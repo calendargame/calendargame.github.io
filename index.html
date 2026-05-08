@@ -99,15 +99,12 @@
     [data-theme="light"] .btn-wrong-persist,[data-theme="parchment"] .btn-wrong-persist{background:rgba(220,38,38,.82)}
     [data-theme="light"] .btn-wrong-dim,[data-theme="parchment"] .btn-wrong-dim{background:rgba(220,38,38,.28)}
     [data-theme="light"] .btn-correct-persist,[data-theme="parchment"] .btn-correct-persist{background:rgba(22,163,74,.82)}
-    /* Focus ring for keyboard navigation. Scoped to (pointer: fine) so touch-only
-       devices never see it. Applied to the year range <input> fields and other
-       form controls via the focus-ring class. Native <select> elements were
-       replaced by CustomSelect (see comment in CustomSelect component for the
-       iOS picker auto-close history); the focus-ring class is still used on
-       CustomSelect triggers so keyboard navigation is preserved. */
-    @media (pointer: fine){
-      .focus-ring:focus-visible{box-shadow:0 0 0 2px rgb(192 132 252)}
-    }
+    /* Focus ring previously rendered via .focus-ring:focus-visible — removed
+       intentionally. With Tab bound exclusively to toggling the mode selector
+       dropdown (see App keydown handler), no other element is reachable via
+       keyboard focus, so a visible focus indicator on those elements is dead
+       weight. The .focus-ring class is left on element classNames as a no-op
+       so future re-enablement is a one-line CSS change rather than a sweep. */
     .hist-unsel{border-left-color:var(--panel-bd)}
     .bar{height:6px;border-radius:6px;overflow:hidden;background:var(--bar-bg);border:1px solid var(--bar-bd)}
     .bar>span{display:block;height:100%;background:linear-gradient(90deg,#a855f7,#7c3aed)}
@@ -521,7 +518,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-08T22:13:00Z');
+    const DEPLOY_TS=new Date('2026-05-08T22:59:00Z');
 
     function StatPanel({stats}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -629,14 +626,26 @@
           else if(e.key==="Home"){e.preventDefault();setActiveIdx(0);}
           else if(e.key==="End"){e.preventDefault();setActiveIdx(options.length-1);}
           else if(e.key==="Enter"||e.key===" "){e.preventDefault();selectAt(activeIdx>=0?activeIdx:selectedIdx);}
-          else if(e.key==="Tab"){setOpen(false);setActiveIdx(-1);}
+          else if(e.key==="Tab"&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey){e.preventDefault();e.stopPropagation();setOpen(false);setActiveIdx(-1);}
           return;
         }
         if(e.key==="ArrowDown"||e.key==="ArrowUp"||e.key==="Enter"||e.key===" "){e.preventDefault();handleToggle();}
       };
       useEffect(()=>{
         if(!open)return;
-        const h=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+        const h=(e)=>{
+          if(!ref.current||ref.current.contains(e.target))return;
+          // Ignore mousedowns that landed in a scrollbar (Windows native scrollbars register
+          // mousedown on the scrolling element itself). Without this, dragging the Settings
+          // popover's scrollbar while a dropdown inside it is open closes the dropdown.
+          const t=e.target;
+          if(t&&t.nodeType===1){
+            const r=t.getBoundingClientRect();
+            if(t.scrollHeight>t.clientHeight&&e.clientX!=null&&e.clientX>r.left+t.clientWidth)return;
+            if(t.scrollWidth>t.clientWidth&&e.clientY!=null&&e.clientY>r.top+t.clientHeight)return;
+          }
+          setOpen(false);
+        };
         document.addEventListener('mousedown',h);
         document.addEventListener('touchstart',h);
         return()=>{
@@ -800,7 +809,7 @@
         //   Date Format dropdown change while randomFormat off — regen if _fmt ≠ new value
         //     (when randomFormat is on, dropdown is overridden so changes are a no-op)
         //   Force Jan/Feb — regen if current date is leap non-Jan/Feb
-        //   Year range — regen if current date out of new range
+        //   Year range — always regen on any range edit (used to be range-violation only)
         //   Julian — keep date (current useJulian flows through naturally to codes/answer)
         const formatRegenReason=(
           (randomFormatChanged&&randomFormat) ||
@@ -810,7 +819,7 @@
         if(leapChanceChanged||formatRegenReason){setDate(genDate(minY,maxY));return;}
         const isLeapY=(useJulian&&isJulianDate(date.y,date.m,date.d))?isLeapJulian(date.y):isLeap(date.y);
         if(forceJanFebChanged&&forceJanFebOnLeap&&isLeapY&&date.m!==1&&date.m!==2){setDate(genDate(minY,maxY));return;}
-        if(yearRangeChanged&&(date.y<minY||date.y>maxY)){setDate(genDate(minY,maxY));return;}
+        if(yearRangeChanged){setDate(genDate(minY,maxY));return;}
         // Julian change in idle: no wrong guesses, so keep date — current useJulian flows naturally.
       },[randomFormat,dateFormat,useJulian,minY,maxY,leapChance,forceJanFebOnLeap]);
       // Frozen date for codes panel: during close animation, keep showing old codes; update new codes only after close finishes
@@ -1457,6 +1466,19 @@
       // pointer-events-none className check is mandatory to mirror real-click locks.
       useEffect(()=>{const onKey=e=>{
         if(e.repeat||e.isComposing)return;
+        // Tab: toggle the mode selector dropdown. Plain Tab only — Ctrl+Tab, Ctrl+Shift+Tab,
+        // Shift+Tab, Alt+Tab all pass through to the browser. Works universally, including
+        // when an input is focused (Esc/Enter already blur inputs, so the standard "leave
+        // this input" role of Tab is unneeded). focus() before click() so the dropdown's
+        // arrow-nav handler (handleTriggerKeyDown on the trigger) sees subsequent keys.
+        if(e.key==='Tab'){
+          if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey)return;
+          if(modeSelectRef.current){
+            const trigger=modeSelectRef.current.querySelector('button');
+            if(trigger){e.preventDefault();trigger.focus();trigger.click();}
+          }
+          return;
+        }
         if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey)return;
         const k=e.key;
         const ae=document.activeElement;
@@ -1806,8 +1828,12 @@
           const newHC=!!u.wasWrong;
           setBrowseHasCredit(newHC);
           if(u.wasWrong){
+            // Capture wrongTimeRef.current locally — the mutator below runs lazily during React's
+            // batched update phase, by which point wrongTimeRef.current=null below has already
+            // cleared the value, so reading it inside the closure would push nothing.
+            const wt=wrongTimeRef.current;
             // Give credit for a previously wrong answer
-            updateStats(c=>{c.good+=1;if(wrongTimeRef.current!=null&&trackingOn())c.times=[...c.times,wrongTimeRef.current];});
+            updateStats(c=>{c.good+=1;if(wt!=null&&trackingOn())c.times=[...c.times,wt];});
             if(mode==="blitz")setBlitzRoundStats(p=>({...p,good:p.good+1}));
             if(mode==="deduction")setPersistBtns({[getDedCorrectIdx()]:'correct'});
             else setPersistBtns({[correct]:'correct'});
@@ -1829,7 +1855,10 @@
         if(canOverrideCorrect&&prevStatsSnapshotRef.current){
           const u=prevStatsSnapshotRef.current;
           if(u.wasWrong){
-            updateStats(c=>{c.played=u.played+1;c.good=u.good+1;c.streak=u.streak+1;if(c.streak>c.best)c.best=c.streak;c.times=c.times.slice(0,u.timesLen);if(wrongTimeRef.current!=null&&trackingOn())c.times=[...c.times,wrongTimeRef.current];});
+            // Capture wrongTimeRef.current locally — see Fix #1 comment above. Same lazy-mutator
+            // hazard: wrongTimeRef.current=null below would clear the value before the mutator runs.
+            const wt=wrongTimeRef.current;
+            updateStats(c=>{c.played=u.played+1;c.good=u.good+1;c.streak=u.streak+1;if(c.streak>c.best)c.best=c.streak;c.times=c.times.slice(0,u.timesLen);if(wt!=null&&trackingOn())c.times=[...c.times,wt];});
             if(mode==="blitz")setBlitzRoundStats(p=>({...p,played:u.blitzPlayed+1,good:u.blitzGood+1}));
           }else{
             updateStats(c=>{c.played=u.played+1;c.good=u.good;c.streak=0;c.times=c.times.slice(0,u.timesLen);});
@@ -1846,7 +1875,13 @@
           // full history rather than snapshot arithmetic. This makes streak restoration
           // consistent regardless of how the question reached its current state
           // (Reveal/Show Codes used to null the snapshot, which silently degraded streak).
-          updateStats(c=>{c.good+=1;if(wrongTimeRef.current!=null&&trackingOn())c.times=[...c.times,wrongTimeRef.current];});
+          // Capture wrongTimeRef.current locally — the mutator runs lazily during React's
+          // batched update phase, by which point wrongTimeRef.current=null below would have
+          // cleared it. Without this capture, c.good += 1 still applies (direct) but the time
+          // never gets pushed into c.times — visible as: Score/Accuracy/Streak update on
+          // wrong→override, but Last/Average/Median don't, causing a count desync.
+          const wt=wrongTimeRef.current;
+          updateStats(c=>{c.good+=1;if(wt!=null&&trackingOn())c.times=[...c.times,wt];});
           wrongTimeRef.current=null;prevStatsSnapshotRef.current=null;
           if(mode==="blitz")setBlitzRoundStats(p=>({...p,good:p.good+1}));
           setCountedWrong(false);setCanOverrideCorrect(false);setLocked(false);setRevealed(false);setCalcPenalty(false);setCalcOpen(false);
@@ -2822,7 +2857,7 @@
         //     the active format to compare against).
         //   a — leapChanceChanged: always
         //   b — forceJanFebChanged + setting just turned on + current date is leap non-Jan/Feb
-        //   c — yearRangeChanged + current date out of new range
+        //   c — yearRangeChanged: always regen on any range edit (was range-violation only)
         //   d — julianChanged + current date is Julian-eligible (carve-out: still fires when
         //         hasWrong, with synthesized green; outside that, deferred like the rest)
         //   e — randomFormatChanged off→on: always regen (fresh random format wanted)
@@ -2835,7 +2870,7 @@
           const isLeapY=(useJulian&&isJulianDate(dt.y,dt.m,dt.d))?isLeapJulian(dt.y):isLeap(dt.y);
           const aReason=leapChanceChanged;
           const bReason=forceJanFebChanged&&forceJanFebOnLeap&&isLeapY&&dt.m!==1&&dt.m!==2;
-          const cReason=yearRangeChanged&&(dt.y<minY||dt.y>maxY);
+          const cReason=yearRangeChanged;
           const dReason=julianChanged&&isJulianDate(dt.y,dt.m,dt.d);
           const eReason=randomFormatChanged&&randomFormat;
           const fReason=randomFormatChanged&&!randomFormat&&dt._fmt!==dateFormat;
@@ -3415,7 +3450,7 @@
             <p><b>Back (&lt;)</b> — return to the previous date. The answer is shown and the card is locked. No stat penalty. You can go back through your entire history in Classic, Flash, and Deduction; in Blitz and AoX, you can browse the current round or run. Every entry in your history shows the correct answer in green; if you got it wrong, your wrong guess(es) appear as dimmed red alongside the green. While browsing back, a small <b>Q#</b> label appears at the top-right of the date card showing your position in history (e.g. Q3 means you're on the third question viewed).</p>
             <p><b>Forward (&gt;)</b> — move forward through dates you've browsed past with Back. The forward history clears whenever you answer a new question, press New/Begin/Reset, or take any action that advances the date. Overriding while browsing back does not clear the forward history. Each entry remembers its date format and calendar system, so a back-then-forward round trip never alters how a date was originally shown.</p>
             <p><b>Reveal</b> — show the correct answer without guessing. Counts as a wrong attempt. No penalty on unanswered dates while browsing back.</p>
-            <p><b>Override</b> — fix a mistake. You can override any date in your history by browsing to it with Back/Forward. After a wrong answer: gives you credit and adjusts your score. After a correct answer: undoes the credit and adjusts your score. You can also override the most recent past date directly from a fresh, untouched live question (in any mode) — Override is enabled when the live date hasn't been answered yet, and tapping it flips your previous date's right/wrong status. A previously correct date that's been retroactively flipped to wrong shows up with a green-and-red diagonal split: green-upper-left (originally correct) and red-lower-right (now counted wrong). You can only override each date once. Overriding a wrong answer (regardless of how) clears any wrong highlights; only the correct answer is shown. In Blitz, you can override past dates after the round ends to adjust your score and saved bests. In AoX without Allow Mistakes, overriding a correct answer ends the run.</p>
+            <p><b>Override</b> — fix a mistake. You can override any date in your history by browsing to it with Back/Forward. After a wrong answer: gives you credit with time recorded and adjusts your score. After a correct answer: undoes the credit and adjusts your score. You can also override the most recent past date directly from a fresh, untouched live question (in any mode) — Override is enabled when the live date hasn't been answered yet, and tapping it flips your previous date's right/wrong status. A previously correct date that's been retroactively flipped to wrong shows up with a green-and-red diagonal split: green-upper-left (originally correct) and red-lower-right (now counted wrong). You can only override each date once. Overriding a wrong answer (regardless of how) clears any wrong highlights; only the correct answer is shown. In Blitz, you can override past dates after the round ends to adjust your score and saved bests. In AoX without Allow Mistakes, overriding a correct answer ends the run.</p>
             <p><b>Show Codes</b> — reveals the calculation codes for the current date. Counts as wrong if you haven't already answered incorrectly. No penalty on unanswered dates while browsing back. In AoX without Allow Mistakes, opening Show Codes ends the run.</p>
           </GuideSection>
           <GuideSection id="stats" title="Stats" openId={open} onToggle={toggle}>
@@ -3431,12 +3466,12 @@
           <Divider label="Settings"/>
           <GuideSection id="dateformat" title="Date Format" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Choose one of five real-world formats: <b>Written MDY</b> (April 27, 1828), <b>Written DMY</b> (27 April 1828), <b>Numeric MDY</b> (4/27/1828), <b>Numeric DMY</b> (27.4.1828), or <b>Numeric YMD</b> (1828-4-27). Numeric formats use a fixed separator convention: MDY uses '/', DMY uses '.', YMD uses '-'. Years always show in full, never abbreviated.</p><p>Only DMY, MDY, and YMD orderings are offered because those are the only orderings actually used in real life — orderings like YDM aren't standard anywhere.</p><p><b>Random Format</b>, when on, rolls one of the five formats per date in game modes only — your selected format is preserved underneath (the panels just lock visually). Lookup and the Last Updated timestamp ignore Random and always use the selected format. The Last Updated timestamp uses the numeric version of whichever format you've selected.</p><p>In Classic, Deduction, Flash, and AoX (idle), format changes on an unanswered, untouched date may regenerate the date. Turning Random Format on always regenerates (a fresh random format is rolled). Turning Random Format off regenerates only if the displayed format differs from your selected dropdown format. Changing the dropdown while Random Format is off regenerates only if the new selection differs from the displayed format. Changing the dropdown while Random Format is on does nothing visible — the dropdown is overridden by the random roll. If you've already made a wrong guess on the displayed date, format changes are deferred — the wrong-state is preserved and the new format applies on the next generated date. In active Blitz rounds and AoX runs, any format change ends the round.</p><p>In game modes' Show Codes, codes appear in the order the date is read (left to right), with Leap shown once you've seen both the year and month.</p></GuideSection>
           <GuideSection id="julian" title="Julian Calendar" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Calendar System. Off by default. When on, dates on or before October 4, 1582 are treated as Julian calendar dates, which have different leap year rules — every year divisible by 4 is a leap year, with no century exception. This affects weekday calculation and the codes shown in Show Codes. October 5–14, 1582 are always excluded since those dates never existed; the Gregorian calendar skipped them to correct accumulated calendar drift.</p><p>Toggling Julian doesn't necessarily regenerate the current date. For dates after October 4, 1582, Julian has no effect. For Julian-eligible dates (October 4, 1582 or earlier), the date stays if you haven't made a wrong guess yet — the answer and codes simply update. If you've already wrong-guessed, the date regenerates and is added to your history with both your red guess and a green for the day that was correct under the calendar system in effect when the date was first generated. Each date snapshots its calendar system at generation, so revisiting an earlier question via Back shows the highlights and codes that were correct under the system in effect when that date was generated. In active Blitz rounds and AoX runs, any Julian toggle ends the round.</p></GuideSection>
-          <GuideSection id="range" title="Year Range" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Controls which years dates are drawn from. Defaults to 1–10000 AD. Changing the range regenerates the current date only if it falls outside the new range — and even then, if you've already made a wrong guess on the current date, the change is deferred so the wrong-state is preserved; the new range applies to the next date. While browsing back, settings-driven regen always preserves your history: the date you were viewing and any forward entries are pushed back to history before the live slot is regenerated. In active Blitz rounds and AoX runs, any range change ends the round.</p><p><b>Year sub-mode auto-disable:</b> Deduction's Year sub-mode requires either a year range of at least 5 years (so a 5-year window can be built) or, with Julian on, a range that contains October 15, 1582 (so a 2-year Jul Cross window can be built). When neither condition holds, the Year sub-type button greys out, and if you were already in Year mode when the range changed, you're auto-switched to Day mode. Day and Month sub-modes work for any valid range.</p></GuideSection>
+          <GuideSection id="range" title="Year Range" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Controls which years dates are drawn from. Defaults to 1–10000 AD. Changing the range always regenerates the current date — but if you've already made a wrong guess on the current date, the change is deferred so the wrong-state is preserved; the new range applies to the next date. While browsing back, settings-driven regen always preserves your history: the date you were viewing and any forward entries are pushed back to history before the live slot is regenerated. In active Blitz rounds and AoX runs, any range change ends the round.</p><p><b>Year sub-mode auto-disable:</b> Deduction's Year sub-mode requires either a year range of at least 5 years (so a 5-year window can be built) or, with Julian on, a range that contains October 15, 1582 (so a 2-year Jul Cross window can be built). When neither condition holds, the Year sub-type button greys out, and if you were already in Year mode when the range changed, you're auto-switched to Day mode. Day and Month sub-modes work for any valid range.</p></GuideSection>
           <GuideSection id="leap" title="Leap Year Settings" openId={open} onToggle={toggle}><p>Two settings in the ⚙ menu control how often leap years appear and what months they're paired with. <b>Leap Year Chance</b> sets how often a generated date lands on a leap year — Random uses the natural rate (~24%); 50%, 75%, and 100% force higher rates. <b>Force Jan/Feb on Leap Years</b>, when on, restricts the month to January or February whenever a leap year is generated. These settings apply to all game modes' date generation; Lookup is unaffected. If your year range happens to contain no leap years (under the active calendar), the four Leap Year Chance buttons are locked and faded; the previously-selected value stays visually selected so it's restored when you change the range back to one with a leap year reachable. Force Jan/Feb on Leap Years stays unlocked since it doesn't imply leap-year reachability. Changing <b>Leap Year Chance</b> always regenerates the displayed date. Toggling <b>Force Jan/Feb on Leap Years</b> regenerates only if the current date is a leap year with a month other than January or February. If you've already made a wrong guess on the current date, either change is deferred so the wrong-state is preserved; the new setting applies to the next date. In active Blitz rounds and AoX runs, any leap setting change ends the round.</p></GuideSection>
           <GuideSection id="savestats" title="Save Stats" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Stats. On by default. When off, your answers don't update stats or saved bests. The stats panel dims to indicate the off state. The toggle works differently per mode:</p><p className="mt-2"><b>Classic, Deduction, Flash</b> — per-question. The toggle's value is locked in at the moment of your first stat-affecting action (your first wrong guess on the question, or your correct answer if you got it right on the first try). Toggling afterward doesn't change that question's outcome, but does apply to the next question. If you've already made a wrong guess on the current question, toggling Save Stats does not regenerate the date — the toggle's frozen value sticks for the question. When off, the question doesn't update stats and isn't pushed to history (Back can't browse to it). Override still advances to the next date the same way it normally would (or stays put if timing is hidden), just without any stat or history changes.</p><p className="mt-2"><b>Blitz</b> — round-level. In-round score, accuracy, streak, and Back/Forward navigation through round questions all work normally regardless of the toggle. Whatever the toggle is set to when the round ends determines whether the round's Best Score and Best Streak update.</p><p className="mt-2"><b>AoX</b> — run-level. In-run score, streak, times, and Back/Forward navigation all work normally regardless of the toggle. Whatever the toggle is set to when the run ends determines whether Best Average, Best Median, and Best Streak update. If a run finishes with Save Stats off, overriding entries after the run is a no-op on persistent bests; round-level stats still adjust.</p></GuideSection>
           <GuideSection id="theme" title="Theme" openId={open} onToggle={toggle}><p>Five themes: Dusk (default dark navy), Midnight (true black with purple), Nebula (deep purple), Light (clean white), and Parchment (warm cream). Accessible from the ⚙ settings menu in any tab. Enable Use System Settings to match your device's light/dark mode automatically, with separate theme choices for each. Disable to pick one manually.</p></GuideSection>
           <GuideSection id="reset-settings" title="Reset Settings" openId={open} onToggle={toggle}><p>The Reset Settings button at the bottom of the ⚙ menu restores everything in the menu to its defaults: Random Format on, Written MDY, Julian off, year range 1–10000, Leap Year Chance Random, Force Jan/Feb off, Save Stats on, and theme back to Use System Settings with Dusk (dark) and Light (light). It does not touch mode-specific config outside the menu (AoX N, timer durations, Deduction sub-types and toggles) or your stats and history. No confirmation prompt — tap to apply.</p></GuideSection>
-          <GuideSection id="keyboard" title="Keyboard Input" openId={open} onToggle={toggle}><p>On any device with a hardware keyboard (typically desktop), you can press keys to operate the site without tapping. The on-screen layout is identical to mobile — keyboard input is the only desktop-specific addition.</p><div className="mt-3 space-y-3"><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Answer Grid</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>0</Kbd><span>Sunday</span></div><div className="flex items-center gap-2"><Kbd>1</Kbd><span>Monday</span></div><div className="flex items-center gap-2"><Kbd>2</Kbd><span>Tuesday</span></div><div className="flex items-center gap-2"><Kbd>3</Kbd><span>Wednesday</span></div><div className="flex items-center gap-2"><Kbd>4</Kbd><span>Thursday</span></div><div className="flex items-center gap-2"><Kbd>5</Kbd><span>Friday</span></div><div className="flex items-center gap-2"><Kbd>6</Kbd><span>Saturday</span></div></div><p className="mt-2 text-xs italic">In Deduction Month and Year, the same keys map positionally to the boxes or year options on screen.</p></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Game Actions</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>N</Kbd><span>New / Begin / Reset</span></div><div className="flex items-center gap-2"><Kbd>R</Kbd><span>Reveal</span></div><div className="flex items-center gap-2"><Kbd>O</Kbd><span>Override</span></div><div className="flex items-center gap-2"><Kbd>C</Kbd><span>Show / Hide Codes</span></div><div className="flex items-center gap-2"><Kbd>S</Kbd><span>Reset Stats</span></div><div className="flex items-center gap-2"><Kbd>←</Kbd><span>Back</span></div><div className="flex items-center gap-2"><Kbd>→</Kbd><span>Forward</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Overlays</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>H</Kbd><span>How to Play (toggle)</span></div><div className="flex items-center gap-2"><Kbd>G</Kbd><span>Settings ⚙ (toggle)</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Mode Switching</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>K</Kbd><span>Classic</span></div><div className="flex items-center gap-2"><Kbd>F</Kbd><span>Flash</span></div><div className="flex items-center gap-2"><Kbd>B</Kbd><span>Blitz</span></div><div className="flex items-center gap-2"><Kbd>A</Kbd><span>AoX</span></div><div className="flex items-center gap-2"><Kbd>D</Kbd><span>Deduction</span></div><div className="flex items-center gap-2"><Kbd>L</Kbd><span>Lookup</span></div></div></div></div><p className="mt-3">Letter keys are case-insensitive. Keys are ignored when you're typing in an input field or when a modifier key (Ctrl/Cmd/Alt/Shift) is held. Locked or already-pressed buttons are skipped, just like a click would be. Reset Stats (S) only applies to the casual modes (Classic, Deduction, Flash); pressing it in Blitz, AoX, or Lookup is a no-op since those modes don't have a separate Reset Stats button (their round/run Reset clears in-round/in-run stats; persistent bests update only when set).</p></GuideSection>
+          <GuideSection id="keyboard" title="Keyboard Input" openId={open} onToggle={toggle}><p>On any device with a hardware keyboard (typically desktop), you can press keys to operate the site without tapping. The on-screen layout is identical to mobile — keyboard input is the only desktop-specific addition.</p><div className="mt-3 space-y-3"><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Answer Grid</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>0</Kbd><span>Sunday</span></div><div className="flex items-center gap-2"><Kbd>1</Kbd><span>Monday</span></div><div className="flex items-center gap-2"><Kbd>2</Kbd><span>Tuesday</span></div><div className="flex items-center gap-2"><Kbd>3</Kbd><span>Wednesday</span></div><div className="flex items-center gap-2"><Kbd>4</Kbd><span>Thursday</span></div><div className="flex items-center gap-2"><Kbd>5</Kbd><span>Friday</span></div><div className="flex items-center gap-2"><Kbd>6</Kbd><span>Saturday</span></div></div><p className="mt-2 text-xs italic">In Deduction Month and Year, the same keys map positionally to the boxes or year options on screen.</p></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Game Actions</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>N</Kbd><span>New / Begin / Reset</span></div><div className="flex items-center gap-2"><Kbd>R</Kbd><span>Reveal</span></div><div className="flex items-center gap-2"><Kbd>O</Kbd><span>Override</span></div><div className="flex items-center gap-2"><Kbd>C</Kbd><span>Show / Hide Codes</span></div><div className="flex items-center gap-2"><Kbd>S</Kbd><span>Reset Stats</span></div><div className="flex items-center gap-2"><Kbd>←</Kbd><span>Back</span></div><div className="flex items-center gap-2"><Kbd>→</Kbd><span>Forward</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Overlays</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>H</Kbd><span>How to Play (toggle)</span></div><div className="flex items-center gap-2"><Kbd>G</Kbd><span>Settings ⚙ (toggle)</span></div><div className="flex items-center gap-2"><Kbd>Tab</Kbd><span>Mode selector (toggle)</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Mode Switching</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>K</Kbd><span>Classic</span></div><div className="flex items-center gap-2"><Kbd>F</Kbd><span>Flash</span></div><div className="flex items-center gap-2"><Kbd>B</Kbd><span>Blitz</span></div><div className="flex items-center gap-2"><Kbd>A</Kbd><span>AoX</span></div><div className="flex items-center gap-2"><Kbd>D</Kbd><span>Deduction</span></div><div className="flex items-center gap-2"><Kbd>L</Kbd><span>Lookup</span></div></div></div></div><p className="mt-3">Letter keys are case-insensitive. Letter and number keys are ignored when you're typing in an input field or when a modifier key (Ctrl/Cmd/Alt/Shift) is held. <Kbd>Tab</Kbd> is the exception: it toggles the mode selector even from inputs (use Esc or Enter to leave an input first if you'd rather), and Tab combined with any modifier (Ctrl+Tab, Ctrl+Shift+Tab, etc.) passes through to the browser. Locked or already-pressed buttons are skipped, just like a click would be. Reset Stats (S) only applies to the casual modes (Classic, Deduction, Flash); pressing it in Blitz, AoX, or Lookup is a no-op since those modes don't have a separate Reset Stats button (their round/run Reset clears in-round/in-run stats; persistent bests update only when set).</p></GuideSection>
           <Divider label="Modes"/>
           <GuideSection id="classic" title="Classic" openId={open} onToggle={toggle}><p>The main practice mode with no time pressure. Answer at your own pace. Override works after both wrong and correct answers. Reset Stats clears your stats and question history; when timing stats are hidden and you haven't burned the current date, the date is kept.</p></GuideSection>
           <GuideSection id="aox" title="AoX" openId={open} onToggle={toggle}>
@@ -3687,9 +3722,11 @@
       // codes-open simply stays as-is. For gap entries (Does Not Exist), calcDate becomes
       // null, which triggers MethodBreakdownSection's hasDate auto-close effect.
       // Selecting any history entry (by tap, click, or Enter via keyboard nav) populates the input
-      // with that date — convenient for re-running a lookup or editing it. Use the rendered label
-      // (current dateFormat) so the input shows what the user sees in the history list.
-      const selEntry=entry=>{if(!entry)return;ssid(entry.id);slo(entry?.result||"");if(entry.isGap){scd(null);lastLookupRef.current=null;}else{if(typeof entry.y==="number")scd({y:entry.y,m:entry.m,d:entry.d});}const renderedLabel=entry.isGap||typeof entry.y!=='number'?entry.label:(fmtDate?fmtDate(entry.y,entry.m,entry.d):entry.label);if(typeof renderedLabel==='string')sli(renderedLabel);if(document.activeElement)document.activeElement.blur();};
+      // with that date — convenient for re-running a lookup or editing it. The input is always
+      // numeric (per the input's contract; the displayed history label may be written), so
+      // populate using the numeric form of the selected dateFormat regardless of how the
+      // history row reads.
+      const selEntry=entry=>{if(!entry)return;ssid(entry.id);slo(entry?.result||"");if(entry.isGap){scd(null);lastLookupRef.current=null;}else{if(typeof entry.y==="number")scd({y:entry.y,m:entry.m,d:entry.d});}const renderedLabel=typeof entry.y==='number'?fmt(entry.y,entry.m,entry.d,numericFmtForInput):entry.label;if(typeof renderedLabel==='string')sli(renderedLabel);if(document.activeElement)document.activeElement.blur();};
       const clearHist=()=>{if(onClearHistory)onClearHistory();ssid(null);scd(null);slo("");sco(false);lastLookupRef.current=null;};
       const displayNote=React.useMemo(()=>{const selectedEntry=entries.find(e=>e.id===sid);if(selectedEntry&&!selectedEntry.isGap&&typeof selectedEntry.y==='number'&&isJulianDate(selectedEntry.y,selectedEntry.m,selectedEntry.d)){const isJul=useJulian;const wd=isJul?wdayJulian(selectedEntry.y,selectedEntry.m,selectedEntry.d):wday(selectedEntry.y,selectedEntry.m,selectedEntry.d);const displayDate=fmtDate?fmtDate(selectedEntry.y,selectedEntry.m,selectedEntry.d):`${MONTH[selectedEntry.m-1]} ${selectedEntry.d}, ${selectedEntry.y}`;return`${displayDate} is a ${DAY[wd]} (${isJul?"Julian":"Gregorian"}).`;}return lo;},[sid,entries,useJulian,fmtDate,lo]);
       const getEntryWeekday=e=>{if(e.isGap)return"Does Not Exist";if(typeof e.y==='number'&&isJulianDate(e.y,e.m,e.d)){const wd=useJulian?wdayJulian(e.y,e.m,e.d):wday(e.y,e.m,e.d);return DAY[wd];}return e.weekday;};
