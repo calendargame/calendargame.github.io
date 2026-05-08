@@ -3092,7 +3092,12 @@
       // and pick from the mode dropdown without the settings popover auto-closing
       // on the same tap — taps inside the mode trigger or its open dropdown panel
       // are inside modeSelectRef's subtree and therefore "inside" for this check.
-      useEffect(()=>{if(!settingsOpen)return;const h=e=>{const inBtn=settingsRef.current&&settingsRef.current.contains(e.target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(e.target);const inSel=modeSelectRef.current&&modeSelectRef.current.contains(e.target);if(!inBtn&&!inPop&&!inSel)setSettingsOpen(false);};document.addEventListener('mousedown',h);document.addEventListener('touchstart',h);return()=>{document.removeEventListener('mousedown',h);document.removeEventListener('touchstart',h);};},[settingsOpen]);
+      useEffect(()=>{if(!settingsOpen)return;const h=e=>{const inBtn=settingsRef.current&&settingsRef.current.contains(e.target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(e.target);const inSel=modeSelectRef.current&&modeSelectRef.current.contains(e.target);
+        // Mousedown on the browser scrollbar registers e.target as <html> on Windows. Ignore that
+        // case so dragging the scrollbar doesn't close the popover.
+        const onScrollbar=e.target===document.documentElement||e.target===document.body;
+        if(onScrollbar)return;
+        if(!inBtn&&!inPop&&!inSel)setSettingsOpen(false);};document.addEventListener('mousedown',h);document.addEventListener('touchstart',h);return()=>{document.removeEventListener('mousedown',h);document.removeEventListener('touchstart',h);};},[settingsOpen]);
       // Escape closes the settings popover. Doesn't fire when an input has focus that already
       // handles Escape (year-range inputs revert their value on Escape) — those handlers call
       // stopPropagation isn't used, so this listener still receives the event after the input's
@@ -3692,7 +3697,7 @@
       const renderedEntries=React.useMemo(()=>entries.map(e=>{if(e.isGap||typeof e.y!=='number')return e;return{...e,label:fmtDate?fmtDate(e.y,e.m,e.d):e.label};}),[entries,fmtDate,dateFormat]);
       // Keyboard navigation for the Lookup card when no input has focus:
       //   ArrowDown/ArrowUp — move highlighted history entry; selecting populates input.
-      //   Backspace/Delete  — clear all history (matches the Clear History button).
+      //   Backspace/Delete  — clear the Lookup input box (matches the Clear button).
       // When an input IS focused, all keys pass through unchanged so typing & native cursor
       // handling (including ↑/↓ jumping cursor to start/end on single-line inputs) work normally.
       React.useEffect(()=>{
@@ -3709,15 +3714,18 @@
             return;
           }
           if(e.key==="Backspace"||e.key==="Delete"){
-            if(renderedEntries.length===0)return;
+            // Clear the Lookup input box (matching what the Clear button does), NOT the history.
+            // Only fires when the input doesn't have focus — when it does, Backspace/Delete edit
+            // the input character-by-character as normal.
+            if(!li&&!lo&&!cdv)return;
             e.preventDefault();
-            clearHist();
+            clearLookup();
             return;
           }
         };
         document.addEventListener('keydown',h);
         return()=>document.removeEventListener('keydown',h);
-      },[renderedEntries,sid]);
+      },[renderedEntries,sid,li,lo,cdv]);
       return(
         <div className="mt-1 space-y-4">
           <div className="rounded-2xl panel p-4 space-y-4">
