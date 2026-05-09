@@ -518,7 +518,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-09T07:37:00Z');
+    const DEPLOY_TS=new Date('2026-05-09T08:01:00Z');
 
     function StatPanel({stats}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -3306,7 +3306,7 @@
         if(typeof window!=="undefined")window.scrollTo(0,0);
       };
       // Two-tap-to-confirm wrapper. Tap 1 arms (label flips to "Confirm?", button gets a ring).
-      // Tap 2 within the arm window fires the reset and disarms. Auto-disarm via timer (4s),
+      // Tap 2 within the arm window fires the reset and disarms. Auto-disarm via timer (3s),
       // settings-close watcher, and any-other-popover-mousedown listener.
       const armFullReset=()=>{
         if(fullResetArmed){
@@ -3317,7 +3317,7 @@
         }
         setFullResetArmed(true);
         if(fullResetTimerRef.current)clearTimeout(fullResetTimerRef.current);
-        fullResetTimerRef.current=setTimeout(()=>{setFullResetArmed(false);fullResetTimerRef.current=null;},4000);
+        fullResetTimerRef.current=setTimeout(()=>{setFullResetArmed(false);fullResetTimerRef.current=null;},3000);
       };
       const disarmFullReset=()=>{
         if(fullResetTimerRef.current){clearTimeout(fullResetTimerRef.current);fullResetTimerRef.current=null;}
