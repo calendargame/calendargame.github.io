@@ -3495,6 +3495,10 @@
             </>)}
             {mode==='flash'&&(<div className="mt-3">{timerSettingControl}</div>)}
           </>)}
+          {/* key={aoxResetKey} forces remount on Full Reset since AoxMode is always-mounted
+              (display:none toggle on visible prop, not conditional rendering) and its internal
+              state would otherwise persist across resets. See aoxResetKey declaration upstream
+              for full rationale. */}
           <AoxMode key={aoxResetKey} minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} forceJanFebOnLeap={forceJanFebOnLeap} randomFormat={randomFormat} dateFormat={dateFormat} saveStats={saveStats}/>
           {mode==="lookup"&&(<div className="mt-5"><LookupCard history={lookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div>)}
           {mode==="guide"&&(<div className="mt-2.5"><GuidePage/></div>)}
