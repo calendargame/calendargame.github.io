@@ -518,7 +518,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-09T08:20:00Z');
+    const DEPLOY_TS=new Date('2026-05-09T09:16:00Z');
 
     function StatPanel({stats}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -592,22 +592,62 @@
       const listboxId=useRef(`cs-list-${Math.random().toString(36).slice(2,9)}`).current;
       const optionId=i=>`${listboxId}-opt-${i}`;
       const selectedIdx=options.findIndex(o=>o.value===value);
+      // findClippingAncestor walks up the parent chain from the trigger and
+      // returns the first ancestor whose computed overflow-y is auto/scroll/
+      // hidden — i.e. the first ancestor that will visually clip an absolutely
+      // positioned descendant panel. Returns null if no such ancestor exists
+      // (panel is free to overflow into the viewport).
+      // This is needed because the dropdown panel is position:absolute inside
+      // its trigger's wrapper, which means clipping happens at whichever
+      // ancestor has overflow!=visible — NOT at the viewport. Measuring flip-up
+      // space against the viewport (the original behavior) gave wrong answers
+      // whenever a CustomSelect lived inside a scrolling container: the math
+      // saw "lots of viewport room below" and chose to open downward, but the
+      // panel then got sliced off by the clipping ancestor's bottom edge. This
+      // was the root cause of the Dark/Light theme dropdowns opening downward
+      // into clipped space inside the settings popover's inner scroll wrapper.
+      const findClippingAncestor=el=>{
+        let p=el&&el.parentElement;
+        while(p){
+          const oy=getComputedStyle(p).overflowY;
+          if(oy==='auto'||oy==='scroll'||oy==='hidden')return p;
+          p=p.parentElement;
+        }
+        return null;
+      };
       // Toggle handler measures available space at the moment the user opens
       // the dropdown. Each option button is ~45px tall (py-3 + text-[15px]),
       // plus a small panel margin. If space below isn't enough AND there's
       // more space above, flip upward. Measurement only happens on open
       // (not on close) so close is cheap.
-      // visualViewport.height is preferred over window.innerHeight because it
-      // excludes Safari's bottom toolbar — without this, dropdowns near the
-      // bottom of the page render downward and get clipped behind the toolbar.
-      // Falls back to innerHeight for browsers without visualViewport. The 16px
-      // safety buffer keeps the panel from kissing the viewport edge.
+      // Space measurement: prefer the nearest clipping ancestor's bounds (since
+      // that's where the panel will actually be cut off if it overflows). Fall
+      // back to the viewport when no clipping ancestor exists. visualViewport
+      // is preferred over innerHeight for the viewport fallback because it
+      // excludes Safari's bottom toolbar — without this, dropdowns at the
+      // bottom of the page would render downward and get clipped behind the
+      // toolbar. The 16px safety buffer keeps the panel from kissing the edge.
+      // Concrete effect: the three theme selects (Dark/Light/manual Theme)
+      // live inside the settings popover's inner scroll wrapper, which has
+      // overflow-y:auto. Within that wrapper they sit near the bottom with
+      // very little room below and plenty above, so this math correctly flips
+      // them upward. The header mode select has no scrolling ancestor, so it
+      // uses viewport bounds and continues to open downward as before.
       const handleToggle=()=>{
         if(!open&&ref.current){
           const rect=ref.current.getBoundingClientRect();
-          const vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
-          const spaceBelow=vh-rect.bottom-16;
-          const spaceAbove=rect.top-16;
+          const clip=findClippingAncestor(ref.current);
+          let topBound,bottomBound;
+          if(clip){
+            const cr=clip.getBoundingClientRect();
+            topBound=cr.top;
+            bottomBound=cr.bottom;
+          }else{
+            topBound=0;
+            bottomBound=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
+          }
+          const spaceBelow=bottomBound-rect.bottom-16;
+          const spaceAbove=rect.top-topBound-16;
           const estimatedHeight=options.length*45+10;
           setOpenUpward(spaceBelow<estimatedHeight&&spaceAbove>spaceBelow);
           setActiveIdx(selectedIdx>=0?selectedIdx:0);
