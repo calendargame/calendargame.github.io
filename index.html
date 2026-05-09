@@ -518,7 +518,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-09T08:01:00Z');
+    const DEPLOY_TS=new Date('2026-05-09T08:20:00Z');
 
     function StatPanel({stats}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -3103,6 +3103,14 @@
       const [fullResetArmed,setFullResetArmed]=useState(false);
       const fullResetBtnRef=useRef(null);
       const fullResetTimerRef=useRef(null);
+      // AoxMode is always-mounted-with-display-none (rather than conditionally rendered) so its
+      // internal state persists across mode switches — that's intentional UX (a paused AoX
+      // run survives a detour into Classic). But it means none of AoxMode's ~25 useStates and
+      // refs auto-reset when fullReset switches mode away from 'aox'. Solution: bump this key
+      // in fullReset to force a one-shot AoxMode remount, which runs all its useState/useRef
+      // initializers fresh. Normal mode switching doesn't change this key, so the cross-mode
+      // persistence behavior is preserved everywhere except the explicit Full Reset path.
+      const [aoxResetKey,setAoxResetKey]=useState(0);
       // Scroll-state tracking for the settings popover inner scroll wrapper.
       // popoverAtBottom drives BOTH the bottom fade gradient (no fade when at bottom)
       // AND the elevation shadow on the sticky footer (no shadow when at bottom). Both
@@ -3191,19 +3199,23 @@
       //         don't fire during the reset (would mutate state we just cleared)
       //      d. DOM-attached bar refs — direct style/textContent reset for visual snap-back
       //      e. window scroll — back to top
+      //      f. AoxMode key bump — AoxMode is always-mounted (display:none when not visible)
+      //         so its ~25 internal useStates and refs DON'T auto-reset on mode change. The
+      //         key bump forces a remount, which runs all its hook initializers fresh.
       //   2. AUTO-RESET via component unmount (NO action needed):
-      //      a. AoxMode internal state — unmounts when mode≠'aox' (~25 useStates and refs)
-      //      b. LookupCard internal state — unmounts when mode≠'lookup'
-      //      c. GuidePage and all GuideSection [open] flags — unmount when mode≠'guide'
-      //      d. CustomSelect instances inside Settings popover (theme, format) — unmount
-      //         when settings closes; the header mode CustomSelect stays mounted but its
-      //         own dropdown closes via internal logic
-      //      e. MethodBreakdownSection's frozen* states — re-derived on next open via the
-      //         freeze contract; stale values are harmless because section is closed
+      //      a. LookupCard internal state — conditionally rendered (mode==='lookup'), unmounts
+      //         on mode change to 'classic'
+      //      b. GuidePage and all GuideSection [open] flags — conditionally rendered
+      //         (mode==='guide'), unmount on mode change
+      //      c. Theme/Format CustomSelect inside Settings popover — unmount when settings closes
+      //      d. MethodBreakdownSection in Deduction/Lookup — inside conditional containers
+      //         that unmount with their parents; the always-rendered Classic/Flash/Blitz one
+      //         is keyed by mode so it remounts on any mode change
       // Order of operations:
       //   1. clearTimeout — stop in-flight callbacks
       //   2. Ref assignments — synchronous, set immediately
-      //   3. setState calls — batched, applied together at end of event
+      //   3. setState calls — batched, applied together at end of event (includes the
+      //      aoxResetKey bump, which causes AoxMode to remount as part of the same render)
       //   4. DOM mutations on bar refs — synchronous
       //   5. window.scrollTo — synchronous
       // Deliberately NOT a location.reload() — when memory, profiles, or offline state are
@@ -3295,6 +3307,10 @@
         // Fresh dates for the casual modes (classic/blitz/flash). AoX/Deduction generate on
         // entry. Range and format setters above force defaults for this generation.
         setDateByMode(()=>{const mk=()=>{const d=randomDate(1,10000);d._fmt=rollFormat();d._jul=false;return d;};return{classic:mk(),blitz:mk(),flash:mk()};});
+        // Force AoxMode remount so its internal state (aoxN, runPhase, allowMistakes, oneByOne,
+        // bestRef, persistBtns, all the run-progress refs, etc.) resets to defaults. This is
+        // batched with the other setStates so the remount happens in the same render cycle.
+        setAoxResetKey(k=>k+1);
         // 4. DOM bar refs — visual snap-back so the bars don't show a partially-drained state
         //    until the next render writes them.
         if(blitzBarRef.current)blitzBarRef.current.style.width="100%";
@@ -3479,7 +3495,7 @@
             </>)}
             {mode==='flash'&&(<div className="mt-3">{timerSettingControl}</div>)}
           </>)}
-          <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} forceJanFebOnLeap={forceJanFebOnLeap} randomFormat={randomFormat} dateFormat={dateFormat} saveStats={saveStats}/>
+          <AoxMode key={aoxResetKey} minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} forceJanFebOnLeap={forceJanFebOnLeap} randomFormat={randomFormat} dateFormat={dateFormat} saveStats={saveStats}/>
           {mode==="lookup"&&(<div className="mt-5"><LookupCard history={lookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div>)}
           {mode==="guide"&&(<div className="mt-2.5"><GuidePage/></div>)}
           {["classic","blitz","flash"].includes(mode)&&(
