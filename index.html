@@ -518,7 +518,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-08T22:59:00Z');
+    const DEPLOY_TS=new Date('2026-05-09T07:16:00Z');
 
     function StatPanel({stats}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -3095,6 +3095,14 @@
       const [settingsOpen,setSettingsOpen]=useState(false);
       const settingsRef=useRef(null);
       const settingsPopoverRef=useRef(null);
+      // Full Reset state: armed=true means the user tapped once and the next tap fires.
+      // Auto-disarms after a short timer, when settings closes, or when the user taps any
+      // other interactive control inside the popover. Implemented as a per-tap state machine
+      // rather than a dialog so the destructive nature is communicated by the in-place label
+      // and color change without a modal interruption.
+      const [fullResetArmed,setFullResetArmed]=useState(false);
+      const fullResetBtnRef=useRef(null);
+      const fullResetTimerRef=useRef(null);
       // Scroll-state tracking for the settings popover inner scroll wrapper.
       // popoverAtBottom drives BOTH the bottom fade gradient (no fade when at bottom)
       // AND the elevation shadow on the sticky footer (no shadow when at bottom). Both
@@ -3132,7 +3140,17 @@
         // case so dragging the scrollbar doesn't close the popover.
         const onScrollbar=e.target===document.documentElement||e.target===document.body;
         if(onScrollbar)return;
-        if(!inBtn&&!inPop&&!inSel)setSettingsOpen(false);};document.addEventListener('mousedown',h);document.addEventListener('touchstart',h);return()=>{document.removeEventListener('mousedown',h);document.removeEventListener('touchstart',h);};},[settingsOpen]);
+        if(!inBtn&&!inPop&&!inSel){
+          // Year-range inputs (and any future input in the popover) commit on blur. When closing
+          // settings via click-outside on a non-focusable element, the input keeps focus until
+          // the popover unmounts — and React's synthetic onBlur doesn't reliably fire on unmount,
+          // so the typed value gets dropped. Programmatically blur first so onBlur runs
+          // synchronously (commit), then close. (Mobile happens to work without this because
+          // tapping a non-focusable target on touch normally fires blur before touchstart.)
+          const ae=document.activeElement;
+          if(ae&&ae.tagName==='INPUT'&&settingsPopoverRef.current&&settingsPopoverRef.current.contains(ae))ae.blur();
+          setSettingsOpen(false);
+        }};document.addEventListener('mousedown',h);document.addEventListener('touchstart',h);return()=>{document.removeEventListener('mousedown',h);document.removeEventListener('touchstart',h);};},[settingsOpen]);
       // Escape closes the settings popover. Doesn't fire when an input has focus that already
       // handles Escape (year-range inputs revert their value on Escape) — those handlers call
       // stopPropagation isn't used, so this listener still receives the event after the input's
@@ -3162,6 +3180,101 @@
         setLightTheme("light");
         setManualTheme("dusk");
       };
+      // Full Reset — wipes everything to the initial launch state. Stats, bests, history,
+      // settings, per-mode toggles, in-progress rounds/runs, overlays — all cleared. Returns
+      // to mode==='classic' which incidentally unmounts AoxMode, LookupCard, GuidePage, and
+      // MethodBreakdownSection, so their internal state (AoX bestRef, LookupCard scroll
+      // tracking, GuideSection open flags, breakdown scroll state, etc.) all reset on next
+      // mount. Order matters: mode flips first so subsequent setters don't trigger transient
+      // visible state in the outgoing mode's UI; date regen is last so the fresh date sees
+      // the new range/format defaults. Deliberately NOT a location.reload() — when memory,
+      // profiles, or offline state are added later, the full-reset flow needs to be the
+      // single source of truth for "back to launch state" and reload would re-hydrate from
+      // saved storage.
+      const fullReset=()=>{
+        // Mode + overlays first
+        setMode("classic");
+        setSettingsOpen(false);
+        setHtpAtBottom(true);
+        setHtpScrolledFromTop(false);
+        // All stats wiped
+        setStatsByMode({classic:blankStats(),blitz:blankStats(),flash:blankStats(),"deduction-day":blankStats(),"deduction-month":blankStats(),"deduction-year":blankStats()});
+        setBlitzRoundStats(blankStats());
+        setBlitzBest({});
+        setSuddenBest({});
+        // History stacks
+        setStack([]);setForwardStack([]);
+        setDedStack(blankDedStacks());setDedForwardStack(blankDedStacks());
+        setSavedDedByType(blankDedTypeStore());
+        setBackDepth(0);setBrowseHasCredit(false);
+        // Live question state
+        setLocked(false);setRevealed(false);setCountedWrong(false);
+        setCanOverrideCorrect(false);setPendingWrongOverride(null);
+        setOverrideUsedThisQ(false);setTimerDone(false);
+        setCalcOpenByMode({});setCalcPenaltyActive(false);
+        setPersistBtns({});setFlash(null);
+        setDed(null);setDedFlash(null);setDedType("day");
+        setAbCrossOnly(false);setJulCrossOnly(false);setMonthOnly1582(false);
+        // Per-mode toggles
+        setSaveStats(true);setUseJulian(false);
+        setAllowMistakes(true);setPerQ(false);
+        setBlitzSec(60);setBlitzRemain(60);setBlitzRunning(false);
+        setQSec(5);setQRemain(5);
+        setActive(false);setShowTimerDate(false);
+        setFlashMs(500);setFlashPhase("dash");setFlashRemainMs(500);
+        setScoringOffByMode({});setTimingOffByMode({classic:true,deduction:true});
+        // Settings popover
+        setRandomFormat(true);setDateFormat('written-mdy');
+        setLeapChance('random');setForceJanFebOnLeap(false);
+        setMinY(1);setMaxY(10000);
+        setMinInputVal("1");setMaxInputVal("10000");
+        // Theme back to system-detection defaults
+        setUseSystem(true);setDarkTheme("dusk");setLightTheme("light");setManualTheme("dusk");
+        // Lookup
+        setLookupHistory([]);setLookupInput("");setLookupOutput("");
+        setLookupCalcDate(null);setLookupSelectedHistoryId(null);setLookupCalcOpen(false);
+        // Fresh dates for the casual modes (classic/blitz/flash). AoX/Deduction generate on
+        // entry. The popover effect will see the format/range setters above and may also
+        // try to regen, but our explicit dateByMode set wins because it runs in the same batch.
+        setDateByMode(()=>{const mk=()=>{const d=randomDate(1,10000);d._fmt=rollFormat();d._jul=false;return d;};return{classic:mk(),blitz:mk(),flash:mk()};});
+      };
+      // Two-tap-to-confirm wrapper. Tap 1 arms (label flips to "Confirm?", button gets a ring).
+      // Tap 2 within the arm window fires the reset and disarms. Auto-disarm via timer (4s),
+      // settings-close watcher, and any-other-popover-mousedown listener.
+      const armFullReset=()=>{
+        if(fullResetArmed){
+          if(fullResetTimerRef.current){clearTimeout(fullResetTimerRef.current);fullResetTimerRef.current=null;}
+          setFullResetArmed(false);
+          fullReset();
+          return;
+        }
+        setFullResetArmed(true);
+        if(fullResetTimerRef.current)clearTimeout(fullResetTimerRef.current);
+        fullResetTimerRef.current=setTimeout(()=>{setFullResetArmed(false);fullResetTimerRef.current=null;},4000);
+      };
+      const disarmFullReset=()=>{
+        if(fullResetTimerRef.current){clearTimeout(fullResetTimerRef.current);fullResetTimerRef.current=null;}
+        setFullResetArmed(false);
+      };
+      // Disarm whenever settings closes by any path (gear tap, click-outside, Esc, full-reset firing).
+      useEffect(()=>{if(!settingsOpen)disarmFullReset();},[settingsOpen]);
+      // Disarm when the user mousedowns/touches any other interactive element inside the popover.
+      // Capture phase so this fires before the target's own onClick — that way the user's intent
+      // (e.g., toggling Random Format) still proceeds normally; we just consume the pending arm.
+      // Excludes the Full Reset button itself (and its descendants) so tap 2 actually fires.
+      useEffect(()=>{
+        if(!fullResetArmed)return;
+        const h=e=>{
+          if(!settingsPopoverRef.current||!settingsPopoverRef.current.contains(e.target))return;
+          if(fullResetBtnRef.current&&fullResetBtnRef.current.contains(e.target))return;
+          disarmFullReset();
+        };
+        document.addEventListener('mousedown',h,true);
+        document.addEventListener('touchstart',h,true);
+        return()=>{document.removeEventListener('mousedown',h,true);document.removeEventListener('touchstart',h,true);};
+      },[fullResetArmed]);
+      // Cleanup the timer on unmount.
+      useEffect(()=>()=>{if(fullResetTimerRef.current)clearTimeout(fullResetTimerRef.current);},[]);
       // True when every popover-controlled value matches its initial useState default.
       // Drives Reset Settings dim-and-lock — same pattern as Reveal/Override/etc.
       // Includes year range *input text* values so a dirty (uncommitted) input keeps
@@ -3224,7 +3337,10 @@
         </div>
         </div>
         <div className={`popover-sticky-footer pt-3 px-4 border-t border-purple-500/20${!popoverAtBottom?" elev-shadow-up":""}`}>
-          <button type="button" onClick={resetSettings} className={`w-full ${RESET_BTN_CLASS} ${settingsAtDefaults?"opacity-60 pointer-events-none":""}`}>Reset Settings</button>
+          <div className="flex gap-2">
+            <button type="button" onClick={resetSettings} className={`flex-1 ${RESET_BTN_CLASS} ${settingsAtDefaults?"opacity-60 pointer-events-none":""}`}>Reset Settings</button>
+            <button ref={fullResetBtnRef} type="button" onClick={armFullReset} className={`flex-1 ${RESET_BTN_CLASS}${fullResetArmed?" ring-2 ring-rose-200":""}`}>{fullResetArmed?"Confirm?":"Full Reset"}</button>
+          </div>
         </div>
         <div className="pt-2 px-4 border-t border-purple-500/20 text-[11px] text-purple-300/60 space-y-0.5">
           <div>Contact: <a href="mailto:dayoftheweekcalculation@gmail.com" className="underline break-all">dayoftheweekcalculation@gmail.com</a></div>
@@ -3470,7 +3586,7 @@
           <GuideSection id="leap" title="Leap Year Settings" openId={open} onToggle={toggle}><p>Two settings in the ⚙ menu control how often leap years appear and what months they're paired with. <b>Leap Year Chance</b> sets how often a generated date lands on a leap year — Random uses the natural rate (~24%); 50%, 75%, and 100% force higher rates. <b>Force Jan/Feb on Leap Years</b>, when on, restricts the month to January or February whenever a leap year is generated. These settings apply to all game modes' date generation; Lookup is unaffected. If your year range happens to contain no leap years (under the active calendar), the four Leap Year Chance buttons are locked and faded; the previously-selected value stays visually selected so it's restored when you change the range back to one with a leap year reachable. Force Jan/Feb on Leap Years stays unlocked since it doesn't imply leap-year reachability. Changing <b>Leap Year Chance</b> always regenerates the displayed date. Toggling <b>Force Jan/Feb on Leap Years</b> regenerates only if the current date is a leap year with a month other than January or February. If you've already made a wrong guess on the current date, either change is deferred so the wrong-state is preserved; the new setting applies to the next date. In active Blitz rounds and AoX runs, any leap setting change ends the round.</p></GuideSection>
           <GuideSection id="savestats" title="Save Stats" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Stats. On by default. When off, your answers don't update stats or saved bests. The stats panel dims to indicate the off state. The toggle works differently per mode:</p><p className="mt-2"><b>Classic, Deduction, Flash</b> — per-question. The toggle's value is locked in at the moment of your first stat-affecting action (your first wrong guess on the question, or your correct answer if you got it right on the first try). Toggling afterward doesn't change that question's outcome, but does apply to the next question. If you've already made a wrong guess on the current question, toggling Save Stats does not regenerate the date — the toggle's frozen value sticks for the question. When off, the question doesn't update stats and isn't pushed to history (Back can't browse to it). Override still advances to the next date the same way it normally would (or stays put if timing is hidden), just without any stat or history changes.</p><p className="mt-2"><b>Blitz</b> — round-level. In-round score, accuracy, streak, and Back/Forward navigation through round questions all work normally regardless of the toggle. Whatever the toggle is set to when the round ends determines whether the round's Best Score and Best Streak update.</p><p className="mt-2"><b>AoX</b> — run-level. In-run score, streak, times, and Back/Forward navigation all work normally regardless of the toggle. Whatever the toggle is set to when the run ends determines whether Best Average, Best Median, and Best Streak update. If a run finishes with Save Stats off, overriding entries after the run is a no-op on persistent bests; round-level stats still adjust.</p></GuideSection>
           <GuideSection id="theme" title="Theme" openId={open} onToggle={toggle}><p>Five themes: Dusk (default dark navy), Midnight (true black with purple), Nebula (deep purple), Light (clean white), and Parchment (warm cream). Accessible from the ⚙ settings menu in any tab. Enable Use System Settings to match your device's light/dark mode automatically, with separate theme choices for each. Disable to pick one manually.</p></GuideSection>
-          <GuideSection id="reset-settings" title="Reset Settings" openId={open} onToggle={toggle}><p>The Reset Settings button at the bottom of the ⚙ menu restores everything in the menu to its defaults: Random Format on, Written MDY, Julian off, year range 1–10000, Leap Year Chance Random, Force Jan/Feb off, Save Stats on, and theme back to Use System Settings with Dusk (dark) and Light (light). It does not touch mode-specific config outside the menu (AoX N, timer durations, Deduction sub-types and toggles) or your stats and history. No confirmation prompt — tap to apply.</p></GuideSection>
+          <GuideSection id="reset-settings" title="Reset Settings &amp; Full Reset" openId={open} onToggle={toggle}><p><b>Reset Settings</b> — at the bottom-left of the ⚙ menu, restores everything in the menu to its defaults: Random Format on, Written MDY, Julian off, year range 1–10000, Leap Year Chance Random, Force Jan/Feb off, Save Stats on, and theme back to Use System Settings with Dusk (dark) and Light (light). It does not touch mode-specific config outside the menu (AoX N, timer durations, Deduction sub-types and toggles) or your stats and history. No confirmation prompt — tap to apply.</p><p><b>Full Reset</b> — at the bottom-right of the ⚙ menu, restores the entire site to its initial launch state. Wipes all stats, all-time bests (Blitz, Sudden, AoX), Lookup history, and in-progress rounds and runs. Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode toggles (AoX N, timer durations, Deduction sub-types and toggles, Allow Mistakes, Save Stats, Stop Codes, etc.). Closes any open overlay (How to Play, ⚙ menu, codes, method breakdown) and switches to Classic. Requires two taps to confirm: tap once and the button changes to "Confirm?"; tap again to fire. Auto-cancels after a few seconds, when you close ⚙, or if you tap any other control.</p></GuideSection>
           <GuideSection id="keyboard" title="Keyboard Input" openId={open} onToggle={toggle}><p>On any device with a hardware keyboard (typically desktop), you can press keys to operate the site without tapping. The on-screen layout is identical to mobile — keyboard input is the only desktop-specific addition.</p><div className="mt-3 space-y-3"><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Answer Grid</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>0</Kbd><span>Sunday</span></div><div className="flex items-center gap-2"><Kbd>1</Kbd><span>Monday</span></div><div className="flex items-center gap-2"><Kbd>2</Kbd><span>Tuesday</span></div><div className="flex items-center gap-2"><Kbd>3</Kbd><span>Wednesday</span></div><div className="flex items-center gap-2"><Kbd>4</Kbd><span>Thursday</span></div><div className="flex items-center gap-2"><Kbd>5</Kbd><span>Friday</span></div><div className="flex items-center gap-2"><Kbd>6</Kbd><span>Saturday</span></div></div><p className="mt-2 text-xs italic">In Deduction Month and Year, the same keys map positionally to the boxes or year options on screen.</p></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Game Actions</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>N</Kbd><span>New / Begin / Reset</span></div><div className="flex items-center gap-2"><Kbd>R</Kbd><span>Reveal</span></div><div className="flex items-center gap-2"><Kbd>O</Kbd><span>Override</span></div><div className="flex items-center gap-2"><Kbd>C</Kbd><span>Show / Hide Codes</span></div><div className="flex items-center gap-2"><Kbd>S</Kbd><span>Reset Stats</span></div><div className="flex items-center gap-2"><Kbd>←</Kbd><span>Back</span></div><div className="flex items-center gap-2"><Kbd>→</Kbd><span>Forward</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Overlays</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>H</Kbd><span>How to Play (toggle)</span></div><div className="flex items-center gap-2"><Kbd>G</Kbd><span>Settings ⚙ (toggle)</span></div><div className="flex items-center gap-2"><Kbd>Tab</Kbd><span>Mode selector (toggle)</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Mode Switching</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>K</Kbd><span>Classic</span></div><div className="flex items-center gap-2"><Kbd>F</Kbd><span>Flash</span></div><div className="flex items-center gap-2"><Kbd>B</Kbd><span>Blitz</span></div><div className="flex items-center gap-2"><Kbd>A</Kbd><span>AoX</span></div><div className="flex items-center gap-2"><Kbd>D</Kbd><span>Deduction</span></div><div className="flex items-center gap-2"><Kbd>L</Kbd><span>Lookup</span></div></div></div></div><p className="mt-3">Letter keys are case-insensitive. Letter and number keys are ignored when you're typing in an input field or when a modifier key (Ctrl/Cmd/Alt/Shift) is held. <Kbd>Tab</Kbd> is the exception: it toggles the mode selector even from inputs (use Esc or Enter to leave an input first if you'd rather), and Tab combined with any modifier (Ctrl+Tab, Ctrl+Shift+Tab, etc.) passes through to the browser. Locked or already-pressed buttons are skipped, just like a click would be. Reset Stats (S) only applies to the casual modes (Classic, Deduction, Flash); pressing it in Blitz, AoX, or Lookup is a no-op since those modes don't have a separate Reset Stats button (their round/run Reset clears in-round/in-run stats; persistent bests update only when set).</p></GuideSection>
           <Divider label="Modes"/>
           <GuideSection id="classic" title="Classic" openId={open} onToggle={toggle}><p>The main practice mode with no time pressure. Answer at your own pace. Override works after both wrong and correct answers. Reset Stats clears your stats and question history; when timing stats are hidden and you haven't burned the current date, the date is kept.</p></GuideSection>
