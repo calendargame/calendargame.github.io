@@ -518,7 +518,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-09T09:16:00Z');
+    const DEPLOY_TS=new Date('2026-05-24T02:12:00Z');
 
     function StatPanel({stats}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -797,7 +797,9 @@
         !aoxStack[aoxStack.length-1].overrideUsed &&
         aoxStack[aoxStack.length-1].capsule?.snapshot!=null
       );
-      const overrideAvail=!overrideUsedAox&&(
+      // Override is universally locked when Save Stats is off — same rule as App-side
+      // overrideAvail. AoX uses the `saveStats` prop (run-level, no per-Q freeze).
+      const overrideAvail=saveStats&&!overrideUsedAox&&(
         (isRunning&&(Object.keys(aoxPersistBtns).length>0||codesOpen||canOverrideCorrect||pendingWrongCredit!=null))||
         (runPhase==="failed")||
         (runPhase==="done"&&canOverrideCorrect)||
@@ -1317,7 +1319,7 @@
       // See regenDecisionFor in the App popover effect for the full set of rules.
       // This lazy initializer can't reference randomFormat/dateFormat state because they
       // are declared later in the component. Hardcoded values mirror those useState
-      // defaults (randomFormat=true → rollFormat(); useJulian=false). If those defaults
+      // defaults (randomFormat=true → rollFormat(); useJulian=true). If those defaults
       // change, update both.
       // dateByMode intentionally only holds entries for classic/blitz/flash. Deduction
       // tracks its puzzle in a separate `ded` state (Year/Month/Day sub-modes have
@@ -1338,7 +1340,7 @@
       const [stack,setStack]=useState([]),[dedStack,setDedStack]=useState(blankDedStacks);
       const [forwardStack,setForwardStack]=useState([]);
       const [dedForwardStack,setDedForwardStack]=useState(blankDedStacks);
-      const [useJulian,setUseJulian]=useState(false);
+      const [useJulian,setUseJulian]=useState(true);
       const [saveStats,setSaveStats]=useState(true);
       // Per-question freeze: captures the saveStats value at the moment of the
       // first stat-affecting action on the current question. Reset to null on
@@ -1399,6 +1401,22 @@
       const [perQ,setPerQ]=useState(false);
       const blitzConfigPrevRef=useRef({perQ:false,allowMistakes:true});
       const blitzRoundIdRef=useRef(1);
+      // currentBlitzRoundIdRef holds the id of the round currently in the timerDone
+      // state (i.e., the round whose history is on screen for retro-override). Set
+      // by the timerDone useEffect when a round ends. Read by Path 1 / Path 5 /
+      // recalcStreak's Blitz-best update sites to decide whether the saved Best
+      // Score / Best Streak belongs to THIS round (rollback applies) or to an
+      // earlier round (rollback skipped — saved value belongs to a different round
+      // and lowering it would be wrong).
+      //
+      // Without this gate, retro-override compared the saved best to the current
+      // round's stats. When this round tied an earlier round's best, the heuristic
+      // falsely said "saved best came from this round" and overwrote the value
+      // belonging to the earlier round. Example: prior round set best of 4; this
+      // round also scored 4 (Math.max kept the saved 4); retro-override on this
+      // round dropped the saved best to 3 even though the earlier round's 4 was
+      // still legitimately the best score on record.
+      const currentBlitzRoundIdRef=useRef(null);
       const blitzDisplayRef=useRef({width:"100%",text:""});
       const suddenDisplayRef=useRef({width:"100%",text:""});
       const [blitzSec,setBlitzSec]=useState(60),[blitzRemain,setBlitzRemain]=useState(60),[blitzRunning,setBlitzRunning]=useState(false);
@@ -1774,7 +1792,22 @@
         for(const h of history){if(h){run++;if(run>bestStreak)bestStreak=run;}else run=0;}
         updateStats(c=>{c.streak=curStreak;c.best=bestStreak;});
         if(mode==="blitz"){setBlitzRoundStats(p=>({...p,streak:curStreak,best:bestStreak}));
-          if(timerDone){const bk=getBlitzBk();setBlitzBest(prev=>{const cur=prev[bk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};return{...prev,[bk]:{...cur,score:cur.score,streak:Math.max(cur.streak===blitzRoundStats.best?bestStreak:cur.streak,bestStreak)}};});}
+          if(timerDone){const bk=getBlitzBk();const rid=currentBlitzRoundIdRef.current;
+            // Best Streak update at round end. Two cases:
+            //   - Ratchet up: recomputed bestStreak > saved → take the new value
+            //     (works regardless of which round originally set the saved best).
+            //   - Roll back down: only when the saved streakRoundId matches the
+            //     current round id — i.e., this round's streak is what set the
+            //     saved best, and we just lowered this round's recomputed streak
+            //     via retro-override. If streakRoundId belongs to an earlier
+            //     round, the saved best legitimately came from a different run
+            //     and must not be lowered.
+            // See currentBlitzRoundIdRef declaration for the full rationale.
+            setBlitzBest(prev=>{const cur=prev[bk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};
+              if(bestStreak>cur.streak)return{...prev,[bk]:{...cur,streak:bestStreak,streakRoundId:rid}};
+              if(cur.streakRoundId===rid&&bestStreak<cur.streak)return{...prev,[bk]:{...cur,streak:bestStreak}};
+              return prev;
+            });}
         }
         return{curStreak,bestStreak};
       }
@@ -1804,63 +1837,19 @@
       // Streak restoration is uniform across all paths: full-history recalc (recalcStreak
       // helper or its inline equivalent when stale-state concerns exist). Snapshot refs
       // are still used to roll back played/good/times — only streak is now snapshot-free.
+      //
+      // Path precedence: paths are checked in order 1 → 2 → 3 → 4 → 5; the first matching
+      // path wins. When two paths' conditions could be simultaneously true, the higher
+      // path takes the action. Concrete consequence: if the user lands on a new Q with
+      // `pendingWrongOverride` set from a previous wrong-then-right (Path 4 ready), then
+      // burns the new Q via Show Codes or Reveal (setting `countedWrong=true`), Path 3
+      // wins on the next Override press — credit goes to the burned Q, and the Path 4
+      // pending state for the previous Q is dropped when the next Q advances. This is
+      // intentional: the user moved on to the new Q without resolving the previous one.
       function override(){
-        // Save Stats OFF for this question (Classic/Flash/Deduction with frozen-OFF):
-        // no stats to update and no history to push (frozen-OFF questions never enter
-        // the stack), but we still need to advance the date / clean up state — mirroring
-        // the structure of the three live override paths below.
-        //
-        // Path 1 (browsing-back) is reached AFTER this branch. While browsing back,
-        // saveStatsThisQRef.current is forced to true (see goBack), so this Save Stats
-        // OFF branch never fires during back-browse — path 1 still handles those.
-        //
-        // We deliberately don't call setStack/setDedStack to mark a previous entry
-        // overrideUsed (as the Save Stats ON paths do) because no entry was just pushed
-        // for this Q — doing so would corrupt the previous Q's history entry.
-        if(isPerQGated()&&!effectiveSaveStats()){
-          setOverrideUsedThisQ(true);
-          if(canOverrideCorrect){
-            // Mirrors path 2 (canOverrideCorrect → undo correct). With stats off there's
-            // nothing to undo — just advance / stay + clean up.
-            setCanOverrideCorrect(false);
-            if(!timingOff){
-              pushAndNext();
-              setPendingWrongOverride(null);
-            }else{
-              setCountedWrong(false);
-              setLocked(false);setRevealed(false);setCalcPenalty(false);setCalcOpen(false);
-            }
-          }else if(countedWrong){
-            // Mirrors path 3 (countedWrong → give credit after wrong/reveal). With stats
-            // off there's nothing to credit — just advance and clean up. Always advances
-            // (matches path 3's unconditional pushAndNext).
-            setCountedWrong(false);setCanOverrideCorrect(false);
-            setLocked(false);setRevealed(false);setCalcPenalty(false);setCalcOpen(false);
-            // Flash is the only timer mode in isPerQGated; drop it back to idle so the
-            // next date appears as a fresh dash awaiting Begin (matches path 3 Flash).
-            if(mode==="flash"){
-              setActive(false);setShowTimerDate(false);
-              clearTimeout(flashTimerRef.current);flashTimerRef.current=null;
-              setFlashPhase("dash");flashDeadlineRef.current=null;
-              setFlashRemainMs(flashMs);resetFlashBar();
-            }
-            pushAndNext();
-            setPendingWrongOverride(null);
-          }else if(pendingWrongOverride!=null){
-            // Mirrors path 4 (pendingWrongOverride → retroactive credit on previous Q).
-            // With stats off, no credit to apply — just clear the pending state and advance.
-            setPendingWrongOverride(null);
-            preCalcPenaltySnapshotRef.current=null;
-            if(!timingOff){
-              pushAndNext();
-              setPendingWrongOverride(null);
-            }
-          }
-          wrongTimeRef.current=null;
-          prevStatsSnapshotRef.current=null;
-          saveStatsThisQRef.current=null;
-          return;
-        }
+        // Save Stats off locks Override entirely — see overrideAvail formula below.
+        // This function is only reached when Override is enabled, which now requires
+        // saveStats=true. No save-stats-off branch is needed; the gating handles it.
         setOverrideUsedThisQ(true);
         // === BROWSING-BACK OVERRIDE: delta-based stat adjustment + streak recalc ===
         if(backDepth>0&&canOverrideCorrect&&prevStatsSnapshotRef.current){
@@ -1882,9 +1871,35 @@
             const tIdx=typeof u.timesLen==="number"?u.timesLen:null;
             updateStats(c=>{c.good=Math.max(0,c.good-1);if(tIdx!=null&&tIdx<c.times.length)c.times=[...c.times.slice(0,tIdx),...c.times.slice(tIdx+1)];});
             if(mode==="blitz")setBlitzRoundStats(p=>({...p,good:Math.max(0,p.good-1)}));
+            // Display the diagonal-split visual matching Path 5's right→wrong (green
+            // upper-left = originally correct, red lower-right = now counted wrong).
+            // Without this, the displayed btns kept the plain green from before the
+            // flip, even though the saved entry's hasCredit was now false. The HtP
+            // already promises this visual for "previously correct date that's been
+            // retroactively flipped to wrong" — Path 5 implemented it; Path 1 didn't.
+            // entryWithGreen treats override-wrong-only entries as already having a
+            // marked answer (no synthesized green), so the visual persists correctly
+            // when the user navigates away or reloads the entry via Forward.
+            if(mode==="deduction")setPersistBtns({[getDedCorrectIdx()]:'override-wrong'});
+            else setPersistBtns({[correct]:'override-wrong'});
             if(timerDone){
-              if(mode==='blitz'&&!perQ){const bk=getBlitzBk();setBlitzBest(prev=>{const cur=prev[bk];if(!cur)return prev;const ng=Math.max(0,blitzRoundStats.good-1);return{...prev,[bk]:{...cur,score:cur.score===blitzRoundStats.good?ng:cur.score,streak:cur.streak}};});}
-              if(mode==='blitz'&&perQ)setSuddenBest(prev=>{const cur=prev[getSuddenBk()];if(!cur)return prev;const ng=Math.max(0,S.good-1);return cur.score===S.good?{...prev,[getSuddenBk()]:{score:ng}}:prev;});
+              // Best Score rollback (Per Round): only lower the saved best if its
+              // scoreRoundId matches the round whose history we're currently
+              // browsing. The current round's id is captured in
+              // currentBlitzRoundIdRef.current at round end. When this round didn't
+              // beat the prior best (Math.max kept the saved value), scoreRoundId
+              // still points to whichever earlier round originally set it — so the
+              // gate correctly skips rollback. New value `blitzRoundStats.good - 1`
+              // equals the recomputed round score after the override (the setBlitzRoundStats
+              // above subtracted 1 from blitzRoundStats.good in the closure-staged update).
+              if(mode==='blitz'&&!perQ){const bk=getBlitzBk();const rid=currentBlitzRoundIdRef.current;setBlitzBest(prev=>{const cur=prev[bk];if(!cur)return prev;if(cur.scoreRoundId!==rid)return prev;const ng=Math.max(0,blitzRoundStats.good-1);return{...prev,[bk]:{...cur,score:ng}};});}
+              // Best Score rollback (Per Question / Sudden): use suddenBestSnapRef
+              // (captured at this round's timerDone effect) as a floor. The new
+              // saved best is the higher of (this round's recomputed score) and
+              // (the previous saved best before this round). If snapshot is missing
+              // (path 3 already consumed it via override-after-wrong), fall back to
+              // Math.max(0, S.good - 1) as a defensive default.
+              if(mode==='blitz'&&perQ)setSuddenBest(prev=>{const cur=prev[getSuddenBk()];if(!cur)return prev;if(cur.score!==S.good)return prev;const snapPrev=(suddenBestSnapRef.current&&suddenBestSnapRef.current.key===getSuddenBk())?suddenBestSnapRef.current.prev.score:0;const ng=Math.max(snapPrev,S.good-1);return{...prev,[getSuddenBk()]:{score:ng}};});
             }
           }
           recalcStreak(newHC);
@@ -1953,6 +1968,11 @@
           const overrideBtns=mode==="deduction"?{[getDedCorrectIdx()]:'correct'}:{[correct]:'correct'};pushAndNext(overrideBtns);if(mode==="deduction")setDedStack(s=>{const arr=s[dedType]||[];if(!arr.length)return s;return{...s,[dedType]:[...arr.slice(0,-1),{...arr[arr.length-1],overrideUsed:true}]};});else setStack(s=>{if(!s.length)return s;return[...s.slice(0,-1),{...s[s.length-1],overrideUsed:true}];});setPendingWrongOverride(null);return;
         }
         if(pendingWrongOverride!=null){
+          // Path 4 is unreachable in Per Question Blitz (Sudden) by mode design —
+          // wrong is terminal in that mode (locks the Q immediately on wrong, no
+          // try-again to produce a wrong-then-right sequence). Modes where it IS
+          // reachable: Classic, Flash, Deduction, Per Round Blitz (Allow Mistakes
+          // on), AoX (Allow Mistakes on, separate code path in AoxMode).
           const {wrongTime,snapshot}=pendingWrongOverride;
           // Streak consolidation: roll back played/good via snapshot when available
           // (snapshot may be null if Reveal/Show Codes nulled it after the wrong was
@@ -1994,10 +2014,30 @@
           for(const h of history){if(h){run++;if(run>bestStreak)bestStreak=run;}else run=0;}
           updateStats(c=>{c.streak=curStreak;c.best=bestStreak;});
           if(mode==="blitz"){setBlitzRoundStats(p=>({...p,streak:curStreak,best:bestStreak}));
-            if(timerDone){const bk=getBlitzBk();setBlitzBest(prev=>{const cur=prev[bk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};return{...prev,[bk]:{...cur,score:cur.score,streak:Math.max(cur.streak===blitzRoundStats.best?bestStreak:cur.streak,bestStreak)}};});}
+            if(timerDone){const bk=getBlitzBk();const rid=currentBlitzRoundIdRef.current;
+              // Best Streak update at round end. Same round-id pattern as recalcStreak —
+              // see currentBlitzRoundIdRef declaration. Path 4 only adds credit, so
+              // bestStreak >= the round's prior best; the roll-down branch is
+              // unreachable in practice but kept for uniformity with Path 1 / Path 5.
+              setBlitzBest(prev=>{const cur=prev[bk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};
+                if(bestStreak>cur.streak)return{...prev,[bk]:{...cur,streak:bestStreak,streakRoundId:rid}};
+                if(cur.streakRoundId===rid&&bestStreak<cur.streak)return{...prev,[bk]:{...cur,streak:bestStreak}};
+                return prev;
+              });}
           }
           setPendingWrongOverride(null);preCalcPenaltySnapshotRef.current=null;
           if(!timingOff){pushAndNext();if(mode==="deduction")setDedStack(s=>{const arr=s[dedType]||[];if(!arr.length)return s;return{...s,[dedType]:[...arr.slice(0,-1),{...arr[arr.length-1],overrideUsed:true}]};});else setStack(s=>{if(!s.length)return s;return[...s.slice(0,-1),{...s[s.length-1],overrideUsed:true}];});}
+          else{
+            // Timing-hidden branch: Path 4 retroactively credited the PREVIOUS Q;
+            // the live Q is untouched. The `setOverrideUsedThisQ(true)` at the top
+            // of override() was set as a blanket double-fire guard, but since the
+            // live Q is unchanged, future state on this same live Q (e.g. the user
+            // submits a wrong answer) should re-arm Override via Path 3. Clear the
+            // flag so the live Q is eligible for its own override path. The
+            // timing-visible branch above doesn't need this — pushAndNext clears
+            // overrideUsedThisQ naturally on advance.
+            setOverrideUsedThisQ(false);
+          }
           return;
         }
         // === PATH 5: RETROACTIVE OVERRIDE OF MOST RECENT STACK ENTRY ===
@@ -2042,8 +2082,11 @@
             updateStats(c=>{c.good=Math.max(0,c.good-1);if(tIdx!=null&&tIdx<c.times.length)c.times=[...c.times.slice(0,tIdx),...c.times.slice(tIdx+1)];});
             if(mode==="blitz")setBlitzRoundStats(p=>({...p,good:Math.max(0,p.good-1)}));
             if(timerDone){
-              if(mode==='blitz'&&!perQ){const bk=getBlitzBk();setBlitzBest(prev=>{const cur=prev[bk];if(!cur)return prev;const ng=Math.max(0,blitzRoundStats.good-1);return{...prev,[bk]:{...cur,score:cur.score===blitzRoundStats.good?ng:cur.score,streak:cur.streak}};});}
-              if(mode==='blitz'&&perQ)setSuddenBest(prev=>{const cur=prev[getSuddenBk()];if(!cur)return prev;const ng=Math.max(0,S.good-1);return cur.score===S.good?{...prev,[getSuddenBk()]:{score:ng}}:prev;});
+              // Best Score rollback (Per Round): same round-id gate as Path 1.
+              // See currentBlitzRoundIdRef declaration for the full rationale.
+              if(mode==='blitz'&&!perQ){const bk=getBlitzBk();const rid=currentBlitzRoundIdRef.current;setBlitzBest(prev=>{const cur=prev[bk];if(!cur)return prev;if(cur.scoreRoundId!==rid)return prev;const ng=Math.max(0,blitzRoundStats.good-1);return{...prev,[bk]:{...cur,score:ng}};});}
+              // Best Score rollback (Per Question / Sudden): same snapshot floor as Path 1.
+              if(mode==='blitz'&&perQ)setSuddenBest(prev=>{const cur=prev[getSuddenBk()];if(!cur)return prev;if(cur.score!==S.good)return prev;const snapPrev=(suddenBestSnapRef.current&&suddenBestSnapRef.current.key===getSuddenBk())?suddenBestSnapRef.current.prev.score:0;const ng=Math.max(snapPrev,S.good-1);return{...prev,[getSuddenBk()]:{score:ng}};});
             }
             // Stack entry: change btns to override-wrong state on the correct-answer button
             // (replaces the existing 'correct' marking). Override visual: green-upper-left/
@@ -2072,7 +2115,17 @@
           for(const h of history){if(h){run++;if(run>bestStreak)bestStreak=run;}else run=0;}
           updateStats(c=>{c.streak=curStreak;c.best=bestStreak;});
           if(mode==="blitz"){setBlitzRoundStats(p=>({...p,streak:curStreak,best:bestStreak}));
-            if(timerDone){const bk=getBlitzBk();setBlitzBest(prev=>{const cur=prev[bk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};return{...prev,[bk]:{...cur,score:cur.score,streak:Math.max(cur.streak===blitzRoundStats.best?bestStreak:cur.streak,bestStreak)}};});}
+            if(timerDone){const bk=getBlitzBk();const rid=currentBlitzRoundIdRef.current;
+              // Best Streak update at round end. Same round-id pattern as recalcStreak —
+              // see currentBlitzRoundIdRef declaration. Path 5 right→wrong can lower
+              // the round's recomputed best streak (took credit away), so the
+              // roll-down branch genuinely fires here when the saved best came from
+              // this round; an earlier round's saved best is correctly preserved.
+              setBlitzBest(prev=>{const cur=prev[bk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};
+                if(bestStreak>cur.streak)return{...prev,[bk]:{...cur,streak:bestStreak,streakRoundId:rid}};
+                if(cur.streakRoundId===rid&&bestStreak<cur.streak)return{...prev,[bk]:{...cur,streak:bestStreak}};
+                return prev;
+              });}
           }
           // Note: overrideUsedThisQ was set true at top of override(); it stays true
           // until the live Q advances (next New/correct answer) to prevent double-fire.
@@ -2085,7 +2138,12 @@
         if(idx===correct){
           setFlashWithTimeout({type:"good",idx});
           if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);setPendingWrongOverride(null);if(tStartRef.current&&trackingOn()){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}
-          else if(countedWrong&&prevStatsSnapshotRef.current){setCanOverrideCorrect(true);}
+          // Wrong-then-right on the same live Q reaches override Path 4 (via
+          // pendingWrongOverride set in pushAndNext below), NOT Path 2 — pushAndNext
+          // clears canOverrideCorrect on advance, so any setCanOverrideCorrect(true)
+          // here would be immediately wiped before render. Path 2's u.wasWrong=true
+          // branch is only reachable when a wrong-then-right entry is reloaded via
+          // back-browse (where canOverrideCorrect is restored from the entry's capsule).
           if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});
           if(mode==="blitz"&&!countedWrong)setBlitzRoundStats(p=>({...p,played:p.played+1,good:p.good+1,streak:p.streak+1,best:Math.max(p.best,p.streak+1)}));
           if(mode==="blitz"&&perQ){const now=performance.now();qDeadlineRef.current=now+qSec*1000;qPausedAccRef.current=0;qPausedAtRef.current=null;setQRemain(qSec);}
@@ -2486,9 +2544,9 @@
         // batch so the ded change (via spawnDed) lands with the panel close — freeze contract.
         const sctn=()=>{const ci=getDedCorrectIdx();const dedBtns=mkBtnsWithCorrect(persistBtns,ci);const capsule={snapshot:prevStatsSnapshotRef.current?{...prevStatsSnapshotRef.current}:null,wrongTime:wrongTimeRef.current};setDedStack(s=>ded?({...s,[dedType]:[...(s[dedType]||[]),{...ded,btns:dedBtns,overrideUsed:false,capsule,hasCredit:computeHasCredit(dedBtns)}]}):s);setDedForwardStack(s=>({...s,[dedType]:[]}));spawnDed();setCountedWrong(false);setCanOverrideCorrect(false);setLocked(false);setRevealed(false);setOverrideUsedThisQ(false);setBackDepth(0);setCalcOpen(false);wrongTimeRef.current=null;prevStatsSnapshotRef.current=null;resetPB();};
         const sw=(label,idx)=>{if(!countedWrong){wrongTimeRef.current=tStartRef.current?(performance.now()-tStartRef.current)/1000:null;prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:true};}markWrong(idx);setCountedWrong(true);setCanOverrideCorrect(false);};
-        if(ded.type==="year"){const ok=(+val)===ded.y;flashDed("year",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}else if(countedWrong&&prevStatsSnapshotRef.current){setCanOverrideCorrect(true);}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(fmtYear(+val),index);}}
-        if(ded.type==="month"){const ok=ded.boxes?ded.boxes[index]?.months.includes(ded.m):((+val)===ded.m);flashDed("month",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}else if(countedWrong&&prevStatsSnapshotRef.current){setCanOverrideCorrect(true);}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(val),index);}}
-        if(ded.type==="day"){const ok=(+val)===ded.d;flashDed("day",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}else if(countedWrong&&prevStatsSnapshotRef.current){setCanOverrideCorrect(true);}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(+val),index);}}
+        if(ded.type==="year"){const ok=(+val)===ded.y;flashDed("year",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(fmtYear(+val),index);}}
+        if(ded.type==="month"){const ok=ded.boxes?ded.boxes[index]?.months.includes(ded.m):((+val)===ded.m);flashDed("month",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(val),index);}}
+        if(ded.type==="day"){const ok=(+val)===ded.d;flashDed("day",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(+val),index);}}
       }
       // Mode-switch state preservation — fires synchronously when `mode` changes.
       //   LEAVING: save stacks/timerDone snap/preservedQ based on what prevMode was doing.
@@ -2674,7 +2732,11 @@
         !retroOverrideStack[retroOverrideStack.length-1].overrideUsed &&
         retroOverrideStack[retroOverrideStack.length-1].capsule?.snapshot!=null
       );
-      const overrideAvail=(countedWrong||canOverrideCorrect||pendingWrongOverride!=null||retroOverrideEligible)&&!overrideUsedThisQ;
+      // Override is universally locked when Save Stats is off — there are no stats
+      // to adjust anywhere (live Q, back-browsed entries, or AoX runs). Gates on the
+      // live `saveStats` global, not `effectiveSaveStats()`, so the lock is consistent
+      // across the whole UI including back-browse on entries that were saved earlier.
+      const overrideAvail=saveStats&&(countedWrong||canOverrideCorrect||pendingWrongOverride!=null||retroOverrideEligible)&&!overrideUsedThisQ;
       const calcTarget=useMemo(()=>{if(mode==="lookup"||mode==="guide"||mode==="aox")return null;if(isTimer(mode)&&!shouldShowTimerDate)return null;if(mode==="deduction")return ded?{y:ded.y,m:ded.m,d:ded.d,_jul:ded._jul}:null;return date;},[mode,shouldShowTimerDate,date?.y,date?.m,date?.d,date?._jul,date?._fmt,ded?.y,ded?.m,ded?.d,ded?._jul,ded?._fmt]);
       const calcTargetKey=calcTarget?`${calcTarget.y}-${calcTarget.m}-${calcTarget.d}`:"none";
       const lookupCalcTargetKey=lookupCalcDate?`${lookupCalcDate.y}-${lookupCalcDate.m}-${lookupCalcDate.d}`:"none";
@@ -2717,6 +2779,10 @@
         if(!perQ){
           const bk=getBlitzBk();
           const thisRoundId=blitzRoundIdRef.current++;
+          // Tracked so retro-override paths can determine whether the saved best
+          // belongs to THIS round (rollback applies) or an earlier round (skipped).
+          // See currentBlitzRoundIdRef declaration for the full rationale.
+          currentBlitzRoundIdRef.current=thisRoundId;
           setBlitzBest(prev=>{
             const cur=prev[bk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};
             const newScore=Math.max(cur.score,blitzRoundStats.good);
@@ -3217,7 +3283,7 @@
       const resetSettings=()=>{
         setRandomFormat(true);
         setDateFormat('written-mdy');
-        setUseJulian(false);
+        setUseJulian(true);
         setMinY(1);setMaxY(10000);
         setMinInputVal("1");setMaxInputVal("10000");
         setLeapChance('random');
@@ -3292,12 +3358,13 @@
         qPausedAtRef.current=null;
         qPausedAccRef.current=0;
         blitzRoundIdRef.current=1;
+        currentBlitzRoundIdRef.current=null;
         blitzConfigPrevRef.current={perQ:false,allowMistakes:true};
         blitzDisplayRef.current={width:"100%",text:""};
         suddenDisplayRef.current={width:"100%",text:""};
         //    Settings/popover diff refs (set to defaults so the popover effect doesn't see a
         //    stale "previous" and trigger a stray regen against it):
-        prevPopRef.current={randomFormat:true,dateFormat:'written-mdy',useJulian:false,minY:1,maxY:10000,leapChance:'random',forceJanFebOnLeap:false};
+        prevPopRef.current={randomFormat:true,dateFormat:'written-mdy',useJulian:true,minY:1,maxY:10000,leapChance:'random',forceJanFebOnLeap:false};
         prevDedTogglesRef.current={abCrossOnly:false,julCrossOnly:false,monthOnly1582:false};
         //    Misc:
         lastAppliedScrollLockRef.current=null;
@@ -3327,7 +3394,7 @@
         setDed(null);setDedFlash(null);setDedType("day");
         setAbCrossOnly(false);setJulCrossOnly(false);setMonthOnly1582(false);
         // Per-mode toggles
-        setSaveStats(true);setUseJulian(false);
+        setSaveStats(true);setUseJulian(true);
         setAllowMistakes(true);setPerQ(false);
         setBlitzSec(60);setBlitzRemain(60);setBlitzRunning(false);
         setQSec(5);setQRemain(5);
@@ -3402,7 +3469,7 @@
       // Drives Reset Settings dim-and-lock — same pattern as Reveal/Override/etc.
       // Includes year range *input text* values so a dirty (uncommitted) input keeps
       // the button active to clear it back to "1" / "10000".
-      const settingsAtDefaults=randomFormat===true&&dateFormat==='written-mdy'&&useJulian===false&&minY===1&&maxY===10000&&minInputVal==="1"&&maxInputVal==="10000"&&leapChance==='random'&&forceJanFebOnLeap===false&&saveStats===true&&useSystem===true&&darkTheme==='dusk'&&lightTheme==='light'&&manualTheme==='dusk';
+      const settingsAtDefaults=randomFormat===true&&dateFormat==='written-mdy'&&useJulian===true&&minY===1&&maxY===10000&&minInputVal==="1"&&maxInputVal==="10000"&&leapChance==='random'&&forceJanFebOnLeap===false&&saveStats===true&&useSystem===true&&darkTheme==='dusk'&&lightTheme==='light'&&manualTheme==='dusk';
       const settingsJsx=settingsOpen&&(<div ref={settingsPopoverRef} className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card py-4 space-y-4 shadow-xl flex flex-col max-h-[calc(100dvh-80px)]">
         <div ref={popoverInnerScrollRef} className={`overflow-y-auto overscroll-none flex-1 min-h-0 space-y-4 px-4${popoverAtBottom?"":" fade-scroll-bottom"}`}>
         <div className="space-y-2">
@@ -3693,7 +3760,7 @@
             <p><b>Back (&lt;)</b> — return to the previous date. The answer is shown and the card is locked. No stat penalty. You can go back through your entire history in Classic, Flash, and Deduction; in Blitz and AoX, you can browse the current round or run. Every entry in your history shows the correct answer in green; if you got it wrong, your wrong guess(es) appear as dimmed red alongside the green. While browsing back, a small <b>Q#</b> label appears at the top-right of the date card showing your position in history (e.g. Q3 means you're on the third question viewed).</p>
             <p><b>Forward (&gt;)</b> — move forward through dates you've browsed past with Back. The forward history clears whenever you answer a new question, press New/Begin/Reset, or take any action that advances the date. Overriding while browsing back does not clear the forward history. Each entry remembers its date format and calendar system, so a back-then-forward round trip never alters how a date was originally shown.</p>
             <p><b>Reveal</b> — show the correct answer without guessing. Counts as a wrong attempt. No penalty on unanswered dates while browsing back.</p>
-            <p><b>Override</b> — fix a mistake. You can override any date in your history by browsing to it with Back/Forward. After a wrong answer: gives you credit with time recorded and adjusts your score. After a correct answer: undoes the credit and adjusts your score. You can also override the most recent past date directly from a fresh, untouched live question (in any mode) — Override is enabled when the live date hasn't been answered yet, and tapping it flips your previous date's right/wrong status. A previously correct date that's been retroactively flipped to wrong shows up with a green-and-red diagonal split: green-upper-left (originally correct) and red-lower-right (now counted wrong). You can only override each date once. Overriding a wrong answer (regardless of how) clears any wrong highlights; only the correct answer is shown. In Blitz, you can override past dates after the round ends to adjust your score and saved bests. In AoX without Allow Mistakes, overriding a correct answer ends the run.</p>
+            <p><b>Override</b> — fix a mistake. You can override any date in your history by browsing to it with Back/Forward. After a wrong answer: gives you credit with time recorded and adjusts your score. After a correct answer: undoes the credit and adjusts your score. You can also override the most recent past date directly from a fresh, untouched live question (in any mode) — Override is enabled when the live date hasn't been answered yet, and tapping it flips your previous date's right/wrong status. A previously correct date that's been retroactively flipped to wrong shows up with a green-and-red diagonal split: green-upper-left (originally correct) and red-lower-right (now counted wrong). You can only override each date once. Overriding a wrong answer (regardless of how) clears any wrong highlights; only the correct answer is shown. In Blitz, you can override past dates after the round ends to adjust your score and saved bests. In AoX without Allow Mistakes, overriding a correct answer ends the run. Override is locked when Save Stats is off.</p>
             <p><b>Show Codes</b> — reveals the calculation codes for the current date. Counts as wrong if you haven't already answered incorrectly. No penalty on unanswered dates while browsing back. In AoX without Allow Mistakes, opening Show Codes ends the run.</p>
           </GuideSection>
           <GuideSection id="stats" title="Stats" openId={open} onToggle={toggle}>
@@ -3708,10 +3775,10 @@
           </GuideSection>
           <Divider label="Settings"/>
           <GuideSection id="dateformat" title="Date Format" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Choose one of five real-world formats: <b>Written MDY</b> (April 27, 1828), <b>Written DMY</b> (27 April 1828), <b>Numeric MDY</b> (4/27/1828), <b>Numeric DMY</b> (27.4.1828), or <b>Numeric YMD</b> (1828-4-27). Numeric formats use a fixed separator convention: MDY uses '/', DMY uses '.', YMD uses '-'. Years always show in full, never abbreviated.</p><p>Only DMY, MDY, and YMD orderings are offered because those are the only orderings actually used in real life — orderings like YDM aren't standard anywhere.</p><p><b>Random Format</b>, when on, rolls one of the five formats per date in game modes only — your selected format is preserved underneath (the panels just lock visually). Lookup and the Last Updated timestamp ignore Random and always use the selected format. The Last Updated timestamp uses the numeric version of whichever format you've selected.</p><p>In Classic, Deduction, Flash, and AoX (idle), format changes on an unanswered, untouched date may regenerate the date. Turning Random Format on always regenerates (a fresh random format is rolled). Turning Random Format off regenerates only if the displayed format differs from your selected dropdown format. Changing the dropdown while Random Format is off regenerates only if the new selection differs from the displayed format. Changing the dropdown while Random Format is on does nothing visible — the dropdown is overridden by the random roll. If you've already made a wrong guess on the displayed date, format changes are deferred — the wrong-state is preserved and the new format applies on the next generated date. In active Blitz rounds and AoX runs, any format change ends the round.</p><p>In game modes' Show Codes, codes appear in the order the date is read (left to right), with Leap shown once you've seen both the year and month.</p></GuideSection>
-          <GuideSection id="julian" title="Julian Calendar" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Calendar System. Off by default. When on, dates on or before October 4, 1582 are treated as Julian calendar dates, which have different leap year rules — every year divisible by 4 is a leap year, with no century exception. This affects weekday calculation and the codes shown in Show Codes. October 5–14, 1582 are always excluded since those dates never existed; the Gregorian calendar skipped them to correct accumulated calendar drift.</p><p>Toggling Julian doesn't necessarily regenerate the current date. For dates after October 4, 1582, Julian has no effect. For Julian-eligible dates (October 4, 1582 or earlier), the date stays if you haven't made a wrong guess yet — the answer and codes simply update. If you've already wrong-guessed, the date regenerates and is added to your history with both your red guess and a green for the day that was correct under the calendar system in effect when the date was first generated. Each date snapshots its calendar system at generation, so revisiting an earlier question via Back shows the highlights and codes that were correct under the system in effect when that date was generated. In active Blitz rounds and AoX runs, any Julian toggle ends the round.</p></GuideSection>
+          <GuideSection id="julian" title="Julian Calendar" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Calendar System. On by default. When on, dates on or before October 4, 1582 are treated as Julian calendar dates, which have different leap year rules — every year divisible by 4 is a leap year, with no century exception. This affects weekday calculation and the codes shown in Show Codes. October 5–14, 1582 are always excluded since those dates never existed; the Gregorian calendar skipped them to correct accumulated calendar drift.</p><p>Toggling Julian doesn't necessarily regenerate the current date. For dates after October 4, 1582, Julian has no effect. For Julian-eligible dates (October 4, 1582 or earlier), the date stays if you haven't made a wrong guess yet — the answer and codes simply update. If you've already wrong-guessed, the date regenerates and is added to your history with both your red guess and a green for the day that was correct under the calendar system in effect when the date was first generated. Each date snapshots its calendar system at generation, so revisiting an earlier question via Back shows the highlights and codes that were correct under the system in effect when that date was generated. In active Blitz rounds and AoX runs, any Julian toggle ends the round.</p></GuideSection>
           <GuideSection id="range" title="Year Range" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Controls which years dates are drawn from. Defaults to 1–10000 AD. Changing the range always regenerates the current date — but if you've already made a wrong guess on the current date, the change is deferred so the wrong-state is preserved; the new range applies to the next date. While browsing back, settings-driven regen always preserves your history: the date you were viewing and any forward entries are pushed back to history before the live slot is regenerated. In active Blitz rounds and AoX runs, any range change ends the round.</p><p><b>Year sub-mode auto-disable:</b> Deduction's Year sub-mode requires either a year range of at least 5 years (so a 5-year window can be built) or, with Julian on, a range that contains October 15, 1582 (so a 2-year Jul Cross window can be built). When neither condition holds, the Year sub-type button greys out, and if you were already in Year mode when the range changed, you're auto-switched to Day mode. Day and Month sub-modes work for any valid range.</p></GuideSection>
           <GuideSection id="leap" title="Leap Year Settings" openId={open} onToggle={toggle}><p>Two settings in the ⚙ menu control how often leap years appear and what months they're paired with. <b>Leap Year Chance</b> sets how often a generated date lands on a leap year — Random uses the natural rate (~24%); 50%, 75%, and 100% force higher rates. <b>Force Jan/Feb on Leap Years</b>, when on, restricts the month to January or February whenever a leap year is generated. These settings apply to all game modes' date generation; Lookup is unaffected. If your year range happens to contain no leap years (under the active calendar), the four Leap Year Chance buttons are locked and faded; the previously-selected value stays visually selected so it's restored when you change the range back to one with a leap year reachable. Force Jan/Feb on Leap Years stays unlocked since it doesn't imply leap-year reachability. Changing <b>Leap Year Chance</b> always regenerates the displayed date. Toggling <b>Force Jan/Feb on Leap Years</b> regenerates only if the current date is a leap year with a month other than January or February. If you've already made a wrong guess on the current date, either change is deferred so the wrong-state is preserved; the new setting applies to the next date. In active Blitz rounds and AoX runs, any leap setting change ends the round.</p></GuideSection>
-          <GuideSection id="savestats" title="Save Stats" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Stats. On by default. When off, your answers don't update stats or saved bests. The stats panel dims to indicate the off state. The toggle works differently per mode:</p><p className="mt-2"><b>Classic, Deduction, Flash</b> — per-question. The toggle's value is locked in at the moment of your first stat-affecting action (your first wrong guess on the question, or your correct answer if you got it right on the first try). Toggling afterward doesn't change that question's outcome, but does apply to the next question. If you've already made a wrong guess on the current question, toggling Save Stats does not regenerate the date — the toggle's frozen value sticks for the question. When off, the question doesn't update stats and isn't pushed to history (Back can't browse to it). Override still advances to the next date the same way it normally would (or stays put if timing is hidden), just without any stat or history changes.</p><p className="mt-2"><b>Blitz</b> — round-level. In-round score, accuracy, streak, and Back/Forward navigation through round questions all work normally regardless of the toggle. Whatever the toggle is set to when the round ends determines whether the round's Best Score and Best Streak update.</p><p className="mt-2"><b>AoX</b> — run-level. In-run score, streak, times, and Back/Forward navigation all work normally regardless of the toggle. Whatever the toggle is set to when the run ends determines whether Best Average, Best Median, and Best Streak update. If a run finishes with Save Stats off, overriding entries after the run is a no-op on persistent bests; round-level stats still adjust.</p></GuideSection>
+          <GuideSection id="savestats" title="Save Stats" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Stats. On by default. When off, your answers don't update stats or saved bests. The stats panel dims to indicate the off state. Override is locked when Save Stats is off, across all modes. The toggle works differently per mode:</p><p className="mt-2"><b>Classic, Deduction, Flash</b> — per-question. The toggle's value is locked in at the moment of your first stat-affecting action (your first wrong guess on the question, or your correct answer if you got it right on the first try). Toggling afterward doesn't change that question's outcome, but does apply to the next question. If you've already made a wrong guess on the current question, toggling Save Stats does not regenerate the date — the toggle's frozen value sticks for the question. When off, the question doesn't update stats and isn't pushed to history (Back can't browse to it).</p><p className="mt-2"><b>Blitz</b> — round-level. In-round score, accuracy, streak, and Back/Forward navigation through round questions all work normally regardless of the toggle. Whatever the toggle is set to when the round ends determines whether the round's Best Score and Best Streak update.</p><p className="mt-2"><b>AoX</b> — run-level. In-run score, streak, times, and Back/Forward navigation all work normally regardless of the toggle. Whatever the toggle is set to when the run ends determines whether Best Average, Best Median, and Best Streak update.</p></GuideSection>
           <GuideSection id="theme" title="Theme" openId={open} onToggle={toggle}><p>Five themes: Dusk (default dark navy), Midnight (true black with purple), Nebula (deep purple), Light (clean white), and Parchment (warm cream). Accessible from the ⚙ settings menu in any tab. Enable Use System Settings to match your device's light/dark mode automatically, with separate theme choices for each. Disable to pick one manually.</p></GuideSection>
           <GuideSection id="reset-settings" title="Reset Settings &amp; Full Reset" openId={open} onToggle={toggle}><p><b>Reset Settings</b> — at the bottom-left of the ⚙ menu, restores everything in the menu to its defaults: Random Format on, Written MDY, Julian off, year range 1–10000, Leap Year Chance Random, Force Jan/Feb off, Save Stats on, and theme back to Use System Settings with Dusk (dark) and Light (light). It does not touch mode-specific config outside the menu (AoX N, timer durations, Deduction sub-types and toggles) or your stats and history. No confirmation prompt — tap to apply.</p><p><b>Full Reset</b> — at the bottom-right of the ⚙ menu, restores the entire site to its initial launch state. Wipes all stats, all-time bests (Blitz, Sudden, AoX), Lookup history, and in-progress rounds and runs. Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode toggles (AoX N, timer durations, Deduction sub-types and toggles, Allow Mistakes, Save Stats, Stop Codes, etc.). Closes any open overlay (How to Play, ⚙ menu, codes, method breakdown) and switches to Classic. Requires two taps to confirm: tap once and the button changes to "Confirm?"; tap again to fire. Auto-cancels after a few seconds, when you close ⚙, or if you tap any other control.</p></GuideSection>
           <GuideSection id="keyboard" title="Keyboard Input" openId={open} onToggle={toggle}><p>On any device with a hardware keyboard (typically desktop), you can press keys to operate the site without tapping. The on-screen layout is identical to mobile — keyboard input is the only desktop-specific addition.</p><div className="mt-3 space-y-3"><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Answer Grid</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>0</Kbd><span>Sunday</span></div><div className="flex items-center gap-2"><Kbd>1</Kbd><span>Monday</span></div><div className="flex items-center gap-2"><Kbd>2</Kbd><span>Tuesday</span></div><div className="flex items-center gap-2"><Kbd>3</Kbd><span>Wednesday</span></div><div className="flex items-center gap-2"><Kbd>4</Kbd><span>Thursday</span></div><div className="flex items-center gap-2"><Kbd>5</Kbd><span>Friday</span></div><div className="flex items-center gap-2"><Kbd>6</Kbd><span>Saturday</span></div></div><p className="mt-2 text-xs italic">In Deduction Month and Year, the same keys map positionally to the boxes or year options on screen.</p></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Game Actions</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>N</Kbd><span>New / Begin / Reset</span></div><div className="flex items-center gap-2"><Kbd>R</Kbd><span>Reveal</span></div><div className="flex items-center gap-2"><Kbd>O</Kbd><span>Override</span></div><div className="flex items-center gap-2"><Kbd>C</Kbd><span>Show / Hide Codes</span></div><div className="flex items-center gap-2"><Kbd>S</Kbd><span>Reset Stats</span></div><div className="flex items-center gap-2"><Kbd>←</Kbd><span>Back</span></div><div className="flex items-center gap-2"><Kbd>→</Kbd><span>Forward</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Overlays</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>H</Kbd><span>How to Play (toggle)</span></div><div className="flex items-center gap-2"><Kbd>G</Kbd><span>Settings ⚙ (toggle)</span></div><div className="flex items-center gap-2"><Kbd>Tab</Kbd><span>Mode selector (toggle)</span></div></div></div><div><div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">Mode Switching</div><div className="space-y-1 text-sm"><div className="flex items-center gap-2"><Kbd>K</Kbd><span>Classic</span></div><div className="flex items-center gap-2"><Kbd>F</Kbd><span>Flash</span></div><div className="flex items-center gap-2"><Kbd>B</Kbd><span>Blitz</span></div><div className="flex items-center gap-2"><Kbd>A</Kbd><span>AoX</span></div><div className="flex items-center gap-2"><Kbd>D</Kbd><span>Deduction</span></div><div className="flex items-center gap-2"><Kbd>L</Kbd><span>Lookup</span></div></div></div></div><p className="mt-3">Letter keys are case-insensitive. Letter and number keys are ignored when you're typing in an input field or when a modifier key (Ctrl/Cmd/Alt/Shift) is held. <Kbd>Tab</Kbd> is the exception: it toggles the mode selector even from inputs (use Esc or Enter to leave an input first if you'd rather), and Tab combined with any modifier (Ctrl+Tab, Ctrl+Shift+Tab, etc.) passes through to the browser. Locked or already-pressed buttons are skipped, just like a click would be. Reset Stats (S) only applies to the casual modes (Classic, Deduction, Flash); pressing it in Blitz, AoX, or Lookup is a no-op since those modes don't have a separate Reset Stats button (their round/run Reset clears in-round/in-run stats; persistent bests update only when set).</p></GuideSection>
@@ -3723,7 +3790,7 @@
             <p><b>One-By-One</b> — hides the date between solves. Press Continue to reveal each new date.</p>
             <p><b>Last / Avg / Med</b> — tap any of these to show or hide all three time stats.</p>
             <p><b>Back/Forward</b> — browse previous dates from the current run without affecting it. Press Continue to resume; the date you were viewing and any forward entries are pushed back to your run history before a fresh date is generated, so nothing is lost. After a run completes, Back and Forward let you browse all dates from that run; press Reset to start fresh.</p>
-            <p><b>Override</b> — after wrong: gives credit with time recorded, preserves streak. After correct: undoes the credit, resets streak, and either ends the run (Allow Mistakes off) or advances to a new date (Allow Mistakes on). You can also override past dates while browsing back with Back/Forward. If overriding on the last question with Allow Mistakes on, a new date is generated to complete the average. One override per question.</p>
+            <p><b>Override</b> — after wrong: gives credit with time recorded, preserves streak. After correct: undoes the credit, resets streak, and either ends the run (Allow Mistakes off) or advances to a new date (Allow Mistakes on). You can also override past dates while browsing back with Back/Forward. If overriding on the last question with Allow Mistakes on, a new date is generated to complete the average. One override per question. Override is locked when Save Stats is off.</p>
             <p>Stats in AoX are always visible and always track. Best average and best median are tracked independently — they can come from different runs. Beneath each best, the companion metric from the run that set it is also shown (e.g. the median from the run that set your best average). A <i>Same Round</i> or <i>Different Rounds</i> tag tells you whether your best average and best median came from the same exceptional run, or from two different strong ones. If you override a correct answer that set a new best, the best is also restored. The score display freezes when a run ends and only resets after pressing Reset.</p>
             <p>Bests are tracked per exact configuration: AoX size (n), Allow Mistakes, Date Format (or Random Format on its own bucket), Leap Year Chance, Force Jan/Feb on Leap Years, year range, and Calendar System (Julian on/off). Changing any of these creates a separate bucket — your previous bests remain stored and reappear when you switch back to that exact config.</p>
             <p>The small <b>Q#</b> label at the top-right of the date card appears not only while back-browsing but also at run end (done/failed) so you can identify which question of the run you're viewing in the summary.</p>
