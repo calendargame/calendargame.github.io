@@ -518,13 +518,18 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-24T02:12:00Z');
+    const DEPLOY_TS=new Date('2026-05-25T01:44:00Z');
 
-    function StatPanel({stats}){
+    function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
       // when either side reaches 1000+ or 10000+ to prevent overflow on long
       // sessions. Non-fractional values (Accuracy, Last, Average, Median)
       // stay at default size — they don't grow this way in practice.
+      //
+      // Bug #4 armedSpan: when present, replaces stats[armedSpan.startIdx..endIdx]
+      // (inclusive) with a single wide "Turn on and reset stats?" warning button.
+      // Used by the App-side timing-arm flow to merge the 3 time stat boxes into one
+      // confirmation target. Shape: {startIdx, endIdx, label, onClick, btnRef}.
       const sizeForValue=(val)=>{
         const s=String(val);
         if(!s.includes('/'))return"text-sm";
@@ -535,7 +540,43 @@
       };
       return(
         <div className="mt-4 rounded-2xl panel flex overflow-hidden">
-          {stats.map((s,i,arr)=>{const Tag=s.fn?"button":"div";const props=s.fn?{type:"button",onClick:s.fn}:{};const sz=sizeForValue(s.value);return(<React.Fragment key={s.label}><Tag {...props} className="flex-1 flex flex-col items-center py-2 gap-0.5"><span className={`text-xs text-purple-200/80 leading-none whitespace-nowrap${s.off?" line-through":""}`}>{s.label}</span><span className={`${sz} font-semibold tabular-nums leading-tight mt-0.5`}>{s.off?"—":s.value}</span></Tag>{i<arr.length-1&&<div className="w-px h-8 self-center bg-purple-500/20 shrink-0"/>}</React.Fragment>);})}
+          {(()=>{
+            const items=[];
+            for(let i=0;i<stats.length;i++){
+              if(armedSpan&&i===armedSpan.startIdx){
+                const span=armedSpan.endIdx-armedSpan.startIdx+1;
+                items.push(
+                  <button
+                    key="armed-warning"
+                    ref={armedSpan.btnRef}
+                    type="button"
+                    onClick={armedSpan.onClick}
+                    style={{flex:span}}
+                    className="flex items-center justify-center py-2 text-xs font-medium ring-2 ring-rose-200 rounded-lg"
+                  >{armedSpan.label}</button>
+                );
+                if(armedSpan.endIdx<stats.length-1){
+                  items.push(<div key={`d-armed-${i}`} className="w-px h-8 self-center bg-purple-500/20 shrink-0"/>);
+                }
+                i=armedSpan.endIdx;
+                continue;
+              }
+              const s=stats[i];
+              const Tag=s.fn?"button":"div";
+              const props=s.fn?{type:"button",onClick:s.fn}:{};
+              const sz=sizeForValue(s.value);
+              items.push(
+                <Tag key={s.label} {...props} className="flex-1 flex flex-col items-center py-2 gap-0.5">
+                  <span className={`text-xs text-purple-200/80 leading-none whitespace-nowrap${s.off?" line-through":""}`}>{s.label}</span>
+                  <span className={`${sz} font-semibold tabular-nums leading-tight mt-0.5`}>{s.off?"—":s.value}</span>
+                </Tag>
+              );
+              if(i<stats.length-1){
+                items.push(<div key={`d-${i}`} className="w-px h-8 self-center bg-purple-500/20 shrink-0"/>);
+              }
+            }
+            return items;
+          })()}
         </div>
       );
     }
@@ -820,13 +861,11 @@
       //   through anyChanged to trigger this round-end correctly.
       // Done/failed: never auto-replace the displayed last-question date (Cat C).
       // Idle (Cat A): per-setting rules for the currently displayed date —
-      //   Random Format → off→on always regens; on→off regens only if displayed _fmt
-      //     differs from the now-active dropdown value (so the visible format would change)
-      //   Date Format dropdown → regens only if randomFormat is OFF and the new dropdown
-      //     value differs from the displayed _fmt; no-op when randomFormat is ON
+      //   Random Format toggle → always regen on any change (Bug #1)
+      //   Date Format dropdown → always regen on any change (Bug #1)
       //   Leap Chance → always regen
-      //   Force Jan/Feb → regen only if current date is leap-year non-Jan/Feb
-      //   Year range → regen only if current date is out of new range
+      //   Force Jan/Feb → always regen on toggle (Bug #3b; was previously content-gated)
+      //   Year range → always regen on any range edit
       //   Julian → keep date (idle has no wrong guesses; current useJulian flows naturally
       //            through correct-answer + codes panel)
       useEffect(()=>{
@@ -846,22 +885,16 @@
         // wrong-guess possibility (clicks are gated by isRunning), so the wrong-guess
         // defer branch isn't needed here.
         //   leapChance — always regen
-        //   Random Format off→on — always regen
-        //   Random Format on→off — regen if displayed _fmt ≠ now-active dropdown value
-        //   Date Format dropdown change while randomFormat off — regen if _fmt ≠ new value
-        //     (when randomFormat is on, dropdown is overridden so changes are a no-op)
-        //   Force Jan/Feb — regen if current date is leap non-Jan/Feb
-        //   Year range — always regen on any range edit (used to be range-violation only)
+        //   Random Format toggle (either direction) — always regen (Bug #1; previously gated)
+        //   Date Format dropdown change — always regen (Bug #1; previously gated on _fmt
+        //     mismatch and only when randomFormat was off)
+        //   Force Jan/Feb — always regen on toggle (Bug #3b; previously gated on leap
+        //     non-Jan/Feb date content — now matches Leap Chance / Year Range)
+        //   Year range — always regen on any range edit
         //   Julian — keep date (current useJulian flows through naturally to codes/answer)
-        const formatRegenReason=(
-          (randomFormatChanged&&randomFormat) ||
-          (randomFormatChanged&&!randomFormat&&date._fmt!==dateFormat) ||
-          (dateFormatChanged&&!randomFormat&&date._fmt!==dateFormat)
-        );
-        if(leapChanceChanged||formatRegenReason){setDate(genDate(minY,maxY));return;}
-        const isLeapY=(useJulian&&isJulianDate(date.y,date.m,date.d))?isLeapJulian(date.y):isLeap(date.y);
-        if(forceJanFebChanged&&forceJanFebOnLeap&&isLeapY&&date.m!==1&&date.m!==2){setDate(genDate(minY,maxY));return;}
-        if(yearRangeChanged){setDate(genDate(minY,maxY));return;}
+        if(leapChanceChanged||randomFormatChanged||dateFormatChanged||forceJanFebChanged||yearRangeChanged){
+          setDate(genDate(minY,maxY));return;
+        }
         // Julian change in idle: no wrong guesses, so keep date — current useJulian flows naturally.
       },[randomFormat,dateFormat,useJulian,minY,maxY,leapChance,forceJanFebOnLeap]);
       // Frozen date for codes panel: during close animation, keep showing old codes; update new codes only after close finishes
@@ -1274,35 +1307,134 @@
       // Two independent stat-display toggles, each affecting a trio of boxes in the stats row:
       //   scoringOff: hides Score / Accuracy / Streak. Display only — these stats keep
       //     tracking in the background, and re-enabling restores the same values.
-      //   timingOff:  hides Last / Average / Median. Pauses timing entirely — no times
-      //     are recorded while hidden, and re-enabling after any answers triggers a
-      //     full Reset Stats so score and timing always reflect the same question set.
+      //   timingOff:  hides Last / Average / Median. Pauses timing entirely — c.times
+      //     stops growing while hidden (enforced by trackingOn's timingOff gate, see
+      //     above). On re-enable, if a desync exists (S.good !== S.times.length, meaning
+      //     stats updated while timing was paused), a confirmation warning is shown
+      //     (Bug #4) before the full reset fires. No-desync re-enable just regens the
+      //     date per the unanswered/burned rule. Save Stats being off shields the
+      //     toggle entirely — no regen, no reset, just visibility flip (Bug #3a).
       const [scoringOffByMode,setScoringOffByMode]=useState({});
       const [timingOffByMode,setTimingOffByMode]=useState({classic:true,deduction:true});
       const scoringOff=scoringOffByMode[mode]??false;
       const timingOff=timingOffByMode[mode]??false;
       const toggleScoringOff=()=>setScoringOffByMode(p=>({...p,[mode]:!scoringOff}));
-      // Turning timing stats ON after calcs happened with them off treats this as a full Reset Stats —
-      // clear stacks, question state, and codes panel so score + timing reflect the same set of questions.
+      // Time stats toggle. Rules (all decisions taken on the click, before state changes):
+      //
+      //   Turn OFF: no date change, no stat reset. Just hide the timing display. (c.times
+      //     stops growing automatically via trackingOn's timingOff gate.)
+      //
+      //   Turn ON, Save Stats off: no date change, no reset (Bug #3a). Save Stats off means
+      //     stat updates were already gated, so no desync is possible — the toggle is purely
+      //     a visibility flip.
+      //
+      //   Turn ON, Save Stats on, no desync (c.good === c.times.length): no reset.
+      //     Regen date if the current Q is unanswered or Flash mid-dash. Keep date if burned
+      //     (countedWrong covers wrong/Reveal/codes-shown — all three set countedWrong=true).
+      //
+      //   Turn ON, Save Stats on, desync exists (c.good !== c.times.length): full reset of
+      //     stats + clear stacks + clear current Q state + regen date. The desync proves
+      //     calcs happened while timing was off, and Option B from spec wipes the burned
+      //     state too so the display doesn't show 0/0 stats next to a red-marked date.
+      //
+      // The destructive "Turn ON + desync → reset" case is gated by a two-tap arm/confirm
+      // pattern (Bug #4). Tap 1 arms (sets timingArmed, starts 3s timer, merges the 3 time
+      // stat boxes into a single "Turn on and reset stats?" warning button). Tap 2 within
+      // the window confirms and fires. Timer expiry or any tap outside the warning button
+      // disarms (see the global mousedown/touchstart listener below).
+      //
+      // The old timesAtTimingOffRef snapshot is gone — state-based desync detection
+      // (S.good vs S.times.length) is exact and doesn't depend on captured-played counts,
+      // which missed Override paths that change c.good without touching c.played.
+      const performTimingOn=({reset})=>{
+        if(reset){
+          resetStatsCurrent();
+          setStack([]);setForwardStack([]);setDedStack(blankDedStacks());setDedForwardStack(blankDedStacks());setBackDepth(0);
+          resetPB();
+          setLocked(false);setRevealed(false);setCountedWrong(false);setCanOverrideCorrect(false);
+          setPendingWrongOverride(null);setOverrideUsedThisQ(false);
+          setCalcPenalty(false);setCalcOpen(false);
+          wrongTimeRef.current=null;prevStatsSnapshotRef.current=null;preCalcPenaltySnapshotRef.current=null;
+        }
+        const flashMidDate=mode==='flash'&&active;
+        const isBurned=countedWrong||revealed;
+        // Regen if reset happened (state is now clean), if Q is unanswered, or if Flash mid-dash.
+        if(reset||!isBurned||flashMidDate){
+          setDate(genDate(minY,maxY));
+          if(mode==="deduction")spawnDed();
+          tStartRef.current=performance.now();
+        }
+        if(flashMidDate){
+          clearTimeout(flashTimerRef.current);flashTimerRef.current=null;
+          setFlashPhase("dash");flashDeadlineRef.current=null;
+          setFlashRemainMs(flashMs);resetFlashBar();
+          setActive(false);setShowTimerDate(false);
+        }
+        setTimingOffByMode(p=>({...p,[mode]:false}));
+      };
       const toggleTimingOff=()=>{
         const currentlyOff=timingOffByMode[mode]??false;
-        const next=!currentlyOff;
-        setTimingOffByMode(p=>({...p,[mode]:next}));
-        if(next){timesAtTimingOffRef.current=S.played;}
-        else{
-          const calcsWhileOff=timesAtTimingOffRef.current!==null&&S.played!==timesAtTimingOffRef.current;
-          timesAtTimingOffRef.current=null;
-          if(calcsWhileOff){
-            resetStatsCurrent();
-            setStack([]);setForwardStack([]);setDedStack(blankDedStacks());setDedForwardStack(blankDedStacks());setBackDepth(0);
-            resetPB();
-            setLocked(false);setRevealed(false);setCountedWrong(false);setCanOverrideCorrect(false);
-            setPendingWrongOverride(null);setOverrideUsedThisQ(false);
-            setCalcPenalty(false);setCalcOpen(false);
-            wrongTimeRef.current=null;prevStatsSnapshotRef.current=null;preCalcPenaltySnapshotRef.current=null;
-          }
-          doNew({skipInactiveMessage:true});
+        if(!currentlyOff){
+          // Turn OFF: no date change, no reset.
+          setTimingOffByMode(p=>({...p,[mode]:true}));
+          return;
         }
+        // Turn ON path.
+        if(!saveStats){
+          // Save Stats off → no desync possible, no reset. Just flip visibility.
+          setTimingOffByMode(p=>({...p,[mode]:false}));
+          return;
+        }
+        const desync=S.good!==S.times.length;
+        if(!desync){
+          performTimingOn({reset:false});
+          return;
+        }
+        // Desync exists — destructive. Arm or fire.
+        if(timingArmedRef.current){
+          if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}
+          timingArmedRef.current=false;
+          setTimingArmed(false);
+          performTimingOn({reset:true});
+          return;
+        }
+        timingArmedRef.current=true;
+        setTimingArmed(true);
+        if(timingArmTimerRef.current)clearTimeout(timingArmTimerRef.current);
+        timingArmTimerRef.current=setTimeout(()=>{
+          timingArmedRef.current=false;setTimingArmed(false);timingArmTimerRef.current=null;
+        },3000);
+      };
+      const disarmTimingArm=()=>{
+        if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}
+        timingArmedRef.current=false;
+        setTimingArmed(false);
+      };
+      // Bug #3b: Save Stats toggle wrapper. When turning ON (off→on) AND time stats are
+      // currently visible AND we're in a hideable mode (Classic/Deduction/Flash), apply the
+      // standard unanswered/burned regen rule: regen if unanswered or Flash mid-dash; keep
+      // if burned. Blitz and AoX have their own setting-change reset logic (Cat B for
+      // active rounds) and are unaffected here. Turning Save Stats OFF or turning it ON
+      // while time stats are hidden does nothing to the date.
+      const toggleSaveStats=()=>{
+        const turningOn=!saveStats;
+        const timingVisible=["classic","deduction","flash"].includes(mode)&&!(timingOffByMode[mode]??false);
+        if(turningOn&&timingVisible){
+          const flashMidDate=mode==='flash'&&active;
+          const isBurned=countedWrong||revealed;
+          if(!isBurned||flashMidDate){
+            setDate(genDate(minY,maxY));
+            if(mode==='deduction')spawnDed();
+            tStartRef.current=performance.now();
+          }
+          if(flashMidDate){
+            clearTimeout(flashTimerRef.current);flashTimerRef.current=null;
+            setFlashPhase("dash");flashDeadlineRef.current=null;
+            setFlashRemainMs(flashMs);resetFlashBar();
+            setActive(false);setShowTimerDate(false);
+          }
+        }
+        setSaveStats(v=>!v);
       };
       const [minY,setMinY]=useState(1),[maxY,setMaxY]=useState(10000);
       const [minInputVal,setMinInputVal]=useState("1");
@@ -1312,11 +1444,14 @@
       // roll, when off it's the current dateFormat. The display layer always trusts
       // _fmt (so the visible format on a live date is whatever was stamped at generation,
       // not the current setting).
-      // On a Cat A unanswered untouched live date, format setting changes CAN regen —
-      // Random off→on always regens; Random on→off and dropdown changes regen only
-      // when the displayed _fmt would no longer match the now-active format. A wrong
-      // guess on the live date defers any format regen until the next generated date.
-      // See regenDecisionFor in the App popover effect for the full set of rules.
+      // Bug #1: format setting changes (Random Format toggle OR Date Format dropdown)
+      // always regen any UNANSWERED date across all stored modes (Classic, Flash, Blitz
+      // pre-round, Deduction per sub-type, AoX idle). Burned dates (countedWrong covers
+      // wrong/Reveal/codes-shown) are preserved exactly as left until the user advances.
+      // The previous _fmt-mismatch gate has been removed — any format setting change
+      // regens if unanswered, regardless of whether the visible format would actually
+      // differ. See regenDecisionFor in the App popover effect for the full ruleset and
+      // the matching AoX-side effect at the top of AoxMode.
       // This lazy initializer can't reference randomFormat/dateFormat state because they
       // are declared later in the component. Hardcoded values mirror those useState
       // defaults (randomFormat=true → rollFormat(); useJulian=true). If those defaults
@@ -1356,7 +1491,15 @@
       const [backDepth,setBackDepth]=useState(0);
       const [browseHasCredit,setBrowseHasCredit]=useState(false);
       const [timerDone,setTimerDone]=useState(false);
-      const timesAtTimingOffRef=useRef(null);
+      // Bug #4: two-tap arm/confirm pattern for the destructive "Turn timing ON + desync"
+      // case. Mirrors Full Reset's pattern. The 3 time stat boxes visually merge into a
+      // single "Turn on and reset stats?" warning button when armed. timingArmedRef is the
+      // synchronous twin of timingArmed state — needed because toggleTimingOff reads/writes
+      // armed status on the same click and React state updates are async.
+      const [timingArmed,setTimingArmed]=useState(false);
+      const timingArmedRef=useRef(false);
+      const timingArmTimerRef=useRef(null);
+      const timingArmBtnRef=useRef(null);
       const activeWday=(y,m,d)=>(useJulian&&isJulianDate(y,m,d))?wdayJulian(y,m,d):wday(y,m,d);
       const dimFn=(y,m)=>{const leap=(useJulian&&isJulianDate(y,m,1))?isLeapJulian(y):isLeap(y);return m===2?(leap?29:28):([4,6,9,11].includes(m)?30:31);};
       const correct=useMemo(()=>activeWday(date.y,date.m,date.d),[date,useJulian]);const correctRef=useRef(correct);correctRef.current=correct;
@@ -1603,7 +1746,17 @@
         };
         raf=requestAnimationFrame(loop);return()=>cancelAnimationFrame(raf);
       },[mode,blitzSec,qSec,blitzRunning,active,flashPhase]);
-      const trackingOn=()=>["classic","blitz","flash","deduction"].includes(mode);
+      // trackingOn gates appending solve times to c.times. Returns false when timing
+      // stats are hidden in modes that allow it (Classic/Deduction/Flash) — this
+      // enforces the "no times recorded while hidden" contract documented at the
+      // timingOff declaration above. Blitz and AoX have no timing toggle, so they
+      // always track. Without this gate, c.times keeps growing while timing is
+      // hidden, and a desync (c.good > c.times.length) emerges on re-enable.
+      const trackingOn=()=>{
+        if(!["classic","blitz","flash","deduction"].includes(mode))return false;
+        if(["classic","deduction","flash"].includes(mode)&&(timingOffByMode[mode]??false))return false;
+        return true;
+      };
       // arm() is the canonical mode-arrival reset for Classic/Flash/Deduction/Blitz state.
       // Resets every transient question-state value: locked, revealed, countedWrong,
       // calcPenaltyActive, flash, etc. If a new piece of question state is
@@ -2887,24 +3040,25 @@
       const prevPopRef=useRef({randomFormat,dateFormat,useJulian,minY,maxY,leapChance,forceJanFebOnLeap});
       // Unified popover-settings effect.
       // Per-setting rules in idle Cat A states (Classic, Deduction, Flash idle, Blitz pre-round):
-      //   Random Format — off→on always regens (fresh random format wanted). on→off regens
-      //     only when the date's stored _fmt differs from the now-active dateFormat dropdown
-      //     value (otherwise the visible format already matches and no regen is needed).
-      //   Date Format dropdown — when randomFormat is OFF, regens only if the date's stored
-      //     _fmt differs from the new dropdown value. When randomFormat is ON the dropdown
-      //     is overridden by the random roll, so dropdown changes are a no-op.
+      //   Random Format — any toggle (either direction) regens an unanswered date (Bug #1)
+      //   Date Format dropdown — any change regens an unanswered date (Bug #1)
       //   Leap Chance — always regen
-      //   Force Jan/Feb — regen only if current date is leap-year non-Jan/Feb
-      //   Year range — regen only if current date is out of new range
+      //   Force Jan/Feb — always regen on toggle (Bug #3b; was previously gated on date content)
+      //   Year range — always regen on any range edit
       //   Julian — keep date (answer/codes float to current useJulian) unless current date is
       //            Julian-eligible AND a wrong guess has been made → regen
-      //   In all of the above, a wrong guess on the live date defers any format/leap/jan-feb/
-      //   range regen — the question is finished first, and the new setting applies on the
-      //   next generate. (Julian on a wrong-guessed Julian-eligible date is the carve-out:
-      //   it regens with a synthesized green for the original-Julian correct answer.)
+      //   In all of the above, a wrong guess (countedWrong, which also covers Reveal and
+      //   codes-shown via applyCalcPenalty) on the live date defers any regen — the question
+      //   is finished first, and the new setting applies on the next generate. (Julian on a
+      //   wrong-guessed Julian-eligible date is the carve-out: it regens with a synthesized
+      //   green for the original-Julian correct answer.)
       // Cat B (Blitz active timer): always full reset on any popover change (incl. format).
       // Cat C (Blitz timerDone): never auto-regen. Stale stored dates in non-current modes
       //   that are *permanently violating* (leap-100/jan-feb/range) are still cleaned up.
+      // Bug #1 also extends cleanseNonCurrent: format-setting changes regen any FRESH
+      //   (unanswered, untouched) stored dates in non-current modes (Classic, Flash, Blitz
+      //   pre-round, Deduction per sub-type), so the user doesn't return to a previously-
+      //   seen date in a now-mismatched format. Burned non-current dates are preserved.
       // Flash mid-dash is Cat A: a regen tears down the dash + lands at idle with the new date.
       // AoX is owned by AoxMode's internal effect, which mirrors this logic.
       useEffect(()=>{
@@ -2948,49 +3102,73 @@
         //                        entry shows both the user's red guess and the original
         //                        green answer. Only fires when a Julian toggle would
         //                        change the answer on a Julian-eligible wrong-guessed date.
-        // Reasons a–g all defer when hasWrong is true (julian carve-out aside) — finishing
+        // All reasons defer when hasWrong is true (julian carve-out aside) — finishing
         // the current question takes priority over re-shuffling its presentation.
-        // Note an asymmetry between reasons a–d and e–g:
-        //   a–d are "static condition on the live date" checks — leap chance fires
-        //     unconditionally; jan-feb/range/julian fire only when the date matches
-        //     a fixed property at the moment the setting changes. The triggering
-        //     setting either changed or it didn't.
-        //   e–g are "value comparison" checks — they don't just ask whether the format
-        //     setting changed, but whether the resulting effective format would now
-        //     differ from the date's stamped _fmt. This is what makes Random on→off
-        //     conditional (no regen if the format already matches) and what makes
-        //     dropdown changes during randomFormat=on a no-op (the dropdown isn't
-        //     the active format to compare against).
         //   a — leapChanceChanged: always
-        //   b — forceJanFebChanged + setting just turned on + current date is leap non-Jan/Feb
-        //   c — yearRangeChanged: always regen on any range edit (was range-violation only)
+        //   b — forceJanFebChanged: always (Bug #3b — was previously gated on leap non-Jan/Feb;
+        //         now matches Leap Chance / Year Range for consistency — any toggle regens
+        //         an unanswered date, burned dates defer like everything else)
+        //   c — yearRangeChanged: always regen on any range edit
         //   d — julianChanged + current date is Julian-eligible (carve-out: still fires when
         //         hasWrong, with synthesized green; outside that, deferred like the rest)
-        //   e — randomFormatChanged off→on: always regen (fresh random format wanted)
-        //   f — randomFormatChanged on→off + current _fmt ≠ now-active dropdown value
-        //   g — dateFormatChanged + randomFormat is off + current _fmt ≠ new dropdown value
-        //         (dropdown changes are no-ops when randomFormat is on, since the random
-        //         roll overrides the dropdown selection at generation time)
+        //   e — randomFormatChanged (either direction): always (Bug #1 — was previously gated
+        //         on _fmt mismatch when off→on; now any RF toggle regens unanswered dates)
+        //   f — dateFormatChanged (regardless of randomFormat state): always (Bug #1 — was
+        //         previously a no-op when randomFormat was on AND gated on _fmt mismatch;
+        //         now any format setting change regens unanswered dates uniformly)
+        // Bug #1 also extends cleanseNonCurrent below: when a format setting changes, any
+        // non-current mode's stored date that is "fresh" (no burn state in preservedByModeRef)
+        // is also regenerated, so the user doesn't return to a previously-seen date.
         const regenDecisionFor=(dt,hasWrong)=>{
           if(!dt)return'none';
-          const isLeapY=(useJulian&&isJulianDate(dt.y,dt.m,dt.d))?isLeapJulian(dt.y):isLeap(dt.y);
           const aReason=leapChanceChanged;
-          const bReason=forceJanFebChanged&&forceJanFebOnLeap&&isLeapY&&dt.m!==1&&dt.m!==2;
+          const bReason=forceJanFebChanged;
           const cReason=yearRangeChanged;
           const dReason=julianChanged&&isJulianDate(dt.y,dt.m,dt.d);
-          const eReason=randomFormatChanged&&randomFormat;
-          const fReason=randomFormatChanged&&!randomFormat&&dt._fmt!==dateFormat;
-          const gReason=dateFormatChanged&&!randomFormat&&dt._fmt!==dateFormat;
+          const eReason=randomFormatChanged;
+          const fReason=dateFormatChanged;
           if(hasWrong)return dReason?'julianWithGreen':'none';
-          return(aReason||bReason||cReason||eReason||fReason||gReason)?'normal':'none';
+          return(aReason||bReason||cReason||eReason||fReason)?'normal':'none';
         };
-        // Helper: cleanup permanently-violating non-current-mode storage (always runs).
+        const formatSettingChanged=randomFormatChanged||dateFormatChanged;
+        // Helper: cleanup non-current-mode storage. Always handles permanently-violating
+        // dates (out of range, leap-100, jan-feb force). Bug #1: also regens fresh
+        // (unanswered, untouched) dates in non-current modes when a format setting just
+        // changed, so the user doesn't return to a date they've already seen.
+        //   "Fresh" for App-side modes = no preservedByModeRef entry OR an entry with empty
+        //   persistBtns and no burn flags. preservedByModeRef holds the last-saved state
+        //   from when the user left that mode; absence means the mode was last in a fresh
+        //   state, presence with empty btns/flags means same.
+        //   "Fresh" for Deduction sub-types = no saved entry OR saved entry with empty btns.
+        const isFreshClassicFlash=(m)=>{
+          const pe=preservedByModeRef.current[m];
+          if(!pe)return true;
+          const btnsEmpty=!pe.persistBtns||Object.keys(pe.persistBtns).length===0;
+          return btnsEmpty&&!pe.countedWrong&&!pe.locked&&!pe.revealed;
+        };
+        const isFreshDedSub=(sd)=>{
+          if(!sd||!sd.ded)return true;
+          const btns=sd.ded.btns||sd.btns||{};
+          return Object.keys(btns).length===0&&!sd.countedWrong&&!sd.locked&&!sd.revealed;
+        };
         const cleanseNonCurrent=(skipCurrentGm,skipCurrentDed)=>{
           setDateByMode(p=>{
             let changed=false;const next={...p};
             for(const m of ['classic','flash','blitz']){
               if(skipCurrentGm===m)continue;
-              if(next[m]&&isPermanentlyViolating(next[m])){next[m]=genDate(minY,maxY);changed=true;}
+              if(next[m]){
+                if(isPermanentlyViolating(next[m])){next[m]=genDate(minY,maxY);changed=true;}
+                else if(formatSettingChanged){
+                  // Blitz only regens its pre-round date if not active and not in timerDone.
+                  // Post-round (timerDone) Blitz dates are "burned" by definition (round
+                  // concluded), so preserve.
+                  if(m==='blitz'){
+                    if(!active&&!timerDone){next[m]=genDate(minY,maxY);changed=true;}
+                  }else if(isFreshClassicFlash(m)){
+                    next[m]=genDate(minY,maxY);changed=true;
+                  }
+                }
+              }
             }
             return changed?next:p;
           });
@@ -3004,7 +3182,9 @@
             for(const k of Object.keys(p)){
               if(skipCurrentDed&&k===dedType)continue;
               const sd=p[k];
-              if(sd?.ded&&isPermanentlyViolating({y:sd.ded.y,m:sd.ded.m,d:sd.ded.d})){next[k]=null;changed=true;}
+              if(!sd?.ded)continue;
+              if(isPermanentlyViolating({y:sd.ded.y,m:sd.ded.m,d:sd.ded.d})){next[k]=null;changed=true;}
+              else if(formatSettingChanged&&isFreshDedSub(sd)){next[k]=null;changed=true;}
             }
             return changed?next:p;
           });
@@ -3339,7 +3519,8 @@
         prevStatsSnapshotRef.current=null;
         saveStatsThisQRef.current=null;
         preCalcPenaltySnapshotRef.current=null;
-        timesAtTimingOffRef.current=null;
+        timingArmedRef.current=false;
+        if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}
         suddenBestSnapRef.current=null;
         timerDoneSnapRef.current=null;
         pendingDedSwitchRef.current=null;
@@ -3448,14 +3629,16 @@
       };
       // Disarm whenever settings closes by any path (gear tap, click-outside, Esc, full-reset firing).
       useEffect(()=>{if(!settingsOpen)disarmFullReset();},[settingsOpen]);
-      // Disarm when the user mousedowns/touches any other interactive element inside the popover.
-      // Capture phase so this fires before the target's own onClick — that way the user's intent
-      // (e.g., toggling Random Format) still proceeds normally; we just consume the pending arm.
-      // Excludes the Full Reset button itself (and its descendants) so tap 2 actually fires.
+      // Site-wide disarm listener (capture phase) — disarms when the user mousedowns/touches
+      // any element outside the Full Reset button itself. Capture phase fires before the
+      // target's own onClick, so the user's intent (e.g., toggling Random Format, switching
+      // modes, tapping a date answer) still proceeds normally; we just consume the pending
+      // arm. Scope is the entire document (not just the settings popover) so taps anywhere
+      // outside the button reliably disarm. Matches the bug #4 timing-arm listener below
+      // — both confirmations follow the same global-tap-to-cancel UX.
       useEffect(()=>{
         if(!fullResetArmed)return;
         const h=e=>{
-          if(!settingsPopoverRef.current||!settingsPopoverRef.current.contains(e.target))return;
           if(fullResetBtnRef.current&&fullResetBtnRef.current.contains(e.target))return;
           disarmFullReset();
         };
@@ -3463,8 +3646,28 @@
         document.addEventListener('touchstart',h,true);
         return()=>{document.removeEventListener('mousedown',h,true);document.removeEventListener('touchstart',h,true);};
       },[fullResetArmed]);
-      // Cleanup the timer on unmount.
-      useEffect(()=>()=>{if(fullResetTimerRef.current)clearTimeout(fullResetTimerRef.current);},[]);
+      // Bug #4: parallel global listener for the timing-arm warning. Disarms on any tap
+      // outside the merged warning button (which carries timingArmBtnRef). Same site-wide
+      // capture-phase pattern as Full Reset above.
+      useEffect(()=>{
+        if(!timingArmed)return;
+        const h=e=>{
+          if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target))return;
+          disarmTimingArm();
+        };
+        document.addEventListener('mousedown',h,true);
+        document.addEventListener('touchstart',h,true);
+        return()=>{document.removeEventListener('mousedown',h,true);document.removeEventListener('touchstart',h,true);};
+      },[timingArmed]);
+      // Bug #4: disarm the timing warning on mode change. Programmatic mode switches
+      // (e.g., Full Reset, or guide → Classic auto-redirect) need an explicit disarm
+      // since they don't go through the global tap listener.
+      useEffect(()=>{if(timingArmedRef.current)disarmTimingArm();},[mode]);
+      // Cleanup the timers on unmount.
+      useEffect(()=>()=>{
+        if(fullResetTimerRef.current)clearTimeout(fullResetTimerRef.current);
+        if(timingArmTimerRef.current)clearTimeout(timingArmTimerRef.current);
+      },[]);
       // True when every popover-controlled value matches its initial useState default.
       // Drives Reset Settings dim-and-lock — same pattern as Reveal/Override/etc.
       // Includes year range *input text* values so a dirty (uncommitted) input keeps
@@ -3518,7 +3721,7 @@
         </div>
         <div className="space-y-2 pt-3 border-t border-purple-500/20">
           <SectionLabel>Stats</SectionLabel>
-          <div className="flex items-center justify-between"><span className="text-xs text-purple-200/80">Save Stats</span><button type="button" onClick={()=>setSaveStats(v=>!v)} className={`px-3 py-1 rounded-xl text-xs font-medium border ${saveStats?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}`}>{saveStats?"On":"Off"}</button></div>
+          <div className="flex items-center justify-between"><span className="text-xs text-purple-200/80">Save Stats</span><button type="button" onClick={toggleSaveStats} className={`px-3 py-1 rounded-xl text-xs font-medium border ${saveStats?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}`}>{saveStats?"On":"Off"}</button></div>
         </div>
         <div className="space-y-2 pt-3 border-t border-purple-500/20">
           <SectionLabel>Theme</SectionLabel>
@@ -3582,14 +3785,28 @@
         </div>
         <div className="mx-auto px-4 pb-5 w-full max-w-[480px]">
           {showStats&&(<>
-            <div className={saveStats?"":"opacity-50"}><StatPanel stats={[
-              {label:"Score",value:(mode==="blitz"&&!perQ)?`${blitzRoundStats.good}/${blitzRoundStats.played}`:`${S.good}/${S.played}`,off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null},
-              {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null},
-              ...(!(mode==="blitz"&&perQ)?[{label:"Streak",value:`${S.streak}/${S.best}`,off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null}]:[]),
-              {label:"Last",value:truncTime(sLast),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
-              {label:"Average",value:fmtTime(sAvg),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
-              {label:"Median",value:fmtTime(sMed),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
-            ]}/></div>
+            <div className={saveStats?"":"opacity-50"}>{(()=>{
+              const showStreak=!(mode==="blitz"&&perQ);
+              const statsArr=[
+                {label:"Score",value:(mode==="blitz"&&!perQ)?`${blitzRoundStats.good}/${blitzRoundStats.played}`:`${S.good}/${S.played}`,off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null},
+                {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null},
+                ...(showStreak?[{label:"Streak",value:`${S.streak}/${S.best}`,off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null}]:[]),
+                {label:"Last",value:truncTime(sLast),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
+                {label:"Average",value:fmtTime(sAvg),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
+                {label:"Median",value:fmtTime(sMed),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
+              ];
+              // Bug #4: when timingArmed, merge the 3 time stat boxes into one wide warning button.
+              // Start index of time stats: 3 when Streak is present, 2 when not (Blitz perQ).
+              const timeStart=showStreak?3:2;
+              const armedSpan=timingArmed?{
+                startIdx:timeStart,
+                endIdx:timeStart+2,
+                label:"Turn on and reset stats?",
+                onClick:toggleTimingOff,
+                btnRef:timingArmBtnRef,
+              }:null;
+              return<StatPanel stats={statsArr} armedSpan={armedSpan}/>;
+            })()}</div>
             {["classic","deduction","flash"].includes(mode)&&(<div className="mt-3"><button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={handleResetStats}>Reset Stats</button></div>)}
             {mode==='blitz'&&!perQ&&(()=>{const bk=getBlitzBk();const newF=blitzBestNew[bk]||{score:false,streak:false};const b=blitzBest[bk];const showTag=b&&b.scoreRoundId!=null&&b.streakRoundId!=null;return(<div className="mt-3 text-xs text-purple-300/60"><div className="flex flex-wrap items-start gap-4"><div className="min-w-[125px]">Best Score: {b?.score??'—'}{newF.score&&<NewBestStar/>}</div><div className="min-w-[125px]">Best Streak: {b?.streak??'—'}{newF.streak&&<NewBestStar/>}</div>{showTag&&<span className="shrink-0 ml-auto">{b.scoreRoundId===b.streakRoundId?"Same Round":"Different Rounds"}</span>}</div></div>);})()}
             {mode==='blitz'&&perQ&&(()=>{const sk=getSuddenBk();return(<div className="mt-3 text-xs text-purple-300/60"><div className="flex flex-wrap items-start gap-4"><div className="min-w-[125px]">Best Score: {suddenBest[sk]?.score??'—'}{suddenBestNew[sk]&&<NewBestStar/>}</div></div></div>);})()}
@@ -3771,13 +3988,13 @@
             <p>Time formatting follows the WCA speedcubing convention: individual single times (Last) are <i>truncated</i> to hundredths — the third decimal is dropped, never rounded. Averages, medians, and bests are <i>rounded</i> to the nearest hundredth. Truncating singles prevents fortunate rounding boundaries on individual attempts; rounding aggregates avoids systematic downward bias.</p>
             <p>One question = one attempt. Getting a question wrong then right still counts as one attempt, marked correct.</p>
             <p>When you set a new best, a small ★ appears next to the value to flag it.</p>
-            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: if you answer any questions while timing is hidden, re-enabling timing triggers a full reset of all stats so score and timing always reflect the same set of questions. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
+            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: timing pauses entirely while hidden — no times are recorded. When you turn timing back on, the current date is regenerated if it's still unanswered; if you've already answered wrong, revealed the answer, or shown codes, the date stays until you advance yourself. If any questions were answered while timing was hidden, a desync would arise on re-enable, so the three timing stat boxes merge into a single "Turn on and reset stats?" confirmation — tap it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to cancel. When Save Stats is off, toggling timing stats is purely cosmetic — no date change, no reset. Turning Save Stats on while timing is also on regenerates an unanswered date for a clean fresh start. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
           </GuideSection>
           <Divider label="Settings"/>
-          <GuideSection id="dateformat" title="Date Format" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Choose one of five real-world formats: <b>Written MDY</b> (April 27, 1828), <b>Written DMY</b> (27 April 1828), <b>Numeric MDY</b> (4/27/1828), <b>Numeric DMY</b> (27.4.1828), or <b>Numeric YMD</b> (1828-4-27). Numeric formats use a fixed separator convention: MDY uses '/', DMY uses '.', YMD uses '-'. Years always show in full, never abbreviated.</p><p>Only DMY, MDY, and YMD orderings are offered because those are the only orderings actually used in real life — orderings like YDM aren't standard anywhere.</p><p><b>Random Format</b>, when on, rolls one of the five formats per date in game modes only — your selected format is preserved underneath (the panels just lock visually). Lookup and the Last Updated timestamp ignore Random and always use the selected format. The Last Updated timestamp uses the numeric version of whichever format you've selected.</p><p>In Classic, Deduction, Flash, and AoX (idle), format changes on an unanswered, untouched date may regenerate the date. Turning Random Format on always regenerates (a fresh random format is rolled). Turning Random Format off regenerates only if the displayed format differs from your selected dropdown format. Changing the dropdown while Random Format is off regenerates only if the new selection differs from the displayed format. Changing the dropdown while Random Format is on does nothing visible — the dropdown is overridden by the random roll. If you've already made a wrong guess on the displayed date, format changes are deferred — the wrong-state is preserved and the new format applies on the next generated date. In active Blitz rounds and AoX runs, any format change ends the round.</p><p>In game modes' Show Codes, codes appear in the order the date is read (left to right), with Leap shown once you've seen both the year and month.</p></GuideSection>
+          <GuideSection id="dateformat" title="Date Format" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Choose one of five real-world formats: <b>Written MDY</b> (April 27, 1828), <b>Written DMY</b> (27 April 1828), <b>Numeric MDY</b> (4/27/1828), <b>Numeric DMY</b> (27.4.1828), or <b>Numeric YMD</b> (1828-4-27). Numeric formats use a fixed separator convention: MDY uses '/', DMY uses '.', YMD uses '-'. Years always show in full, never abbreviated.</p><p>Only DMY, MDY, and YMD orderings are offered because those are the only orderings actually used in real life — orderings like YDM aren't standard anywhere.</p><p><b>Random Format</b>, when on, rolls one of the five formats per date in game modes only — your selected format is preserved underneath (the panels just lock visually). Lookup and the Last Updated timestamp ignore Random and always use the selected format. The Last Updated timestamp uses the numeric version of whichever format you've selected.</p><p>In Classic, Deduction, Flash, and AoX (idle), any format setting change — Random Format toggle or Date Format dropdown — regenerates an unanswered date so you don't return to a previously-seen date in a now-mismatched format. This applies across all modes: if you change a format setting in one mode, any unanswered dates in the other modes are also regenerated. If you've already made a wrong guess, revealed the answer, or shown codes on the displayed date, the change is deferred — the burned state is preserved and the new format applies on the next generated date. In active Blitz rounds and AoX runs, any format change ends the round.</p><p>In game modes' Show Codes, codes appear in the order the date is read (left to right), with Leap shown once you've seen both the year and month.</p></GuideSection>
           <GuideSection id="julian" title="Julian Calendar" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Calendar System. On by default. When on, dates on or before October 4, 1582 are treated as Julian calendar dates, which have different leap year rules — every year divisible by 4 is a leap year, with no century exception. This affects weekday calculation and the codes shown in Show Codes. October 5–14, 1582 are always excluded since those dates never existed; the Gregorian calendar skipped them to correct accumulated calendar drift.</p><p>Toggling Julian doesn't necessarily regenerate the current date. For dates after October 4, 1582, Julian has no effect. For Julian-eligible dates (October 4, 1582 or earlier), the date stays if you haven't made a wrong guess yet — the answer and codes simply update. If you've already wrong-guessed, the date regenerates and is added to your history with both your red guess and a green for the day that was correct under the calendar system in effect when the date was first generated. Each date snapshots its calendar system at generation, so revisiting an earlier question via Back shows the highlights and codes that were correct under the system in effect when that date was generated. In active Blitz rounds and AoX runs, any Julian toggle ends the round.</p></GuideSection>
           <GuideSection id="range" title="Year Range" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Controls which years dates are drawn from. Defaults to 1–10000 AD. Changing the range always regenerates the current date — but if you've already made a wrong guess on the current date, the change is deferred so the wrong-state is preserved; the new range applies to the next date. While browsing back, settings-driven regen always preserves your history: the date you were viewing and any forward entries are pushed back to history before the live slot is regenerated. In active Blitz rounds and AoX runs, any range change ends the round.</p><p><b>Year sub-mode auto-disable:</b> Deduction's Year sub-mode requires either a year range of at least 5 years (so a 5-year window can be built) or, with Julian on, a range that contains October 15, 1582 (so a 2-year Jul Cross window can be built). When neither condition holds, the Year sub-type button greys out, and if you were already in Year mode when the range changed, you're auto-switched to Day mode. Day and Month sub-modes work for any valid range.</p></GuideSection>
-          <GuideSection id="leap" title="Leap Year Settings" openId={open} onToggle={toggle}><p>Two settings in the ⚙ menu control how often leap years appear and what months they're paired with. <b>Leap Year Chance</b> sets how often a generated date lands on a leap year — Random uses the natural rate (~24%); 50%, 75%, and 100% force higher rates. <b>Force Jan/Feb on Leap Years</b>, when on, restricts the month to January or February whenever a leap year is generated. These settings apply to all game modes' date generation; Lookup is unaffected. If your year range happens to contain no leap years (under the active calendar), the four Leap Year Chance buttons are locked and faded; the previously-selected value stays visually selected so it's restored when you change the range back to one with a leap year reachable. Force Jan/Feb on Leap Years stays unlocked since it doesn't imply leap-year reachability. Changing <b>Leap Year Chance</b> always regenerates the displayed date. Toggling <b>Force Jan/Feb on Leap Years</b> regenerates only if the current date is a leap year with a month other than January or February. If you've already made a wrong guess on the current date, either change is deferred so the wrong-state is preserved; the new setting applies to the next date. In active Blitz rounds and AoX runs, any leap setting change ends the round.</p></GuideSection>
+          <GuideSection id="leap" title="Leap Year Settings" openId={open} onToggle={toggle}><p>Two settings in the ⚙ menu control how often leap years appear and what months they're paired with. <b>Leap Year Chance</b> sets how often a generated date lands on a leap year — Random uses the natural rate (~24%); 50%, 75%, and 100% force higher rates. <b>Force Jan/Feb on Leap Years</b>, when on, restricts the month to January or February whenever a leap year is generated. These settings apply to all game modes' date generation; Lookup is unaffected. If your year range happens to contain no leap years (under the active calendar), the four Leap Year Chance buttons are locked and faded; the previously-selected value stays visually selected so it's restored when you change the range back to one with a leap year reachable. Force Jan/Feb on Leap Years stays unlocked since it doesn't imply leap-year reachability. Changing <b>Leap Year Chance</b> or toggling <b>Force Jan/Feb on Leap Years</b> always regenerates the displayed date so the new setting takes effect immediately. If you've already made a wrong guess, revealed the answer, or shown codes on the current date, either change is deferred so the burned state is preserved; the new setting applies to the next date. In active Blitz rounds and AoX runs, any leap setting change ends the round.</p></GuideSection>
           <GuideSection id="savestats" title="Save Stats" openId={open} onToggle={toggle}><p>Toggle via the ⚙ settings menu under Stats. On by default. When off, your answers don't update stats or saved bests. The stats panel dims to indicate the off state. Override is locked when Save Stats is off, across all modes. The toggle works differently per mode:</p><p className="mt-2"><b>Classic, Deduction, Flash</b> — per-question. The toggle's value is locked in at the moment of your first stat-affecting action (your first wrong guess on the question, or your correct answer if you got it right on the first try). Toggling afterward doesn't change that question's outcome, but does apply to the next question. If you've already made a wrong guess on the current question, toggling Save Stats does not regenerate the date — the toggle's frozen value sticks for the question. When off, the question doesn't update stats and isn't pushed to history (Back can't browse to it).</p><p className="mt-2"><b>Blitz</b> — round-level. In-round score, accuracy, streak, and Back/Forward navigation through round questions all work normally regardless of the toggle. Whatever the toggle is set to when the round ends determines whether the round's Best Score and Best Streak update.</p><p className="mt-2"><b>AoX</b> — run-level. In-run score, streak, times, and Back/Forward navigation all work normally regardless of the toggle. Whatever the toggle is set to when the run ends determines whether Best Average, Best Median, and Best Streak update.</p></GuideSection>
           <GuideSection id="theme" title="Theme" openId={open} onToggle={toggle}><p>Five themes: Dusk (default dark navy), Midnight (true black with purple), Nebula (deep purple), Light (clean white), and Parchment (warm cream). Accessible from the ⚙ settings menu in any tab. Enable Use System Settings to match your device's light/dark mode automatically, with separate theme choices for each. Disable to pick one manually.</p></GuideSection>
           <GuideSection id="reset-settings" title="Reset Settings &amp; Full Reset" openId={open} onToggle={toggle}><p><b>Reset Settings</b> — at the bottom-left of the ⚙ menu, restores everything in the menu to its defaults: Random Format on, Written MDY, Julian off, year range 1–10000, Leap Year Chance Random, Force Jan/Feb off, Save Stats on, and theme back to Use System Settings with Dusk (dark) and Light (light). It does not touch mode-specific config outside the menu (AoX N, timer durations, Deduction sub-types and toggles) or your stats and history. No confirmation prompt — tap to apply.</p><p><b>Full Reset</b> — at the bottom-right of the ⚙ menu, restores the entire site to its initial launch state. Wipes all stats, all-time bests (Blitz, Sudden, AoX), Lookup history, and in-progress rounds and runs. Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode toggles (AoX N, timer durations, Deduction sub-types and toggles, Allow Mistakes, Save Stats, Stop Codes, etc.). Closes any open overlay (How to Play, ⚙ menu, codes, method breakdown) and switches to Classic. Requires two taps to confirm: tap once and the button changes to "Confirm?"; tap again to fire. Auto-cancels after a few seconds, when you close ⚙, or if you tap any other control.</p></GuideSection>
