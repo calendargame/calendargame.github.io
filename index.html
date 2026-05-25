@@ -518,7 +518,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-25T01:44:00Z');
+    const DEPLOY_TS=new Date('2026-05-25T02:36:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -545,6 +545,11 @@
             for(let i=0;i<stats.length;i++){
               if(armedSpan&&i===armedSpan.startIdx){
                 const span=armedSpan.endIdx-armedSpan.startIdx+1;
+                // Bug #4 aesthetic: no ring or rounded corners on the merged warning button.
+                // The text change ('Turn On and Reset Stats?') is the sole visual cue. The
+                // standard vertical divider between Streak and this button is already
+                // present (it was the Streak|Last divider in unarmed state) — no element
+                // positions shift between armed and unarmed states.
                 items.push(
                   <button
                     key="armed-warning"
@@ -552,7 +557,7 @@
                     type="button"
                     onClick={armedSpan.onClick}
                     style={{flex:span}}
-                    className="flex items-center justify-center py-2 text-xs font-medium ring-2 ring-rose-200 rounded-lg"
+                    className="flex items-center justify-center py-2 text-xs font-medium"
                   >{armedSpan.label}</button>
                 );
                 if(armedSpan.endIdx<stats.length-1){
@@ -1195,13 +1200,16 @@
 
       return(
         <div style={{display:visible?"block":"none"}}>
+          {/* Bug #5: Site-wide Save Stats pause — when saveStats is false, all AoX stat
+              boxes show "—" with strikethrough labels (matches App-side behavior). AoX stat
+              boxes never had toggle fn handlers, so no fn change needed. opacity-50 dim stays. */}
           <div className={saveStats?"":"opacity-50"}><StatPanel stats={[
-            {label:"Score",value:scoreDisplay,off:false,fn:null},
-            {label:"Accuracy",value:accuracyDisplay,off:false,fn:null},
-            {label:"Streak",value:`${streak}/${bestStreak}`,off:false,fn:null},
-            {label:"Last",value:truncTime(calcLast(times)),off:false,fn:null},
-            {label:"Average",value:fmtTime(calcAvg(times)),off:false,fn:null},
-            {label:"Median",value:fmtTime(calcMed(times)),off:false,fn:null},
+            {label:"Score",value:scoreDisplay,off:!saveStats,fn:null},
+            {label:"Accuracy",value:accuracyDisplay,off:!saveStats,fn:null},
+            {label:"Streak",value:`${streak}/${bestStreak}`,off:!saveStats,fn:null},
+            {label:"Last",value:truncTime(calcLast(times)),off:!saveStats,fn:null},
+            {label:"Average",value:fmtTime(calcAvg(times)),off:!saveStats,fn:null},
+            {label:"Median",value:fmtTime(calcMed(times)),off:!saveStats,fn:null},
           ]}/></div>
           <div className="mt-3 text-xs text-purple-300/60">
             <div className="flex flex-wrap items-start gap-4">
@@ -1318,7 +1326,12 @@
       const [timingOffByMode,setTimingOffByMode]=useState({classic:true,deduction:true});
       const scoringOff=scoringOffByMode[mode]??false;
       const timingOff=timingOffByMode[mode]??false;
-      const toggleScoringOff=()=>setScoringOffByMode(p=>({...p,[mode]:!scoringOff}));
+      const toggleScoringOff=()=>{
+        // Defense in depth: when Save Stats is off, the stat box's fn is nulled (renders
+        // as <div>, not <button>) so this function should be unreachable. Kept as a safety net.
+        if(!saveStats)return;
+        setScoringOffByMode(p=>({...p,[mode]:!scoringOff}));
+      };
       // Time stats toggle. Rules (all decisions taken on the click, before state changes):
       //
       //   Turn OFF: no date change, no stat reset. Just hide the timing display. (c.times
@@ -1373,6 +1386,9 @@
         setTimingOffByMode(p=>({...p,[mode]:false}));
       };
       const toggleTimingOff=()=>{
+        // Defense in depth: when Save Stats is off, the stat box's fn is nulled (renders
+        // as <div>, not <button>) so this function should be unreachable. Kept as a safety net.
+        if(!saveStats)return;
         const currentlyOff=timingOffByMode[mode]??false;
         if(!currentlyOff){
           // Turn OFF: no date change, no reset.
@@ -1380,11 +1396,6 @@
           return;
         }
         // Turn ON path.
-        if(!saveStats){
-          // Save Stats off → no desync possible, no reset. Just flip visibility.
-          setTimingOffByMode(p=>({...p,[mode]:false}));
-          return;
-        }
         const desync=S.good!==S.times.length;
         if(!desync){
           performTimingOn({reset:false});
@@ -2697,9 +2708,9 @@
         // batch so the ded change (via spawnDed) lands with the panel close — freeze contract.
         const sctn=()=>{const ci=getDedCorrectIdx();const dedBtns=mkBtnsWithCorrect(persistBtns,ci);const capsule={snapshot:prevStatsSnapshotRef.current?{...prevStatsSnapshotRef.current}:null,wrongTime:wrongTimeRef.current};setDedStack(s=>ded?({...s,[dedType]:[...(s[dedType]||[]),{...ded,btns:dedBtns,overrideUsed:false,capsule,hasCredit:computeHasCredit(dedBtns)}]}):s);setDedForwardStack(s=>({...s,[dedType]:[]}));spawnDed();setCountedWrong(false);setCanOverrideCorrect(false);setLocked(false);setRevealed(false);setOverrideUsedThisQ(false);setBackDepth(0);setCalcOpen(false);wrongTimeRef.current=null;prevStatsSnapshotRef.current=null;resetPB();};
         const sw=(label,idx)=>{if(!countedWrong){wrongTimeRef.current=tStartRef.current?(performance.now()-tStartRef.current)/1000:null;prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:true};}markWrong(idx);setCountedWrong(true);setCanOverrideCorrect(false);};
-        if(ded.type==="year"){const ok=(+val)===ded.y;flashDed("year",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(fmtYear(+val),index);}}
-        if(ded.type==="month"){const ok=ded.boxes?ded.boxes[index]?.months.includes(ded.m):((+val)===ded.m);flashDed("month",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(val),index);}}
-        if(ded.type==="day"){const ok=(+val)===ded.d;flashDed("day",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(+val),index);}}
+        if(ded.type==="year"){const ok=(+val)===ded.y;flashDed("year",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current&&trackingOn()){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(fmtYear(+val),index);}}
+        if(ded.type==="month"){const ok=ded.boxes?ded.boxes[index]?.months.includes(ded.m):((+val)===ded.m);flashDed("month",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current&&trackingOn()){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(val),index);}}
+        if(ded.type==="day"){const ok=(+val)===ded.d;flashDed("day",index,ok);if(ok){if(!countedWrong){prevStatsSnapshotRef.current={played:S.played,good:S.good,streak:S.streak,best:S.best,timesLen:S.times.length,blitzPlayed:blitzRoundStats.played,blitzGood:blitzRoundStats.good,wasWrong:false};setCanOverrideCorrect(true);if(tStartRef.current&&trackingOn()){const dt=(performance.now()-tStartRef.current)/1000;updateStats(c=>{c.times=[...c.times,dt];});}}if(!countedWrong)updateStats(c=>{c.played+=1;c.good+=1;c.streak+=1;if(c.streak>c.best)c.best=c.streak;});sctn();}else{if(!countedWrong)updateStats(c=>{c.played+=1;c.streak=0;});sw(String(+val),index);}}
       }
       // Mode-switch state preservation — fires synchronously when `mode` changes.
       //   LEAVING: save stacks/timerDone snap/preservedQ based on what prevMode was doing.
@@ -3152,31 +3163,48 @@
           return Object.keys(btns).length===0&&!sd.countedWrong&&!sd.locked&&!sd.revealed;
         };
         const cleanseNonCurrent=(skipCurrentGm,skipCurrentDed)=>{
-          setDateByMode(p=>{
-            let changed=false;const next={...p};
-            for(const m of ['classic','flash','blitz']){
-              if(skipCurrentGm===m)continue;
-              if(next[m]){
-                if(isPermanentlyViolating(next[m])){next[m]=genDate(minY,maxY);changed=true;}
-                else if(formatSettingChanged){
-                  // Blitz only regens its pre-round date if not active and not in timerDone.
-                  // Post-round (timerDone) Blitz dates are "burned" by definition (round
-                  // concluded), so preserve.
-                  if(m==='blitz'){
-                    if(!active&&!timerDone){next[m]=genDate(minY,maxY);changed=true;}
-                  }else if(isFreshClassicFlash(m)){
-                    next[m]=genDate(minY,maxY);changed=true;
-                  }
-                }
+          // CRITICAL (Bug #5 follow-up): we must update BOTH dateByMode[m] AND
+          // preservedByModeRef.current[m].date for non-current Classic/Flash modes. The
+          // mode-switch useLayoutEffect's restore path reads from preservedByModeRef when
+          // arrivedTimingOff is true (which is the DEFAULT for Classic and Deduction), and
+          // applies it via setDate(preservedQ.date) — silently overwriting dateByMode with
+          // the stale date. Without the preservedByModeRef sync, this entire format-regen
+          // cleanse is invisible to the user in the most common case.
+          // Step 1: pre-compute the regen decisions and new dates so both setDateByMode and
+          // the preservedByModeRef sync use the same values (avoids double-call hazards from
+          // React strict mode running functional updaters twice).
+          const newDates={};
+          for(const m of ['classic','flash','blitz']){
+            if(skipCurrentGm===m)continue;
+            const cur=dateByMode[m];
+            if(!cur)continue;
+            if(isPermanentlyViolating(cur)){
+              newDates[m]=genDate(minY,maxY);
+            }else if(formatSettingChanged){
+              if(m==='blitz'){
+                // Blitz pre-round only (not active, not timerDone).
+                if(!active&&!timerDone)newDates[m]=genDate(minY,maxY);
+              }else if(isFreshClassicFlash(m)){
+                newDates[m]=genDate(minY,maxY);
               }
             }
-            return changed?next:p;
-          });
+          }
+          // Step 2: apply to dateByMode.
+          if(Object.keys(newDates).length>0){
+            setDateByMode(p=>{const next={...p};for(const m in newDates)next[m]=newDates[m];return next;});
+          }
+          // Step 3: sync preservedByModeRef.current[m].date for Classic/Flash. Also clean up
+          // permanently-violating preserved dates (previous behavior).
           for(const m of ['classic','flash']){
             if(skipCurrentGm===m)continue;
             const pe=preservedByModeRef.current[m];
-            if(pe?.date&&isPermanentlyViolating(pe.date))delete preservedByModeRef.current[m];
+            if(!pe?.date)continue;
+            if(isPermanentlyViolating(pe.date)){delete preservedByModeRef.current[m];}
+            else if(newDates[m]){preservedByModeRef.current[m]={...pe,date:{...newDates[m]}};}
           }
+          // Step 4: Deduction sub-types — clear stale entries so the dedType watcher
+          // re-spawns a fresh puzzle on next visit. Both permanently-violating and
+          // format-stale fresh entries are cleared.
           setSavedDedByType(p=>{
             let changed=false;const next={...p};
             for(const k of Object.keys(p)){
@@ -3663,6 +3691,10 @@
       // (e.g., Full Reset, or guide → Classic auto-redirect) need an explicit disarm
       // since they don't go through the global tap listener.
       useEffect(()=>{if(timingArmedRef.current)disarmTimingArm();},[mode]);
+      // Bug #5: also disarm if saveStats flips off while armed. The armed warning UI is
+      // gated on (timingArmed && saveStats), so the button visually disappears, but the
+      // state needs to follow.
+      useEffect(()=>{if(!saveStats&&timingArmedRef.current)disarmTimingArm();},[saveStats]);
       // Cleanup the timers on unmount.
       useEffect(()=>()=>{
         if(fullResetTimerRef.current)clearTimeout(fullResetTimerRef.current);
@@ -3785,23 +3817,34 @@
         </div>
         <div className="mx-auto px-4 pb-5 w-full max-w-[480px]">
           {showStats&&(<>
+            {/* Bug #5 (Save Stats off pauses all stats site-wide): when saveStats is false,
+                every stat's `off` becomes true (showing "—" with strikethrough label) and
+                every stat's `fn` is nulled (boxes render as <div>, not <button>, so taps do
+                nothing). The opacity-50 wrapper provides additional dim reinforcement.
+                armedSpan is also gated on saveStats so the warning UI can't appear while
+                save is off (defense in depth — toggleTimingOff also won't arm in this state). */}
             <div className={saveStats?"":"opacity-50"}>{(()=>{
               const showStreak=!(mode==="blitz"&&perQ);
+              const sOff=effectiveScoringOff||!saveStats;
+              const tOff=effectiveTimingOff||!saveStats;
+              const sFn=saveStats&&canHideStats?toggleScoringOff:null;
+              const tFn=saveStats&&canHideStats?toggleTimingOff:null;
               const statsArr=[
-                {label:"Score",value:(mode==="blitz"&&!perQ)?`${blitzRoundStats.good}/${blitzRoundStats.played}`:`${S.good}/${S.played}`,off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null},
-                {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null},
-                ...(showStreak?[{label:"Streak",value:`${S.streak}/${S.best}`,off:effectiveScoringOff,fn:canHideStats?toggleScoringOff:null}]:[]),
-                {label:"Last",value:truncTime(sLast),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
-                {label:"Average",value:fmtTime(sAvg),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
-                {label:"Median",value:fmtTime(sMed),off:effectiveTimingOff,fn:canHideStats?toggleTimingOff:null},
+                {label:"Score",value:(mode==="blitz"&&!perQ)?`${blitzRoundStats.good}/${blitzRoundStats.played}`:`${S.good}/${S.played}`,off:sOff,fn:sFn},
+                {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:sOff,fn:sFn},
+                ...(showStreak?[{label:"Streak",value:`${S.streak}/${S.best}`,off:sOff,fn:sFn}]:[]),
+                {label:"Last",value:truncTime(sLast),off:tOff,fn:tFn},
+                {label:"Average",value:fmtTime(sAvg),off:tOff,fn:tFn},
+                {label:"Median",value:fmtTime(sMed),off:tOff,fn:tFn},
               ];
-              // Bug #4: when timingArmed, merge the 3 time stat boxes into one wide warning button.
-              // Start index of time stats: 3 when Streak is present, 2 when not (Blitz perQ).
+              // Bug #4: when timingArmed AND saveStats, merge the 3 time stat boxes into one
+              // wide warning button. Start index of time stats: 3 when Streak is present,
+              // 2 when not (Blitz perQ).
               const timeStart=showStreak?3:2;
-              const armedSpan=timingArmed?{
+              const armedSpan=(timingArmed&&saveStats)?{
                 startIdx:timeStart,
                 endIdx:timeStart+2,
-                label:"Turn on and reset stats?",
+                label:"Turn On and Reset Stats?",
                 onClick:toggleTimingOff,
                 btnRef:timingArmBtnRef,
               }:null;
@@ -3988,7 +4031,7 @@
             <p>Time formatting follows the WCA speedcubing convention: individual single times (Last) are <i>truncated</i> to hundredths — the third decimal is dropped, never rounded. Averages, medians, and bests are <i>rounded</i> to the nearest hundredth. Truncating singles prevents fortunate rounding boundaries on individual attempts; rounding aggregates avoids systematic downward bias.</p>
             <p>One question = one attempt. Getting a question wrong then right still counts as one attempt, marked correct.</p>
             <p>When you set a new best, a small ★ appears next to the value to flag it.</p>
-            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: timing pauses entirely while hidden — no times are recorded. When you turn timing back on, the current date is regenerated if it's still unanswered; if you've already answered wrong, revealed the answer, or shown codes, the date stays until you advance yourself. If any questions were answered while timing was hidden, a desync would arise on re-enable, so the three timing stat boxes merge into a single "Turn on and reset stats?" confirmation — tap it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to cancel. When Save Stats is off, toggling timing stats is purely cosmetic — no date change, no reset. Turning Save Stats on while timing is also on regenerates an unanswered date for a clean fresh start. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
+            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: timing pauses entirely while hidden — no times are recorded. When you turn timing back on, the current date is regenerated if it's still unanswered; if you've already answered wrong, revealed the answer, or shown codes, the date stays until you advance yourself. If any questions were answered while timing was hidden, a desync would arise on re-enable, so the three timing stat boxes merge into a single "Turn On and Reset Stats?" confirmation — tap it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to cancel. When Save Stats is off, all stat boxes site-wide (across every mode, including AoX) show '—' with strikethrough labels, dim, and become non-interactive — toggling timing or scoring is disabled until Save Stats is turned back on, which prevents accidentally creating stat desyncs. Turning Save Stats on while timing is also on regenerates an unanswered date for a clean fresh start. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
           </GuideSection>
           <Divider label="Settings"/>
           <GuideSection id="dateformat" title="Date Format" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Choose one of five real-world formats: <b>Written MDY</b> (April 27, 1828), <b>Written DMY</b> (27 April 1828), <b>Numeric MDY</b> (4/27/1828), <b>Numeric DMY</b> (27.4.1828), or <b>Numeric YMD</b> (1828-4-27). Numeric formats use a fixed separator convention: MDY uses '/', DMY uses '.', YMD uses '-'. Years always show in full, never abbreviated.</p><p>Only DMY, MDY, and YMD orderings are offered because those are the only orderings actually used in real life — orderings like YDM aren't standard anywhere.</p><p><b>Random Format</b>, when on, rolls one of the five formats per date in game modes only — your selected format is preserved underneath (the panels just lock visually). Lookup and the Last Updated timestamp ignore Random and always use the selected format. The Last Updated timestamp uses the numeric version of whichever format you've selected.</p><p>In Classic, Deduction, Flash, and AoX (idle), any format setting change — Random Format toggle or Date Format dropdown — regenerates an unanswered date so you don't return to a previously-seen date in a now-mismatched format. This applies across all modes: if you change a format setting in one mode, any unanswered dates in the other modes are also regenerated. If you've already made a wrong guess, revealed the answer, or shown codes on the displayed date, the change is deferred — the burned state is preserved and the new format applies on the next generated date. In active Blitz rounds and AoX runs, any format change ends the round.</p><p>In game modes' Show Codes, codes appear in the order the date is read (left to right), with Leap shown once you've seen both the year and month.</p></GuideSection>
