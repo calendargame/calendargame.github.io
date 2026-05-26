@@ -16,15 +16,33 @@
     [data-theme="nebula"]{--bg1:#0b0714;--bg2:#0b0714;--tc:#0b0714}
     [data-theme="parchment"]{--bg1:#f0e8d5;--bg2:#f0e8d5;--tc:#f0e8d5;--card-bg:rgba(255,252,244,.95);--card-bd:rgba(120,53,175,.22);--panel-bg:rgba(120,53,175,.07);--panel-bd:rgba(120,53,175,.22);--thin-bd:rgba(120,53,175,.18);--sbtn-bg:rgba(120,53,175,.1);--sbtn-bd:rgba(120,53,175,.28);--sbtn-hov:rgba(120,53,175,.18);--stgl-bg:rgba(120,53,175,.07);--stgl-hov:rgba(120,53,175,.14);--chip-bg:rgba(120,53,175,.09);--chip-bd:rgba(120,53,175,.22);--bar-bg:rgba(120,53,175,.09);--bar-bd:rgba(120,53,175,.22);--body-color:#2e1065;--sec-color:rgba(46,16,101,.78);--mut-color:rgba(46,16,101,.62);--fnt-color:rgba(46,16,101,.5);--shadow-elev:rgba(46,16,101,.18)}
     [data-theme="light"]{--bg1:#f2f2f7;--bg2:#f2f2f7;--tc:#f2f2f7;--card-bg:rgba(255,255,255,.95);--card-bd:rgba(120,53,175,.22);--panel-bg:rgba(237,233,254,.48);--panel-bd:rgba(120,53,175,.22);--thin-bd:rgba(120,53,175,.18);--sbtn-bg:rgba(237,233,254,.65);--sbtn-bd:rgba(120,53,175,.28);--sbtn-hov:rgba(237,233,254,.88);--stgl-bg:rgba(237,233,254,.42);--stgl-hov:rgba(237,233,254,.65);--chip-bg:rgba(237,233,254,.75);--chip-bd:rgba(120,53,175,.22);--bar-bg:rgba(237,233,254,.75);--bar-bd:rgba(120,53,175,.22);--body-color:#1e1b4b;--sec-color:rgba(30,27,75,.78);--mut-color:rgba(30,27,75,.62);--fnt-color:rgba(30,27,75,.5);--shadow-elev:rgba(30,27,75,.15)}
-    /* overscroll-behavior: none kills two iOS Safari behaviors at once: scroll-chain
-       bleed (e.g., reaching the bottom of the settings popover would otherwise scroll
-       the body / HtP underneath) and the rubber-band bounce at scroll boundaries.
-       Applied to html+body for the page-level body scroll (HtP); the inner scroll
-       containers (settings popover, Lookup history) get their own overscroll-none
-       Tailwind classes. */
+    /* Layout architecture: body never scrolls (body+html have overflow:hidden and
+       overscroll-behavior:none — no rubber-band on locked body). Three structural
+       pieces inside #root:
+         1. .htp-sticky-bar: position:fixed at the top of the viewport. NOT a flex
+            child or part of normal flow — it's a chrome-style fixed element above
+            everything. Has its own bg-[var(--bg1)]. ResizeObserver in JS measures
+            the bar's offsetHeight on mount and any resize, writes the value to the
+            --bar-h CSS custom property on the document root.
+         2. #appScroll (the scroll container, ref={appScrollRef}): position:absolute
+            inset:0, with padding-top:var(--bar-h) so its content starts below the
+            bar instead of being covered by it. overflow-y:auto with
+            overscroll-contain keeps rubber-band bounce LOCAL — the bounce happens
+            inside this container and cannot affect the fixed bar above.
+         3. Inner scrollables (settings popover inner, Lookup history): also use
+            overscroll-contain for the same reason.
+       Why the bar is position:fixed (not sticky or a flex item): iOS PWA samples
+       the status bar color from the topmost fixed/sticky element with its own
+       background. The bar being explicitly position:fixed with bg-[var(--bg1)]
+       (a theme-aware CSS variable) means iOS re-samples the bar's bg whenever the
+       theme changes, so the status bar / URL bar tinting updates live. A plain
+       flex child without explicit positioning does NOT give iOS this cue, so it
+       falls back to the theme-color meta tag, which iOS PWA reads only at launch
+       and never updates on JS changes. */
     html,body{overflow:hidden;overscroll-behavior:none}
     html{touch-action:manipulation}
     body{background:var(--bg1);color:var(--body-color)}
+    #root{position:fixed;top:0;left:0;right:0;bottom:0;overflow:hidden}
     /* Disable text selection globally to prevent accidental selection during rapid
        practice taps (long-press-and-drag, double-tap, etc.). Two specific opt-ins:
        input/textarea elements (so typing/editing stays functional everywhere they
@@ -34,13 +52,24 @@
     body{user-select:none;-webkit-user-select:none}
     input,textarea{user-select:text;-webkit-user-select:text}
     .select-text{user-select:text;-webkit-user-select:text}
-    /* Utility classes — fade gradient + theme-aware elevation shadows.
-       fade-scroll-bottom is applied conditionally to bounded scroll regions
-       (settings popover inner, Lookup history) via state, signaling more content below.
-       elev-shadow-down/up cast theme-aware shadows from sticky elements over scrolled
-       content for elevation polish. htp-fade-overlay is a fixed-position overlay used
-       only in guide mode where the body itself scrolls. */
+    /* Scroll-edge indicator system. Two visual languages, designed to stack:
+       FADE = "content extends past this edge." Implemented as a CSS mask on the
+         scroll container itself. Applied conditionally (state-driven) so it only
+         appears when content actually overflows past that edge. Top and bottom
+         variants are symmetric (24px each).
+       SHADOW (elev-shadow-down/up) = "fixed UI sits at this boundary, content
+         slides under it." Applied to the fixed element (bar, sticky footer,
+         layered section header), not to the scroll container. Cast away from the
+         scroll content.
+       Where both apply (e.g., bar at scroll's top edge), both stack: shadow says
+       "I'm a layered surface," fade says "and there's content extending under me." */
+    .fade-scroll-top{-webkit-mask-image:linear-gradient(to bottom,transparent,black 24px);mask-image:linear-gradient(to bottom,transparent,black 24px)}
     .fade-scroll-bottom{-webkit-mask-image:linear-gradient(to bottom,black calc(100% - 24px),transparent);mask-image:linear-gradient(to bottom,black calc(100% - 24px),transparent)}
+    /* When a container has BOTH top and bottom fades, the two mask-images must be
+       combined into a single rule so neither overrides the other (CSS doesn't stack
+       mask-image declarations from separate classes). The combined gradient fades
+       both edges at once. */
+    .fade-scroll-both{-webkit-mask-image:linear-gradient(to bottom,transparent,black 24px,black calc(100% - 24px),transparent);mask-image:linear-gradient(to bottom,transparent,black 24px,black calc(100% - 24px),transparent)}
     .elev-shadow-down{box-shadow:0 4px 6px -2px var(--shadow-elev)}
     .elev-shadow-up{box-shadow:0 -4px 6px -2px var(--shadow-elev)}
     /* Smooth shadow fade in/out. Selectors target the elements that conditionally
@@ -48,8 +77,7 @@
        (always present), letting the box-shadow animate both when the class is added AND
        when it's removed. Putting transition inside .elev-shadow-down would only animate
        on add, since the rule no longer applies once the class is removed. */
-    .htp-sticky-bar,.popover-sticky-footer{transition:box-shadow 0.2s ease}
-    .htp-fade-overlay{position:fixed;left:0;right:0;bottom:0;height:32px;pointer-events:none;z-index:20;background:linear-gradient(to top,var(--bg1),transparent)}
+    .htp-sticky-bar,.popover-sticky-footer,.lookup-history-header,.lookup-method-section{transition:box-shadow 0.2s ease}
     .card{background:var(--card-bg);border:1px solid var(--card-bd)}
     .panel{background:var(--panel-bg);border:1px solid var(--panel-bd)}
     .thin{border:1px solid var(--thin-bd)}
@@ -560,7 +588,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-25T20:33:00Z');
+    const DEPLOY_TS=new Date('2026-05-26T19:15:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -569,7 +597,7 @@
       // stay at default size — they don't grow this way in practice.
       //
       // Bug #4 armedSpan: when present, replaces stats[armedSpan.startIdx..endIdx]
-      // (inclusive) with a single wide "Turn on and reset stats?" warning button.
+      // (inclusive) with a single wide "Enable and Reset Stats?" warning button.
       // Used by the App-side timing-arm flow to merge the 3 time stat boxes into one
       // confirmation target. Shape: {startIdx, endIdx, label, onClick, btnRef}.
       const sizeForValue=(val)=>{
@@ -588,7 +616,7 @@
               if(armedSpan&&i===armedSpan.startIdx){
                 const span=armedSpan.endIdx-armedSpan.startIdx+1;
                 // Bug #4 aesthetic: no ring or rounded corners on the merged warning button.
-                // The text change ('Turn On and Reset Stats?') is the sole visual cue. The
+                // The text change ('Enable and Reset Stats?') is the sole visual cue. The
                 // standard vertical divider between Streak and this button is already
                 // present (it was the Streak|Last divider in unarmed state) — no element
                 // positions shift between armed and unarmed states.
@@ -1335,31 +1363,6 @@
       // mode changes for codes-freeze logic.
       const prevNonGuideModeRef=useRef('classic');
       useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
-      // Scroll-state tracking for guide-mode body scroll. htpAtBottom controls
-      // the fixed-position bottom fade overlay (no overlay when at bottom OR when
-      // content fits without scrolling). htpScrolledFromTop controls the elevation
-      // shadow on the sticky title-row header (appears once user scrolls past top).
-      // Listener gated on mode==='guide' since body only scrolls in guide mode;
-      // game modes have #root position:fixed so window scroll never fires there.
-      const [htpAtBottom,setHtpAtBottom]=useState(true);
-      const [htpScrolledFromTop,setHtpScrolledFromTop]=useState(false);
-      useEffect(()=>{
-        if(mode!=='guide'){setHtpAtBottom(true);setHtpScrolledFromTop(false);return;}
-        const evaluate=()=>{
-          const doc=document.documentElement;
-          const scrollTop=doc.scrollTop||document.body.scrollTop||0;
-          const scrollHeight=doc.scrollHeight;
-          const clientHeight=doc.clientHeight;
-          const noOverflow=scrollHeight<=clientHeight+1;
-          setHtpAtBottom(noOverflow||scrollTop+clientHeight>=scrollHeight-4);
-          setHtpScrolledFromTop(!noOverflow&&scrollTop>0);
-        };
-        evaluate();
-        window.addEventListener('scroll',evaluate,{passive:true});
-        const ro=new ResizeObserver(evaluate);
-        ro.observe(document.body);
-        return()=>{window.removeEventListener('scroll',evaluate);ro.disconnect();};
-      },[mode]);
       const modeSelectRef=useRef(null);
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
       const [useSystem,setUseSystem]=useState(true);
@@ -1415,7 +1418,7 @@
       //
       // The destructive "Turn ON + desync → reset" case is gated by a two-tap arm/confirm
       // pattern (Bug #4). Tap 1 arms (sets timingArmed, starts 3s timer, merges the 3 time
-      // stat boxes into a single "Turn on and reset stats?" warning button). Tap 2 within
+      // stat boxes into a single "Enable and Reset Stats?" warning button). Tap 2 within
       // the window confirms and fires. Timer expiry or any tap outside the warning button
       // disarms (see the global mousedown/touchstart listener below).
       //
@@ -1567,7 +1570,7 @@
       const [timerDone,setTimerDone]=useState(false);
       // Bug #4: two-tap arm/confirm pattern for the destructive "Turn timing ON + desync"
       // case. Mirrors Full Reset's pattern. The 3 time stat boxes visually merge into a
-      // single "Turn on and reset stats?" warning button when armed. timingArmedRef is the
+      // single "Enable and Reset Stats?" warning button when armed. timingArmedRef is the
       // synchronous twin of timingArmed state — needed because toggleTimingOff reads/writes
       // armed status on the same click and React state updates are async.
       const [timingArmed,setTimingArmed]=useState(false);
@@ -1678,53 +1681,67 @@
       // when runLookup() fires a new result or the user manually closes it.
       const pendingDedSwitchRef=useRef(null);
       const prevModeRef=useRef(mode);const prevModeForSwitchRef=useRef(mode);const timerDoneSnapRef=useRef(null);const preservedByModeRef=useRef({});const stacksByModeRef=useRef({});
-      // Mode-based scroll-lock. For game modes (everything except 'guide'), the #root element is
-      // locked to the viewport via `position: fixed; inset: 0` plus `overflow: hidden`. The fixed
-      // anchor lives on #root (not body) so body stays in normal flow — that lets body's bg
-      // propagate to the canvas, which iOS Safari uses for live chrome tinting (URL bar / status
-      // bar bg color follows theme changes live instead of being frozen by a position:fixed body).
-      // The BFCache layout-shift protection works the same way: anchoring #root to the current
-      // viewport prevents iOS from restoring stale layout state. 'guide' mode allows scrolling
-      // because the HtP content is long.
-      //
-      // lastAppliedScrollLockRef tracks whether 'guide' or 'lock' state was last applied. When
-      // mode changes between two non-guide modes (e.g. Classic → AoX), the desired DOM state is
-      // identical and we skip the work entirely. Avoids unnecessary style writes and scroll
-      // resets on every mode change, keeping the transition crisp. window.scrollTo(0,0) only
-      // fires when leaving guide (where scrolling was actually possible). No cleanup function
-      // — the App never unmounts in practice and skipping cleanup avoids redundant work on
-      // every effect re-run.
-      // (Historical note: this optimization originally landed to stop iOS Safari from
-      // dismissing the native <select> picker after fast mode-changes, since unconditional
-      // #root style writes were churning layout. The native <select> has since been replaced
-      // by CustomSelect, which is immune to that dismissal heuristic, so the layout-churn
-      // concern no longer applies — but the optimization remains valuable on its own merits.)
-      const lastAppliedScrollLockRef=useRef(null);
+      // Bar height tracking. The htp-sticky-bar is position:fixed (chrome-style fixed
+      // element above everything), so it has no natural effect on the flow of the
+      // appScrollRef container below it. We measure the bar's offsetHeight here and
+      // write it to a CSS custom property (--bar-h) on the document root; the scroll
+      // container reads it via padding-top:var(--bar-h) so its content starts below
+      // the bar instead of being covered by it. ResizeObserver fires on initial mount
+      // and any time the bar's height changes (e.g., mode switch flips pb-2.5 in
+      // guide mode vs none in game modes, or content reflows). Writing to a CSS
+      // variable instead of JS-applying padding directly keeps the styling
+      // declarative and avoids React state churn for a value that's not part of
+      // application logic.
+      const htpStickyBarRef=useRef(null);
       useEffect(()=>{
-        const desired=mode==='guide'?'guide':'lock';
-        if(lastAppliedScrollLockRef.current===desired)return;
-        const el=document.documentElement;const body=document.body;const root=document.getElementById('root');
-        if(desired==='guide'){
-          // Must be 'visible' (not 'auto') for the sticky title bar to pin correctly
-          // on iOS Safari. Setting overflow:auto on html+body creates two competing scroll
-          // containers and the sticky element binds to the inner one (body) which itself
-          // doesn't actually scroll, causing the bar to scroll out of view with content.
-          // overflow:visible lets the page scroll naturally via the viewport, making the
-          // viewport the sticky pinning context — sticky then works as expected.
-          el.style.overflow='visible';body.style.overflow='visible';
-          if(root){root.style.position='';root.style.top='';root.style.left='';root.style.right='';root.style.bottom='';root.style.overflow='';}
-        }else{
-          el.style.overflow='hidden';body.style.overflow='hidden';
-          if(root){root.style.position='fixed';root.style.top='0';root.style.left='0';root.style.right='0';root.style.bottom='0';root.style.overflow='hidden';}
-          if(lastAppliedScrollLockRef.current==='guide')window.scrollTo(0,0);
-        }
-        lastAppliedScrollLockRef.current=desired;
+        const el=htpStickyBarRef.current;if(!el)return;
+        const updateBarH=()=>{document.documentElement.style.setProperty('--bar-h',`${el.offsetHeight}px`);};
+        updateBarH();
+        const ro=new ResizeObserver(updateBarH);
+        ro.observe(el);
+        return()=>ro.disconnect();
+      },[]);
+      // App-wide scroll-state tracking on the confined scroll container (appScrollRef).
+      // Container scrolls when content overflows the viewport-below-bar (always in HtP,
+      // and in any mode where content can't fit at the current viewport size).
+      //   appScrolledFromTop → bar's elev-shadow-down + container's fade-scroll-top
+      //   appAtBottom         → container's fade-scroll-bottom
+      // Defaults: appAtBottom true / appScrolledFromTop false (no indicators on first
+      // paint before scroll state is evaluated). The listener runs on every mode change
+      // so it picks up the container ref and re-evaluates against new content. Inner
+      // scrollables (popover, lookup) track their own scroll state independently.
+      const appScrollRef=useRef(null);
+      const [appAtBottom,setAppAtBottom]=useState(true);
+      const [appScrolledFromTop,setAppScrolledFromTop]=useState(false);
+      useEffect(()=>{
+        const el=appScrollRef.current;if(!el)return;
+        const evaluate=()=>{
+          const scrollTop=el.scrollTop;
+          const scrollHeight=el.scrollHeight;
+          const clientHeight=el.clientHeight;
+          const noOverflow=scrollHeight<=clientHeight+1;
+          setAppAtBottom(noOverflow||scrollTop+clientHeight>=scrollHeight-4);
+          setAppScrolledFromTop(!noOverflow&&scrollTop>0);
+        };
+        evaluate();
+        el.addEventListener('scroll',evaluate,{passive:true});
+        const ro=new ResizeObserver(evaluate);
+        ro.observe(el);
+        return()=>{el.removeEventListener('scroll',evaluate);ro.disconnect();};
       },[mode]);
+      // Mode-change effect: reset the scroll container to top on every mode switch.
+      // Without this, switching from HtP (where the user scrolled) into a game mode
+      // would leave the container at its previous scrollTop, hiding the top of the
+      // mode's content. Runs after evaluate() above to ensure a clean visual transition.
+      useEffect(()=>{const el=appScrollRef.current;if(el)el.scrollTop=0;},[mode]);
       // BFCache scroll reset (defense-in-depth alongside position:fixed #root).
       // Multiple events + deferred resets cover edge cases where pageshow alone isn't reliable
       // on iOS Safari. visibilitychange catches tab-foreground transitions; rAF + setTimeout
-      // catch late scroll restorations that happen after the initial event fires.
-      useEffect(()=>{const reset=()=>{window.scrollTo(0,0);if(document.documentElement.scrollTop!==0)document.documentElement.scrollTop=0;if(document.body.scrollTop!==0)document.body.scrollTop=0;};const onPageShow=()=>{reset();requestAnimationFrame(reset);setTimeout(reset,0);};const onVisChange=()=>{if(document.visibilityState==='visible'){reset();requestAnimationFrame(reset);}};reset();window.addEventListener('pageshow',onPageShow);document.addEventListener('visibilitychange',onVisChange);return()=>{window.removeEventListener('pageshow',onPageShow);document.removeEventListener('visibilitychange',onVisChange);};},[]);
+      // catch late scroll restorations that happen after the initial event fires. Resets
+      // both the window/body scroll (defense-in-depth — body has overflow:hidden so it
+      // can't scroll, but BFCache might try anyway) AND the inner container (the actual
+      // scroll surface that the user interacts with).
+      useEffect(()=>{const reset=()=>{window.scrollTo(0,0);if(document.documentElement.scrollTop!==0)document.documentElement.scrollTop=0;if(document.body.scrollTop!==0)document.body.scrollTop=0;if(appScrollRef.current)appScrollRef.current.scrollTop=0;};const onPageShow=()=>{reset();requestAnimationFrame(reset);setTimeout(reset,0);};const onVisChange=()=>{if(document.visibilityState==='visible'){reset();requestAnimationFrame(reset);}};reset();window.addEventListener('pageshow',onPageShow);document.addEventListener('visibilitychange',onVisChange);return()=>{window.removeEventListener('pageshow',onPageShow);document.removeEventListener('visibilitychange',onVisChange);};},[]);
       // Keyboard input — desktop convenience, mobile-no-op.
       // Three categories of keys are handled, all subject to the same gates: not in
       // an input/textarea/contentEditable, no modifiers held (Cmd+L stays browser),
@@ -3537,23 +3554,21 @@
       // persistence behavior is preserved everywhere except the explicit Full Reset path.
       const [aoxResetKey,setAoxResetKey]=useState(0);
       // Scroll-state tracking for the settings popover inner scroll wrapper.
-      // popoverAtBottom drives BOTH the bottom fade gradient (no fade when at bottom)
-      // AND the elevation shadow on the sticky footer (no shadow when at bottom). Both
-      // appear when there's still content scrollable below — the fade signals "more
-      // below," the shadow signals "footer is elevated above content sliding behind
-      // it." The two cues reinforce each other rather than compete. Mirrored from the
-      // HtP sticky-header shadow rule: shadow appears when content is sliding behind
-      // the sticky element (top header → scrolled-from-top; bottom footer → !at-bottom).
-      // Defaults to true (no fade, no shadow) so initial open before any scroll event
-      // fires is correct.
+      // Popover inner scroll state. Three flags drive the visual edge indicators:
+      //   popoverScrolledFromTop → top fade (no shadow at top — no fixed UI there)
+      //   popoverAtBottom        → bottom fade + sticky footer shadow (both signal "more below")
+      // Defaults: scrolledFromTop false, atBottom true (no indicators on first open before
+      // the listener evaluates). The two fade flags combine into fade-scroll-both when both apply.
       const popoverInnerScrollRef=useRef(null);
       const [popoverAtBottom,setPopoverAtBottom]=useState(true);
+      const [popoverScrolledFromTop,setPopoverScrolledFromTop]=useState(false);
       useEffect(()=>{
-        if(!settingsOpen){setPopoverAtBottom(true);return;}
+        if(!settingsOpen){setPopoverAtBottom(true);setPopoverScrolledFromTop(false);return;}
         const el=popoverInnerScrollRef.current;if(!el)return;
         const evaluate=()=>{
           const noOverflow=el.scrollHeight<=el.clientHeight+1;
           setPopoverAtBottom(noOverflow||el.scrollTop+el.clientHeight>=el.scrollHeight-4);
+          setPopoverScrolledFromTop(!noOverflow&&el.scrollTop>0);
         };
         evaluate();
         el.addEventListener('scroll',evaluate,{passive:true});
@@ -3688,12 +3703,12 @@
         prevPopRef.current={randomFormat:true,dateFormat:'written-mdy',useJulian:true,minY:1,maxY:10000,leapChance:'random',janFebChance:'random',julianChance:'random'};
         prevDedTogglesRef.current={abCrossOnly:false,julCrossOnly:false,monthOnly1582:false};
         //    Misc:
-        lastAppliedScrollLockRef.current=null;
+        // (scroll-lock ref removed — #root is permanently fixed now, no ref to reset)
         // 3. State setters (batched). Mode + overlays first.
         setMode("classic");
         setSettingsOpen(false);
-        setHtpAtBottom(true);
-        setHtpScrolledFromTop(false);
+        setAppAtBottom(true);
+        setAppScrolledFromTop(false);
         // All stats wiped
         setStatsByMode({classic:blankStats(),blitz:blankStats(),flash:blankStats(),"deduction-day":blankStats(),"deduction-month":blankStats(),"deduction-year":blankStats()});
         setBlitzRoundStats(blankStats());
@@ -3746,8 +3761,13 @@
         if(suddenBarRef.current)suddenBarRef.current.style.width="100%";
         if(suddenTimeRef.current)suddenTimeRef.current.textContent="5s";
         resetFlashBar();
-        // 5. Scroll the window to the top (matches initial launch state).
+        // 5. Scroll the window AND the app scroll container to the top (matches
+        // initial launch state). The mode-change effect would handle the container
+        // reset asynchronously after setMode commits, but doing it synchronously here
+        // matches this section's "synchronous reset" promise and avoids any visual
+        // flash. window.scrollTo is defense-in-depth since body can't scroll anyway.
         if(typeof window!=="undefined")window.scrollTo(0,0);
+        if(appScrollRef.current)appScrollRef.current.scrollTop=0;
       };
       // Two-tap-to-confirm wrapper. Tap 1 arms (label flips to "Confirm?", button gets a ring).
       // Tap 2 within the arm window fires the reset and disarms. Auto-disarm via timer (3s),
@@ -3781,8 +3801,8 @@
       // target's own onClick, so the user's intent (e.g., toggling Random Format, switching
       // modes, tapping a date answer) still proceeds normally; we just consume the pending
       // arm. Scope is the entire document (not just the settings popover) so taps anywhere
-      // outside the button reliably disarm. Matches the bug #4 timing-arm listener below
-      // — both confirmations follow the same global-tap-to-cancel UX.
+      // outside the button reliably disarm. (The bug #4 timing-arm listener below
+      // intentionally uses a different phase — see its comment for why.)
       useEffect(()=>{
         if(!fullResetArmed)return;
         const h=e=>{
@@ -3793,18 +3813,35 @@
         document.addEventListener('touchstart',h,true);
         return()=>{document.removeEventListener('mousedown',h,true);document.removeEventListener('touchstart',h,true);};
       },[fullResetArmed]);
-      // Bug #4: parallel global listener for the timing-arm warning. Disarms on any tap
-      // outside the merged warning button (which carries timingArmBtnRef). Same site-wide
-      // capture-phase pattern as Full Reset above.
+      // Bug #4: global listener for the timing-arm warning. Disarms on any tap outside
+      // the merged warning button (which carries timingArmBtnRef). Uses bubble-phase
+      // 'click' rather than the capture-phase mousedown/touchstart pattern used by Full
+      // Reset above. Reason: with capture-phase, the disarm state update was scheduling
+      // a React re-render of the StatPanel (merged-warning → 3 separate stat boxes)
+      // between touchstart and the synthetic click on touchend, and the target's onClick
+      // wasn't firing reliably as a result — outside taps disarmed but didn't perform
+      // their intended action (day-of-week buttons, Reset Stats, etc.). Bubble-phase
+      // click guarantees the target's onClick has already fired by the time this
+      // handler runs, so the user's intent always proceeds AND the countdown is
+      // canceled in the same tap — matching the Full Reset UX from the user's
+      // perspective. Full Reset stays on the capture-phase pattern because its arm
+      // lives inside the settings popover, where the DOM doesn't reshape on disarm
+      // and the timing concern doesn't apply.
+      //
+      // Listener registration is DEFERRED via setTimeout(0): the tap that just armed
+      // the warning bubbles up to document and would otherwise be caught by this very
+      // listener (which doesn't recognize the now-detached time-stat box as "inside the
+      // warning button"), instantly disarming what was just armed. Deferring registration
+      // to the next macrotask guarantees the arming click has finished propagating before
+      // the listener exists, so the arming tap can't disarm itself.
       useEffect(()=>{
         if(!timingArmed)return;
         const h=e=>{
           if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target))return;
           disarmTimingArm();
         };
-        document.addEventListener('mousedown',h,true);
-        document.addEventListener('touchstart',h,true);
-        return()=>{document.removeEventListener('mousedown',h,true);document.removeEventListener('touchstart',h,true);};
+        const t=setTimeout(()=>document.addEventListener('click',h),0);
+        return()=>{clearTimeout(t);document.removeEventListener('click',h);};
       },[timingArmed]);
       // Bug #4: disarm the timing warning on mode change. Programmatic mode switches
       // (e.g., Full Reset, or guide → Classic auto-redirect) need an explicit disarm
@@ -3852,11 +3889,12 @@
       //   - mode and settingsOpen are preconditions, not dirty signals (you're looking at
       //     the button from inside the settings popover, so settingsOpen=true; classic is
       //     the post-reset mode)
-      //   - htpAtBottom and htpScrolledFromTop are auto-reset whenever mode!=='guide'
-      //     (see the listener at the htpAtBottom useState declaration around line 1281).
-      //     ** HTP-COUPLING NOTE: if HtP's leave behavior is ever changed so these two
-      //     are NO LONGER auto-reset on mode!='guide', they MUST be added to this check
-      //     or the button could appear dim while HtP scroll state isn't actually default. **
+      //   - appAtBottom and appScrolledFromTop are auto-reset whenever mode changes
+      //     (the mode-change effect on appScrollRef sets scrollTop=0; the ResizeObserver
+      //     in the scroll-state effect then re-evaluates and clears both to defaults).
+      //     ** SCROLL-COUPLING NOTE: if container leave behavior is ever changed so these
+      //     are NO LONGER auto-reset on mode change, they MUST be added to this check
+      //     or the button could appear dim while scroll state isn't actually default. **
       //   - dateByMode entries (always random; reset just rerolls; user has no relationship
       //     with the specific date value)
       //   - aoxFrozenDate (derived from date)
@@ -3869,7 +3907,7 @@
       //     mirror ARE checked, so any actual user-visible change is caught.
       const isFullyReset=mode==='classic'&&settingsAtDefaults&&allowMistakes===true&&perQ===false&&blitzSec===60&&qSec===5&&flashMs===500&&abCrossOnly===false&&julCrossOnly===false&&monthOnly1582===false&&dedType==='day'&&Object.keys(scoringOffByMode).length===0&&timingOffByMode.classic===true&&timingOffByMode.deduction===true&&Object.keys(timingOffByMode).length===2&&isBlankStats(statsByMode.classic)&&isBlankStats(statsByMode.blitz)&&isBlankStats(statsByMode.flash)&&isBlankStats(statsByMode['deduction-day'])&&isBlankStats(statsByMode['deduction-month'])&&isBlankStats(statsByMode['deduction-year'])&&isBlankStats(blitzRoundStats)&&Object.keys(blitzBest).length===0&&Object.keys(blitzBestNew).length===0&&Object.keys(suddenBest).length===0&&Object.keys(suddenBestNew).length===0&&stack.length===0&&forwardStack.length===0&&isBlankDedStacks(dedStack)&&isBlankDedStacks(dedForwardStack)&&isBlankDedTypeStore(savedDedByType)&&backDepth===0&&browseHasCredit===false&&locked===false&&revealed===false&&countedWrong===false&&canOverrideCorrect===false&&pendingWrongOverride===null&&overrideUsedThisQ===false&&timerDone===false&&calcPenaltyActive===false&&Object.keys(calcOpenByMode).length===0&&Object.keys(persistBtns).length===0&&flash===null&&ded===null&&dedFlash===null&&blitzRunning===false&&active===false&&showTimerDate===false&&blitzRemain===60&&qRemain===5&&flashRemainMs===500&&flashPhase==='dash'&&lookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&aoxIsFresh;
       const settingsJsx=settingsOpen&&(<div ref={settingsPopoverRef} className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card py-4 space-y-4 shadow-xl flex flex-col max-h-[calc(100dvh-80px)]">
-        <div ref={popoverInnerScrollRef} className={`overflow-y-auto overscroll-none flex-1 min-h-0 space-y-4 px-4${popoverAtBottom?"":" fade-scroll-bottom"}`}>
+        <div ref={popoverInnerScrollRef} className={`overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-4 px-4${popoverScrolledFromTop&&!popoverAtBottom?" fade-scroll-both":popoverScrolledFromTop?" fade-scroll-top":!popoverAtBottom?" fade-scroll-bottom":""}`}>
         <div className="space-y-2">
           <SectionLabel>Date Format</SectionLabel>
           <div className="flex items-center justify-between"><span className="text-xs text-purple-200/80">Random Format</span><button type="button" onClick={()=>setRandomFormat(v=>!v)} className={`px-3 py-1 rounded-xl text-xs font-medium border ${randomFormat?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}`}>{randomFormat?"On":"Off"}</button></div>
@@ -3913,7 +3951,14 @@
           </div>
         </div>
         <div className="space-y-2 pt-3 border-t border-purple-500/20">
-          <SectionLabel>Leap Year Chance</SectionLabel>
+          <SectionLabel>Leap Year</SectionLabel>
+          {/* Umbrella "Leap Year" SectionLabel covers both chance rows below. Each row
+              keeps its own descriptive sub-label (muted text-purple-200/80, NOT the
+              uppercase tracking-widest SectionLabel style) so the hierarchy reads
+              top-down: section heading → sub-label → buttons. The two rows live in
+              one divider-bounded section because they're tightly related — both
+              control leap-year date generation behavior. */}
+          <div className="text-xs text-purple-200/80">Leap Year Chance</div>
           <div className="flex gap-1.5">
             {/* When the active year range contains no leap years (per active calendar), lock the four
                 buttons. The currently-selected value stays visually selected so it's restored when the
@@ -3921,7 +3966,7 @@
                 doesn't imply leap-year reachability (a setting kept while unreachable just doesn't fire). */}
             {(() => { const leapReachable=rangeHasLeapYear(minY,maxY,useJulian); return ['random','50','75','100'].map(v=>(<button key={v} type="button" onClick={()=>{if(!leapReachable)return;setLeapChance(v);}} aria-disabled={!leapReachable} className={`flex-1 px-1.5 py-1.5 rounded-xl text-xs font-medium border ${leapChance===v?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}${!leapReachable?" opacity-60 pointer-events-none":""}`}>{v==='random'?'Random':v+'%'}</button>)); })()}
           </div>
-          <SectionLabel>Jan/Feb Chance on Leap Years</SectionLabel>
+          <div className="text-xs text-purple-200/80">Jan/Feb Chance on Leap Years</div>
           {/* Jan/Feb Chance: 5-button chance row. Option A semantics — the listed % is the
               exact final probability that a leap-year date lands on Jan/Feb. Random means
               no biasing (natural ~17% on uniform months). The row stays unlocked even when
@@ -3944,38 +3989,34 @@
           {useSystem?(<><div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Dark:</span><CustomSelect value={darkTheme} onChange={setDarkTheme} options={DARK_THEMES} ariaLabel="Dark theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div><div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Light:</span><CustomSelect value={lightTheme} onChange={setLightTheme} options={LIGHT_THEMES} ariaLabel="Light theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div></>):(<div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Theme:</span><CustomSelect value={manualTheme} onChange={setManualTheme} options={ALL_THEMES_LABELED} ariaLabel="Theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div>)}
         </div>
         </div>
-        <div className={`popover-sticky-footer pt-3 px-4 border-t border-purple-500/20${!popoverAtBottom?" elev-shadow-up":""}`}>
+        <div className={`popover-sticky-footer pt-4 px-4 border-t border-purple-500/20${!popoverAtBottom?" elev-shadow-up":""}`}>
           <div className="flex gap-2">
             <button type="button" onClick={resetSettings} className={`flex-1 ${RESET_BTN_CLASS} ${settingsAtDefaults?"opacity-60 pointer-events-none":""}`}>Reset Settings</button>
             <button ref={fullResetBtnRef} type="button" onClick={armFullReset} className={`flex-1 ${RESET_BTN_CLASS}${fullResetArmed?" ring-2 ring-rose-200":""}${isFullyReset?" opacity-60 pointer-events-none":""}`}>{fullResetArmed?"Confirm?":"Full Reset"}</button>
           </div>
         </div>
-        <div className="pt-2 px-4 border-t border-purple-500/20 text-[11px] text-purple-300/60 space-y-0.5">
+        <div className="pt-3 px-4 border-t border-purple-500/20 text-[11px] text-purple-300/60 space-y-0.5">
           <div>Contact: <a href="mailto:dayoftheweekcalculation@gmail.com" className="underline break-all select-text">dayoftheweekcalculation@gmail.com</a></div>
           <div>Last Updated: {(()=>{const d=DEPLOY_TS;const yy=d.getFullYear();const mo=d.getMonth()+1;const da=d.getDate();const numFmt=numericFormatOf(dateFormat);const datePart=fmt(yy,mo,da,numFmt);const timePart=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false});return`${datePart} ${timePart}`;})()}</div>
         </div>
       </div>);
       return(
         <>
-        {/* Sticky title bar uses a TWO-LEVEL wrapper:
-            - Outer (.htp-sticky-bar): position:sticky, full-width (no max-w), holds the
-              theme bg + elevation shadow so they extend edge-to-edge on screens wider
-              than 480px. Without this, the shadow would only span the centered 480px
-              column with awkward vertical edges where it ends.
-            - Inner: max-w-[480px] mx-auto px-4, relative (popover anchor). Keeps the
-              actual title/gear/mode-select row at the same 480px width as today.
-            The htp-sticky-bar class also carries the box-shadow transition so the
-            shadow fades smoothly in/out as the elev-shadow-down class is added/removed.
-            Padding split: outer pt-5 above title bar, content wrapper pb-5 below — total
-            vertical spacing matches the original single py-5 wrapper exactly.
-            HtP-only pb-2.5: in guide mode, the sticky bar absorbs half (10px) of the
-            existing 20px gap that sits between the title row and the first GuidePage
-            panel. Visual layout at rest is unchanged (the <GuidePage/> wrapper drops
-            mt-5 → mt-2.5 to compensate, so the total gap stays 20px) — but the lock
-            line moves down 10px, so when the page scrolls, content disappears at the
-            midpoint between the title row and the first panel rather than right at
-            the title row's bottom edge. */}
-        <div className={`htp-sticky-bar sticky top-0 z-30 bg-[var(--bg1)] w-full pt-5${mode==="guide"?" pb-2.5":""}${htpScrolledFromTop?" elev-shadow-down":""}`}>
+        {/* Bar (position:fixed): the bar is a CHROME-STYLE fixed element above
+            everything — explicitly positioned at the viewport top so iOS PWA recognizes
+            it as chrome UI and live-samples its bg-[var(--bg1)] (theme-aware) for the
+            status bar color. Sibling appScrollRef container is position:absolute
+            below, with padding-top:var(--bar-h) so its content starts below the bar.
+            ResizeObserver elsewhere in App writes the bar's offsetHeight to --bar-h.
+            Full width (no max-w) so theme bg + elevation shadow span edge-to-edge on
+            screens wider than 480px; inner max-w-[480px] wrapper holds the title row.
+            elev-shadow-down appears when the scroll container is past top.
+            HtP-only bar pb-2.5: absorbs half (10px) of the 20px gap that normally sits
+            between the title row and the first GuidePage panel. The <GuidePage/> wrapper
+            also drops mt-5 → mt-2.5 to compensate, so the total gap stays 20px — but the
+            visual "lock line" is centered between title row and first panel rather than
+            sitting right at the title row's bottom edge. */}
+        <div ref={htpStickyBarRef} style={{position:'fixed',top:0,left:0,right:0,zIndex:30}} className={`htp-sticky-bar bg-[var(--bg1)] w-full pt-5${mode==="guide"?" pb-2.5":""}${appScrolledFromTop?" elev-shadow-down":""}`}>
           <div className="mx-auto px-4 w-full max-w-[480px] relative">
             <div className="flex items-center justify-between gap-2">
               {/* header left: title */}
@@ -3998,6 +4039,10 @@
             </div>
           </div>
         </div>
+        {/* Scroll container: position:absolute inset:0 with padding-top:var(--bar-h)
+            so content starts immediately below the bar. overscroll-contain keeps
+            rubber-band bounce LOCAL to this container (bar is unaffected). */}
+        <div ref={appScrollRef} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 overflow-y-auto overscroll-contain${appScrolledFromTop&&!appAtBottom?" fade-scroll-both":appScrolledFromTop?" fade-scroll-top":!appAtBottom?" fade-scroll-bottom":""}`}>
         <div className="mx-auto px-4 pb-5 w-full max-w-[480px]">
           {showStats&&(<>
             {/* Bug #5 (Save Stats off pauses all stats site-wide): when saveStats is false,
@@ -4027,7 +4072,7 @@
               const armedSpan=(timingArmed&&saveStats)?{
                 startIdx:timeStart,
                 endIdx:timeStart+2,
-                label:"Turn On and Reset Stats?",
+                label:"Enable and Reset Stats?",
                 onClick:toggleTimingOff,
                 btnRef:timingArmBtnRef,
               }:null;
@@ -4178,7 +4223,7 @@
             </div>
           )}
         </div>
-        {mode==='guide'&&!htpAtBottom&&(<div className="htp-fade-overlay"/>)}
+        </div>
         </>
       );
     }
@@ -4214,7 +4259,7 @@
             <p>Time formatting follows the WCA speedcubing convention: individual single times (Last) are <i>truncated</i> to hundredths — the third decimal is dropped, never rounded. Averages, medians, and bests are <i>rounded</i> to the nearest hundredth. Truncating singles prevents fortunate rounding boundaries on individual attempts; rounding aggregates avoids systematic downward bias.</p>
             <p>One question = one attempt. Getting a question wrong then right still counts as one attempt, marked correct.</p>
             <p>When you set a new best, a small ★ appears next to the value to flag it.</p>
-            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: timing pauses entirely while hidden — no times are recorded. When you turn timing back on, the current date is regenerated if it's still unanswered; if you've already answered wrong, revealed the answer, or shown codes, the date stays until you advance yourself. If any questions were answered while timing was hidden, a desync would arise on re-enable, so the three timing stat boxes merge into a single "Turn On and Reset Stats?" confirmation — tap it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to cancel. When Save Stats is off, all stat boxes site-wide (across every mode, including AoX) show '—' with strikethrough labels, dim, and become non-interactive — toggling timing or scoring is disabled until Save Stats is turned back on, which prevents accidentally creating stat desyncs. Turning Save Stats on while timing is also on regenerates an unanswered date for a clean fresh start. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
+            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: timing pauses entirely while hidden — no times are recorded. When you turn timing back on, the current date is regenerated if it's still unanswered; if you've already answered wrong, revealed the answer, or shown codes, the date stays until you advance yourself. If any questions were answered while timing was hidden, a desync would arise on re-enable, so the three timing stat boxes merge into a single "Enable and Reset Stats?" confirmation — tap it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to cancel. When Save Stats is off, all stat boxes site-wide (across every mode, including AoX) show '—' with strikethrough labels, dim, and become non-interactive — toggling timing or scoring is disabled until Save Stats is turned back on, which prevents accidentally creating stat desyncs. Turning Save Stats on while timing is also on regenerates an unanswered date for a clean fresh start. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
           </GuideSection>
           <Divider label="Settings"/>
           <GuideSection id="dateformat" title="Date Format" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Choose one of five real-world formats: <b>Written MDY</b> (April 27, 1828), <b>Written DMY</b> (27 April 1828), <b>Numeric MDY</b> (4/27/1828), <b>Numeric DMY</b> (27.4.1828), or <b>Numeric YMD</b> (1828-4-27). Numeric formats use a fixed separator convention: MDY uses '/', DMY uses '.', YMD uses '-'. Years always show in full, never abbreviated.</p><p>Only DMY, MDY, and YMD orderings are offered because those are the only orderings actually used in real life — orderings like YDM aren't standard anywhere.</p><p><b>Random Format</b>, when on, rolls one of the five formats per date in game modes only — your selected format is preserved underneath (the panels just lock visually). Lookup and the Last Updated timestamp ignore Random and always use the selected format. The Last Updated timestamp uses the numeric version of whichever format you've selected.</p><p>In Classic, Deduction, Flash, and AoX (idle), any format setting change — Random Format toggle or Date Format dropdown — regenerates an unanswered date so you don't return to a previously-seen date in a now-mismatched format. This applies across all modes: if you change a format setting in one mode, any unanswered dates in the other modes are also regenerated. If you've already made a wrong guess, revealed the answer, or shown codes on the displayed date, the change is deferred — the burned state is preserved and the new format applies on the next generated date. In active Blitz rounds and AoX runs, any format change ends the round.</p><p>In game modes' Show Codes, codes appear in the order the date is read (left to right), with Leap shown once you've seen both the year and month.</p></GuideSection>
@@ -4386,17 +4431,20 @@
       const cdv=calcDate??null;const scd=typeof onCalcDateChange==="function"?onCalcDateChange:()=>{};
       const sid=selectedHistoryId??null;const ssid=typeof onSelectedHistoryIdChange==="function"?onSelectedHistoryIdChange:()=>{};
       const cov=!!calcOpen;
-      // Lookup history scroll-state tracking. Only fade is applied here (no
-      // sticky element so no shadow needed). atBottom defaults to true so an empty
-      // or short list (no overflow) shows no fade. ResizeObserver covers the case
+      // Lookup history scroll-state tracking. Three flags drive edge indicators:
+      //   lookupHistoryScrolledFromTop → top fade + History header shadow (down)
+      //   lookupHistoryAtBottom        → bottom fade + MethodBreakdown shadow (up)
+      // Defaults: scrolledFromTop false, atBottom true. ResizeObserver covers the case
       // where the list grows from 9→10 entries while the user is viewing it.
       const lookupHistoryRef=React.useRef(null);
       const [lookupHistoryAtBottom,setLookupHistoryAtBottom]=React.useState(true);
+      const [lookupHistoryScrolledFromTop,setLookupHistoryScrolledFromTop]=React.useState(false);
       React.useEffect(()=>{
         const el=lookupHistoryRef.current;if(!el)return;
         const evaluate=()=>{
           const noOverflow=el.scrollHeight<=el.clientHeight+1;
           setLookupHistoryAtBottom(noOverflow||el.scrollTop+el.clientHeight>=el.scrollHeight-4);
+          setLookupHistoryScrolledFromTop(!noOverflow&&el.scrollTop>0);
         };
         evaluate();
         el.addEventListener('scroll',evaluate,{passive:true});
@@ -4528,9 +4576,19 @@
             <p className="text-xs text-purple-100/90">Format: <b>{inputMeta.label}</b><br/>AD dates only, 1–10000</p>
           </div>
           <div className="rounded-2xl panel p-4 space-y-4">
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-purple-200/70"><span>History</span>{entries.length>0&&(<button type="button" onClick={clearHist} className="text-purple-200/70 font-medium">Clear History</button>)}</div>
-            {renderedEntries.length>0?(<ul ref={lookupHistoryRef} className={`space-y-2 overflow-y-auto overscroll-none max-h-[440px]${lookupHistoryAtBottom?"":" fade-scroll-bottom"}`}>{renderedEntries.map(e=>(<li key={e.id}><button type="button" onClick={()=>selEntry(e)} className={`w-full text-left px-3 py-2 rounded-xl panel flex items-center justify-between gap-3 text-xs transition ${sid===e.id?"border-l-2 border-l-purple-400 bg-purple-500/35":"hist-unsel hover:bg-purple-500/15"}`}><span className="block text-[13px] font-medium text-purple-100/90">{e.label}</span><span className="text-[12px] font-semibold text-purple-200/80">{getEntryWeekday(e)}</span></button></li>))}</ul>):(<p className="text-sm text-purple-200/70">No lookups yet</p>)}
-            <MethodBreakdownSection date={cdv} className="pt-4 border-t border-purple-500/40" contentClassName="mt-3 rounded-2xl panel px-4 pt-[3px] pb-1.5" open={cov} onOpenChange={sco} useJulian={useJulian} displayedFormat={dateFormat}/>
+            {/* History header: divider line below extends to full panel width via -mx-4
+                + px-4 (so the line cuts edge-to-edge instead of stopping short at the
+                parent's p-4). lookup-history-header class is for the box-shadow transition
+                hook (see CSS). elev-shadow-down + the divider line together signal "fixed
+                header above content scrolling below" — same pattern as the popover sticky
+                footer's elev-shadow-up. */}
+            <div className={`lookup-history-header -mx-4 px-4 pb-3 border-b border-purple-500/40 flex items-center justify-between text-[11px] uppercase tracking-wide text-purple-200/70${lookupHistoryScrolledFromTop?" elev-shadow-down":""}`}><span>History</span>{entries.length>0&&(<button type="button" onClick={clearHist} className="text-purple-200/70 font-medium">Clear History</button>)}</div>
+            {renderedEntries.length>0?(<ul ref={lookupHistoryRef} className={`space-y-2 overflow-y-auto overscroll-contain max-h-[440px]${lookupHistoryScrolledFromTop&&!lookupHistoryAtBottom?" fade-scroll-both":lookupHistoryScrolledFromTop?" fade-scroll-top":!lookupHistoryAtBottom?" fade-scroll-bottom":""}`}>{renderedEntries.map(e=>(<li key={e.id}><button type="button" onClick={()=>selEntry(e)} className={`w-full text-left px-3 py-2 rounded-xl panel flex items-center justify-between gap-3 text-xs transition ${sid===e.id?"border-l-2 border-l-purple-400 bg-purple-500/35":"hist-unsel hover:bg-purple-500/15"}`}><span className="block text-[13px] font-medium text-purple-100/90">{e.label}</span><span className="text-[12px] font-semibold text-purple-200/80">{getEntryWeekday(e)}</span></button></li>))}</ul>):(<p className="text-sm text-purple-200/70">No lookups yet</p>)}
+            {/* MethodBreakdownSection wrapper: -mx-4 + px-4 extends the existing border-t
+                divider full-width across the panel (was previously stopping short at the
+                parent's p-4). lookup-method-section class hooks the box-shadow transition.
+                elev-shadow-up signals "fixed footer below content scrolling above." */}
+            <MethodBreakdownSection date={cdv} className={`lookup-method-section -mx-4 px-4 pt-4 border-t border-purple-500/40${!lookupHistoryAtBottom?" elev-shadow-up":""}`} contentClassName="mt-3 rounded-2xl panel px-4 pt-[3px] pb-1.5" open={cov} onOpenChange={sco} useJulian={useJulian} displayedFormat={dateFormat}/>
           </div>
         </div>
       );
