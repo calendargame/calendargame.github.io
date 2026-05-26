@@ -588,7 +588,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-26T06:37:00Z');
+    const DEPLOY_TS=new Date('2026-05-26T18:57:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -681,7 +681,11 @@
       //   theme — iOS itself keeps the picker light in dark mode, we mirror that.
       //   Alpha is intentionally low so dark backgrounds bleed through and tone
       //   down the brightness; blur is bumped to 28px to keep the frosted look
-      //   at the lower alpha.
+      //   at the lower alpha. Below the translucent layer sits an opaque backing
+      //   layer (var(--bg1)) so the dropdown renders against a known solid surface
+      //   regardless of what's behind it — see the full explanation on that div
+      //   inside the render (matters most for dropdowns that open inside the
+      //   already-translucent settings popover).
       // - Backdrop blur + saturate filter for the frosted-glass effect.
       // - Rounded corners, subtle shadow, dark text, checkmark on selected.
       // - Trigger button reuses the original <select>'s className so the visible
@@ -830,12 +834,26 @@
           {showChevron&&(<div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none text-[7px] text-white/90"><span>▲</span><span>▼</span></div>)}
           {open&&(
             <div id={listboxId} role="listbox" aria-label={ariaLabel} className={`absolute right-0 ${openUpward?"bottom-full mb-1.5":"top-full mt-1.5"} z-[60] rounded-2xl overflow-hidden`} style={{background:'rgba(245,245,247,0.50)',WebkitBackdropFilter:'blur(28px) saturate(120%)',backdropFilter:'blur(28px) saturate(120%)',boxShadow:'0 6px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.05)',width:'max-content',maxWidth:'90vw'}}>
-              {options.map((opt,i)=>(
-                <button id={optionId(i)} role="option" aria-selected={opt.value===value} key={opt.value} type="button" onMouseEnter={()=>setActiveIdx(i)} onClick={()=>{onChange(opt.value);closeAndFocus();}} className={`w-full text-left pl-4 pr-8 py-3 text-[15px] flex items-center gap-2.5 ${i===activeIdx?'bg-black/10':'active:bg-black/10'}`} style={{color:'#1a1a1a',whiteSpace:'nowrap'}}>
-                  <span style={{display:'inline-block',width:'14px',color:'#1a1a1a',fontSize:'14px'}}>{opt.value===value?'✓':''}</span>
-                  <span>{opt.label}</span>
-                </button>
-              ))}
+              {/* Opaque backing layer. Without this, when CustomSelect opens inside a
+                  translucent surface (e.g., the settings popover, which uses a low-alpha
+                  panel bg), the dropdown's rgba(245,245,247,0.50) cascades on top of
+                  the popover's existing translucency and the underlying page bleeds
+                  through. Result: the dropdown looks heavily transparent compared to
+                  when it opens over the opaque main page (e.g., the mode selector).
+                  An absolute inset:0 backing layer with the theme's solid var(--bg1)
+                  underneath the translucent layer guarantees the dropdown ALWAYS
+                  renders against a known opaque surface, so the 50% translucent layer
+                  + 28px blur produces an identical visual result regardless of where
+                  the dropdown opens. */}
+              <div style={{position:'absolute',inset:0,background:'var(--bg1)',borderRadius:'inherit'}}/>
+              <div style={{position:'relative'}}>
+                {options.map((opt,i)=>(
+                  <button id={optionId(i)} role="option" aria-selected={opt.value===value} key={opt.value} type="button" onMouseEnter={()=>setActiveIdx(i)} onClick={()=>{onChange(opt.value);closeAndFocus();}} className={`w-full text-left pl-4 pr-8 py-3 text-[15px] flex items-center gap-2.5 ${i===activeIdx?'bg-black/10':'active:bg-black/10'}`} style={{color:'#1a1a1a',whiteSpace:'nowrap'}}>
+                    <span style={{display:'inline-block',width:'14px',color:'#1a1a1a',fontSize:'14px'}}>{opt.value===value?'✓':''}</span>
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
