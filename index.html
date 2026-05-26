@@ -24,13 +24,18 @@
        overflows on small viewports). It uses overscroll-contain to keep its rubber-band
        bounce LOCAL — bouncing doesn't drag the fixed bar around. Inner scroll containers
        (settings popover inner, Lookup history) also use overscroll-contain for the same
-       reason. Body is intentionally kept in normal flow (not position:fixed) so its
-       background color propagates to the iOS Safari canvas, which the URL bar / status
-       bar tint follows live as the theme changes. */
+       reason.
+       CRITICAL: #root must NOT have its own background. Body's background:var(--bg1)
+       paints behind everything, and iOS Safari samples the body bg to live-tint the
+       canvas (status bar / URL bar color follows the active theme as it changes). The
+       moment any opaque layer covers the canvas above body (e.g., a background on #root),
+       iOS freezes the chrome color to whatever it sampled at launch and never updates
+       again. Body is in normal flow (not position:fixed) for the same reason — its
+       paint must reach the canvas. */
     html,body{overflow:hidden;overscroll-behavior:none}
     html{touch-action:manipulation}
     body{background:var(--bg1);color:var(--body-color)}
-    #root{position:fixed;top:0;left:0;right:0;bottom:0;overflow:hidden;display:flex;flex-direction:column;background:var(--bg1)}
+    #root{position:fixed;top:0;left:0;right:0;bottom:0;overflow:hidden;display:flex;flex-direction:column}
     /* Disable text selection globally to prevent accidental selection during rapid
        practice taps (long-press-and-drag, double-tap, etc.). Two specific opt-ins:
        input/textarea elements (so typing/editing stays functional everywhere they
@@ -576,7 +581,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-26T01:03:00Z');
+    const DEPLOY_TS=new Date('2026-05-26T06:11:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -585,7 +590,7 @@
       // stay at default size — they don't grow this way in practice.
       //
       // Bug #4 armedSpan: when present, replaces stats[armedSpan.startIdx..endIdx]
-      // (inclusive) with a single wide "Turn on and reset stats?" warning button.
+      // (inclusive) with a single wide "Enable and Reset Stats?" warning button.
       // Used by the App-side timing-arm flow to merge the 3 time stat boxes into one
       // confirmation target. Shape: {startIdx, endIdx, label, onClick, btnRef}.
       const sizeForValue=(val)=>{
@@ -604,7 +609,7 @@
               if(armedSpan&&i===armedSpan.startIdx){
                 const span=armedSpan.endIdx-armedSpan.startIdx+1;
                 // Bug #4 aesthetic: no ring or rounded corners on the merged warning button.
-                // The text change ('Turn On and Reset Stats?') is the sole visual cue. The
+                // The text change ('Enable and Reset Stats?') is the sole visual cue. The
                 // standard vertical divider between Streak and this button is already
                 // present (it was the Streak|Last divider in unarmed state) — no element
                 // positions shift between armed and unarmed states.
@@ -1406,7 +1411,7 @@
       //
       // The destructive "Turn ON + desync → reset" case is gated by a two-tap arm/confirm
       // pattern (Bug #4). Tap 1 arms (sets timingArmed, starts 3s timer, merges the 3 time
-      // stat boxes into a single "Turn on and reset stats?" warning button). Tap 2 within
+      // stat boxes into a single "Enable and Reset Stats?" warning button). Tap 2 within
       // the window confirms and fires. Timer expiry or any tap outside the warning button
       // disarms (see the global mousedown/touchstart listener below).
       //
@@ -1558,7 +1563,7 @@
       const [timerDone,setTimerDone]=useState(false);
       // Bug #4: two-tap arm/confirm pattern for the destructive "Turn timing ON + desync"
       // case. Mirrors Full Reset's pattern. The 3 time stat boxes visually merge into a
-      // single "Turn on and reset stats?" warning button when armed. timingArmedRef is the
+      // single "Enable and Reset Stats?" warning button when armed. timingArmedRef is the
       // synchronous twin of timingArmed state — needed because toggleTimingOff reads/writes
       // armed status on the same click and React state updates are async.
       const [timingArmed,setTimingArmed]=useState(false);
@@ -4041,7 +4046,7 @@
               const armedSpan=(timingArmed&&saveStats)?{
                 startIdx:timeStart,
                 endIdx:timeStart+2,
-                label:"Turn On and Reset Stats?",
+                label:"Enable and Reset Stats?",
                 onClick:toggleTimingOff,
                 btnRef:timingArmBtnRef,
               }:null;
@@ -4228,7 +4233,7 @@
             <p>Time formatting follows the WCA speedcubing convention: individual single times (Last) are <i>truncated</i> to hundredths — the third decimal is dropped, never rounded. Averages, medians, and bests are <i>rounded</i> to the nearest hundredth. Truncating singles prevents fortunate rounding boundaries on individual attempts; rounding aggregates avoids systematic downward bias.</p>
             <p>One question = one attempt. Getting a question wrong then right still counts as one attempt, marked correct.</p>
             <p>When you set a new best, a small ★ appears next to the value to flag it.</p>
-            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: timing pauses entirely while hidden — no times are recorded. When you turn timing back on, the current date is regenerated if it's still unanswered; if you've already answered wrong, revealed the answer, or shown codes, the date stays until you advance yourself. If any questions were answered while timing was hidden, a desync would arise on re-enable, so the three timing stat boxes merge into a single "Turn On and Reset Stats?" confirmation — tap it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to cancel. When Save Stats is off, all stat boxes site-wide (across every mode, including AoX) show '—' with strikethrough labels, dim, and become non-interactive — toggling timing or scoring is disabled until Save Stats is turned back on, which prevents accidentally creating stat desyncs. Turning Save Stats on while timing is also on regenerates an unanswered date for a clean fresh start. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
+            <p className="text-purple-300/70 text-[12px]">In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides all three. Score, Accuracy, and Streak continue tracking in the background while hidden — re-enabling them brings the same numbers back. Timing stats behave differently: timing pauses entirely while hidden — no times are recorded. When you turn timing back on, the current date is regenerated if it's still unanswered; if you've already answered wrong, revealed the answer, or shown codes, the date stays until you advance yourself. If any questions were answered while timing was hidden, a desync would arise on re-enable, so the three timing stat boxes merge into a single "Enable and Reset Stats?" confirmation — tap it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to cancel. When Save Stats is off, all stat boxes site-wide (across every mode, including AoX) show '—' with strikethrough labels, dim, and become non-interactive — toggling timing or scoring is disabled until Save Stats is turned back on, which prevents accidentally creating stat desyncs. Turning Save Stats on while timing is also on regenerates an unanswered date for a clean fresh start. When timing stats are off, leaving and returning to a mode preserves the current question exactly as you left it — same date, same answers, codes panel in the same state. In all other modes, stats are always visible.</p>
           </GuideSection>
           <Divider label="Settings"/>
           <GuideSection id="dateformat" title="Date Format" openId={open} onToggle={toggle}><p>Set via the ⚙ settings menu. Choose one of five real-world formats: <b>Written MDY</b> (April 27, 1828), <b>Written DMY</b> (27 April 1828), <b>Numeric MDY</b> (4/27/1828), <b>Numeric DMY</b> (27.4.1828), or <b>Numeric YMD</b> (1828-4-27). Numeric formats use a fixed separator convention: MDY uses '/', DMY uses '.', YMD uses '-'. Years always show in full, never abbreviated.</p><p>Only DMY, MDY, and YMD orderings are offered because those are the only orderings actually used in real life — orderings like YDM aren't standard anywhere.</p><p><b>Random Format</b>, when on, rolls one of the five formats per date in game modes only — your selected format is preserved underneath (the panels just lock visually). Lookup and the Last Updated timestamp ignore Random and always use the selected format. The Last Updated timestamp uses the numeric version of whichever format you've selected.</p><p>In Classic, Deduction, Flash, and AoX (idle), any format setting change — Random Format toggle or Date Format dropdown — regenerates an unanswered date so you don't return to a previously-seen date in a now-mismatched format. This applies across all modes: if you change a format setting in one mode, any unanswered dates in the other modes are also regenerated. If you've already made a wrong guess, revealed the answer, or shown codes on the displayed date, the change is deferred — the burned state is preserved and the new format applies on the next generated date. In active Blitz rounds and AoX runs, any format change ends the round.</p><p>In game modes' Show Codes, codes appear in the order the date is read (left to right), with Leap shown once you've seen both the year and month.</p></GuideSection>
