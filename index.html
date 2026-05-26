@@ -17,25 +17,32 @@
     [data-theme="parchment"]{--bg1:#f0e8d5;--bg2:#f0e8d5;--tc:#f0e8d5;--card-bg:rgba(255,252,244,.95);--card-bd:rgba(120,53,175,.22);--panel-bg:rgba(120,53,175,.07);--panel-bd:rgba(120,53,175,.22);--thin-bd:rgba(120,53,175,.18);--sbtn-bg:rgba(120,53,175,.1);--sbtn-bd:rgba(120,53,175,.28);--sbtn-hov:rgba(120,53,175,.18);--stgl-bg:rgba(120,53,175,.07);--stgl-hov:rgba(120,53,175,.14);--chip-bg:rgba(120,53,175,.09);--chip-bd:rgba(120,53,175,.22);--bar-bg:rgba(120,53,175,.09);--bar-bd:rgba(120,53,175,.22);--body-color:#2e1065;--sec-color:rgba(46,16,101,.78);--mut-color:rgba(46,16,101,.62);--fnt-color:rgba(46,16,101,.5);--shadow-elev:rgba(46,16,101,.18)}
     [data-theme="light"]{--bg1:#f2f2f7;--bg2:#f2f2f7;--tc:#f2f2f7;--card-bg:rgba(255,255,255,.95);--card-bd:rgba(120,53,175,.22);--panel-bg:rgba(237,233,254,.48);--panel-bd:rgba(120,53,175,.22);--thin-bd:rgba(120,53,175,.18);--sbtn-bg:rgba(237,233,254,.65);--sbtn-bd:rgba(120,53,175,.28);--sbtn-hov:rgba(237,233,254,.88);--stgl-bg:rgba(237,233,254,.42);--stgl-hov:rgba(237,233,254,.65);--chip-bg:rgba(237,233,254,.75);--chip-bd:rgba(120,53,175,.22);--bar-bg:rgba(237,233,254,.75);--bar-bd:rgba(120,53,175,.22);--body-color:#1e1b4b;--sec-color:rgba(30,27,75,.78);--mut-color:rgba(30,27,75,.62);--fnt-color:rgba(30,27,75,.5);--shadow-elev:rgba(30,27,75,.15)}
     /* Layout architecture: body never scrolls (body+html have overflow:hidden and
-       overscroll-behavior:none — no rubber-band on locked body). #root is permanently
-       fixed to the viewport and acts as a flex column with two children: a non-scrolling
-       bar at top, and a confined scroll container below that fills the rest of the
-       viewport. This container is where ALL site scrolling happens (HtP, anything that
-       overflows on small viewports). It uses overscroll-contain to keep its rubber-band
-       bounce LOCAL — bouncing doesn't drag the fixed bar around. Inner scroll containers
-       (settings popover inner, Lookup history) also use overscroll-contain for the same
-       reason.
-       CRITICAL: #root must NOT have its own background. Body's background:var(--bg1)
-       paints behind everything, and iOS Safari samples the body bg to live-tint the
-       canvas (status bar / URL bar color follows the active theme as it changes). The
-       moment any opaque layer covers the canvas above body (e.g., a background on #root),
-       iOS freezes the chrome color to whatever it sampled at launch and never updates
-       again. Body is in normal flow (not position:fixed) for the same reason — its
-       paint must reach the canvas. */
+       overscroll-behavior:none — no rubber-band on locked body). Three structural
+       pieces inside #root:
+         1. .htp-sticky-bar: position:fixed at the top of the viewport. NOT a flex
+            child or part of normal flow — it's a chrome-style fixed element above
+            everything. Has its own bg-[var(--bg1)]. ResizeObserver in JS measures
+            the bar's offsetHeight on mount and any resize, writes the value to the
+            --bar-h CSS custom property on the document root.
+         2. #appScroll (the scroll container, ref={appScrollRef}): position:absolute
+            inset:0, with padding-top:var(--bar-h) so its content starts below the
+            bar instead of being covered by it. overflow-y:auto with
+            overscroll-contain keeps rubber-band bounce LOCAL — the bounce happens
+            inside this container and cannot affect the fixed bar above.
+         3. Inner scrollables (settings popover inner, Lookup history): also use
+            overscroll-contain for the same reason.
+       Why the bar is position:fixed (not sticky or a flex item): iOS PWA samples
+       the status bar color from the topmost fixed/sticky element with its own
+       background. The bar being explicitly position:fixed with bg-[var(--bg1)]
+       (a theme-aware CSS variable) means iOS re-samples the bar's bg whenever the
+       theme changes, so the status bar / URL bar tinting updates live. A plain
+       flex child without explicit positioning does NOT give iOS this cue, so it
+       falls back to the theme-color meta tag, which iOS PWA reads only at launch
+       and never updates on JS changes. */
     html,body{overflow:hidden;overscroll-behavior:none}
     html{touch-action:manipulation}
     body{background:var(--bg1);color:var(--body-color)}
-    #root{position:fixed;top:0;left:0;right:0;bottom:0;overflow:hidden;display:flex;flex-direction:column}
+    #root{position:fixed;top:0;left:0;right:0;bottom:0;overflow:hidden}
     /* Disable text selection globally to prevent accidental selection during rapid
        practice taps (long-press-and-drag, double-tap, etc.). Two specific opt-ins:
        input/textarea elements (so typing/editing stays functional everywhere they
@@ -581,7 +588,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-26T06:11:00Z');
+    const DEPLOY_TS=new Date('2026-05-26T06:37:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -1674,6 +1681,26 @@
       // when runLookup() fires a new result or the user manually closes it.
       const pendingDedSwitchRef=useRef(null);
       const prevModeRef=useRef(mode);const prevModeForSwitchRef=useRef(mode);const timerDoneSnapRef=useRef(null);const preservedByModeRef=useRef({});const stacksByModeRef=useRef({});
+      // Bar height tracking. The htp-sticky-bar is position:fixed (chrome-style fixed
+      // element above everything), so it has no natural effect on the flow of the
+      // appScrollRef container below it. We measure the bar's offsetHeight here and
+      // write it to a CSS custom property (--bar-h) on the document root; the scroll
+      // container reads it via padding-top:var(--bar-h) so its content starts below
+      // the bar instead of being covered by it. ResizeObserver fires on initial mount
+      // and any time the bar's height changes (e.g., mode switch flips pb-2.5 in
+      // guide mode vs none in game modes, or content reflows). Writing to a CSS
+      // variable instead of JS-applying padding directly keeps the styling
+      // declarative and avoids React state churn for a value that's not part of
+      // application logic.
+      const htpStickyBarRef=useRef(null);
+      useEffect(()=>{
+        const el=htpStickyBarRef.current;if(!el)return;
+        const updateBarH=()=>{document.documentElement.style.setProperty('--bar-h',`${el.offsetHeight}px`);};
+        updateBarH();
+        const ro=new ResizeObserver(updateBarH);
+        ro.observe(el);
+        return()=>ro.disconnect();
+      },[]);
       // App-wide scroll-state tracking on the confined scroll container (appScrollRef).
       // Container scrolls when content overflows the viewport-below-bar (always in HtP,
       // and in any mode where content can't fit at the current viewport size).
@@ -3975,25 +4002,21 @@
       </div>);
       return(
         <>
-        {/* Layout architecture (Option B): #root is permanently position:fixed inset:0
-            via CSS, set up as flex flex-column. Two children:
-              1. .htp-sticky-bar (shrink-0): the title bar. NOT position:sticky — it sits
-                 above the scroll container as a fixed sibling, so it never moves and the
-                 scroll container's rubber-band bounce cannot affect it. Full width (no
-                 max-w) so theme bg + elevation shadow span edge-to-edge on screens wider
-                 than 480px; an inner max-w-[480px] wrapper holds the actual title row.
-                 elev-shadow-down appears when the scroll container is past top.
-              2. appScrollRef container (flex-1 min-h-0 overflow-y-auto overscroll-contain):
-                 the actual scroll surface for ALL content. fade-scroll-top appears when
-                 scrolled past top (paired with bar shadow). fade-scroll-bottom appears
-                 when content extends below (HtP only currently; other modes typically
-                 fit the viewport).
+        {/* Bar (position:fixed): the bar is a CHROME-STYLE fixed element above
+            everything — explicitly positioned at the viewport top so iOS PWA recognizes
+            it as chrome UI and live-samples its bg-[var(--bg1)] (theme-aware) for the
+            status bar color. Sibling appScrollRef container is position:absolute
+            below, with padding-top:var(--bar-h) so its content starts below the bar.
+            ResizeObserver elsewhere in App writes the bar's offsetHeight to --bar-h.
+            Full width (no max-w) so theme bg + elevation shadow span edge-to-edge on
+            screens wider than 480px; inner max-w-[480px] wrapper holds the title row.
+            elev-shadow-down appears when the scroll container is past top.
             HtP-only bar pb-2.5: absorbs half (10px) of the 20px gap that normally sits
             between the title row and the first GuidePage panel. The <GuidePage/> wrapper
             also drops mt-5 → mt-2.5 to compensate, so the total gap stays 20px — but the
             visual "lock line" is centered between title row and first panel rather than
             sitting right at the title row's bottom edge. */}
-        <div className={`htp-sticky-bar shrink-0 bg-[var(--bg1)] w-full pt-5${mode==="guide"?" pb-2.5":""}${appScrolledFromTop?" elev-shadow-down":""}`}>
+        <div ref={htpStickyBarRef} style={{position:'fixed',top:0,left:0,right:0,zIndex:30}} className={`htp-sticky-bar bg-[var(--bg1)] w-full pt-5${mode==="guide"?" pb-2.5":""}${appScrolledFromTop?" elev-shadow-down":""}`}>
           <div className="mx-auto px-4 w-full max-w-[480px] relative">
             <div className="flex items-center justify-between gap-2">
               {/* header left: title */}
@@ -4016,7 +4039,10 @@
             </div>
           </div>
         </div>
-        <div ref={appScrollRef} className={`flex-1 min-h-0 overflow-y-auto overscroll-contain${appScrolledFromTop&&!appAtBottom?" fade-scroll-both":appScrolledFromTop?" fade-scroll-top":!appAtBottom?" fade-scroll-bottom":""}`}>
+        {/* Scroll container: position:absolute inset:0 with padding-top:var(--bar-h)
+            so content starts immediately below the bar. overscroll-contain keeps
+            rubber-band bounce LOCAL to this container (bar is unaffected). */}
+        <div ref={appScrollRef} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 overflow-y-auto overscroll-contain${appScrolledFromTop&&!appAtBottom?" fade-scroll-both":appScrolledFromTop?" fade-scroll-top":!appAtBottom?" fade-scroll-bottom":""}`}>
         <div className="mx-auto px-4 pb-5 w-full max-w-[480px]">
           {showStats&&(<>
             {/* Bug #5 (Save Stats off pauses all stats site-wide): when saveStats is false,
