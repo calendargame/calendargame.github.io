@@ -588,7 +588,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-26T19:15:00Z');
+    const DEPLOY_TS=new Date('2026-05-28T22:54:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -1599,6 +1599,12 @@
       const isBlankStats=s=>!!s&&s.played===0&&s.good===0&&s.streak===0&&s.best===0&&Array.isArray(s.times)&&s.times.length===0;
       const isBlankDedStacks=d=>!!d&&Array.isArray(d.day)&&d.day.length===0&&Array.isArray(d.month)&&d.month.length===0&&Array.isArray(d.year)&&d.year.length===0;
       const isBlankDedTypeStore=d=>!!d&&d.year===null&&d.month===null&&d.day===null;
+      // isFreshDedSnap — true if a saved Deduction snapshot represents an UNTOUCHED puzzle
+      // (no answers, not counted-wrong, not locked, not revealed) or is empty. Mirrors the
+      // mode-switch isFreshDedSub helper. Used by isFullyReset so merely VISITING a Deduction
+      // sub-mode and leaving (which saves the auto-generated unanswered puzzle) still counts as
+      // a fresh launch state — matching how Classic/Flash preserved-but-untouched state is ignored.
+      const isFreshDedSnap=sd=>{if(!sd||!sd.ded)return true;const b=sd.ded.btns||sd.btns||{};return Object.keys(b).length===0&&!sd.countedWrong&&!sd.locked&&!sd.revealed;};
       const [statsByMode,setStatsByMode]=useState({classic:blankStats(),blitz:blankStats(),flash:blankStats(),"deduction-day":blankStats(),"deduction-month":blankStats(),"deduction-year":blankStats()});
       const [blitzRoundStats,setBlitzRoundStats]=useState(()=>blankStats());
       const [dedType,setDedType]=useState("day");
@@ -3531,6 +3537,13 @@
       const [settingsOpen,setSettingsOpen]=useState(false);
       const settingsRef=useRef(null);
       const settingsPopoverRef=useRef(null);
+      // The settings popover is rendered through a portal to #root (out of the position:fixed bar)
+      // so the theme dropdowns' backdrop-filter frost samples correctly — nested inside the fixed
+      // bar it was rendering nearly transparent. barInnerRef is the bar's inner row (the anchor the
+      // popover used to hang off via top-full); popoverPos is measured from it so the portaled
+      // popover lands in the exact same spot (top-full + mt-2, left-4/right-4 within the column).
+      const barInnerRef=useRef(null);
+      const [popoverPos,setPopoverPos]=useState(null);
       // Full Reset state: armed=true means the user tapped once and the next tap fires.
       // Auto-disarms after a short timer, when settings closes, or when the user taps any
       // other interactive control inside the popover. Implemented as a per-tap state machine
@@ -3575,6 +3588,17 @@
         const ro=new ResizeObserver(evaluate);
         ro.observe(el);
         return()=>{el.removeEventListener('scroll',evaluate);ro.disconnect();};
+      },[settingsOpen]);
+      // Measure the popover anchor (bar inner row) and position the portaled popover to match its
+      // former in-bar placement. useLayoutEffect so it lands before paint (no flash). Recompute on
+      // viewport resize and iOS visualViewport changes (URL bar show/hide) so it stays aligned.
+      useLayoutEffect(()=>{
+        if(!settingsOpen)return;
+        const measure=()=>{const el=barInnerRef.current;if(!el)return;const r=el.getBoundingClientRect();setPopoverPos({top:r.bottom+8,left:r.left+16,right:window.innerWidth-r.right+16});};
+        measure();
+        window.addEventListener('resize',measure);
+        const vv=window.visualViewport;if(vv)vv.addEventListener('resize',measure);
+        return()=>{window.removeEventListener('resize',measure);if(vv)vv.removeEventListener('resize',measure);};
       },[settingsOpen]);
       // Settings popover click-outside handler. Closes settings when the user taps
       // anywhere outside three regions: the gear button itself (settingsRef), the
@@ -3905,8 +3929,8 @@
       //     populates them passively. Including them would mean "I haven't done anything but
       //     the button is bright" the moment a user tabs between modes. The state values they
       //     mirror ARE checked, so any actual user-visible change is caught.
-      const isFullyReset=mode==='classic'&&settingsAtDefaults&&allowMistakes===true&&perQ===false&&blitzSec===60&&qSec===5&&flashMs===500&&abCrossOnly===false&&julCrossOnly===false&&monthOnly1582===false&&dedType==='day'&&Object.keys(scoringOffByMode).length===0&&timingOffByMode.classic===true&&timingOffByMode.deduction===true&&Object.keys(timingOffByMode).length===2&&isBlankStats(statsByMode.classic)&&isBlankStats(statsByMode.blitz)&&isBlankStats(statsByMode.flash)&&isBlankStats(statsByMode['deduction-day'])&&isBlankStats(statsByMode['deduction-month'])&&isBlankStats(statsByMode['deduction-year'])&&isBlankStats(blitzRoundStats)&&Object.keys(blitzBest).length===0&&Object.keys(blitzBestNew).length===0&&Object.keys(suddenBest).length===0&&Object.keys(suddenBestNew).length===0&&stack.length===0&&forwardStack.length===0&&isBlankDedStacks(dedStack)&&isBlankDedStacks(dedForwardStack)&&isBlankDedTypeStore(savedDedByType)&&backDepth===0&&browseHasCredit===false&&locked===false&&revealed===false&&countedWrong===false&&canOverrideCorrect===false&&pendingWrongOverride===null&&overrideUsedThisQ===false&&timerDone===false&&calcPenaltyActive===false&&Object.keys(calcOpenByMode).length===0&&Object.keys(persistBtns).length===0&&flash===null&&ded===null&&dedFlash===null&&blitzRunning===false&&active===false&&showTimerDate===false&&blitzRemain===60&&qRemain===5&&flashRemainMs===500&&flashPhase==='dash'&&lookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&aoxIsFresh;
-      const settingsJsx=settingsOpen&&(<div ref={settingsPopoverRef} className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card py-4 space-y-4 shadow-xl flex flex-col max-h-[calc(100dvh-80px)]">
+      const isFullyReset=mode==='classic'&&settingsAtDefaults&&allowMistakes===true&&perQ===false&&blitzSec===60&&qSec===5&&flashMs===500&&abCrossOnly===false&&julCrossOnly===false&&monthOnly1582===false&&dedType==='day'&&!Object.values(scoringOffByMode).some(Boolean)&&timingOffByMode.classic===true&&timingOffByMode.deduction===true&&Object.entries(timingOffByMode).every(([k,v])=>k==='classic'||k==='deduction'||v===false)&&isBlankStats(statsByMode.classic)&&isBlankStats(statsByMode.blitz)&&isBlankStats(statsByMode.flash)&&isBlankStats(statsByMode['deduction-day'])&&isBlankStats(statsByMode['deduction-month'])&&isBlankStats(statsByMode['deduction-year'])&&isBlankStats(blitzRoundStats)&&Object.keys(blitzBest).length===0&&Object.keys(blitzBestNew).length===0&&Object.keys(suddenBest).length===0&&Object.keys(suddenBestNew).length===0&&stack.length===0&&forwardStack.length===0&&isBlankDedStacks(dedStack)&&isBlankDedStacks(dedForwardStack)&&Object.values(savedDedByType).every(isFreshDedSnap)&&backDepth===0&&locked===false&&revealed===false&&countedWrong===false&&canOverrideCorrect===false&&pendingWrongOverride===null&&overrideUsedThisQ===false&&timerDone===false&&calcPenaltyActive===false&&!Object.values(calcOpenByMode).some(Boolean)&&Object.keys(persistBtns).length===0&&flash===null&&ded===null&&dedFlash===null&&blitzRunning===false&&active===false&&showTimerDate===false&&blitzRemain===60&&qRemain===5&&flashRemainMs===500&&flashPhase==='dash'&&lookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&aoxIsFresh;
+      const settingsJsx=settingsOpen&&(<div ref={settingsPopoverRef} style={{position:'absolute',top:popoverPos?popoverPos.top:0,left:popoverPos?popoverPos.left:0,right:popoverPos?popoverPos.right:0,zIndex:20,visibility:popoverPos?'visible':'hidden'}} className="rounded-2xl card py-4 space-y-4 shadow-xl flex flex-col max-h-[calc(100dvh-80px)]">
         <div ref={popoverInnerScrollRef} className={`overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-4 px-4${popoverScrolledFromTop&&!popoverAtBottom?" fade-scroll-both":popoverScrolledFromTop?" fade-scroll-top":!popoverAtBottom?" fade-scroll-bottom":""}`}>
         <div className="space-y-2">
           <SectionLabel>Date Format</SectionLabel>
@@ -4017,7 +4041,7 @@
             visual "lock line" is centered between title row and first panel rather than
             sitting right at the title row's bottom edge. */}
         <div ref={htpStickyBarRef} style={{position:'fixed',top:0,left:0,right:0,zIndex:30}} className={`htp-sticky-bar bg-[var(--bg1)] w-full pt-5${mode==="guide"?" pb-2.5":""}${appScrolledFromTop?" elev-shadow-down":""}`}>
-          <div className="mx-auto px-4 w-full max-w-[480px] relative">
+          <div ref={barInnerRef} className="mx-auto px-4 w-full max-w-[480px] relative">
             <div className="flex items-center justify-between gap-2">
               {/* header left: title */}
               <h1 className="text-xl font-semibold leading-none shrink-0">Calendar Game</h1>
@@ -4035,10 +4059,15 @@
                     on the original <select>. showChevron renders the same ▲▼ indicator. */}
                 <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{setMode(v);setSettingsOpen(false);}} options={MODE_LABELS} ariaLabel="Mode" showChevron className="panel rounded-xl px-2.5 py-2 pr-9 text-sm focus:outline-none focus-ring text-left"/>
               </div>
-              {settingsJsx}
             </div>
           </div>
         </div>
+        {/* Settings popover, portaled to #root so it escapes the position:fixed bar — keeps the
+            theme dropdowns' backdrop-filter frost working (they rendered nearly transparent when
+            nested inside the fixed bar). Positioned via barInnerRef/popoverPos to match the old
+            in-bar placement. z-20 keeps it above page content but below the bar (z-30), so the mode
+            dropdown still renders over it when both are open. */}
+        {ReactDOM.createPortal(settingsJsx,document.getElementById('root'))}
         {/* Scroll container: position:absolute inset:0 with padding-top:var(--bar-h)
             so content starts immediately below the bar. overscroll-contain keeps
             rubber-band bounce LOCAL to this container (bar is unaffected). */}
