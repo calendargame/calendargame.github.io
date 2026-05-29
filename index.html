@@ -588,7 +588,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-29T18:28:00Z');
+    const DEPLOY_TS=new Date('2026-05-29T18:33:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -750,6 +750,11 @@
       const panelRef=useRef(null);
       const openUpwardRef=useRef(false);
       const [panelPos,setPanelPos]=useState(null);
+      // ⚠ STABILITY NOTE: the dropdown's portal positioning (measurePanel) and
+      // open-direction logic (handleToggle, plus the openUp override) were tuned
+      // against iOS Safari over several attempts and are QA-confirmed working.
+      // They look like ordinary geometry but are device-sensitive — ALWAYS
+      // re-verify on iPhone Safari (browser + PWA) after editing anything here.
       // measurePanel reads the trigger's current viewport rect and writes panelPos:
       // right edge aligned to the trigger, 6px below it (top) when opening down, or
       // 6px above it (bottom) when flipping up. Called on open and on scroll/resize
