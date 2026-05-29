@@ -588,7 +588,7 @@
 
 
 
-    const DEPLOY_TS=new Date('2026-05-29T18:04:00Z');
+    const DEPLOY_TS=new Date('2026-05-29T18:28:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
@@ -667,7 +667,7 @@
       );
     }
 
-    function CustomSelect({value,onChange,options,className,wrapperClassName,ariaLabel,wrapperRef,showChevron=false}){
+    function CustomSelect({value,onChange,options,className,wrapperClassName,ariaLabel,wrapperRef,showChevron=false,openUp=false}){
       // Custom dropdown that mimics the native iOS picker visually but renders
       // entirely from page DOM. Replaces native <select> elements site-wide so
       // iOS WebKit's popover dismissal heuristic (which auto-closes the native
@@ -721,6 +721,9 @@
       //   above → flip above. (Now that the panel escapes to #root, the viewport
       //   is the only clipping boundary, so this measures viewport space directly
       //   — which is why the old findClippingAncestor helper is gone.)
+      //   The openUp prop overrides this and forces upward, skipping the
+      //   measurement entirely — used by the theme selects, which sit at the
+      //   bottom of the settings popover where there is always room above.
       //
       // wrapperRef is forwarded to the outer relative div so callers (e.g. the
       // settings click-outside handler) can keep treating the wrapper the same
@@ -767,12 +770,17 @@
       // Measurement only happens on open (close is cheap).
       const handleToggle=()=>{
         if(!open&&ref.current){
-          const rect=ref.current.getBoundingClientRect();
-          const vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
-          const spaceBelow=vh-rect.bottom-16;
-          const spaceAbove=rect.top-16;
-          const estimatedHeight=options.length*45+10;
-          openUpwardRef.current=spaceBelow<estimatedHeight&&spaceAbove>spaceBelow;
+          if(openUp){
+            // Caller forces upward (theme selects — always room above them).
+            openUpwardRef.current=true;
+          }else{
+            const rect=ref.current.getBoundingClientRect();
+            const vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
+            const spaceBelow=vh-rect.bottom-16;
+            const spaceAbove=rect.top-16;
+            const estimatedHeight=options.length*45+10;
+            openUpwardRef.current=spaceBelow<estimatedHeight&&spaceAbove>spaceBelow;
+          }
           measurePanel();
           setActiveIdx(selectedIdx>=0?selectedIdx:0);
         }
@@ -4022,7 +4030,7 @@
         <div className="space-y-2 pt-3 border-t border-purple-500/20">
           <SectionLabel>Theme</SectionLabel>
           <div className="flex items-center justify-between"><span className="text-xs text-purple-200/80">Use System Settings</span><button type="button" onClick={()=>setUseSystem(v=>!v)} className={`px-3 py-1 rounded-xl text-xs font-medium border ${useSystem?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}`}>{useSystem?"On":"Off"}</button></div>
-          {useSystem?(<><div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Dark:</span><CustomSelect value={darkTheme} onChange={setDarkTheme} options={DARK_THEMES} ariaLabel="Dark theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div><div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Light:</span><CustomSelect value={lightTheme} onChange={setLightTheme} options={LIGHT_THEMES} ariaLabel="Light theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div></>):(<div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Theme:</span><CustomSelect value={manualTheme} onChange={setManualTheme} options={ALL_THEMES_LABELED} ariaLabel="Theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div>)}
+          {useSystem?(<><div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Dark:</span><CustomSelect value={darkTheme} onChange={setDarkTheme} options={DARK_THEMES} openUp ariaLabel="Dark theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div><div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Light:</span><CustomSelect value={lightTheme} onChange={setLightTheme} options={LIGHT_THEMES} openUp ariaLabel="Light theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div></>):(<div className="flex items-center gap-3"><span className="text-xs text-purple-200/80 w-10 shrink-0">Theme:</span><CustomSelect value={manualTheme} onChange={setManualTheme} options={ALL_THEMES_LABELED} openUp ariaLabel="Theme" wrapperClassName="flex-1" className="panel rounded-xl px-2 py-1 text-sm w-full focus:outline-none focus-ring text-left"/></div>)}
         </div>
         </div>
         <div className={`popover-sticky-footer pt-4 px-4 border-t border-purple-500/20${!popoverAtBottom?" elev-shadow-up":""}`}>
