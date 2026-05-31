@@ -1,5 +1,11 @@
 import * as React from 'react'
-import * as ReactDOM from 'react-dom/client'
+// The original loaded the full ReactDOM UMD global, which exposes BOTH createRoot and
+// createPortal. The modern modular build splits them: createRoot is in 'react-dom/client',
+// createPortal is in 'react-dom'. Reconstruct a ReactDOM with both so the app's
+// ReactDOM.createRoot (mount) and ReactDOM.createPortal (dropdowns/popovers) both work.
+import { createRoot } from 'react-dom/client'
+import { createPortal } from 'react-dom'
+const ReactDOM = { createRoot, createPortal }
 
     const {useEffect,useMemo,useRef,useState,useCallback,useLayoutEffect} = React;
     // ─────────────────────────────────────────────────────────────────────────
