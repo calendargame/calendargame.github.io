@@ -1,0 +1,165 @@
+// Unit tests for the pure game reducer — CORE lifecycle (Stage C, Step 6, sub-step 1b).
+// Deterministic: a fixed Gregorian date (so activeWday === wday) and explicit payloads.
+// These mirror the Classic characterization (tests/classic.dom) at the reducer level —
+// the two must agree, which is what makes wiring the reducer into App (1c) safe.
+import { describe, it, expect } from 'vitest'
+import { gameReducer, initEngine } from '../../src/engine/gameReducer.js'
+import { wday } from '../../src/lib/calendar.js'
+
+const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
+const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
+const C = wday(2024, 1, 1) // the correct weekday index for the fixed date
+const W = (C + 1) % 7 // a wrong index
+
+// Default play context: Gregorian, Save Stats on, timing hidden (Classic default).
+const ctx = { useJulian: false, saveStats: true, tracking: false }
+const answer = (s, idx, extra = {}) => gameReducer(s, { type: 'ANSWER', idx, nextDate: NEXT, ...ctx, ...extra })
+const reveal = (s, extra = {}) => gameReducer(s, { type: 'REVEAL', ...ctx, ...extra })
+const showCodes = (s, open = true, extra = {}) => gameReducer(s, { type: 'SHOW_CODES', open, ...ctx, ...extra })
+const neu = (s, extra = {}) => gameReducer(s, { type: 'NEW', nextDate: NEXT, ...ctx, ...extra })
+
+describe('gameReducer — initial state', () => {
+  it('starts at a clean slate', () => {
+    const s = initEngine(DATE)
+    expect(s.stats).toEqual({ played: 0, good: 0, streak: 0, best: 0, times: [] })
+    expect(s.date).toBe(DATE)
+    expect(s.stack).toEqual([])
+    expect(s.countedWrong).toBe(false)
+    expect(s.locked).toBe(false)
+  })
+})
+
+describe('gameReducer — ANSWER', () => {
+  it('first-try correct: credits 1/1/streak 1, advances, pushes a credited history entry', () => {
+    const s = answer(initEngine(DATE), C)
+    expect(s.stats).toEqual({ played: 1, good: 1, streak: 1, best: 1, times: [] })
+    expect(s.date).toBe(NEXT) // advanced
+    expect(s.persistBtns).toEqual({}) // fresh grid
+    expect(s.stack).toHaveLength(1)
+    expect(s.stack[0].hasCredit).toBe(true)
+    expect(s.stack[0].btns).toEqual({ [C]: 'correct' })
+    // The history entry carries the pre-answer snapshot (so Override can reverse it later).
+    expect(s.stack[0].capsule.snapshot).toEqual({
+      played: 0, good: 0, streak: 0, best: 0, timesLen: 0, wasWrong: false,
+    })
+    expect(s.pendingWrongOverride).toBe(null)
+  })
+
+  it('wrong: counts as played, streak 0, marks the button, does NOT advance, arms snapshot', () => {
+    const s = answer(initEngine(DATE), W, { elapsed: 0.5 })
+    expect(s.stats).toEqual({ played: 1, good: 0, streak: 0, best: 0, times: [] })
+    expect(s.date).toBe(DATE) // not advanced
+    expect(s.persistBtns).toEqual({ [W]: 'wrong-latest' })
+    expect(s.countedWrong).toBe(true)
+    expect(s.wrongTime).toBe(0.5)
+    expect(s.prevStatsSnapshot.wasWrong).toBe(true)
+  })
+
+  it('correct after a wrong on the same question: no extra credit, advances, arms pendingWrongOverride', () => {
+    let s = answer(initEngine(DATE), W) // 0/1, burned
+    s = answer(s, C) // late-correct
+    expect(s.stats).toEqual({ played: 1, good: 0, streak: 0, best: 0, times: [] }) // no credit
+    expect(s.date).toBe(NEXT) // advanced
+    expect(s.pendingWrongOverride).not.toBe(null) // Path 4 armed
+    expect(s.stack).toHaveLength(1) // the wrong-then-right entry was pushed
+  })
+
+  it('builds streak across correct answers; a wrong resets current but keeps best', () => {
+    let s = answer(initEngine(DATE), C) // 1/1, streak 1
+    s = answer({ ...s, date: DATE }, C) // 2/2, streak 2  (reset date so C is correct again)
+    expect(s.stats).toMatchObject({ played: 2, good: 2, streak: 2, best: 2 })
+    s = answer({ ...s, date: DATE }, W) // wrong → 2/3, streak 0, best 2
+    expect(s.stats).toMatchObject({ played: 3, good: 2, streak: 0, best: 2 })
+  })
+
+  it('with timing on, a correct answer records the solve time', () => {
+    const s = answer(initEngine(DATE), C, { tracking: true, elapsed: 1.5 })
+    expect(s.stats.times).toEqual([1.5])
+    expect(s.stats).toMatchObject({ played: 1, good: 1 })
+  })
+
+  it('with Save Stats off, a wrong answer is not counted and the freeze is recorded', () => {
+    const s = answer(initEngine(DATE), W, { saveStats: false })
+    expect(s.stats).toEqual({ played: 0, good: 0, streak: 0, best: 0, times: [] }) // not counted
+    expect(s.countedWrong).toBe(true) // question state still progresses
+    expect(s.persistBtns).toEqual({ [W]: 'wrong-latest' })
+    expect(s.saveStatsThisQ).toBe(false) // frozen
+  })
+
+  it('does nothing while locked', () => {
+    const locked = { ...initEngine(DATE), locked: true }
+    expect(answer(locked, C)).toBe(locked)
+  })
+})
+
+describe('gameReducer — REVEAL', () => {
+  it('burns a fresh question: played 1, streak 0, shows the answer, locks', () => {
+    const s = reveal(initEngine(DATE))
+    expect(s.stats).toMatchObject({ played: 1, good: 0, streak: 0 })
+    expect(s.persistBtns).toEqual({ [C]: 'correct' })
+    expect(s.locked).toBe(true)
+    expect(s.revealed).toBe(true)
+    expect(s.countedWrong).toBe(true)
+  })
+
+  it('is penalty-free on an unanswered back-browsed entry', () => {
+    const browsing = { ...initEngine(DATE), locked: true, backDepth: 1 }
+    const s = reveal(browsing)
+    expect(s.stats).toEqual({ played: 0, good: 0, streak: 0, best: 0, times: [] }) // no penalty
+    expect(s.persistBtns).toEqual({ [C]: 'correct' })
+    expect(s.revealed).toBe(true)
+  })
+})
+
+describe('gameReducer — SHOW_CODES', () => {
+  it('opening on a fresh question applies the penalty and reveals the answer', () => {
+    const s = showCodes(initEngine(DATE), true)
+    expect(s.stats).toMatchObject({ played: 1, good: 0, streak: 0 })
+    expect(s.persistBtns).toEqual({ [C]: 'correct' })
+    expect(s.calcOpen).toBe(true)
+    expect(s.calcPenaltyActive).toBe(true)
+    expect(s.countedWrong).toBe(true)
+    expect(s.preCalcPenaltySnapshot).toMatchObject({ played: 0, good: 0 })
+  })
+
+  it('closing just hides the panel (no stat change)', () => {
+    const open = showCodes(initEngine(DATE), true)
+    const closed = showCodes(open, false)
+    expect(closed.calcOpen).toBe(false)
+    expect(closed.stats).toEqual(open.stats)
+  })
+})
+
+describe('gameReducer — NEW', () => {
+  it('from a fresh unanswered question: regenerates, no history push, stats untouched', () => {
+    const s = neu(initEngine(DATE))
+    expect(s.date).toBe(NEXT)
+    expect(s.stack).toEqual([])
+    expect(s.stats).toEqual({ played: 0, good: 0, streak: 0, best: 0, times: [] })
+  })
+
+  it('after a wrong answer: pushes the entry, advances, arms pendingWrongOverride', () => {
+    let s = answer(initEngine(DATE), W) // burned, not advanced
+    s = neu(s)
+    expect(s.stack).toHaveLength(1)
+    expect(s.date).toBe(NEXT)
+    expect(s.pendingWrongOverride).not.toBe(null)
+  })
+})
+
+describe('gameReducer — RESET', () => {
+  it('clears stats + history; keeps the (unburned) date when timing is hidden', () => {
+    let s = answer(initEngine(DATE), C) // 1/1, now on NEXT, unburned
+    s = gameReducer(s, { type: 'RESET', timingOff: true, nextDate: DATE })
+    expect(s.stats).toEqual({ played: 0, good: 0, streak: 0, best: 0, times: [] })
+    expect(s.stack).toEqual([])
+    expect(s.date).toBe(NEXT) // kept (unburned + timing hidden)
+  })
+
+  it('regenerates the date when the current question was burned', () => {
+    let s = answer(initEngine(DATE), W) // burned (countedWrong), still on DATE
+    s = gameReducer(s, { type: 'RESET', timingOff: true, nextDate: NEXT })
+    expect(s.date).toBe(NEXT) // regenerated
+    expect(s.stats.played).toBe(0)
+  })
+})
