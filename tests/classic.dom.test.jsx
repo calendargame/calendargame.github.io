@@ -319,3 +319,83 @@ describe('Classic — characterization (batch 4: Show Codes, streaks, Reset Stat
     for (const name of DAY) expect(dayState(name)).toBe('idle') // fresh grid
   })
 })
+
+describe('Classic — characterization (batch 5: timing-on, history & override nuances)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useSettings.getState().resetSettings()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  // Timing is OFF by default in Classic (Last/Average/Median hidden). Clicking the "Last"
+  // stat cell toggles timing ON. The cell doubles as the toggle button.
+  it('with timing enabled, a correct answer records a solve time into Last/Average/Median', () => {
+    mountApp()
+    pressNewAndRead() // normalize the date format
+    fireEvent.click(statCell('Last')) // enable timing → regenerates the (unanswered) date
+    const date = readDate()
+    expect(statValue('Last')).toBe('—') // no solves recorded yet
+    fireEvent.click(dayBtn(correctName(date)))
+    expect(statValue('Score')).toBe('1/1')
+    // A time is now recorded — shape "N.NNs" (the exact value is wall-clock, so match the format).
+    expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
+  })
+
+  it('answering correctly AFTER a wrong (no Override) advances with no credit but arms Override', () => {
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(wrongName(q1))) // 0/1, streak 0
+    fireEvent.click(dayBtn(correctName(q1))) // late-correct: advances, but earns no credit
+    expect(statValue('Score')).toBe('0/1') // no credit for the late-correct
+    expect(statValue('Streak')).toBe('0/0')
+    expect(isDisabled(ctrl('<'))).toBe(false) // advanced → history has the (uncredited) entry
+    expect(isDisabled(ctrl('Override'))).toBe(false) // pendingWrongOverride armed (Path 4 ready)
+  })
+
+  it('Override after Reveal retroactively credits the question (Path 3 via Reveal)', () => {
+    mountApp()
+    pressNewAndRead() // advance to a fresh, normalized question
+    fireEvent.click(ctrl('Reveal')) // 0/1, revealed + counted wrong + locked
+    expect(statValue('Score')).toBe('0/1')
+    fireEvent.click(ctrl('Override')) // Path 3: credit + advance
+    expect(statValue('Score')).toBe('1/1')
+    expect(statValue('Streak')).toBe('1/1')
+    expect(isDisabled(ctrl('<'))).toBe(false) // advanced
+  })
+
+  it('Back/Forward walks two levels of history with correct Q indicators, stats untouched', () => {
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(correctName(q1))) // 1/1 → advance
+    const q2 = readDate()
+    fireEvent.click(dayBtn(correctName(q2))) // 2/2 → advance (now on live Q3)
+    expect(statValue('Score')).toBe('2/2')
+
+    // Back once → Q2 (history position "Q2").
+    fireEvent.click(ctrl('<'))
+    expect(readDate()).toEqual(q2)
+    expect(screen.getByText('Q2')).toBeInTheDocument()
+    // Back again → Q1, the oldest (Back now disabled).
+    fireEvent.click(ctrl('<'))
+    expect(readDate()).toEqual(q1)
+    expect(screen.getByText('Q1')).toBeInTheDocument()
+    expect(isDisabled(ctrl('<'))).toBe(true)
+    expect(statValue('Score')).toBe('2/2') // browsing never changes stats
+
+    // Forward twice → back to the live edge.
+    fireEvent.click(ctrl('>'))
+    expect(readDate()).toEqual(q2)
+    fireEvent.click(ctrl('>'))
+    expect(isDisabled(ctrl('>'))).toBe(true)
+    expect(statValue('Score')).toBe('2/2')
+  })
+})
