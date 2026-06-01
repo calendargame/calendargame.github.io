@@ -3727,4 +3727,16 @@ const ReactDOM = { createRoot, createPortal }
 
     // LookupCard → src/components/LookupCard.jsx, imported at top.
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
+    // Browser entry: mount into #root (provided by index.html). The mount is guarded on
+    // #root's presence so that importing this module from a characterization test does NOT
+    // auto-mount a second copy — tests `import { App }`, create a #root (for CustomSelect's
+    // portal), and mount via Testing Library into their own container. At test-import time
+    // #root doesn't exist yet (tests create it in beforeEach), so this is skipped; in the
+    // real build #root is in the HTML before this module runs. (The eventual thin entry /
+    // app-module split falls out naturally during the Step-6 cleanup; this is the minimal
+    // touch needed to make App testable for the safety net.)
+    const rootEl = typeof document !== "undefined" ? document.getElementById("root") : null;
+    if (rootEl) ReactDOM.createRoot(rootEl).render(<ErrorBoundary><App/></ErrorBoundary>);
+
+    // Exported for the Step-6 characterization tests (the mode-untangle safety net).
+    export { App };
