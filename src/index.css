@@ -159,17 +159,19 @@ button:focus,select:focus{outline:none}
 [data-theme="parchment"] .bg-purple-500\/20,[data-theme="light"] .bg-purple-500\/20{background-color:rgba(120,53,175,.2)!important}
 [data-theme="parchment"] .border-purple-500\/40,[data-theme="light"] .border-purple-500\/40{border-color:rgba(120,53,175,.3)!important}
 [data-theme="parchment"] .border-purple-500\/20,[data-theme="light"] .border-purple-500\/20{border-color:rgba(120,53,175,.15)!important}
-/* Centered strikethrough for disabled/off stat labels (StatPanel). The native
-   line-through sits where the FONT's strikeout metric puts it — for system UI
-   fonts (Segoe UI on Windows, San Francisco on iOS) that's noticeably high on
-   the lowercase letters, and it differs per platform. We draw the strike as a
-   thin background gradient pinned to the exact vertical middle of the text box
-   instead, so it reads as a clean, intentional line that looks identical on
-   every device/font. currentColor keeps it tied to the label's own color across
-   all 5 themes. ~2px thick band centered at 50%. Used app-wide (every stat box
-   in every mode shows this when Save Stats is off or a stat is toggled off). */
+/* Strikethrough for disabled/off stat labels (StatPanel). The native CSS
+   line-through is drawn at the FONT's strikeout metric — for system UI fonts
+   (Segoe UI on Windows, San Francisco on iOS) that sits noticeably HIGH on the
+   lowercase letters, and at a different height per platform. We draw the strike
+   as a thin background gradient instead, so we control both its weight and
+   position and it looks identical on every device/font. currentColor ties it to
+   the label's own color across all 5 themes. A 1px-thin band (matching the
+   native line's weight) centered at ~58% of the text box, so it crosses through
+   the middle of the lowercase letters rather than riding high across their tops.
+   Used app-wide (every stat box, every mode, when Save Stats is off or a stat is
+   toggled off). */
 .strike-center{
-  background-image:linear-gradient(to bottom,transparent calc(50% - 1px),currentColor calc(50% - 1px),currentColor calc(50% + 1px),transparent calc(50% + 1px));
+  background-image:linear-gradient(to bottom,transparent calc(58% - 0.5px),currentColor calc(58% - 0.5px),currentColor calc(58% + 0.5px),transparent calc(58% + 0.5px));
   background-repeat:no-repeat;
 }
 input[type="range"]{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;border:none;outline:none;background:linear-gradient(to right,#a855f7 0%,#7c3aed var(--rng-fill,50%),var(--panel-bd) var(--rng-fill,50%));}
