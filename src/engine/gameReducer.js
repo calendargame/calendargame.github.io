@@ -277,6 +277,33 @@ export function gameReducer(state, action) {
       return { ...state, date: nextDate, questionId: (state.questionId ?? 0) + 1 }
     }
 
+    // ── RESET_ROUND ──────────────────────────────────────────────────────────────
+    // Clear the history + the current question's transient state but KEEP stats and the
+    // current date — App's arm() for the timed modes (Flash/Blitz "Reset" while a round is
+    // live). Stats survive (unlike RESET); the timer machinery itself is component-owned.
+    case 'RESET_ROUND': {
+      return {
+        ...state,
+        persistBtns: {},
+        stack: [],
+        forwardStack: [],
+        backDepth: 0,
+        locked: false,
+        revealed: false,
+        countedWrong: false,
+        canOverrideCorrect: false,
+        pendingWrongOverride: null,
+        overrideUsedThisQ: false,
+        calcOpen: false,
+        calcPenaltyActive: false,
+        browseHasCredit: false,
+        prevStatsSnapshot: null,
+        wrongTime: null,
+        preCalcPenaltySnapshot: null,
+        saveStatsThisQ: null,
+      }
+    }
+
     // ── OVERRIDE ───────────────────────────────────────────────────────────────
     // The 5-path override (App's most complex function), Classic scope. Only ever
     // dispatched when overrideAvail (Save Stats on + a path armed + not used this Q), so

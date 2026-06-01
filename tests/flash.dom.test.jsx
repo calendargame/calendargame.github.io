@@ -221,4 +221,20 @@ describe('Flash — characterization (batch 2: Reveal, Override, consecutive rou
     expect(statValue('Score')).toBe('2/2')
     expect(statValue('Streak')).toBe('2/2')
   })
+
+  it('Reset while a flash is live returns to idle, keeps stats, clears history', () => {
+    mountApp()
+    switchToFlash()
+    begin()
+    click(correctName(readDate())) // 1/1; history now has the answered Q
+    begin() // start another flash (active)
+    expect(ctrl('Reset')).toBeInTheDocument()
+    act(() => {
+      fireEvent.click(ctrl('Reset'))
+    })
+    expect(ctrl('Begin')).toBeInTheDocument() // back to idle
+    expect(dateDisplayText()).toBe('—')
+    expect(statValue('Score')).toBe('1/1') // stats kept
+    expect(isDisabled(ctrl('<'))).toBe(true) // history cleared (Back disabled)
+  })
 })

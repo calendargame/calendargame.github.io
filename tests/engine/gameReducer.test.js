@@ -267,3 +267,17 @@ describe('gameReducer — REGEN_DATE', () => {
     expect(regen(s).date).toBe(s.date) // unchanged
   })
 })
+
+describe('gameReducer — RESET_ROUND', () => {
+  it('clears history + current-question state but keeps stats and date', () => {
+    let s = answer(initEngine(DATE), C) // 1/1, advanced; stack has one entry
+    s = answer({ ...s, date: DATE }, W) // wrong on the new Q → countedWrong, stack still has 1
+    const kept = s.stats
+    s = gameReducer(s, { type: 'RESET_ROUND' })
+    expect(s.stats).toBe(kept) // stats survive
+    expect(s.stack).toEqual([])
+    expect(s.countedWrong).toBe(false)
+    expect(s.persistBtns).toEqual({})
+    expect(s.date).toBe(DATE) // date kept
+  })
+})

@@ -69,6 +69,8 @@ export function useGameEngine({ genDate, minY, maxY, useJulian, saveStats, timin
   const regenDate = () => dispatch({ type: 'REGEN_DATE', nextDate: newDate() })
   // Full reset of stats + history + the live question (timing-enable when a desync exists).
   const fullReset = () => dispatch({ type: 'RESET', timingOff: false, nextDate: newDate() })
+  // Clear history + current-question state but KEEP stats (timed-mode "Reset" mid-round).
+  const resetRound = () => dispatch({ type: 'RESET_ROUND' })
 
   return {
     state,
@@ -85,5 +87,6 @@ export function useGameEngine({ genDate, minY, maxY, useJulian, saveStats, timin
     resetStats,
     regenDate,
     fullReset,
+    resetRound,
   }
 }
