@@ -20,6 +20,7 @@ import GuidePage from './components/GuidePage.jsx'
 import LookupCard from './components/LookupCard.jsx'
 import { MethodExplanation, MethodBreakdownSection } from './components/MethodBreakdown.jsx'
 import { CODES_CLOSE_MS } from './lib/constants.js'
+import { useSettings } from './store/settings.js'
 const ReactDOM = { createRoot, createPortal }
 
     const {useEffect,useMemo,useRef,useState,useCallback,useLayoutEffect} = React;
@@ -287,7 +288,7 @@ const ReactDOM = { createRoot, createPortal }
 
 
 
-    const DEPLOY_TS=new Date('2026-06-01T01:48:00Z');
+    const DEPLOY_TS=new Date('2026-06-01T02:25:00Z');
 
     // StatPanel → src/components/StatPanel.jsx, imported at top.
 
@@ -816,10 +817,27 @@ const ReactDOM = { createRoot, createPortal }
       useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
       const modeSelectRef=useRef(null);
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
-      const [useSystem,setUseSystem]=useState(true);
-      const [darkTheme,setDarkTheme]=useState("dusk");
-      const [lightTheme,setLightTheme]=useState("light");
-      const [manualTheme,setManualTheme]=useState("dusk");
+      // ⚙ Settings store (Stage C, Step 5a). The 13 settings values + their setters
+      // + resetSettings now live in the Zustand store (src/store/settings.js), bound
+      // here to the SAME local names App used before so every read site, setter call
+      // (incl. functional updaters), and the settingsAtDefaults/isFullyReset booleans
+      // keep working unchanged. minInputVal/maxInputVal stay as local useState below.
+      // Each setter is selected individually so component re-renders only when the
+      // specific value it reads changes (Zustand selector subscriptions).
+      const useSystem=useSettings(s=>s.useSystem),setUseSystem=useSettings(s=>s.setUseSystem);
+      const darkTheme=useSettings(s=>s.darkTheme),setDarkTheme=useSettings(s=>s.setDarkTheme);
+      const lightTheme=useSettings(s=>s.lightTheme),setLightTheme=useSettings(s=>s.setLightTheme);
+      const manualTheme=useSettings(s=>s.manualTheme),setManualTheme=useSettings(s=>s.setManualTheme);
+      const minY=useSettings(s=>s.minY),setMinY=useSettings(s=>s.setMinY);
+      const maxY=useSettings(s=>s.maxY),setMaxY=useSettings(s=>s.setMaxY);
+      const useJulian=useSettings(s=>s.useJulian),setUseJulian=useSettings(s=>s.setUseJulian);
+      const saveStats=useSettings(s=>s.saveStats),setSaveStats=useSettings(s=>s.setSaveStats);
+      const dateFormat=useSettings(s=>s.dateFormat),setDateFormat=useSettings(s=>s.setDateFormat);
+      const randomFormat=useSettings(s=>s.randomFormat),setRandomFormat=useSettings(s=>s.setRandomFormat);
+      const leapChance=useSettings(s=>s.leapChance),setLeapChance=useSettings(s=>s.setLeapChance);
+      const janFebChance=useSettings(s=>s.janFebChance),setJanFebChance=useSettings(s=>s.setJanFebChance);
+      const julianChance=useSettings(s=>s.julianChance),setJulianChance=useSettings(s=>s.setJulianChance);
+      const resetSettingsStore=useSettings(s=>s.resetSettings);
 
       const activeTheme=useSystem?(systemIsDark?darkTheme:lightTheme):manualTheme;
       useEffect(()=>{const mq=window.matchMedia("(prefers-color-scheme: dark)");const h=e=>setSystemIsDark(e.matches);mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);},[]);
@@ -964,7 +982,7 @@ const ReactDOM = { createRoot, createPortal }
         }
         setSaveStats(v=>!v);
       };
-      const [minY,setMinY]=useState(1),[maxY,setMaxY]=useState(10000);
+      // minY/maxY now from the settings store (bound at top of App). minInputVal/maxInputVal stay local (transient text mirrors).
       const [minInputVal,setMinInputVal]=useState("1");
       const [maxInputVal,setMaxInputVal]=useState("10000");
       const minInputRef=useRef(null),maxInputRef=useRef(null);
@@ -1003,8 +1021,7 @@ const ReactDOM = { createRoot, createPortal }
       const [stack,setStack]=useState([]),[dedStack,setDedStack]=useState(blankDedStacks);
       const [forwardStack,setForwardStack]=useState([]);
       const [dedForwardStack,setDedForwardStack]=useState(blankDedStacks);
-      const [useJulian,setUseJulian]=useState(true);
-      const [saveStats,setSaveStats]=useState(true);
+      // useJulian/saveStats now from the settings store (bound at top of App).
       // Per-question freeze: captures the saveStats value at the moment of the
       // first stat-affecting action on the current question. Reset to null on
       // advance to next question. effectiveSaveStats() returns the frozen value
@@ -2540,20 +2557,13 @@ const ReactDOM = { createRoot, createPortal }
       const handleCalcOpenChange=next=>{if(next&&!(locked&&!revealed&&backDepth>0))applyCalcPenalty();setCalcOpen(next);};
       const showStats=mode!=="lookup"&&mode!=="guide"&&mode!=="aox";
       const sAvg=calcAvg(S.times),sLast=calcLast(S.times),sMed=calcMed(S.times);
-      // Date format: one of 'written-mdy'|'written-dmy'|'numeric-mdy'|'numeric-dmy'|'numeric-ymd'.
-      // randomFormat overrides the selected format for game-mode dates only (Lookup + DEPLOY_TS ignore it).
-      const [dateFormat,setDateFormat]=useState('written-mdy');
-      const [randomFormat,setRandomFormat]=useState(true);
-      // Leap-year date generation settings (apply to all game modes; Lookup unaffected).
-      const [leapChance,setLeapChance]=useState('random');
-      const [janFebChance,setJanFebChance]=useState('random');
-      // julianChance: chance that a generated date falls in the Julian calendar period
-      // (pre-Oct 15, 1582). Option A semantics like leapChance/janFebChance. The 5-button
-      // row in the popover is locked when useJulian is off OR when the year range
-      // contains only Gregorian dates (minY >= 1583) or only Julian dates (maxY <= 1581).
-      // Year 1582 is mixed (Jan-Sep + Oct 1-4 are Julian; Oct 15+ + Nov + Dec are Gregorian),
-      // so a range that includes year 1582 always counts as mixed and the row is unlocked.
-      const [julianChance,setJulianChance]=useState('random');
+      // Date format / randomFormat / leapChance / janFebChance / julianChance now from the
+      // settings store (bound at top of App). Semantics unchanged:
+      //   dateFormat: 'written-mdy'|'written-dmy'|'numeric-mdy'|'numeric-dmy'|'numeric-ymd'.
+      //   randomFormat overrides the selected format for game-mode dates only (Lookup + DEPLOY_TS ignore it).
+      //   leap/janFeb/julianChance: Option-A date-generation biases (apply to all game modes; Lookup unaffected).
+      //   julianChance's 5-button row is locked when useJulian is off OR the year range is all-Gregorian
+      //   (minY>=1583) or all-Julian (maxY<=1581); year 1582 is mixed so any range including it is unlocked.
       // Blitz best keying: bests are siloed per difficulty configuration so a Best Score
       // achieved at one config doesn't compare against rounds at a different config.
       // Dimensions: duration (blitzSec for Per Round, qSec for Per Question), allowMistakes,
@@ -3077,19 +3087,10 @@ const ReactDOM = { createRoot, createPortal }
       // Triggers the unified popover-settings effect, which will regenerate the current
       // date as appropriate (Random Format / Date Format / Leap Chance are always-regen).
       const resetSettings=()=>{
-        setRandomFormat(true);
-        setDateFormat('written-mdy');
-        setUseJulian(true);
-        setMinY(1);setMaxY(10000);
+        // Reset the 13 store-held settings in one shot (single source of truth in
+        // src/store/settings.js), then the 2 transient text mirrors that live locally.
+        resetSettingsStore();
         setMinInputVal("1");setMaxInputVal("10000");
-        setLeapChance('random');
-        setJanFebChance('random');
-        setJulianChance('random');
-        setSaveStats(true);
-        setUseSystem(true);
-        setDarkTheme("dusk");
-        setLightTheme("light");
-        setManualTheme("dusk");
       };
       // Full Reset — wipes everything to the initial launch state. Every single piece of mutable
       // state in the app must be considered when modifying this function. Categories:
