@@ -32,6 +32,12 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      # Quality gate — a failing test (or lint error) blocks the deploy, so broken
+      # date math / logic can never reach the site. Tests run first (cheapest signal).
+      - name: Run tests
+        run: npm test
+      - name: Lint
+        run: npm run lint
       - name: Build the site
         run: npm run build
       - name: Upload the built site
