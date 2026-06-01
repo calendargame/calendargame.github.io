@@ -12,6 +12,7 @@ import {
 } from './lib/calendar.js'
 import { MONTH, DAY, fmtYear, fmt, fmtPartial, numericFormatOf } from './lib/format.js'
 import { computeMethodSummary } from './lib/method.js'
+import Expander from './components/Expander.jsx'
 const ReactDOM = { createRoot, createPortal }
 
     const {useEffect,useMemo,useRef,useState,useCallback,useLayoutEffect} = React;
@@ -284,60 +285,11 @@ const ReactDOM = { createRoot, createPortal }
     const markBtns=(btns,idx,state)=>{const next={...btns};for(const k in next){if(next[k]==='wrong-latest')next[k]='wrong-prev';}next[idx]=state;return next;};
     const mkBtnsWithCorrect=(btns,idx)=>markBtns(btns,idx,'correct');
 
-    function Expander({open,children}){
-      const outerRef=useRef(null);
-      const innerRef=useRef(null);
-      const prevOpenRef=useRef(open);
-      const mountedRef=useRef(false);
-      const resizeObsRef=useRef(null);
-      useLayoutEffect(()=>{
-        const el=outerRef.current;if(!el)return;
-        const attachObs=()=>{
-          if(typeof ResizeObserver==="undefined"||!innerRef.current||!outerRef.current)return;
-          // Disconnect any prior observer before creating a new one. Currently the effect cleanup
-          // handles disconnection between effect runs, so this guard only matters if a future change
-          // calls attachObs twice within a single effect run (which would otherwise orphan the first).
-          if(resizeObsRef.current){resizeObsRef.current.disconnect();resizeObsRef.current=null;}
-          const obs=new ResizeObserver(()=>{
-            if(!outerRef.current||!innerRef.current)return;
-            outerRef.current.style.maxHeight=(innerRef.current.scrollHeight+16)+"px";
-          });
-          obs.observe(innerRef.current);
-          resizeObsRef.current=obs;
-        };
-        if(!mountedRef.current){
-          mountedRef.current=true;
-          prevOpenRef.current=open;
-          if(open){
-            el.style.transition='none';
-            el.style.maxHeight=(innerRef.current?.scrollHeight??0)+16+"px";
-            el.getBoundingClientRect();
-            el.style.transition='';
-            attachObs();
-          }else{
-            el.style.maxHeight="0px";
-          }
-          return()=>{if(resizeObsRef.current){resizeObsRef.current.disconnect();resizeObsRef.current=null;}};
-        }
-        const wasOpen=prevOpenRef.current;prevOpenRef.current=open;
-        if(open){
-          el.style.maxHeight=(innerRef.current?.scrollHeight??0)+16+"px";
-          attachObs();
-        }else if(!wasOpen){
-          el.style.maxHeight="0px";
-        }else{
-          el.style.maxHeight=el.scrollHeight+"px";
-          el.getBoundingClientRect();
-          el.style.maxHeight="0px";
-        }
-        return()=>{if(resizeObsRef.current){resizeObsRef.current.disconnect();resizeObsRef.current=null;}};
-      },[open]);
-      return(<div ref={outerRef} className="expander"><div ref={innerRef}>{children}</div></div>);
-    }
+    // Expander → src/components/Expander.jsx, imported at top.
 
 
 
-    const DEPLOY_TS=new Date('2026-05-31T16:56:00Z');
+    const DEPLOY_TS=new Date('2026-05-31T17:24:00Z');
 
     function StatPanel({stats,armedSpan}){
       // For fractional values (Score, Streak as "X/Y"), shrink the value font
