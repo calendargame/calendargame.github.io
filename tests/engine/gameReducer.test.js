@@ -17,6 +17,10 @@ const answer = (s, idx, extra = {}) => gameReducer(s, { type: 'ANSWER', idx, nex
 const reveal = (s, extra = {}) => gameReducer(s, { type: 'REVEAL', ...ctx, ...extra })
 const showCodes = (s, open = true, extra = {}) => gameReducer(s, { type: 'SHOW_CODES', open, ...ctx, ...extra })
 const neu = (s, extra = {}) => gameReducer(s, { type: 'NEW', nextDate: NEXT, ...ctx, ...extra })
+const override = (s, extra = {}) =>
+  gameReducer(s, { type: 'OVERRIDE', useJulian: false, tracking: false, timingOff: true, nextDate: NEXT, ...extra })
+const back = (s) => gameReducer(s, { type: 'BACK' })
+const forward = (s) => gameReducer(s, { type: 'FORWARD', useJulian: false })
 
 describe('gameReducer — initial state', () => {
   it('starts at a clean slate', () => {
@@ -161,5 +165,82 @@ describe('gameReducer — RESET', () => {
     s = gameReducer(s, { type: 'RESET', timingOff: true, nextDate: NEXT })
     expect(s.date).toBe(NEXT) // regenerated
     expect(s.stats.played).toBe(0)
+  })
+})
+
+describe('gameReducer — OVERRIDE', () => {
+  it('Path 5 (correct then Override): retro-flips the just-answered entry to wrong (1/1 → 0/1)', () => {
+    let s = answer(initEngine(DATE), C) // 1/1, advanced; stack[0] is the credited DATE entry
+    s = override(s) // live Q untouched → Path 5 flips the entry
+    expect(s.stats).toMatchObject({ played: 1, good: 0, streak: 0 })
+    expect(s.stack[0].btns).toEqual({ [C]: 'override-wrong' })
+    expect(s.stack[0].hasCredit).toBe(false)
+    expect(s.overrideUsedThisQ).toBe(true)
+  })
+
+  it('Path 3 (wrong then Override): credits the wrong answer and advances (0/1 → 1/1)', () => {
+    let s = answer(initEngine(DATE), W) // 0/1, burned, not advanced
+    s = override(s)
+    expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1 })
+    expect(s.date).toBe(NEXT) // advanced
+    expect(s.stack).toHaveLength(1)
+    expect(s.stack[0].overrideUsed).toBe(true)
+  })
+
+  it('Path 4 (wrong-then-right then Override): credits the previous question; live Q stays (timing off)', () => {
+    let s = answer(initEngine(DATE), W) // 0/1
+    s = answer(s, C) // late-correct: advances to NEXT, arms pendingWrongOverride
+    s = override(s)
+    expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1 })
+    expect(s.date).toBe(NEXT) // not advanced again (timing off)
+    expect(s.stack[0].hasCredit).toBe(true)
+  })
+
+  it('Path 1 (Back to a correct answer then Override): undoes the credit (1/1 → 0/1)', () => {
+    let s = answer(initEngine(DATE), C) // 1/1, advanced
+    s = back(s) // browse the credited entry; canOverrideCorrect restored
+    expect(s.canOverrideCorrect).toBe(true)
+    s = override(s) // delta-undo
+    expect(s.stats).toMatchObject({ played: 1, good: 0, streak: 0 })
+    expect(s.persistBtns).toEqual({ [C]: 'override-wrong' })
+  })
+
+  it('Path 2 (live canOverrideCorrect, timing off): undoes a correct in place without advancing', () => {
+    // Path 2 isn't reached in normal Classic flow (advance clears canOverrideCorrect); exercise it directly.
+    const armed = {
+      ...initEngine(DATE),
+      canOverrideCorrect: true,
+      prevStatsSnapshot: { played: 5, good: 5, streak: 5, best: 6, timesLen: 0, wasWrong: false },
+      stats: { played: 6, good: 6, streak: 6, best: 6, times: [] },
+    }
+    const s = override(armed)
+    expect(s.stats).toMatchObject({ played: 6, good: 5, streak: 0 }) // played u+1, good kept, streak 0
+    expect(s.countedWrong).toBe(true)
+    expect(s.locked).toBe(false) // timing-off branch leaves the live Q open
+    expect(s.date).toBe(DATE) // not advanced
+  })
+})
+
+describe('gameReducer — BACK / FORWARD', () => {
+  it('Back then Forward round-trips without changing stats', () => {
+    let s = answer(initEngine(DATE), C) // 1/1, on NEXT; stack=[DATE]
+    s = back(s)
+    expect(s.backDepth).toBe(1)
+    expect(s.stack).toHaveLength(0)
+    expect(s.forwardStack).toHaveLength(1)
+    expect(s.date.y).toBe(DATE.y) // viewing the prior question
+    expect(s.stats).toMatchObject({ played: 1, good: 1 }) // browsing doesn't change stats
+
+    s = forward(s)
+    expect(s.backDepth).toBe(0)
+    expect(s.forwardStack).toHaveLength(0)
+    expect(s.stack).toHaveLength(1) // prior question pushed back
+    expect(s.date.y).toBe(NEXT.y) // back at the live edge
+    expect(s.stats).toMatchObject({ played: 1, good: 1 })
+  })
+
+  it('Back is a no-op with empty history', () => {
+    const s = initEngine(DATE)
+    expect(back(s)).toBe(s)
   })
 })
