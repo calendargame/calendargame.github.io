@@ -182,3 +182,56 @@ describe('Blitz — characterization (batch 2: Per Question / sudden death)', ()
     expect(isDisabled(dayBtn(correctName(d)))).toBe(true) // locked (round over)
   })
 })
+
+describe('Blitz — characterization (batch 3: Override)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetSettings()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('per-round Override after a wrong credits the round (0/1 → 1/1) and advances', () => {
+    mountApp()
+    switchToBlitz()
+    begin()
+    const d = readDate()
+    click(wrongName(d)) // miss → round score 0/1, still live
+    expect(statValue('Score')).toBe('0/1')
+    expect(isDisabled(ctrl('Override'))).toBe(false)
+    act(() => {
+      fireEvent.click(ctrl('Override'))
+    })
+    expect(statValue('Score')).toBe('1/1') // credited
+    expect(ctrl('Reset')).toBeInTheDocument() // still live (advanced to next Q)
+  })
+
+  it('Best Score rolls back when a completed-round correct answer is overridden to wrong', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off → wrong ends the round
+    begin()
+    click(correctName(readDate())) // round score 1
+    const last = readDate()
+    click(wrongName(last)) // wrong → round ends; good = 1
+    expect(screen.getByText(/Best Score: 1\b/)).toBeInTheDocument()
+    // Back-browse to the credited answer and Override it to wrong → round score + Best drop to 0.
+    act(() => {
+      fireEvent.click(ctrl('<'))
+    })
+    expect(isDisabled(ctrl('Override'))).toBe(false)
+    act(() => {
+      fireEvent.click(ctrl('Override'))
+    })
+    expect(screen.getByText(/Best Score: 0\b/)).toBeInTheDocument()
+  })
+})
