@@ -141,6 +141,64 @@ describe('aoxReducer — Override', () => {
   })
 })
 
+describe('aoxReducer — Override sub-paths (gap coverage)', () => {
+  const override = (s, correct, nextDate, over = {}) =>
+    aoxReducer(s, { type: 'OVERRIDE', correct, elapsed: 1, nextDate, ...cfg(over) })
+  const cont = (s, nextDate, over = {}) =>
+    aoxReducer(s, { type: 'CONTINUE', nextDate, oneByOne: over.oneByOne ?? false, useJulian: false })
+
+  it('Path 1 — back-browse override undoes a reviewed credited solve (times roll back, streak recalcs)', () => {
+    let s = begin(initAox(D1), 2)
+    s = answer(s, cw(D1), cw(D1), D2) // 1/1
+    s = answer(s, cw(D2), cw(D2), D3) // 2/2 → done
+    s = aoxReducer(s, { type: 'BACK', useJulian: false }) // review Q1 (credited)
+    expect(s.inBackMode).toBe(true)
+    expect(s.canOverrideCorrect).toBe(true)
+    s = override(s, cw(D1), D3) // back-browse undo → roll times back to pre-Q1
+    expect(s.times.length).toBe(0)
+    expect(s.browseHasCredit).toBe(false)
+    expect(s.overrideUsed).toBe(true)
+  })
+
+  it('Path 2 — One-By-One retro-flip of the most recent entry (right→wrong)', () => {
+    let s = begin(initAox(D1), 3)
+    s = answer(s, cw(D1), cw(D1), D2, { oneByOne: true }) // 1/1, advance; date hidden (One-By-One)
+    expect(s.shown).toBe(false)
+    s = cont(s, D2, { oneByOne: true }) // reveal D2 → clears canOverrideCorrect (now retro-eligible)
+    expect(s.canOverrideCorrect).toBe(false)
+    s = override(s, cw(D2), D3, { oneByOne: true }) // retro-flip the credited D1 entry
+    expect(s.times.length).toBe(0) // credit rolled back
+    const last = s.stack[s.stack.length - 1]
+    expect(last.hasCredit).toBe(false)
+    expect(Object.values(last.btns)).toContain('override-wrong')
+  })
+
+  it('Path 4 — pendingWrongCredit that COMPLETES the run finishes it (done + best)', () => {
+    let s = begin(initAox(D1), 2)
+    s = answer(s, cw(D1), cw(D1), D2) // 1/1 (need only one more)
+    const wrong = (cw(D2) + 1) % 7
+    s = answer(s, wrong, cw(D2), D3, { allowMistakes: true }) // wrong on D2, still running
+    s = answer(s, cw(D2), cw(D2), D3, { allowMistakes: true }) // right → pendingWrongCredit, advance to D3
+    expect(s.pendingWrongCredit).not.toBeNull()
+    expect(s.times.length).toBe(1)
+    s = override(s, cw(D3), D3, { allowMistakes: true }) // credit the previous → reaches N=2 → completes
+    expect(s.runPhase).toBe('done')
+    expect(s.times.length).toBe(2)
+    expect(s.bests.k.avg).not.toBeNull()
+  })
+
+  it('Path 5 — override-after-wrong that COMPLETES the run finishes it (done + best)', () => {
+    let s = begin(initAox(D1), 2)
+    s = answer(s, cw(D1), cw(D1), D2) // 1/1 (one more completes)
+    const wrong = (cw(D2) + 1) % 7
+    s = answer(s, wrong, cw(D2), D3, { allowMistakes: true }) // wrong on D2, still running
+    s = override(s, cw(D2), D3, { allowMistakes: true }) // credit it → reaches N=2 → completes
+    expect(s.runPhase).toBe('done')
+    expect(s.times.length).toBe(2)
+    expect(s.bests.k.avg).not.toBeNull()
+  })
+})
+
 describe('aoxReducer — Back/Forward', () => {
   it('Back is a no-op while running, works after the run ends, and Forward round-trips', () => {
     let s = begin(initAox(D1), 2)
