@@ -108,6 +108,11 @@ input,textarea{user-select:text;-webkit-user-select:text}
   .surface-button:hover{background:var(--sbtn-hov)}
   .surface-toggle:hover{background:var(--stgl-hov)}
   .btn-solid:hover{background:#6d28d9}
+  /* CustomSelect option press-highlight — only on hover-capable (desktop/mouse) devices, so a
+     touch tap on mobile doesn't flash a dark highlight on the option being selected. Tailwind's
+     `active:` variant isn't hover-guarded (unlike `hover:`), so it's gated here instead. The
+     active-cursor box (bg-black/10 on the hovered/arrowed option) is separate + unaffected. */
+  .cs-option-press:active{background-color:#0000001a}
 }
 .btn-solid[aria-disabled="true"],.btn-solid:disabled{opacity:.6;cursor:not-allowed}
 button,input,select{-webkit-tap-highlight-color:transparent}

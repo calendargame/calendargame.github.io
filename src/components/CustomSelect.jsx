@@ -267,7 +267,7 @@ export default function CustomSelect({
                   onChange(opt.value)
                   closeAndFocus()
                 }}
-                className={`w-full text-left pl-4 pr-8 py-3 text-[15px] flex items-center gap-2.5 ${i === activeIdx ? 'bg-black/10' : 'active:bg-black/10'}`}
+                className={`w-full text-left pl-4 pr-8 py-3 text-[15px] flex items-center gap-2.5 ${i === activeIdx ? 'bg-black/10' : 'cs-option-press'}`}
                 style={{ color: '#1a1a1a', whiteSpace: 'nowrap' }}
               >
                 <span
