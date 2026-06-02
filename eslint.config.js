@@ -25,22 +25,23 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
-      // Intentional destructuring discards (e.g. `const {isLive:_il, ...rest}=e`
-      // to strip fields from `rest`) and any deliberately-unused arg use the `_`
-      // prefix convention — don't flag those. The remaining genuine unused LOCALS
-      // live inside the fused App engine and are deferred to the mode-untangle
-      // (same tangled code as the hook warnings below), so this rule is WARN for
-      // now to keep them visible without blocking. Unused IMPORTS were removed.
-      'no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
-      // ── React-Compiler-strict hook rules: DEFERRED, not ignored. ──────────────
-      // React 19's react-hooks plugin enforces Compiler-grade purity/immutability.
-      // The existing App (the fused timer/stats/override engine) trips ~159 of
-      // these — its ref-mutation patterns work correctly today and are thoroughly
-      // tested, but they won't satisfy the React Compiler when we enable it. They
-      // get fixed AT THE SOURCE during the mode-untangle (which rewrites exactly
-      // this code, behind tests). Until then we keep them as WARN so they stay
-      // visible (never silently suppressed) without falsely marking working,
-      // shipped code as a hard error. Flip back to error once the untangle lands.
+      // No dead code: unused vars/imports are now an ERROR. The mode-untangle landed and
+      // the fused App engine (the old home of the deferred unused locals) is deleted, so the
+      // codebase is unused-var-clean and this rule can hold the line going forward.
+      // `ignoreRestSiblings` permits the intentional "strip fields via rest" destructure
+      // (e.g. `const {btns, isLive, ...date}=e` in gameReducer's stripEntryMeta); the `^_`
+      // pattern still marks any other deliberate discard.
+      'no-unused-vars': ['error', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', ignoreRestSiblings: true }],
+      // ── React-Compiler-strict hook rules: DEFERRED to the React Compiler step (Stage D). ──
+      // React 19's react-hooks plugin enforces Compiler-grade purity/immutability. The
+      // mode-untangle is done (the fused App engine that tripped the bulk of these is gone),
+      // but ~40 findings remain in the LIVE mode components + reducer — e.g. reading a timer
+      // ref during render to show the live countdown, performance.now() in a handler, setState
+      // inside a rAF effect. That code is CORRECT and fully tested; the patterns just aren't
+      // React-Compiler-optimizable yet. They get fixed AT THE SOURCE when we turn on the React
+      // Compiler (Stage D) — with the compiler in the loop to verify each refactor actually
+      // helps. Kept WARN until then (always visible, never silently suppressed); flipping them
+      // to error is part of enabling the Compiler.
       'react-hooks/immutability': 'warn',
       'react-hooks/purity': 'warn',
       'react-hooks/refs': 'warn',

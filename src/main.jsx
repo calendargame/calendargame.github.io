@@ -21,13 +21,11 @@ import LookupCard from './components/LookupCard.jsx'
 import { MethodExplanation, MethodBreakdownSection } from './components/MethodBreakdown.jsx'
 import { CODES_CLOSE_MS } from './lib/constants.js'
 import { useSettings } from './store/settings.js'
-import { computeStreaks } from './engine/streak.js'
 import { calcAvg, calcLast, calcMed } from './engine/stats.js'
-import { computeHasCredit, markBtns, mkBtnsWithCorrect, entryWithGreen } from './engine/answerButtons.js'
 import { useGameEngine } from './engine/useGameEngine.js'
 const ReactDOM = { createRoot, createPortal }
 
-    const {useEffect,useMemo,useRef,useState,useCallback,useLayoutEffect} = React;
+    const {useEffect,useRef,useState,useCallback} = React;
     // ─────────────────────────────────────────────────────────────────────────
     // Date snapshot fields. Every generated date object carries these stamps
     // so that back-browse and codes display always reflect the system that was
@@ -77,12 +75,13 @@ const ReactDOM = { createRoot, createPortal }
     // canonicalizeMod, calcDayCode, calcCdCode, yearParts, computeMethodSummary) → src/lib/method.js,
     // imported at top. (computeMethodSummary is the only one used here; the rest are its internals.)
     // Deduction option-count constants. YEAR_OPTION_DEFAULT (5) is the universal max for
-    // distinct-codes Year windows in normal Gregorian/Julian play (N=6+ collides).
-    // YEAR_OPTION_JUL_CROSS (2) applies when a Year window straddles Oct 15, 1582 — the +5 weekday
-    // shift across that boundary collapses any longer window to duplicates. DAY_OPTION_COUNT (7) is
-    // the standard Day window; the Oct 1582 left-side {1-4} case uses the literal-4 window
-    // [1,2,3,4] inline since that's the only valid layout there (codes 1-4 repeat at days 15-18).
-    const YEAR_OPTION_DEFAULT=5,YEAR_OPTION_JUL_CROSS=2,DAY_OPTION_COUNT=7;
+    // distinct-codes Year windows in normal Gregorian/Julian play (N=6+ collides). A Year
+    // window straddling Oct 15, 1582 collapses to 2 options (the +5 weekday shift across that
+    // boundary makes any longer window duplicate) — handled by windowYears length, not a const.
+    // DAY_OPTION_COUNT (7) is the standard Day window; the Oct 1582 left-side {1-4} case uses
+    // the literal-4 window [1,2,3,4] inline since that's the only valid layout there (codes
+    // 1-4 repeat at days 15-18).
+    const YEAR_OPTION_DEFAULT=5,DAY_OPTION_COUNT=7;
     // Month deduction boxes — 7 fixed boxes grouping months by shared doomsday code
     // Each box: {label:displayed text, months:[month numbers in that box]}
     const MONTH_BOXES_COMMON=[
@@ -207,18 +206,11 @@ const ReactDOM = { createRoot, createPortal }
         return{y,m,d};
       }
     }
-    const blankDedTypeStore=()=>({year:null,month:null,day:null});
-    // Format IDs and rollFormat live at module scope so the dateByMode useState
-    // initializer can stamp ._fmt on the very first dates. Previously these were
-    // declared inside the component, which meant the initializer fell back to
-    // dateFormat (default 'written-mdy') for the first date in each mode even
-    // when randomFormat was on — visible as "April 2, 2020" being the first
-    // launch date every time. Other call sites (attachFmt, advanceDate) use
-    // these same module-scope versions.
+    // FORMAT_IDS / rollFormat live at module scope so App's genDate and every mode
+    // component can stamp a date's ._fmt at generation time.
     const FORMAT_IDS=['written-mdy','written-dmy','numeric-mdy','numeric-dmy','numeric-ymd'];
     const rollFormat=()=>FORMAT_IDS[Math.floor(Math.random()*FORMAT_IDS.length)];
     const isTouch=typeof window!=="undefined"&&("ontouchstart" in window||navigator.maxTouchPoints>0||matchMedia("(pointer:coarse)").matches);
-    const isTimer=m=>m==="blitz"||m==="flash";
     const fmtBlitzT=s=>{const sec=Math.ceil(s);if(sec<60)return sec+"s";const m=Math.floor(sec/60),r=sec%60;return m+"m "+r+"s";};
     const fmtFlashT=ms=>(ms/1000).toFixed(1)+"s";
     // Time display follows WCA convention (regulation 9f1): individual single times
@@ -330,7 +322,7 @@ const ReactDOM = { createRoot, createPortal }
             if(D<=0)continue;
             let d=rint(1,D);
             if(isGapDate(yc,m,d))continue;
-            let target,windowYears;
+            let windowYears;
             if(enforce==='jul'){
               const pair=julianBoundaryPair(m,d);
               if(!pair||!inRange(pair[0])||!inRange(pair[1]))continue;
@@ -342,7 +334,7 @@ const ReactDOM = { createRoot, createPortal }
                 if(d>dimFn(pair[0],m)||d>dimFn(pair[1],m))continue;
                 yc=pair[rint(0,1)];
               }
-              target=YEAR_OPTION_JUL_CROSS;windowYears=pair.slice();
+              windowYears=pair.slice();
             }else if(enforce==='ab'){
               const P=rint(0,YEAR_OPTION_DEFAULT-1);
               const start=yc-P,end=start+YEAR_OPTION_DEFAULT-1;
@@ -356,7 +348,6 @@ const ReactDOM = { createRoot, createPortal }
                 if(leaps.length===0)continue;
                 yc=leaps[rint(0,leaps.length-1)];
               }
-              target=YEAR_OPTION_DEFAULT;
             }else{
               const P=rint(0,YEAR_OPTION_DEFAULT-1);
               const start=yc-P,end=start+YEAR_OPTION_DEFAULT-1;
@@ -373,7 +364,7 @@ const ReactDOM = { createRoot, createPortal }
                   if(d>dimFn(pair[0],m)||d>dimFn(pair[1],m))continue;
                   yc=pair[rint(0,1)];
                 }
-                target=YEAR_OPTION_JUL_CROSS;windowYears=pair.slice();
+                windowYears=pair.slice();
               }else{
                 windowYears=[];for(let yy=start;yy<=end;yy++)windowYears.push(yy);
                 if(m===2&&d===29){
@@ -381,7 +372,6 @@ const ReactDOM = { createRoot, createPortal }
                   if(leaps.length===0)continue;
                   yc=leaps[rint(0,leaps.length-1)];
                 }
-                target=YEAR_OPTION_DEFAULT;
               }
             }
             if(!validateDistinct(windowYears,m,d))continue;
@@ -1014,8 +1004,8 @@ const ReactDOM = { createRoot, createPortal }
       const [showTimerDate,setShowTimerDate]=useState(false);
       const [blitzSec,setBlitzSec]=useState(60);
       const [qSec,setQSec]=useState(5);
-      const [blitzRemain,setBlitzRemain]=useState(60);
-      const [qRemain,setQRemain]=useState(5);
+      const [,setBlitzRemain]=useState(60);
+      const [,setQRemain]=useState(5);
       const blitzStartRef=useRef(null),blitzPausedAtRef=useRef(null),blitzPausedAccRef=useRef(0),blitzRemainRef=useRef(60);
       const blitzBarRef=useRef(null),blitzTimeRef=useRef(null);
       const qDeadlineRef=useRef(null),qPausedAtRef=useRef(null),qPausedAccRef=useRef(0);
@@ -1150,7 +1140,6 @@ const ReactDOM = { createRoot, createPortal }
 
       const shouldShowTimerDate=active||showTimerDate;
       const optionsDisabled=!active||state.locked||state.calcOpen||state.calcPenaltyActive;
-      const flashHiding=false;
       const timerBlocksReveal=!shouldShowTimerDate;
       const revealDisabled=(state.locked&&state.revealed)||state.calcOpen||state.calcPenaltyActive||timerBlocksReveal||timerDone;
       const timerBusy=active;
