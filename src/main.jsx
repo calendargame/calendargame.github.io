@@ -252,7 +252,7 @@ const ReactDOM = { createRoot, createPortal }
 
 
 
-    const DEPLOY_TS=new Date('2026-06-02T04:18:00Z');
+    const DEPLOY_TS=new Date('2026-06-02T05:02:00Z');
 
     // ============================================================
     // makeDedPuzzle — the PURE Deduction puzzle generator (mode-untangle Step 4).
