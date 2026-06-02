@@ -56,6 +56,15 @@ function dateDisplayText() {
   return el ? el.textContent.trim() : null
 }
 
+// The Flash countdown NUMBER (the reveal-time label sitting directly above the timer bar),
+// visible copy only — it's the element immediately before the visible `.bar`. Used to prove the
+// number freezes (doesn't drain to 0) when the flash is frozen.
+function flashCountdownText() {
+  const bar = Array.from(document.querySelectorAll('.bar')).find((b) => !isHidden(b))
+  const num = bar?.previousElementSibling
+  return num ? num.textContent.trim() : null
+}
+
 const correctName = ({ y, m, d }) => DAY[wday(y, m, d)]
 const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
 const dayBtn = (name) => screen.getByRole('button', { name })
@@ -267,22 +276,49 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
     expect(isDisabled(ctrl('Reveal'))).toBe(false)
   })
 
-  // Bug #4: opening Show Codes during the flash freezes the countdown — it cancels the auto-hide
-  // timer, so the date stays on screen instead of vanishing to "…" while you study the codes.
-  it('Show Codes during the flash freezes the countdown: the date stays shown (not "…")', () => {
+  // Bug #4 (ROOT): opening Show Codes during the "show" phase CANCELS the pending hide-timer, so
+  // advancing past the flash duration can never flip the phase to "hide" — the main date stays on
+  // the real date (never "…") and the countdown number stays frozen (never drains to 0). This is
+  // the narrow edge a visual-only freeze would miss (a timer still pending under the codes panel).
+  it('Show Codes during "show" cancels the hide-timer at the root: date never flips to "…", countdown frozen', () => {
     mountApp()
     switchToFlash()
     act(() => {
       fireEvent.click(ctrl('Begin'))
     })
-    expect(dateDisplayText()).toMatch(/^-?\d+-\d+-\d+$/) // date shown during the flash
+    const shownDate = dateDisplayText()
+    expect(shownDate).toMatch(/^-?\d+-\d+-\d+$/) // "show" phase: the real date is on screen
     act(() => {
       fireEvent.click(ctrl('Show Codes'))
     })
+    const frozenCountdown = flashCountdownText()
+    // Advance WELL past the 500ms reveal window. A still-pending hide-timer would fire here:
+    // flip the phase to "hide", set the countdown to 0, and glitch the main date to "…".
     act(() => {
-      vi.advanceTimersByTime(3000) // far past the 500ms reveal window
+      vi.advanceTimersByTime(5000)
     })
-    expect(dateDisplayText()).toMatch(/^-?\d+-\d+-\d+$/) // STILL the date — auto-hide was cancelled
+    expect(dateDisplayText()).toBe(shownDate) // STILL the same real date — hide-timer was cancelled
+    expect(flashCountdownText()).toBe(frozenCountdown) // countdown number frozen, not drained to 0
     expect(statValue('Score')).toBe('0/1') // codes penalty counted the question as a miss
+  })
+
+  // Reveal shares the root: onReveal → stopFlash also clears the hide-timer + nulls the deadline,
+  // so Reveal during "show" can't leave a pending timer that later glitches the date to "…".
+  it('Reveal during "show" also cancels the hide-timer: date never flips to "…"', () => {
+    mountApp()
+    switchToFlash()
+    act(() => {
+      fireEvent.click(ctrl('Begin'))
+    })
+    const shownDate = dateDisplayText()
+    expect(shownDate).toMatch(/^-?\d+-\d+-\d+$/)
+    act(() => {
+      fireEvent.click(ctrl('Reveal'))
+    })
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    expect(dateDisplayText()).toBe(shownDate) // still the real date, never "…"
+    expect(statValue('Score')).toBe('0/1') // Reveal counted the miss
   })
 })
