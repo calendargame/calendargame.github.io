@@ -85,7 +85,12 @@ export default function CustomSelect({
         openUpwardRef.current = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
       }
       measurePanel()
-      setActiveIdx(selectedIdx >= 0 ? selectedIdx : 0)
+      // Do NOT pre-highlight the selected option on open. The grey "active" box is a
+      // pointer/keyboard cursor, not an open-state indicator (the ✓ already marks the
+      // selection). It appears only once the user hovers with a MOUSE or presses an arrow —
+      // touch sends neither, so the box never shows on mobile. First ↑/↓ reveals it on the
+      // selected option (see handleTriggerKeyDown).
+      setActiveIdx(-1)
     }
     setOpen((v) => !v)
   }
@@ -108,10 +113,12 @@ export default function CustomSelect({
         closeAndFocus()
       } else if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setActiveIdx((i) => Math.min(options.length - 1, (i < 0 ? selectedIdx : i) + 1))
+        // First arrow (from the no-cursor -1 state) reveals the box ON the selected option;
+        // subsequent arrows move it. So the cursor first appears where the ✓ is.
+        setActiveIdx((i) => (i < 0 ? (selectedIdx >= 0 ? selectedIdx : 0) : Math.min(options.length - 1, i + 1)))
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setActiveIdx((i) => Math.max(0, (i < 0 ? selectedIdx : i) - 1))
+        setActiveIdx((i) => (i < 0 ? (selectedIdx >= 0 ? selectedIdx : 0) : Math.max(0, i - 1)))
       } else if (e.key === 'Home') {
         e.preventDefault()
         setActiveIdx(0)
@@ -253,7 +260,9 @@ export default function CustomSelect({
                 aria-selected={opt.value === value}
                 key={opt.value}
                 type="button"
-                onMouseEnter={() => setActiveIdx(i)}
+                onPointerEnter={(e) => {
+                  if (e.pointerType === 'mouse') setActiveIdx(i)
+                }}
                 onClick={() => {
                   onChange(opt.value)
                   closeAndFocus()
