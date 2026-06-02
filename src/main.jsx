@@ -253,7 +253,7 @@ const ReactDOM = { createRoot, createPortal }
 
 
 
-    const DEPLOY_TS=new Date('2026-06-02T03:32:00Z');
+    const DEPLOY_TS=new Date('2026-06-02T04:18:00Z');
 
     // ============================================================
     // makeDedPuzzle — the PURE Deduction puzzle generator (mode-untangle Step 4).
@@ -856,7 +856,10 @@ const ReactDOM = { createRoot, createPortal }
         eng.answer(i);
         if(i===correct){setActive(false);stopFlash();}   // a correct answer ends the flash
       };
-      const onReveal=()=>{eng.reveal();setActive(false);setShowTimerDate(true);stopFlash();};
+      // Reveal during a live flash FREEZES the countdown (bar + number) in place, exactly like
+      // Show Codes — the date stays shown and the answer is revealed. Outside a live flash
+      // (browsing history / idle) it keeps the plain reset-to-idle teardown.
+      const onReveal=()=>{eng.reveal();if(active)freezeFlash();else{setActive(false);setShowTimerDate(true);stopFlash();}};
       // Opening Show Codes mid-flash freezes the countdown (bar + number) and keeps the date
       // shown, then applies the codes penalty — bug #4. Closing it (or opening on a non-live
       // entry) is the normal toggle.

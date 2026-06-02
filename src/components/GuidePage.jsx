@@ -652,9 +652,10 @@ export default function GuidePage() {
           Mid-question, Reset Stats always generates a new date and returns to the dash state.
         </p>
         <p>
-          While the date is showing you can also press Reveal (shows the answer and counts a miss) or
-          Show Codes. Opening Show Codes freezes the countdown — the timer bar and the number stop
-          together — and keeps the date on screen so you can study the calculation.
+          While the date is showing you can also press Reveal or Show Codes — both freeze the
+          countdown (the timer bar and the number stop together) and keep the date on screen. Reveal
+          shows the answer and counts a miss; Show Codes does the same and also opens the calculation
+          breakdown.
         </p>
       </GuideSection>
       <GuideSection id="blitz" title="Blitz" openId={open} onToggle={toggle}>

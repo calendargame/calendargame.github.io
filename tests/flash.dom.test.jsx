@@ -302,9 +302,10 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
     expect(statValue('Score')).toBe('0/1') // codes penalty counted the question as a miss
   })
 
-  // Reveal shares the root: onReveal → stopFlash also clears the hide-timer + nulls the deadline,
-  // so Reveal during "show" can't leave a pending timer that later glitches the date to "…".
-  it('Reveal during "show" also cancels the hide-timer: date never flips to "…"', () => {
+  // Reveal during a live flash now FREEZES the countdown like Show Codes (onReveal → freezeFlash):
+  // the hide-timer is cancelled, so the date never flips to "…" and the countdown never drains to 0.
+  // (Freeze-in-place vs reset-to-full is a CSS/timing visual — browser-verified, not jsdom-testable.)
+  it('Reveal during "show" cancels the hide-timer like Show Codes: date never "…", countdown not drained', () => {
     mountApp()
     switchToFlash()
     act(() => {
@@ -315,10 +316,12 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
     act(() => {
       fireEvent.click(ctrl('Reveal'))
     })
+    const frozenCountdown = flashCountdownText()
     act(() => {
       vi.advanceTimersByTime(5000)
     })
     expect(dateDisplayText()).toBe(shownDate) // still the real date, never "…"
+    expect(flashCountdownText()).toBe(frozenCountdown) // countdown held, never drained to 0
     expect(statValue('Score')).toBe('0/1') // Reveal counted the miss
   })
 })
