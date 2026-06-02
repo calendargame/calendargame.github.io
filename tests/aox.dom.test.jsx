@@ -267,6 +267,35 @@ describe('AoX — characterization (batch 3: Override)', () => {
   })
 })
 
+// ── Batch 3b: Best rollback when an override undoes the run that set it ──────────
+describe('AoX — characterization (batch 3b: Best rollback)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    pin()
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('Override on a completed run undoes the last solve and rolls the Best Average back to —', () => {
+    mountApp()
+    switchToAox()
+    setN(2)
+    click('Begin')
+    answerCorrect()
+    answerCorrect() // run done; Best Average recorded
+    expect(bestVal('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(isDisabled(ctrl('Override'))).toBe(false) // the completing solve is reversible
+    click('Override') // undo the last solve → its Best was this run's, so it rolls back
+    expect(statValue('Score')).toBe('1/2') // one solve undone, both attempts still counted
+    expect(bestVal('Average')).toBe('—') // Best rolled back (it was set by this now-undone run)
+    expect(ctrl('Reset')).toBeInTheDocument() // run is over (failed) → locked
+  })
+})
+
 // ── Batch 4: Back/Forward after a run ends ──────────────────────────────────────
 describe('AoX — characterization (batch 4: Back/Forward review)', () => {
   beforeEach(() => {

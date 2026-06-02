@@ -22,8 +22,10 @@ import { MethodExplanation, MethodBreakdownSection } from './components/MethodBr
 import { CODES_CLOSE_MS } from './lib/constants.js'
 import { useSettings } from './store/settings.js'
 import { computeStreaks } from './engine/streak.js'
+import { calcAvg, calcLast, calcMed } from './engine/stats.js'
 import { computeHasCredit, markBtns, mkBtnsWithCorrect, entryWithGreen } from './engine/answerButtons.js'
 import { useGameEngine } from './engine/useGameEngine.js'
+import { useAoxEngine } from './engine/useAoxEngine.js'
 const ReactDOM = { createRoot, createPortal }
 
     const {useEffect,useMemo,useRef,useState,useCallback,useLayoutEffect} = React;
@@ -235,9 +237,7 @@ const ReactDOM = { createRoot, createPortal }
       if(good<played&&pct>=99.95)return"99.9%";
       return`${pct.toFixed(1)}%`;
     };
-    const calcAvg=t=>t.length?t.reduce((a,b)=>a+b,0)/t.length:null;
-    const calcLast=t=>t.length?t[t.length-1]:null;
-    const calcMed=t=>{if(!t.length)return null;const s=[...t].sort((a,b)=>a-b),m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;};
+    // calcAvg / calcLast / calcMed → src/engine/stats.js, imported at top (shared with aoxReducer).
     const blockMinus=e=>{if(e.key==="-"||e.key==="Subtract"||e.key==="Minus")e.preventDefault();};
     const blockMinusBI=e=>{if(e.data&&e.data.includes("-"))e.preventDefault();};
 
@@ -486,126 +486,57 @@ const ReactDOM = { createRoot, createPortal }
 
     // CustomSelect → src/components/CustomSelect.jsx, imported at top.
 
+    // ============================================================
+    // AoxMode — the AoX game mode on its OWN clean engine (mode-untangle Step 5).
+    //
+    // AoX is a genuinely different game (a timed RUN of N solves with averaging), so rather than
+    // forcing it into the shared gameReducer it has its own pure, unit-tested engine built the
+    // SAME way as the others: useAoxEngine + aoxReducer, sharing every common building block
+    // (answerButtons / streak / stats / activeWday). This component is now thin: the run config
+    // toggles (Ao size, Allow Mistakes, One-By-One), the transient flash, the codes frozen-date
+    // animation, and the display — all the run/override/history/best logic lives in the reducer.
+    // Self-contained + always-mounted (display:none when inactive), like the other mode components.
+    // ============================================================
     function AoxMode({minY,maxY,visible,fmtDate,useJulian=false,genDate=randomDate,leapChance='random',janFebChance='random',julianChance='random',randomFormat=false,dateFormat='written-mdy',saveStats=true,onFreshChange}){
       const [aoxN,setAoxN]=useState("10");
       const [allowMistakes,setAllowMistakes]=useState(false);
       const [oneByOne,setOneByOne]=useState(false);
-      const [date,setDate]=useState(()=>genDate(minY,maxY));
-      const [runPhase,setRunPhase]=useState("idle");
-      const [displayN,setDisplayN]=useState(10);
-      const [shown,setShown]=useState(false);
-      const [inBackMode,setInBackMode]=useState(false);
-      const [aoxStack,setAoxStack]=useState([]);
-      const [aoxForwardStack,setAoxForwardStack]=useState([]);
-      const [times,setTimes]=useState([]);
-      const [streak,setStreak]=useState(0);
-      const [bestStreak,setBestStreak]=useState(0);
-      const [attempts,setAttempts]=useState(0);
+      const n=Math.max(2,Math.min(1000,parseInt(aoxN)||10));
+      // Best keying: bests are siloed per difficulty configuration so a Best Average achieved at
+      // one config doesn't compare against runs at a different config. Dimensions: n (Ao size),
+      // allowMistakes, format (random→'random' bucket, else the specific id), leapChance,
+      // janFebChance, year range, useJulian.
+      const bestKey=`${n}|${allowMistakes}|${randomFormat?'random':dateFormat}|${leapChance}|${janFebChance}|${minY}-${maxY}|${useJulian}`;
+      const eng=useAoxEngine({genDate,minY,maxY,useJulian,saveStats,n,allowMistakes,oneByOne,bestKey});
+      const {state,correct}=eng;
+
+      // Transient button flash (green/red pulse) — UI only, not engine state. Latest-timeout
+      // pattern so rapid answers each get the full duration.
       const [flash,setFlash]=useState(null);
-      // Latest-timeout tracker for setFlash. Without this, two rapid setFlash calls (e.g. fast
-      // successive correct answers in AoX runs) would let the older timeout fire mid-flash on the
-      // newer one, cutting it short. setFlashWithTimeout cancels any pending timeout before
-      // scheduling a new one, so each flash gets the full FLASH_MS duration.
       const flashClearRef=useRef(null);
       const setFlashWithTimeout=val=>{setFlash(val);if(flashClearRef.current)clearTimeout(flashClearRef.current);flashClearRef.current=setTimeout(()=>{setFlash(null);flashClearRef.current=null;},FLASH_MS);};
-      const [aoxPersistBtns,setAoxPersistBtns]=useState({});
-      const markAoxWrong=idx=>setAoxPersistBtns(prev=>markBtns(prev,idx,'wrong-latest'));
-      const markAoxCorrect=idx=>setAoxPersistBtns(prev=>markBtns(prev,idx,'correct'));
-      const resetAoxPB=()=>setAoxPersistBtns({});
-      const [codesOpen,setCodesOpen]=useState(false);
-      const [aoxFrozenDate,setAoxFrozenDate]=useState(()=>({...date}));
+
+      // Frozen date for the codes panel: during the close animation keep showing the old codes;
+      // update to the new date only after the close finishes.
       const latestAoxDateRef=useRef(null);
       const wasCodesOpenRef=useRef(false);
-      const prevAoxPopRef=useRef({randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance});
-      const [canOverrideCorrect,setCanOverrideCorrect]=useState(false);
-      const tStartRef=useRef(null);
-      const wrongTimeRef=useRef(null);
-      const prevTimesSnapRef=useRef(null);
-      const prevStreakSnapRef=useRef(null);
-      const prevBestSnapRef=useRef(null);
-      const nextRoundIdRef=useRef(1);
-      const bestRef=useRef({});
-      const [bestNew,setBestNew]=useState({});// {[key]:{avg:bool,med:bool}}
-      const [pendingWrongCredit,setPendingWrongCredit]=useState(null);
-      const [overrideUsedAox,setOverrideUsedAox]=useState(false);
-      const [aoxBrowseHasCredit,setAoxBrowseHasCredit]=useState(false);
-      const [questionCounted,setQuestionCounted]=useState(false);
-      // Freshness signal — true iff every internal AoX state field is at its initial-mount
-      // default. Reported up to App via onFreshChange so isFullyReset can dim the Full Reset
-      // button. bestRef is read directly; ref reads in a non-memoized expression aren't
-      // reactive on their own, but bestRef.current changes are always paired with setBestNew
-      // updates (in the same handlers), which trigger renders — so this expression re-evaluates
-      // with the up-to-date ref value whenever bestRef changes.
-      const aoxIsFreshLocal=aoxN==="10"&&allowMistakes===false&&oneByOne===false&&runPhase==="idle"&&shown===false&&inBackMode===false&&aoxStack.length===0&&aoxForwardStack.length===0&&times.length===0&&streak===0&&bestStreak===0&&attempts===0&&flash===null&&Object.keys(aoxPersistBtns).length===0&&codesOpen===false&&canOverrideCorrect===false&&Object.keys(bestRef.current).length===0&&Object.keys(bestNew).length===0&&pendingWrongCredit===null&&overrideUsedAox===false&&aoxBrowseHasCredit===false&&questionCounted===false;
-      useEffect(()=>{onFreshChange&&onFreshChange(aoxIsFreshLocal);},[aoxIsFreshLocal,onFreshChange]);
-      const correct=useMemo(()=>(useJulian&&isJulianDate(date.y,date.m,date.d))?wdayJulian(date.y,date.m,date.d):wday(date.y,date.m,date.d),[date,useJulian]);
-      const n=Math.max(2,Math.min(1000,parseInt(aoxN)||10));
-      // Best keying: bests are siloed per difficulty configuration so a Best Average
-      // achieved at one config doesn't compare against runs at a different config.
-      // Dimensions: n (Ao size), allowMistakes, format (random→'random' bucket, otherwise
-      // the specific format ID), leapChance, janFebChance, year range, useJulian.
-      // Changing any of these creates a fresh bucket; the previous bests remain stored
-      // and reappear when the user switches back to that exact config.
-      const bestKey=`${n}|${allowMistakes}|${randomFormat?'random':dateFormat}|${leapChance}|${janFebChance}|${minY}-${maxY}|${useJulian}`;
-      const bestData=bestRef.current[bestKey]||{avg:null,avgMed:null,avgRoundId:null,med:null,medAvg:null,medRoundId:null};
-      const aoLabel=`Ao${n}`;
-      const doneCount=times.length;
-      const isRunning=runPhase==="running";
-      const isLocked=runPhase==="done"||runPhase==="failed";
-      const dateVisible=runPhase==="failed"||runPhase==="done"||(isRunning&&(!oneByOne||shown))||inBackMode;
-      const revealLocked=!isRunning||isLocked||codesOpen||(oneByOne&&!shown)||inBackMode;
-      const backDisabled=aoxStack.length===0||runPhase==="idle"||runPhase==="running";
-      // Identifying when "retroactive override of most recent stack entry" path
-      // is available in AoX. Conditions: live Q is fully untouched (running, no buttons
-      // clicked, no codes open, no other override path armed), aoxStack is nonempty,
-      // most recent stack entry hasn't been overridden, and that entry's capsule has
-      // a snapshot (right-answer entries only — see note below).
-      // BY DESIGN: AoX's back-browse override only handles right→wrong (entry's
-      // capsule.snapshot is the pre-Q times array, set only for correct answers).
-      // Wrong-answer entries have capsule.snapshot=null. The wrong→right retroactive
-      // override path is unreachable here because back-browse is locked while runs
-      // are active in both AoX and Blitz — so any code path that would hit a
-      // wrong-stack-entry retro-override never fires. App supports both directions
-      // because its snapshot is structured.
-      const aoxRetroOverrideEligible=(
-        isRunning && !inBackMode &&
-        Object.keys(aoxPersistBtns).length===0 &&
-        !codesOpen && !canOverrideCorrect &&
-        pendingWrongCredit==null &&
-        aoxStack.length>0 &&
-        !aoxStack[aoxStack.length-1].overrideUsed &&
-        aoxStack[aoxStack.length-1].capsule?.snapshot!=null
-      );
-      // Override is universally locked when Save Stats is off — same rule as App-side
-      // overrideAvail. AoX uses the `saveStats` prop (run-level, no per-Q freeze).
-      const overrideAvail=saveStats&&!overrideUsedAox&&(
-        (isRunning&&(Object.keys(aoxPersistBtns).length>0||codesOpen||canOverrideCorrect||pendingWrongCredit!=null))||
-        (runPhase==="failed")||
-        (runPhase==="done"&&canOverrideCorrect)||
-        aoxRetroOverrideEligible
-      );
-      const codesDisabled=runPhase==="idle"||(oneByOne&&!shown&&!inBackMode&&!isLocked);
-      const optionsDisabled=isLocked||codesOpen||(oneByOne&&!shown&&!inBackMode)||runPhase==="idle"||inBackMode;
-      // Tailwind's `transition` utility intentionally omitted — it would re-introduce
-      // a 150ms multi-property fade on persist (red on wrong, green at end of run)
-      // and on flash border-color. Hover fades are handled by surface-button's own
-      // targeted 200ms bg-only transition (see <style> block at top of file).
-      const baseBtn="w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none";
+      const [aoxFrozenDate,setAoxFrozenDate]=useState(()=>({...state.date}));
+      latestAoxDateRef.current=state.date;
+      useEffect(()=>{
+        if(state.codesOpen){wasCodesOpenRef.current=true;setAoxFrozenDate(state.date);return;}
+        if(wasCodesOpenRef.current){wasCodesOpenRef.current=false;const t=setTimeout(()=>setAoxFrozenDate(latestAoxDateRef.current),CODES_CLOSE_MS);return()=>clearTimeout(t);}
+        else{setAoxFrozenDate(state.date);}
+      },[state.codesOpen,state.date.y,state.date.m,state.date.d]);
 
-      function reset(){setRunPhase("idle");setDisplayN(n);setShown(false);setInBackMode(false);setAoxStack([]);setAoxForwardStack([]);setTimes([]);setStreak(0);setBestStreak(0);setAttempts(0);setFlash(null);resetAoxPB();setCodesOpen(false);setCanOverrideCorrect(false);setQuestionCounted(false);setPendingWrongCredit(null);setOverrideUsedAox(false);setBestNew({});setDate(genDate(minY,maxY));tStartRef.current=null;wrongTimeRef.current=null;prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;prevBestSnapRef.current=null;}
-      useEffect(()=>{if(!visible&&runPhase==="running")reset();},[visible]);
-      // Auto-reset/regen on popover setting change.
-      // Running: any setting change resets the round (Cat B). Format changes still flow
-      //   through anyChanged to trigger this round-end correctly.
-      // Done/failed: never auto-replace the displayed last-question date (Cat C).
-      // Idle (Cat A): per-setting rules for the currently displayed date —
-      //   Random Format toggle → always regen on any change (Bug #1)
-      //   Date Format dropdown → always regen on any change (Bug #1)
-      //   Leap Chance → always regen
-      //   Force Jan/Feb → always regen on toggle (Bug #3b; was previously content-gated)
-      //   Year range → always regen on any range edit
-      //   Julian → keep date (idle has no wrong guesses; current useJulian flows naturally
-      //            through correct-answer + codes panel)
+      // Reset the run when the panel is hidden mid-run (matches the old AoxMode visibility effect).
+      useEffect(()=>{if(!visible&&state.runPhase==="running")eng.reset();/* eslint-disable-line react-hooks/exhaustive-deps */},[visible]);
+
+      // Auto-reset/regen on a settings change. Running → any change resets the round. Idle → regen
+      // the displayed date on a content change (Julian-only keeps it; current useJulian flows
+      // through naturally). Done/failed → never auto-replace the displayed last question. (eng.reset
+      // in idle just reloads the date + keeps bests, == the old setDate regen.) Mirrors the old
+      // prevAoxPopRef effect / App's regenDecisionFor.
+      const prevAoxPopRef=useRef({randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance});
       useEffect(()=>{
         const prev=prevAoxPopRef.current;
         const dateFormatChanged=prev.dateFormat!==dateFormat;
@@ -618,373 +549,113 @@ const ReactDOM = { createRoot, createPortal }
         prevAoxPopRef.current={randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance};
         const anyChanged=dateFormatChanged||randomFormatChanged||leapChanceChanged||janFebChanceChanged||julianChanceChanged||yearRangeChanged||julianChanged;
         if(!anyChanged)return;
-        if(runPhase==='running'){reset();return;}
-        if(runPhase!=='idle')return;
-        // Cat A (AoX idle) regen rules — mirrors App's regenDecisionFor. AoX idle has no
-        // wrong-guess possibility (clicks are gated by isRunning), so the wrong-guess
-        // defer branch isn't needed here.
-        //   leapChance — always regen
-        //   Random Format toggle (either direction) — always regen (Bug #1; previously gated)
-        //   Date Format dropdown change — always regen (Bug #1; previously gated on _fmt
-        //     mismatch and only when randomFormat was off)
-        //   Jan/Feb Chance — always regen on any chance value change (Option A semantics
-        //     replaces the prior Force Jan/Feb boolean toggle; Bug #3b unchanged)
-        //   Julian Chance — always regen on any chance value change (parallel to Jan/Feb Chance)
-        //   Year range — always regen on any range edit
-        //   Julian toggle (useJulian) — keep date (current useJulian flows through naturally to codes/answer)
-        if(leapChanceChanged||randomFormatChanged||dateFormatChanged||janFebChanceChanged||julianChanceChanged||yearRangeChanged){
-          setDate(genDate(minY,maxY));return;
-        }
-        // Julian change in idle: no wrong guesses, so keep date — current useJulian flows naturally.
-      },[randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance]);
-      // Frozen date for codes panel: during close animation, keep showing old codes; update new codes only after close finishes
-      latestAoxDateRef.current=date;
-      useEffect(()=>{
-        if(codesOpen){
-          wasCodesOpenRef.current=true;
-          setAoxFrozenDate(date);
-          return;
-        }
-        if(wasCodesOpenRef.current){
-          wasCodesOpenRef.current=false;
-          const t=setTimeout(()=>setAoxFrozenDate(latestAoxDateRef.current),CODES_CLOSE_MS);
-          return()=>clearTimeout(t);
-        }else{
-          setAoxFrozenDate(date);
-        }
-      },[codesOpen,date.y,date.m,date.d]);
-      function startOrContinue(){
-        if(runPhase==="idle"){setRunPhase("running");setDisplayN(n);setShown(true);tStartRef.current=performance.now();}
-        else if(inBackMode){
-          // Reconstruct history: push the displayed (back-browsed) entry and every
-          // non-live forward entry to aoxStack, in chronological order, so the run
-          // history isn't lost when continuing from back mode. The live forward entry
-          // (forwardStack[0], with isLive:true) is discarded because its slot is being
-          // regenerated.
-          const dispCapsule={snapshot:prevTimesSnapRef.current?[...prevTimesSnapRef.current]:null,streakSnap:prevStreakSnapRef.current?{...prevStreakSnapRef.current}:null,wrongTime:wrongTimeRef.current};
-          const dispEntry=entryWithGreen({...date,btns:{...aoxPersistBtns},overrideUsed:overrideUsedAox,capsule:dispCapsule,hasCredit:aoxBrowseHasCredit},useJulian);
-          const insertions=[dispEntry];
-          for(let i=aoxForwardStack.length-1;i>=1;i--){
-            const e=aoxForwardStack[i];
-            const{isLive:_il,...rest}=e;
-            insertions.push(rest);
-          }
-          setAoxStack(s=>[...s,...insertions]);
-          setInBackMode(false);setAoxForwardStack([]);
-          const nd=genDate(minY,maxY);setDate(nd);
-          resetAoxPB();setCodesOpen(false);
-          wrongTimeRef.current=null;
-          setCanOverrideCorrect(false);setQuestionCounted(false);setPendingWrongCredit(null);
-          setOverrideUsedAox(false);
-          if(oneByOne){setShown(false);tStartRef.current=null;}
-          else{setShown(true);tStartRef.current=performance.now();}
-        }
-        else if(isRunning&&!shown){setShown(true);tStartRef.current=performance.now();wrongTimeRef.current=null;setCanOverrideCorrect(false);setQuestionCounted(false);setPendingWrongCredit(null);}
-      }
-      function goBackAox(){if(backDisabled)return;const prevEntry=aoxStack[aoxStack.length-1];
-        if(codesOpen)setCodesOpen(false);
-        // Save current view to aox forward stack
-        const fwdHC=!inBackMode?computeHasCredit(aoxPersistBtns):aoxBrowseHasCredit;
-        const fwdEntry={...date,btns:{...aoxPersistBtns},overrideUsed:overrideUsedAox,capsule:{snapshot:prevTimesSnapRef.current?[...prevTimesSnapRef.current]:null,streakSnap:prevStreakSnapRef.current?{...prevStreakSnapRef.current}:null,wrongTime:wrongTimeRef.current,canOverrideCorrect,questionCounted,pendingWrongCredit},isLive:!inBackMode,hasCredit:fwdHC};
-        setAoxForwardStack(s=>[...s,fwdEntry]);
-        setAoxStack(s=>s.slice(0,-1));setDate({...prevEntry});setInBackMode(true);
-        // Restore capsule for override
-        const cap=prevEntry.capsule||{};
-        prevTimesSnapRef.current=cap.snapshot||null;prevStreakSnapRef.current=cap.streakSnap||null;wrongTimeRef.current=cap.wrongTime??null;
-        setCanOverrideCorrect(cap.snapshot!=null&&!(prevEntry.overrideUsed||false));
-        setOverrideUsedAox(prevEntry.overrideUsed||false);
-        const prevWday=(useJulian&&isJulianDate(prevEntry.y,prevEntry.m,prevEntry.d))?wdayJulian(prevEntry.y,prevEntry.m,prevEntry.d):wday(prevEntry.y,prevEntry.m,prevEntry.d);
-        setAoxPersistBtns(prevEntry.btns??{[prevWday]:'correct'});setCodesOpen(false);setPendingWrongCredit(null);setQuestionCounted(false);
-        setAoxBrowseHasCredit(prevEntry.hasCredit??computeHasCredit(prevEntry.btns));
-      }
-      function goForwardAox(){
-        const fwd=aoxForwardStack[aoxForwardStack.length-1];if(!fwd)return;
-        if(codesOpen)setCodesOpen(false);
-        setAoxForwardStack(s=>s.slice(0,-1));
-        // Push current browsed entry back to aoxStack
-        const capsule={snapshot:prevTimesSnapRef.current?[...prevTimesSnapRef.current]:null,streakSnap:prevStreakSnapRef.current?{...prevStreakSnapRef.current}:null,wrongTime:wrongTimeRef.current};
-        setAoxStack(s=>[...s,entryWithGreen({...date,btns:{...aoxPersistBtns},overrideUsed:overrideUsedAox,capsule,hasCredit:aoxBrowseHasCredit},useJulian)]);
-        if(fwd.isLive){
-          setDate({y:fwd.y,m:fwd.m,d:fwd.d,_fmt:fwd._fmt,_jul:fwd._jul});
-          setAoxPersistBtns(fwd.btns||{});setOverrideUsedAox(fwd.overrideUsed||false);
-          setCanOverrideCorrect(!!fwd.capsule?.canOverrideCorrect);
-          setQuestionCounted(!!fwd.capsule?.questionCounted);
-          setPendingWrongCredit(fwd.capsule?.pendingWrongCredit||null);
-          setCodesOpen(false);
-          const fc=fwd.capsule||{};
-          prevTimesSnapRef.current=fc.snapshot||null;prevStreakSnapRef.current=fc.streakSnap||null;wrongTimeRef.current=fc.wrongTime??null;
-          setInBackMode(false);setAoxBrowseHasCredit(fwd.hasCredit??false);
-        }else{
-          setDate({y:fwd.y,m:fwd.m,d:fwd.d,_fmt:fwd._fmt,_jul:fwd._jul});setAoxPersistBtns(fwd.btns||{});
-          setCodesOpen(false);setPendingWrongCredit(null);setQuestionCounted(false);
-          const cap=fwd.capsule||{};
-          prevTimesSnapRef.current=cap.snapshot||null;prevStreakSnapRef.current=cap.streakSnap||null;wrongTimeRef.current=cap.wrongTime??null;
-          setCanOverrideCorrect(cap.snapshot!=null&&!(fwd.overrideUsed||false));
-          setOverrideUsedAox(fwd.overrideUsed||false);setAoxBrowseHasCredit(fwd.hasCredit??computeHasCredit(fwd.btns));
-        }
-        
-      }
+        if(state.runPhase==='running'){eng.reset();return;}
+        if(state.runPhase!=='idle')return;
+        if(leapChanceChanged||randomFormatChanged||dateFormatChanged||janFebChanceChanged||julianChanceChanged||yearRangeChanged){eng.reset();}
+        // idle + Julian-only change: keep the date (current useJulian flows through to codes/answer).
+      },[randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance,eng,state.runPhase]);
 
-      function advanceDate(newTimes,newStreak,newBest){
-        const completing=newTimes.length>=displayN;
-        wrongTimeRef.current=null;
-        // do NOT clear prevTimesSnapRef/prevStreakSnapRef here — they must survive to next date for override-after-correct
-        setCodesOpen(false);
-        setQuestionCounted(false);
-        setStreak(newStreak);setBestStreak(newBest);
-        if(!completing){
-          setDate(genDate(minY,maxY));resetAoxPB();setOverrideUsedAox(false);prevBestSnapRef.current=null;
-          if(oneByOne){setShown(false);tStartRef.current=null;}else tStartRef.current=performance.now();
-        }
-        if(completing){
-          // Save Stats: when off at run end, skip best update entirely. Run
-          // still ends and round-level stats remain visible for the user.
-          if(!saveStats){setRunPhase("done");return;}
-          const avg=newTimes.reduce((a,b)=>a+b,0)/newTimes.length;
-          const med=calcMed(newTimes);
-          const thisRoundId=nextRoundIdRef.current++;
-          const prev=bestRef.current[bestKey]||{avg:null,avgMed:null,avgRoundId:null,med:null,medAvg:null,medRoundId:null};
-          prevBestSnapRef.current={key:bestKey,best:{...prev}};
-          const avgImp=prev.avg==null||avg<prev.avg;
-          const medImp=prev.med==null||med<prev.med;
-          bestRef.current[bestKey]={
-            avg:avgImp?avg:prev.avg,
-            avgMed:avgImp?med:prev.avgMed,
-            avgRoundId:avgImp?thisRoundId:prev.avgRoundId,
-            med:medImp?med:prev.med,
-            medAvg:medImp?avg:prev.medAvg,
-            medRoundId:medImp?thisRoundId:prev.medRoundId,
-          };
-          if(avgImp||medImp)setBestNew(p=>{const e=p[bestKey]||{avg:false,med:false};return{...p,[bestKey]:{avg:e.avg||avgImp,med:e.med||medImp}};});
-          setRunPhase("done");
-        }
-      }
+      // Freshness — true iff every AoX field is at its launch default (the date is random, so
+      // excluded). Reported to App so isFullyReset can dim the Full Reset button.
+      const aoxIsFreshLocal=aoxN==="10"&&allowMistakes===false&&oneByOne===false&&state.runPhase==="idle"&&state.shown===false&&state.inBackMode===false&&state.stack.length===0&&state.forwardStack.length===0&&state.times.length===0&&state.streak===0&&state.bestStreak===0&&state.attempts===0&&flash===null&&Object.keys(state.persistBtns).length===0&&state.codesOpen===false&&state.canOverrideCorrect===false&&Object.keys(state.bests).length===0&&Object.keys(state.bestNew).length===0&&state.pendingWrongCredit===null&&state.overrideUsed===false&&state.browseHasCredit===false&&state.questionCounted===false;
+      useEffect(()=>{onFreshChange&&onFreshChange(aoxIsFreshLocal);},[aoxIsFreshLocal,onFreshChange]);
 
-      function handleCorrect(idx){
-        setFlashWithTimeout({type:"good",idx});
-        if(questionCounted){
-          // wrong first — no score credit; store wrongTime so override can give credit
-          const prevBtns={...aoxPersistBtns};for(const k in prevBtns){if(prevBtns[k]==='wrong-latest')prevBtns[k]='wrong-prev';}prevBtns[idx]='correct';
-          setPendingWrongCredit({wrongTime:wrongTimeRef.current,prevDate:{...date},prevBtns,correctIdx:idx});
-          setCanOverrideCorrect(false);
-          prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;
-          setAoxStack(s=>[...s,{...date,btns:prevBtns,overrideUsed:overrideUsedAox,capsule:{snapshot:null,streakSnap:prevStreakSnapRef.current?{...prevStreakSnapRef.current}:null,wrongTime:wrongTimeRef.current},hasCredit:false}]);setAoxForwardStack([]);
-          advanceDate(times,streak,bestStreak);return;
-        }
-        // first-try correct
-        setPendingWrongCredit(null);
-        // Null-guard: if tStartRef is null (truly unreachable in normal flow), fall back to 0 rather
-        // than pushing a synthesized "now − now" zero anyway. Same defensive intent as #52: never let
-        // a missing start time silently distort averages without at least matching App's pattern.
-        const dt=tStartRef.current?(performance.now()-tStartRef.current)/1000:0;
-        prevTimesSnapRef.current=[...times];prevStreakSnapRef.current={streak,bestStreak};setCanOverrideCorrect(true);
-        const newTimes=[...times,dt];setTimes(newTimes);
-        setAttempts(a=>a+1);
-        const completing=newTimes.length>=displayN;
-        if(completing)markAoxCorrect(idx);
-        const ns=streak+1,nb=Math.max(bestStreak,ns);if(!completing){setAoxStack(s=>[...s,{...date,btns:{[idx]:'correct'},overrideUsed:overrideUsedAox,capsule:{snapshot:[...times],streakSnap:{streak,bestStreak},wrongTime:wrongTimeRef.current},hasCredit:true}]);setAoxForwardStack([]);}advanceDate(newTimes,ns,nb);
-      }
-      function handleWrong(idx){
-        setFlashWithTimeout({type:"bad",idx});
-        wrongTimeRef.current=tStartRef.current?(performance.now()-tStartRef.current)/1000:null;
-        if(!questionCounted)setAttempts(a=>a+1);
-        setQuestionCounted(true);
-        prevStreakSnapRef.current={streak,bestStreak};
-        setStreak(0);setCanOverrideCorrect(false);
-        prevTimesSnapRef.current=null;setPendingWrongCredit(null);
-        markAoxWrong(idx);
-        if(!allowMistakes){markAoxCorrect(correct);setRunPhase("failed");}
-      }
-      function submitDoW(idx){if(!isRunning||isLocked||codesOpen||inBackMode)return;if(oneByOne&&!shown)return;if(idx===correct)handleCorrect(idx);else handleWrong(idx);}
-      function revealAnswer(){if(revealLocked)return;wrongTimeRef.current=tStartRef.current?(performance.now()-tStartRef.current)/1000:null;markAoxCorrect(correct);setStreak(0);setCanOverrideCorrect(false);prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;setPendingWrongCredit(null);if(!questionCounted)setAttempts(a=>a+1);setQuestionCounted(true);if(!allowMistakes)setRunPhase("failed");}
-      function openCodes(){
-        if(inBackMode||runPhase==="done"){setCodesOpen(v=>!v);return;}if(codesDisabled)return;
-        if(!codesOpen){wrongTimeRef.current=tStartRef.current?(performance.now()-tStartRef.current)/1000:null;setCanOverrideCorrect(false);prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;setPendingWrongCredit(null);setStreak(0);if(!allowMistakes)setRunPhase("failed");if(!questionCounted)setAttempts(a=>a+1);setQuestionCounted(true);markAoxCorrect(correct);}
-        setCodesOpen(v=>!v);
-      }
+      // Derived UI state (from the engine state + the run config).
+      const isRunning=state.runPhase==="running";
+      const isLocked=state.runPhase==="done"||state.runPhase==="failed";
+      const dateVisible=state.runPhase==="failed"||state.runPhase==="done"||(isRunning&&(!oneByOne||state.shown))||state.inBackMode;
+      const revealLocked=!isRunning||isLocked||state.codesOpen||(oneByOne&&!state.shown)||state.inBackMode;
+      const backDisabled=state.stack.length===0||state.runPhase==="idle"||state.runPhase==="running";
+      const aoxRetroOverrideEligible=(
+        isRunning && !state.inBackMode &&
+        Object.keys(state.persistBtns).length===0 &&
+        !state.codesOpen && !state.canOverrideCorrect &&
+        state.pendingWrongCredit==null &&
+        state.stack.length>0 &&
+        !state.stack[state.stack.length-1].overrideUsed &&
+        state.stack[state.stack.length-1].capsule?.snapshot!=null
+      );
+      const overrideAvail=saveStats&&!state.overrideUsed&&(
+        (isRunning&&(Object.keys(state.persistBtns).length>0||state.codesOpen||state.canOverrideCorrect||state.pendingWrongCredit!=null))||
+        (state.runPhase==="failed")||
+        (state.runPhase==="done"&&state.canOverrideCorrect)||
+        aoxRetroOverrideEligible
+      );
+      const codesDisabled=state.runPhase==="idle"||(oneByOne&&!state.shown&&!state.inBackMode&&!isLocked);
+      const optionsDisabled=isLocked||state.codesOpen||(oneByOne&&!state.shown&&!state.inBackMode)||state.runPhase==="idle"||state.inBackMode;
+      const baseBtn="w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none";
+      const bestData=state.bests[bestKey]||{avg:null,avgMed:null,avgRoundId:null,med:null,medAvg:null,medRoundId:null};
+      const doneCount=state.times.length;
+      const scoreDisplay=state.runPhase==="idle"?"0/0":`${doneCount}/${state.attempts}`;
+      const accuracyDisplay=fmtAccuracyPct(doneCount,state.attempts);
+      const date=state.date;
 
-      function handleOverride(){
-        // === BROWSING-BACK OVERRIDE: delta-based ===
-        if(inBackMode&&canOverrideCorrect&&prevTimesSnapRef.current!=null){
-          // Undo credit for a first-try correct answer viewed while browsing back
-          setOverrideUsedAox(true);
-          const prevTimes=prevTimesSnapRef.current;
-          setTimes(prevTimes);
-          const newHC=false;setAoxBrowseHasCredit(newHC);
-          // Recalc streak from full history
-          const history=[...aoxStack.map(e=>!!e.hasCredit),newHC,...aoxForwardStack.slice().reverse().filter(e=>!e.isLive).map(e=>!!e.hasCredit)];
-          let cs=0;for(let i=history.length-1;i>=0;i--){if(history[i])cs++;else break;}
-          let bs=0,r=0;for(const h of history){if(h){r++;if(r>bs)bs=r;}else r=0;}
-          setStreak(cs);setBestStreak(bs);
-          prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;setCanOverrideCorrect(false);
-          if(prevBestSnapRef.current&&prevBestSnapRef.current.key===bestKey){bestRef.current[bestKey]=prevBestSnapRef.current.best;setBestNew(p=>{const n={...p};delete n[bestKey];return n;});prevBestSnapRef.current=null;}
-          return;
-        }
-        if(inBackMode)return;
-        // === PATH 5: RETROACTIVE OVERRIDE OF MOST RECENT AOX STACK ENTRY ===
-        // Right→wrong only (see KNOWN LIMITATION note at aoxRetroOverrideEligible
-        // declaration). Mirrors path 1's right→wrong logic (set times back to the
-        // pre-Q snapshot, recalc streak from full history including the now-flipped
-        // entry). Live Q stays untouched. Stack entry gets override-wrong btns state
-        // and overrideUsed:true so back-navigation locks the Override button.
-        if(aoxRetroOverrideEligible){
-          setOverrideUsedAox(true);
-          const targetEntry=aoxStack[aoxStack.length-1];
-          const cap=targetEntry.capsule||{};
-          const prevTimes=cap.snapshot;
-          // Roll back times to pre-Q snapshot (removes this entry's time contribution).
-          setTimes(prevTimes);
-          // Update Best if this entry's contribution is what set it.
-          if(prevBestSnapRef.current&&prevBestSnapRef.current.key===bestKey){
-            bestRef.current[bestKey]=prevBestSnapRef.current.best;
-            setBestNew(p=>{const n={...p};delete n[bestKey];return n;});
-            prevBestSnapRef.current=null;
-          }
-          // Update stack entry: replace correct-answer marking with override-wrong.
-          const wd=(useJulian&&isJulianDate(targetEntry.y,targetEntry.m,targetEntry.d))?wdayJulian(targetEntry.y,targetEntry.m,targetEntry.d):wday(targetEntry.y,targetEntry.m,targetEntry.d);
-          const newLastEntry={...targetEntry,btns:{[wd]:'override-wrong'},overrideUsed:true,hasCredit:false};
-          const newAoxStack=[...aoxStack.slice(0,-1),newLastEntry];
-          setAoxStack(newAoxStack);
-          // Inline streak recalc using the new stack value (mirrors path 1's pattern).
-          const history=[
-            ...newAoxStack.map(e=>!!e.hasCredit),
-            ...aoxForwardStack.slice().reverse().filter(e=>!e.isLive).map(e=>!!e.hasCredit)
-          ];
-          let cs=0;for(let i=history.length-1;i>=0;i--){if(history[i])cs++;else break;}
-          let bs=0,r=0;for(const h of history){if(h){r++;if(r>bs)bs=r;}else r=0;}
-          setStreak(cs);setBestStreak(bs);
-          return;
-        }
-        setOverrideUsedAox(true);
-        // Override after first-try correct: undo credit, reset streak, end run if !allowMistakes
-        if(canOverrideCorrect&&prevTimesSnapRef.current!=null){
-          const prevTimes=prevTimesSnapRef.current;
-          const wasLastQ=prevTimes.length>=displayN-1;
-          setTimes(prevTimes);
-          setStreak(0);
-          if(prevStreakSnapRef.current)setBestStreak(prevStreakSnapRef.current.bestStreak);
-          if(prevBestSnapRef.current&&prevBestSnapRef.current.key===bestKey){bestRef.current[bestKey]=prevBestSnapRef.current.best;setBestNew(p=>{const n={...p};delete n[bestKey];return n;});prevBestSnapRef.current=null;}
-          prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;setCanOverrideCorrect(false);setQuestionCounted(true);setPendingWrongCredit(null);
-          setAoxStack(s=>s.slice(0,-1));
-          setCodesOpen(false);wrongTimeRef.current=null;
-          if(!allowMistakes){setRunPhase("failed");}
-          else if(wasLastQ){resetAoxPB();setRunPhase("running");setCodesOpen(false);setQuestionCounted(false);setOverrideUsedAox(false);setDate(genDate(minY,maxY));if(oneByOne){setShown(false);tStartRef.current=null;}else tStartRef.current=performance.now();}
-          else{resetAoxPB();setRunPhase("running");tStartRef.current=performance.now();}
-          return;
-        }
-        // Override after wrong→correct (pendingWrongCredit): give retroactive credit, restore streak
-        if(pendingWrongCredit!=null){
-          const{wrongTime,prevDate,prevBtns,correctIdx}=pendingWrongCredit;setPendingWrongCredit(null);
-          // wrongTime can be null if tStartRef was null at the original wrong-answer click. Falling back
-          // to 0 (prior behavior) distorts averages by pushing a 0s entry. Instead, synthesize a fallback
-          // from "now − current tStartRef" — non-null in normal flow since the question's still active.
-          // If tStartRef is also null (truly unreachable), 0 is the last-resort floor.
-          const dt=wrongTime??(tStartRef.current?(performance.now()-tStartRef.current)/1000:0);
-          const newTimes=[...times,dt];setTimes(newTimes);
-          const preStreak=prevStreakSnapRef.current?.streak??0;
-          const ns=preStreak+1,nb=Math.max(bestStreak,ns);setStreak(ns);setBestStreak(nb);
-          setCanOverrideCorrect(false);prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;
-          const greenOnly={[correctIdx??correct]:'correct'};
-          if(newTimes.length>=displayN){
-            const avg=newTimes.reduce((a,b)=>a+b,0)/newTimes.length;const med=calcMed(newTimes);
-            const thisRoundId=nextRoundIdRef.current++;
-            const prev=bestRef.current[bestKey]||{avg:null,avgMed:null,avgRoundId:null,med:null,medAvg:null,medRoundId:null};
-            prevBestSnapRef.current={key:bestKey,best:{...prev}};
-            const avgImp=prev.avg==null||avg<prev.avg;
-            const medImp=prev.med==null||med<prev.med;
-            bestRef.current[bestKey]={
-              avg:avgImp?avg:prev.avg,
-              avgMed:avgImp?med:prev.avgMed,
-              avgRoundId:avgImp?thisRoundId:prev.avgRoundId,
-              med:medImp?med:prev.med,
-              medAvg:medImp?avg:prev.medAvg,
-              medRoundId:medImp?thisRoundId:prev.medRoundId,
-            };
-            if(avgImp||medImp)setBestNew(p=>{const e=p[bestKey]||{avg:false,med:false};return{...p,[bestKey]:{avg:e.avg||avgImp,med:e.med||medImp}};});
-            setAoxStack(s=>s.slice(0,-1));
-            if(prevDate)setDate({...prevDate});
-            setAoxPersistBtns(greenOnly);
-            setRunPhase("done");
-          }else{
-            setAoxStack(s=>{if(!s.length)return s;const last=s[s.length-1];return[...s.slice(0,-1),{...last,btns:greenOnly,overrideUsed:true}];});
-          }
-          return;
-        }
-        // Override after wrong (same date, running or failed): give credit, restore streak, advance
-        if(runPhase==="running"||runPhase==="failed"){
-          const dt=wrongTimeRef.current??((performance.now()-(tStartRef.current??performance.now()))/1000);
-          const preStreak=prevStreakSnapRef.current?.streak??0;
-          wrongTimeRef.current=null;prevTimesSnapRef.current=null;prevStreakSnapRef.current=null;
-          const newTimes=[...times,dt];setTimes(newTimes);
-          const ns=preStreak+1,nb=Math.max(bestStreak,ns);
-          setCodesOpen(false);setCanOverrideCorrect(false);setPendingWrongCredit(null);
-          setAoxStack(s=>[...s,{...date,btns:{[correct]:'correct'},overrideUsed:true,capsule:{snapshot:null,streakSnap:null,wrongTime:null},hasCredit:true}]);
-          if(runPhase==="failed")setRunPhase("running");
-          const completing=newTimes.length>=displayN;
-          if(completing)markAoxCorrect(correct);
-          else{setFlashWithTimeout({type:"good",idx:correct});}
-          advanceDate(newTimes,ns,nb);
-        }
-      }
+      // Handlers — thin wrappers over the engine + the transient flash.
+      const submitDoW=i=>{setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});eng.answer(i);};
+      const startOrContinue=()=>{if(state.runPhase==="idle")eng.begin();else eng.continueRun();};
+      const onOverride=()=>{
+        // Cosmetic green flash when crediting a wrong on the current question (AoX Path 5, non-completing).
+        if((state.runPhase==="running"||state.runPhase==="failed")&&!state.inBackMode&&!state.canOverrideCorrect&&state.pendingWrongCredit==null&&!aoxRetroOverrideEligible&&state.questionCounted&&state.times.length+1<state.displayN)setFlashWithTimeout({type:"good",idx:correct});
+        eng.override();
+      };
 
-      // #4 — done+inBackMode → Reset; running+inBackMode → Continue
-      const primaryBtn=runPhase==="idle"?(<button type="button" data-key="N" className="col-span-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium" onClick={startOrContinue}>Begin</button>):runPhase==="done"&&inBackMode?(<button type="button" data-key="N" className={`col-span-1 ${RESET_BTN_CLASS}`} onClick={reset}>Reset</button>):isLocked?(<button type="button" data-key="N" className={`col-span-1 ${RESET_BTN_CLASS}`} onClick={reset}>Reset</button>):inBackMode||(!shown&&oneByOne)?(<button type="button" data-key="N" className="col-span-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium" onClick={startOrContinue}>Continue</button>):(<button type="button" data-key="N" className={`col-span-1 ${RESET_BTN_CLASS}`} onClick={reset}>Reset</button>);
-
-      const scoreDisplay=runPhase==="idle"?"0/0":`${doneCount}/${attempts}`;
-      const accuracyDisplay=fmtAccuracyPct(doneCount,attempts);
+      const primaryBtn=state.runPhase==="idle"
+        ?(<button type="button" data-key="N" className="col-span-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium" onClick={startOrContinue}>Begin</button>)
+        :state.runPhase==="done"&&state.inBackMode?(<button type="button" data-key="N" className={`col-span-1 ${RESET_BTN_CLASS}`} onClick={eng.reset}>Reset</button>)
+        :isLocked?(<button type="button" data-key="N" className={`col-span-1 ${RESET_BTN_CLASS}`} onClick={eng.reset}>Reset</button>)
+        :state.inBackMode||(!state.shown&&oneByOne)?(<button type="button" data-key="N" className="col-span-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium" onClick={startOrContinue}>Continue</button>)
+        :(<button type="button" data-key="N" className={`col-span-1 ${RESET_BTN_CLASS}`} onClick={eng.reset}>Reset</button>);
 
       return(
         <div style={{display:visible?"block":"none"}}>
-          {/* Bug #5: Site-wide Save Stats pause — when saveStats is false, all AoX stat
-              boxes show "—" with strikethrough labels (matches App-side behavior). AoX stat
-              boxes never had toggle fn handlers, so no fn change needed. opacity-50 dim stays. */}
+          {/* Save Stats off: all stat boxes show "—" with strikethrough labels (matches App). */}
           <div className={saveStats?"":"opacity-50"}><StatPanel stats={[
             {label:"Score",value:scoreDisplay,off:!saveStats,fn:null},
             {label:"Accuracy",value:accuracyDisplay,off:!saveStats,fn:null},
-            {label:"Streak",value:`${streak}/${bestStreak}`,off:!saveStats,fn:null},
-            {label:"Last",value:truncTime(calcLast(times)),off:!saveStats,fn:null},
-            {label:"Average",value:fmtTime(calcAvg(times)),off:!saveStats,fn:null},
-            {label:"Median",value:fmtTime(calcMed(times)),off:!saveStats,fn:null},
+            {label:"Streak",value:`${state.streak}/${state.bestStreak}`,off:!saveStats,fn:null},
+            {label:"Last",value:truncTime(calcLast(state.times)),off:!saveStats,fn:null},
+            {label:"Average",value:fmtTime(calcAvg(state.times)),off:!saveStats,fn:null},
+            {label:"Median",value:fmtTime(calcMed(state.times)),off:!saveStats,fn:null},
           ]}/></div>
           <div className="mt-3 text-xs text-purple-300/60">
             <div className="flex flex-wrap items-start gap-4">
               <div className="min-w-[125px]">
-                <div>Best Average: {fmtTime(bestData.avg)}{bestNew[bestKey]?.avg&&<NewBestStar/>}</div>
+                <div>Best Average: {fmtTime(bestData.avg)}{state.bestNew[bestKey]?.avg&&<NewBestStar/>}</div>
                 <div className="text-[11px] opacity-70">Median: {fmtTime(bestData.avgMed)}</div>
               </div>
               <div className="min-w-[125px]">
-                <div>Best Median: {fmtTime(bestData.med)}{bestNew[bestKey]?.med&&<NewBestStar/>}</div>
+                <div>Best Median: {fmtTime(bestData.med)}{state.bestNew[bestKey]?.med&&<NewBestStar/>}</div>
                 <div className="text-[11px] opacity-70">Average: {fmtTime(bestData.medAvg)}</div>
               </div>
               {bestData.avgRoundId!=null&&bestData.medRoundId!=null&&<span className="shrink-0 ml-auto">{bestData.avgRoundId===bestData.medRoundId?"Same Round":"Different Rounds"}</span>}
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2 flex-nowrap">
-            <div className="flex items-center shrink-0"><span className={`text-sm leading-none text-purple-200/80${runPhase!=="idle"?" opacity-60":""}`}>Ao</span><input type="text" inputMode="numeric" readOnly={runPhase!=="idle"} value={aoxN} onChange={e=>{if(runPhase==="idle")setAoxN(e.target.value);}} onBlur={()=>setAoxN(String(Math.max(2,Math.min(1000,parseInt(aoxN)||10))))} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();setAoxN(String(Math.max(2,Math.min(1000,parseInt(aoxN)||10))));e.currentTarget.blur();}else if(e.key==="Escape"){setAoxN(String(displayN));e.currentTarget.blur();}}} className={`panel rounded-xl px-2 py-1 w-14 text-center tabular-nums text-sm focus:outline-hidden shrink-0${runPhase!=="idle"?" opacity-60 pointer-events-none":""}`}/></div>
-            <button type="button" onClick={()=>{if(runPhase==="idle")setAllowMistakes(v=>!v);}} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${allowMistakes?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}${runPhase!=="idle"?" opacity-60 pointer-events-none":""}`}>Allow Mistakes</button>
-            <button type="button" onClick={()=>{if(runPhase==="idle")setOneByOne(v=>!v);}} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${oneByOne?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}${runPhase!=="idle"?" opacity-60 pointer-events-none":""}`}>One-By-One</button>
+            <div className="flex items-center shrink-0"><span className={`text-sm leading-none text-purple-200/80${state.runPhase!=="idle"?" opacity-60":""}`}>Ao</span><input type="text" inputMode="numeric" readOnly={state.runPhase!=="idle"} value={aoxN} onChange={e=>{if(state.runPhase==="idle")setAoxN(e.target.value);}} onBlur={()=>setAoxN(String(Math.max(2,Math.min(1000,parseInt(aoxN)||10))))} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();setAoxN(String(Math.max(2,Math.min(1000,parseInt(aoxN)||10))));e.currentTarget.blur();}else if(e.key==="Escape"){setAoxN(String(state.displayN));e.currentTarget.blur();}}} className={`panel rounded-xl px-2 py-1 w-14 text-center tabular-nums text-sm focus:outline-hidden shrink-0${state.runPhase!=="idle"?" opacity-60 pointer-events-none":""}`}/></div>
+            <button type="button" onClick={()=>{if(state.runPhase==="idle")setAllowMistakes(v=>!v);}} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${allowMistakes?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}${state.runPhase!=="idle"?" opacity-60 pointer-events-none":""}`}>Allow Mistakes</button>
+            <button type="button" onClick={()=>{if(state.runPhase==="idle")setOneByOne(v=>!v);}} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${oneByOne?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}${state.runPhase!=="idle"?" opacity-60 pointer-events-none":""}`}>One-By-One</button>
           </div>
           <div className="mt-4 rounded-2xl panel p-4">
             <div className="text-center relative">
-              {(inBackMode||runPhase==="done"||runPhase==="failed")&&<span className="absolute right-0 top-0 text-[11px] tabular-nums text-purple-300/60">Q{aoxStack.length+1}</span>}
+              {(state.inBackMode||state.runPhase==="done"||state.runPhase==="failed")&&<span className="absolute right-0 top-0 text-[11px] tabular-nums text-purple-300/60">Q{state.stack.length+1}</span>}
               <div className="text-3xl font-bold">{dateVisible?fmtDate(date.y,date.m,date.d,date._fmt):"—"}</div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3" data-answer-grid="true">
-              {DAY.map((nm,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=aoxPersistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",'surface-button');const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={nm} type="button" onClick={()=>{if(perLocked)return;submitDoW(i);}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{nm}</button>);})}
+              {DAY.map((nm,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",'surface-button');const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={nm} type="button" onClick={()=>{if(perLocked)return;submitDoW(i);}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{nm}</button>);})}
             </div>
           </div>
           <div className="mt-4 rounded-2xl panel p-3 space-y-3">
             <div className="grid grid-cols-4 gap-2">
               {primaryBtn}
               <div className="col-span-1 flex gap-1">
-                <button type="button" data-key="ArrowLeft" className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${backDisabled?"opacity-60 pointer-events-none":""}`} onClick={goBackAox}><span style={{position:'relative',top:'-1.5px'}}>&lt;</span></button>
-                <button type="button" data-key="ArrowRight" className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${(aoxForwardStack.length===0||runPhase==="idle"||runPhase==="running")?"opacity-60 pointer-events-none":""}`} onClick={goForwardAox}><span style={{position:'relative',top:'-1.5px'}}>&gt;</span></button>
+                <button type="button" data-key="ArrowLeft" className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${backDisabled?"opacity-60 pointer-events-none":""}`} onClick={eng.back}><span style={{position:'relative',top:'-1.5px'}}>&lt;</span></button>
+                <button type="button" data-key="ArrowRight" className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${(state.forwardStack.length===0||state.runPhase==="idle"||state.runPhase==="running")?"opacity-60 pointer-events-none":""}`} onClick={eng.forward}><span style={{position:'relative',top:'-1.5px'}}>&gt;</span></button>
               </div>
-              <button type="button" data-key="R" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealLocked?"opacity-60 pointer-events-none":""}`} onClick={revealAnswer}>Reveal</button>
-              <button type="button" data-key="O" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail?"opacity-60 pointer-events-none":""}`} onClick={handleOverride}>Override</button>
+              <button type="button" data-key="R" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealLocked?"opacity-60 pointer-events-none":""}`} onClick={eng.reveal}>Reveal</button>
+              <button type="button" data-key="O" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail?"opacity-60 pointer-events-none":""}`} onClick={onOverride}>Override</button>
             </div>
-            <button type="button" data-key="C" className={`w-full px-4 py-2 rounded-xl btn-solid text-sm font-medium ${codesDisabled&&!inBackMode?"opacity-60 pointer-events-none":""}`} onClick={openCodes}>{codesOpen?"Hide Codes":"Show Codes"}</button>
-            <Expander open={codesOpen}><div className="mt-3 rounded-2xl thin px-4 pt-[3px] pb-1.5"><MethodExplanation date={aoxFrozenDate} useJulian={inBackMode?(aoxFrozenDate?._jul??useJulian):useJulian} displayedFormat={aoxFrozenDate?._fmt||dateFormat}/></div></Expander>
+            <button type="button" data-key="C" className={`w-full px-4 py-2 rounded-xl btn-solid text-sm font-medium ${codesDisabled&&!state.inBackMode?"opacity-60 pointer-events-none":""}`} onClick={eng.showCodes}>{state.codesOpen?"Hide Codes":"Show Codes"}</button>
+            <Expander open={state.codesOpen}><div className="mt-3 rounded-2xl thin px-4 pt-[3px] pb-1.5"><MethodExplanation date={aoxFrozenDate} useJulian={state.inBackMode?(aoxFrozenDate?._jul??useJulian):useJulian} displayedFormat={aoxFrozenDate?._fmt||dateFormat}/></div></Expander>
           </div>
         </div>
       );
