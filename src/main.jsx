@@ -247,6 +247,57 @@ const ReactDOM = { createRoot, createPortal }
       const setFlashWithTimeout=val=>{setFlash(val);if(flashClearRef.current)clearTimeout(flashClearRef.current);flashClearRef.current=setTimeout(()=>{setFlash(null);flashClearRef.current=null;},FLASH_MS);};
       return {flash,setFlash,setFlashWithTimeout};
     }
+    // The engine-state half of a mode's freshness check (stats all zero, no history, no live-question
+    // flags set) — identical across modes. Each mode ANDs its own fields (toggles/timers/bests) on top.
+    function engineFresh(s){
+      return s.stats.played===0&&s.stats.good===0&&s.stats.streak===0&&s.stats.best===0&&s.stats.times.length===0&&s.stack.length===0&&s.forwardStack.length===0&&s.backDepth===0&&s.locked===false&&s.revealed===false&&s.countedWrong===false&&s.canOverrideCorrect===false&&s.pendingWrongOverride===null&&s.overrideUsedThisQ===false&&s.calcOpen===false&&s.calcPenaltyActive===false;
+    }
+    // Shared "hideable stats" chrome for the three non-timed modes (Classic, Flash, Deduction): the
+    // show/hide toggles, the two-tap "Enable and Reset Stats?" arm (+ its click-outside / Save-Stats-off
+    // / mode-leave disarms), and the 6-box stats array + armedSpan for <StatPanel>. Re-enabling timing
+    // follows App's original rule: OFF→just hide; ON with no desync→regen the live date; ON with a
+    // desync (stats moved while hidden)→two-tap confirm→full reset. `timingOff` stays owned by the
+    // component (it's also fed to useGameEngine), so it's passed in with its setter. Flash is the only
+    // mode with a live timer to tear down, so it passes afterTimingEnabled() (on re-enable) and onHide()
+    // (on mode-leave); Classic/Deduction omit them.
+    function useStatsHideToggles({eng, saveStats, visible, timingOff, setTimingOff, afterTimingEnabled, onHide}){
+      const S=eng.state.stats;
+      const [scoringOff,setScoringOff]=useState(false);
+      const [timingArmed,setTimingArmed]=useState(false);
+      const timingArmedRef=useRef(false);
+      const timingArmTimerRef=useRef(null);
+      const timingArmBtnRef=useRef(null);
+      const disarmTimingArm=()=>{if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);};
+      const toggleScoringOff=()=>{if(!saveStats)return;setScoringOff(v=>!v);};
+      const toggleTimingOff=()=>{
+        if(!saveStats)return;
+        if(!timingOff){setTimingOff(true);return;}
+        const desync=S.good!==S.times.length;
+        if(!desync){eng.regenDate();if(afterTimingEnabled)afterTimingEnabled();setTimingOff(false);return;}
+        if(timingArmedRef.current){if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);eng.fullReset();if(afterTimingEnabled)afterTimingEnabled();setTimingOff(false);return;}
+        timingArmedRef.current=true;setTimingArmed(true);
+        if(timingArmTimerRef.current)clearTimeout(timingArmTimerRef.current);
+        timingArmTimerRef.current=setTimeout(()=>{timingArmedRef.current=false;setTimingArmed(false);timingArmTimerRef.current=null;},3000);
+      };
+      useEffect(()=>{if(!timingArmed)return;const h=e=>{if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target))return;disarmTimingArm();};const t=setTimeout(()=>document.addEventListener('click',h),0);return()=>{clearTimeout(t);document.removeEventListener('click',h);};},[timingArmed]);
+      useEffect(()=>{if(!visible){if(timingArmedRef.current)disarmTimingArm();if(onHide)onHide();}},[visible]);
+      useEffect(()=>{if(!saveStats&&timingArmedRef.current)disarmTimingArm();},[saveStats]);
+      const sLast=calcLast(S.times),sAvg=calcAvg(S.times),sMed=calcMed(S.times);
+      const sOff=scoringOff||!saveStats;
+      const tOff=timingOff||!saveStats;
+      const sFn=saveStats?toggleScoringOff:null;
+      const tFn=saveStats?toggleTimingOff:null;
+      const statsArr=[
+        {label:"Score",value:`${S.good}/${S.played}`,off:sOff,fn:sFn},
+        {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:sOff,fn:sFn},
+        {label:"Streak",value:`${S.streak}/${S.best}`,off:sOff,fn:sFn},
+        {label:"Last",value:truncTime(sLast),off:tOff,fn:tFn},
+        {label:"Average",value:fmtTime(sAvg),off:tOff,fn:tFn},
+        {label:"Median",value:fmtTime(sMed),off:tOff,fn:tFn},
+      ];
+      const armedSpan=(timingArmed&&saveStats)?{startIdx:3,endIdx:5,label:"Enable and Reset Stats?",onClick:toggleTimingOff,btnRef:timingArmBtnRef}:null;
+      return {scoringOff,timingArmed,statsArr,armedSpan};
+    }
 
     // computeHasCredit, markBtns, mkBtnsWithCorrect → src/engine/answerButtons.js, imported at top.
 
@@ -707,37 +758,18 @@ const ReactDOM = { createRoot, createPortal }
     // carved out of App's fused rendering; Flash/Blitz/Deduction follow onto the same engine.
     // ============================================================
     function ClassicMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}){
-      const [timingOff,setTimingOff]=useState(true);   // Classic launches with timing hidden
-      const [scoringOff,setScoringOff]=useState(false);
-      const [timingArmed,setTimingArmed]=useState(false);
-      const timingArmedRef=useRef(false);
-      const timingArmTimerRef=useRef(null);
-      const timingArmBtnRef=useRef(null);
+      const [timingOff,setTimingOff]=useState(true);   // Classic launches with timing hidden (feeds the engine)
       const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff});
       const {state,correct,overrideAvail}=eng;
-      const S=state.stats;
-      const sLast=calcLast(S.times),sAvg=calcAvg(S.times),sMed=calcMed(S.times);
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
+      // Hideable stats chrome (show/hide toggles + two-tap "Enable and Reset Stats?" arm + the 6-box
+      // stats strip), shared with Flash/Deduction via useStatsHideToggles.
+      const {scoringOff,timingArmed,statsArr,armedSpan}=useStatsHideToggles({eng,saveStats,visible,timingOff,setTimingOff});
       const optionsDisabled=state.locked||state.calcOpen||state.calcPenaltyActive;
       const revealDisabled=(state.locked&&state.revealed)||state.calcOpen||state.calcPenaltyActive;
       const baseBtn="w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none";
       const idleBtn="surface-button";
 
-      const toggleScoringOff=()=>{if(!saveStats)return;setScoringOff(v=>!v);};
-      // Turn timing OFF → just hide. Turn ON with no desync → regen the (unburned) live date
-      // (performTimingOn). Turn ON with a desync (good !== times recorded) → two-tap confirm,
-      // then a full reset (fullReset). Mirrors App's toggleTimingOff exactly.
-      const toggleTimingOff=()=>{
-        if(!saveStats)return;
-        if(!timingOff){setTimingOff(true);return;}
-        const desync=S.good!==S.times.length;
-        if(!desync){eng.regenDate();setTimingOff(false);return;}
-        if(timingArmedRef.current){if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);eng.fullReset();setTimingOff(false);return;}
-        timingArmedRef.current=true;setTimingArmed(true);
-        if(timingArmTimerRef.current)clearTimeout(timingArmTimerRef.current);
-        timingArmTimerRef.current=setTimeout(()=>{timingArmedRef.current=false;setTimingArmed(false);timingArmTimerRef.current=null;},3000);
-      };
-      const disarmTimingArm=()=>{if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);};
       const onAnswer=i=>{setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});eng.answer(i);};
       // Override Path 3 (override-after-wrong) flashes green on the correct button, matching App.
       const onOverride=()=>{if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});eng.override();};
@@ -755,31 +787,10 @@ const ReactDOM = { createRoot, createPortal }
         // `eng` is in deps so the rule is satisfied; the body is a cheap guarded compare and
         // regenDate only fires when a setting actually changed (prevPopRef), so no render loop.
       },[randomFormat,dateFormat,leapChance,janFebChance,julianChance,minY,maxY,eng]);
-      // Timing-arm disarm: click outside the warning button (deferred a tick so the arming
-      // click can't disarm itself), and on hide / Save-Stats-off. Mirrors App.
-      useEffect(()=>{if(!timingArmed)return;const h=e=>{if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target))return;disarmTimingArm();};const t=setTimeout(()=>document.addEventListener('click',h),0);return()=>{clearTimeout(t);document.removeEventListener('click',h);};},[timingArmed]);
-      useEffect(()=>{if(!visible&&timingArmedRef.current)disarmTimingArm();},[visible]);
-      useEffect(()=>{if(!saveStats&&timingArmedRef.current)disarmTimingArm();},[saveStats]);
-
-      // Freshness — true iff every ClassicMode field is at its launch default (the date is
-      // random, so excluded, exactly like AoxMode). Reported up via onFreshChange so App's
-      // isFullyReset (Full Reset dim/lock) accounts for Classic's now-self-owned state.
-      const classicIsFresh=state.stats.played===0&&state.stats.good===0&&state.stats.streak===0&&state.stats.best===0&&state.stats.times.length===0&&state.stack.length===0&&state.forwardStack.length===0&&state.backDepth===0&&state.locked===false&&state.revealed===false&&state.countedWrong===false&&state.canOverrideCorrect===false&&state.pendingWrongOverride===null&&state.overrideUsedThisQ===false&&state.calcOpen===false&&state.calcPenaltyActive===false&&timingOff===true&&scoringOff===false&&timingArmed===false&&flash===null;
+      // Freshness — engine state at launch default + Classic's own toggle/flash fields. Reported up
+      // via onFreshChange so App's isFullyReset (Full Reset dim/lock) accounts for Classic.
+      const classicIsFresh=engineFresh(state)&&timingOff===true&&scoringOff===false&&timingArmed===false&&flash===null;
       useEffect(()=>{onFreshChange&&onFreshChange(classicIsFresh);},[classicIsFresh,onFreshChange]);
-
-      const sOff=scoringOff||!saveStats;
-      const tOff=timingOff||!saveStats;
-      const sFn=saveStats?toggleScoringOff:null;
-      const tFn=saveStats?toggleTimingOff:null;
-      const statsArr=[
-        {label:"Score",value:`${S.good}/${S.played}`,off:sOff,fn:sFn},
-        {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:sOff,fn:sFn},
-        {label:"Streak",value:`${S.streak}/${S.best}`,off:sOff,fn:sFn},
-        {label:"Last",value:truncTime(sLast),off:tOff,fn:tFn},
-        {label:"Average",value:fmtTime(sAvg),off:tOff,fn:tFn},
-        {label:"Median",value:fmtTime(sMed),off:tOff,fn:tFn},
-      ];
-      const armedSpan=(timingArmed&&saveStats)?{startIdx:3,endIdx:5,label:"Enable and Reset Stats?",onClick:toggleTimingOff,btnRef:timingArmBtnRef}:null;
       const date=state.date;
       return(
         <div style={{display:visible?"block":"none"}}>
@@ -833,16 +844,9 @@ const ReactDOM = { createRoot, createPortal }
       const flashTimerRef=useRef(null);
       const flashDeadlineRef=useRef(null);
       const flashBarRef=useRef(null);
-      const [timingOff,setTimingOff]=useState(false);   // Flash shows timing by default
-      const [scoringOff,setScoringOff]=useState(false);
-      const [timingArmed,setTimingArmed]=useState(false);
-      const timingArmedRef=useRef(false);
-      const timingArmTimerRef=useRef(null);
-      const timingArmBtnRef=useRef(null);
+      const [timingOff,setTimingOff]=useState(false);   // Flash shows timing by default (feeds the engine)
       const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff});
       const {state,correct,overrideAvail}=eng;
-      const S=state.stats;
-      const sLast=calcLast(S.times),sAvg=calcAvg(S.times),sMed=calcMed(S.times);
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
 
       const resetFlashBar=()=>{if(flashBarRef.current){flashBarRef.current.style.transition="none";flashBarRef.current.style.width="100%";}};
@@ -896,21 +900,14 @@ const ReactDOM = { createRoot, createPortal }
       const onOverride=()=>{const wasActive=active;if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});eng.override();if(wasActive){setActive(false);stopFlash();}};
       const resetRound=()=>{eng.resetRound();setActive(false);setShowTimerDate(false);stopFlash();};   // primary "Reset" while live (= App arm)
 
-      const toggleScoringOff=()=>{if(!saveStats)return;setScoringOff(v=>!v);};
-      // Flash timing toggle. OFF→just hide. ON with no desync→regen (+stop the flash if live).
-      // ON with a desync→two-tap confirm then a full reset. Mirrors App's flash path.
-      const toggleTimingOff=()=>{
-        if(!saveStats)return;
-        if(!timingOff){setTimingOff(true);return;}
-        const desync=S.good!==S.times.length;
-        const stop=()=>{if(active){setActive(false);stopFlash();}setShowTimerDate(false);};
-        if(!desync){eng.regenDate();stop();setTimingOff(false);return;}
-        if(timingArmedRef.current){if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);eng.fullReset();stop();setTimingOff(false);return;}
-        timingArmedRef.current=true;setTimingArmed(true);
-        if(timingArmTimerRef.current)clearTimeout(timingArmTimerRef.current);
-        timingArmTimerRef.current=setTimeout(()=>{timingArmedRef.current=false;setTimingArmed(false);timingArmTimerRef.current=null;},3000);
-      };
-      const disarmTimingArm=()=>{if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);};
+      // Hideable stats chrome shared with Classic/Deduction. Flash supplies its flash-timer teardown:
+      // afterTimingEnabled (re-enabling timing while a flash is live stops it + hides its date) and
+      // onHide (leaving the mode stops a live flash). Classic/Deduction pass neither (no timer).
+      const {scoringOff,timingArmed,statsArr,armedSpan}=useStatsHideToggles({
+        eng,saveStats,visible,timingOff,setTimingOff,
+        afterTimingEnabled:()=>{if(active){setActive(false);stopFlash();}setShowTimerDate(false);},
+        onHide:()=>{if(active){setActive(false);stopFlash();}},
+      });
 
       const prevPopRef=useRef({randomFormat,dateFormat,leapChance,janFebChance,julianChance,minY,maxY});
       useEffect(()=>{
@@ -919,12 +916,9 @@ const ReactDOM = { createRoot, createPortal }
         prevPopRef.current={randomFormat,dateFormat,leapChance,janFebChance,julianChance,minY,maxY};
         if(changed)eng.regenDate();   // engine no-ops on a burned/browsed date (same as App's regen-on-change)
       },[randomFormat,dateFormat,leapChance,janFebChance,julianChance,minY,maxY,eng]);
-      useEffect(()=>{if(!timingArmed)return;const h=e=>{if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target))return;disarmTimingArm();};const t=setTimeout(()=>document.addEventListener('click',h),0);return()=>{clearTimeout(t);document.removeEventListener('click',h);};},[timingArmed]);
-      useEffect(()=>{if(!visible){if(timingArmedRef.current)disarmTimingArm();if(active){setActive(false);stopFlash();}}/* eslint-disable-line react-hooks/exhaustive-deps */},[visible]);
-      useEffect(()=>{if(!saveStats&&timingArmedRef.current)disarmTimingArm();},[saveStats]);
 
-      // Freshness for App's isFullyReset (Flash owns its state now).
-      const flashIsFresh=state.stats.played===0&&state.stats.good===0&&state.stats.streak===0&&state.stats.best===0&&state.stats.times.length===0&&state.stack.length===0&&state.forwardStack.length===0&&state.backDepth===0&&state.locked===false&&state.revealed===false&&state.countedWrong===false&&state.canOverrideCorrect===false&&state.pendingWrongOverride===null&&state.overrideUsedThisQ===false&&state.calcOpen===false&&state.calcPenaltyActive===false&&timingOff===false&&scoringOff===false&&timingArmed===false&&flash===null&&active===false&&flashPhase==="dash"&&showTimerDate===false&&flashMs===500&&flashRemainMs===500;
+      // Freshness for App's isFullyReset (Flash owns its state now): engine fresh + Flash's own fields.
+      const flashIsFresh=engineFresh(state)&&timingOff===false&&scoringOff===false&&timingArmed===false&&flash===null&&active===false&&flashPhase==="dash"&&showTimerDate===false&&flashMs===500&&flashRemainMs===500;
       useEffect(()=>{onFreshChange&&onFreshChange(flashIsFresh);},[flashIsFresh,onFreshChange]);
 
       const shouldShowTimerDate=active||showTimerDate;
@@ -936,20 +930,6 @@ const ReactDOM = { createRoot, createPortal }
       const revealDisabled=(state.locked&&state.revealed)||state.calcOpen||state.calcPenaltyActive||!shouldShowTimerDate;
       const baseBtn="w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none";
       const idleBtn="surface-button";
-
-      const sOff=scoringOff||!saveStats;
-      const tOff=timingOff||!saveStats;
-      const sFn=saveStats?toggleScoringOff:null;
-      const tFn=saveStats?toggleTimingOff:null;
-      const statsArr=[
-        {label:"Score",value:`${S.good}/${S.played}`,off:sOff,fn:sFn},
-        {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:sOff,fn:sFn},
-        {label:"Streak",value:`${S.streak}/${S.best}`,off:sOff,fn:sFn},
-        {label:"Last",value:truncTime(sLast),off:tOff,fn:tFn},
-        {label:"Average",value:fmtTime(sAvg),off:tOff,fn:tFn},
-        {label:"Median",value:fmtTime(sMed),off:tOff,fn:tFn},
-      ];
-      const armedSpan=(timingArmed&&saveStats)?{startIdx:3,endIdx:5,label:"Enable and Reset Stats?",onClick:toggleTimingOff,btnRef:timingArmBtnRef}:null;
       const onResetStats=()=>{eng.resetStats();if(active){setActive(false);stopFlash();}setShowTimerDate(false);};
       const date=state.date;
       const dateText=shouldShowTimerDate?(flashHiding?"…":fmtDate(date.y,date.m,date.d,date._fmt)):"—";
@@ -1214,12 +1194,7 @@ const ReactDOM = { createRoot, createPortal }
       const [abCrossOnly,setAbCrossOnly]=useState(false);
       const [julCrossOnly,setJulCrossOnly]=useState(false);
       const [monthOnly1582,setMonthOnly1582]=useState(false);
-      const [timingOff,setTimingOff]=useState(true);   // Deduction launches with timing hidden (like Classic)
-      const [scoringOff,setScoringOff]=useState(false);
-      const [timingArmed,setTimingArmed]=useState(false);
-      const timingArmedRef=useRef(false);
-      const timingArmTimerRef=useRef(null);
-      const timingArmBtnRef=useRef(null);
+      const [timingOff,setTimingOff]=useState(true);   // Deduction launches with timing hidden (feeds all three engines)
 
       // Per-sub-mode puzzle generators — close over the latest settings + toggles each render.
       const opts={useJulian,leapChance,janFebChance,randomFormat,dateFormat,abCrossOnly,julCrossOnly,monthOnly1582};
@@ -1236,12 +1211,11 @@ const ReactDOM = { createRoot, createPortal }
       const yearEng=useGameEngine({genDate:genYear,minY,maxY,useJulian,saveStats,timingOff});
       const eng=dedType==="month"?monthEng:dedType==="year"?yearEng:dayEng;
       const {state,correct,overrideAvail}=eng;
-      const S=state.stats;
-      const sLast=calcLast(S.times),sAvg=calcAvg(S.times),sMed=calcMed(S.times);
-
       // One flash for the active grid (only one sub-mode visible at a time). setFlash is cleared
       // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
       const {flash,setFlash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
+      // Hideable stats chrome shared with Classic/Flash — operates on the ACTIVE sub-mode's engine.
+      const {scoringOff,timingArmed,statsArr,armedSpan}=useStatsHideToggles({eng,saveStats,visible,timingOff,setTimingOff});
 
       const fmtDatePartial=(y,m,d,storedFmt,missing)=>fmtPartial(y,m,d,storedFmt||dateFormat,missing);
       const centerLastOpt=(index,total)=>{if(total<=0)return"";if(index===total-1&&total%3===1)return"col-span-3";return"";};
@@ -1257,21 +1231,6 @@ const ReactDOM = { createRoot, createPortal }
       const onAnswer=i=>{setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});eng.answer(i);};
       // Override-after-wrong flashes green on the correct option, matching App's dedFlash branch.
       const onOverride=()=>{if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});eng.override();};
-
-      const toggleScoringOff=()=>{if(!saveStats)return;setScoringOff(v=>!v);};
-      // Timing toggle — identical contract to ClassicMode (OFF→hide; ON no-desync→regen; ON with
-      // a desync→two-tap confirm then full reset). Operates on the ACTIVE sub-mode's engine.
-      const toggleTimingOff=()=>{
-        if(!saveStats)return;
-        if(!timingOff){setTimingOff(true);return;}
-        const desync=S.good!==S.times.length;
-        if(!desync){eng.regenDate();setTimingOff(false);return;}
-        if(timingArmedRef.current){if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);eng.fullReset();setTimingOff(false);return;}
-        timingArmedRef.current=true;setTimingArmed(true);
-        if(timingArmTimerRef.current)clearTimeout(timingArmTimerRef.current);
-        timingArmTimerRef.current=setTimeout(()=>{timingArmedRef.current=false;setTimingArmed(false);timingArmTimerRef.current=null;},3000);
-      };
-      const disarmTimingArm=()=>{if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);};
 
       // Auto-switch out of Year when a range/Julian change makes it unbuildable (mirrors App).
       useEffect(()=>{if(dedType==="year"&&!yearSubPossible)setDedType("day");},[dedType,yearSubPossible]);
@@ -1303,31 +1262,10 @@ const ReactDOM = { createRoot, createPortal }
         if(changed)eng.regenDate();
       },[abCrossOnly,julCrossOnly,monthOnly1582,eng]);
 
-      // Timing-arm disarm listeners (mirror ClassicMode): click outside the warning button, or on
-      // hide / Save-Stats-off.
-      useEffect(()=>{if(!timingArmed)return;const h=e=>{if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target))return;disarmTimingArm();};const t=setTimeout(()=>document.addEventListener('click',h),0);return()=>{clearTimeout(t);document.removeEventListener('click',h);};},[timingArmed]);
-      useEffect(()=>{if(!visible&&timingArmedRef.current)disarmTimingArm();},[visible]);
-      useEffect(()=>{if(!saveStats&&timingArmedRef.current)disarmTimingArm();},[saveStats]);
-
-      // Freshness — true iff all three silos + toggles + UI are at launch default (dates are
-      // random, so excluded). Reported up so App's isFullyReset accounts for Deduction.
-      const engFresh=e=>e.state.stats.played===0&&e.state.stats.good===0&&e.state.stats.streak===0&&e.state.stats.best===0&&e.state.stats.times.length===0&&e.state.stack.length===0&&e.state.forwardStack.length===0&&e.state.backDepth===0&&e.state.locked===false&&e.state.revealed===false&&e.state.countedWrong===false&&e.state.canOverrideCorrect===false&&e.state.pendingWrongOverride===null&&e.state.overrideUsedThisQ===false&&e.state.calcOpen===false&&e.state.calcPenaltyActive===false;
-      const deductionIsFresh=engFresh(dayEng)&&engFresh(monthEng)&&engFresh(yearEng)&&dedType==="day"&&abCrossOnly===false&&julCrossOnly===false&&monthOnly1582===false&&timingOff===true&&scoringOff===false&&timingArmed===false&&flash===null;
+      // Freshness — all three silos' engine state fresh + Deduction's toggles/UI at launch default
+      // (dates are random, so excluded). Reported up so App's isFullyReset accounts for Deduction.
+      const deductionIsFresh=engineFresh(dayEng.state)&&engineFresh(monthEng.state)&&engineFresh(yearEng.state)&&dedType==="day"&&abCrossOnly===false&&julCrossOnly===false&&monthOnly1582===false&&timingOff===true&&scoringOff===false&&timingArmed===false&&flash===null;
       useEffect(()=>{onFreshChange&&onFreshChange(deductionIsFresh);},[deductionIsFresh,onFreshChange]);
-
-      const sOff=scoringOff||!saveStats;
-      const tOff=timingOff||!saveStats;
-      const sFn=saveStats?toggleScoringOff:null;
-      const tFn=saveStats?toggleTimingOff:null;
-      const statsArr=[
-        {label:"Score",value:`${S.good}/${S.played}`,off:sOff,fn:sFn},
-        {label:"Accuracy",value:fmtAccuracyPct(S.good,S.played),off:sOff,fn:sFn},
-        {label:"Streak",value:`${S.streak}/${S.best}`,off:sOff,fn:sFn},
-        {label:"Last",value:truncTime(sLast),off:tOff,fn:tFn},
-        {label:"Average",value:fmtTime(sAvg),off:tOff,fn:tFn},
-        {label:"Median",value:fmtTime(sMed),off:tOff,fn:tFn},
-      ];
-      const armedSpan=(timingArmed&&saveStats)?{startIdx:3,endIdx:5,label:"Enable and Reset Stats?",onClick:toggleTimingOff,btnRef:timingArmBtnRef}:null;
       const date=state.date;
       // Codes-panel target mirrors App's deduction calcTarget: just the date fields (so
       // displayedFormat falls to the current dateFormat) + the puzzle's _jul snapshot.
