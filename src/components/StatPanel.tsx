@@ -22,7 +22,7 @@ import type { ElementType, ReactNode, Ref } from 'react'
 export interface StatItem {
   label: string
   value: string | number
-  fn?: () => void
+  fn?: (() => void) | null //  null = the stat is present but non-interactive (Save Stats off / non-toggleable mode)
   off?: boolean
 }
 export interface ArmedSpan {
@@ -32,7 +32,7 @@ export interface ArmedSpan {
   onClick?: () => void
   btnRef?: Ref<HTMLButtonElement>
 }
-export default function StatPanel({ stats, armedSpan }: { stats: StatItem[]; armedSpan?: ArmedSpan }) {
+export default function StatPanel({ stats, armedSpan }: { stats: StatItem[]; armedSpan?: ArmedSpan | null }) {
   // For fractional values (Score, Streak as "X/Y"), shrink the value font
   // when either side reaches 1000+ or 10000+ to prevent overflow on long
   // sessions. Non-fractional values (Accuracy, Last, Average, Median)

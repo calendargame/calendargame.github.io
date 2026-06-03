@@ -23,7 +23,44 @@ import { CODES_CLOSE_MS } from './lib/constants.js'
 import { useSettings } from './store/settings.js'
 import { calcAvg, calcLast, calcMed } from './engine/stats.js'
 import { useGameEngine } from './engine/useGameEngine.js'
+import type { Question, WeekdayQuestion, DedPuzzle, GameState } from './engine/gameReducer.js'
+import type { ButtonState } from './engine/answerButtons.js'
+import type { FormatId, DatePart } from './lib/format.js'
+import type { LookupEntry } from './components/LookupCard.jsx'
+import type { CodeDate } from './components/MethodBreakdown.jsx'
 const ReactDOM = { createRoot, createPortal }
+
+// --- Shared types for the typed App + mode components (Stage C, TypeScript, final file). ---
+type GenDate = (minY: number, maxY: number) => Question
+type FmtDate = (y: number, m: number, d: number, fmt?: FormatId) => string
+type FlashState = { type: 'good' | 'bad'; idx: number }
+type GameEngine = ReturnType<typeof useGameEngine>
+interface ModeProps {
+  visible: boolean
+  minY: number
+  maxY: number
+  useJulian: boolean
+  saveStats: boolean
+  dateFormat: FormatId
+  randomFormat: boolean
+  leapChance: string
+  janFebChance: string
+  julianChance: string
+  onFreshChange?: (fresh: boolean) => void
+}
+interface DedOpts {
+  useJulian: boolean
+  leapChance: string
+  janFebChance: string
+  randomFormat: boolean
+  dateFormat: FormatId
+  abCrossOnly: boolean
+  julCrossOnly: boolean
+  monthOnly1582: boolean
+}
+interface AoxBest { avg: number | null; avgMed: number | null; avgRoundId: number | null; med: number | null; medAvg: number | null; medRoundId: number | null }
+interface BlitzBest { score: number; streak: number; scoreRoundId: number | null; streakRoundId: number | null }
+interface SuddenBest { score: number; roundId: number | null }
 
     const {useEffect,useRef,useState,useCallback} = React;
     // ─────────────────────────────────────────────────────────────────────────
@@ -54,7 +91,7 @@ const ReactDOM = { createRoot, createPortal }
     //   isFlashing — whether a flash is active for this button index
     //   flashGood — when flashing, whether it's a good or bad flash
     //   idleClass — fallback for idle state (varies between AoX 'surface-button' and App's idleBtn)
-    const buttonStateClass=(ps,isFlashing,flashGood,idleClass)=>{
+    const buttonStateClass=(ps: ButtonState | undefined,isFlashing: boolean,flashGood: boolean,idleClass: string)=>{
       if(ps==='correct')return'btn-correct-persist border-transparent';
       if(ps==='wrong-latest')return'btn-wrong-persist border-transparent';
       if(ps==='wrong-prev')return'btn-wrong-dim border-transparent';
@@ -135,8 +172,8 @@ const ReactDOM = { createRoot, createPortal }
     ];
     // Day-of-week & calendar math (toAstro, isLeap, dim, jdn*, wday*, isJulian*, isGap*, rangeHasLeapYear) → src/lib/calendar.js, imported at top.
     // Date formatting (fmtYear, fmt, fmtPartial, numericFormatOf) → src/lib/format.js, imported at top.
-    const rint=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
-    function randomDate(lo,hi,julian=false,leapChance='random',janFebChance='random',julianChance='random'){
+    const rint=(a: number,b: number)=>Math.floor(Math.random()*(b-a+1))+a;
+    function randomDate(lo: number,hi: number,julian=false,leapChance='random',janFebChance='random',julianChance='random'): WeekdayQuestion {
       // Decide leap-year preference based on leapChance setting
       const r=Math.random();
       let wantLeap=null;
@@ -167,7 +204,7 @@ const ReactDOM = { createRoot, createPortal }
       }
       // Try preference-respecting attempts first; fall back to no preference if year range has no leap years
       for(let attempts=0;attempts<2000;attempts++){
-        let y=rint(lo,hi);if(y===0)continue;
+        const y=rint(lo,hi);if(y===0)continue;
         // Per-date leap check: only apply Julian leap rule if the year actually falls in the Julian period.
         // Without this, useJulian=on caused isLeapJulian to be applied to post-1582 years, which disagrees with
         // dimFn / isJulianDate / the codes panel — manifesting as e.g. 1900 being treated as a leap year for
@@ -185,7 +222,7 @@ const ReactDOM = { createRoot, createPortal }
         }
         const isJul=julian&&isJulianDate(y,m,1);
         const maxD=m===2?((isJul?isLeapJulian(y):isLeap(y))?29:28):([4,6,9,11].includes(m)?30:31);
-        let d=rint(1,maxD);
+        const d=rint(1,maxD);
         if(isGapDate(y,m,d))continue;
         // Julian-chance bias is checked against the final (y,m,d) since year 1582 contains
         // both Julian (Jan-Sep + Oct 1-4) and Gregorian (Oct 15+ + Nov + Dec) dates.
@@ -197,40 +234,40 @@ const ReactDOM = { createRoot, createPortal }
       }
       // Silent fallback: no leap-preference / janFeb / julian filter
       for(;;){
-        let y=rint(lo,hi);if(y===0)continue;
-        let m=rint(1,12);
+        const y=rint(lo,hi);if(y===0)continue;
+        const m=rint(1,12);
         const isJul=julian&&isJulianDate(y,m,1);
         const maxD=m===2?((isJul?isLeapJulian(y):isLeap(y))?29:28):([4,6,9,11].includes(m)?30:31);
-        let d=rint(1,maxD);
+        const d=rint(1,maxD);
         if(isGapDate(y,m,d))continue;
         return{y,m,d};
       }
     }
     // FORMAT_IDS / rollFormat live at module scope so App's genDate and every mode
     // component can stamp a date's ._fmt at generation time.
-    const FORMAT_IDS=['written-mdy','written-dmy','numeric-mdy','numeric-dmy','numeric-ymd'];
+    const FORMAT_IDS: FormatId[]=['written-mdy','written-dmy','numeric-mdy','numeric-dmy','numeric-ymd'];
     const rollFormat=()=>FORMAT_IDS[Math.floor(Math.random()*FORMAT_IDS.length)];
     const isTouch=typeof window!=="undefined"&&("ontouchstart" in window||navigator.maxTouchPoints>0||matchMedia("(pointer:coarse)").matches);
-    const fmtBlitzT=s=>{const sec=Math.ceil(s);if(sec<60)return sec+"s";const m=Math.floor(sec/60),r=sec%60;return m+"m "+r+"s";};
-    const fmtFlashT=ms=>(ms/1000).toFixed(1)+"s";
+    const fmtBlitzT=(s: number)=>{const sec=Math.ceil(s);if(sec<60)return sec+"s";const m=Math.floor(sec/60),r=sec%60;return m+"m "+r+"s";};
+    const fmtFlashT=(ms: number)=>(ms/1000).toFixed(1)+"s";
     // Time display follows WCA convention (regulation 9f1): individual single times
     // (Last) are truncated to hundredths — the third decimal is dropped, never rounded.
     // Averages, medians, and bests are rounded to nearest hundredth (toFixed(2)).
     // truncTime drops the third decimal; fmtTime rounds via toFixed(2).
-    const truncTime=t=>(t==null||t>=60)?"—":`${(Math.floor(t*100)/100).toFixed(2)}s`;
-    const fmtTime=t=>(t==null||t>=60)?"—":`${t.toFixed(2)}s`;
+    const truncTime=(t: number | null)=>(t==null||t>=60)?"—":`${(Math.floor(t*100)/100).toFixed(2)}s`;
+    const fmtTime=(t: number | null)=>(t==null||t>=60)?"—":`${t.toFixed(2)}s`;
     // WCA-consistent accuracy formatter: when there's at least one wrong answer, floor (truncate) the
     // percentage so we never display "100.0%" for 9999/10000 (which rounds up under toFixed). Pure 100%
     // displays normally. Same philosophy as truncTime (regulation 9f1) — never inflate the user's result.
-    const fmtAccuracyPct=(good,played)=>{
+    const fmtAccuracyPct=(good: number,played: number)=>{
       if(!played)return"—";
       const pct=good/played*100;
       if(good<played&&pct>=99.95)return"99.9%";
       return`${pct.toFixed(1)}%`;
     };
     // calcAvg / calcLast / calcMed → src/engine/stats.js, imported at top (shared by the mode strips).
-    const blockMinus=e=>{if(e.key==="-"||e.key==="Subtract"||e.key==="Minus")e.preventDefault();};
-    const blockMinusBI=e=>{if(e.data&&e.data.includes("-"))e.preventDefault();};
+    const blockMinus=(e: React.KeyboardEvent)=>{if(e.key==="-"||e.key==="Subtract"||e.key==="Minus")e.preventDefault();};
+    const blockMinusBI=(e: React.FormEvent<HTMLInputElement> & { data?: string | null })=>{if(e.data&&e.data.includes("-"))e.preventDefault();};
 
     // entryWithGreen → src/engine/answerButtons.js, imported at top (shared with the reducer + AoxMode).
 
@@ -242,14 +279,14 @@ const ReactDOM = { createRoot, createPortal }
     // so rapid answers each get the full FLASH_MS before clearing. `setFlash` is exposed for the
     // few sites that clear it directly (e.g. Deduction's sub-type switch).
     function useButtonFlash(){
-      const [flash,setFlash]=useState(null);
-      const flashClearRef=useRef(null);
-      const setFlashWithTimeout=val=>{setFlash(val);if(flashClearRef.current)clearTimeout(flashClearRef.current);flashClearRef.current=setTimeout(()=>{setFlash(null);flashClearRef.current=null;},FLASH_MS);};
+      const [flash,setFlash]=useState<FlashState | null>(null);
+      const flashClearRef=useRef<ReturnType<typeof setTimeout> | null>(null);
+      const setFlashWithTimeout=(val: FlashState)=>{setFlash(val);if(flashClearRef.current)clearTimeout(flashClearRef.current);flashClearRef.current=setTimeout(()=>{setFlash(null);flashClearRef.current=null;},FLASH_MS);};
       return {flash,setFlash,setFlashWithTimeout};
     }
     // The engine-state half of a mode's freshness check (stats all zero, no history, no live-question
     // flags set) — identical across modes. Each mode ANDs its own fields (toggles/timers/bests) on top.
-    function engineFresh(s){
+    function engineFresh(s: GameState){
       return s.stats.played===0&&s.stats.good===0&&s.stats.streak===0&&s.stats.best===0&&s.stats.times.length===0&&s.stack.length===0&&s.forwardStack.length===0&&s.backDepth===0&&s.locked===false&&s.revealed===false&&s.countedWrong===false&&s.canOverrideCorrect===false&&s.pendingWrongOverride===null&&s.overrideUsedThisQ===false&&s.calcOpen===false&&s.calcPenaltyActive===false;
     }
     // Shared "hideable stats" chrome for the three non-timed modes (Classic, Flash, Deduction): the
@@ -260,13 +297,13 @@ const ReactDOM = { createRoot, createPortal }
     // component (it's also fed to useGameEngine), so it's passed in with its setter. Flash is the only
     // mode with a live timer to tear down, so it passes afterTimingEnabled() (on re-enable) and onHide()
     // (on mode-leave); Classic/Deduction omit them.
-    function useStatsHideToggles({eng, saveStats, visible, timingOff, setTimingOff, afterTimingEnabled, onHide}){
+    function useStatsHideToggles({eng, saveStats, visible, timingOff, setTimingOff, afterTimingEnabled, onHide}: { eng: GameEngine; saveStats: boolean; visible: boolean; timingOff: boolean; setTimingOff: (v: boolean) => void; afterTimingEnabled?: () => void; onHide?: () => void }){
       const S=eng.state.stats;
       const [scoringOff,setScoringOff]=useState(false);
       const [timingArmed,setTimingArmed]=useState(false);
       const timingArmedRef=useRef(false);
-      const timingArmTimerRef=useRef(null);
-      const timingArmBtnRef=useRef(null);
+      const timingArmTimerRef=useRef<ReturnType<typeof setTimeout> | null>(null);
+      const timingArmBtnRef=useRef<HTMLButtonElement | null>(null);
       const disarmTimingArm=()=>{if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);};
       const toggleScoringOff=()=>{if(!saveStats)return;setScoringOff(v=>!v);};
       const toggleTimingOff=()=>{
@@ -279,7 +316,7 @@ const ReactDOM = { createRoot, createPortal }
         if(timingArmTimerRef.current)clearTimeout(timingArmTimerRef.current);
         timingArmTimerRef.current=setTimeout(()=>{timingArmedRef.current=false;setTimingArmed(false);timingArmTimerRef.current=null;},3000);
       };
-      useEffect(()=>{if(!timingArmed)return;const h=e=>{if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target))return;disarmTimingArm();};const t=setTimeout(()=>document.addEventListener('click',h),0);return()=>{clearTimeout(t);document.removeEventListener('click',h);};},[timingArmed]);
+      useEffect(()=>{if(!timingArmed)return;const h=(e: MouseEvent)=>{if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target as Node | null))return;disarmTimingArm();};const t=setTimeout(()=>document.addEventListener('click',h),0);return()=>{clearTimeout(t);document.removeEventListener('click',h);};},[timingArmed]);
       useEffect(()=>{if(!visible){if(timingArmedRef.current)disarmTimingArm();if(onHide)onHide();}},[visible]);
       useEffect(()=>{if(!saveStats&&timingArmedRef.current)disarmTimingArm();},[saveStats]);
       const sLast=calcLast(S.times),sAvg=calcAvg(S.times),sMed=calcMed(S.times);
@@ -302,7 +339,7 @@ const ReactDOM = { createRoot, createPortal }
     // "react to a settings/toggle change" effect the modes use to regen an unanswered live date
     // (the engine's regenDate no-ops on a burned/browsed date). fn is read through a ref so the
     // latest closure runs without having to list it (or the engine) in the dependency array.
-    function useChangeEffect(deps, fn){
+    function useChangeEffect(deps: React.DependencyList, fn: () => void){
       const fnRef=useRef(fn);fnRef.current=fn;
       const firstRef=useRef(true);
       useEffect(()=>{if(firstRef.current){firstRef.current=false;return;}fnRef.current();},deps);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -329,9 +366,9 @@ const ReactDOM = { createRoot, createPortal }
     // (mirrors App's activeWday/dimFn, keyed off the passed useJulian). The dead `pc` local of
     // the original is dropped (it was never read). Generation logic is otherwise verbatim.
     // ============================================================
-    function makeDedPuzzle(type,lo,hi,{useJulian,leapChance,janFebChance,randomFormat,dateFormat,abCrossOnly,julCrossOnly,monthOnly1582}){
-      const aw=(y,m,d)=>(useJulian&&isJulianDate(y,m,d))?wdayJulian(y,m,d):wday(y,m,d);
-      const dimFn=(y,m)=>{const leap=(useJulian&&isJulianDate(y,m,1))?isLeapJulian(y):isLeap(y);return m===2?(leap?29:28):([4,6,9,11].includes(m)?30:31);};
+    function makeDedPuzzle(type: DatePart, lo: number, hi: number, {useJulian,leapChance,janFebChance,randomFormat,dateFormat,abCrossOnly,julCrossOnly,monthOnly1582}: DedOpts): DedPuzzle | null {
+      const aw=(y: number,m: number,d: number)=>(useJulian&&isJulianDate(y,m,d))?wdayJulian(y,m,d):wday(y,m,d);
+      const dimFn=(y: number,m: number)=>{const leap=(useJulian&&isJulianDate(y,m,1))?isLeapJulian(y):isLeap(y);return m===2?(leap?29:28):([4,6,9,11].includes(m)?30:31);};
       // Decide leap preference once per question (not per attempt) so probabilities don't skew.
       const r=Math.random();
       let wantLeap=null;
@@ -345,26 +382,26 @@ const ReactDOM = { createRoot, createPortal }
       else if(janFebChance==='75')wantJanFeb=rjf<0.75;
       else if(janFebChance==='50')wantJanFeb=rjf<0.5;
       else if(janFebChance==='25')wantJanFeb=rjf<0.25;
-      const isLeapForY=yc=>{const jul=useJulian&&isJulianDate(yc,1,1);return jul?isLeapJulian(yc):isLeap(yc);};
-      const pickMonth=isLeapY=>{
+      const isLeapForY=(yc: number)=>{const jul=useJulian&&isJulianDate(yc,1,1);return jul?isLeapJulian(yc):isLeap(yc);};
+      const pickMonth=(isLeapY: boolean)=>{
         if(wantJanFeb===null||!isLeapY)return rint(1,12);
         return wantJanFeb?rint(1,2):rint(3,12);
       };
-      const attachFmt=o=>{o._fmt=randomFormat?rollFormat():dateFormat;o._jul=useJulian;return o;};
+      const attachFmt=(o: DedPuzzle)=>{o._fmt=randomFormat?rollFormat():dateFormat;o._jul=useJulian;return o;};
       if(type==="year"){
-        const windowCrossesJulianBoundary=(a,b,m,d)=>{
+        const windowCrossesJulianBoundary=(a: number,b: number,m: number,d: number)=>{
           if(!useJulian)return false;
           if(a>b)return false;
           const aIsJul=isJulianDate(a,m,d),bIsJul=isJulianDate(b,m,d);
           return aIsJul!==bIsJul;
         };
-        const julianBoundaryPair=(m,d)=>{
+        const julianBoundaryPair=(m: number,d: number)=>{
           if(m===10&&d>=5&&d<=14)return null; // gap day
           if(m<10||(m===10&&d<=4))return[1582,1583];
           return[1581,1582];
         };
-        const windowCrossesAb=(a,b)=>Math.floor(a/100)!==Math.floor(b/100);
-        const validateDistinct=(years,m,d)=>{
+        const windowCrossesAb=(a: number,b: number)=>Math.floor(a/100)!==Math.floor(b/100);
+        const validateDistinct=(years: number[],m: number,d: number)=>{
           const wdays=[];
           for(const y of years){
             if(m===2&&d===29&&!isLeapForY(y))continue; // dead option, skip
@@ -374,7 +411,7 @@ const ReactDOM = { createRoot, createPortal }
           }
           return new Set(wdays).size===wdays.length;
         };
-        const inRange=y=>y!==0&&y>=Math.max(1,lo)&&y<=hi;
+        const inRange=(y: number)=>y!==0&&y>=Math.max(1,lo)&&y<=hi;
         const julCrossPossible=julCrossOnly&&useJulian&&inRange(1582)&&(inRange(1581)||inRange(1583));
         const abCrossPossible=abCrossOnly&&Math.floor(Math.max(1,lo)/100)!==Math.floor(hi/100);
         let enforce=null;
@@ -390,7 +427,7 @@ const ReactDOM = { createRoot, createPortal }
             const m=pickMonth(isLeapY);
             const D=dimFn(yc,m);
             if(D<=0)continue;
-            let d=rint(1,D);
+            const d=rint(1,D);
             if(isGapDate(yc,m,d))continue;
             let windowYears;
             if(enforce==='jul'){
@@ -554,7 +591,7 @@ const ReactDOM = { createRoot, createPortal }
     // credited solves, played = attempts, times = solve times, streak/best. The fold needs only
     // two general engine flags: `complete` (the Nth solve credits without advancing) and
     // `noAdvance` (a failing override of that solve stays put). See gameReducer.
-    function AoxMode({minY,maxY,visible,fmtDate,useJulian=false,genDate=randomDate,leapChance='random',janFebChance='random',julianChance='random',randomFormat=false,dateFormat='written-mdy',saveStats=true,onFreshChange}){
+    function AoxMode({minY,maxY,visible,fmtDate,useJulian=false,genDate=randomDate,leapChance='random',janFebChance='random',julianChance='random',randomFormat=false,dateFormat='written-mdy',saveStats=true,onFreshChange}: ModeProps & { fmtDate: FmtDate; genDate?: GenDate }){
       const [aoxN,setAoxN]=useState("10");
       const [allowMistakes,setAllowMistakes]=useState(false);
       const [oneByOne,setOneByOne]=useState(false);
@@ -578,19 +615,19 @@ const ReactDOM = { createRoot, createPortal }
       // Per-config Best Average / Median (component-owned, like Blitz's Best Score). A run records
       // its Best on completion; an Override that undoes the completing solve rolls it back, gated
       // to the run that set it via the run id.
-      const [bests,setBests]=useState({});
-      const [bestNew,setBestNew]=useState({});
+      const [bests,setBests]=useState<Record<string, AoxBest>>({});
+      const [bestNew,setBestNew]=useState<Record<string, { avg: boolean; med: boolean }>>({});
       const nextRunIdRef=useRef(1);
-      const currentRunIdRef=useRef(null);
-      const prevBestSnapRef=useRef(null);     // {key,best} snapshotted when this run set a Best, for rollback
+      const currentRunIdRef=useRef<number | null>(null);
+      const prevBestSnapRef=useRef<{ key: string; best: AoxBest } | null>(null);     // {key,best} snapshotted when this run set a Best, for rollback
       const bestData=bests[bestKey]||{avg:null,avgMed:null,avgRoundId:null,med:null,medAvg:null,medRoundId:null};
 
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
 
       // Frozen date for the codes panel during the close animation (same as the other modes).
-      const latestAoxDateRef=useRef(null);
+      const latestAoxDateRef=useRef<Question | null>(null);
       const wasCodesOpenRef=useRef(false);
-      const [aoxFrozenDate,setAoxFrozenDate]=useState(()=>({...state.date}));
+      const [aoxFrozenDate,setAoxFrozenDate]=useState<Question | null>(()=>({...state.date}));
       latestAoxDateRef.current=state.date;
       useEffect(()=>{
         if(state.calcOpen){wasCodesOpenRef.current=true;setAoxFrozenDate(state.date);return;}
@@ -600,8 +637,9 @@ const ReactDOM = { createRoot, createPortal }
 
       // Record this run's Best Average/Median (on completion). Compares against the closure
       // `bests[bestKey]` (the best before this run) and snapshots it for a later rollback.
-      const applyBest=(times)=>{
+      const applyBest=(times: number[])=>{
         const avg=calcAvg(times),med=calcMed(times),rid=currentRunIdRef.current;
+        if(avg==null||med==null)return;
         const cur=bests[bestKey]||{avg:null,avgMed:null,avgRoundId:null,med:null,medAvg:null,medRoundId:null};
         prevBestSnapRef.current={key:bestKey,best:{...cur}};
         const avgImp=cur.avg==null||avg<cur.avg,medImp=cur.med==null||med<cur.med;
@@ -648,7 +686,7 @@ const ReactDOM = { createRoot, createPortal }
 
       // Freshness for App's isFullyReset (the random date is excluded).
       const aoxIsFreshLocal=aoxN==="10"&&allowMistakes===false&&oneByOne===false&&runPhase==="idle"&&shown===false&&S.played===0&&S.good===0&&S.streak===0&&S.best===0&&S.times.length===0&&state.stack.length===0&&state.forwardStack.length===0&&state.backDepth===0&&flash===null&&Object.keys(state.persistBtns).length===0&&state.calcOpen===false&&state.canOverrideCorrect===false&&Object.keys(bests).length===0&&Object.keys(bestNew).length===0&&state.pendingWrongOverride===null&&state.overrideUsedThisQ===false&&state.countedWrong===false;
-      useEffect(()=>{onFreshChange&&onFreshChange(aoxIsFreshLocal);},[aoxIsFreshLocal,onFreshChange]);
+      useEffect(()=>{onFreshChange?.(aoxIsFreshLocal);},[aoxIsFreshLocal,onFreshChange]);
 
       // Derived UI state.
       const dateVisible=isLocked||(isRunning&&(!oneByOne||shown))||inBack;
@@ -669,7 +707,7 @@ const ReactDOM = { createRoot, createPortal }
       const begin=()=>{eng.resetStats();currentRunIdRef.current=nextRunIdRef.current++;prevBestSnapRef.current=null;setRunPhase("running");setShown(true);};
       const continueRun=()=>{setShown(true);eng.restartTimer();};   // One-By-One: reveal the already-loaded next date + start its solve timer
       const startOrContinue=()=>{if(runPhase==="idle")begin();else continueRun();};
-      const submitDoW=i=>{
+      const submitDoW=(i: number)=>{
         setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});
         const willComplete=i===correct&&!state.countedWrong&&doneCount===n-1;   // the Nth credited solve completes the run
         const willAdvance=i===correct&&!willComplete;                            // a non-completing correct (first-try or late) advances
@@ -687,7 +725,7 @@ const ReactDOM = { createRoot, createPortal }
         const toWrong=reverseToWrong||retroToWrong;
         const failNow=toWrong&&!allowMistakes;
         if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});   // crediting the current wrong → green flash
-        eng.override({noAdvance:reverseCompleting&&failNow});
+        eng.override({noAdvance:!!(reverseCompleting&&failNow)});
         if(reverseCompleting)rollbackBest();                                     // the completing solve may have set this run's Best
         if(failNow)setRunPhase("failed");                                        // a to-wrong override with no mistakes fails the run (bug #2 / unified rule)
         else if(crediting&&runPhase==="failed")setRunPhase("running");           // crediting the wrong that failed the run resumes it
@@ -736,7 +774,7 @@ const ReactDOM = { createRoot, createPortal }
               <div className="text-3xl font-bold">{dateVisible?fmtDate(date.y,date.m,date.d,date._fmt):"—"}</div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3" data-answer-grid="true">
-              {DAY.map((nm,i)=>{const lastCol=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",'surface-button');const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={nm} type="button" onClick={()=>{if(perLocked)return;submitDoW(i);}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${lastCol}`}>{nm}</button>);})}
+              {DAY.map((nm,i)=>{const lastCol=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash?.type==="good",'surface-button');const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={nm} type="button" onClick={()=>{if(perLocked)return;submitDoW(i);}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${lastCol}`}>{nm}</button>);})}
             </div>
           </div>
           <div className="mt-4 rounded-2xl panel p-3 space-y-3">
@@ -766,7 +804,7 @@ const ReactDOM = { createRoot, createPortal }
     // and passes the settings down (like it does for AoxMode). This is the first mode
     // carved out of App's fused rendering; Flash/Blitz/Deduction follow onto the same engine.
     // ============================================================
-    function ClassicMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}){
+    function ClassicMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}: ModeProps & { genDate: GenDate; fmtDate: FmtDate }){
       const [timingOff,setTimingOff]=useState(true);   // Classic launches with timing hidden (feeds the engine)
       const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff});
       const {state,correct,overrideAvail}=eng;
@@ -779,7 +817,7 @@ const ReactDOM = { createRoot, createPortal }
       const baseBtn="w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none";
       const idleBtn="surface-button";
 
-      const onAnswer=i=>{setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});eng.answer(i);};
+      const onAnswer=(i: number)=>{setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});eng.answer(i);};
       // Override Path 3 (override-after-wrong) flashes green on the correct button, matching App.
       const onOverride=()=>{if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});eng.override();};
 
@@ -791,7 +829,7 @@ const ReactDOM = { createRoot, createPortal }
       // Freshness — engine state at launch default + Classic's own toggle/flash fields. Reported up
       // via onFreshChange so App's isFullyReset (Full Reset dim/lock) accounts for Classic.
       const classicIsFresh=engineFresh(state)&&timingOff===true&&scoringOff===false&&timingArmed===false&&flash===null;
-      useEffect(()=>{onFreshChange&&onFreshChange(classicIsFresh);},[classicIsFresh,onFreshChange]);
+      useEffect(()=>{onFreshChange?.(classicIsFresh);},[classicIsFresh,onFreshChange]);
       const date=state.date;
       return(
         <div style={{display:visible?"block":"none"}}>
@@ -804,7 +842,7 @@ const ReactDOM = { createRoot, createPortal }
                 <div className="text-3xl font-bold">{fmtDate(date.y,date.m,date.d,date._fmt)}</div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3" data-answer-grid="true">
-                {DAY.map((n,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={n} type="button" onClick={()=>{if(perLocked)return;onAnswer(i);if(isTouch)document.activeElement?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{n}</button>);})}
+                {DAY.map((n,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash?.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={n} type="button" onClick={()=>{if(perLocked)return;onAnswer(i);if(isTouch)(document.activeElement as HTMLElement | null)?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{n}</button>);})}
               </div>
             </div>
             <div className="mt-4 rounded-2xl panel p-3 space-y-3">
@@ -836,24 +874,24 @@ const ReactDOM = { createRoot, createPortal }
     // ClassicMode; that duplication gets factored into a shared shell in Step 6, once all
     // modes' variations are known.)
     // ============================================================
-    function FlashMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}){
+    function FlashMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}: ModeProps & { genDate: GenDate; fmtDate: FmtDate }){
       const [active,setActive]=useState(false);
       const [flashPhase,setFlashPhase]=useState("dash");      // dash (idle) | show (revealing) | hide ("…")
       const [showTimerDate,setShowTimerDate]=useState(false); // keep the date visible after Reveal
       const [flashMs,setFlashMs]=useState(500);
       const [flashRemainMs,setFlashRemainMs]=useState(500);
-      const flashTimerRef=useRef(null);
-      const flashDeadlineRef=useRef(null);
-      const flashBarRef=useRef(null);
+      const flashTimerRef=useRef<ReturnType<typeof setTimeout> | null>(null);
+      const flashDeadlineRef=useRef<number | null>(null);
+      const flashBarRef=useRef<HTMLSpanElement | null>(null);
       const [timingOff,setTimingOff]=useState(false);   // Flash shows timing by default (feeds the engine)
       const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff});
       const {state,correct,overrideAvail}=eng;
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
 
       const resetFlashBar=()=>{if(flashBarRef.current){flashBarRef.current.style.transition="none";flashBarRef.current.style.width="100%";}};
-      const startFlashBar=ms=>{requestAnimationFrame(()=>{if(!flashBarRef.current)return;const s=flashBarRef.current;s.style.transition="none";s.style.width="100%";s.getBoundingClientRect();s.style.transition=`width ${ms}ms linear`;s.style.width="0%";});};
+      const startFlashBar=(ms: number)=>{requestAnimationFrame(()=>{if(!flashBarRef.current)return;const s=flashBarRef.current;s.style.transition="none";s.style.width="100%";s.getBoundingClientRect();s.style.transition=`width ${ms}ms linear`;s.style.width="0%";});};
       const endFlashPhase=useCallback(()=>{setFlashPhase("hide");flashDeadlineRef.current=null;setFlashRemainMs(0);flashTimerRef.current=null;},[]);
-      const stopFlash=()=>{clearTimeout(flashTimerRef.current);flashTimerRef.current=null;setFlashPhase("dash");flashDeadlineRef.current=null;setFlashRemainMs(flashMs);resetFlashBar();};
+      const stopFlash=()=>{clearTimeout(flashTimerRef.current ?? undefined);flashTimerRef.current=null;setFlashPhase("dash");flashDeadlineRef.current=null;setFlashRemainMs(flashMs);resetFlashBar();};
       // freezeFlash — Show-Codes-during-the-flash teardown. Unlike stopFlash (which RESETS the
       // bar to 100% + number to full for the idle state), this FREEZES the countdown in place:
       // it cancels the auto-hide timer, stops the rAF number countdown (setActive(false)), and
@@ -861,7 +899,7 @@ const ReactDOM = { createRoot, createPortal }
       // date stays shown. (The original applyCalcPenalty froze the number but missed the bar's
       // CSS transition — bug #4. This completes the freeze.)
       const freezeFlash=()=>{
-        clearTimeout(flashTimerRef.current);flashTimerRef.current=null;flashDeadlineRef.current=null;
+        clearTimeout(flashTimerRef.current ?? undefined);flashTimerRef.current=null;flashDeadlineRef.current=null;
         if(flashBarRef.current){const w=getComputedStyle(flashBarRef.current).width;flashBarRef.current.style.transition="none";flashBarRef.current.style.width=w;}
         setActive(false);setShowTimerDate(true);setFlashPhase("dash");
       };
@@ -869,7 +907,7 @@ const ReactDOM = { createRoot, createPortal }
       // rAF countdown of the reveal-time label while showing (cosmetic; matches App's loop).
       useEffect(()=>{
         if(!(active&&flashPhase==="show"))return;
-        let raf;
+        let raf = 0;
         const loop=()=>{const now=performance.now();if(flashDeadlineRef.current)setFlashRemainMs(Math.max(0,flashDeadlineRef.current-now));raf=requestAnimationFrame(loop);};
         raf=requestAnimationFrame(loop);
         return ()=>cancelAnimationFrame(raf);
@@ -878,13 +916,13 @@ const ReactDOM = { createRoot, createPortal }
       const begin=()=>{
         eng.doNew();                       // advance to a fresh date to reveal
         setActive(true);setShowTimerDate(false);setFlashPhase("show");
-        clearTimeout(flashTimerRef.current);
+        clearTimeout(flashTimerRef.current ?? undefined);
         const now=performance.now();
         flashDeadlineRef.current=now+flashMs;setFlashRemainMs(flashMs);
         flashTimerRef.current=setTimeout(endFlashPhase,Math.max(50,flashMs));
         startFlashBar(flashMs);
       };
-      const onAnswer=i=>{
+      const onAnswer=(i: number)=>{
         if(!active)return;
         setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});
         eng.answer(i);
@@ -897,7 +935,7 @@ const ReactDOM = { createRoot, createPortal }
       // Opening Show Codes mid-flash freezes the countdown (bar + number) and keeps the date
       // shown, then applies the codes penalty — bug #4. Closing it (or opening on a non-live
       // entry) is the normal toggle.
-      const onShowCodes=open=>{if(open&&active)freezeFlash();eng.showCodes(open);};
+      const onShowCodes=(open: boolean)=>{if(open&&active)freezeFlash();eng.showCodes(open);};
       const onOverride=()=>{const wasActive=active;if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});eng.override();if(wasActive){setActive(false);stopFlash();}};
       const resetRound=()=>{eng.resetRound();setActive(false);setShowTimerDate(false);stopFlash();};   // primary "Reset" while live (= App arm)
 
@@ -914,7 +952,7 @@ const ReactDOM = { createRoot, createPortal }
 
       // Freshness for App's isFullyReset (Flash owns its state now): engine fresh + Flash's own fields.
       const flashIsFresh=engineFresh(state)&&timingOff===false&&scoringOff===false&&timingArmed===false&&flash===null&&active===false&&flashPhase==="dash"&&showTimerDate===false&&flashMs===500&&flashRemainMs===500;
-      useEffect(()=>{onFreshChange&&onFreshChange(flashIsFresh);},[flashIsFresh,onFreshChange]);
+      useEffect(()=>{onFreshChange?.(flashIsFresh);},[flashIsFresh,onFreshChange]);
 
       const shouldShowTimerDate=active||showTimerDate;
       const flashHiding=active&&flashPhase==="hide";
@@ -932,7 +970,7 @@ const ReactDOM = { createRoot, createPortal }
         <div style={{display:visible?"block":"none"}}>
           <div className={saveStats?"":"opacity-50"}><StatPanel stats={statsArr} armedSpan={armedSpan}/></div>
           <div className="mt-3"><button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={onResetStats}>Reset Stats</button></div>
-          <div className="mt-3"><div className="flex items-center gap-2"><input type="range" min="100" max="3000" step="100" value={flashMs} onChange={e=>{const v=+e.target.value;setFlashMs(v);if(!active){setFlashRemainMs(v);resetFlashBar();}}} disabled={active} style={{"--rng-fill":Math.round((flashMs-100)/2900*100)+"%"}} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-10 shrink-0 text-right">{fmtFlashT(flashMs)}</span></div></div>
+          <div className="mt-3"><div className="flex items-center gap-2"><input type="range" min="100" max="3000" step="100" value={flashMs} onChange={e=>{const v=+e.target.value;setFlashMs(v);if(!active){setFlashRemainMs(v);resetFlashBar();}}} disabled={active} style={{"--rng-fill":Math.round((flashMs-100)/2900*100)+"%"} as React.CSSProperties} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-10 shrink-0 text-right">{fmtFlashT(flashMs)}</span></div></div>
           <div className="mt-5">
             <div className="mb-3"><div className="text-center text-xs tabular-nums text-purple-200/80 mb-1">{fmtFlashT(flashRemainMs)}</div><div className="bar"><span ref={flashBarRef} style={{width:"100%"}}></span></div></div>
             <div className="mt-4 rounded-2xl panel p-4">
@@ -941,7 +979,7 @@ const ReactDOM = { createRoot, createPortal }
                 <div className="text-3xl font-bold">{dateText}</div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3" data-answer-grid="true">
-                {DAY.map((n,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={n} type="button" onClick={()=>{if(perLocked)return;onAnswer(i);if(isTouch)document.activeElement?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{n}</button>);})}
+                {DAY.map((n,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash?.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={n} type="button" onClick={()=>{if(perLocked)return;onAnswer(i);if(isTouch)(document.activeElement as HTMLElement | null)?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{n}</button>);})}
               </div>
             </div>
             <div className="mt-4 rounded-2xl panel p-3 space-y-3">
@@ -972,7 +1010,7 @@ const ReactDOM = { createRoot, createPortal }
     // per-Q wrong. Best is reconciled in an effect when a round ends (set to max, tagged with
     // the round id) and ROLLED BACK there too when an Override drops the round that set it.
     // ============================================================
-    function BlitzMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}){
+    function BlitzMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}: ModeProps & { genDate: GenDate; fmtDate: FmtDate }){
       const [perQ,setPerQ]=useState(false);
       const [allowMistakes,setAllowMistakes]=useState(true);
       const [active,setActive]=useState(false);
@@ -982,13 +1020,13 @@ const ReactDOM = { createRoot, createPortal }
       const [qSec,setQSec]=useState(5);
       const [,setBlitzRemain]=useState(60);
       const [,setQRemain]=useState(5);
-      const blitzStartRef=useRef(null),blitzPausedAtRef=useRef(null),blitzPausedAccRef=useRef(0),blitzRemainRef=useRef(60);
-      const blitzBarRef=useRef(null),blitzTimeRef=useRef(null);
-      const qDeadlineRef=useRef(null),qPausedAtRef=useRef(null),qPausedAccRef=useRef(0);
-      const suddenBarRef=useRef(null),suddenTimeRef=useRef(null);
-      const [blitzBest,setBlitzBest]=useState({}),[suddenBest,setSuddenBest]=useState({});
-      const [blitzBestNew,setBlitzBestNew]=useState({}),[suddenBestNew,setSuddenBestNew]=useState({});
-      const currentRoundIdRef=useRef(null),nextRoundIdRef=useRef(1);
+      const blitzStartRef=useRef<number | null>(null),blitzPausedAtRef=useRef<number | null>(null),blitzPausedAccRef=useRef(0),blitzRemainRef=useRef(60);
+      const blitzBarRef=useRef<HTMLSpanElement | null>(null),blitzTimeRef=useRef<HTMLSpanElement | null>(null);
+      const qDeadlineRef=useRef<number | null>(null),qPausedAtRef=useRef<number | null>(null),qPausedAccRef=useRef(0);
+      const suddenBarRef=useRef<HTMLSpanElement | null>(null),suddenTimeRef=useRef<HTMLSpanElement | null>(null);
+      const [blitzBest,setBlitzBest]=useState<Record<string, BlitzBest>>({}),[suddenBest,setSuddenBest]=useState<Record<string, SuddenBest>>({});
+      const [blitzBestNew,setBlitzBestNew]=useState<Record<string, { score: boolean; streak: boolean }>>({}),[suddenBestNew,setSuddenBestNew]=useState<Record<string, boolean>>({});
+      const currentRoundIdRef=useRef<number | null>(null),nextRoundIdRef=useRef(1);
       const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff:false}); // Blitz: timing always tracked
       const {state,correct,overrideAvail}=eng;
       const S=state.stats;
@@ -1007,7 +1045,7 @@ const ReactDOM = { createRoot, createPortal }
       // timeout counts a miss (timeoutMiss).
       useEffect(()=>{
         if(!active)return;
-        let raf;
+        let raf = 0;
         const loop=()=>{
           const now=performance.now();
           if(!perQ&&blitzStartRef.current!=null){
@@ -1042,7 +1080,7 @@ const ReactDOM = { createRoot, createPortal }
         else{qDeadlineRef.current=now+qSec*1000;qPausedAccRef.current=0;qPausedAtRef.current=null;setQRemain(qSec);}
         resetTimerBars();
       };
-      const onAnswer=i=>{
+      const onAnswer=(i: number)=>{
         if(!active)return;
         setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});
         eng.answer(i);
@@ -1071,7 +1109,7 @@ const ReactDOM = { createRoot, createPortal }
       // Opening Show Codes during an active round ends the round (so Best Score is recorded and
       // the countdown stops), exactly like Reveal — bug #3. The original applyCalcPenalty ended
       // the round for an active timer; the Blitz migration dropped it (bare eng.showCodes).
-      const onShowCodes=open=>{eng.showCodes(open);if(open&&active)endRound();};
+      const onShowCodes=(open: boolean)=>{eng.showCodes(open);if(open&&active)endRound();};
       const resetRound=()=>{eng.resetStats();setActive(false);setTimerDone(false);setShowTimerDate(false);stopRound();resetTimerBars();}; // App's arm (resets stats for blitz)
 
       // Reconcile Best when a round is over: set to max(S) tagged with the round id, and roll
@@ -1110,7 +1148,7 @@ const ReactDOM = { createRoot, createPortal }
       const toggleAllowMistakes=()=>{if(active||timerDone)return;setAllowMistakes(v=>!v);};
 
       const blitzIsFresh=state.stats.played===0&&state.stats.good===0&&state.stats.streak===0&&state.stats.best===0&&state.stats.times.length===0&&state.stack.length===0&&state.forwardStack.length===0&&state.backDepth===0&&state.locked===false&&state.revealed===false&&state.countedWrong===false&&state.canOverrideCorrect===false&&state.pendingWrongOverride===null&&state.overrideUsedThisQ===false&&state.calcOpen===false&&active===false&&timerDone===false&&showTimerDate===false&&perQ===false&&allowMistakes===true&&blitzSec===60&&qSec===5&&Object.keys(blitzBest).length===0&&Object.keys(suddenBest).length===0&&flash===null;
-      useEffect(()=>{onFreshChange&&onFreshChange(blitzIsFresh);},[blitzIsFresh,onFreshChange]);
+      useEffect(()=>{onFreshChange?.(blitzIsFresh);},[blitzIsFresh,onFreshChange]);
 
       const shouldShowTimerDate=active||showTimerDate;
       const optionsDisabled=!active||state.locked||state.calcOpen||state.calcPenaltyActive;
@@ -1141,7 +1179,7 @@ const ReactDOM = { createRoot, createPortal }
             <button type="button" onClick={toggleAllowMistakes} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${allowMistakes?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}${(active||timerDone)?" opacity-60 pointer-events-none":""}`}>Allow Mistakes</button>
             <button type="button" onClick={togglePerQ} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border btn-solid border-transparent${(active||timerDone)?" opacity-60 pointer-events-none":""}`}>{perQ?"Per Question":"Per Round"}</button>
           </div>
-          <div className="mt-3">{!perQ?(<div className="flex items-center gap-2"><input type="range" min="10" max="180" step="5" value={blitzSec} onChange={e=>{const v=+e.target.value;setBlitzSec(v);if(!active){setBlitzRemain(v);blitzRemainRef.current=v;if(blitzTimeRef.current)blitzTimeRef.current.textContent=fmtBlitzT(v);if(blitzBarRef.current)blitzBarRef.current.style.width="100%";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((blitzSec-10)/170*100)+"%"}} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-14 shrink-0 text-right">{fmtBlitzT(blitzSec)}</span></div>):(<div className="flex items-center gap-2"><input type="range" min="1" max="20" step="1" value={qSec} onChange={e=>{const v=+e.target.value;setQSec(v);if(!active){setQRemain(v);if(suddenTimeRef.current)suddenTimeRef.current.textContent=v+"s";if(suddenBarRef.current)suddenBarRef.current.style.width="100%";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((qSec-1)/19*100)+"%"}} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-8 shrink-0 text-right">{qSec}s</span></div>)}</div>
+          <div className="mt-3">{!perQ?(<div className="flex items-center gap-2"><input type="range" min="10" max="180" step="5" value={blitzSec} onChange={e=>{const v=+e.target.value;setBlitzSec(v);if(!active){setBlitzRemain(v);blitzRemainRef.current=v;if(blitzTimeRef.current)blitzTimeRef.current.textContent=fmtBlitzT(v);if(blitzBarRef.current)blitzBarRef.current.style.width="100%";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((blitzSec-10)/170*100)+"%"} as React.CSSProperties} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-14 shrink-0 text-right">{fmtBlitzT(blitzSec)}</span></div>):(<div className="flex items-center gap-2"><input type="range" min="1" max="20" step="1" value={qSec} onChange={e=>{const v=+e.target.value;setQSec(v);if(!active){setQRemain(v);if(suddenTimeRef.current)suddenTimeRef.current.textContent=v+"s";if(suddenBarRef.current)suddenBarRef.current.style.width="100%";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((qSec-1)/19*100)+"%"} as React.CSSProperties} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-8 shrink-0 text-right">{qSec}s</span></div>)}</div>
           <div className="mt-5">
             {!perQ&&(<div className="mb-3"><div className="text-center text-xs tabular-nums text-purple-200/80 mb-1"><span ref={blitzTimeRef}>{fmtBlitzT(blitzSec)}</span></div><div className="bar"><span ref={blitzBarRef} style={{width:"100%"}}></span></div></div>)}
             {perQ&&(<div className="mb-3"><div className="text-center text-xs tabular-nums text-purple-200/80 mb-1"><span ref={suddenTimeRef}>{qSec}s</span></div><div className="bar"><span ref={suddenBarRef} style={{width:"100%"}}></span></div></div>)}
@@ -1151,7 +1189,7 @@ const ReactDOM = { createRoot, createPortal }
                 <div className="text-3xl font-bold">{dateText}</div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3" data-answer-grid="true">
-                {DAY.map((n,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={n} type="button" onClick={()=>{if(perLocked)return;onAnswer(i);if(isTouch)document.activeElement?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{n}</button>);})}
+                {DAY.map((n,i)=>{const last=i===DAY.length-1?"col-span-2":"";const ps=state.persistBtns[i];const isFlashing=!!(flash&&flash.idx===i);const bCls=buttonStateClass(ps,isFlashing,flash?.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={n} type="button" onClick={()=>{if(perLocked)return;onAnswer(i);if(isTouch)(document.activeElement as HTMLElement | null)?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{n}</button>);})}
               </div>
             </div>
             <div className="mt-4 rounded-2xl panel p-3 space-y-3">
@@ -1184,7 +1222,7 @@ const ReactDOM = { createRoot, createPortal }
     // scoring+timing toggles / freshness / settings-regen) mirrors ClassicMode and gets folded
     // into a shared shell in Step 6, once all modes' variations are known.
     // ============================================================
-    function DeductionMode({visible,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,onFreshChange}){
+    function DeductionMode({visible,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,onFreshChange}: ModeProps){
       const [dedType,setDedType]=useState("day");
       const [abCrossOnly,setAbCrossOnly]=useState(false);
       const [julCrossOnly,setJulCrossOnly]=useState(false);
@@ -1196,10 +1234,10 @@ const ReactDOM = { createRoot, createPortal }
       // Year init can fail when the range can't build a distinct-window puzzle (yearSubPossible
       // false). Supply a minimal valid fallback so the (hidden, unreachable) Year engine stays
       // well-formed — it's never displayed in that state (the Year button is disabled).
-      const yearFallback=lo=>{const y=Math.max(1,lo);const w=(useJulian&&isJulianDate(y,1,1))?wdayJulian(y,1,1):wday(y,1,1);return{type:"year",y,m:1,d:1,w,options:[y],_fmt:randomFormat?rollFormat():dateFormat,_jul:useJulian,_abx:abCrossOnly,_julx:julCrossOnly};};
-      const genDay=(lo,hi)=>makeDedPuzzle("day",lo,hi,opts);
-      const genMonth=(lo,hi)=>makeDedPuzzle("month",lo,hi,opts);
-      const genYear=(lo,hi)=>makeDedPuzzle("year",lo,hi,opts)||yearFallback(lo);
+      const yearFallback=(lo: number): DedPuzzle=>{const y=Math.max(1,lo);const w=(useJulian&&isJulianDate(y,1,1))?wdayJulian(y,1,1):wday(y,1,1);return{type:"year",y,m:1,d:1,w,options:[y],_fmt:randomFormat?rollFormat():dateFormat,_jul:useJulian,_abx:abCrossOnly,_julx:julCrossOnly};};
+      const genDay=(lo: number,hi: number): DedPuzzle=>makeDedPuzzle("day",lo,hi,opts)!;
+      const genMonth=(lo: number,hi: number): DedPuzzle=>makeDedPuzzle("month",lo,hi,opts)!;
+      const genYear=(lo: number,hi: number): DedPuzzle=>makeDedPuzzle("year",lo,hi,opts)||yearFallback(lo);
 
       const dayEng=useGameEngine({genDate:genDay,minY,maxY,useJulian,saveStats,timingOff});
       const monthEng=useGameEngine({genDate:genMonth,minY,maxY,useJulian,saveStats,timingOff});
@@ -1212,8 +1250,8 @@ const ReactDOM = { createRoot, createPortal }
       // Hideable stats chrome shared with Classic/Flash — operates on the ACTIVE sub-mode's engine.
       const {scoringOff,timingArmed,statsArr,armedSpan}=useStatsHideToggles({eng,saveStats,visible,timingOff,setTimingOff});
 
-      const fmtDatePartial=(y,m,d,storedFmt,missing)=>fmtPartial(y,m,d,storedFmt||dateFormat,missing);
-      const centerLastOpt=(index,total)=>{if(total<=0)return"";if(index===total-1&&total%3===1)return"col-span-3";return"";};
+      const fmtDatePartial=(y: number,m: number,d: number,storedFmt: FormatId | undefined,missing: DatePart)=>fmtPartial(y,m,d,storedFmt||dateFormat,missing);
+      const centerLastOpt=(index: number,total: number)=>{if(total<=0)return"";if(index===total-1&&total%3===1)return"col-span-3";return"";};
       // Can the range support a Year puzzle? (mirrors App's yearSubPossible exactly.)
       const yearSubPossible=(()=>{const lo=Math.max(1,minY),hi=maxY;if(hi-lo+1>=5)return true;if(!useJulian)return false;const has1581=lo<=1581&&hi>=1581,has1582=lo<=1582&&hi>=1582,has1583=lo<=1583&&hi>=1583;return(has1582&&has1583)||(has1581&&has1582);})();
 
@@ -1222,8 +1260,8 @@ const ReactDOM = { createRoot, createPortal }
       const baseBtn="w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none";
       const idleBtn="surface-button";
 
-      const changeDedType=t=>{if(t===dedType)return;setFlash(null);setDedType(t);};   // each silo persists; just swap which shows
-      const onAnswer=i=>{setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});eng.answer(i);};
+      const changeDedType=(t: string)=>{if(t===dedType)return;setFlash(null);setDedType(t);};   // each silo persists; just swap which shows
+      const onAnswer=(i: number)=>{setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});eng.answer(i);};
       // Override-after-wrong flashes green on the correct option, matching App's dedFlash branch.
       const onOverride=()=>{if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});eng.override();};
 
@@ -1248,11 +1286,11 @@ const ReactDOM = { createRoot, createPortal }
       // Freshness — all three silos' engine state fresh + Deduction's toggles/UI at launch default
       // (dates are random, so excluded). Reported up so App's isFullyReset accounts for Deduction.
       const deductionIsFresh=engineFresh(dayEng.state)&&engineFresh(monthEng.state)&&engineFresh(yearEng.state)&&dedType==="day"&&abCrossOnly===false&&julCrossOnly===false&&monthOnly1582===false&&timingOff===true&&scoringOff===false&&timingArmed===false&&flash===null;
-      useEffect(()=>{onFreshChange&&onFreshChange(deductionIsFresh);},[deductionIsFresh,onFreshChange]);
-      const date=state.date;
+      useEffect(()=>{onFreshChange?.(deductionIsFresh);},[deductionIsFresh,onFreshChange]);
+      const date=state.date as DedPuzzle;
       // Codes-panel target mirrors App's deduction calcTarget: just the date fields (so
       // displayedFormat falls to the current dateFormat) + the puzzle's _jul snapshot.
-      const calcTarget=date?{y:date.y,m:date.m,d:date.d,_jul:date._jul}:null;
+      const calcTarget: { y: number; m: number; d: number; _jul?: boolean; _fmt?: FormatId } | null=date?{y:date.y,m:date.m,d:date.d,_jul:date._jul}:null;
       // cellDates for the Month 1582 codes panel (answer box groups months from both calendars).
       let cellDates=null;
       if(date&&date.type==="month"&&date.y===1582&&date.boxes){
@@ -1289,9 +1327,9 @@ const ReactDOM = { createRoot, createPortal }
                 {date&&<div className="mt-1 text-lg text-purple-100">Weekday: <span className="font-semibold">{DAY[date.w]}</span></div>}
               </div>
               <div className="mt-4">
-                {date&&date.type==="year"&&(()=>{const N=date.options.length;const gridCls=N===2?"grid-cols-2":N===5?"grid-cols-6":"grid-cols-3";const colSpanFor=idx=>N===5?(idx<3?"col-span-2":"col-span-3"):"";return(<div className={`grid gap-2 ${gridCls}`} data-answer-grid="true">{date.options.map((y,idx)=>{const ps=state.persistBtns[idx];const isFlashing=!!(flash&&flash.idx===idx);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={idx} type="button" onClick={()=>{if(perLocked)return;onAnswer(idx);if(isTouch)document.activeElement?.blur();}} className={`${baseBtn} py-2 text-sm ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${colSpanFor(idx)}`}>{fmtYear(y)}</button>);})}</div>);})()}
-                {date&&date.type==="month"&&(<div className="grid grid-cols-2 gap-3" data-answer-grid="true">{date.options.map((mv,idx)=>{const last=idx===date.options.length-1?"col-span-2":"";const ps=state.persistBtns[idx];const isFlashing=!!(flash&&flash.idx===idx);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={idx} type="button" onClick={()=>{if(perLocked)return;onAnswer(idx);if(isTouch)document.activeElement?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{mv}</button>);})}</div>)}
-                {date&&date.type==="day"&&(<div className="grid grid-cols-3 gap-2" data-answer-grid="true">{date.options.map((dv,idx)=>{const ps=state.persistBtns[idx];const isFlashing=!!(flash&&flash.idx===idx);const bCls=buttonStateClass(ps,isFlashing,flash&&flash.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={idx} type="button" onClick={()=>{if(perLocked)return;onAnswer(idx);if(isTouch)document.activeElement?.blur();}} className={`${baseBtn} py-2 text-sm ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${centerLastOpt(idx,date.options.length)}`}>{dv}</button>);})}</div>)}
+                {date&&date.type==="year"&&(()=>{const N=date.options.length;const gridCls=N===2?"grid-cols-2":N===5?"grid-cols-6":"grid-cols-3";const colSpanFor=(idx: number)=>N===5?(idx<3?"col-span-2":"col-span-3"):"";return(<div className={`grid gap-2 ${gridCls}`} data-answer-grid="true">{date.options.map((y,idx)=>{const ps=state.persistBtns[idx];const isFlashing=!!(flash&&flash.idx===idx);const bCls=buttonStateClass(ps,isFlashing,flash?.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={idx} type="button" onClick={()=>{if(perLocked)return;onAnswer(idx);if(isTouch)(document.activeElement as HTMLElement | null)?.blur();}} className={`${baseBtn} py-2 text-sm ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${colSpanFor(idx)}`}>{fmtYear(y)}</button>);})}</div>);})()}
+                {date&&date.type==="month"&&(<div className="grid grid-cols-2 gap-3" data-answer-grid="true">{date.options.map((mv,idx)=>{const last=idx===date.options.length-1?"col-span-2":"";const ps=state.persistBtns[idx];const isFlashing=!!(flash&&flash.idx===idx);const bCls=buttonStateClass(ps,isFlashing,flash?.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={idx} type="button" onClick={()=>{if(perLocked)return;onAnswer(idx);if(isTouch)(document.activeElement as HTMLElement | null)?.blur();}} className={`${baseBtn} ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${last}`}>{mv}</button>);})}</div>)}
+                {date&&date.type==="day"&&(<div className="grid grid-cols-3 gap-2" data-answer-grid="true">{date.options.map((dv,idx)=>{const ps=state.persistBtns[idx];const isFlashing=!!(flash&&flash.idx===idx);const bCls=buttonStateClass(ps,isFlashing,flash?.type==="good",idleBtn);const perLocked=!!ps;const shouldDim=optionsDisabled&&!ps&&!isFlashing;return(<button key={idx} type="button" onClick={()=>{if(perLocked)return;onAnswer(idx);if(isTouch)(document.activeElement as HTMLElement | null)?.blur();}} className={`${baseBtn} py-2 text-sm ${bCls} ${(perLocked||optionsDisabled)?"pointer-events-none":""} ${shouldDim?"opacity-60":""} ${centerLastOpt(idx,date.options.length)}`}>{dv}</button>);})}</div>)}
               </div>
             </div>
             <div className="mt-4 rounded-2xl panel p-3 space-y-3">
@@ -1329,7 +1367,7 @@ const ReactDOM = { createRoot, createPortal }
       // mode changes for codes-freeze logic.
       const prevNonGuideModeRef=useRef('classic');
       useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
-      const modeSelectRef=useRef(null);
+      const modeSelectRef=useRef<HTMLDivElement | null>(null);
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
       // ⚙ Settings store (Stage C, Step 5a). The 13 settings values + their setters
       // + resetSettings now live in the Zustand store (src/store/settings.js), bound
@@ -1354,12 +1392,12 @@ const ReactDOM = { createRoot, createPortal }
       const resetSettingsStore=useSettings(s=>s.resetSettings);
 
       const activeTheme=useSystem?(systemIsDark?darkTheme:lightTheme):manualTheme;
-      useEffect(()=>{const mq=window.matchMedia("(prefers-color-scheme: dark)");const h=e=>setSystemIsDark(e.matches);mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);},[]);
+      useEffect(()=>{const mq=window.matchMedia("(prefers-color-scheme: dark)");const h=(e: MediaQueryListEvent)=>setSystemIsDark(e.matches);mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);},[]);
       useEffect(()=>{
         document.documentElement.setAttribute("data-theme",activeTheme);
         const tc=getComputedStyle(document.documentElement).getPropertyValue("--tc").trim();
         const meta=document.querySelector("meta[name='theme-color']");
-        if(meta&&tc)meta.content=tc;
+        if(meta&&tc)(meta as HTMLMetaElement).content=tc;
       },[activeTheme]);
       // Save Stats toggle. Flips the global ⚙ setting; each always-mounted mode component
       // reads the new saveStats prop itself (display dimming + Best-recording gate). Save Stats
@@ -1368,12 +1406,12 @@ const ReactDOM = { createRoot, createPortal }
       // minY/maxY now from the settings store (bound at top of App). minInputVal/maxInputVal stay local (transient text mirrors).
       const [minInputVal,setMinInputVal]=useState("1");
       const [maxInputVal,setMaxInputVal]=useState("10000");
-      const minInputRef=useRef(null),maxInputRef=useRef(null);
-      const [lookupHistory,setLookupHistory]=useState([]);
+      const minInputRef=useRef<HTMLInputElement | null>(null),maxInputRef=useRef<HTMLInputElement | null>(null);
+      const [lookupHistory,setLookupHistory]=useState<LookupEntry[]>([]);
       const [lookupInput,setLookupInput]=useState("");
       const [lookupOutput,setLookupOutput]=useState("");
-      const [lookupCalcDate,setLookupCalcDate]=useState(null);
-      const [lookupSelectedHistoryId,setLookupSelectedHistoryId]=useState(null);
+      const [lookupCalcDate,setLookupCalcDate]=useState<CodeDate | null>(null);
+      const [lookupSelectedHistoryId,setLookupSelectedHistoryId]=useState<string | null>(null);
       const [lookupCalcOpen,setLookupCalcOpen]=useState(false);
       // #6 — removed prevLookupCalcKeyRef and its effect; lookup Show Codes now only closes
       // when runLookup() fires a new result or the user manually closes it.
@@ -1388,7 +1426,7 @@ const ReactDOM = { createRoot, createPortal }
       // variable instead of JS-applying padding directly keeps the styling
       // declarative and avoids React state churn for a value that's not part of
       // application logic.
-      const htpStickyBarRef=useRef(null);
+      const htpStickyBarRef=useRef<HTMLDivElement | null>(null);
       useEffect(()=>{
         const el=htpStickyBarRef.current;if(!el)return;
         const updateBarH=()=>{document.documentElement.style.setProperty('--bar-h',`${el.offsetHeight}px`);};
@@ -1406,7 +1444,7 @@ const ReactDOM = { createRoot, createPortal }
       // paint before scroll state is evaluated). The listener runs on every mode change
       // so it picks up the container ref and re-evaluates against new content. Inner
       // scrollables (popover, lookup) track their own scroll state independently.
-      const appScrollRef=useRef(null);
+      const appScrollRef=useRef<HTMLDivElement | null>(null);
       const [appAtBottom,setAppAtBottom]=useState(true);
       const [appScrolledFromTop,setAppScrolledFromTop]=useState(false);
       useEffect(()=>{
@@ -1458,7 +1496,7 @@ const ReactDOM = { createRoot, createPortal }
       //
       // All keyboard activations bypass CSS pointer-events via .click(), so the
       // pointer-events-none className check is mandatory to mirror real-click locks.
-      useEffect(()=>{const onKey=e=>{
+      useEffect(()=>{const onKey=(e: KeyboardEvent)=>{
         if(e.repeat||e.isComposing)return;
         // Tab: toggle the mode selector dropdown. Plain Tab only — Ctrl+Tab, Ctrl+Shift+Tab,
         // Shift+Tab, Alt+Tab all pass through to the browser. Works universally, including
@@ -1475,16 +1513,16 @@ const ReactDOM = { createRoot, createPortal }
         }
         if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey)return;
         const k=e.key;
-        const ae=document.activeElement;
+        const ae=document.activeElement as HTMLElement | null;
         if(ae){const tag=ae.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||ae.isContentEditable)return;}
         // Category 1: 0–9 → answer grid
         if(k>='0'&&k<='9'){
-          const grids=document.querySelectorAll('[data-answer-grid="true"]');
-          let visible=null;
+          const grids=document.querySelectorAll<HTMLElement>('[data-answer-grid="true"]');
+          let visible: HTMLElement | null=null;
           for(const g of grids){if(g.offsetParent!==null){visible=g;break;}}
           if(!visible)return;
           const idx=parseInt(k,10);
-          const btn=visible.children[idx];
+          const btn=visible.children[idx] as HTMLElement | undefined;
           if(!btn||btn.tagName!=='BUTTON')return;
           if(btn.className.includes('pointer-events-none'))return;
           e.preventDefault();
@@ -1498,14 +1536,14 @@ const ReactDOM = { createRoot, createPortal }
         else if(k.length===1){const upper=k.toUpperCase();if(upper>='A'&&upper<='Z')dataKey=upper;}
         if(!dataKey)return;
         // Category 3a: mode switching — direct setMode (no DOM button per mode)
-        const MODE_KEYS={K:'classic',F:'flash',B:'blitz',A:'aox',D:'deduction',L:'lookup'};
+        const MODE_KEYS: Record<string, string>={K:'classic',F:'flash',B:'blitz',A:'aox',D:'deduction',L:'lookup'};
         if(MODE_KEYS[dataKey]){e.preventDefault();setMode(MODE_KEYS[dataKey]);setSettingsOpen(false);return;}
         // Category 3b: H — toggle to/from guide, preserving previous non-guide mode
         if(dataKey==='H'){e.preventDefault();setMode(m=>m==='guide'?(prevNonGuideModeRef.current||'classic'):'guide');setSettingsOpen(false);return;}
         // Category 3c: G — toggle settings popover
         if(dataKey==='G'){e.preventDefault();setSettingsOpen(v=>!v);return;}
         // Category 2: data-key DOM walk for game-loop letters and arrows
-        const tagged=document.querySelectorAll(`[data-key="${dataKey}"]`);
+        const tagged=document.querySelectorAll<HTMLElement>(`[data-key="${dataKey}"]`);
         for(const btn of tagged){
           if(btn.tagName!=='BUTTON')continue;
           if(btn.offsetParent===null)continue;
@@ -1515,14 +1553,14 @@ const ReactDOM = { createRoot, createPortal }
           return;
         }
       };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[]);
-      function applyMinValue(val){if(val!==minY)setMinY(val);}
-      function applyMaxValue(val){if(val!==maxY)setMaxY(val);}
+      function applyMinValue(val: number){if(val!==minY)setMinY(val);}
+      function applyMaxValue(val: number){if(val!==maxY)setMaxY(val);}
       const commitMin=()=>{const p=parseInt(minInputVal);if(isNaN(p)){setMinInputVal(String(minY));return;}const v=Math.max(1,Math.min(maxY,p));applyMinValue(v);setMinInputVal(String(v));};
       const commitMax=()=>{const p=parseInt(maxInputVal);if(isNaN(p)){setMaxInputVal(String(maxY));return;}const v=Math.max(minY,Math.min(10000,p));applyMaxValue(v);setMaxInputVal(String(v));};
       useEffect(()=>{if(document.activeElement===minInputRef.current)return;setMinInputVal(String(minY));},[minY]);
       useEffect(()=>{if(document.activeElement===maxInputRef.current)return;setMaxInputVal(String(maxY));},[maxY]);
-      const pushLookupHistory=entry=>setLookupHistory(prev=>[entry,...prev].slice(0,20));
-      const moveHistoryEntryToTop=id=>setLookupHistory(prev=>{const idx=prev.findIndex(e=>e.id===id);if(idx<=0)return prev;const entry=prev[idx];return[entry,...prev.slice(0,idx),...prev.slice(idx+1)];});
+      const pushLookupHistory=(entry: LookupEntry)=>setLookupHistory(prev=>[entry,...prev].slice(0,20));
+      const moveHistoryEntryToTop=(id: string)=>setLookupHistory(prev=>{const idx=prev.findIndex(e=>e.id===id);if(idx<=0)return prev;const entry=prev[idx];return[entry,...prev.slice(0,idx),...prev.slice(idx+1)];});
       const clearLookupHistory=()=>setLookupHistory([]);
       // Date format / randomFormat / leapChance / janFebChance / julianChance now from the
       // settings store (bound at top of App). Semantics unchanged:
@@ -1536,7 +1574,7 @@ const ReactDOM = { createRoot, createPortal }
       // fmtDate: every date stamps _fmt (always present), so display always uses
       // the date's stored format. Falls through to dateFormat only if a malformed
       // legacy date without _fmt slips through (defensive).
-      const fmtDate=(y,m,d,storedFmt)=>fmt(y,m,d,storedFmt||dateFormat);
+      const fmtDate=(y: number,m: number,d: number,storedFmt?: FormatId)=>fmt(y,m,d,storedFmt||dateFormat);
       // Generate a new game-mode date with the current settings baked in.
       // Stamps _fmt and _jul at generation. _fmt is always present — random roll
       // when randomFormat is on, current dateFormat when off. The display layer always
@@ -1549,23 +1587,23 @@ const ReactDOM = { createRoot, createPortal }
       // entries (and deduction) so revisiting a past question shows codes consistent with
       // the system that was active when it was created. Live questions ignore _jul and use
       // current useJulian, so toggling Julian on a live (un-guessed) date updates the answer.
-      const genDate=(lo,hi)=>{
+      const genDate=(lo: number,hi: number)=>{
         const dt=randomDate(lo,hi,useJulian,leapChance,janFebChance,julianChance);
         dt._fmt=randomFormat?rollFormat():dateFormat;
         dt._jul=useJulian;
         return dt;
       };
       const [settingsOpen,setSettingsOpen]=useState(false);
-      const settingsRef=useRef(null);
-      const settingsPopoverRef=useRef(null);
+      const settingsRef=useRef<HTMLDivElement | null>(null);
+      const settingsPopoverRef=useRef<HTMLDivElement | null>(null);
       // Full Reset state: armed=true means the user tapped once and the next tap fires.
       // Auto-disarms after a short timer, when settings closes, or when the user taps any
       // other interactive control inside the popover. Implemented as a per-tap state machine
       // rather than a dialog so the destructive nature is communicated by the in-place label
       // and color change without a modal interruption.
       const [fullResetArmed,setFullResetArmed]=useState(false);
-      const fullResetBtnRef=useRef(null);
-      const fullResetTimerRef=useRef(null);
+      const fullResetBtnRef=useRef<HTMLButtonElement | null>(null);
+      const fullResetTimerRef=useRef<ReturnType<typeof setTimeout> | null>(null);
       // aoxIsFresh — reported up from AoxMode via the onFreshChange prop. AoxMode's ~24
       // internal state fields are otherwise opaque to the App, so we mirror their combined
       // freshness state here to use in isFullyReset (the Full Reset dim/lock check below).
@@ -1598,7 +1636,7 @@ const ReactDOM = { createRoot, createPortal }
       //   popoverAtBottom        → bottom fade + sticky footer shadow (both signal "more below")
       // Defaults: scrolledFromTop false, atBottom true (no indicators on first open before
       // the listener evaluates). The two fade flags combine into fade-scroll-both when both apply.
-      const popoverInnerScrollRef=useRef(null);
+      const popoverInnerScrollRef=useRef<HTMLDivElement | null>(null);
       const [popoverAtBottom,setPopoverAtBottom]=useState(true);
       const [popoverScrolledFromTop,setPopoverScrolledFromTop]=useState(false);
       useEffect(()=>{
@@ -1622,16 +1660,16 @@ const ReactDOM = { createRoot, createPortal }
       // and pick from the mode dropdown without the settings popover auto-closing
       // on the same tap — taps inside the mode trigger or its open dropdown panel
       // are inside modeSelectRef's subtree and therefore "inside" for this check.
-      useEffect(()=>{if(!settingsOpen)return;const h=e=>{const inBtn=settingsRef.current&&settingsRef.current.contains(e.target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(e.target);const inSel=modeSelectRef.current&&modeSelectRef.current.contains(e.target);
+      useEffect(()=>{if(!settingsOpen)return;const h=(e: MouseEvent | TouchEvent)=>{const target=e.target as Element | null;const inBtn=settingsRef.current&&settingsRef.current.contains(target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(target);const inSel=modeSelectRef.current&&modeSelectRef.current.contains(target);
         // Mousedown on the browser scrollbar registers e.target as <html> on Windows. Ignore that
         // case so dragging the scrollbar doesn't close the popover.
-        const onScrollbar=e.target===document.documentElement||e.target===document.body;
+        const onScrollbar=target===document.documentElement||target===document.body;
         if(onScrollbar)return;
         // Open CustomSelect dropdown panels (the mode select + the theme selects) portal out to
         // #root with role="listbox", so a tap on an option lands OUTSIDE the popover in the DOM.
         // Treat that as "inside" so picking a theme/mode doesn't slam the settings popover shut
         // before the selection registers.
-        const inListbox=!!(e.target&&e.target.closest&&e.target.closest('[role="listbox"]'));
+        const inListbox=!!(target&&target.closest&&target.closest('[role="listbox"]'));
         if(!inBtn&&!inPop&&!inSel&&!inListbox){
           // Year-range inputs (and any future input in the popover) commit on blur. When closing
           // settings via click-outside on a non-focusable element, the input keeps focus until
@@ -1639,7 +1677,7 @@ const ReactDOM = { createRoot, createPortal }
           // so the typed value gets dropped. Programmatically blur first so onBlur runs
           // synchronously (commit), then close. (Mobile happens to work without this because
           // tapping a non-focusable target on touch normally fires blur before touchstart.)
-          const ae=document.activeElement;
+          const ae=document.activeElement as HTMLElement | null;
           if(ae&&ae.tagName==='INPUT'&&settingsPopoverRef.current&&settingsPopoverRef.current.contains(ae))ae.blur();
           setSettingsOpen(false);
         }};document.addEventListener('mousedown',h);document.addEventListener('touchstart',h);return()=>{document.removeEventListener('mousedown',h);document.removeEventListener('touchstart',h);};},[settingsOpen]);
@@ -1647,7 +1685,7 @@ const ReactDOM = { createRoot, createPortal }
       // handles Escape (year-range inputs revert their value on Escape) — those handlers call
       // stopPropagation isn't used, so this listener still receives the event after the input's
       // handler runs. To avoid double-handling, we check the active element type.
-      useEffect(()=>{if(!settingsOpen)return;const h=e=>{if(e.key!=="Escape")return;const ae=document.activeElement;if(ae&&ae.tagName==="INPUT")return;e.preventDefault();setSettingsOpen(false);};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[settingsOpen]);
+      useEffect(()=>{if(!settingsOpen)return;const h=(e: KeyboardEvent)=>{if(e.key!=="Escape")return;const ae=document.activeElement;if(ae&&ae.tagName==="INPUT")return;e.preventDefault();setSettingsOpen(false);};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[settingsOpen]);
       // Theme option arrays — keys match the CustomSelect API (value/label) so
       // they can be passed directly without per-render mapping.
       const DARK_THEMES=[{value:'dusk',label:'Dusk'},{value:'midnight',label:'Midnight'},{value:'nebula',label:'Nebula'}];
@@ -1730,8 +1768,8 @@ const ReactDOM = { createRoot, createPortal }
       // outside the button reliably disarm.
       useEffect(()=>{
         if(!fullResetArmed)return;
-        const h=e=>{
-          if(fullResetBtnRef.current&&fullResetBtnRef.current.contains(e.target))return;
+        const h=(e: MouseEvent | TouchEvent)=>{
+          if(fullResetBtnRef.current&&fullResetBtnRef.current.contains(e.target as Node | null))return;
           disarmFullReset();
         };
         document.addEventListener('mousedown',h,true);

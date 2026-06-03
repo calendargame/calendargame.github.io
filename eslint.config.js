@@ -68,11 +68,11 @@ export default defineConfig([
     },
   },
   {
-    // main.jsx is the app entry (renders the root) — it legitimately defines
+    // main.tsx is the app entry (renders the root) — it legitimately defines
     // components without exporting them, which the react-refresh rule flags. That
     // rule is for HMR of component MODULES, not the entry file, so silence it here.
     // (As the mode-untangle moves components into their own files, this shrinks.)
-    files: ['src/main.jsx'],
+    files: ['src/main.tsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
   // MUST be last: turns off any ESLint rules that would conflict with Prettier's
