@@ -29,7 +29,7 @@ import { isJulianDate, wday, wdayJulian } from '../lib/calendar.js'
 import { computeStreaks } from './streak.js'
 import { computeHasCredit, markBtns, mkBtnsWithCorrect, entryWithGreen } from './answerButtons.js'
 import type { ButtonState, Btns } from './answerButtons.js'
-import type { FormatId, DatePart } from '../lib/format.js'
+import type { FormatId } from '../lib/format.js'
 
 // ── Question / history-entry types ───────────────────────────────────────────
 // A plain weekday question: pick the day-of-week for this date. `type` is absent
@@ -47,23 +47,36 @@ export interface DedBox {
   label: string
   months: number[]
 }
-// A Deduction puzzle: the weekday `w` is shown and the player picks the hidden piece
-// (`type` = which piece). `options` are the choices (years / day-numbers; the Month
-// sub-mode answers via `boxes` instead). The `_*` flags record the generation settings.
-export interface DedPuzzle {
-  type: DatePart
+// A Deduction puzzle: the weekday `w` is shown and the player picks the hidden piece. The
+// three sub-modes are a discriminated union because their `options` differ in kind — Day/Year
+// answer by a numeric option (a day number / a year), while Month answers by a box, so its
+// `options` hold the box LABELS (strings) and the answer resolves through `boxes`. The `_*`
+// flags record the generation settings active at spawn.
+interface BasePuzzle {
   y: number
   m: number
   d: number
   w: number //         the shown weekday index (0=Sun)
-  options: number[]
-  boxes?: DedBox[]
   _fmt?: FormatId
   _jul?: boolean
-  _abx?: boolean
-  _julx?: boolean
+}
+export interface DayPuzzle extends BasePuzzle {
+  type: 'day'
+  options: number[] //   the day-number choices
+}
+export interface MonthPuzzle extends BasePuzzle {
+  type: 'month'
+  options: string[] //   the box labels (e.g. 'Jan/Oct'); the answer is the box, resolved via `boxes`
+  boxes: DedBox[]
   _m1582?: boolean
 }
+export interface YearPuzzle extends BasePuzzle {
+  type: 'year'
+  options: number[] //   the year choices
+  _abx?: boolean
+  _julx?: boolean
+}
+export type DedPuzzle = DayPuzzle | MonthPuzzle | YearPuzzle
 // A question is either a weekday prompt or a Deduction puzzle (discriminated on `type`).
 export type Question = WeekdayQuestion | DedPuzzle
 
@@ -189,19 +202,17 @@ export const activeWday = (y: number, m: number, d: number, useJulian: boolean):
   useJulian && isJulianDate(y, m, d) ? wdayJulian(y, m, d) : wday(y, m, d)
 
 // The correct answer index for a question. This is what makes the one shared engine serve
-// BOTH weekday modes and Deduction: a Deduction puzzle (entry.type set) resolves by its own
-// options/answer — year: options.indexOf(y); month: the box whose months include m (or
-// options.indexOf(m) when boxless); day: options.indexOf(d) — while a plain weekday question
-// resolves by activeWday on (y,m,d). Mirrors App's getDedCorrectIdx / dedCorrectIdxFor and the
-// same dispatch in answerButtons.entryWithGreen. Weekday entries have no `type`, so this is
-// byte-identical to the old direct activeWday call for Classic/Flash/Blitz.
+// BOTH weekday modes and Deduction: a Deduction puzzle resolves by its own options/answer —
+// year: options.indexOf(y); month: the box whose months include m; day: options.indexOf(d) —
+// while a plain weekday question resolves by activeWday on (y,m,d). Mirrors App's
+// getDedCorrectIdx / dedCorrectIdxFor and the same dispatch in answerButtons.entryWithGreen.
+// Weekday entries have no `type`, so this is byte-identical to the old direct activeWday call
+// for Classic/Flash/Blitz. (Month always carries `boxes` from makeDedPuzzle, so it resolves
+// through them — the old boxless `options.indexOf(m)` fallback was dead and is gone.)
 export const correctIndexOf = (e: Question, useJulian: boolean): number => {
-  if (e && e.type) {
-    if (e.type === 'year') return e.options.findIndex((y) => y === e.y)
-    if (e.type === 'month')
-      return e.boxes ? e.boxes.findIndex((b) => b.months.includes(e.m)) : e.options.findIndex((m) => m === e.m)
-    return e.options.findIndex((d) => d === e.d)
-  }
+  if (e.type === 'year') return e.options.findIndex((y) => y === e.y)
+  if (e.type === 'month') return e.boxes.findIndex((b) => b.months.includes(e.m))
+  if (e.type === 'day') return e.options.findIndex((d) => d === e.d)
   return activeWday(e.y, e.m, e.d, useJulian)
 }
 

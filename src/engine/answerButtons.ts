@@ -24,7 +24,7 @@ export type EntryLike = {
   d: number
   btns?: Btns
   type?: DatePart
-  options?: number[]
+  options?: (number | string)[] //  numbers for Day/Year, box-label strings for Month
   boxes?: Array<{ months?: number[] }>
   _jul?: boolean
 }
