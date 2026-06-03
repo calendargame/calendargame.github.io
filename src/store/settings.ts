@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { FormatId } from '../lib/format.js'
 
 // settings.js — the ⚙ Settings store (Stage C, Steps 5a + 5b).
 //
@@ -27,8 +28,43 @@ import { persist } from 'zustand/middleware'
 // transient text-input mirror strings, not persisted settings; they stay as
 // local useState in App.
 
+// The 13 settings values, then the full store (values + setters). Each setter takes a direct
+// value OR a React-style functional updater (prev => next), matching App's setX(v=>!v) call sites.
+export type SettingsValues = {
+  randomFormat: boolean
+  dateFormat: FormatId
+  useJulian: boolean
+  minY: number
+  maxY: number
+  leapChance: string
+  janFebChance: string
+  julianChance: string
+  saveStats: boolean
+  useSystem: boolean
+  darkTheme: string
+  lightTheme: string
+  manualTheme: string
+}
+type Updater<T> = T | ((prev: T) => T)
+export type SettingsState = SettingsValues & {
+  setRandomFormat: (v: Updater<boolean>) => void
+  setDateFormat: (v: Updater<FormatId>) => void
+  setUseJulian: (v: Updater<boolean>) => void
+  setMinY: (v: Updater<number>) => void
+  setMaxY: (v: Updater<number>) => void
+  setLeapChance: (v: Updater<string>) => void
+  setJanFebChance: (v: Updater<string>) => void
+  setJulianChance: (v: Updater<string>) => void
+  setSaveStats: (v: Updater<boolean>) => void
+  setUseSystem: (v: Updater<boolean>) => void
+  setDarkTheme: (v: Updater<string>) => void
+  setLightTheme: (v: Updater<string>) => void
+  setManualTheme: (v: Updater<string>) => void
+  resetSettings: () => void
+}
+
 // The launch defaults — single source of truth, reused by resetSettings().
-export const SETTINGS_DEFAULTS = {
+export const SETTINGS_DEFAULTS: SettingsValues = {
   randomFormat: true,
   dateFormat: 'written-mdy',
   useJulian: true,
@@ -45,12 +81,13 @@ export const SETTINGS_DEFAULTS = {
 }
 
 // resolve(next, prev): support React-style functional updaters.
-const resolve = (next, prev) => (typeof next === 'function' ? next(prev) : next)
+const resolve = <T,>(next: Updater<T>, prev: T): T =>
+  typeof next === 'function' ? (next as (prev: T) => T)(prev) : (next as T)
 
 // The set of keys we persist — exactly the data values (not the setters).
-const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS)
+const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
 
-export const useSettings = create(
+export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       ...SETTINGS_DEFAULTS,
@@ -76,7 +113,8 @@ export const useSettings = create(
       name: 'cg-settings-v1', // localStorage key (versioned for future migrations)
       version: 1,
       // Persist only the data values, never the setter functions.
-      partialize: (state) => Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])),
+      partialize: (state) =>
+        Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<SettingsState>,
     },
   ),
 )
