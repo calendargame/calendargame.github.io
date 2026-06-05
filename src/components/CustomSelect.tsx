@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode, type RefObject } from 'react'
+import { useState, useRef, useEffect, useId, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 
 // CustomSelect — the app's custom dropdown, replacing the native <select>.
@@ -64,7 +64,12 @@ export default function CustomSelect({
   const localRef = useRef<HTMLDivElement>(null)
   const ref = wrapperRef || localRef
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const listboxId = useRef(`cs-list-${Math.random().toString(36).slice(2, 9)}`).current
+  // Stable unique id for the listbox + its option ids (aria-controls /
+  // aria-activedescendant). useId is React's blessed generator — it replaces the old
+  // useRef(`...${Math.random()}`).current, which both called an impure function and
+  // read a ref during render. Used only as opaque aria/id strings (never queried via a
+  // CSS selector), so useId's separator characters are harmless here.
+  const listboxId = useId()
   const optionId = (i: number) => `${listboxId}-opt-${i}`
   const selectedIdx = options.findIndex((o) => o.value === value)
   // panelRef points at the PORTALED panel so the click-outside handler can
@@ -79,6 +84,10 @@ export default function CustomSelect({
   // right edge aligned to the trigger, 6px below it (top) when opening down, or
   // 6px above it (bottom) when flipping up. Called on open and on scroll/resize
   // so the portaled panel stays pinned to its trigger.
+  // Plain function (no useCallback): it reads ref.current, which a manual dep array can't
+  // track at ref.current granularity — useCallback here trips preserve-manual-memoization.
+  // The React Compiler memoizes this automatically, so the reposition effect below can list
+  // it as a dependency and the compiler keeps its identity stable (no listener re-subscribe).
   const measurePanel = () => {
     if (!ref.current) return
     const rect = ref.current.getBoundingClientRect()
@@ -191,7 +200,7 @@ export default function CustomSelect({
       document.removeEventListener('mousedown', h)
       document.removeEventListener('touchstart', h)
     }
-  }, [open])
+  }, [open, ref])
   // Keep the portaled panel pinned to its trigger while open: any scroll
   // (capture phase, since scroll doesn't bubble — this catches the settings
   // popover's inner scroll wrapper) or viewport resize re-measures panelPos.
@@ -213,6 +222,12 @@ export default function CustomSelect({
         vv.removeEventListener('scroll', reposition)
       }
     }
+    // Depend on [open] alone. measurePanel closes over nothing render-specific (only the
+    // stable ref/openUpwardRef/setPanelPos), so calling a "stale" copy is behavior-identical;
+    // listing it would just re-subscribe the listeners every render. useCallback isn't an
+    // option here — it reads ref.current, which trips preserve-manual-memoization. The React
+    // Compiler memoizes measurePanel automatically, making this exactly correct at runtime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
   return (
     <div ref={ref} className={`relative ${wrapperClassName || ''}`}>
