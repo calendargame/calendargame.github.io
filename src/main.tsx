@@ -317,6 +317,10 @@ interface DedOpts {
         timingArmTimerRef.current=setTimeout(()=>{timingArmedRef.current=false;setTimingArmed(false);timingArmTimerRef.current=null;},3000);
       };
       useEffect(()=>{if(!timingArmed)return;const h=(e: MouseEvent)=>{if(timingArmBtnRef.current&&timingArmBtnRef.current.contains(e.target as Node | null))return;disarmTimingArm();};const t=setTimeout(()=>document.addEventListener('click',h),0);return()=>{clearTimeout(t);document.removeEventListener('click',h);};},[timingArmed]);
+      // Fire on visibility transitions only: when hidden, disarm + run the mode's teardown (onHide,
+      // the Flash flash-stopper). onHide/disarmTimingArm are re-created each render; listing them
+      // would re-fire the teardown every render. Intentional [visible]-only effect.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       useEffect(()=>{if(!visible){if(timingArmedRef.current)disarmTimingArm();if(onHide)onHide();}},[visible]);
       useEffect(()=>{if(!saveStats&&timingArmedRef.current)disarmTimingArm();},[saveStats]);
       const sLast=calcLast(S.times),sAvg=calcAvg(S.times),sMed=calcMed(S.times);
@@ -342,7 +346,8 @@ interface DedOpts {
     // (the engine's regenDate no-ops on a burned/browsed date). fn is read through a ref so the
     // latest closure runs without having to list it (or the engine) in the dependency array.
     function useChangeEffect(deps: React.DependencyList, fn: () => void){
-      const fnRef=useRef(fn);fnRef.current=fn;
+      const fnRef=useRef(fn);
+      useEffect(()=>{fnRef.current=fn;});   // keep the latest fn (post-commit), not during render (refs rule)
       const firstRef=useRef(true);
       useEffect(()=>{if(firstRef.current){firstRef.current=false;return;}fnRef.current();},deps);   // eslint-disable-line react-hooks/exhaustive-deps
     }
@@ -632,12 +637,16 @@ interface DedOpts {
       const latestAoxDateRef=useRef<Question | null>(null);
       const wasCodesOpenRef=useRef(false);
       const [aoxFrozenDate,setAoxFrozenDate]=useState<Question | null>(()=>({...state.date}));
-      latestAoxDateRef.current=state.date;
+      // Keep the latest date in a ref (post-commit) for the close-timeout below — written in an
+      // effect, not during render (compiler refs rule); the timeout fires long after any commit.
+      useEffect(()=>{latestAoxDateRef.current=state.date;});
+      // Freeze the codes-panel date across the close animation. Depends on the date VALUE (y/m/d),
+      // not the object identity — intentional, mirroring MethodBreakdown's freeze effect.
       useEffect(()=>{
         if(state.calcOpen){wasCodesOpenRef.current=true;setAoxFrozenDate(state.date);return;}
         if(wasCodesOpenRef.current){wasCodesOpenRef.current=false;const t=setTimeout(()=>setAoxFrozenDate(latestAoxDateRef.current),CODES_CLOSE_MS);return()=>clearTimeout(t);}
         else{setAoxFrozenDate(state.date);}
-      },[state.calcOpen,state.date.y,state.date.m,state.date.d]);
+      },[state.calcOpen,state.date.y,state.date.m,state.date.d]);   // eslint-disable-line react-hooks/exhaustive-deps
 
       // Record this run's Best Average/Median (on completion). Compares against the closure
       // `bests[bestKey]` (the best before this run) and snapshots it for a later rollback.
@@ -1083,6 +1092,7 @@ interface DedOpts {
         };
         raf=requestAnimationFrame(loop);
         return ()=>cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- endRound is behavior-stable (closes over only stable setters + ref writes); excluded so its identity change doesn't restart the countdown
       },[active,perQ,blitzSec,qSec,eng]);
 
       const begin=()=>{
@@ -1099,6 +1109,7 @@ interface DedOpts {
         setFlashWithTimeout({type:i===correct?"good":"bad",idx:i});
         eng.answer(i);
         if(i===correct){
+          // eslint-disable-next-line react-hooks/purity -- performance.now() runs in the answer event handler (not render); the linter mis-flags handler-only impurity (begin() makes the same call un-flagged)
           if(perQ){const now=performance.now();qDeadlineRef.current=now+qSec*1000;qPausedAccRef.current=0;qPausedAtRef.current=null;setQRemain(qSec);}
           // per-round: round continues; engine already advanced to the next date
         }else{
@@ -1521,6 +1532,9 @@ interface DedOpts {
       //
       // All keyboard activations bypass CSS pointer-events via .click(), so the
       // pointer-events-none className check is mandatory to mirror real-click locks.
+      // settingsOpen is declared here — above the keyboard effect that toggles it (G key) — so it's
+      // not read before its declaration (the compiler flags accessing a binding before it's declared).
+      const [settingsOpen,setSettingsOpen]=useState(false);
       useEffect(()=>{const onKey=(e: KeyboardEvent)=>{
         if(e.repeat||e.isComposing)return;
         // Tab: toggle the mode selector dropdown. Plain Tab only — Ctrl+Tab, Ctrl+Shift+Tab,
@@ -1618,7 +1632,6 @@ interface DedOpts {
         dt._jul=useJulian;
         return dt;
       };
-      const [settingsOpen,setSettingsOpen]=useState(false);
       const settingsRef=useRef<HTMLDivElement | null>(null);
       const settingsPopoverRef=useRef<HTMLDivElement | null>(null);
       // Full Reset state: armed=true means the user tapped once and the next tap fires.
