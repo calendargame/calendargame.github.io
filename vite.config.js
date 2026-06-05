@@ -6,8 +6,9 @@ import { defineConfig } from 'vitest/config'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { VitePWA } from 'vite-plugin-pwa'
+import { visualizer } from 'rollup-plugin-visualizer'
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   base: command === 'build' ? '/vite-deploy-test/' : '/',
   // React Compiler — automatic memoization (Stage D2). @vitejs/plugin-react v6 is Rolldown/oxc-based
   // and dropped its old `babel` option, so the compiler runs through @rolldown/plugin-babel fed the
@@ -48,6 +49,21 @@ export default defineConfig(({ command }) => ({
       // build via `vite preview`.
       devOptions: { enabled: false },
     }),
+    // Bundle analysis (Stage E2): `npm run analyze` (= `vite build --mode analyze`) emits an
+    // interactive treemap to dist/stats.html so we can see what's in the JS bundle and catch
+    // surprise bloat as the app grows. Gated on the 'analyze' mode so it NEVER runs in a normal
+    // or CI build — zero effect on the shipped output.
+    ...(mode === 'analyze'
+      ? [
+          visualizer({
+            filename: 'dist/stats.html',
+            template: 'treemap',
+            gzipSize: true,
+            brotliSize: true,
+            title: 'Calendar Game — bundle',
+          }),
+        ]
+      : []),
   ],
   test: {
     // Pure-logic tests run in Node (Vitest's default environment). DOM characterization

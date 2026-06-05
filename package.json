@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "size": "node scripts/check-bundle-size.mjs",
+    "analyze": "vite build --mode analyze",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -46,6 +48,7 @@
     "jsdom": "^29.1.1",
     "postcss": "^8.5.15",
     "prettier": "^3.8.3",
+    "rollup-plugin-visualizer": "^7.0.1",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",

@@ -42,6 +42,11 @@ jobs:
         run: npm run typecheck
       - name: Build the site
         run: npm run build
+      # Size budget — fails the deploy if the app JS bundle grows past the gzip ceiling in
+      # scripts/check-bundle-size.mjs, so accidental bloat (e.g. a large library) can't ship
+      # unnoticed. Intentional growth = bump the budget constant deliberately (shows in the diff).
+      - name: Check bundle size budget
+        run: npm run size
       - name: Upload the built site
         uses: actions/upload-pages-artifact@v3
         with:
