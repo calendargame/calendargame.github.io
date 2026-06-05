@@ -32,10 +32,21 @@ const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
   <rect width="${W}" height="${H}" fill="url(#g)"/>
   <rect width="${W}" height="${H}" fill="url(#glow)"/>
   <text x="540" y="300" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="700" fill="#ffffff">Calendar Game</text>
-  <text x="543" y="362" font-family="Arial, Helvetica, sans-serif" font-size="33" font-weight="400" fill="#ddd0fb">Master mental day-of-the-week math</text>
+  <text x="543" y="360" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" fill="#ddd0fb">Master Mental Day-of-the-Week Calculation</text>
 </svg>`
 
-const icon = await sharp(join(root, 'public', 'pwa-512x512.png')).resize(ICON, ICON).toBuffer()
+// Round the icon's corners (~22% radius, echoing how iOS renders the home-screen icon) so it
+// reads as an app tile rather than a hard square pasted on the gradient. dest-in keeps the icon
+// only where the rounded-rect mask is opaque, leaving the corners transparent over the gradient.
+const radius = Math.round(ICON * 0.22)
+const roundMask = Buffer.from(
+  `<svg width="${ICON}" height="${ICON}"><rect width="${ICON}" height="${ICON}" rx="${radius}" ry="${radius}"/></svg>`,
+)
+const icon = await sharp(join(root, 'public', 'pwa-512x512.png'))
+  .resize(ICON, ICON)
+  .composite([{ input: roundMask, blend: 'dest-in' }])
+  .png()
+  .toBuffer()
 
 await sharp(Buffer.from(bg))
   .composite([{ input: icon, left: ICON_LEFT, top: ICON_TOP }])
