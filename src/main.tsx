@@ -27,6 +27,7 @@ import { useProgress } from './store/progress.js'
 import type { AoxBest } from './store/progress.js'
 import { calcAvg, calcLast, calcMed } from './engine/stats.js'
 import { useGameEngine } from './engine/useGameEngine.js'
+import { reportWebVitals } from './dev/webVitals.js'
 import type { Question, WeekdayQuestion, DedPuzzle, GameState } from './engine/gameReducer.js'
 import type { ButtonState } from './engine/answerButtons.js'
 import type { FormatId, DatePart } from './lib/format.js'
@@ -2059,6 +2060,11 @@ interface DedOpts {
     // touch needed to make App testable for the safety net.)
     const rootEl = typeof document !== "undefined" ? document.getElementById("root") : null;
     if (rootEl) ReactDOM.createRoot(rootEl).render(<ErrorBoundary><App/></ErrorBoundary>);
+
+    // Dev-only Core Web Vitals logging (Stage E0). The static import.meta.env.DEV guard
+    // makes this dead code in a production build, so the call, reportWebVitals, and the
+    // web-vitals library are all tree-shaken out of the shipped bundle.
+    if (rootEl && import.meta.env.DEV) reportWebVitals();
 
     // Exported for the Step-6 characterization tests (the mode-untangle safety net).
     export { App };
