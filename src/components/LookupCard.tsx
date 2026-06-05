@@ -36,6 +36,16 @@ interface LookupCardProps {
   useJulian?: boolean
 }
 
+// Unique id for a new history entry. At module scope it's outside React's render-purity rule
+// (Date.now()/Math.random() are impure) — and it only ever runs from the Lookup event handler.
+// Single source of truth: was previously duplicated inline at both add sites.
+function makeEntryId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+// Stable empty-array fallback (module scope) so `entries` keeps a constant identity when
+// history isn't an array — a fresh [] each render would change the memos/effects that read it.
+const NO_ENTRIES: LookupEntry[] = []
+
 // LookupCard — the Lookup-mode card: a numeric date input (format follows the
 // active dateFormat), a scrollable history list (up to 10 before scrolling, with
 // edge-fade indicators), and the shared Show Codes panel. All state is lifted to
@@ -132,6 +142,9 @@ export default function LookupCard({
       lastLookupRef.current = null
       prevFormatRef.current = dateFormat
     }
+    // Fire on dateFormat change only (the prevFormatRef guard also skips the initial mount). The
+    // setters are re-created each render; excluding them keeps this from running every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFormat])
   function runLookup() {
     const s = li.trim()
@@ -191,7 +204,7 @@ export default function LookupCard({
         'October 5–14, 1582 never existed. When the Gregorian calendar was adopted, 10 days were skipped to correct accumulated calendar drift.'
       const displayDate = fmtDate ? fmtDate(yy, mm, dd) : `${MONTH[mm - 1]} ${dd}, ${yy}`
       const entry = {
-        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        id: makeEntryId(),
         label: displayDate,
         weekday: 'Does Not Exist',
         result: gapMsg,
@@ -222,7 +235,7 @@ export default function LookupCard({
     const displayDate = fmtDate ? fmtDate(yy, mm, dd) : `${MONTH[mm - 1]} ${dd}, ${yy}`
     const rt = `${displayDate} is a ${d}.`
     const entry = {
-      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      id: makeEntryId(),
       label: displayDate,
       weekday: d,
       result: rt,
@@ -246,7 +259,9 @@ export default function LookupCard({
     sco(false)
     lastLookupRef.current = null
   }
-  const entries = Array.isArray(history) ? history : []
+  // `entries` is `history` (stable per parent render) or the stable NO_ENTRIES const — never a
+  // fresh [] — so the memos/effects that read it don't churn.
+  const entries = Array.isArray(history) ? history : NO_ENTRIES
   React.useEffect(() => {
     if (!sid) return
     if (!entries.some((e) => e.id === sid)) {
@@ -255,6 +270,9 @@ export default function LookupCard({
       slo('')
       sco(false)
     }
+    // Orphaned-selection cleanup: fire on [entries, sid] only. The setters are prop-callback
+    // wrappers re-created each render; listing them would re-run this every render to no effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, sid])
   // Selecting a history entry never changes calcOpen directly. For non-gap entries,
   // codes-open simply stays as-is. For gap entries (Does Not Exist), calcDate becomes
@@ -314,14 +332,16 @@ export default function LookupCard({
     }
     return e.weekday
   }
-  // History entries are stored as {y,m,d} so changing dateFormat re-renders labels live.
+  // History entries are stored as {y,m,d} so changing dateFormat re-renders labels live. fmtDate
+  // itself closes over dateFormat (and is re-created when it changes), so it alone is the correct
+  // dependency — listing dateFormat too is redundant.
   const renderedEntries = React.useMemo(
     () =>
       entries.map((e) => {
         if (e.isGap || typeof e.y !== 'number') return e
         return { ...e, label: fmtDate ? fmtDate(e.y, e.m, e.d) : e.label }
       }),
-    [entries, fmtDate, dateFormat],
+    [entries, fmtDate],
   )
   // Keyboard navigation for the Lookup card when no input has focus:
   //   ArrowDown/ArrowUp — move highlighted history entry; selecting populates input.
@@ -357,6 +377,10 @@ export default function LookupCard({
     }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
+    // Re-subscribe when the navigable list / selection / input change. clearLookup and selEntry
+    // are body functions re-created each render but behavior-stable; excluding them avoids
+    // re-subscribing the keydown listener on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderedEntries, sid, li, lo, cdv])
   return (
     <div className="mt-1 space-y-4">
