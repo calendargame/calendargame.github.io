@@ -348,18 +348,19 @@ export default function GuidePage() {
           The app saves the following on this device and restores them when you return — after
           closing the app, refreshing, or revisiting later: your <b>⚙ Settings</b> (date format,
           calendar system, year range, the leap / Jan-Feb / Julian chances, Save Stats, and theme);
-          your <b>stats</b> in the casual modes (Classic, Flash, Deduction); your{' '}
-          <b>all-time bests</b> (Blitz score &amp; streak, Sudden score, AoX average &amp; median);
-          and your <b>Lookup history</b>. Saved Average and Median use a rolling window of your most
-          recent 500 solves.
+          your <b>per-mode setup</b> (Flash speed; Blitz / Sudden timer lengths, Allow Mistakes, and
+          Per-Round vs Per-Question; AoX count, Allow Mistakes, and One-By-One; the Deduction
+          sub-type); the <b>game mode you last used</b> (the app reopens to it instead of always
+          starting on Classic); your <b>stats</b> in the casual modes (Classic, Flash, Deduction);
+          your <b>all-time bests</b> (Blitz score &amp; streak, Sudden score, AoX average &amp;
+          median); and your <b>Lookup history</b>. Saved Average and Median use a rolling window of
+          your most recent 500 solves.
         </p>
         <p>
           <b>Not saved</b> — these reset each visit: any in-progress timed round or run and the
-          current question (a half-finished run is discarded by design); mode options outside the ⚙
-          menu — AoX count, Blitz / Sudden timer lengths, Allow Mistakes, Per-Round vs Per-Question,
-          Deduction sub-type, the show / hide stat toggles, and One-By-One — which return to their
-          defaults; and the current tab (the app always opens to Classic). <b>Full Reset</b> (below)
-          clears everything that is saved.
+          current question (a half-finished run is discarded by design); and the show / hide stat
+          toggles, which return to each mode's default so you always start from a clean view.{' '}
+          <b>Full Reset</b> (below) clears everything that is saved.
         </p>
         <p>
           <b>Install &amp; offline</b> — Calendar Game can be added to your home screen (use your

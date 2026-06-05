@@ -22,6 +22,7 @@ import { MethodExplanation, MethodBreakdownSection } from './components/MethodBr
 import W5Logo from './components/W5Logo.jsx'
 import { CODES_CLOSE_MS } from './lib/constants.js'
 import { useSettings } from './store/settings.js'
+import { useModePrefs } from './store/modePrefs.js'
 import { useProgress } from './store/progress.js'
 import type { AoxBest } from './store/progress.js'
 import { calcAvg, calcLast, calcMed } from './engine/stats.js'
@@ -359,7 +360,7 @@ interface DedOpts {
 
 
 
-    const DEPLOY_TS=new Date('2026-06-05T03:52:44Z');
+    const DEPLOY_TS=new Date('2026-06-05T04:38:01Z');
 
     // ============================================================
     // makeDedPuzzle — the PURE Deduction puzzle generator (mode-untangle Step 4).
@@ -600,9 +601,9 @@ interface DedOpts {
     // two general engine flags: `complete` (the Nth solve credits without advancing) and
     // `noAdvance` (a failing override of that solve stays put). See gameReducer.
     function AoxMode({minY,maxY,visible,fmtDate,useJulian=false,genDate=randomDate,leapChance='random',janFebChance='random',julianChance='random',randomFormat=false,dateFormat='written-mdy',saveStats=true,onFreshChange}: ModeProps & { fmtDate: FmtDate; genDate?: GenDate }){
-      const [aoxN,setAoxN]=useState("10");
-      const [allowMistakes,setAllowMistakes]=useState(false);
-      const [oneByOne,setOneByOne]=useState(false);
+      const aoxN=useModePrefs(s=>s.aoxN),setAoxN=useModePrefs(s=>s.setAoxN);   // persisted (mode-prefs store)
+      const allowMistakes=useModePrefs(s=>s.aoxAllowMistakes),setAllowMistakes=useModePrefs(s=>s.setAoxAllowMistakes);   // persisted (mode-prefs store)
+      const oneByOne=useModePrefs(s=>s.aoxOneByOne),setOneByOne=useModePrefs(s=>s.setAoxOneByOne);   // persisted (mode-prefs store)
       const [runPhase,setRunPhase]=useState("idle");   // idle | running | done | failed (the RUN; the engine just runs the per-question loop)
       const [shown,setShown]=useState(false);           // One-By-One: is the current date revealed? (always true for non-One-By-One while running)
       const n=Math.max(2,Math.min(1000,parseInt(aoxN)||10));
@@ -896,7 +897,7 @@ interface DedOpts {
       const [active,setActive]=useState(false);
       const [flashPhase,setFlashPhase]=useState("dash");      // dash (idle) | show (revealing) | hide ("…")
       const [showTimerDate,setShowTimerDate]=useState(false); // keep the date visible after Reveal
-      const [flashMs,setFlashMs]=useState(500);
+      const flashMs=useModePrefs(s=>s.flashMs),setFlashMs=useModePrefs(s=>s.setFlashMs);   // persisted (mode-prefs store)
       const [flashRemainMs,setFlashRemainMs]=useState(500);
       const flashTimerRef=useRef<ReturnType<typeof setTimeout> | null>(null);
       const flashDeadlineRef=useRef<number | null>(null);
@@ -1032,13 +1033,13 @@ interface DedOpts {
     // the round id) and ROLLED BACK there too when an Override drops the round that set it.
     // ============================================================
     function BlitzMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}: ModeProps & { genDate: GenDate; fmtDate: FmtDate }){
-      const [perQ,setPerQ]=useState(false);
-      const [allowMistakes,setAllowMistakes]=useState(true);
+      const perQ=useModePrefs(s=>s.blitzPerQ),setPerQ=useModePrefs(s=>s.setBlitzPerQ);   // persisted (mode-prefs store)
+      const allowMistakes=useModePrefs(s=>s.blitzAllowMistakes),setAllowMistakes=useModePrefs(s=>s.setBlitzAllowMistakes);   // persisted (mode-prefs store)
       const [active,setActive]=useState(false);
       const [timerDone,setTimerDone]=useState(false);
       const [showTimerDate,setShowTimerDate]=useState(false);
-      const [blitzSec,setBlitzSec]=useState(60);
-      const [qSec,setQSec]=useState(5);
+      const blitzSec=useModePrefs(s=>s.blitzSec),setBlitzSec=useModePrefs(s=>s.setBlitzSec);   // persisted (mode-prefs store)
+      const qSec=useModePrefs(s=>s.blitzQSec),setQSec=useModePrefs(s=>s.setBlitzQSec);   // persisted (mode-prefs store)
       const [,setBlitzRemain]=useState(60);
       const [,setQRemain]=useState(5);
       const blitzStartRef=useRef<number | null>(null),blitzPausedAtRef=useRef<number | null>(null),blitzPausedAccRef=useRef(0),blitzRemainRef=useRef(60);
@@ -1249,7 +1250,7 @@ interface DedOpts {
     // into a shared shell in Step 6, once all modes' variations are known.
     // ============================================================
     function DeductionMode({visible,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,onFreshChange}: ModeProps){
-      const [dedType,setDedType]=useState("day");
+      const dedType=useModePrefs(s=>s.dedType),setDedType=useModePrefs(s=>s.setDedType);   // persisted (mode-prefs store)
       const [abCrossOnly,setAbCrossOnly]=useState(false);
       const [julCrossOnly,setJulCrossOnly]=useState(false);
       const [monthOnly1582,setMonthOnly1582]=useState(false);
@@ -1298,7 +1299,7 @@ interface DedOpts {
       const onOverride=()=>{if(state.countedWrong)setFlashWithTimeout({type:"good",idx:correct});eng.override();};
 
       // Auto-switch out of Year when a range/Julian change makes it unbuildable (mirrors App).
-      useEffect(()=>{if(dedType==="year"&&!yearSubPossible)setDedType("day");},[dedType,yearSubPossible]);
+      useEffect(()=>{if(dedType==="year"&&!yearSubPossible)setDedType("day");},[dedType,yearSubPossible,setDedType]);   // setDedType is a stable store setter
       // Auto-clear toggles when their prerequisites break (mirrors App's popover effect).
       useEffect(()=>{if(!useJulian){if(julCrossOnly)setJulCrossOnly(false);if(monthOnly1582)setMonthOnly1582(false);}},[useJulian,julCrossOnly,monthOnly1582]);
       useEffect(()=>{
@@ -1391,14 +1392,14 @@ interface DedOpts {
     // shared engine, AoxMode).
     // ============================================================
     function App(){
-      const [mode,setMode]=useState("classic");
+      const [mode,setMode]=useState(()=>useModePrefs.getState().lastMode);   // reopen the last GAME mode (persisted)
       // Tracks the most recent non-guide mode so the H key bind can toggle out of
       // guide back to where the user was. Updated whenever mode changes (excluding
       // changes INTO guide). Initial value 'classic' covers the never-left-classic case.
       // Distinct from the unrelated prevModeRef declared further down which tracks
       // mode changes for codes-freeze logic.
       const prevNonGuideModeRef=useRef('classic');
-      useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
+      useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;if(mode!=='guide'&&mode!=='lookup')useModePrefs.getState().setLastMode(mode);},[mode]);   // persist the last GAME mode (not Lookup/Guide) for relaunch
       const modeSelectRef=useRef<HTMLDivElement | null>(null);
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
       // ⚙ Settings store (Stage C, Step 5a). The 13 settings values + their setters
@@ -1445,6 +1446,7 @@ interface DedOpts {
       const lookupHistory=useProgress(s=>s.lookupHistory);
       const setLookupHistory=useProgress(s=>s.setLookupHistory);
       const resetProgress=useProgress(s=>s.resetProgress);   // Full Reset wipes saved progress too (Stage D1)
+      const resetModePrefs=useModePrefs(s=>s.resetModePrefs);   // Full Reset restores the per-mode setup too
       const [lookupInput,setLookupInput]=useState("");
       const [lookupOutput,setLookupOutput]=useState("");
       const [lookupCalcDate,setLookupCalcDate]=useState<CodeDate | null>(null);
@@ -1760,6 +1762,9 @@ interface DedOpts {
         // history in the persisted store, making Full Reset permanent. Runs BEFORE the remount-key bumps
         // below, so the continuous modes re-hydrate from the now-empty store (blank stats).
         resetProgress();
+        // Per-mode setup (Flash speed, Blitz/AoX config, Deduction sub-type, last mode) → launch
+        // defaults. Runs BEFORE the remount-key bumps so the modes re-read the now-default prefs.
+        resetModePrefs();
         // Lookup input/output are transient local state (the history itself was cleared by resetProgress).
         setLookupInput("");setLookupOutput("");
         setLookupCalcDate(null);setLookupSelectedHistoryId(null);setLookupCalcOpen(false);

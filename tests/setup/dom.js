@@ -23,6 +23,7 @@
 import '@testing-library/jest-dom/vitest'
 import { beforeEach } from 'vitest'
 import { useProgress } from '../../src/store/progress.js'
+import { useModePrefs } from '../../src/store/modePrefs.js'
 
 if (typeof window !== 'undefined') {
   if (!window.matchMedia) {
@@ -61,4 +62,6 @@ if (typeof window !== 'undefined') {
 // DOM tests also localStorage.clear() + resetSettings() in their own beforeEach). Cheap + idempotent.
 beforeEach(() => {
   useProgress.getState().resetProgress()
+  // The per-mode setup store (Stage D follow-up) is the same kind of persisted singleton.
+  useModePrefs.getState().resetModePrefs()
 })
