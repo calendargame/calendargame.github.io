@@ -9,7 +9,16 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { visualizer } from 'rollup-plugin-visualizer'
 
 export default defineConfig(({ command, mode }) => ({
-  base: command === 'build' ? '/vite-deploy-test/' : '/',
+  // The live org page (calendargame.github.io — also served at calendargame.app) lives at the ROOT,
+  // so its CI build uses base '/'. The test/staging repo (vite-deploy-test) + any local build keep
+  // '/vite-deploy-test/'. GitHub Actions sets GITHUB_REPOSITORY to "owner/repo", so one codebase
+  // deploys correctly to both: the live build detects the calendargame.github.io repo.
+  base:
+    command === 'build'
+      ? (process.env.GITHUB_REPOSITORY || '').endsWith('/calendargame.github.io')
+        ? '/'
+        : '/vite-deploy-test/'
+      : '/',
   // React Compiler — automatic memoization (Stage D2). @vitejs/plugin-react v6 is Rolldown/oxc-based
   // and dropped its old `babel` option, so the compiler runs through @rolldown/plugin-babel fed the
   // plugin's `reactCompilerPreset()`. Defaults are exactly what we want: compilationMode 'infer'
