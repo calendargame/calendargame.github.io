@@ -56,6 +56,12 @@
    flex child without explicit positioning does NOT give iOS this cue, so it
    falls back to the theme-color meta tag, which iOS PWA reads only at launch
    and never updates on JS changes. */
+/* Initial default for --bar-h (the fixed top bar's height) so the FIRST paint already reserves
+   the bar's space. Without it, padding-top:var(--bar-h) resolves to 0 on first paint and the
+   content jumps down ~57px the moment the JS ResizeObserver measures the bar and writes --bar-h
+   — a cumulative-layout-shift source. 57px = the measured bar height; the ResizeObserver then
+   refines it (inline style on :root overrides this) for any per-viewport variation (Stage E4). */
+:root{--bar-h:57px}
 html,body{overflow:hidden;overscroll-behavior:none}
 html{touch-action:manipulation}
 body{background:var(--bg1);color:var(--body-color)}

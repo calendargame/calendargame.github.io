@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
+  <!-- Pinch-zoom is DELIBERATELY disabled (maximum-scale=1, user-scalable=no, plus the
+       gesturestart preventDefault below) for a locked, native-app feel — the site owner's
+       choice (re-confirmed 2026-06-05, Stage E4). This is the one thing keeping the Lighthouse
+       Accessibility score at ~92 (the "viewport" audit) — an accepted tradeoff, NOT a bug; do
+       not "fix" it. To re-enable zoom for accessibility instead, drop maximum-scale/user-scalable
+       here AND remove the gesturestart handler in the script below. -->
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
   <meta name="theme-color" content="#0d1117">
   <title>Calendar Game</title>
+  <meta name="description" content="A free, mobile-first trainer for fast mental day-of-the-week calculation — practice the doomsday method with timed drills, deduction puzzles, and instant date lookups."/>
   <meta name="application-name" content="Calendar Game">
   <meta name="apple-mobile-web-app-title" content="Calendar Game">
   <!-- PWA standalone (Stage D3): launches full-screen from the home screen. No safe-area
