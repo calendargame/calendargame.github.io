@@ -172,7 +172,11 @@ button:focus,select:focus{outline:none}
    so future re-enablement is a one-line CSS change rather than a sweep. */
 .hist-unsel{border-left-color:var(--panel-bd)}
 .bar{height:6px;border-radius:6px;overflow:hidden;background:var(--bar-bg);border:1px solid var(--bar-bd)}
-.bar>span{display:block;height:100%;background:linear-gradient(90deg,#a855f7,#7c3aed)}
+/* The fill is full-width (width:100% set inline) and animated with transform:scaleX(1->0),
+   NOT width, so the countdown is GPU-composited (no per-frame layout) and stays smooth on
+   weak devices. transform-origin:left makes it empty from the right (matching the old
+   width animation); will-change promotes the layer up front to avoid a start-of-animation hitch. */
+.bar>span{display:block;height:100%;transform-origin:left;will-change:transform;background:linear-gradient(90deg,#a855f7,#7c3aed)}
 .expander{max-height:0;transition:max-height .28s ease-in-out;overflow:hidden;will-change:max-height}
 [data-theme="parchment"] .text-purple-50,[data-theme="light"] .text-purple-50{color:var(--body-color)!important}
 [data-theme="parchment"] .text-purple-100,[data-theme="light"] .text-purple-100{color:var(--sec-color)!important}

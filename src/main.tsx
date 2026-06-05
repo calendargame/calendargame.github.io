@@ -916,19 +916,19 @@ interface DedOpts {
       useEffect(()=>{setModeStats('flash',state.stats);},[state.stats,setModeStats]);
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
 
-      const resetFlashBar=()=>{if(flashBarRef.current){flashBarRef.current.style.transition="none";flashBarRef.current.style.width="100%";}};
-      const startFlashBar=(ms: number)=>{requestAnimationFrame(()=>{if(!flashBarRef.current)return;const s=flashBarRef.current;s.style.transition="none";s.style.width="100%";s.getBoundingClientRect();s.style.transition=`width ${ms}ms linear`;s.style.width="0%";});};
+      const resetFlashBar=()=>{if(flashBarRef.current){flashBarRef.current.style.transition="none";flashBarRef.current.style.transform="scaleX(1)";}};
+      const startFlashBar=(ms: number)=>{requestAnimationFrame(()=>{if(!flashBarRef.current)return;const s=flashBarRef.current;s.style.transition="none";s.style.transform="scaleX(1)";s.getBoundingClientRect();s.style.transition=`transform ${ms}ms linear`;s.style.transform="scaleX(0)";});};
       const endFlashPhase=useCallback(()=>{setFlashPhase("hide");flashDeadlineRef.current=null;setFlashRemainMs(0);flashTimerRef.current=null;},[]);
       const stopFlash=()=>{clearTimeout(flashTimerRef.current ?? undefined);flashTimerRef.current=null;setFlashPhase("dash");flashDeadlineRef.current=null;setFlashRemainMs(flashMs);resetFlashBar();};
       // freezeFlash — Show-Codes-during-the-flash teardown. Unlike stopFlash (which RESETS the
       // bar to 100% + number to full for the idle state), this FREEZES the countdown in place:
       // it cancels the auto-hide timer, stops the rAF number countdown (setActive(false)), and
-      // pins the bar at its current rendered width so the bar and number freeze TOGETHER. The
+      // pins the bar at its current rendered scale so the bar and number freeze TOGETHER. The
       // date stays shown. (The original applyCalcPenalty froze the number but missed the bar's
       // CSS transition — bug #4. This completes the freeze.)
       const freezeFlash=()=>{
         clearTimeout(flashTimerRef.current ?? undefined);flashTimerRef.current=null;flashDeadlineRef.current=null;
-        if(flashBarRef.current){const w=getComputedStyle(flashBarRef.current).width;flashBarRef.current.style.transition="none";flashBarRef.current.style.width=w;}
+        if(flashBarRef.current){const t=getComputedStyle(flashBarRef.current).transform;flashBarRef.current.style.transition="none";flashBarRef.current.style.transform=t;}
         setActive(false);setShowTimerDate(true);setFlashPhase("dash");
       };
 
@@ -1067,7 +1067,7 @@ interface DedOpts {
       const blitzBk=`${allowMistakes?'m':'n'}${blitzSec}|${randomFormat?'random':dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`;
       const suddenBk=`${qSec}|${randomFormat?'random':dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`;
 
-      const resetTimerBars=()=>{if(blitzBarRef.current)blitzBarRef.current.style.width="100%";if(suddenBarRef.current)suddenBarRef.current.style.width="100%";};
+      const resetTimerBars=()=>{if(blitzBarRef.current)blitzBarRef.current.style.transform="scaleX(1)";if(suddenBarRef.current)suddenBarRef.current.style.transform="scaleX(1)";};
       const stopRound=()=>{blitzStartRef.current=null;blitzPausedAtRef.current=null;blitzPausedAccRef.current=0;qDeadlineRef.current=null;qPausedAtRef.current=null;qPausedAccRef.current=0;};
       const endRound=()=>{setActive(false);setShowTimerDate(true);setTimerDone(true);stopRound();};
 
@@ -1082,16 +1082,16 @@ interface DedOpts {
           if(!perQ&&blitzStartRef.current!=null){
             const t=(now-blitzStartRef.current-blitzPausedAccRef.current)/1000;
             const r=Math.max(0,blitzSec-t);blitzRemainRef.current=r;
-            const w=Math.max(0,Math.min(100,(r/blitzSec)*100))+"%";
-            if(blitzBarRef.current)blitzBarRef.current.style.width=w;
+            const sx=Math.max(0,Math.min(1,r/blitzSec));
+            if(blitzBarRef.current)blitzBarRef.current.style.transform="scaleX("+sx+")";
             if(blitzTimeRef.current)blitzTimeRef.current.textContent=fmtBlitzT(r);
             setBlitzRemain(r);
             if(r<=.001){eng.lockReveal();endRound();return;}
           }
           if(perQ&&qDeadlineRef.current!=null){
             const r=Math.max(0,(qDeadlineRef.current+qPausedAccRef.current-now)/1000);
-            const w=(qSec>0?Math.max(0,Math.min(100,(r/qSec)*100)):100)+"%";
-            if(suddenBarRef.current)suddenBarRef.current.style.width=w;
+            const sx=(qSec>0?Math.max(0,Math.min(1,r/qSec)):1);
+            if(suddenBarRef.current)suddenBarRef.current.style.transform="scaleX("+sx+")";
             if(suddenTimeRef.current)suddenTimeRef.current.textContent=Math.ceil(r)+"s";
             setQRemain(r);
             if(r<=.001){eng.timeoutMiss();endRound();return;}
@@ -1212,7 +1212,7 @@ interface DedOpts {
             <button type="button" onClick={toggleAllowMistakes} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${allowMistakes?"btn-solid border-transparent":"surface-toggle text-purple-100/80"}${(active||timerDone)?" opacity-60 pointer-events-none":""}`}>Allow Mistakes</button>
             <button type="button" onClick={togglePerQ} className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border btn-solid border-transparent${(active||timerDone)?" opacity-60 pointer-events-none":""}`}>{perQ?"Per Question":"Per Round"}</button>
           </div>
-          <div className="mt-3">{!perQ?(<div className="flex items-center gap-2"><input type="range" min="10" max="180" step="5" value={blitzSec} onChange={e=>{const v=+e.target.value;setBlitzSec(v);if(!active){setBlitzRemain(v);blitzRemainRef.current=v;if(blitzTimeRef.current)blitzTimeRef.current.textContent=fmtBlitzT(v);if(blitzBarRef.current)blitzBarRef.current.style.width="100%";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((blitzSec-10)/170*100)+"%"} as React.CSSProperties} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-14 shrink-0 text-right">{fmtBlitzT(blitzSec)}</span></div>):(<div className="flex items-center gap-2"><input type="range" min="1" max="20" step="1" value={qSec} onChange={e=>{const v=+e.target.value;setQSec(v);if(!active){setQRemain(v);if(suddenTimeRef.current)suddenTimeRef.current.textContent=v+"s";if(suddenBarRef.current)suddenBarRef.current.style.width="100%";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((qSec-1)/19*100)+"%"} as React.CSSProperties} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-8 shrink-0 text-right">{qSec}s</span></div>)}</div>
+          <div className="mt-3">{!perQ?(<div className="flex items-center gap-2"><input type="range" min="10" max="180" step="5" value={blitzSec} onChange={e=>{const v=+e.target.value;setBlitzSec(v);if(!active){setBlitzRemain(v);blitzRemainRef.current=v;if(blitzTimeRef.current)blitzTimeRef.current.textContent=fmtBlitzT(v);if(blitzBarRef.current)blitzBarRef.current.style.transform="scaleX(1)";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((blitzSec-10)/170*100)+"%"} as React.CSSProperties} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-14 shrink-0 text-right">{fmtBlitzT(blitzSec)}</span></div>):(<div className="flex items-center gap-2"><input type="range" min="1" max="20" step="1" value={qSec} onChange={e=>{const v=+e.target.value;setQSec(v);if(!active){setQRemain(v);if(suddenTimeRef.current)suddenTimeRef.current.textContent=v+"s";if(suddenBarRef.current)suddenBarRef.current.style.transform="scaleX(1)";}}} disabled={active||timerDone} style={{"--rng-fill":Math.round((qSec-1)/19*100)+"%"} as React.CSSProperties} className="flex-1 disabled:opacity-40"/><span className="tabular-nums text-xs w-8 shrink-0 text-right">{qSec}s</span></div>)}</div>
           <div className="mt-5">
             {!perQ&&(<div className="mb-3"><div className="text-center text-xs tabular-nums text-purple-200/80 mb-1"><span ref={blitzTimeRef}>{fmtBlitzT(blitzSec)}</span></div><div className="bar"><span ref={blitzBarRef} style={{width:"100%"}}></span></div></div>)}
             {perQ&&(<div className="mb-3"><div className="text-center text-xs tabular-nums text-purple-200/80 mb-1"><span ref={suddenTimeRef}>{qSec}s</span></div><div className="bar"><span ref={suddenBarRef} style={{width:"100%"}}></span></div></div>)}
