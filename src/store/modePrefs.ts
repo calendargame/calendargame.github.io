@@ -12,12 +12,12 @@ import { persist } from 'zustand/middleware'
 //
 // What it holds: Flash reveal speed; Blitz round/per-question timers + Per-Round/Question
 // + Allow Mistakes; AoX count (N) + Allow Mistakes + One-By-One; Deduction sub-type; and
-// `lastMode` (the mode the app reopens to). `allowMistakes` is namespaced per mode
-// (blitz* / aox*) since both have one with different defaults.
+// the per-mode show/hide stat toggles (timing/scoring), namespaced per mode since their
+// defaults differ (Classic/Deduction launch with timing hidden, Flash with it shown).
+// `allowMistakes` is likewise namespaced (blitz*/aox*).
 //
-// NOT here (intentionally, deliberately session-fresh): the show/hide stat toggles
-// (an in-the-moment "focus" choice with calm per-mode defaults) and any mid-game state
-// (a half-finished timed run can't fairly resume).
+// NOT here (intentionally): the current tab — the app always opens to Classic; and any
+// mid-game state — a half-finished timed run can't fairly resume.
 //
 // Same pattern as settings.ts: Zustand `persist` (localStorage 'cg-modeprefs-v1',
 // versioned), each setter accepts a direct value OR a React-style functional updater
@@ -26,21 +26,32 @@ import { persist } from 'zustand/middleware'
 // copy back to the launch defaults.
 
 export type ModePrefsValues = {
-  lastMode: string // the last GAME mode reopened on launch ('classic'|'flash'|'blitz'|'aox'|'deduction')
+  // Flash
   flashMs: number
+  flashTimingOff: boolean
+  flashScoringOff: boolean
+  // Blitz
   blitzSec: number
   blitzQSec: number
   blitzPerQ: boolean
   blitzAllowMistakes: boolean
+  // AoX
   aoxN: string
   aoxAllowMistakes: boolean
   aoxOneByOne: boolean
+  // Deduction
   dedType: string
+  dedTimingOff: boolean
+  dedScoringOff: boolean
+  // Classic
+  classicTimingOff: boolean
+  classicScoringOff: boolean
 }
 type Updater<T> = T | ((prev: T) => T)
 export type ModePrefsState = ModePrefsValues & {
-  setLastMode: (v: Updater<string>) => void
   setFlashMs: (v: Updater<number>) => void
+  setFlashTimingOff: (v: Updater<boolean>) => void
+  setFlashScoringOff: (v: Updater<boolean>) => void
   setBlitzSec: (v: Updater<number>) => void
   setBlitzQSec: (v: Updater<number>) => void
   setBlitzPerQ: (v: Updater<boolean>) => void
@@ -49,14 +60,19 @@ export type ModePrefsState = ModePrefsValues & {
   setAoxAllowMistakes: (v: Updater<boolean>) => void
   setAoxOneByOne: (v: Updater<boolean>) => void
   setDedType: (v: Updater<string>) => void
+  setDedTimingOff: (v: Updater<boolean>) => void
+  setDedScoringOff: (v: Updater<boolean>) => void
+  setClassicTimingOff: (v: Updater<boolean>) => void
+  setClassicScoringOff: (v: Updater<boolean>) => void
   resetModePrefs: () => void
 }
 
 // The launch defaults — single source of truth (match the components' old useState defaults),
-// reused by resetModePrefs().
+// reused by resetModePrefs(). Timing hidden by default in Classic/Deduction, shown in Flash.
 export const MODE_PREFS_DEFAULTS: ModePrefsValues = {
-  lastMode: 'classic',
   flashMs: 500,
+  flashTimingOff: false,
+  flashScoringOff: false,
   blitzSec: 60,
   blitzQSec: 5,
   blitzPerQ: false,
@@ -65,6 +81,10 @@ export const MODE_PREFS_DEFAULTS: ModePrefsValues = {
   aoxAllowMistakes: false,
   aoxOneByOne: false,
   dedType: 'day',
+  dedTimingOff: true,
+  dedScoringOff: false,
+  classicTimingOff: true,
+  classicScoringOff: false,
 }
 
 // resolve(next, prev): support React-style functional updaters.
@@ -78,8 +98,9 @@ export const useModePrefs = create<ModePrefsState>()(
   persist(
     (set) => ({
       ...MODE_PREFS_DEFAULTS,
-      setLastMode: (v) => set((s) => ({ lastMode: resolve(v, s.lastMode) })),
       setFlashMs: (v) => set((s) => ({ flashMs: resolve(v, s.flashMs) })),
+      setFlashTimingOff: (v) => set((s) => ({ flashTimingOff: resolve(v, s.flashTimingOff) })),
+      setFlashScoringOff: (v) => set((s) => ({ flashScoringOff: resolve(v, s.flashScoringOff) })),
       setBlitzSec: (v) => set((s) => ({ blitzSec: resolve(v, s.blitzSec) })),
       setBlitzQSec: (v) => set((s) => ({ blitzQSec: resolve(v, s.blitzQSec) })),
       setBlitzPerQ: (v) => set((s) => ({ blitzPerQ: resolve(v, s.blitzPerQ) })),
@@ -88,6 +109,10 @@ export const useModePrefs = create<ModePrefsState>()(
       setAoxAllowMistakes: (v) => set((s) => ({ aoxAllowMistakes: resolve(v, s.aoxAllowMistakes) })),
       setAoxOneByOne: (v) => set((s) => ({ aoxOneByOne: resolve(v, s.aoxOneByOne) })),
       setDedType: (v) => set((s) => ({ dedType: resolve(v, s.dedType) })),
+      setDedTimingOff: (v) => set((s) => ({ dedTimingOff: resolve(v, s.dedTimingOff) })),
+      setDedScoringOff: (v) => set((s) => ({ dedScoringOff: resolve(v, s.dedScoringOff) })),
+      setClassicTimingOff: (v) => set((s) => ({ classicTimingOff: resolve(v, s.classicTimingOff) })),
+      setClassicScoringOff: (v) => set((s) => ({ classicScoringOff: resolve(v, s.classicScoringOff) })),
       // Reset every mode pref to its launch default in one shot. Because the store is
       // persisted, this also overwrites the saved copy back to defaults (Full Reset).
       resetModePrefs: () => set(() => ({ ...MODE_PREFS_DEFAULTS })),

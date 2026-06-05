@@ -34,8 +34,8 @@ describe('modePrefs store', () => {
     expect(useModePrefs.getState().blitzPerQ).toBe(false)
     useModePrefs.getState().setAoxN('5')
     expect(useModePrefs.getState().aoxN).toBe('5')
-    useModePrefs.getState().setLastMode('blitz')
-    expect(useModePrefs.getState().lastMode).toBe('blitz')
+    useModePrefs.getState().setClassicTimingOff((v) => !v) // toggle, like the show/hide stat buttons
+    expect(useModePrefs.getState().classicTimingOff).toBe(false) // default true -> false
   })
 
   it('resetModePrefs restores fresh launch defaults', () => {
@@ -43,12 +43,12 @@ describe('modePrefs store', () => {
     s.setFlashMs(2000)
     s.setAoxOneByOne(true)
     s.setDedType('year')
-    s.setLastMode('aox')
+    s.setClassicTimingOff(false)
     s.resetModePrefs()
     const r = useModePrefs.getState()
     expect(r.flashMs).toBe(MODE_PREFS_DEFAULTS.flashMs)
     expect(r.aoxOneByOne).toBe(MODE_PREFS_DEFAULTS.aoxOneByOne)
     expect(r.dedType).toBe(MODE_PREFS_DEFAULTS.dedType)
-    expect(r.lastMode).toBe(MODE_PREFS_DEFAULTS.lastMode)
+    expect(r.classicTimingOff).toBe(MODE_PREFS_DEFAULTS.classicTimingOff)
   })
 })

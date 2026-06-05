@@ -299,15 +299,17 @@ interface DedOpts {
     // component (it's also fed to useGameEngine), so it's passed in with its setter. Flash is the only
     // mode with a live timer to tear down, so it passes afterTimingEnabled() (on re-enable) and onHide()
     // (on mode-leave); Classic/Deduction omit them.
-    function useStatsHideToggles({eng, saveStats, visible, timingOff, setTimingOff, afterTimingEnabled, onHide}: { eng: GameEngine; saveStats: boolean; visible: boolean; timingOff: boolean; setTimingOff: (v: boolean) => void; afterTimingEnabled?: () => void; onHide?: () => void }){
+    function useStatsHideToggles({eng, saveStats, visible, timingOff, setTimingOff, scoringOff, setScoringOff, afterTimingEnabled, onHide}: { eng: GameEngine; saveStats: boolean; visible: boolean; timingOff: boolean; setTimingOff: (v: boolean) => void; scoringOff: boolean; setScoringOff: (v: boolean) => void; afterTimingEnabled?: () => void; onHide?: () => void }){
+      // timingOff + scoringOff are owned by the mode component (persisted in the mode-prefs store) and
+      // passed in, so the hook holds no toggle state of its own — it just orchestrates the desync arm
+      // and builds the stats strip from them.
       const S=eng.state.stats;
-      const [scoringOff,setScoringOff]=useState(false);
       const [timingArmed,setTimingArmed]=useState(false);
       const timingArmedRef=useRef(false);
       const timingArmTimerRef=useRef<ReturnType<typeof setTimeout> | null>(null);
       const timingArmBtnRef=useRef<HTMLButtonElement | null>(null);
       const disarmTimingArm=()=>{if(timingArmTimerRef.current){clearTimeout(timingArmTimerRef.current);timingArmTimerRef.current=null;}timingArmedRef.current=false;setTimingArmed(false);};
-      const toggleScoringOff=()=>{if(!saveStats)return;setScoringOff(v=>!v);};
+      const toggleScoringOff=()=>{if(!saveStats)return;setScoringOff(!scoringOff);};   // scoringOff is the current (prop) value
       const toggleTimingOff=()=>{
         if(!saveStats)return;
         if(!timingOff){setTimingOff(true);return;}
@@ -341,7 +343,7 @@ interface DedOpts {
       const armedSpan=(timingArmed&&saveStats)?{startIdx:3,endIdx:5,label:"Enable and Reset Stats?",onClick:toggleTimingOff}:null;
       // armedBtnRef is returned separately (not nested in armedSpan) so StatPanel's plain
       // armedSpan data stays ref-free — see the note in StatPanel.tsx.
-      return {scoringOff,timingArmed,statsArr,armedSpan,armedBtnRef:timingArmBtnRef};
+      return {timingArmed,statsArr,armedSpan,armedBtnRef:timingArmBtnRef};
     }
     // Run fn() whenever any value in `deps` changes — skipping the initial mount. The generic
     // "react to a settings/toggle change" effect the modes use to regen an unanswered live date
@@ -360,7 +362,7 @@ interface DedOpts {
 
 
 
-    const DEPLOY_TS=new Date('2026-06-05T04:38:01Z');
+    const DEPLOY_TS=new Date('2026-06-05T04:53:38Z');
 
     // ============================================================
     // makeDedPuzzle — the PURE Deduction puzzle generator (mode-untangle Step 4).
@@ -820,7 +822,8 @@ interface DedOpts {
     // carved out of App's fused rendering; Flash/Blitz/Deduction follow onto the same engine.
     // ============================================================
     function ClassicMode({visible,genDate,minY,maxY,useJulian,saveStats,dateFormat,randomFormat,leapChance,janFebChance,julianChance,fmtDate,onFreshChange}: ModeProps & { genDate: GenDate; fmtDate: FmtDate }){
-      const [timingOff,setTimingOff]=useState(true);   // Classic launches with timing hidden (feeds the engine)
+      const timingOff=useModePrefs(s=>s.classicTimingOff),setTimingOff=useModePrefs(s=>s.setClassicTimingOff);   // persisted; timing hidden by default (feeds the engine)
+      const scoringOff=useModePrefs(s=>s.classicScoringOff),setScoringOff=useModePrefs(s=>s.setClassicScoringOff);   // persisted; scoring shown by default
       // Lifetime stats persist across reloads (Stage D1): hydrate from saved progress on mount,
       // then mirror every stats change back to the store (which caps the solve-times window).
       const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.classic});
@@ -830,7 +833,7 @@ interface DedOpts {
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
       // Hideable stats chrome (show/hide toggles + two-tap "Enable and Reset Stats?" arm + the 6-box
       // stats strip), shared with Flash/Deduction via useStatsHideToggles.
-      const {scoringOff,timingArmed,statsArr,armedSpan,armedBtnRef}=useStatsHideToggles({eng,saveStats,visible,timingOff,setTimingOff});
+      const {timingArmed,statsArr,armedSpan,armedBtnRef}=useStatsHideToggles({eng,saveStats,visible,timingOff,setTimingOff,scoringOff,setScoringOff});
       const optionsDisabled=state.locked||state.calcOpen||state.calcPenaltyActive;
       const revealDisabled=(state.locked&&state.revealed)||state.calcOpen||state.calcPenaltyActive;
       const baseBtn="w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none";
@@ -902,7 +905,8 @@ interface DedOpts {
       const flashTimerRef=useRef<ReturnType<typeof setTimeout> | null>(null);
       const flashDeadlineRef=useRef<number | null>(null);
       const flashBarRef=useRef<HTMLSpanElement | null>(null);
-      const [timingOff,setTimingOff]=useState(false);   // Flash shows timing by default (feeds the engine)
+      const timingOff=useModePrefs(s=>s.flashTimingOff),setTimingOff=useModePrefs(s=>s.setFlashTimingOff);   // persisted; timing shown by default (feeds the engine)
+      const scoringOff=useModePrefs(s=>s.flashScoringOff),setScoringOff=useModePrefs(s=>s.setFlashScoringOff);   // persisted; scoring shown by default
       // Lifetime stats persist across reloads (Stage D1): hydrate on mount, mirror changes to the store.
       const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.flash});
       const {state,correct,overrideAvail}=eng;
@@ -964,8 +968,8 @@ interface DedOpts {
       // Hideable stats chrome shared with Classic/Deduction. Flash supplies its flash-timer teardown:
       // afterTimingEnabled (re-enabling timing while a flash is live stops it + hides its date) and
       // onHide (leaving the mode stops a live flash). Classic/Deduction pass neither (no timer).
-      const {scoringOff,timingArmed,statsArr,armedSpan,armedBtnRef}=useStatsHideToggles({
-        eng,saveStats,visible,timingOff,setTimingOff,
+      const {timingArmed,statsArr,armedSpan,armedBtnRef}=useStatsHideToggles({
+        eng,saveStats,visible,timingOff,setTimingOff,scoringOff,setScoringOff,
         afterTimingEnabled:()=>{if(active){setActive(false);stopFlash();}setShowTimerDate(false);},
         onHide:()=>{if(active){setActive(false);stopFlash();}},
       });
@@ -1254,7 +1258,8 @@ interface DedOpts {
       const [abCrossOnly,setAbCrossOnly]=useState(false);
       const [julCrossOnly,setJulCrossOnly]=useState(false);
       const [monthOnly1582,setMonthOnly1582]=useState(false);
-      const [timingOff,setTimingOff]=useState(true);   // Deduction launches with timing hidden (feeds all three engines)
+      const timingOff=useModePrefs(s=>s.dedTimingOff),setTimingOff=useModePrefs(s=>s.setDedTimingOff);   // persisted; timing hidden by default (feeds all three engines)
+      const scoringOff=useModePrefs(s=>s.dedScoringOff),setScoringOff=useModePrefs(s=>s.setDedScoringOff);   // persisted; scoring shown by default
 
       // Per-sub-mode puzzle generators — close over the latest settings + toggles each render.
       const opts={useJulian,leapChance,janFebChance,randomFormat,dateFormat,abCrossOnly,julCrossOnly,monthOnly1582};
@@ -1281,7 +1286,7 @@ interface DedOpts {
       // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
       const {flash,setFlash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
       // Hideable stats chrome shared with Classic/Flash — operates on the ACTIVE sub-mode's engine.
-      const {scoringOff,timingArmed,statsArr,armedSpan,armedBtnRef}=useStatsHideToggles({eng,saveStats,visible,timingOff,setTimingOff});
+      const {timingArmed,statsArr,armedSpan,armedBtnRef}=useStatsHideToggles({eng,saveStats,visible,timingOff,setTimingOff,scoringOff,setScoringOff});
 
       const fmtDatePartial=(y: number,m: number,d: number,storedFmt: FormatId | undefined,missing: DatePart)=>fmtPartial(y,m,d,storedFmt||dateFormat,missing);
       const centerLastOpt=(index: number,total: number)=>{if(total<=0)return"";if(index===total-1&&total%3===1)return"col-span-3";return"";};
@@ -1392,14 +1397,14 @@ interface DedOpts {
     // shared engine, AoxMode).
     // ============================================================
     function App(){
-      const [mode,setMode]=useState(()=>useModePrefs.getState().lastMode);   // reopen the last GAME mode (persisted)
+      const [mode,setMode]=useState("classic");   // the app always opens to Classic (the current tab is not persisted)
       // Tracks the most recent non-guide mode so the H key bind can toggle out of
       // guide back to where the user was. Updated whenever mode changes (excluding
       // changes INTO guide). Initial value 'classic' covers the never-left-classic case.
       // Distinct from the unrelated prevModeRef declared further down which tracks
       // mode changes for codes-freeze logic.
       const prevNonGuideModeRef=useRef('classic');
-      useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;if(mode!=='guide'&&mode!=='lookup')useModePrefs.getState().setLastMode(mode);},[mode]);   // persist the last GAME mode (not Lookup/Guide) for relaunch
+      useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
       const modeSelectRef=useRef<HTMLDivElement | null>(null);
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
       // ⚙ Settings store (Stage C, Step 5a). The 13 settings values + their setters
