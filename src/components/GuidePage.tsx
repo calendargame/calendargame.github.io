@@ -361,6 +361,11 @@ export default function GuidePage() {
           defaults; and the current tab (the app always opens to Classic). <b>Full Reset</b> (below)
           clears everything that is saved.
         </p>
+        <p>
+          <b>Install &amp; offline</b> — Calendar Game can be added to your home screen (use your
+          browser's Add to Home Screen / Install option) and then opens full-screen like a normal
+          app. Once it has loaded it works fully offline — no connection needed to practice.
+        </p>
       </GuideSection>
       <GuideSection
         id="reset-settings"
