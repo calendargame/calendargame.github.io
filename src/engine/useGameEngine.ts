@@ -17,7 +17,7 @@
 // every dispatch below is checked against the action union (Stage C, TypeScript).
 // ─────────────────────────────────────────────────────────────────────────
 import { useReducer, useRef, useEffect, useMemo } from 'react'
-import { gameReducer, initEngine, correctIndexOf } from './gameReducer.js'
+import { gameReducer, initEngine, correctIndexOf, effectiveSaveStats } from './gameReducer.js'
 import type { Question, Stats } from './gameReducer.js'
 
 // genDate produces the next question for the active year range (the parent bakes in the
@@ -80,8 +80,14 @@ export function useGameEngine({
     !!last &&
     !last.overrideUsed &&
     last.capsule?.snapshot != null
+  // Gated on effectiveSaveStats (the per-question FROZEN Save-Stats), NOT the live `saveStats`:
+  // a question processed (answer / Reveal / Show Codes) while Save Stats was OFF is never scored
+  // (played not incremented), so it must stay override-LOCKED even after Save Stats is turned back
+  // ON — else Path 3 would credit good+1 on played 0, an impossible 1/0 (good > played). Fix
+  // 2026-06-06 (tests: classic.dom "Save Stats / Override availability"). saveStatsThisQ===null
+  // (no stat action yet) falls back to the live setting, so fresh / Path-4 / Path-5 are unchanged.
   const overrideAvail =
-    saveStats &&
+    effectiveSaveStats(state, saveStats) &&
     (state.countedWrong ||
       state.canOverrideCorrect ||
       state.pendingWrongOverride != null ||

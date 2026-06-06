@@ -713,7 +713,12 @@ interface DedOpts {
       const backDisabled=state.stack.length===0||runPhase==="idle"||runPhase==="running";
       const fwdDisabled=state.forwardStack.length===0||runPhase==="idle"||runPhase==="running";
       const last=state.stack[state.stack.length-1];
-      // Override availability mirrors the shared engine's (Save Stats off locks it).
+      // Override availability uses the REAL `saveStats` (NOT effectiveSaveStats like the hook): AoX
+      // feeds the engine saveStats:true (above) so every run question IS scored (played always
+      // increments) → it can't hit the unscored-question 1/0 bug the hook guards (fix 2026-06-06),
+      // and the live toggle is what should gate the button here. Do NOT "consistency-fix" this to
+      // effectiveSaveStats — saveStatsThisQ is always true here, so that would wrongly show Override
+      // while Save Stats is off.
       const overrideAvail=saveStats&&!state.overrideUsedThisQ&&(state.countedWrong||state.canOverrideCorrect||state.pendingWrongOverride!=null||eng.retroOverrideEligible);
       const codesDisabled=runPhase==="idle"||(oneByOne&&!shown&&!inBack&&!isLocked);
       const optionsDisabled=isLocked||state.calcOpen||(oneByOne&&!shown&&!inBack)||runPhase==="idle"||inBack;

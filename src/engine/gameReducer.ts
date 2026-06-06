@@ -275,7 +275,7 @@ export const initEngine = (date: Question, initialStats?: Stats): GameState => (
 
 // The per-question frozen Save-Stats value (frozen on first stat-affecting action),
 // else the live setting. Mirrors App's effectiveSaveStats / saveStatsThisQRef.
-const effectiveSaveStats = (state: GameState, saveStats: boolean): boolean =>
+export const effectiveSaveStats = (state: GameState, saveStats: boolean): boolean =>
   state.saveStatsThisQ === null ? saveStats : state.saveStatsThisQ
 
 // pushAndNext (Classic): push the just-finished question to history (only when it was
@@ -309,8 +309,13 @@ const advance = (
   // doesn't), so a wrong-then-right on a puzzle is reclaimed by Path 5 (retro-flip the just-
   // pushed entry), not Path 4. Gate on the finished question being a puzzle (date.type set).
   const isDeductionQ = !!(state.date && state.date.type)
+  // Only arm pendingWrongOverride when the finished wrong question was actually SCORED (`saved`):
+  // a wrong burned while Save Stats was OFF was never counted (played not incremented), so there is
+  // nothing to retroactively credit — arming it would let Override Path 4 credit good+1 on a played
+  // it never incremented (an over-credit / 1-0). Fix 2026-06-06 (tests: classic.dom "Save Stats /
+  // Override availability"; surfaced by the all-modes score-integrity survey).
   const pendingWrongOverride: PendingWrongOverride | null =
-    state.countedWrong && !isDeductionQ
+    state.countedWrong && !isDeductionQ && saved
       ? { wrongTime: state.wrongTime, snapshot: state.preCalcPenaltySnapshot }
       : null
   return {
@@ -470,8 +475,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'SHOW_CODES': {
       const { open, useJulian, elapsed, saveStats } = action
       if (!open) return { ...state, calcOpen: false }
-      // Penalty-free when viewing an unanswered back entry.
-      if (state.locked && !state.revealed && state.backDepth > 0) {
+      // Penalty-free when browsing back (backDepth>0): reviewing history is read-only, so opening
+      // codes on ANY browsed entry — answered/revealed too, not just unanswered — must NOT burn it
+      // (arm countedWrong), which would let Override fire Path 3 (good+1) instead of the legitimate
+      // back-browse Path 1 (flip), over-crediting to an impossible 2/1 (good > played). When
+      // backDepth>0 the grid is always locked, so the prior `locked` term was redundant; dropping
+      // the `!revealed` term is the fix. (Fix 2026-06-06; tests: classic.dom "Show Codes while
+      // browsing back is read-only".)
+      if (state.backDepth > 0) {
         return { ...state, calcOpen: true }
       }
       const correct = correctIndexOf(state.date, useJulian)
@@ -497,7 +508,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       if (state.backDepth === 0) next.persistBtns = mkBtnsWithCorrect(state.persistBtns, correct)
       if (!state.revealed) next.revealed = true
-      if (!state.countedWrong) {
+      // Arm countedWrong (which opens Override Path 3) ONLY on a first penalty — the burn that
+      // actually counts this question. If it was already `revealed` but never counted (Blitz
+      // per-round timeout = LOCK_REVEAL: revealed + locked, played NOT incremented), opening codes
+      // must NOT arm Override — else Path 3 credits good+1 on played 0 (1-0). firstPenalty is the
+      // same gate the played increment uses, keeping countedWrong and played in lockstep. Fix
+      // 2026-06-06 (surfaced by the all-modes score-integrity survey).
+      if (firstPenalty) {
         next.countedWrong = true
         next.canOverrideCorrect = false
       }

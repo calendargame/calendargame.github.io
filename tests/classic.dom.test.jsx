@@ -14,7 +14,7 @@
 // click accordingly. We pin a Gregorian-only year range (>=1583) and a fixed numeric-ymd
 // format so the displayed date is unambiguous and trivially parseable.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { wday } from '../src/lib/calendar.js'
@@ -399,5 +399,98 @@ describe('Classic — characterization (batch 5: timing-on, history & override n
     fireEvent.click(ctrl('>'))
     expect(isDisabled(ctrl('>'))).toBe(true)
     expect(statValue('Score')).toBe('2/2')
+  })
+})
+
+// ── Save Stats / Override availability (deliberate fix, 2026-06-06) ────────────
+// A question processed (answered wrong / Reveal / Show Codes) while Save Stats is OFF is
+// never scored (played is NOT incremented). Turning Save Stats back ON must NOT make that
+// question override-able again — otherwise Override Path 3 credits good+1 with played still
+// 0, an impossible 1/0 (good > played). The fix gates override AVAILABILITY on whether THIS
+// question was actually scored (state.saveStatsThisQ via effectiveSaveStats), not on the live
+// Save Stats setting. These assert the corrected behavior — they fail RED against the pre-fix
+// code (Override was wrongly enabled and the score jumped to 1/0). The Save-Stats-ON path
+// staying override-able is already covered by "Override after Reveal … (Path 3 via Reveal)".
+describe('Classic — Save Stats / Override availability (fix 2026-06-06)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useSettings.getState().resetSettings()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  const setSaveStats = (v) => act(() => useSettings.getState().setSaveStats(v))
+
+  it('Reveal while Save Stats OFF, then ON: Override stays locked, Score stays 0/0 (no 1/0)', () => {
+    mountApp()
+    setSaveStats(false)
+    pressNewAndRead() // fresh, normalized date; nothing is scored while Save Stats is off
+    fireEvent.click(ctrl('Reveal')) // burns the question, but played is NOT incremented
+    setSaveStats(true)
+    expect(isDisabled(ctrl('Override'))).toBe(true) // must NOT arm override on an unscored Q
+    expect(statValue('Score')).toBe('0/0')
+  })
+
+  it('Wrong answer while Save Stats OFF, then ON: Override stays locked, Score stays 0/0', () => {
+    mountApp()
+    setSaveStats(false)
+    const date = pressNewAndRead()
+    fireEvent.click(dayBtn(wrongName(date))) // wrong, burns the question, played NOT incremented
+    setSaveStats(true)
+    expect(isDisabled(ctrl('Override'))).toBe(true)
+    expect(statValue('Score')).toBe('0/0')
+  })
+
+  it('Wrong while Save Stats OFF, then New + Save Stats ON: no Path-4 over-credit (Override locked)', () => {
+    // The unscored wrong must NOT arm pendingWrongOverride on the next question — else Override
+    // Path 4 credits good+1 on a played it never incremented (1/0). Gated at arming (advance `saved`).
+    mountApp()
+    setSaveStats(false)
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(wrongName(q1))) // wrong + unscored (played NOT incremented)
+    fireEvent.click(ctrl('New')) // advance off the unscored wrong
+    setSaveStats(true)
+    expect(isDisabled(ctrl('Override'))).toBe(true) // no scored history → nothing to override
+    expect(statValue('Score')).toBe('0/0')
+  })
+})
+
+// ── Show Codes while browsing back is read-only (deliberate fix, 2026-06-06) ───
+// Browsing back (backDepth>0) is review-only: opening Show Codes on a browsed entry must NOT
+// change anything. The reducer's penalty-free guard only covered UNANSWERED browsed entries
+// (`!state.revealed`), so opening codes on a browsed ANSWERED/correct entry fell through and
+// armed countedWrong — which then let Override fire Path 3 (good+1) instead of the legitimate
+// Path 1 (flip), over-crediting to an impossible 2/1 (good > played). The fix makes Show Codes
+// penalty-free for ANY browsed entry. Surfaced by the C3 all-modes score-integrity survey.
+describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-06)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useSettings.getState().resetSettings()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('Back to a correct entry → Show Codes → Override does Path 1 flip (0/1), never over-credits (2/1)', () => {
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(correctName(q1))) // 1/1 → advance to Q2 (Q1 now in history)
+    expect(statValue('Score')).toBe('1/1')
+    fireEvent.click(ctrl('<')) // browse back to Q1 (the correct, revealed entry)
+    fireEvent.click(ctrl('Show Codes')) // review the codes — must be penalty-free
+    expect(statValue('Score')).toBe('1/1') // reviewing never changes the score
+    fireEvent.click(ctrl('Override')) // back-browse override = Path 1 (flip correct→wrong)
+    expect(statValue('Score')).toBe('0/1') // the legit flip — NOT the pre-fix 2/1 over-credit
   })
 })
