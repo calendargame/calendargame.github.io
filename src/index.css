@@ -177,6 +177,13 @@ button:focus,select:focus{outline:none}
    weak devices. transform-origin:left makes it empty from the right (matching the old
    width animation); will-change promotes the layer up front to avoid a start-of-animation hitch. */
 .bar>span{display:block;height:100%;transform-origin:left;will-change:transform;background:linear-gradient(90deg,#a855f7,#7c3aed)}
+/* Fluid type + spacing (C3): ONE fluid root font-size scales every rem-based size at once — Tailwind's
+   text-*, p-*, gap-*, etc. are rem, and the column max-width is set in rem too — so the whole app grows
+   / shrinks proportionally with the viewport: a legibility floor on small phones (helps the no-scroll
+   goal), a capped ceiling + centered column on desktop. The clamp uses rem (not px) so it still honors
+   the user's browser font-size setting (accessibility). Min 0.875rem (≈14px at the default 16px root),
+   max 1.1875rem (≈19px). Owner delegated these min/max — tune on a real-device pass (staging). */
+html{font-size:clamp(0.875rem, 0.86rem + 0.4vw, 1.1875rem)}
 /* Reduced-motion groundwork (C2): decorative-motion durations multiply by --motion-scale, which
    drops to 0 under the OS "Reduce Motion" setting, making them instant. Functional motion — the
    .bar countdown (transform:scaleX, set inline in JS) and the color flashes (.flash-*, which are

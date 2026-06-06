@@ -1963,7 +1963,7 @@ interface DedOpts {
             below, with padding-top:var(--bar-h) so its content starts below the bar.
             ResizeObserver elsewhere in App writes the bar's offsetHeight to --bar-h.
             Full width (no max-w) so theme bg + elevation shadow span edge-to-edge on
-            screens wider than 480px; inner max-w-[480px] wrapper holds the title row.
+            screens wider than 480px; inner max-w-[30rem] wrapper holds the title row.
             elev-shadow-down appears when the scroll container is past top.
             HtP-only bar pb-2.5: absorbs half (10px) of the 20px gap that normally sits
             between the title row and the first GuidePage panel. The <GuidePage/> wrapper
@@ -1975,7 +1975,7 @@ interface DedOpts {
             its pt-5 (20px) top padding and the whole site sat ~20px too high. Don't remove the
             space. (Calendar Game layout bug-fix, 2026-06-01.) */}
         <div ref={htpStickyBarRef} style={{position:'fixed',top:0,left:0,right:0,zIndex:30}} className={`htp-sticky-bar bg-(--bg1) w-full pt-5 ${mode==="guide"?" pb-2.5":""}${appScrolledFromTop?" elev-shadow-down":""}`}>
-          <div className="mx-auto px-4 w-full max-w-[480px] relative">
+          <div className="mx-auto px-4 w-full max-w-[30rem] relative">
             <div className="flex items-center justify-between gap-2">
               {/* header left: title */}
               <div className="flex items-center gap-2 shrink-0">
@@ -2004,7 +2004,7 @@ interface DedOpts {
             so content starts immediately below the bar. overscroll-contain keeps
             rubber-band bounce LOCAL to this container (bar is unaffected). */}
         <div ref={appScrollRef} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 overflow-y-auto overscroll-contain${appScrolledFromTop&&!appAtBottom?" fade-scroll-both":appScrolledFromTop?" fade-scroll-top":!appAtBottom?" fade-scroll-bottom":""}`}>
-        <div className="mx-auto px-4 pb-5 w-full max-w-[480px]">
+        <div className="mx-auto px-4 pb-5 w-full max-w-[30rem]">
           {/* key={aoxResetKey} forces remount on Full Reset since AoxMode is always-mounted
               (display:none toggle on visible prop, not conditional rendering) and its internal
               state would otherwise persist across resets. See aoxResetKey declaration upstream
