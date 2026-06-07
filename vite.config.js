@@ -7,6 +7,7 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { VitePWA } from 'vite-plugin-pwa'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
 
 // GitHub Pages serves the org ROOT page `calendargame.github.io` (and its custom domain
 // calendargame.app) from '/', but every PROJECT repo's Pages site from '/<repo>/'. CI sets
@@ -114,7 +115,32 @@ export default defineConfig(({ command, mode }) => ({
           }),
         ]
       : []),
+    // Sentry source-map upload (Current Work C1b): makes crash stack traces READABLE (real file/line,
+    // not minified gibberish). Runs ONLY in a production build that has a SENTRY_AUTH_TOKEN — a GitHub
+    // Actions SECRET set in both repos; local builds (no token) skip it cleanly. It uploads the source
+    // maps to Sentry (matched to events by injected debug IDs, so the lazy SDK chunk resolves too),
+    // then DELETES them from dist so they're never publicly served. Must be last (processes the final
+    // output). org/project slugs are public, not secret. telemetry off.
+    ...(command === 'build' && process.env.SENTRY_AUTH_TOKEN
+      ? [
+          sentryVitePlugin({
+            org: 'ts-6a',
+            project: 'javascript-react',
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
+            telemetry: false,
+          }),
+        ]
+      : []),
   ],
+  // Generate hidden source maps ONLY when we're uploading them to Sentry (CI deploys with the auth
+  // token). 'hidden' emits the .map files but omits the //# sourceMappingURL comment from the shipped
+  // JS, so browsers never fetch them and they aren't referenced; the Sentry plugin above uploads then
+  // deletes them. Local builds (no token) generate none — no clutter, no cost — and .map files never
+  // count toward the JS size budget anyway (the size script globs *.js only).
+  build: {
+    sourcemap: process.env.SENTRY_AUTH_TOKEN ? 'hidden' : false,
+  },
   test: {
     // Pure-logic tests run in Node (Vitest's default environment). DOM characterization
     // tests (Stage C, Step 6) opt into jsdom per-file via `// @vitest-environment jsdom`.
