@@ -1,8 +1,8 @@
-// Generates the Open Graph / social-share preview image — public/og-image.png (1200x630) —
-// from the brand purple-dusk gradient + the W5 app icon. This is what a shared link renders
-// as its preview card image (the title + tagline come from the og:/twitter: meta tags in
-// index.html, which platforms draw as text beside the image, so the image stays text-free and
-// renders identically everywhere — no font dependency). Run: node design/icons/build-og.mjs
+// Generates the Open Graph / social-share preview image — public/og-image.jpg (1200x630) — from the
+// brand purple-dusk gradient + the W5 app icon + the app name & tagline drawn INTO the image. This is
+// what a shared link renders as its preview card. The text is baked in (a common system sans-serif via
+// sharp/resvg) so the card reads identically everywhere, regardless of how each platform renders the
+// og:/twitter: meta text beside it. Run: node design/icons/build-og.mjs
 import sharp from 'sharp'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -10,8 +10,8 @@ import { dirname, join } from 'node:path'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const W = 1200
 const H = 630
-const ICON = 340
-const ICON_LEFT = 120
+const ICON = 330
+const ICON_LEFT = 90
 const ICON_TOP = Math.round((H - ICON) / 2)
 
 // Brand gradient (deep -> violet) + a soft radial glow behind the icon (left), with the app name
@@ -24,15 +24,16 @@ const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
       <stop offset="0.55" stop-color="#5b21b6"/>
       <stop offset="1" stop-color="#7c3aed"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0.26" cy="0.5" r="0.5">
+    <radialGradient id="glow" cx="0.22" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#a855f7" stop-opacity="0.5"/>
       <stop offset="1" stop-color="#a855f7" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#g)"/>
   <rect width="${W}" height="${H}" fill="url(#glow)"/>
-  <text x="540" y="300" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="700" fill="#ffffff">Calendar Game</text>
-  <text x="543" y="360" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" fill="#ddd0fb">Master Mental Day-of-the-Week Calculation</text>
+  <text x="480" y="285" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" fill="#ffffff">Calendar Game</text>
+  <text x="483" y="350" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="400" fill="#ddd0fb">Master Mental</text>
+  <text x="483" y="402" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="400" fill="#ddd0fb">Day-of-the-Week Calculation</text>
 </svg>`
 
 // Round the icon's corners (~22% radius, echoing how iOS renders the home-screen icon) so it
