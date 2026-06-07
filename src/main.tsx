@@ -618,7 +618,7 @@ interface DedOpts {
       // saveStats:true ALWAYS → the run tracks + completes regardless of the global Save Stats
       // setting (which only dims the display + gates recording a Best). timingOff:false → solve
       // times are recorded for the average.
-      const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats:true,timingOff:false});
+      const eng=useGameEngine({label:'aox',genDate,minY,maxY,useJulian,saveStats:true,timingOff:false});
       const {state,correct}=eng;
       const S=state.stats;
       const doneCount=S.good;                 // credited solves this run
@@ -834,7 +834,7 @@ interface DedOpts {
       const scoringOff=useModePrefs(s=>s.classicScoringOff),setScoringOff=useModePrefs(s=>s.setClassicScoringOff);   // persisted; scoring shown by default
       // Lifetime stats persist across reloads (Stage D1): hydrate from saved progress on mount,
       // then mirror every stats change back to the store (which caps the solve-times window).
-      const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.classic});
+      const eng=useGameEngine({label:'classic',genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.classic});
       const {state,correct,overrideAvail}=eng;
       const setModeStats=useProgress(s=>s.setModeStats);
       useEffect(()=>{setModeStats('classic',state.stats);},[state.stats,setModeStats]);
@@ -916,7 +916,7 @@ interface DedOpts {
       const timingOff=useModePrefs(s=>s.flashTimingOff),setTimingOff=useModePrefs(s=>s.setFlashTimingOff);   // persisted; timing shown by default (feeds the engine)
       const scoringOff=useModePrefs(s=>s.flashScoringOff),setScoringOff=useModePrefs(s=>s.setFlashScoringOff);   // persisted; scoring shown by default
       // Lifetime stats persist across reloads (Stage D1): hydrate on mount, mirror changes to the store.
-      const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.flash});
+      const eng=useGameEngine({label:'flash',genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.flash});
       const {state,correct,overrideAvail}=eng;
       const setModeStats=useProgress(s=>s.setModeStats);
       useEffect(()=>{setModeStats('flash',state.stats);},[state.stats,setModeStats]);
@@ -1064,7 +1064,7 @@ interface DedOpts {
       const suddenBest=useProgress(s=>s.suddenBest),setSuddenBest=useProgress(s=>s.setSuddenBest);
       const [blitzBestNew,setBlitzBestNew]=useState<Record<string, { score: boolean; streak: boolean }>>({}),[suddenBestNew,setSuddenBestNew]=useState<Record<string, boolean>>({});
       const currentRoundIdRef=useRef<number | null>(null),nextRoundIdRef=useRef(1);
-      const eng=useGameEngine({genDate,minY,maxY,useJulian,saveStats,timingOff:false}); // Blitz: timing always tracked
+      const eng=useGameEngine({label:'blitz',genDate,minY,maxY,useJulian,saveStats,timingOff:false}); // Blitz: timing always tracked
       const {state,correct,overrideAvail}=eng;
       const S=state.stats;
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
@@ -1281,9 +1281,9 @@ interface DedOpts {
 
       // Lifetime stats persist per sub-mode (Stage D1): each silo hydrates from its own saved slice
       // on mount and mirrors changes back to the store.
-      const dayEng=useGameEngine({genDate:genDay,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.dedDay});
-      const monthEng=useGameEngine({genDate:genMonth,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.dedMonth});
-      const yearEng=useGameEngine({genDate:genYear,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.dedYear});
+      const dayEng=useGameEngine({label:'dedDay',genDate:genDay,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.dedDay});
+      const monthEng=useGameEngine({label:'dedMonth',genDate:genMonth,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.dedMonth});
+      const yearEng=useGameEngine({label:'dedYear',genDate:genYear,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.dedYear});
       const eng=dedType==="month"?monthEng:dedType==="year"?yearEng:dayEng;
       const {state,correct,overrideAvail}=eng;
       const setModeStats=useProgress(s=>s.setModeStats);

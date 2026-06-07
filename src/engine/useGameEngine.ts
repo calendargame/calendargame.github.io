@@ -19,6 +19,8 @@
 import { useReducer, useRef, useEffect, useMemo } from 'react'
 import { gameReducer, initEngine, correctIndexOf, effectiveSaveStats } from './gameReducer.js'
 import type { Question, Stats } from './gameReducer.js'
+import { checkGameInvariants } from './invariants.js'
+import { captureError } from '../observability/sentry.js'
 
 // genDate produces the next question for the active year range (the parent bakes in the
 // format / leap / calendar settings — it's App's genDate, or makeDedPuzzle for Deduction).
@@ -29,6 +31,9 @@ export interface UseGameEngineOptions {
   useJulian: boolean
   saveStats: boolean
   timingOff: boolean
+  // A short mode label ('classic', 'flash', …) attached to any tripwire report so it says WHICH mode
+  // hit an impossible state. Optional — the stats/history context is reported either way.
+  label?: string
   // Hydrate lifetime stats from saved progress on mount (Stage D1). A GETTER — read ONCE inside the
   // lazy reducer init (where genDate is already read), so the store access stays out of render and
   // the engine never re-hydrates mid-session. Omitted ⇒ blank stats (timed modes; post-Full-Reset remount).
@@ -42,6 +47,7 @@ export function useGameEngine({
   useJulian,
   saveStats,
   timingOff,
+  label,
   getInitialStats,
 }: UseGameEngineOptions) {
   const [state, dispatch] = useReducer(gameReducer, undefined, () =>
@@ -63,6 +69,29 @@ export function useGameEngine({
   const restartTimer = () => {
     tStartRef.current = performance.now()
   }
+
+  // Tripwire: after every state change, verify the engine's invariants (see engine/invariants.ts).
+  // A violation = an IMPOSSIBLE state that didn't crash (an impossible score, a desynced history, a
+  // corrupt date) — the kind of silent bug we'd otherwise never hear about on real devices. Report
+  // each unique violation ONCE per mounted engine (a Set guards against re-reporting it every render
+  // → no Sentry spam). captureError is a no-op until the Sentry SDK loads (production only), so this
+  // never fires in dev or tests; the fuzz survey (tests/engine/fuzz) is the dev-time catcher.
+  const reportedInvariants = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const violations = checkGameInvariants(state, useJulian)
+    for (const violation of violations) {
+      if (reportedInvariants.current.has(violation)) continue
+      reportedInvariants.current.add(violation)
+      captureError(new Error(`Game invariant violated: ${violation}`), {
+        tripwire: 'gameInvariant',
+        mode: label,
+        violation,
+        stats: state.stats,
+        backDepth: state.backDepth,
+        forwardLen: state.forwardStack.length,
+      })
+    }
+  }, [state, useJulian, label])
 
   const tracking = !timingOff // Classic: timing visible ⇒ record solve times into stats.times
   // The correct answer index — weekday for Classic/Flash/Blitz, puzzle option for Deduction

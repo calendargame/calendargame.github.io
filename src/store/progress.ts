@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Stats } from '../engine/gameReducer.js'
 import type { LookupEntry } from '../components/LookupCard.jsx'
+import { captureError } from '../observability/sentry.js'
+import { checkStatsInvariants } from '../engine/invariants.js'
 
 // store/progress.ts — saved gameplay progress (Stage D1).
 //
@@ -132,6 +134,30 @@ export const useProgress = create<ProgressState>()(
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<ProgressState>,
+      // Tripwire: after the saved copy loads, verify it. Corrupt saved progress (good>played from an
+      // old bug, or storage truncation/tampering on a real device) is a silent integrity problem —
+      // report it to Sentry (prod only, via captureError). Report-only: behavior is unchanged (the
+      // engine still hydrates whatever loaded, and its own tripwire fires too; this just pinpoints
+      // that the bad data came from STORAGE rather than live play).
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          captureError(error instanceof Error ? error : new Error(String(error)), {
+            tripwire: 'progressRehydrate',
+          })
+          return
+        }
+        if (!state) return
+        const violations: string[] = []
+        for (const key of Object.keys(state.stats ?? {}) as StatsKey[]) {
+          violations.push(...checkStatsInvariants(state.stats[key], `saved.${key}`))
+        }
+        if (violations.length) {
+          captureError(new Error(`Saved progress invariant violated: ${violations[0]}`), {
+            tripwire: 'progressRehydrate',
+            violations,
+          })
+        }
+      },
     },
   ),
 )
