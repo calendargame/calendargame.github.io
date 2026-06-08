@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useId, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
+import { useBackButton } from './useBackButton.js'
 
 // CustomSelect — the app's custom dropdown, replacing the native <select>.
 //
@@ -188,6 +189,9 @@ export default function CustomSelect({
       e.preventDefault()
     }
   }
+  // Android hardware Back closes an open dropdown instead of quitting the app (Q1). listboxId is a
+  // stable per-instance useId, so multiple selects (mode + the settings dropdowns) register distinctly.
+  useBackButton(open, () => setOpen(false), listboxId)
   useEffect(() => {
     if (!open) return
     const h = (e: MouseEvent | TouchEvent) => {

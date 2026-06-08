@@ -1,0 +1,33 @@
+<!-- Calendar Game — BACKUP app icon (2026-06-03; v2: contents centered + ~1.1x bigger).
+     The Gregorian reform of 1582: the calendar jumped Thu Oct 4 -> Fri Oct 15,
+     dropping Oct 5-14 (the dashed gap). The "4"/"15" cells are now centered in the card body.
+     NOTE: the "4"/"15" use <text>; if this ever becomes the chosen icon, outline them to paths
+     so rasterization is font-independent. Full-bleed + mask-safe. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Calendar Game">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a855f7"/>
+      <stop offset=".45" stop-color="#7c3aed"/>
+      <stop offset=".78" stop-color="#5b21b6"/>
+      <stop offset="1" stop-color="#2e1065"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".3" cy=".22" r=".85">
+      <stop offset="0" stop-color="#c4b5fd" stop-opacity=".5"/>
+      <stop offset=".55" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <g transform="translate(256 256) scale(1.1) translate(-256 -256)">
+    <rect x="120" y="132" width="272" height="252" rx="30" fill="#ffffff"/>
+    <path d="M120,162 a30,30 0 0 1 30,-30 h212 a30,30 0 0 1 30,30 v34 h-272 z" fill="#6d28d9"/>
+    <rect x="182" y="110" width="20" height="46" rx="10" fill="#ede9fe"/>
+    <rect x="310" y="110" width="20" height="46" rx="10" fill="#ede9fe"/>
+    <!-- date cells centered in the body (header is y132..196, body 196..384, center 290) -->
+    <rect x="150" y="244" width="74" height="92" rx="16" fill="#ede9fe"/>
+    <text x="187" y="318" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Arial,sans-serif" font-weight="800" font-size="74" fill="#6d28d9">4</text>
+    <rect x="232" y="244" width="48" height="92" rx="14" fill="none" stroke="#c4b5fd" stroke-width="5" stroke-dasharray="3 13" stroke-linecap="round"/>
+    <rect x="288" y="244" width="74" height="92" rx="16" fill="#7c3aed"/>
+    <text x="325" y="312" text-anchor="middle" font-family="'Segoe UI',system-ui,-apple-system,Arial,sans-serif" font-weight="800" font-size="58" fill="#ffffff">15</text>
+  </g>
+</svg>

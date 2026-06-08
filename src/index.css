@@ -65,7 +65,15 @@
 html,body{overflow:hidden;overscroll-behavior:none}
 html{touch-action:manipulation}
 body{background:var(--bg1);color:var(--body-color)}
-#root{position:fixed;top:0;left:0;right:0;bottom:0;overflow:hidden}
+/* #root fills the VISIBLE viewport via dvh (the dynamic viewport height), NOT the large layout
+   viewport. This is what makes overflow scrollable in a phone browser: when the bottom toolbar is
+   showing it shrinks the visible area, so content that would sit behind the toolbar instead overflows
+   the scroll container and becomes reachable by scrolling — in EVERY mode, not only the ones tall
+   enough to exceed the full screen (the Flash-vs-Blitz inconsistency). height:100vh is the fallback
+   for browsers without dvh (they keep the prior large-viewport behavior). The text itself is still
+   sized to the full screen via vh (see the fluid font-size below), so the toolbar never shrinks text
+   — it only adds scroll, which is the intended behavior. */
+#root{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;overflow:hidden}
 /* Disable text selection globally to prevent accidental selection during rapid
    practice taps (long-press-and-drag, double-tap, etc.). Two specific opt-ins:
    input/textarea elements (so typing/editing stays functional everywhere they
@@ -183,12 +191,17 @@ button:focus,select:focus{outline:none}
    width term scales with viewport WIDTH, but min() caps it by viewport HEIGHT (the vh term) so a wide-but-SHORT
    window can't scale the type up past what fits vertically. The no-scroll goal is height-bound — a
    width-only fluid font made the tallest screen (Blitz + Show Codes) scroll on short/wide windows.
-   Clamped to [0.875rem, 1.1875rem] (≈14–19px at the default 16px root); rem honors the user's browser
+   Clamped to [0.75rem, 1.1875rem] (≈12–19px at the default 16px root); rem honors the user's browser
    font-size (accessibility). The width base (0.95rem) + height factor (1.95vh) were tuned UP on real
    devices (2026-06-07): the first 0.86rem/1.8vh calibration rendered ~15px on iPhone — a touch small
    vs the old fixed 16px, with vertical room to spare on the tallest screen. Re-tune here on real
-   devices (smaller height factor ⇒ fits shorter screens; larger ⇒ bigger type when there's room). */
-html{font-size:clamp(0.875rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
+   devices (smaller height factor ⇒ fits shorter screens; larger ⇒ bigger type when there's room).
+   ★ FLOOR lowered 0.875→0.75rem (2026-06-07, owner's call): short screens now shrink the type to fit
+   the tallest layout (Blitz + Show Codes) instead of flooring at 14px and overflowing — wide phones are
+   width-governed so this doesn't shrink THEM (e.g. the 15 Pro Max stays ~16.9px). Below the floor (very
+   short windows) scroll-on-overflow is the universal fallback (the shared #appScroll container — EVERY
+   mode scrolls when content exceeds it), so a game page is never cut off, only scrolled as a last resort. */
+html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
 /* Reduced-motion groundwork (C2): decorative-motion durations multiply by --motion-scale, which
    drops to 0 under the OS "Reduce Motion" setting, making them instant. Functional motion — the
    .bar countdown (transform:scaleX, set inline in JS) and the color flashes (.flash-*, which are

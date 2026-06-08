@@ -47,7 +47,21 @@
        light icon. The dark master (design/icons/icon-piday-trace-dark.svg) is kept; to re-enable,
        uncomment the link below AND the dark lines in design/icons/build-icons.mjs, then re-run it.
   <link rel="apple-touch-icon" href="/apple-touch-icon-dark.png" media="(prefers-color-scheme: dark)"> -->
-  <script>(function(){var d=window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme',d?'dusk':'light');document.addEventListener('gesturestart',function(e){e.preventDefault();});})();</script>
+  <!-- Apply the SAVED theme + its matching toolbar color BEFORE React mounts, so there's no
+       wrong-theme / dark-toolbar flash on first paint (Q2). Mirrors the store's resolution
+       (useSystem ? OS-dark?darkTheme:lightTheme : manualTheme) from localStorage 'cg-settings-v1';
+       falls back to the OS light/dark default (= SETTINGS_DEFAULTS) when nothing is saved. The color
+       map is each theme's --tc in src/index.css — keep in sync if those change. Also blocks the iOS
+       pinch-zoom gesture (the deliberate locked zoom; see the viewport meta above). -->
+  <script>(function(){
+    var d=window.matchMedia('(prefers-color-scheme: dark)').matches,t;
+    try{var s=JSON.parse(localStorage.getItem('cg-settings-v1')).state;t=s.useSystem?(d?s.darkTheme:s.lightTheme):s.manualTheme;}catch(e){}
+    if(!t)t=d?'dusk':'light';
+    document.documentElement.setAttribute('data-theme',t);
+    var c={dusk:'#0d1117',midnight:'#000',nebula:'#0b0714',parchment:'#f0e8d5',light:'#f2f2f7'},m=document.querySelector("meta[name='theme-color']");
+    if(m&&c[t])m.content=c[t];
+    document.addEventListener('gesturestart',function(e){e.preventDefault();});
+  })();</script>
 </head>
 <body class="text-purple-50">
   <div id="root" class="min-h-screen">Loading…</div>

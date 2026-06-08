@@ -76,8 +76,9 @@ const blankStats = (): Stats => ({ played: 0, good: 0, streak: 0, best: 0, times
 
 // Cap persisted solve-`times` to a rolling window so the saved payload can't grow without bound
 // across sessions (avg/median then reflect recent performance). The live engine keeps the full
-// in-session array — only the copy written into the store is capped.
-const STATS_TIMES_CAP = 500
+// in-session array — only the copy written into the store is capped. (Keep the How-to-Play "rolling
+// window of the most recent N" wording in sync with this number — GuidePage Stats + Saved Progress.)
+const STATS_TIMES_CAP = 1000
 
 // Fresh defaults via a FACTORY (not a shared const): the nested Stats objects/arrays must be
 // new each call so resetProgress() never aliases — and so a reset can't mutate live/persisted data.

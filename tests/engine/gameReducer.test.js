@@ -52,6 +52,7 @@ describe('gameReducer — ANSWER', () => {
     expect(s.stack[0].hasCredit).toBe(true)
     expect(s.stack[0].btns).toEqual({ [C]: 'correct' })
     // The history entry carries the pre-answer snapshot (so Override can reverse it later).
+    // contributedTime is null here — timing is hidden (tracking off), so no solve time was recorded.
     expect(s.stack[0].capsule.snapshot).toEqual({
       played: 0,
       good: 0,
@@ -59,6 +60,7 @@ describe('gameReducer — ANSWER', () => {
       best: 0,
       timesLen: 0,
       wasWrong: false,
+      contributedTime: null,
     })
     expect(s.pendingWrongOverride).toBe(null)
   })
@@ -137,7 +139,6 @@ describe('gameReducer — SHOW_CODES', () => {
     expect(s.calcOpen).toBe(true)
     expect(s.calcPenaltyActive).toBe(true)
     expect(s.countedWrong).toBe(true)
-    expect(s.preCalcPenaltySnapshot).toMatchObject({ played: 0, good: 0 })
   })
 
   it('closing just hides the panel (no stat change)', () => {

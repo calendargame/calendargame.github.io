@@ -33,7 +33,10 @@ export function GuideSection({
         <span className="text-sm font-semibold text-purple-50">{title}</span>
         <span
           className={`text-[7px] text-white/90 leading-none transition-transform ease-in-out ${isOpen ? 'rotate-180' : ''}`}
-          style={{ transitionDuration: '250ms' }}
+          // Match the Expander's duration EXACTLY (.expander uses the same calc) so the triangle and
+          // the panel finish together — and honor the reduce-motion --motion-scale, so both snap
+          // instantly under "Reduce Motion" instead of the panel snapping while the triangle spins.
+          style={{ transitionDuration: 'calc(0.28s * var(--motion-scale))' }}
         >
           ▼
         </span>
@@ -137,14 +140,19 @@ export default function GuidePage() {
         <p>
           <b>Override</b> — fix a mistake. You can override any date in your history by browsing to
           it with Back/Forward. After a wrong answer: gives you credit with time recorded and
-          adjusts your score. After a correct answer: undoes the credit and adjusts your score. You
-          can also override the most recent past date directly from a fresh, untouched live question
+          adjusts your score. After a correct answer: undoes the credit and adjusts your score.
+        </p>
+        <p>
+          You can also override the most recent past date directly from a fresh, untouched live question
           (in any mode) — Override is enabled when the live date hasn't been answered yet, and
           tapping it flips your previous date's right/wrong status. A previously correct date that's
           been retroactively flipped to wrong shows up with a green-and-red diagonal split:
           green-upper-left (originally correct) and red-lower-right (now counted wrong). You can
           only override each date once. Overriding a wrong answer (regardless of how) clears any
-          wrong highlights; only the correct answer is shown. In Blitz, you can override past dates
+          wrong highlights; only the correct answer is shown.
+        </p>
+        <p>
+          In Blitz, you can override past dates
           after the round ends to adjust your score and saved bests; and with Allow Mistakes off (or
           in Per Question), overriding a correct answer to wrong during a round ends the round, just
           like a wrong answer. In AoX without Allow Mistakes, overriding a correct answer ends the
@@ -177,9 +185,9 @@ export default function GuidePage() {
           median, which is less skewed by outliers. Any time of 60 seconds or more — whether an
           individual solve, a computed average or median, or any Best — displays as "—". Times are
           still tracked internally and contribute to averages, medians, and best-tracking; only the
-          display is capped. Your saved solve times keep a rolling window of the most recent 500
+          display is capped. Your saved solve times keep a rolling window of the most recent 1000
           (older times roll off so saved progress stays small on your device), so after a lot of
-          practice Avg and Med reflect your recent 500 rather than all-time; within a single visit,
+          practice Avg and Med reflect your recent 1000 rather than all-time; within a single visit,
           every solve still counts.
         </p>
         <p>
@@ -198,20 +206,173 @@ export default function GuidePage() {
           In modes designed for casual practice (Classic, Deduction, Flash), you can tap any stat to
           hide it. Tapping Score, Accuracy, or Streak hides all three; tapping any timing stat hides
           all three. Score, Accuracy, and Streak continue tracking in the background while hidden —
-          re-enabling them brings the same numbers back. Timing stats behave differently: timing
+          re-enabling them brings the same numbers back.
+        </p>
+        <p className="text-purple-300/70 text-[12px]">
+          Timing stats behave differently: timing
           pauses entirely while hidden — no times are recorded. When you turn timing back on, the
           current date is regenerated if it's still unanswered; if you've already answered wrong,
           revealed the answer, or shown codes, the date stays until you advance yourself. If any
           questions were answered while timing was hidden, a desync would arise on re-enable, so the
           three timing stat boxes merge into a single "Enable and Reset Stats?" confirmation — tap
           it again within 3 seconds to confirm (turn on and full reset), or tap anywhere else to
-          cancel. When Save Stats is off, all stat boxes site-wide (across every mode, including
+          cancel.
+        </p>
+        <p className="text-purple-300/70 text-[12px]">
+          When Save Stats is off, all stat boxes site-wide (across every mode, including
           AoX) show '—' with strikethrough labels, dim, and become non-interactive — toggling timing
           or scoring is disabled until Save Stats is turned back on, which prevents accidentally
           creating stat desyncs. Turning Save Stats on while timing is also on regenerates an
-          unanswered date for a clean fresh start. When timing stats are off, leaving and returning
+          unanswered date for a clean fresh start.
+        </p>
+        <p className="text-purple-300/70 text-[12px]">
+          When timing stats are off, leaving and returning
           to a mode preserves the current question exactly as you left it — same date, same answers,
           codes panel in the same state. In all other modes, stats are always visible.
+        </p>
+      </GuideSection>
+      <GuideSection id="keyboard" title="Keyboard Input" openId={open} onToggle={toggle}>
+        <p>
+          On any device with a hardware keyboard (typically desktop), you can press keys to operate
+          the site without tapping. The on-screen layout is identical to mobile — keyboard input is
+          the only desktop-specific addition.
+        </p>
+        <div className="mt-3 space-y-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
+              Answer Grid
+            </div>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <Kbd>0</Kbd>
+                <span>Sunday</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>1</Kbd>
+                <span>Monday</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>2</Kbd>
+                <span>Tuesday</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>3</Kbd>
+                <span>Wednesday</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>4</Kbd>
+                <span>Thursday</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>5</Kbd>
+                <span>Friday</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>6</Kbd>
+                <span>Saturday</span>
+              </div>
+            </div>
+            <p className="mt-2 text-xs italic">
+              In Deduction Month and Year, the same keys map positionally to the boxes or year
+              options on screen.
+            </p>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
+              Game Actions
+            </div>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <Kbd>N</Kbd>
+                <span>New / Begin / Reset</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>R</Kbd>
+                <span>Reveal</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>O</Kbd>
+                <span>Override</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>C</Kbd>
+                <span>Show / Hide Codes</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>S</Kbd>
+                <span>Reset Stats</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>←</Kbd>
+                <span>Back</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>→</Kbd>
+                <span>Forward</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
+              Overlays
+            </div>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <Kbd>H</Kbd>
+                <span>How to Play (toggle)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>G</Kbd>
+                <span>Settings ⚙ (toggle)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>Tab</Kbd>
+                <span>Mode selector (toggle)</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
+              Mode Switching
+            </div>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <Kbd>K</Kbd>
+                <span>Classic</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>F</Kbd>
+                <span>Flash</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>B</Kbd>
+                <span>Blitz</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>A</Kbd>
+                <span>AoX</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>D</Kbd>
+                <span>Deduction</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>L</Kbd>
+                <span>Lookup</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p className="mt-3">
+          Letter keys are case-insensitive. Letter and number keys are ignored when you're typing in
+          an input field or when a modifier key (Ctrl/Cmd/Alt/Shift) is held. <Kbd>Tab</Kbd> is the
+          exception: it toggles the mode selector even from inputs (use Esc or Enter to leave an
+          input first if you'd rather), and Tab combined with any modifier (Ctrl+Tab,
+          Ctrl+Shift+Tab, etc.) passes through to the browser. Locked or already-pressed buttons are
+          skipped, just like a click would be. Reset Stats (S) only applies to the casual modes
+          (Classic, Deduction, Flash); pressing it in Blitz, AoX, or Lookup is a no-op since those
+          modes don't have a separate Reset Stats button (their round/run Reset clears
+          in-round/in-run stats; persistent bests update only when set).
         </p>
       </GuideSection>
       <Divider label="Settings" />
@@ -361,6 +522,7 @@ export default function GuidePage() {
           automatically, with separate theme choices for each. Disable to pick one manually.
         </p>
       </GuideSection>
+      <Divider label="Data" />
       <GuideSection id="saved-progress" title="Saved Progress" openId={open} onToggle={toggle}>
         <p>
           The app saves the following on this device and restores them when you return — after
@@ -371,7 +533,7 @@ export default function GuidePage() {
           sub-type; and each mode's show / hide stat toggles); your <b>stats</b> in the casual modes
           (Classic, Flash, Deduction); your <b>all-time bests</b> (Blitz score &amp; streak, Sudden
           score, AoX average &amp; median); and your <b>Lookup history</b>. Saved Average and Median
-          use a rolling window of your most recent 500 solves.
+          use a rolling window of your most recent 1000 solves.
         </p>
         <p>
           <b>Not saved</b> — these reset each visit: any in-progress timed round or run and the
@@ -408,150 +570,6 @@ export default function GuidePage() {
           when you close ⚙, or if you tap any other control. When every setting, toggle, stat, best,
           history entry, and live state across the entire site is already at its launch value, this
           button dims and locks since tapping it would have no effect.
-        </p>
-      </GuideSection>
-      <GuideSection id="keyboard" title="Keyboard Input" openId={open} onToggle={toggle}>
-        <p>
-          On any device with a hardware keyboard (typically desktop), you can press keys to operate
-          the site without tapping. The on-screen layout is identical to mobile — keyboard input is
-          the only desktop-specific addition.
-        </p>
-        <div className="mt-3 space-y-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
-              Answer Grid
-            </div>
-            <div className="space-y-1 text-sm">
-              <div className="flex items-center gap-2">
-                <Kbd>0</Kbd>
-                <span>Sunday</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>1</Kbd>
-                <span>Monday</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>2</Kbd>
-                <span>Tuesday</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>3</Kbd>
-                <span>Wednesday</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>4</Kbd>
-                <span>Thursday</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>5</Kbd>
-                <span>Friday</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>6</Kbd>
-                <span>Saturday</span>
-              </div>
-            </div>
-            <p className="mt-2 text-xs italic">
-              In Deduction Month and Year, the same keys map positionally to the boxes or year
-              options on screen.
-            </p>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
-              Game Actions
-            </div>
-            <div className="space-y-1 text-sm">
-              <div className="flex items-center gap-2">
-                <Kbd>N</Kbd>
-                <span>New / Begin / Reset</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>R</Kbd>
-                <span>Reveal</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>O</Kbd>
-                <span>Override</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>C</Kbd>
-                <span>Show / Hide Codes</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>S</Kbd>
-                <span>Reset Stats</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>←</Kbd>
-                <span>Back</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>→</Kbd>
-                <span>Forward</span>
-              </div>
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
-              Overlays
-            </div>
-            <div className="space-y-1 text-sm">
-              <div className="flex items-center gap-2">
-                <Kbd>H</Kbd>
-                <span>How to Play (toggle)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>G</Kbd>
-                <span>Settings ⚙ (toggle)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>Tab</Kbd>
-                <span>Mode selector (toggle)</span>
-              </div>
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-purple-300/60 mb-1.5">
-              Mode Switching
-            </div>
-            <div className="space-y-1 text-sm">
-              <div className="flex items-center gap-2">
-                <Kbd>K</Kbd>
-                <span>Classic</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>F</Kbd>
-                <span>Flash</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>B</Kbd>
-                <span>Blitz</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>A</Kbd>
-                <span>AoX</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>D</Kbd>
-                <span>Deduction</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Kbd>L</Kbd>
-                <span>Lookup</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <p className="mt-3">
-          Letter keys are case-insensitive. Letter and number keys are ignored when you're typing in
-          an input field or when a modifier key (Ctrl/Cmd/Alt/Shift) is held. <Kbd>Tab</Kbd> is the
-          exception: it toggles the mode selector even from inputs (use Esc or Enter to leave an
-          input first if you'd rather), and Tab combined with any modifier (Ctrl+Tab,
-          Ctrl+Shift+Tab, etc.) passes through to the browser. Locked or already-pressed buttons are
-          skipped, just like a click would be. Reset Stats (S) only applies to the casual modes
-          (Classic, Deduction, Flash); pressing it in Blitz, AoX, or Lookup is a no-op since those
-          modes don't have a separate Reset Stats button (their round/run Reset clears
-          in-round/in-run stats; persistent bests update only when set).
         </p>
       </GuideSection>
       <Divider label="Modes" />

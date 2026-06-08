@@ -11,8 +11,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const W = 1200
 const H = 630
 const ICON = 330
-const ICON_LEFT = 90
+const ICON_LEFT = 45 //  icon's left margin (45px); the title's right margin is matched to it (symmetric)
 const ICON_TOP = Math.round((H - ICON) / 2)
+const TEXT_X = 415 //     left edge (anchor) of the title
+const SUB_X = 417 //      tagline anchor — nudged right 2px so its visible LEFT edge sits flush with the title's
+const SUB_SIZE = 38.3 //  tagline size — shrunk a hair so its visible RIGHT edge sits flush with the title's too
 
 // Brand gradient (deep -> violet) + a soft radial glow behind the icon (left), with the app name
 // + tagline as text on the right. Colors match the icon palette (#2e1065 / #5b21b6 / #7c3aed /
@@ -24,16 +27,20 @@ const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
       <stop offset="0.55" stop-color="#5b21b6"/>
       <stop offset="1" stop-color="#7c3aed"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0.22" cy="0.5" r="0.5">
+    <radialGradient id="glow" cx="${((ICON_LEFT + ICON / 2) / W).toFixed(3)}" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#a855f7" stop-opacity="0.5"/>
       <stop offset="1" stop-color="#a855f7" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#g)"/>
   <rect width="${W}" height="${H}" fill="url(#glow)"/>
-  <text x="480" y="285" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" fill="#ffffff">Calendar Game</text>
-  <text x="483" y="350" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="400" fill="#ddd0fb">Master Mental</text>
-  <text x="483" y="402" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="400" fill="#ddd0fb">Day-of-the-Week Calculation</text>
+  <!-- Title sized so its right edge leaves a 45px margin = the icon's left margin (balanced). The
+       one-line tagline sits directly beneath, pixel-tuned (SUB_X + SUB_SIZE) so its VISIBLE left AND
+       right edges are flush with the title's — the title's "C" and the tagline's "M" have different
+       left side bearings, so a shared anchor + size leaves them ~2px off. Dialed in against the real
+       resvg render (pixel-measured), 2026-06-07. -->
+  <text x="${TEXT_X}" y="310" font-family="Arial, Helvetica, sans-serif" font-size="101.6" font-weight="700" fill="#ffffff">Calendar Game</text>
+  <text x="${SUB_X}" y="378" font-family="Arial, Helvetica, sans-serif" font-size="${SUB_SIZE}" font-weight="400" fill="#ddd0fb">Master Mental Day-of-the-Week Calculation</text>
 </svg>`
 
 // Round the icon's corners (~22% radius, echoing how iOS renders the home-screen icon) so it

@@ -6,10 +6,10 @@
 // and solve times (performance.now()) — are supplied by the caller in the action
 // payload. Calendar lookups are pure, so the reducer does them directly.
 //
-// Folding the old App snapshot refs (prevStatsSnapshot / wrongTime /
-// preCalcPenaltySnapshot) into state makes every transition atomic, which removes
-// the lazy-mutator + stale-setState hazards documented in main.jsx WHILE keeping
-// behavior identical — proven by the Classic characterization tests (tests/classic.dom).
+// Folding the old App snapshot refs (prevStatsSnapshot / wrongTime) into state makes
+// every transition atomic, which removes the lazy-mutator + stale-setState hazards
+// documented in main.jsx WHILE keeping behavior identical — proven by the Classic
+// characterization tests (tests/classic.dom).
 //
 // This is the engine ALL FIVE modes run on (Classic/Flash/Blitz/Deduction directly;
 // AoX via the same hook + a component run/Best layer). The full action set lives here:
@@ -88,19 +88,16 @@ export interface Snapshot {
   best: number
   timesLen: number
   wasWrong: boolean
+  // The solve time THIS answer contributed to stats.times (or null if it recorded none — timing off /
+  // Save Stats off). Reversing a first-try-correct (Path 1/5) removes this exact value from the pool,
+  // which is robust to reordering: matching by value survives a prior reversal shifting array indices,
+  // where the old absolute `timesLen` index went stale and stranded a time (times.length > good).
+  contributedTime: number | null
 }
-// The pre-penalty snapshot taken when Show Codes first burns a question (no `wasWrong`).
-export interface PreCalcSnapshot {
-  played: number
-  good: number
-  streak: number
-  best: number
-  timesLen: number
-}
-// A previous wrong answer reclaimable via Override on the NEXT question (Path 4).
+// A previous wrong answer reclaimable via Override on the NEXT question (Path 4). Just the wrong
+// answer's solve time — Path 4 credits good+1 on the LIVE stats, so it needs no stats snapshot.
 export interface PendingWrongOverride {
   wrongTime: number | null
-  snapshot: PreCalcSnapshot | null
 }
 // A history entry's rollback capsule: the stats snapshot + solve time captured for it.
 export interface Capsule {
@@ -115,7 +112,6 @@ export interface LiveState {
   canOverrideCorrect: boolean
   pendingWrongOverride: PendingWrongOverride | null
   calcPenaltyActive: boolean
-  preCalcPenaltySnapshot: PreCalcSnapshot | null
   saveStatsFrozen: boolean | null
 }
 // The answer/override bookkeeping a question carries once it's in the back/forward history.
@@ -160,7 +156,6 @@ export interface GameState {
   // Snapshots (were refs in App) — folded into state for atomic updates:
   prevStatsSnapshot: Snapshot | null //       pre-answer stats, for Override rollback
   wrongTime: number | null //                 solve time captured at a wrong answer (for retroactive credit)
-  preCalcPenaltySnapshot: PreCalcSnapshot | null // pre-penalty stats, for Path-4 rollback after Show Codes
   saveStatsThisQ: boolean | null //           frozen Save-Stats value for this question (null until first stat action)
 }
 
@@ -269,7 +264,6 @@ export const initEngine = (date: Question, initialStats?: Stats): GameState => (
   browseHasCredit: false,
   prevStatsSnapshot: null,
   wrongTime: null,
-  preCalcPenaltySnapshot: null,
   saveStatsThisQ: null,
 })
 
@@ -330,9 +324,7 @@ const advance = (
   // it never incremented (an over-credit / 1-0). Fix 2026-06-06 (tests: classic.dom "Save Stats /
   // Override availability"; surfaced by the all-modes score-integrity survey).
   const pendingWrongOverride: PendingWrongOverride | null =
-    state.countedWrong && !isDeductionQ && saved
-      ? { wrongTime: state.wrongTime, snapshot: state.preCalcPenaltySnapshot }
-      : null
+    state.countedWrong && !isDeductionQ && saved ? { wrongTime: state.wrongTime } : null
   return {
     ...state,
     questionId: state.questionId + 1,
@@ -350,21 +342,36 @@ const advance = (
     countedWrong: false,
     wrongTime: null,
     prevStatsSnapshot: null,
-    preCalcPenaltySnapshot: null,
     canOverrideCorrect: false,
     saveStatsThisQ: null,
   }
 }
 
-// A pre-answer stats snapshot used to roll back an Override.
-const snapshot = (stats: Stats, wasWrong: boolean): Snapshot => ({
+// A pre-answer stats snapshot used to roll back an Override. `contributedTime` is the solve time this
+// answer added to the pool (or null) — only a first-try-correct records one; the wrong/Reveal/Show-
+// Codes snapshots pass null (their reversal credits, it never removes a time).
+const snapshot = (
+  stats: Stats,
+  wasWrong: boolean,
+  contributedTime: number | null = null,
+): Snapshot => ({
   played: stats.played,
   good: stats.good,
   streak: stats.streak,
   best: stats.best,
   timesLen: stats.times.length,
   wasWrong,
+  contributedTime,
 })
+
+// Remove one occurrence of a now-reversed answer's solve time from the pool. Matches by VALUE (not the
+// answer-time index, which goes stale once an earlier reversal removed a time) so the count stays in
+// lockstep with `good`. null ⇒ the answer recorded no time, so nothing to remove. (C1 fuzz fix.)
+const dropContributedTime = (times: number[], t: number | null): number[] => {
+  if (t == null) return times
+  const i = times.indexOf(t)
+  return i < 0 ? times : [...times.slice(0, i), ...times.slice(i + 1)]
+}
 
 // Recompute {curStreak,bestStreak} from the full credit-history. `middle` (when given)
 // is the currently-browsed/live question's credit, inserted between the back-stack and
@@ -416,12 +423,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (idx === correct) {
         const next: GameState = { ...state, saveStatsThisQ: effective }
         if (!state.countedWrong) {
-          next.prevStatsSnapshot = snapshot(state.stats, false)
+          // The solve time this answer records (or null) — captured in the snapshot so a later
+          // reversal (Path 1/5) removes this exact value, not a stale index.
+          const recorded = elapsed != null && tracking && effective ? elapsed : null
+          next.prevStatsSnapshot = snapshot(state.stats, false, recorded)
           next.canOverrideCorrect = true
           next.pendingWrongOverride = null
           let stats = state.stats
-          if (elapsed != null && tracking && effective) {
-            stats = { ...stats, times: [...stats.times, elapsed] }
+          if (recorded != null) {
+            stats = { ...stats, times: [...stats.times, recorded] }
           }
           if (effective) {
             const streak = stats.streak + 1
@@ -523,16 +533,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (firstPenalty) {
         next.wrongTime = elapsed
         // wasWrong snapshot (like a wrong ANSWER) so a show-coded entry is back-browse-overridable
-        // later (Path 1). preCalcPenaltySnapshot below still feeds Path 4; the credit-at-most-once gate
-        // (Path 4 skips a target already credited via Path 1) keeps the two from double-crediting.
+        // later (Path 1). The credit-at-most-once gate (Path 4 skips a target already credited via
+        // Path 1) keeps the two override routes from double-crediting.
         next.prevStatsSnapshot = snapshot(state.stats, true)
-        next.preCalcPenaltySnapshot = {
-          played: state.stats.played,
-          good: state.stats.good,
-          streak: state.stats.streak,
-          best: state.stats.best,
-          timesLen: state.stats.times.length,
-        }
         if (effective) next.stats = { ...state.stats, played: state.stats.played + 1, streak: 0 }
       }
       if (state.backDepth === 0) next.persistBtns = mkBtnsWithCorrect(state.persistBtns, correct)
@@ -638,7 +641,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         browseHasCredit: false,
         prevStatsSnapshot: null,
         wrongTime: null,
-        preCalcPenaltySnapshot: null,
         saveStatsThisQ: null,
       }
     }
@@ -664,11 +666,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           stats = { ...state.stats, good: state.stats.good + 1, times }
           persistBtns = oneBtn(correct, 'correct')
         } else {
-          const tIdx = typeof u.timesLen === 'number' ? u.timesLen : null
-          const cut =
-            tIdx != null && tIdx < times.length
-              ? [...times.slice(0, tIdx), ...times.slice(tIdx + 1)]
-              : times
+          const cut = dropContributedTime(times, u.contributedTime)
           stats = { ...state.stats, good: Math.max(0, state.stats.good - 1), times: cut }
           persistBtns = oneBtn(correct, 'override-wrong')
         }
@@ -701,11 +699,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             times,
           }
         } else {
-          // Reversing a first-try-correct to a miss: good + streak revert — and `best` MUST revert to
-          // the pre-answer best (u.best) too, else the bump this answer gave `best` is stranded,
-          // leaving best>good (an impossible score; found by the C2 fuzz survey, 2026-06-06). The
-          // wasWrong branch above already derives best from u; this branch had omitted it.
-          stats = { ...state.stats, played: u.played + 1, good: u.good, streak: 0, best: u.best, times }
+          // Reversing a live first-try-correct to a miss: drop THIS answer's credit RELATIVE to the
+          // live good (good-1) — NOT a restore to the snapshot's u.good, which is stale once a back-
+          // browse Path-1 credit raised good after the snapshot was taken: the restore wiped that
+          // credit from good while its history entry kept hasCredit=true, so a later streak/best
+          // recompute counted the phantom (best>good). Recompute streak/best from history with the
+          // now-miss live question (middle=false), mirroring Path 1/3/5; drop the solve time by value.
+          // played is unchanged (a miss is still a play). (C1 fuzz fix, 2026-06-07 — the Path-2 twin of
+          // the Path-4 stale-snapshot clobber the override-/reveal-heavy + deeper profiles surfaced.)
+          const cut = dropContributedTime([...state.stats.times], u.contributedTime)
+          const { curStreak, bestStreak } = streaksFromStacks(state.stack, state.forwardStack, false)
+          stats = {
+            ...state.stats,
+            good: Math.max(0, state.stats.good - 1),
+            streak: curStreak,
+            best: bestStreak,
+            times: cut,
+          }
         }
         let s: GameState = {
           ...s0,
@@ -783,18 +793,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       // PATH 4 — pendingWrongOverride: retroactively credit the PREVIOUS question.
       if (state.pendingWrongOverride != null) {
-        const { wrongTime, snapshot: snap } = state.pendingWrongOverride
+        const { wrongTime } = state.pendingWrongOverride
         const last = state.stack[state.stack.length - 1]
         // Skip if the target entry is gone OR already credited via back-browse Path 1 (its
         // overrideUsed flag): crediting it again is the Back→override→Forward→override double-credit
         // (good>played). A question is credited AT MOST once. Fix 2026-06-06.
-        if (!last || last.overrideUsed)
-          return { ...s0, pendingWrongOverride: null, preCalcPenaltySnapshot: null }
-        const times = snap ? state.stats.times.slice(0, snap.timesLen) : [...state.stats.times]
+        if (!last || last.overrideUsed) return { ...s0, pendingWrongOverride: null }
+        // Credit the previous wrong question on the LIVE stats: good+1, played UNCHANGED (the burn
+        // already counted it). The old form restored played/good from the pendingWrongOverride
+        // snapshot (snap.good+1), which CLOBBERED any credit earned between the burn and this override
+        // — e.g. a back-browse Path-1 credit — so the history's recomputed streak/best ended up ABOVE
+        // good (an impossible score). In the immediate case (Path 4 on the very next question, no
+        // drift) snap.good+1 == good+1 and the snapshot times-truncation was a no-op, so incrementing
+        // the live stats is identical there and stays correct when stats have drifted. (C1 fuzz fix,
+        // 2026-06-07 — the streak/best-inflation family the override-/reveal-heavy profiles surfaced.)
+        const times = [...state.stats.times]
         if (wrongTime != null && tracking) times.push(wrongTime)
-        const stats = snap
-          ? { ...state.stats, played: snap.played + 1, good: snap.good + 1, times }
-          : { ...state.stats, good: state.stats.good + 1, times }
+        const stats = { ...state.stats, good: state.stats.good + 1, times }
         const wd = correctIndexOf(last, useJulian)
         const newStack = [
           ...state.stack.slice(0, -1),
@@ -806,7 +821,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           stats: { ...stats, streak: curStreak, best: bestStreak },
           stack: newStack,
           pendingWrongOverride: null,
-          preCalcPenaltySnapshot: null,
         }
         if (!timingOff) {
           s = advance(s, { nextDate, useJulian, saved: true })
@@ -848,11 +862,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           stats = { ...state.stats, good: state.stats.good + 1, times }
           newLast = { ...target, btns: oneBtn(wd, 'correct'), overrideUsed: true, hasCredit: true }
         } else {
-          const tIdx = typeof u.timesLen === 'number' ? u.timesLen : null
-          const cut =
-            tIdx != null && tIdx < times.length
-              ? [...times.slice(0, tIdx), ...times.slice(tIdx + 1)]
-              : times
+          const cut = dropContributedTime(times, u.contributedTime)
           stats = { ...state.stats, good: Math.max(0, state.stats.good - 1), times: cut }
           newLast = {
             ...target,
@@ -898,9 +908,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 canOverrideCorrect: state.canOverrideCorrect,
                 pendingWrongOverride: state.pendingWrongOverride,
                 calcPenaltyActive: state.calcPenaltyActive,
-                preCalcPenaltySnapshot: state.preCalcPenaltySnapshot
-                  ? { ...state.preCalcPenaltySnapshot }
-                  : null,
                 saveStatsFrozen: state.saveStatsThisQ,
               },
               hasCredit: fwdHC,
@@ -929,7 +936,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         calcPenaltyActive: false,
         prevStatsSnapshot: cap.snapshot || null,
         wrongTime: cap.wrongTime ?? null,
-        preCalcPenaltySnapshot: null,
         canOverrideCorrect: cap.snapshot != null && !(prev.overrideUsed || false),
         overrideUsedThisQ: prev.overrideUsed || false,
         backDepth: state.backDepth + 1,
@@ -979,7 +985,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           canOverrideCorrect: !!ls.canOverrideCorrect,
           pendingWrongOverride: ls.pendingWrongOverride || null,
           calcPenaltyActive: !!ls.calcPenaltyActive,
-          preCalcPenaltySnapshot: ls.preCalcPenaltySnapshot || null,
           overrideUsedThisQ: fwd.overrideUsed || false,
           prevStatsSnapshot: fc.snapshot || null,
           wrongTime: fc.wrongTime ?? null,
@@ -998,7 +1003,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         countedWrong: false,
         pendingWrongOverride: null,
         calcPenaltyActive: false,
-        preCalcPenaltySnapshot: null,
         prevStatsSnapshot: cap.snapshot || null,
         wrongTime: cap.wrongTime ?? null,
         canOverrideCorrect: cap.snapshot != null && !(fwd.overrideUsed || false),

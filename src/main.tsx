@@ -21,6 +21,7 @@ import GuidePage from './components/GuidePage.jsx'
 import LookupCard from './components/LookupCard.jsx'
 import { MethodExplanation, MethodBreakdownSection } from './components/MethodBreakdown.jsx'
 import W5Logo from './components/W5Logo.jsx'
+import { useBackButton } from './components/useBackButton.js'
 import { CODES_CLOSE_MS } from './lib/constants.js'
 import { useSettings } from './store/settings.js'
 import { useModePrefs } from './store/modePrefs.js'
@@ -365,7 +366,7 @@ interface DedOpts {
 
 
 
-    const DEPLOY_TS=new Date('2026-06-07T21:29:19Z');
+    const DEPLOY_TS=new Date('2026-06-08T06:33:53Z');
 
     // ============================================================
     // makeDedPuzzle — the PURE Deduction puzzle generator (mode-untangle Step 4).
@@ -620,6 +621,8 @@ interface DedOpts {
       // times are recorded for the average.
       const eng=useGameEngine({label:'aox',genDate,minY,maxY,useJulian,saveStats:true,timingOff:false});
       const {state,correct}=eng;
+      // Android Back closes AoX's Show-Codes panel (Q1) — see the same hook in the other modes.
+      useBackButton(visible&&state.calcOpen,()=>eng.showCodes(false),'codes');
       const S=state.stats;
       const doneCount=S.good;                 // credited solves this run
       const isRunning=runPhase==="running";
@@ -813,7 +816,7 @@ interface DedOpts {
               <button type="button" data-key="O" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail?"opacity-60 pointer-events-none":""}`} onClick={onOverride}>Override</button>
             </div>
             <button type="button" data-key="C" className={`w-full px-4 py-2 rounded-xl btn-solid text-sm font-medium ${codesDisabled&&!inBack?"opacity-60 pointer-events-none":""}`} onClick={onShowCodes}>{state.calcOpen?"Hide Codes":"Show Codes"}</button>
-            <Expander open={state.calcOpen}><div className="mt-3 rounded-2xl thin px-4 pt-[3px] pb-1.5"><MethodExplanation date={aoxFrozenDate} useJulian={inBack?(aoxFrozenDate?._jul??useJulian):useJulian} displayedFormat={aoxFrozenDate?._fmt||dateFormat}/></div></Expander>
+            <Expander open={state.calcOpen}><div className="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5"><MethodExplanation date={aoxFrozenDate} useJulian={inBack?(aoxFrozenDate?._jul??useJulian):useJulian} displayedFormat={aoxFrozenDate?._fmt||dateFormat}/></div></Expander>
           </div>
         </div>
       );
@@ -836,6 +839,10 @@ interface DedOpts {
       // then mirror every stats change back to the store (which caps the solve-times window).
       const eng=useGameEngine({label:'classic',genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.classic});
       const {state,correct,overrideAvail}=eng;
+      // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+      // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
+      // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
+      useBackButton(visible&&state.calcOpen,()=>eng.showCodes(false),'codes');
       const setModeStats=useProgress(s=>s.setModeStats);
       useEffect(()=>{setModeStats('classic',state.stats);},[state.stats,setModeStats]);
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
@@ -885,7 +892,7 @@ interface DedOpts {
                 <button type="button" data-key="R" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealDisabled?"opacity-60 pointer-events-none":""}`} onClick={eng.reveal}>Reveal</button>
                 <button type="button" data-key="O" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail?"opacity-60 pointer-events-none":""}`} onClick={onOverride}>Override</button>
               </div>
-              <MethodBreakdownSection date={date} open={state.calcOpen} onOpenChange={open=>eng.showCodes(open)} className="" contentClassName="mt-3 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={state.backDepth>0?(date?._jul??useJulian):useJulian} displayedFormat={date?._fmt||dateFormat}/>
+              <MethodBreakdownSection date={date} open={state.calcOpen} onOpenChange={open=>eng.showCodes(open)} className="" contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={state.backDepth>0?(date?._jul??useJulian):useJulian} displayedFormat={date?._fmt||dateFormat}/>
             </div>
           </div>
         </div>
@@ -918,6 +925,10 @@ interface DedOpts {
       // Lifetime stats persist across reloads (Stage D1): hydrate on mount, mirror changes to the store.
       const eng=useGameEngine({label:'flash',genDate,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.flash});
       const {state,correct,overrideAvail}=eng;
+      // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+      // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
+      // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
+      useBackButton(visible&&state.calcOpen,()=>eng.showCodes(false),'codes');
       const setModeStats=useProgress(s=>s.setModeStats);
       useEffect(()=>{setModeStats('flash',state.stats);},[state.stats,setModeStats]);
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
@@ -1026,7 +1037,7 @@ interface DedOpts {
                 <button type="button" data-key="R" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealDisabled?"opacity-60 pointer-events-none":""}`} onClick={onReveal}>Reveal</button>
                 <button type="button" data-key="O" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail?"opacity-60 pointer-events-none":""}`} onClick={onOverride}>Override</button>
               </div>
-              <MethodBreakdownSection date={shouldShowTimerDate?date:null} open={state.calcOpen} onOpenChange={onShowCodes} className="" contentClassName="mt-3 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={state.backDepth>0?(date?._jul??useJulian):useJulian} displayedFormat={date?._fmt||dateFormat}/>
+              <MethodBreakdownSection date={shouldShowTimerDate?date:null} open={state.calcOpen} onOpenChange={onShowCodes} className="" contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={state.backDepth>0?(date?._jul??useJulian):useJulian} displayedFormat={date?._fmt||dateFormat}/>
             </div>
           </div>
         </div>
@@ -1066,6 +1077,10 @@ interface DedOpts {
       const currentRoundIdRef=useRef<number | null>(null),nextRoundIdRef=useRef(1);
       const eng=useGameEngine({label:'blitz',genDate,minY,maxY,useJulian,saveStats,timingOff:false}); // Blitz: timing always tracked
       const {state,correct,overrideAvail}=eng;
+      // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+      // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
+      // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
+      useBackButton(visible&&state.calcOpen,()=>eng.showCodes(false),'codes');
       const S=state.stats;
       const {flash,setFlashWithTimeout}=useButtonFlash();   // green/red answer pulse
 
@@ -1241,7 +1256,7 @@ interface DedOpts {
                 <button type="button" data-key="R" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealDisabled?"opacity-60 pointer-events-none":""}`} onClick={onReveal}>Reveal</button>
                 <button type="button" data-key="O" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail?"opacity-60 pointer-events-none":""}`} onClick={onOverride}>Override</button>
               </div>
-              <MethodBreakdownSection date={shouldShowTimerDate?date:null} open={state.calcOpen} onOpenChange={onShowCodes} className="" contentClassName="mt-3 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={state.backDepth>0?(date?._jul??useJulian):useJulian} displayedFormat={date?._fmt||dateFormat}/>
+              <MethodBreakdownSection date={shouldShowTimerDate?date:null} open={state.calcOpen} onOpenChange={onShowCodes} className="" contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={state.backDepth>0?(date?._jul??useJulian):useJulian} displayedFormat={date?._fmt||dateFormat}/>
             </div>
           </div>
         </div>
@@ -1286,6 +1301,10 @@ interface DedOpts {
       const yearEng=useGameEngine({label:'dedYear',genDate:genYear,minY,maxY,useJulian,saveStats,timingOff,getInitialStats:()=>useProgress.getState().stats.dedYear});
       const eng=dedType==="month"?monthEng:dedType==="year"?yearEng:dayEng;
       const {state,correct,overrideAvail}=eng;
+      // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+      // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
+      // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
+      useBackButton(visible&&state.calcOpen,()=>eng.showCodes(false),'codes');
       const setModeStats=useProgress(s=>s.setModeStats);
       useEffect(()=>{setModeStats('dedDay',dayEng.state.stats);},[dayEng.state.stats,setModeStats]);
       useEffect(()=>{setModeStats('dedMonth',monthEng.state.stats);},[monthEng.state.stats,setModeStats]);
@@ -1388,7 +1407,7 @@ interface DedOpts {
                 <button type="button" data-key="R" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealDisabled?"opacity-60 pointer-events-none":""}`} onClick={eng.reveal}>Reveal</button>
                 <button type="button" data-key="O" className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail?"opacity-60 pointer-events-none":""}`} onClick={onOverride}>Override</button>
               </div>
-              <MethodBreakdownSection date={calcTarget} open={state.calcOpen} onOpenChange={open=>eng.showCodes(open)} className="" contentClassName="mt-3 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={calcTarget?._jul??useJulian} displayedFormat={calcTarget?._fmt||dateFormat} cellDates={cellDates}/>
+              <MethodBreakdownSection date={calcTarget} open={state.calcOpen} onOpenChange={open=>eng.showCodes(open)} className="" contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5" useJulian={calcTarget?._jul??useJulian} displayedFormat={calcTarget?._fmt||dateFormat} cellDates={cellDates}/>
             </div>
           </div>
         </div>
@@ -1816,6 +1835,12 @@ interface DedOpts {
       };
       // Disarm whenever settings closes by any path (gear tap, click-outside, Esc, full-reset firing).
       useEffect(()=>{if(!settingsOpen)disarmFullReset();},[settingsOpen]);
+      // Android hardware Back closes these App-level overlays instead of quitting the app (Q1).
+      // Settings popover → close it; How-to-Play (the 'guide' mode) → return to the previous game mode
+      // (mirrors the H-key toggle). The mode menu + Show Codes register their own back entries from
+      // CustomSelect / the mode components. See components/useBackButton.
+      useBackButton(settingsOpen, ()=>setSettingsOpen(false), 'settings');
+      useBackButton(mode==='guide', ()=>setMode(prevNonGuideModeRef.current||'classic'), 'guide');
       // NOTE: the "disarm when state flips to fully-reset" safety-net effect was moved to just
       // after the isFullyReset declaration below — its dependency array reads isFullyReset, which
       // is declared later, so keeping it here would read isFullyReset before initialization (a TDZ
@@ -2005,7 +2030,7 @@ interface DedOpts {
             so content starts immediately below the bar. overscroll-contain keeps
             rubber-band bounce LOCAL to this container (bar is unaffected). */}
         <div ref={appScrollRef} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 overflow-y-auto overscroll-contain${appScrolledFromTop&&!appAtBottom?" fade-scroll-both":appScrolledFromTop?" fade-scroll-top":!appAtBottom?" fade-scroll-bottom":""}`}>
-        <div className="mx-auto px-4 pb-5 w-full max-w-[30rem]">
+        <div className="mx-auto px-4 pb-3 w-full max-w-[30rem]">
           {/* key={aoxResetKey} forces remount on Full Reset since AoxMode is always-mounted
               (display:none toggle on visible prop, not conditional rendering) and its internal
               state would otherwise persist across resets. See aoxResetKey declaration upstream
