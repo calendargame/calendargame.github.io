@@ -32,12 +32,16 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      # Quality gate — a failing test, lint error, or TYPE error blocks the deploy, so broken
-      # date math / logic can never reach the site. Tests run first (cheapest signal).
+      # Quality gate — a failing test, lint error, TYPE error, or FORMATTING drift blocks the deploy,
+      # so broken date math / logic can never reach the site. Tests run first (cheapest signal).
       - name: Run tests
         run: npm test
       - name: Lint
         run: npm run lint
+      # Formatting gate — Prettier must be clean (npm run format locally to fix). Without this, style
+      # drift silently re-accumulates on edited files (it has twice); now it can never ship. (B1.)
+      - name: Check formatting
+        run: npm run format:check
       - name: Type-check
         run: npm run typecheck
       - name: Build the site
