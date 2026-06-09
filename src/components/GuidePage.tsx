@@ -159,9 +159,10 @@ export default function GuidePage() {
           run. Override is locked when Save Stats is off.
         </p>
         <p>
-          <b>Show Codes</b> — reveals the calculation codes for the current date. Counts as wrong if
-          you haven't already answered incorrectly. No penalty on unanswered dates while browsing
-          back. In Blitz, opening Show Codes during a round ends the round and records your bests;
+          <b>Show Codes</b> — reveals the calculation codes for the current date. Counts as a miss
+          only while the date is still unresolved; once you've answered it (right or wrong), revealed
+          it, or are browsing back, opening the codes is just a review and changes nothing. In Blitz,
+          opening Show Codes during a round ends the round and records your bests;
           in Flash it freezes the countdown so the date stays on screen while you study the codes.
           In AoX without Allow Mistakes, opening Show Codes ends the run.
         </p>

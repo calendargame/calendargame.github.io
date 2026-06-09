@@ -14,6 +14,7 @@ import {
 } from '../../src/engine/gameReducer.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { computeStreaks } from '../../src/engine/streak.js'
+import { computeHasCredit } from '../../src/engine/answerButtons.js'
 
 // Big-sweep knob: FUZZ_SCALE multiplies every profile's sequence COUNT (not its step length).
 export const SCALE = Math.max(1, Math.floor(Number(process.env.FUZZ_SCALE) || 1))
@@ -303,6 +304,79 @@ export const PROFILES = {
     pComplete: 0,
     pNoAdvance: 0,
   },
+  // ── AoX-complete strong-oracle profile (C2 Part 1) ──
+  // Exercises the AoX action surface — first-try corrects HELD as completing solves (`complete`),
+  // their reversal (OVERRIDE `noAdvance`, Path 2), back-browsing AWAY from a held credit, and Show
+  // Codes / Reveal on a held credit — under the now-extended EXACT oracle. Excludes TIMEOUT_MISS +
+  // RESET_ROUND (oracle-incompatible — RESET_ROUND keeps stats while wiping history) AND LOCK_REVEAL:
+  // AoX's lockReveal fires ONLY after a WRONG answer (never a `complete`), so complete→LOCK_REVEAL is
+  // unreachable; modeling it would only inject that artifact, and a reachable wrong→lockReveal is
+  // stat-identical to the wrong ANSWER this profile already covers. High pAnswerCorrect + pComplete
+  // make held-credit edges frequent.
+  'aox-strong': {
+    name: 'aox-strong',
+    seedBase: 7_000_000,
+    seqs: 5000,
+    steps: 300,
+    strongOracle: true,
+    weights: {
+      ANSWER: 6,
+      OVERRIDE: 4,
+      BACK: 3,
+      FORWARD: 2,
+      NEW: 2,
+      REVEAL: 1,
+      SHOW_CODES_OPEN: 2,
+      SHOW_CODES_CLOSE: 1,
+      RESET: 1,
+      REGEN: 1,
+    },
+    pJulian: 0.3,
+    pSaveStats: 0.85,
+    pTracking: 0.5,
+    pTimingOff: 0.3,
+    pSolveTime: 0.6,
+    pAnswerCorrect: 0.7,
+    pComplete: 0.5,
+    pNoAdvance: 0.4,
+  },
+  // ── Timed-mode strong-oracle profile (C2 Part 1) ──
+  // The Blitz per-round / per-question surface = the Classic engine PLUS the two timeout actions
+  // (LOCK_REVEAL = per-round timeout, no stat; TIMEOUT_MISS = per-question miss). Those are gated to
+  // the active live edge (see runSequence), so the EXACT oracle stays valid. No `complete` (Blitz/Flash
+  // never hold a solve) and no RESET_ROUND (it keeps stats while wiping history — oracle-incompatible;
+  // it's the timed modes' "Reset", separately exercised by the inequality profiles). This exact-checks
+  // that the timeout actions never desync good/best/streak in combination with the override/history
+  // machinery. (Flash's scoring surface IS Classic's — already covered by classic-strict et al.)
+  'timed-strong': {
+    name: 'timed-strong',
+    seedBase: 8_000_000,
+    seqs: 5000,
+    steps: 300,
+    strongOracle: true,
+    weights: {
+      ANSWER: 5,
+      OVERRIDE: 3,
+      LOCK_REVEAL: 3,
+      TIMEOUT_MISS: 3,
+      NEW: 3,
+      BACK: 3,
+      FORWARD: 2,
+      REVEAL: 1,
+      SHOW_CODES_OPEN: 1,
+      SHOW_CODES_CLOSE: 1,
+      RESET: 1,
+      REGEN: 1,
+    },
+    pJulian: 0.3,
+    pSaveStats: 0.85,
+    pTracking: 0.6,
+    pTimingOff: 0.4,
+    pSolveTime: 0.6,
+    pAnswerCorrect: 0.55,
+    pComplete: 0,
+    pNoAdvance: 0,
+  },
 }
 
 // Weighted pick of one action kind.
@@ -318,20 +392,54 @@ function pickKind(rnd, weights) {
 }
 
 // ── The STRONG, EXACT score oracle (strongOracle profiles only) ────────────────────────────────
-// Reconstructs the chronological credit sequence the SAME way the reducer's streaksFromStacks does
-// (back-stack ++ the live/browsed question ++ the de-reversed, non-live forward-stack) and cross-
-// checks good == credits, best == longest run, and (at a clean live edge) streak == trailing run.
+// Reconstructs the chronological credit sequence INDEPENDENTLY of the reducer's incrementally-
+// maintained good/streak/best, then cross-checks good == credits, best == longest run, and (at a
+// clean live edge) streak == trailing run. The sequence is the same one the reducer's streaksFromStacks
+// walks — back-stack ++ the browsed question ++ the de-reversed non-live forward-stack — PLUS the
+// LIVE question's own credit, which the reducer keeps in good/streak separately from the stack:
+//   • Not browsing: a HELD live credit (AoX `complete` — a first-try-correct that credited good but
+//     STAYED on the question instead of advancing) sits at the live edge, not in the stack. It's
+//     flagged by canOverrideCorrect and was scored only if Save Stats was on for it (saveStatsThisQ).
+//   • Browsing: the question we backed away from is parked in forwardStack as the isLive entry; the
+//     base walk excludes it (filter !isLive) and we fold its true contribution back in at the newest
+//     slot via liveCredit — 'credit' → a credit, 'miss' → a played non-credit, null → not played.
+// This widens the exact oracle from the no-complete Classic/Deduction surface onto the AoX-complete
+// reducer surface (C2 Part 1). It stays OFF for RESET_ROUND/TIMEOUT_MISS profiles — RESET_ROUND keeps
+// stats while wiping the history (good != reconstructed by design), and TIMEOUT_MISS can clear
+// canOverrideCorrect without un-crediting a held solve; both are unreachable in real AoX play.
+//
+// liveCredit is re-implemented here (NOT imported from the reducer's liveStreakContribution) so a bug
+// in the reducer's own copy makes the two DISAGREE and the oracle catches it — keeping the check a
+// genuinely independent cross-reference of the same rule advance() uses to set hasCredit.
+function liveCredit(live) {
+  if (!live) return null
+  const ls = live.liveState
+  const btns = live.btns
+  const answered = !!btns && Object.keys(btns).length > 0
+  if (!answered || !ls || ls.saveStatsFrozen !== true) return null
+  return computeHasCredit(btns) && !ls.revealed && !ls.countedWrong ? 'credit' : 'miss'
+}
 export function checkStrongScoreOracle(state) {
   const v = []
   const s = state.stats
   const stackBools = state.stack.map((e) => !!e.hasCredit)
-  const fwdBools = state.forwardStack
-    .slice()
-    .reverse()
-    .filter((e) => !e.isLive)
-    .map((e) => !!e.hasCredit)
   const browsing = state.backDepth > 0
-  const history = browsing ? [...stackBools, !!state.browseHasCredit, ...fwdBools] : stackBools
+  let history
+  if (browsing) {
+    const fwdBools = state.forwardStack
+      .slice()
+      .reverse()
+      .filter((e) => !e.isLive)
+      .map((e) => !!e.hasCredit)
+    const lc = liveCredit(state.forwardStack.find((e) => e.isLive))
+    const liveBool = lc === 'credit' ? [true] : lc === 'miss' ? [false] : []
+    history = [...stackBools, !!state.browseHasCredit, ...fwdBools, ...liveBool]
+  } else {
+    // A held live credit (canOverrideCorrect at the edge) was counted in good only if Save Stats was
+    // on for the question (saveStatsThisQ===true); a complete-while-off neither credits nor pushes.
+    const heldLiveCredit = state.canOverrideCorrect && state.saveStatsThisQ === true
+    history = heldLiveCredit ? [...stackBools, true] : stackBools
+  }
 
   const credits = history.filter(Boolean).length
   if (s.good !== credits) v.push(`STRONG good(${s.good}) != reconstructed credits(${credits})`)
@@ -339,9 +447,11 @@ export function checkStrongScoreOracle(state) {
   const { bestStreak } = computeStreaks(history)
   if (s.best !== bestStreak) v.push(`STRONG best(${s.best}) != history best(${bestStreak})`)
 
+  // Clean live edge only (not browsing, not a pending miss): the trailing run == streak. A held-
+  // credit edge IS clean (it ends in a credit), and `history` already carries that credit.
   if (!browsing && !state.countedWrong && !state.revealed) {
-    const { curStreak } = computeStreaks(stackBools)
-    if (s.streak !== curStreak) v.push(`STRONG streak(${s.streak}) != stack trailing(${curStreak})`)
+    const { curStreak } = computeStreaks(history)
+    if (s.streak !== curStreak) v.push(`STRONG streak(${s.streak}) != trailing(${curStreak})`)
   }
   return v
 }
@@ -359,6 +469,9 @@ export function freshCov() {
     reveal: 0,
     maxStack: 0,
     maxTimes: 0,
+    heldComplete: 0, // reached a HELD completing solve (locked + canOverrideCorrect at the live edge)
+    browsedHeld: 0, //  back-browsed AWAY from a held live credit (the oracle's isLive-fold corner)
+    timedTimeout: 0, // fired a LOCK_REVEAL / TIMEOUT_MISS on the active live edge (timed surface)
   }
 }
 
@@ -423,10 +536,21 @@ export function runSequence(seed, steps, cov, profile) {
         action = { type: 'REGEN_DATE', nextDate }
         break
       case 'LOCK_REVEAL':
-        action = { type: 'LOCK_REVEAL', useJulian }
+        // A timed-mode timeout (Blitz per-round) fires only on the ACTIVE live question — never while
+        // browsing back and never on an already-locked/ended question. Gating it to that reachable
+        // edge keeps the action stream faithful AND keeps the strong oracle valid on the timed surface
+        // (a timeout mid-browse is an unreachable artifact). Coverage counter proves it still fires.
+        if (state.backDepth === 0 && !state.locked) {
+          action = { type: 'LOCK_REVEAL', useJulian }
+          cov.timedTimeout++
+        }
         break
       case 'TIMEOUT_MISS':
-        action = { type: 'TIMEOUT_MISS', useJulian, saveStats }
+        // Blitz per-question (sudden-death) timeout — same reachability as LOCK_REVEAL.
+        if (state.backDepth === 0 && !state.locked) {
+          action = { type: 'TIMEOUT_MISS', useJulian, saveStats }
+          cov.timedTimeout++
+        }
         break
       case 'RESET_ROUND':
         action = { type: 'RESET_ROUND' }
@@ -442,6 +566,11 @@ export function runSequence(seed, steps, cov, profile) {
     if (state.stack.length > cov.maxStack) cov.maxStack = state.stack.length
     if (state.stats.times.length > cov.maxTimes) cov.maxTimes = state.stats.times.length
     if (kind === 'REVEAL' && !prev.countedWrong && state.countedWrong) cov.reveal++
+    // A HELD completing solve at the live edge (locked + reversible) — the AoX-complete corner the
+    // extended strong oracle now covers; browsing away from one parks the credit as the isLive entry.
+    if (state.backDepth === 0 && state.locked && state.canOverrideCorrect) cov.heldComplete++
+    if (kind === 'BACK' && prev.backDepth === 0 && prev.locked && prev.canOverrideCorrect)
+      cov.browsedHeld++
     const S = state.stats
     recent.push(
       `${i}:${kind}${saveStats ? '+' : '-'} p${S.played}g${S.good}s${S.streak}b${S.best} bd${state.backDepth} stk${state.stack.length} cw${state.countedWrong ? 1 : 0} coc${state.canOverrideCorrect ? 1 : 0}`,

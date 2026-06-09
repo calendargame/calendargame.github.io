@@ -287,3 +287,51 @@ describe('Blitz — bug fixes (override-to-wrong + Show Codes end the round)', (
     expect(isDisabled(dayBtn('Sunday'))).toBe(true) // round ended → answer grid locked
   })
 })
+
+// C2 fuzz/read pass (2026-06-08): the Best Score/Streak rollback dropped the Best below a PREVIOUS
+// round's score. The reconcile tracks only ONE best record + its round id, and on rollback set
+// Best = the (overridden-down) current round's good — with no memory of the earlier round that the
+// record had overwritten. AoX's rollback snapshots + restores the PRIOR best (correct); Blitz lacked
+// that snapshot. Same "restore from a stale/absent snapshot" family as the engine bugs.
+describe('Blitz — Best Score cross-round rollback (C2)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetSettings()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('overriding a later round below an earlier one keeps Best Score at the earlier round', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // OFF → a wrong ends the round (lets us end rounds without the timer)
+    // Round A → good 1 (sets Best Score 1)
+    begin()
+    click(correctName(readDate())) // 1/1
+    click(wrongName(readDate())) // wrong → round A ends, good = 1
+    expect(screen.getByText(/Best Score: 1\b/)).toBeInTheDocument()
+    // Round B → good 2 (beats A, overwrites the Best record with round B's id)
+    clickText('Reset') // round A ended → back to idle so Begin shows again (Best 1 persists)
+    begin()
+    click(correctName(readDate())) // 1
+    click(correctName(readDate())) // 2
+    click(wrongName(readDate())) // wrong → round B ends, good = 2
+    expect(screen.getByText(/Best Score: 2\b/)).toBeInTheDocument()
+    // Override round B's two correct answers to wrong → good 2 → 1 → 0 (below round A's 1).
+    act(() => fireEvent.click(ctrl('<'))) // browse B's 2nd correct
+    act(() => fireEvent.click(ctrl('Override'))) // → wrong, good 2→1
+    act(() => fireEvent.click(ctrl('<'))) // browse B's 1st correct
+    act(() => fireEvent.click(ctrl('Override'))) // → wrong, good 1→0
+    // Round A's 1 still stands as the real best — Best Score must be 1, NOT round B's dropped 0.
+    expect(screen.getByText(/Best Score: 1\b/)).toBeInTheDocument()
+  })
+})

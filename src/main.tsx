@@ -28,6 +28,7 @@ import { useModePrefs } from './store/modePrefs.js'
 import { useProgress } from './store/progress.js'
 import type { AoxBest } from './store/progress.js'
 import { calcAvg, calcLast, calcMed } from './engine/stats.js'
+import { reconcileBlitzBest, reconcileSuddenBest } from './engine/blitzBest.js'
 import { useGameEngine } from './engine/useGameEngine.js'
 import { reportWebVitals } from './dev/webVitals.js'
 import type { Question, WeekdayQuestion, DedPuzzle, GameState } from './engine/gameReducer.js'
@@ -366,7 +367,7 @@ interface DedOpts {
 
 
 
-    const DEPLOY_TS=new Date('2026-06-09T02:30:11Z');
+    const DEPLOY_TS=new Date('2026-06-09T04:47:43Z');
 
     // ============================================================
     // makeDedPuzzle — the PURE Deduction puzzle generator (mode-untangle Step 4).
@@ -1075,6 +1076,11 @@ interface DedOpts {
       const suddenBest=useProgress(s=>s.suddenBest),setSuddenBest=useProgress(s=>s.setSuddenBest);
       const [blitzBestNew,setBlitzBestNew]=useState<Record<string, { score: boolean; streak: boolean }>>({}),[suddenBestNew,setSuddenBestNew]=useState<Record<string, boolean>>({});
       const currentRoundIdRef=useRef<number | null>(null),nextRoundIdRef=useRef(1);
+      // The Best that stood BEFORE the current round (snapshotted at Begin). A round that beats the
+      // record OVERWRITES it (only one record + round id is kept), so a later override that drops THIS
+      // round's score must not pull Best below this fallback — the earlier round's achievement still
+      // stands. Mirrors AoX's prevBestSnapRef. (C2 fix — cross-round Best rollback.)
+      const roundBestFallbackRef=useRef({score:0,streak:0,sudden:0});
       const eng=useGameEngine({label:'blitz',genDate,minY,maxY,useJulian,saveStats,timingOff:false}); // Blitz: timing always tracked
       const {state,correct,overrideAvail}=eng;
       // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
@@ -1127,6 +1133,9 @@ interface DedOpts {
       const begin=()=>{
         eng.resetStats();                       // fresh round (S→0, history clear, new date)
         currentRoundIdRef.current=nextRoundIdRef.current++;
+        // Snapshot the Best standing before this round (per the active config) — the rollback floor.
+        const pb=blitzBest[blitzBk],ps=suddenBest[suddenBk];
+        roundBestFallbackRef.current={score:pb?.score??0,streak:pb?.streak??0,sudden:ps?.score??0};
         setActive(true);setTimerDone(false);setShowTimerDate(false);
         const now=performance.now();
         if(!perQ){blitzStartRef.current=now;blitzPausedAccRef.current=0;blitzPausedAtRef.current=null;setBlitzRemain(blitzSec);blitzRemainRef.current=blitzSec;}
@@ -1175,11 +1184,7 @@ interface DedOpts {
         if(!perQ){
           setBlitzBest(prev=>{
             const cur=prev[blitzBk]??{score:0,streak:0,scoreRoundId:null,streakRoundId:null};
-            let next={...cur};
-            if(S.good>cur.score)next={...next,score:S.good,scoreRoundId:rid};
-            else if(cur.scoreRoundId===rid&&S.good<cur.score)next={...next,score:S.good};
-            if(S.best>cur.streak)next={...next,streak:S.best,streakRoundId:rid};
-            else if(cur.streakRoundId===rid&&S.best<cur.streak)next={...next,streak:S.best};
+            const next=reconcileBlitzBest(cur,S.good,S.best,rid,roundBestFallbackRef.current);
             if(next.score===cur.score&&next.streak===cur.streak&&next.scoreRoundId===cur.scoreRoundId&&next.streakRoundId===cur.streakRoundId)return prev;
             const scoreUp=next.score>cur.score,streakUp=next.streak>cur.streak;
             if(scoreUp||streakUp)setBlitzBestNew(p=>{const e=p[blitzBk]||{score:false,streak:false};return{...p,[blitzBk]:{score:e.score||scoreUp,streak:e.streak||streakUp}};});
@@ -1188,9 +1193,7 @@ interface DedOpts {
         }else{
           setSuddenBest(prev=>{
             const cur=prev[suddenBk]??{score:0,roundId:null};
-            let next={...cur};
-            if(S.good>cur.score)next={score:S.good,roundId:rid};
-            else if(cur.roundId===rid&&S.good<cur.score)next={...next,score:S.good};
+            const next=reconcileSuddenBest(cur,S.good,rid,roundBestFallbackRef.current.sudden);
             if(next.score===cur.score&&next.roundId===cur.roundId)return prev;
             if(next.score>cur.score)setSuddenBestNew(p=>({...p,[suddenBk]:true}));
             return{...prev,[suddenBk]:next};
@@ -2120,5 +2123,8 @@ interface DedOpts {
     // web-vitals library are all tree-shaken out of the shipped bundle.
     if (rootEl && import.meta.env.DEV) reportWebVitals();
 
-    // Exported for the Step-6 characterization tests (the mode-untangle safety net).
-    export { App };
+    // Exported for the Step-6 characterization tests (the mode-untangle safety net). randomDate +
+    // makeDedPuzzle are the real date/puzzle generators — exported for the C2 date-generation fuzz
+    // (tests/dateGen.dom), which drives them across every settings combination to prove no setting can
+    // produce a malformed or unanswerable question.
+    export { App, randomDate, makeDedPuzzle };

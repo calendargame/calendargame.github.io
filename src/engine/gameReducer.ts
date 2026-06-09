@@ -286,8 +286,18 @@ const advance = (
 ): GameState => {
   const btns = finalBtns ?? state.persistBtns
   const wasAnswered = Object.keys(btns).length > 0
+  // A question enters history only if it was actually SCORED — i.e. some stat-affecting action ran on
+  // it (saveStatsThisQ goes non-null the moment any answer / Reveal / Show Codes / TIMEOUT_MISS touches
+  // it). A Blitz per-round timeout (LOCK_REVEAL) SYNTHESIZES the answer onto a fresh, never-scored
+  // question (saveStatsThisQ stays null) purely to display it; that question wasn't played, so pushing
+  // it would add a PHANTOM history entry — a miss that desyncs the streak/credit reconstruction from
+  // `good` (e.g. a later Path-4 Override that advances past a LOCK_REVEAL'd question counted the streak
+  // as if the phantom miss weren't there). `saved` (the live/frozen Save-Stats) wrongly falls back to
+  // the live setting when saveStatsThisQ is null, so it can't gate this alone. (C2 fuzz fix, found by
+  // the timed-strong strong-oracle profile.)
+  const scored = state.saveStatsThisQ !== null
   let stack = state.stack
-  if (wasAnswered && saved) {
+  if (wasAnswered && saved && scored) {
     const capsule: Capsule = {
       snapshot: state.prevStatsSnapshot ? { ...state.prevStatsSnapshot } : null,
       wrongTime: state.wrongTime,
@@ -531,14 +541,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'SHOW_CODES': {
       const { open, useJulian, elapsed, saveStats } = action
       if (!open) return { ...state, calcOpen: false }
-      // Penalty-free when browsing back (backDepth>0): reviewing history is read-only, so opening
-      // codes on ANY browsed entry — answered/revealed too, not just unanswered — must NOT burn it
-      // (arm countedWrong), which would let Override fire Path 3 (good+1) instead of the legitimate
-      // back-browse Path 1 (flip), over-crediting to an impossible 2/1 (good > played). When
-      // backDepth>0 the grid is always locked, so the prior `locked` term was redundant; dropping
-      // the `!revealed` term is the fix. (Fix 2026-06-06; tests: classic.dom "Show Codes while
-      // browsing back is read-only".)
-      if (state.backDepth > 0) {
+      // Show Codes is a PENALTY-FREE, read-only review (just open the panel) whenever the current
+      // question is already RESOLVED — opening the codes then can't be a "peek before answering". Three
+      // resolved cases, all of which must NOT run the penalty path below (which counts a played, resets
+      // the streak, arms countedWrong, and re-sets saveStatsThisQ):
+      //   • browsing back (backDepth>0) — reviewing history. Burning a browsed entry would let Override
+      //     fire Path 3 (good+1) instead of the legitimate back-browse Path 1 (flip), over-crediting to
+      //     an impossible 2/1 (good > played). (Fix 2026-06-06; test: classic.dom "Show Codes while
+      //     browsing back is read-only".)
+      //   • a HELD completing solve (canOverrideCorrect — AoX's Nth solve, which credited `good` but
+      //     STAYED on the question): an already-answered-CORRECT question. Burning it would count a
+      //     phantom played + reset the streak while `good` keeps the credit. canOverrideCorrect is never
+      //     true at rest in the one-question-loop modes (they advance on a correct), so this only
+      //     affects AoX. (C2 fuzz fix, aox-strong profile.)
+      //   • already REVEALED (revealed) — the answer is on screen: a wrong-then-Reveal, a Blitz
+      //     per-round timeout (LOCK_REVEAL), or a per-question TIMEOUT_MISS. The penalty path is a
+      //     no-op for these anyway (firstPenalty=!countedWrong&&!revealed is already false), but it
+      //     STILL re-set saveStatsThisQ — which on a never-played LOCK_REVEAL'd question makes it look
+      //     "scored" so a later advance pushes it as a PHANTOM history miss (a good/streak desync). A
+      //     read-only review keeps saveStatsThisQ untouched. (C2 fuzz fix, timed-strong profile.)
+      if (state.backDepth > 0 || state.canOverrideCorrect || state.revealed) {
         return { ...state, calcOpen: true }
       }
       const correct = correctIndexOf(state.date, useJulian)
@@ -634,6 +656,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         // advanced into history its 'correct' grid isn't mistaken for an earned credit. (C2 fuzz
         // fix, 2026-06-06 — keeps the revealed-gate in advance() exhaustive.)
         revealed: true,
+        // LOCK the grid too — a per-question timeout ENDS the round, so the question is resolved and
+        // must not be answerable. LOCK_REVEAL (the per-round timeout) already locks; TIMEOUT_MISS did
+        // not, leaving an unlocked-but-revealed question that the reducer would let ANSWER credit good
+        // while pushing it to history as a (revealed) non-credit — a good>credits desync. The Blitz
+        // component already disables the grid post-round, so this only closes the engine's own
+        // consistency gap (the engine must not rely on the component to forbid an invalid move). (C2
+        // fuzz fix, found by the timed-strong strong-oracle profile.)
+        locked: true,
         canOverrideCorrect: false,
         pendingWrongOverride: null,
       }

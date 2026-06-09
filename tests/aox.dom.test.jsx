@@ -439,3 +439,38 @@ describe('AoX — bug #2 fix (override-to-wrong fails the run, Allow Mistakes of
     expect(isDisabled(dayBtn('Sunday'))).toBe(true) // run FAILED → grid locked (the bug: it used to stay running)
   })
 })
+
+// ── Batch 8: bug fix — Show Codes on a COMPLETED run is review-only (C2) ─────────
+// A completing solve credits good but stays on the question (locked, reversible). Opening Show Codes
+// to review the method on the FINISHED run must NOT burn it. The reducer's SHOW_CODES penalty assumed
+// an unanswered live question; a completing solve is already-answered-correct, so reviewing its codes
+// is read-only. Before the fix, opening the codes turned a finished 2/2 run into 2/3 with the streak
+// reset to 0/2 (a phantom played) — found by the aox-strong strong-oracle fuzz profile.
+describe('AoX — bug fix (Show Codes on a completed run is review-only, C2)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    pin()
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('opening Show Codes on a completed run does not change the score', () => {
+    mountApp()
+    switchToAox()
+    setN(2)
+    click('Begin')
+    answerCorrect() // 1/1
+    answerCorrect() // 2/2 → run completes (held), Best recorded
+    expect(statValue('Score')).toBe('2/2')
+    expect(statValue('Streak')).toBe('2/2')
+    click('Show Codes') // review the codes on the finished run
+    // No phantom played, no streak reset — the score is untouched (was 2/3, streak 0/2).
+    expect(statValue('Score')).toBe('2/2')
+    expect(statValue('Streak')).toBe('2/2')
+    expect(ctrl('Hide Codes')).toBeInTheDocument() // the codes panel opened
+  })
+})

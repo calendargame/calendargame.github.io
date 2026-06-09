@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import { gameReducer, initEngine } from '../../src/engine/gameReducer.js'
 import { wday } from '../../src/lib/calendar.js'
+import { checkStrongScoreOracle } from './fuzzHarness.js'
 
 const D1 = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
 const D2 = { y: 2024, m: 2, d: 2, _fmt: 'numeric-ymd', _jul: false }
@@ -174,5 +175,92 @@ describe('score-integrity regressions (C1 deeper-fuzz fix, 2026-06-08)', () => {
     s = answerAt(s, cOf(D3), D1) // answer D3 correct → streak 1 (NOT 2); best stays the true max run = 1
     expect(s.stats).toMatchObject({ good: 2, streak: 1, best: 1 }) // was best 2 (inflated by the bad streak)
     expect(s.stats.best).toBeLessThanOrEqual(s.stats.good)
+  })
+})
+
+// The C2 fuzz fix (2026-06-08): opening Show Codes on a HELD completing (AoX) solve must be a read-only
+// review, not a burn. A completing solve credits good but stays on the question (locked + reversible,
+// canOverrideCorrect); the SHOW_CODES penalty assumed an UNANSWERED live question, so it counted a
+// phantom played + reset the streak + cleared the credit flag while good kept the credit — desyncing
+// good from the reconstructable credit history (good > credits), and (on the next advance) recording
+// the credited solve as a miss. Found by the new aox-strong strong-oracle profile (the EXACT oracle,
+// extended to the AoX-complete surface). Fixed in gameReducer SHOW_CODES (penalty-free when
+// canOverrideCorrect, like the back-browse review).
+describe('score-integrity regressions (C2 fuzz fix — Show Codes on a held complete, 2026-06-08)', () => {
+  it('Show Codes on a held completing solve does not burn it (good stays a real credit)', () => {
+    let s = initEngine(D1)
+    s = answerComplete(s, C) // D1 first-try correct, HELD as a completing solve → good 1, reversible
+    expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1, best: 1 })
+    expect(s.canOverrideCorrect).toBe(true)
+    s = showCodesOpen(s) // review the codes on the finished solve
+    // No burn: stats untouched, the credit stays reversible, the panel opened.
+    expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1, best: 1 }) // was 1/2 streak 0 (burned)
+    expect(s.canOverrideCorrect).toBe(true) // still reversible (was cleared)
+    expect(s.countedWrong).toBe(false) // not burned (was true)
+    expect(s.calcOpen).toBe(true)
+  })
+
+  it('advancing after a reviewed completing solve records it as a credit, not a phantom miss', () => {
+    let s = initEngine(D1)
+    s = answerComplete(s, C) // held credit → good 1
+    s = showCodesOpen(s) // review (penalty-free)
+    s = neu(s, D2) // advance the completing solve into history
+    // The credited solve enters history AS a credit — good == reconstructable credits, no phantom.
+    expect(s.stats.good).toBe(1)
+    expect(s.stack[s.stack.length - 1].hasCredit).toBe(true) // was false (revealed/countedWrong → mislabelled)
+    expect(s.stats.good).toBeLessThanOrEqual(s.stats.played)
+  })
+})
+
+// Two more C2 fuzz fixes (2026-06-08), found by the new timed-strong strong-oracle profile — the
+// Blitz timeout surface (LOCK_REVEAL = per-round timeout, no stat; TIMEOUT_MISS = per-question miss).
+// Both are the recurring family: a question that LOOKS answered (a synthesized 'correct' grid) but was
+// never PLAYED leaks into the credit history and desyncs the streak from `good`. Pinned at the engine
+// level — both require a countdown to expire, impractical to drive through the rAF timer in jsdom;
+// the reducer drives the exact reachable action sequence (the strong oracle confirms full consistency).
+describe('score-integrity regressions (C2 timed-mode fuzz fixes, 2026-06-08)', () => {
+  // helpers (timingOff:false so Override Path 4 actually advances; the file's `override` uses timingOff:true)
+  const lockReveal = (s) => gameReducer(s, { type: 'LOCK_REVEAL', useJulian: false })
+  const timeoutMiss = (s) => gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true })
+  const overrideAdvance = (s, nextDate) =>
+    gameReducer(s, { type: 'OVERRIDE', ...ctx, tracking: false, timingOff: false, nextDate })
+
+  it('a Path-4 override after a per-round timeout (LOCK_REVEAL) does not push the unplayed question', () => {
+    let s = initEngine(D1)
+    s = answerAt(s, wOf(D1), D2) // D1 wrong → played 1, good 0, countedWrong
+    s = answerAt(s, cOf(D1), D2) // D1 right (late) → advance to D2, arm pendingWrongOverride; D1 pushed as a miss
+    s = lockReveal(s) // Blitz per-round timeout: shows D2's answer WITHOUT counting it as played
+    s = overrideAdvance(s, D3) // Path 4: credit D1 + advance past D2
+    // D2 was never played, so it must NOT enter history — pushing it added a PHANTOM miss that left
+    // streak(1) ≠ the polluted stack's trailing run (0).
+    expect(s.stats.good).toBe(1) // D1 credited
+    expect(s.stack).toHaveLength(1) // only D1 — the LOCK_REVEAL'd D2 is NOT recorded (was a phantom)
+    expect(checkStrongScoreOracle(s)).toEqual([]) // good/best/streak all consistent with history
+  })
+
+  it('reviewing the codes on a per-round-timeout question keeps it unplayed (no phantom on advance)', () => {
+    let s = initEngine(D1)
+    s = answerAt(s, wOf(D1), D2) // D1 wrong
+    s = answerAt(s, cOf(D1), D2) // D1 right (late) → advance to D2, arm pendingWrongOverride
+    s = lockReveal(s) // D2 per-round timeout (shown, never played)
+    s = showCodesOpen(s) // review the codes on D2 — must stay read-only (NOT mark D2 as "scored")
+    s = overrideAdvance(s, D3) // Path 4: credit D1 + advance past D2
+    // Without the review-only-on-revealed fix, Show Codes set saveStatsThisQ on D2, defeating the
+    // advance scored-gate → D2 got pushed as a phantom miss.
+    expect(s.stack).toHaveLength(1) // still only D1
+    expect(checkStrongScoreOracle(s)).toEqual([])
+  })
+
+  it('a per-question timeout (TIMEOUT_MISS) locks the grid so the resolved question cannot be answered', () => {
+    let s = initEngine(D1)
+    s = timeoutMiss(s) // sudden-death timeout: played 1, a miss, answer shown — and the round is OVER
+    expect(s.locked).toBe(true) // resolved → locked (was unlocked, leaving the question answerable)
+    expect(s.stats).toMatchObject({ played: 1, good: 0, streak: 0 })
+    const before = s.stats
+    // Answering the resolved question must be a no-op — else it credits good (0→1) and advance pushes
+    // it to history as a REVEALED non-credit, so good (1) > reconstructable credits (0).
+    s = gameReducer(s, { type: 'ANSWER', idx: C, ...ctx, tracking: false, elapsed: null, nextDate: D2, complete: false })
+    expect(s.stats).toEqual(before) // unchanged — was wrongly credited to good 1 without the lock
+    expect(checkStrongScoreOracle(s)).toEqual([])
   })
 })
