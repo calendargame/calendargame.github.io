@@ -154,5 +154,11 @@ export default defineConfig(({ command, mode }) => ({
     // Skipping CSS keeps the harness fast and removes a moving part. (This is Vitest's
     // default, set explicitly to document intent.)
     css: false,
+    // Generous per-test budget (default is 5s). GitHub Actions runners spike under load, and a
+    // load-induced slowdown of a compute-heavy test (e.g. the 100k-generation date-gen fuzz) once
+    // transiently failed the "Run tests" deploy gate on the production runner while the SAME commit
+    // passed on staging + locally. 20s gives ample headroom without masking a genuinely-hung test;
+    // the heavy fuzz profiles (tests/engine/fuzz) set their own larger budget on top of this.
+    testTimeout: 20000,
   },
 }))
