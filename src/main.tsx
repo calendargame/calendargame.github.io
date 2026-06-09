@@ -366,7 +366,7 @@ interface DedOpts {
 
 
 
-    const DEPLOY_TS=new Date('2026-06-08T22:17:22Z');
+    const DEPLOY_TS=new Date('2026-06-09T01:29:21Z');
 
     // ============================================================
     // makeDedPuzzle — the PURE Deduction puzzle generator (mode-untangle Step 4).
@@ -1885,17 +1885,23 @@ interface DedOpts {
       // inner div via top-full) — only its CustomSelect dropdown PANELS portal out to
       // #root, to escape this overflow scroll context for the frosted-glass blur. Do NOT
       // frost" theory) and reverted — the scroll container, not the bar, was the cause.
-      // Bottom cushion (Calendar Game fix 2026-06-08): max-height is derived from the REAL measured
-      // bar height (--bar-h) + the 8px top gap (mt-2) + a fixed 24px cushion + the bottom safe-area
-      // inset, so the panel always STOPS exactly 24px above the bottom of the VIEWABLE area in every
-      // environment — above the nav bar in Safari, the home-indicator/safe bottom in the installed
-      // app, the nav-bar/pill on Android. The old hardcoded `100dvh-104px` subtracted the bar's
-      // height TWICE (once via the top-full anchoring, once baked into the 104), so the leftover
-      // bottom gap drifted with the bar's real height (which differs between Safari and the installed
-      // app). env(safe-area-inset-bottom) is 0 on iOS (no viewport-fit=cover in index.html) — it only
+      // Elevation + bottom cushion (Calendar Game, refined 2026-06-09): this popover is a large,
+      // anchored, OPAQUE overlay sheet, so it gets a SMALL, theme-aware elevation shadow — the app's
+      // own `elev-shadow-down` (var(--shadow-elev)) — NOT the dropdowns' big frosted-menu shadow. It
+      // sits BELOW the menus in z-order, and an anchored sheet wants a restrained lift, with its 1px
+      // card border (not the shadow) doing the edge definition. Because that shadow is small, the
+      // bottom cushion is DECOUPLED from it: a plain 16px — the SAME inset as the panel's sides
+      // (left-4/right-4) — so the sheet is symmetrically inset on all four edges and the shadow tucks
+      // comfortably inside that margin (no shadow-reach math). max-height = 100dvh - REAL measured bar
+      // height (--bar-h) - 8px top gap (mt-2) - 16px cushion - bottom safe-area, so the panel always
+      // STOPS exactly 16px above the bottom of the VIEWABLE area in every environment — above the
+      // Safari nav bar, the home-indicator/safe bottom in the installed app, the nav-bar/pill on
+      // Android. Using --bar-h avoids the old `100dvh-104px`, which baked the bar height in a second
+      // time (on top of the top-full anchor) and let the bottom gap drift with the bar's real height.
+      // env(safe-area-inset-bottom) is 0 on iOS (no viewport-fit=cover in index.html) — it only
       // matters on edge-to-edge Android. (Tailwind arbitrary value: underscores become spaces, so the
       // calc() emits with the whitespace CSS requires around its - operators.)
-      const settingsJsx=settingsOpen&&(<div ref={settingsPopoverRef} className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card py-4 space-y-4 shadow-xl flex flex-col max-h-[calc(100dvh_-_var(--bar-h)_-_8px_-_24px_-_env(safe-area-inset-bottom))]">
+      const settingsJsx=settingsOpen&&(<div ref={settingsPopoverRef} className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card py-4 space-y-4 elev-shadow-down flex flex-col max-h-[calc(100dvh_-_var(--bar-h)_-_8px_-_16px_-_env(safe-area-inset-bottom))]">
         <div ref={popoverInnerScrollRef} className={`overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-4 px-4${popoverScrolledFromTop&&!popoverAtBottom?" fade-scroll-both":popoverScrolledFromTop?" fade-scroll-top":!popoverAtBottom?" fade-scroll-bottom":""}`}>
         <div className="space-y-2">
           <SectionLabel>Date Format</SectionLabel>
