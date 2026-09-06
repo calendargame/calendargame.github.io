@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import type { FormatId } from '../lib/format.js'
 
 // settings.js — the ⚙ Settings store (Stage C, Steps 5a + 5b).
@@ -154,11 +155,26 @@ export const useSettings = create<SettingsState>()(
       applySettings: (values) => set(() => ({ ...values })),
     }),
     {
-      name: 'cg-settings-v1', // localStorage key (versioned for future migrations)
+      // The localStorage key (versioned for future migrations). It lives in store/presets now, with
+      // the other three, because DELETING a preset has to remove exactly its four keys and nothing
+      // else — which is only checkable if one place can enumerate them. ⚠ THE STRING IS UNCHANGED,
+      // and that is the whole preset design in one line: preset 1 does not receive the existing
+      // saved settings, preset 1 IS them.
+      name: PRESET_STORE_KEYS.settings,
+      // …and this is what makes presets 2, 3, 4… land somewhere else. The `name` above never
+      // changes; the adapter rewrites it to the ACTIVE preset's key at each read and each write.
+      // See store/presets for why that beat swapping the name on every switch.
+      storage: presetScopedStorage<Partial<SettingsState>>(),
       version: 1,
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<SettingsState>,
+      // Hydration REPLACES the settings; it does not patch the saved copy over whatever is in
+      // memory. Identical to zustand's default merge at a cold start (where memory already holds
+      // SETTINGS_DEFAULTS); the difference shows on a preset switch, where the default would let a
+      // preset that has never saved a given setting inherit the last preset's value — including the
+      // theme, which would be visible on screen. Argued in full at mergeOverDefaults.
+      merge: mergeOverDefaults(() => SETTINGS_DEFAULTS),
     },
   ),
 )

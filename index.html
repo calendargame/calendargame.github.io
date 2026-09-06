@@ -76,15 +76,35 @@
   <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/apple-splash-1320-2868.png">
   <!-- Apply the SAVED theme + its matching toolbar color BEFORE React mounts, so there's no
        wrong-theme / dark-toolbar flash on first paint (Q2). Mirrors the store's resolution
-       (useSystem ? OS-dark?darkTheme:lightTheme : manualTheme) from localStorage 'cg-settings-v1';
-       falls back to the OS light/dark default (= SETTINGS_DEFAULTS) when nothing is saved. The color
-       map is each theme's --tc in src/index.css — keep in sync if those change. The map is also
-       stamped as <html>'s background so any frame painted before the external stylesheet applies is
-       theme-colored, never white (App's theme effect re-stamps it on runtime theme switches). Also
-       blocks the iOS pinch-zoom gesture (the deliberate locked zoom; see the viewport meta above). -->
+       (useSystem ? OS-dark?darkTheme:lightTheme : manualTheme) from the settings store's saved
+       payload; falls back to the OS light/dark default (= SETTINGS_DEFAULTS) when nothing is saved.
+       The color map is each theme's --tc in src/index.css — keep in sync if those change. The map is
+       also stamped as <html>'s background so any frame painted before the external stylesheet
+       applies is theme-colored, never white (App's theme effect re-stamps it on runtime theme
+       switches, which is what repaints the app when a preset switch changes the theme). Also blocks
+       the iOS pinch-zoom gesture (the deliberate locked zoom; see the viewport meta above).
+
+       ★★ WHICH SETTINGS PAYLOAD, THOUGH — the settings store is PER-PRESET (the owner was explicit
+       that not even the theme stays global), so this script has to resolve the ACTIVE PRESET before
+       it can know where the theme is. It reads the global registry 'cg-presets-v1' for activeId and
+       composes the key exactly as src/store/presets.ts's `presetKey` does — base key for preset 1,
+       base+'~p'+id for every other. Preset 1's key really is the bare base key, so a device that has
+       never created a second preset (and therefore has no registry entry at all) takes the SAME path
+       it always did, byte for byte. Duplicating that one expression is unavoidable — this script
+       runs before any module can load — so tests/bootTheme.dom pins it against the real `presetKey`
+       and fails if either side drifts.
+       ⚠ A registry that is missing, unparseable or naming a preset with no saved settings falls
+       through to the OS default, which is the same graceful landing this script has always had for
+       a missing payload; store/presets' normalizeRegistry repairs the registry itself moments later,
+       and App's theme effect then repaints. Getting the first frame wrong on a tampered registry is
+       the correct trade against getting it wrong on every normal boot. -->
   <script>(function(){
     var d=window.matchMedia('(prefers-color-scheme: dark)').matches,t;
-    try{var s=JSON.parse(localStorage.getItem('cg-settings-v1')).state;t=s.useSystem?(d?s.darkTheme:s.lightTheme):s.manualTheme;}catch(e){}
+    try{
+      var p=1;try{p=JSON.parse(localStorage.getItem('cg-presets-v1')).state.activeId||1;}catch(e){}
+      var s=JSON.parse(localStorage.getItem('cg-settings-v1'+(p===1?'':'~p'+p))).state;
+      t=s.useSystem?(d?s.darkTheme:s.lightTheme):s.manualTheme;
+    }catch(e){}
     if(!t)t=d?'dusk':'light';
     document.documentElement.setAttribute('data-theme',t);
     var c={dusk:'#0d1117',midnight:'#000',nebula:'#0b0714',parchment:'#f0e8d5',light:'#f2f2f7'},m=document.querySelector("meta[name='theme-color']");

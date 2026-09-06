@@ -4,6 +4,7 @@ import type { Stats } from '../engine/gameReducer.js'
 import { captureError } from '../observability/sentry.js'
 import { checkStatsInvariants } from '../engine/invariants.js'
 import { dimEither } from '../lib/calendar.js'
+import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import { useSettings } from './settings.js'
 
 // store/progress.ts — saved gameplay progress (Stage D1).
@@ -249,7 +250,16 @@ export const useProgress = create<ProgressState>()(
       resetProgress: () => set(() => makeProgressDefaults()),
     }),
     {
-      name: 'cg-progress-v1', // localStorage key (fixed — the `version` field below gates migrations)
+      // The localStorage key (fixed — the `version` field below gates migrations). It lives in
+      // store/presets now, with the other three, so a preset delete can enumerate exactly the four
+      // keys it owns. ⚠ THE STRING IS UNCHANGED, deliberately and permanently: preset 1 does not
+      // receive a copy of the player's stats and bests, preset 1 IS them. A build that has never
+      // heard of presets and one that has therefore agree about preset 1 by construction — which
+      // matters here more than anywhere, because live and staging share one browser origin.
+      name: PRESET_STORE_KEYS.progress,
+      // Presets 2, 3, 4… read and write a namespaced key instead. The `name` above never moves; the
+      // adapter rewrites it per read/write from the active preset. See store/presets.
+      storage: presetScopedStorage<Partial<ProgressState>>(),
       // v3 = the slim lookup-entry shape. The bump still records that shape change even though
       // `merge` below re-asserts it on every load: it is what tells a FUTURE migration which
       // payloads it is looking at.
@@ -272,15 +282,22 @@ export const useProgress = create<ProgressState>()(
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<ProgressState>,
-      // The default shallow merge (persisted over defaults) PLUS the one shape guarantee the app
-      // depends on: lookupHistory is normalized here rather than in `migrate` so it covers every
-      // load at every version, which is what makes LookupCard's guard-free rendering safe. Runs
-      // after migrate, so a v1/v2 payload arrives already rewritten.
+      // Two guarantees, composed, and they are separate concerns:
+      //   • mergeOverDefaults — hydration REPLACES the saved progress rather than patching it over
+      //     whatever is in memory. At a cold start that is byte-identical to zustand's default
+      //     merge (memory already holds makeProgressDefaults()); on a PRESET SWITCH it is the whole
+      //     ballgame, because the default would let a preset with no saved copy of a silo inherit
+      //     the last preset's stats and bests — and the first answered question would make that
+      //     inheritance permanent. Argued in full in store/presets.
+      //   • the lookupHistory screen, which is normalized here rather than in `migrate` so it
+      //     covers every load at every version — that is what makes LookupCard's guard-free
+      //     rendering safe. Runs after migrate, so a v1/v2 payload arrives already rewritten.
+      // ⚠ ORDER: the screen must be applied AFTER the spread, or the saved (unscreened) history
+      // would overwrite it.
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<ProgressValues>
         return {
-          ...current,
-          ...saved,
+          ...mergeOverDefaults<ProgressValues, ProgressState>(makeProgressDefaults)(saved, current),
           lookupHistory: normalizeLookupEntries(saved.lookupHistory),
         }
       },

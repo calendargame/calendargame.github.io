@@ -34,6 +34,7 @@ import { readBuildStamp, writeBuildStamp, buildChanged } from './lib/buildStamp.
 import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogSignature, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
+import { usePresets } from './store/presets.js'
 import { useSettings } from './store/settings.js'
 import { useModePrefs } from './store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, prefsMatchDefaults } from './store/userDefaults.js'
@@ -1337,6 +1338,56 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // the always-mounted screens so that panel, and the reading position, survive a detour into
       // a game mode; Full Reset is the one thing that must still close it).
       const [guideResetKey,setGuideResetKey]=useState(0);
+      // ★★ THROW AWAY EVERYTHING THE SIX ALWAYS-MOUNTED SCREENS ARE HOLDING. Bumping the six keys
+      // above remounts them, so every useState/useRef in each one runs its initializer again and
+      // re-reads the stores as they are NOW. The two App-owned transients that belong to those
+      // screens rather than to App go with them: Lookup's five (its history lives in store/progress,
+      // so lookupSelectedHistoryId names an entry in whatever the store held a moment ago) and the
+      // guide's saved reading offset (captured against a panel that is about to be closed).
+      // ⚠ TWO CALLERS, AND THAT IS THE WHOLE POINT OF EXTRACTING IT. Full Reset has always done
+      // this; a PRESET SWITCH is structurally a second Full Reset and must do exactly the same
+      // discard, or the outgoing preset's run keeps playing on the incoming preset's data — the
+      // 500-cards-becomes-4 bug (store/presetControl's switchPreset argues it in full). A second
+      // hand-written copy of the six bumps is one forgotten line away from that bug, silently, on
+      // whichever screen was missed.
+      // ⚠ WHAT IT DELIBERATELY DOES **NOT** TOUCH: the settings/progress/modePrefs stores (Full
+      // Reset resets those separately and BEFORE calling here, so the modes re-hydrate from the
+      // emptied store; a switch must not, or it would wipe the preset it just opened), and the
+      // current mode. Which mode you are on is App state belonging to no preset — no store has ever
+      // held a "last mode" — so a switch leaves the player where they were, on a fresh screen.
+      // useCallback with an empty dep list: every setter it closes over is a useState setter or a
+      // ref, all stable for the life of the mount, so the registry subscription below can hold this
+      // identity without re-subscribing on every render.
+      const remountScreens=useCallback(()=>{
+        setLookupInput("");setLookupOutput("");
+        setLookupCalcDate(null);setLookupSelectedHistoryId(null);setLookupCalcOpen(false);
+        setAoxResetKey(k=>k+1);
+        setClassicResetKey(k=>k+1);
+        setFlashResetKey(k=>k+1);
+        setBlitzResetKey(k=>k+1);
+        setDeductionResetKey(k=>k+1);
+        setGuideResetKey(k=>k+1);
+        guideScrollYRef.current=0;
+      },[]);
+      // ★★ THE PRESET SWITCH'S REMOUNT, WIRED TO THE FACT RATHER THAN TO THE CALLER. Anything that
+      // changes which preset is active — store/presetControl's switchPreset, deleting the preset you
+      // are on, or whatever a later group adds — lands here, because the one thing all of them have
+      // in common is that the registry's activeId moved. presetControl therefore takes no remount
+      // callback: there is nothing for a call site to forget.
+      // ⚠ store.subscribe, NOT a useEffect on the value, and the difference is load-bearing. zustand
+      // runs subscribers SYNCHRONOUSLY inside the set, i.e. BEFORE switchPreset rehydrates the four
+      // stores — and React batches every update made in one turn (18+ auto-batching, in a handler or
+      // out of one), so neither half renders until switchPreset has RETURNED. The key bumps and the
+      // four store reloads therefore land in ONE commit, and the screens' mount-time reads
+      // (getInitialStats and friends) see the incoming preset the first time they run. An effect
+      // keyed on activeId would
+      // run a commit LATER, leaving one render in which the stores hold the new preset while the
+      // screens still hold the old one; that render is harmless only for as long as no mode
+      // screen's stat-mirror effect happens to re-fire in it, which is a dependency array's
+      // business and not a contract anyone signed.
+      // ⚠ The comparison is on activeId alone: renaming or creating a preset rewrites the registry
+      // value too, and neither may throw away a run in progress.
+      useEffect(()=>usePresets.subscribe((s,prev)=>{if(s.activeId!==prev.activeId)remountScreens();}),[remountScreens]);
       // The two inner scroll regions the panel owns (its own list and the changelog popup's),
       // their useScrollEdgeState hooks, and the footer-button caption auto-fit with its dep-less
       // layout effect and its ResizeObserver -> components/SettingsPanel. Every one of them reads
@@ -1508,26 +1559,19 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // Deduction sub-type, Allow Mistakes, One-by-One, show/hide toggles) stays factory. A no-op
         // when nothing is saved (defPrefs = the factory values).
         applyModePrefs(defPrefs);
-        // Lookup input/output are transient local state (the history itself was cleared by resetProgress).
-        setLookupInput("");setLookupOutput("");
-        setLookupCalcDate(null);setLookupSelectedHistoryId(null);setLookupCalcOpen(false);
-        // Remount all six always-mounted screens → their internal state resets to launch defaults.
-        // How to Play is in the list for its ONE piece of state, the open panel: it used to be
+        // Remount all six always-mounted screens → their internal state resets to launch defaults,
+        // and the transients that belong to them go too (Lookup's five — its history itself was
+        // cleared by resetProgress above — and the guide's saved reading offset, which switchMode
+        // at the top of this function already captured on the way out of the guide, so this clears
+        // it AFTER the capture rather than instead of it). ★ THE SAME CALL A PRESET SWITCH MAKES;
+        // see remountScreens, which is shared precisely so the two can never drift apart.
+        // How to Play is in the six for its ONE piece of state, the open panel: it used to be
         // conditionally rendered, so leaving it dropped that for free — now that it stays mounted
         // (Q6, round 9), a reset that left a panel hanging open would not be the launch state.
-        setAoxResetKey(k=>k+1);
-        setClassicResetKey(k=>k+1);
-        setFlashResetKey(k=>k+1);
-        setBlitzResetKey(k=>k+1);
-        setDeductionResetKey(k=>k+1);
-        setGuideResetKey(k=>k+1);
+        remountScreens();
         // App container to the top, synchronously — the scroll-ownership effect would do it one
-        // commit later, and this avoids the flash in between. The guide's saved reading position
-        // goes with it: switchMode above already captured the live position on the way out of the
-        // guide, and a Full Reset means there is nothing to come back to, so it is cleared AFTER
-        // that capture rather than instead of it.
+        // commit later, and this avoids the flash in between.
         if(appScrollRef.current)appScrollRef.current.scrollTop=0;
-        guideScrollYRef.current=0;
       };
       // Android hardware Back closes these App-level overlays instead of quitting the app (Q1).
       // Settings popover → close it; How-to-Play (the 'guide' mode) → return to the previous game mode

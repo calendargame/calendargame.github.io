@@ -43,6 +43,7 @@ import { useSettings } from '../../src/store/settings.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults } from '../../src/store/userDefaults.js'
 import { useProgress } from '../../src/store/progress.js'
+import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
 // Re-exported so the panel helper's API is complete at one import, while the definition lives in
 // the file that owns the question — mode-screen tests ask "is this offered" about game controls
 // that have nothing to do with settings, and should not be importing from a settings helper.
@@ -70,7 +71,17 @@ export { isOffered, isDimmed }
 // that mount across a simulated build change care about. Those two keep their own explicit
 // sessionStorage.clear(), where it reads as the setup for the thing they are testing instead of
 // as a line nobody can account for.
+//
+// THE PRESET REGISTRY goes back too, and BEFORE the clear rather than after it. Same trap as
+// clearDefaults, one level up: the registry is another in-memory singleton, so a case that creates
+// or switches presets would leave every later case in its file reading and writing a DIFFERENT
+// preset's keys — and, because preset 1's keys are the un-namespaced ones the whole suite has
+// always used, the symptom would be "nothing was saved" rather than anything that names presets.
+// Resetting it writes, hence the ordering: a device that has never been played on has no registry
+// entry at all (store/presets — a default registry says nothing a missing one does not), which is
+// the state every case in this suite is entitled to assume.
 export function resetAppState() {
+  usePresets.setState(makePresetRegistryDefaults())
   localStorage.clear()
   useSettings.getState().resetToFactory()
   useModePrefs.getState().resetModePrefs()

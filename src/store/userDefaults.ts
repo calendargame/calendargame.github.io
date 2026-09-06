@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import { SETTINGS_DEFAULTS } from './settings.js'
 import type { SettingsValues } from './settings.js'
 import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
@@ -89,10 +90,21 @@ export const useUserDefaults = create<UserDefaultsState>()(
       clearDefaults: () => set({ saved: null }),
     }),
     {
-      name: 'cg-userdefaults-v1', // localStorage key (versioned for future migrations)
+      // The localStorage key, unchanged — preset 1 IS the existing saved defaults. Enumerated in
+      // store/presets so a preset delete can remove exactly its four keys; the adapter beside it
+      // sends presets 2, 3, 4… to a namespaced one. Each preset therefore has its OWN saved
+      // personal defaults, which is what makes a Full Reset inside a preset land on THAT preset's
+      // saved values rather than on some other preset's.
+      name: PRESET_STORE_KEYS.userDefaults,
+      storage: presetScopedStorage<Pick<UserDefaultsState, 'saved'>>(),
       version: 1,
       // Persist only the snapshot, never the action functions.
       partialize: (state) => ({ saved: state.saved }),
+      // Hydration replaces the snapshot rather than patching it over memory. Sharpest here of the
+      // four: without it, opening a preset that has never saved defaults would leave the LAST
+      // preset's snapshot standing, and a Full Reset inside the new preset would restore another
+      // preset's settings. See mergeOverDefaults.
+      merge: mergeOverDefaults(() => ({ saved: null })),
     },
   ),
 )

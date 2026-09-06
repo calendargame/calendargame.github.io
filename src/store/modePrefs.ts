@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
 
 // modePrefs.ts — the per-mode SETUP store (Stage D follow-up, 2026-06-05).
 //
@@ -144,11 +145,20 @@ export const useModePrefs = create<ModePrefsState>()(
       applyPrefs: (partial) => set(() => ({ ...partial })),
     }),
     {
-      name: 'cg-modeprefs-v1', // localStorage key (versioned for future migrations)
+      // The localStorage key, unchanged, now enumerated in store/presets alongside the other three
+      // so a preset delete can remove exactly its own — and unchanged because preset 1 IS this
+      // saved mode setup rather than a copy of it. The adapter beside it is what sends presets 2,
+      // 3, 4… to a namespaced key without this `name` ever moving.
+      name: PRESET_STORE_KEYS.modePrefs,
+      storage: presetScopedStorage<Partial<ModePrefsState>>(),
       version: 1,
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<ModePrefsState>,
+      // Hydration replaces the mode setup rather than patching it over memory — at a cold start
+      // identical to zustand's default, on a preset switch the difference between a new preset
+      // opening on the factory Blitz timer and it inheriting the last preset's. See mergeOverDefaults.
+      merge: mergeOverDefaults(() => MODE_PREFS_DEFAULTS),
     },
   ),
 )
