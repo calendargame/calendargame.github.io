@@ -24,6 +24,7 @@ import CustomSelect from './components/CustomSelect.jsx'
 import GuidePage from './components/GuidePage.jsx'
 import LookupCard from './components/LookupCard.jsx'
 import W5Logo from './components/W5Logo.jsx'
+import PresetSwitcher from './components/PresetSwitcher.jsx'
 import { useBackButton } from './components/useBackButton.js'
 import { useYearRangeMirrors } from './components/useYearRangeMirrors.js'
 import { SettingsPanel } from './components/SettingsPanel.jsx'
@@ -35,7 +36,7 @@ import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogSignature, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
 import { usePresets } from './store/presets.js'
-import { activeDataId } from './store/amnesic.js'
+import { activeDataId, selectAmnesic, discardParkedStats } from './store/amnesic.js'
 import { useSettings } from './store/settings.js'
 import { useModePrefs } from './store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, prefsMatchDefaults } from './store/userDefaults.js'
@@ -93,7 +94,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // src/lib/dotLayout.ts. NOT imported here: App renders no answer input. Its readers are
     // components/WeekdayAnswer (the Dots grid itself) and components/GuidePage's DotDiagram, which
     // derives its diagram from the same data. What App DOES hold is the dotOrientation SETTING, and
-    // it hands that to the four weekday modes and to the title-bar mark (W5Logo, whose sibling
+    // it hands that to the four weekday modes and to the top bar's mark (W5Logo, whose sibling
     // DOT_MARK_ROTATION is likewise not imported here — the component applies it).
     // WeekdayAnswer -> src/components/WeekdayAnswer.tsx. NOT imported here: all five mode screens
     // render their own, and App renders none.
@@ -387,6 +388,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const prevNonGuideModeRef=useRef('classic');
       useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
       const modeSelectRef=useRef<HTMLDivElement | null>(null);
+      // The preset switcher's wrapper, and it exists for exactly one reason: the ⚙ click-outside
+      // handler below has to treat a press on that trigger as "inside", the same way it treats the
+      // mode selector's. components/PresetSwitcher makes the prop REQUIRED so this cannot be
+      // forgotten at a call site; the two refs are separate because the two controls are separate
+      // regions — a single "any select in the bar" ref would have to be an array or a class lookup,
+      // and neither is clearer than naming the two things that exist.
+      const presetSelectRef=useRef<HTMLDivElement | null>(null);
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
       // ⚙ Settings store (Stage C, Step 5a). ★ THE COUNT, AND WHICH SET IT COUNTS — three different
       // numbers live in this area and conflating them is how the old comments went wrong:
@@ -543,7 +551,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // callback is ALSO invoked directly from the mode-change layout effect below, where there is
       // no observer entry to read, so a rect read is needed regardless — and two sources for one
       // number is exactly the drift the ONE-writer note above exists to prevent.
-      const htpStickyBarRef=useRef<HTMLDivElement | null>(null);
+      // HTMLElement, not HTMLDivElement: the bar is a <header> since the wordmark came out (the
+      // banner landmark now carries the naming job the visible <h1> used to — see the bar's markup).
+      // Nothing else about this changes: getBoundingClientRect and writeShade are both HTMLElement.
+      const htpStickyBarRef=useRef<HTMLElement | null>(null);
       const syncBarHeight=useCallback(()=>{const el=htpStickyBarRef.current;if(el)document.documentElement.style.setProperty('--bar-h',`${el.getBoundingClientRect().height}px`);},[]);
       useLayoutEffect(()=>{
         const el=htpStickyBarRef.current;if(!el)return;
@@ -1411,13 +1422,19 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // or writes an element that only exists while the panel is open, so all of them belong to
       // the component that owns that DOM.
       // Settings popover click-outside handler. Closes settings when the user taps
-      // anywhere outside three regions: the gear button itself (settingsRef), the
-      // popover content (settingsPopoverRef), and the mode CustomSelect wrapper
-      // (modeSelectRef). The mode CustomSelect exclusion is what lets the user open
-      // and pick from the mode dropdown without the settings popover auto-closing
-      // on the same tap — taps inside the mode trigger or its open dropdown panel
-      // are inside modeSelectRef's subtree and therefore "inside" for this check.
-      useEffect(()=>{if(!settingsOpen)return;const h=(e: MouseEvent | TouchEvent)=>{const target=e.target as Element | null;const inBtn=settingsRef.current&&settingsRef.current.contains(target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(target);const inSel=modeSelectRef.current&&modeSelectRef.current.contains(target);
+      // anywhere outside FOUR regions: the gear button itself (settingsRef), the
+      // popover content (settingsPopoverRef), and the two CustomSelect wrappers in
+      // the bar — mode (modeSelectRef) and preset (presetSelectRef). The select
+      // exclusions are what let the user open and pick from either dropdown without
+      // the settings popover auto-closing on the same tap — taps inside a trigger or
+      // its open dropdown panel are inside that wrapper's subtree and therefore
+      // "inside" for this check.
+      // ⚠ THE PRESET ONE IS NOT DECORATIVE SYMMETRY. Its trigger sits in the bar the ⚙ panel hangs
+      // off, so without this clause the FIRST press on it would close the panel and the menu it
+      // opened would be sitting over a bar that had just changed under the finger — the exact
+      // failure the mode exclusion was added for. components/PresetSwitcher makes its wrapperRef a
+      // required prop so a future mount cannot skip this line; tests/topBar.dom pins the behaviour.
+      useEffect(()=>{if(!settingsOpen)return;const h=(e: MouseEvent | TouchEvent)=>{const target=e.target as Element | null;const inBtn=settingsRef.current&&settingsRef.current.contains(target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(target);const inSel=(modeSelectRef.current&&modeSelectRef.current.contains(target))||(presetSelectRef.current&&presetSelectRef.current.contains(target));
         // Mousedown on the browser scrollbar registers e.target as <html> on Windows. Ignore that
         // case so dragging the scrollbar doesn't close the popover.
         const onScrollbar=target===document.documentElement||target===document.body;
@@ -1565,6 +1582,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // history in the persisted store, making Full Reset permanent. Runs BEFORE the remount-key bumps
         // below, so the continuous modes re-hydrate from the now-empty store (blank stats).
         resetProgress();
+        // ⚠ AND, IN AN AMNESIC PRESET, THE PARKED COPY TOO. resetProgress() writes through the
+        // progress store, which while amnesic points at the SESSION copy — so on its own it would
+        // leave the permanent stats sitting untouched behind the session, and turning Amnesic off
+        // afterwards would RESURRECT stats the player had just destroyed. Full Reset is the one
+        // control that means "everything, gone"; an erase cannot contaminate anything, so it is
+        // outside the "nothing writes the permanent stats while amnesic" rule rather than an
+        // exception to it. The argument in full is at store/amnesic's discardParkedStats.
+        if (selectAmnesic(usePresets.getState())) discardParkedStats(usePresets.getState().activeId);
         // Per-mode setup (Flash speed, Blitz/AoX config, Deduction sub-type, the stat-visibility
         // toggles) → launch defaults. Runs BEFORE the remount-key bumps so the modes re-read the
         // now-default prefs. The store holds no "last mode" and never has — WHICH mode you were on
@@ -1668,6 +1693,60 @@ import BlitzMode from './modes/BlitzMode.jsx'
               regardless — rotating can't pause it, so Updating is the truthful screen). */}
           {landscapeBlocked?<RotateOverlay/>:null}
           {updating?<BootOverlay updating/>:null}
+        {/* ★★ THE BAR'S WIDTH BUDGET, MEASURED — and it starts as a BUG REPORT, because the bar
+            this rebuild replaced did not fit. Numbers below are from a real layout engine (headless
+            Chromium, the dev build) at 360×800, the narrowest-and-tallest common Android phone;
+            the root font there resolves to 15.6px (index.css clamps it to
+            `min(0.95rem + 0.4vw, 1.95vh)`, so it grows with HEIGHT as much as width — which is why
+            the phones that break this line are narrow AND tall, never simply narrow).
+
+            WHAT SHIPPED (three controls, wordmark included) — content box 328.81px, content
+            341.69px, i.e. 12.88px of OVERFLOW:
+                logo 24.00 + gap 7.80 + wordmark 135.05          = 166.84
+                gap 7.80
+                ⚙ 40.25 + gap 7.80 + mode 119.00                 = 167.05
+            Nothing truncated because nothing may shrink (both groups are shrink-0, deliberately —
+            see the RIGHT group's note); it simply spilled, leaving the mode selector 2.72px from
+            the screen edge against a 15.59px gutter on the left. That asymmetry WAS the visible
+            symptom, and it is why "just add a fourth control" was never an option.
+
+            WHAT THIS ROW COSTS NOW (four controls, no wordmark) — 306.11px of 328.81px, so 22.70px
+            of SLACK, scrollWidth == clientWidth:
+                logo 24.00 + gap 5.84 + preset 117.03            = 146.88
+                slack (justify-between puts it HERE, between the two groups)
+                mode 107.30 + gap 5.84 + ⚙ 40.25                 = 153.39
+            The ⚙'s right edge lands at 344.41 — 15.59px from the screen edge, matching the left
+            gutter to the pixel, which is the same fact as "it fits" stated so a human can see it.
+
+            THE THREE THINGS THAT PAID FOR IT, in order of how much they gave:
+              1. the wordmark, −135.05px (the owner's call, and the a11y cost of it is handled at
+                 the <h1> below — that note is not optional reading);
+              2. the mode selector's pr-9 → pr-6, −11.70px (the chevron is `absolute right-2` and
+                 ~7px wide, so pr-9 was reserving ~20px of clearance for a glyph that needs ~8);
+              3. gap-2 → gap-1.5 on all three gaps, −5.85px.
+            Spent: the preset switcher, +117.03px (components/PresetSwitcher's PRESET_NAME_COL is
+            the constant that fixes that width, and MAX_PRESET_NAME is pinned to it).
+
+            ⚠ THE BUDGET IS STATED AT 360×800, BUT IT IS NOT THE WORST CASE — the root font grows
+            with viewport height, so a 360-wide phone that is TALLER is tighter, not roomier. The
+            ceiling for any 360-wide device is 16.64px (the `0.95rem + 0.4vw` term caps there and
+            `1.95vh` overtakes it at ~853px of height), and at 360×900 the same row measures 324.51
+            of 326.75 — 2.24px of slack, still no overflow. So the fit holds for EVERY 360-wide
+            viewport at any height, with the thinnest margin at the tall end. Cut 2 or 3 above and
+            that margin goes negative again; tests/topBar.dom guards both as class reads, which is
+            the most a jsdom suite can do about a number no jsdom suite can compute.
+            ⚠ AND CHROMIUM IS NOT AN IPHONE. Glyph advances differ, the system UI stack differs, and
+            ONLY THE OWNER'S DEVICE can confirm the real thing. What is claimed here is that the
+            arithmetic is no longer guesswork, not that the phone has agreed.
+
+            ⚠ --bar-h IS UNCHANGED BY ALL OF THIS, and that was checked rather than assumed: the
+            resting bar measures 56.594px before and after, byte-identical, because the row's height
+            has always been set by the pill controls (py-2 + text-sm + 1px borders = 37.09px) and
+            never by the 19.5px wordmark that sat beside them. So index.css's hand-written
+            placeholder `:root{--bar-h:57px}` is still right and MUST NOT be touched. If a later
+            edit changes the bar's resting height AT ALL, that placeholder has to move with it or
+            every cold start jumps by the difference before the ResizeObserver catches up — that
+            exact bug has shipped once. The seven readers are listed at syncBarHeight above. */}
         {/* Bar (position:fixed): the bar is a CHROME-STYLE fixed element above
             everything — explicitly positioned at the viewport top so iOS PWA recognizes
             it as chrome UI and live-samples its bg-(--bg1) (theme-aware) for the
@@ -1676,7 +1755,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
             below the bar — in EVERY mode since round 13, the guide included.
             syncBarHeight elsewhere in App writes the bar's fractional rect height to --bar-h.
             Full width (no max-w) so theme bg + elevation shadow span edge-to-edge on
-            screens wider than 480px; inner max-w-[30rem] wrapper holds the title row.
+            screens wider than 480px; inner max-w-[30rem] wrapper holds the control row (it held
+            the TITLE row until the wordmark came out — the budget block above says what replaced
+            it, the <h1> below says what the name became).
             elev-shadow-down is UNCONDITIONAL — the bar is always this screen's top boundary, and
             how strongly it says so is the 0…1 --shade the edge effect writes onto this element
             (0 at rest, ramping to full over the first --fade-h of scroll). The class used to be
@@ -1685,8 +1766,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
             HtP-only bar pb-2.5: absorbs half (10px) of the 20px gap that sits between the title
             row and the first GuidePage panel. That gap used to be one mt-5 on the guide's
             wrapper; GuidePage's own root now carries the matching mt-2.5 instead, so the total
-            stays 20px — but the visual "lock line" is centered between title row and first panel
-            rather than sitting right at the title row's bottom edge. It is a GUIDE number, not an
+            stays 20px — but the visual "lock line" is centered between control row and first panel
+            rather than sitting right at the control row's bottom edge. It is a GUIDE number, not an
             app-wide one: the game modes open on StatPanel's own mt-4 and Lookup on an mt-5
             wrapper, neither of which this pb-2.5 applies to.
             ⚠ The SPACE in `pt-5 ${` is REQUIRED — Tailwind v4's source scanner silently drops a
@@ -1694,11 +1775,35 @@ import BlitzMode from './modes/BlitzMode.jsx'
             its pt-5 (20px) top padding and the whole site sat ~20px too high. Don't remove the
             space — tests/classGlueGuard.test.js now fails the suite on any glued class site.
             (Calendar Game layout bug-fix, 2026-06-01.) */}
-        <div ref={htpStickyBarRef} style={{position:'fixed',top:0,left:0,right:0,zIndex:30}} className={`htp-sticky-bar elev-shadow-down bg-(--bg1) w-full pt-5 ${mode==="guide"?" pb-2.5":""}`}>
+        <header ref={htpStickyBarRef} style={{position:'fixed',top:0,left:0,right:0,zIndex:30}} className={`htp-sticky-bar elev-shadow-down bg-(--bg1) w-full pt-5 ${mode==="guide"?" pb-2.5":""}`}>
           <div className="mx-auto px-4 w-full max-w-[30rem] relative">
-            <div className="flex items-center justify-between gap-2">
-              {/* header left: title */}
-              <div className="flex items-center gap-2 shrink-0">
+            {/* ★★ THE APP'S NAME, AND THE ONLY COPY OF IT LEFT ON SCREEN. The visible "Calendar
+                Game" wordmark was deleted from this row (owner: it was "taking up a lot of valuable
+                real estate" — 135.05px of a 328.81px line at 360px, measured, more than a third of
+                the bar for a name the player already knows). But it was ALSO the page's only
+                heading, and W5Logo beside it is deliberately aria-hidden BECAUSE the heading carried
+                the name — so deleting it outright would have left the whole app unlabelled to
+                assistive technology, with a decorative glyph where its name used to be.
+                So the name stays, twice over, and neither half is optional:
+                  • THIS <h1>, sr-only. Same text, same role, same accessible name, so a screen
+                    reader still opens on "Calendar Game" and every getByRole('heading') in the suite
+                    still means what it meant. It paints nothing.
+                  • THE <header> ABOVE, which makes the bar a BANNER landmark — the structural half.
+                    A lone visually-hidden heading is the cheap version of this fix and it is not
+                    enough: landmark navigation is how a screen-reader user reaches site chrome, and
+                    the bar is now four unlabelled-looking controls with no visible title over them.
+                ⚠ AND BECAUSE THIS IS INVISIBLE, THE SUITE MUST NOT LEAN ON IT AS IF IT WERE NOT.
+                Five sites used to tap or point at this heading as "somewhere on screen that isn't
+                the ⚙ panel"; a sr-only element would have kept every one of them GREEN while
+                testing a target no finger can reach. They now use something visible instead (the
+                bar itself, or the Mode button) — tests/helpers/settingsPanel's outsideTarget,
+                tests/app-mount, tests/persistence and tests/presetSwitch. tests/topBar.dom pins the
+                honest version of the claim: the heading exists, it is sr-only, and NO visible node
+                in the bar renders the words. */}
+            <h1 className="sr-only">Calendar Game</h1>
+            <div className="flex items-center justify-between gap-1.5">
+              {/* LEFT: the mark, then the preset. */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Dot Layout). The app icon
                     IS that 7-dot grid, coordinate for coordinate, so turning the input and leaving
                     the mark upright would break the very claim How-to-Play makes about them. This
@@ -1711,9 +1816,47 @@ import BlitzMode from './modes/BlitzMode.jsx'
                     reading the store itself: the default IS the fixed brand mark, and a caller has
                     to ask for the player's. lib/dotLayout's DOT_MARK_ROTATION states the rest. */}
                 <W5Logo className="shrink-0" dotOrientation={dotOrientation} />
-                <h1 className="text-xl font-semibold leading-none shrink-0">Calendar Game</h1>
+                {/* THE PRESET SWITCHER, standing exactly where the wordmark stood — the owner's
+                    layout, and the trade the wordmark's real estate paid for: a name you already
+                    know, replaced by the one fact the bar could not otherwise tell you (which
+                    preset the numbers on screen belong to).
+                    It is a CustomSelect, so it inherits the mode selector's press-drag gesture and
+                    its portaled panel wholesale; components/PresetSwitcher argues why reuse is a
+                    hard requirement rather than a preference, and why its name cell is a fixed
+                    width instead of shrink-to-fit like the mode selector's. wrapperRef is REQUIRED
+                    there and feeds the ⚙ click-outside exclusion above — see that handler. */}
+                <PresetSwitcher wrapperRef={presetSelectRef} />
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              {/* RIGHT: the mode selector, then the ⚙ at the far edge. The gear moved from the
+                  INSIDE of this pair to the OUTSIDE of it (owner's layout: gear far right). Nothing
+                  else about the pair changed — and note what the swap does NOT disturb: the ⚙ panel
+                  is `absolute left-4 right-4 top-full` against the wrapper two lines up, never
+                  against the gear, so it hangs in exactly the same place whichever end its button
+                  sits at. The corner UpdateDot rides inside the button's own padding
+                  ([data-update-dot="corner"] is inset .21em), so pushing the button to the row's
+                  right edge cannot push the badge off it. */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* mode selector */}
+                {/* Mode CustomSelect. Replaced the original native <select> as part of the
+                    site-wide CustomSelect rollout that fixed iOS Safari's native picker
+                    auto-close bug — see the CustomSelect component for full context.
+                    wrapperRef={modeSelectRef} so the existing settings click-outside handler
+                    keeps treating taps inside the mode dropdown the same way it treated taps
+                    on the original <select>. showChevron renders the same ▲▼ indicator.
+                    The menu always opens DOWNWARD, with no prop and no longer any flip logic to
+                    say so (Q8, round 11 deleted round-8's auto-flip): the trigger sits IN the bar
+                    the flip measured the space above against, so that space was structurally
+                    negative and the branch was unreachable. This trigger is also WHY the panel can
+                    be viewport-fixed and measured once per open — fixed chrome is the one place no
+                    scroller can move it out from under the panel (see the caller contract at the
+                    top of components/CustomSelect).
+                    ⚠ pr-6, NOT pr-9 — one of the two cuts that paid for the fourth control (the
+                    budget block above the bar has the arithmetic). The chevron is `absolute right-2`
+                    and ~7px wide in both selects, so the glyph does not move: pr-9 was reserving
+                    ~20px of clearance between the label and a glyph that needs ~8. pr-6 is what the
+                    preset switcher beside it already wears, so the two now match by construction
+                    instead of by coincidence. */}
+                <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{switchMode(v);setSettingsOpen(false);}} options={MODE_LABELS} ariaLabel="Mode" showChevron pressDrag className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left"/>
                 {/* gear settings button */}
                 <div className="relative" ref={settingsRef}>
                   {/* C2: the ⚙ is a press-drag trigger — pointerdown OPENS the panel so you can drag straight
@@ -1736,21 +1879,6 @@ import BlitzMode from './modes/BlitzMode.jsx'
                       name this button has, its visible content being a bare glyph. */}
                   <button type="button" data-select-trigger aria-controls={settingsOpen?"settings-popover":undefined} onPointerDown={e=>{if(!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;toggleSettings();}} onClick={()=>toggleSettings()} className={`relative px-2.5 py-2 rounded-xl text-sm border ${settingsOpen?"btn-solid border-transparent":`panel text-(--tx-100-80) ${settingsModified?" gear-modified":""}`}`} aria-label={(()=>{const parts=[settingsModified?"modified":"",gearDot?"update":""].filter(Boolean);return parts.length?`Settings (${parts.join(", ")})`:"Settings";})()}>⚙<UpdateDot placement="corner" lit={gearDot}/></button>
                 </div>
-                {/* mode selector */}
-                {/* Mode CustomSelect. Replaced the original native <select> as part of the
-                    site-wide CustomSelect rollout that fixed iOS Safari's native picker
-                    auto-close bug — see the CustomSelect component for full context.
-                    wrapperRef={modeSelectRef} so the existing settings click-outside handler
-                    keeps treating taps inside the mode dropdown the same way it treated taps
-                    on the original <select>. showChevron renders the same ▲▼ indicator.
-                    The menu always opens DOWNWARD, with no prop and no longer any flip logic to
-                    say so (Q8, round 11 deleted round-8's auto-flip): the trigger sits IN the bar
-                    the flip measured the space above against, so that space was structurally
-                    negative and the branch was unreachable. This trigger is also WHY the panel can
-                    be viewport-fixed and measured once per open — fixed chrome is the one place no
-                    scroller can move it out from under the panel (see the caller contract at the
-                    top of components/CustomSelect). */}
-                <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{switchMode(v);setSettingsOpen(false);}} options={MODE_LABELS} ariaLabel="Mode" showChevron pressDrag className="panel rounded-xl px-2.5 py-2 pr-9 text-sm focus:outline-hidden focus-ring text-left"/>
               </div>
             </div>
             {/* ⚙ THE SETTINGS PANEL, at the slot its markup used to occupy inline. Three things
@@ -1784,7 +1912,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               onRetireChangelogDot={retireChangelogDot}
             />}
           </div>
-        </div>
+        </header>
         {/* THE app scroll container, and since round 13 there is no "except in guide mode" left in
             this comment: position:absolute inset:0 with padding-top:var(--bar-h) so content starts
             immediately below the bar; overscroll-contain keeps rubber-band bounce LOCAL to this

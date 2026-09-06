@@ -637,6 +637,10 @@ export default function GuidePage({
             the page coasts to a stop behind it, and you can open it mid-glide.
           </li>
           <li>
+            So does the preset control on the other side of the bar, which is the same kind of list
+            and behaves the same way — see <b>Presets</b> below.
+          </li>
+          <li>
             So does the Settings gear (⚙): press it and drag straight into the panel — it
             auto-scrolls when you drag near its top or bottom edge — then release on a setting to
             change it; the panel closes and the change applies. Releasing on a Year Range field
@@ -831,6 +835,69 @@ export default function GuidePage({
             <b>MoX</b> — without Allow Mistakes, opening Show Codes ends the run.
           </li>
         </UL>
+      </GuideSection>
+      {/* PRESETS — Rule 4's half of the top-bar rebuild. The bar put a NEW control on screen (the
+          preset switcher, standing where the "Calendar Game" wordmark used to) and a new marker
+          inside it (the "A"), and neither could be documented honestly before the bar that hosts
+          them existed — which is why components/PresetSwitcher deliberately left this section to
+          the change that mounted it.
+          ★ WHAT THIS SECTION MAY NOT DO IS PROMISE A SECOND PRESET. There is no create, rename or
+          delete anywhere in the UI yet: the registry ships with exactly one preset and the only
+          things that make a second one are code. So the prose describes the control that EXISTS —
+          what it shows, what picking a row does, what the "A" means — and says plainly that the
+          list has one row today. ⚠ THE CHANGE THAT ADDS A CREATE/DELETE UI OWNS THE SENTENCE THAT
+          SAYS SO; until then, anything here about making presets would be a promise the app cannot
+          keep. Sources: the control = components/PresetSwitcher (its ariaLabel, its options list,
+          the ", amnesic" sr-only sibling); what a switch actually swaps = store/presetControl's
+          PER_PRESET_STORES, all four of them; the screen clear = main.tsx's registry subscription
+          calling remountScreens. */}
+      <GuideSection
+        id="presets"
+        title="Presets"
+        openId={open}
+        onToggle={toggle}
+        durationMs={motionMs}
+      >
+        <Lead>
+          Everything the app remembers belongs to a <b>preset</b>, and the control at the top left —
+          beside the logo, where the app&apos;s name used to be — says which one you are on.
+        </Lead>
+        <p>A preset is a complete, separate copy of the app. Each one keeps its own:</p>
+        <UL>
+          <li>stats, all-time bests, and Lookup history;</li>
+          <li>per-mode setup — timers, run length, the Deduction sub-type, the stat toggles;</li>
+          <li>every ⚙ setting, theme included;</li>
+          <li>saved defaults.</li>
+        </UL>
+        <p>
+          Switching swaps all of that at once. Nothing is merged and nothing is thrown away — the
+          preset you left is exactly where you left it when you come back.
+        </p>
+        <Subhead>Using it</Subhead>
+        <UL>
+          <li>
+            Tap it for the list, then tap a preset to switch. Press and drag down to a row and
+            release, exactly like the mode selector beside it — and the same five things close it
+            (choosing, pressing outside, <Kbd>Esc</Kbd>, <Kbd>Tab</Kbd>, and your device&apos;s
+            Back).
+          </li>
+          <li>
+            A preset with <b>Amnesic</b> on (⚙ &rarr; Stats) carries a small <b>A</b> at the right
+            of its name in the list, so you can see which ones forget before you switch into one.
+          </li>
+          <li>
+            Switching clears the screens, including a Blitz round or an MoX run in progress — every
+            screen has to be re-read from the copy of your stats that is now live.
+          </li>
+          <li>
+            A long name is cut short with an … so the bar can never be pushed wider than the screen.
+          </li>
+        </UL>
+        <p>
+          There is no way to make a second preset from inside the app yet, so today the list has one
+          row in it. The control still earns its place: it names the copy of the app the numbers on
+          screen belong to.
+        </p>
       </GuideSection>
       <GuideSection id="stats" title="Stats" openId={open} onToggle={toggle} durationMs={motionMs}>
         <Lead>What each stat means, how times are measured, and hiding stats.</Lead>
@@ -1175,7 +1242,16 @@ export default function GuidePage({
           every KEY (the arrow contract, Enter/Esc, the letter map) and never restates one — this
           section is about how the app is MARKED UP and what it does with focus and motion.
           ★ EVERY CLAIM BELOW WAS READ OUT OF THE CODE, and nothing here describes what a screen
-          reader SAYS. Sources, in order: the named groups = PillGroup's role/aria-label (all six
+          reader SAYS. Sources, in order: the NAME-AND-BANNER paragraph = src/main.tsx's bar markup
+          — the sr-only <h1> and the <header> element that makes the bar a banner landmark, added
+          when the visible wordmark was removed (that markup argues why one without the other is not
+          the fix, and tests/topBar.dom pins both); the preset control's two lines = the ariaLabel
+          and the ", amnesic" sr-only sibling in components/PresetSwitcher, plus CustomSelect's
+          open-state key handler for "the same keys do the same things"; its GAP line = the same
+          handler's closed branch ("NO key opens the dropdown from the trigger") together with
+          main.tsx's global Tab binding, which resolves modeSelectRef and nothing else — so a
+          keyboard genuinely cannot open the preset list, and that is a thing the code does not do
+          rather than a thing not yet written about; the named groups = PillGroup's role/aria-label (all six
           pickers pass a `label`; the Theme block's name follows Use System Settings, which is why
           the wording is "the setting you're changing" and not a fixed list); the four switches +
           both year boxes = their aria-labels in components/SettingsPanel; the gear = its computed
@@ -1236,6 +1312,14 @@ export default function GuidePage({
           Wording varies between VoiceOver, TalkBack, NVDA and the rest, and the site hasn&apos;t
           been tested against each of them.
         </p>
+        <p>
+          The app&apos;s name is not printed anywhere on screen — the bar at the top is the logo,
+          the preset you&apos;re on, the mode, and ⚙. It is still the page&apos;s heading, carried
+          by a hidden line in that bar, and the bar itself is marked as the page&apos;s banner. So
+          the app still says &quot;Calendar Game&quot; to a screen reader, and its top-of-page
+          controls are reachable as one named region rather than as four loose buttons under a
+          picture.
+        </p>
         <Subhead>Controls that name themselves</Subhead>
         <UL>
           <li>
@@ -1253,6 +1337,11 @@ export default function GuidePage({
           <li>
             The ⚙ button says what&apos;s behind it: that a setting has been changed, and that an
             update is waiting, whenever either is true.
+          </li>
+          <li>
+            The preset control names itself Preset, and every preset in its list reads its own name.
+            A preset that forgets reads its name followed by &quot;amnesic&quot;, so the small{' '}
+            <b>A</b> beside it isn&apos;t the only place that fact is said.
           </li>
           <li>
             In the seven-dot answer layout every dot carries its weekday name, so the dots offer the
@@ -1292,6 +1381,10 @@ export default function GuidePage({
             <Kbd>Esc</Kbd> or <Kbd>Tab</Kbd> closes it. While it&apos;s closed, <Kbd>Tab</Kbd> is
             the only key that opens it.
           </li>
+          <li>
+            The preset control is the same kind of list, and once it&apos;s open the same keys do
+            the same things.
+          </li>
         </UL>
         <Subhead>Motion</Subhead>
         <p>
@@ -1310,6 +1403,11 @@ export default function GuidePage({
             which button the keyboard is on. Inside a ⚙ picker the selection stands in for one —
             landing on an option chooses it, so the option you&apos;re on is the lit one — but
             inside the popups above, <Kbd>Tab</Kbd> moves with nothing drawn to say where it went.
+          </li>
+          <li>
+            The preset list can only be opened by tapping or clicking it. <Kbd>Tab</Kbd> opens the
+            mode selector from anywhere in the app, and no key opens this one — not even with the
+            control itself selected.
           </li>
           <li>
             Pinch-to-zoom is switched off deliberately, to keep the app feeling like an app rather
@@ -1491,12 +1589,12 @@ export default function GuidePage({
           locked in Deduction alongside Input, for the same reason.
         </p>
         <p>
-          <b>The logo turns with it.</b> The mark beside the title at the top of every screen{' '}
-          <i>is</i> this seven-dot layout, so choosing Rows turns that mark too. What can't follow
-          are the pictures your device saved earlier: the home-screen icon, the launch screen and
-          the link preview image are fixed image files, so those keep the upright logo whatever you
-          choose here. The full-screen launch screen and the <b>Rotate back to portrait</b> screen
-          keep the upright mark to match them.
+          <b>The logo turns with it.</b> The mark at the top left of every screen <i>is</i> this
+          seven-dot layout, so choosing Rows turns that mark too. What can't follow are the pictures
+          your device saved earlier: the home-screen icon, the launch screen and the link preview
+          image are fixed image files, so those keep the upright logo whatever you choose here. The
+          full-screen launch screen and the <b>Rotate back to portrait</b> screen keep the upright
+          mark to match them.
         </p>
       </GuideSection>
       <GuideSection
@@ -1813,9 +1911,8 @@ export default function GuidePage({
           <li>
             <b>It is not a menu setting.</b> It belongs to the preset, the way its name does. Save
             Defaults does not capture it, Reset Settings does not restore it, and it never lights
-            the ⚙ button&apos;s &quot;modified&quot; line. Full Reset inside an amnesic preset
-            resets the session and leaves your parked stats alone, for the same reason everything
-            else does.
+            the ⚙ button&apos;s &quot;modified&quot; line. Full Reset still clears everything,
+            though — see below.
           </li>
         </UL>
         <Subhead>What &quot;closed&quot; honestly means</Subhead>
@@ -2011,9 +2108,10 @@ export default function GuidePage({
           <li>
             Wipes all stats, all-time bests (Blitz and MoX), Lookup history, and in-progress rounds
             and runs. Your stats, all-time bests, and Lookup history are saved on this device, so
-            Full Reset clears that saved copy permanently. In a preset with <b>Amnesic</b> on it
-            clears the session&apos;s stats instead and leaves your parked ones exactly as they are:
-            while Amnesic is on nothing writes to your saved stats, and that includes this button.
+            Full Reset clears that saved copy permanently. That is true in a preset with{' '}
+            <b>Amnesic</b> on as well: it clears both the session you are in and the saved stats
+            waiting behind it, so nothing comes back when you turn Amnesic off again. Amnesic stops
+            your play from being recorded; it does not shield anything from a reset you asked for.
           </li>
           <li>
             Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode

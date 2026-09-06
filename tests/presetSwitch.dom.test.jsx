@@ -308,15 +308,20 @@ describe('a browser that refuses localStorage', () => {
     document.body.appendChild(root)
     render(<FreshApp />)
 
-    expect(screen.getByRole('heading', { name: 'Calendar Game' })).toBeInTheDocument()
+    // "Still on screen" is asked of a VISIBLE control, not of the app's heading — since the
+    // top-bar rebuild that heading is sr-only, so it cannot distinguish a painted app from a
+    // rendered-but-blank one. The preset switcher is the apt one here: it is the control this
+    // whole file is about, and it re-reads the registry on every switch.
+    const switcher = () => screen.getByRole('button', { name: 'Preset' })
+    expect(switcher()).toBeInTheDocument()
     // Every per-preset store is memory-only for this session, so persist never attached and
     // presetControl's `store.persist?.rehydrate()` guard is the only thing between a switch and a
     // TypeError. The switch still has to work: the registry lives in memory just fine.
     const p2 = control.createPreset()
     expect(() => act(() => control.switchPreset(p2.id))).not.toThrow()
-    expect(screen.getByRole('heading', { name: 'Calendar Game' })).toBeInTheDocument()
+    expect(switcher()).toBeInTheDocument()
     expect(() => act(() => control.deletePreset(p2.id))).not.toThrow()
-    expect(screen.getByRole('heading', { name: 'Calendar Game' })).toBeInTheDocument()
+    expect(switcher()).toBeInTheDocument()
   })
 })
 

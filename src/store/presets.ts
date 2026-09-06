@@ -101,7 +101,24 @@ export type PresetRegistryValues = {
   nextId: number
 }
 
-export const MAX_PRESET_NAME = 24
+// ★ HOW LONG A PRESET NAME MAY BE, and the number is DERIVED rather than picked. It was 24 while
+// nothing rendered a name; the control that renders them (components/PresetSwitcher) lives in the
+// fixed top bar, where the space the "Calendar Game" wordmark vacates is ~111-122px at a 360px
+// phone — about SIX EM of text at the bar's text-sm tier, and an average mixed-case character in
+// the system UI stack advances ≈0.5em, so twelve characters. The full arithmetic, the fluid-root
+// reason the cell is measured in `em`, and the ⚠ that none of it can be verified without the
+// owner's iPhone are all written out at PRESET_NAME_COL in that file.
+// ⚠ IT IS HALF OF A PAIR AND MUST MOVE WITH THE OTHER HALF. This cap bounds CHARACTERS; the
+// switcher's fixed cell plus `truncate` bound PIXELS, which a character cap cannot do in a
+// proportional font (twelve W's are nearly twice twelve i's). Widen one without the other and the
+// promise breaks in one of two directions: raise this alone and names become permanently unreadable
+// behind an ellipsis, widen the cell alone and the bar overflows on the narrowest phone.
+// ⚠ LOWERING IT IS RETROACTIVE, BY DESIGN. normalizePresetName slices on every read, so a name
+// saved under an older, longer cap is shortened the next time the registry hydrates rather than
+// being kept as a value the UI cannot show. That is the honest behaviour — the alternative is a
+// stored name no screen in the app can display — and it costs nothing today: presets shipped with
+// no naming UI at all, so the only names in existence are `defaultPresetName`'s ("Preset 10" = 9).
+export const MAX_PRESET_NAME = 12
 
 export const defaultPresetName = (id: number): string => `Preset ${id}`
 

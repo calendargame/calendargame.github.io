@@ -419,15 +419,18 @@ describe('turning Amnesic on with the app running', () => {
   })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════
-  // Full Reset is a WRITE to the stats, so the invariant covers it too: inside an amnesic preset it
-  // resets the session and leaves the parked copy alone. The How-to-Play section says so out loud,
-  // because it is the one place the two features visibly disagree.
-  it('Full Reset inside an amnesic preset leaves the parked stats alone', () => {
+  // ★ FULL RESET CLEARS THE PARKED COPY TOO, and this case exists because the opposite shipped
+  // first and the owner caught it: "doesn't full reset reset everything that amnesic does and
+  // more?" It does. Leaving the parked stats alone made the wipe RESURRECTABLE — Full Reset, then
+  // turn Amnesic off, and the destroyed stats came back. The invariant is about CONTAMINATION (a
+  // session's numbers overwriting the real ones); an erase cannot contaminate, so a deliberate
+  // destructive command sits outside it. See store/amnesic's discardParkedStats.
+  it('★ Full Reset inside an amnesic preset clears the PARKED stats too — no resurrection', () => {
     mountApp()
     pinReadableQuestions()
     pressNew()
     playCorrect(3)
-    const before = parked()
+    expect(parked()).not.toBe(null)
 
     setAmnesic(true)
     pressNew()
@@ -436,9 +439,22 @@ describe('turning Amnesic on with the app running', () => {
     tap(screen.getByRole('button', { name: /Full Reset/i }))
     tap(screen.getByRole('button', { name: /Confirm/i }))
 
-    expect(parked()).toBe(before)
+    // The session is blank, as on any preset...
+    expect(statValue('Score')).toBe('0/0')
+    // ...and turning Amnesic off does NOT bring the old numbers back, which is the whole point.
     setAmnesic(false)
-    expect(statValue('Score')).toBe('3/3')
+    expect(statValue('Score')).toBe('0/0')
+  })
+
+  it('Full Reset on a NON-amnesic preset is unchanged — the parked copy is the only copy', () => {
+    mountApp()
+    pinReadableQuestions()
+    pressNew()
+    playCorrect(3)
+    openSettings('key')
+    tap(screen.getByRole('button', { name: /Full Reset/i }))
+    tap(screen.getByRole('button', { name: /Confirm/i }))
+    expect(statValue('Score')).toBe('0/0')
   })
 })
 

@@ -142,6 +142,37 @@ export function discardSessionStats(presetId: number): void {
   }
 }
 
+/**
+ * Throw away one preset's PARKED (permanent) copy of its stats. The counterpart to
+ * discardSessionStats above, and it exists for exactly one caller: Full Reset.
+ *
+ * ⚠⚠ WHY THIS DOES NOT BREAK THE INVARIANT — read this before deleting it, because it looks like a
+ * hole and is not. The invariant is "while a preset is amnesic, nothing writes its permanent
+ * stats", and its PURPOSE is to make cross-contamination impossible: the failure it exists to
+ * prevent is a SESSION'S NUMBERS being written over the real ones (the proven 500-to-4 loss). An
+ * ERASE cannot contaminate anything — there is no wrong data to leak, only removal. So the honest
+ * statement of the rule is "no GAMEPLAY writes the permanent stats", and a deliberate destructive
+ * command sits outside it.
+ *
+ * ★ THE ALTERNATIVE WAS SHIPPED FIRST AND THE OWNER CAUGHT IT. Leaving the parked copy alone made
+ * Full Reset resurrectable: wipe everything, turn amnesic off later, and the old stats come back —
+ * data the player explicitly destroyed, returning. His words: "doesn't full reset reset everything
+ * that amnesic does and more?" It does, and it must, or Full Reset stops being the one control that
+ * means everything is gone.
+ *
+ * ⚠ It is deliberately NOT filtered by AMNESIC_CLEARS. Amnesic forgets a subset; Full Reset is not
+ * a bigger amnesic, it is the whole store — the same payload resetProgress() clears on a normal
+ * preset. Filtering here would leave a Full Reset in an amnesic preset quietly keeping saved
+ * defaults' worth of stats that the same button removes everywhere else.
+ */
+export function discardParkedStats(presetId: number): void {
+  try {
+    window.localStorage.removeItem(statsKey(presetId))
+  } catch {
+    /* storage refused — there is no parked copy to remove */
+  }
+}
+
 // ★ THE SEED, and it is what makes the CLEARS list above mean something. An amnesic preset with no
 // session copy yet — the first read after the switch is flipped, and every read after the app is
 // re-opened — starts from the PARKED permanent payload with the cleared keys REMOVED. The keys

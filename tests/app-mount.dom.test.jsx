@@ -39,8 +39,11 @@ describe('App mounts in the harness (sub-step 0b)', () => {
   it('renders the header and the default Classic mode, mounted exactly once', () => {
     mountApp()
 
-    // Chrome: the title heading.
-    expect(screen.getByRole('heading', { name: 'Calendar Game' })).toBeInTheDocument()
+    // Chrome: the bar. Since the top-bar rebuild the app's name is NOT on screen — the heading
+    // that carries it is sr-only, and tests/topBar.dom is where that fact and the four visible
+    // controls are pinned. What this smoke test wants is "the chrome rendered", so it asks for
+    // the visible thing: the mode selector, which exists in every mode.
+    expect(screen.getByRole('button', { name: 'Mode' })).toBeInTheDocument()
 
     // Classic is the launch mode → the 7 weekday answer buttons are present, exactly once
     // (one App tree, no accidental auto-mount duplicate).

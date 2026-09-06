@@ -278,7 +278,10 @@ describe('storage that refuses does not cost you the app', () => {
   it('the app boots and renders', () => {
     restore = blockStorage()
     mountApp()
-    expect(screen.getByRole('heading', { name: 'Calendar Game' })).toBeInTheDocument()
+    // A VISIBLE piece of chrome, not the app's heading: since the top-bar rebuild that heading is
+    // sr-only, so it would go on proving "it rendered" even if nothing painted (tests/topBar.dom
+    // owns that distinction). The mode selector is on screen in every mode.
+    expect(screen.getByRole('button', { name: 'Mode' })).toBeInTheDocument()
   })
 
   // A payload that is not JSON at all — truncation, tampering, a write cut short by a full disk.

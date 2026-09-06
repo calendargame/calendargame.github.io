@@ -363,10 +363,11 @@ const CLOSE_ROUTES = {
   // Escape, which the panel handles on the document — and deliberately does NOT handle while a
   // text-entry input has focus.
   escape: () => act(() => fireEvent.keyDown(document.body, { key: 'Escape' })),
-  // A tap on the page behind the panel. Defaults to the app's own title, which is a real thing a
-  // finger can land on and is outside all three excluded regions (the gear wrapper, the panel
-  // card, the mode select). Pass `on` for the cases that need a specific target — including
-  // document.documentElement, the Windows scrollbar-drag case that must NOT close it.
+  // A tap on the page behind the panel. Defaults to the bar's own background (outsideTarget
+  // below), which is a real thing a finger can land on and is outside all FOUR excluded regions
+  // (the gear wrapper, the panel card, and the mode and preset selects). Pass `on` for the cases
+  // that need a specific target — including document.documentElement, the Windows scrollbar-drag
+  // case that must NOT close it.
   outside: ({ on } = {}) => tap(on ?? outsideTarget()),
   // Android hardware Back. ⚠ ASYNC — `await closeSettings('back')`. It settles jsdom's history
   // first; see pressBack and the block above it for the trap that makes that necessary. Every
@@ -431,10 +432,24 @@ export const closeSettings = (via = 'gear', opts) =>
 export const OPEN_ROUTE_NAMES = Object.keys(OPEN_ROUTES)
 export const CLOSE_ROUTE_NAMES = Object.keys(CLOSE_ROUTES)
 
-// The default "somewhere else on the page" a tap can land on: the app's own title. A real,
-// visible, non-interactive element outside the gear wrapper, the panel card, the mode select and
+// The default "somewhere else on the page" a tap can land on: THE BAR'S OWN BACKGROUND. A real,
+// visible, non-interactive surface outside the gear wrapper, the panel card, both selects and
 // every modal — which is the definition of "outside" the panel's own rule uses.
-export const outsideTarget = () => screen.getByRole('heading', { name: 'Calendar Game' })
+//
+// ⚠ IT USED TO BE THE <h1> TITLE, AND THAT STOPPED BEING HONEST when the top-bar rebuild removed
+// the visible "Calendar Game" wordmark: the heading survives as an sr-only element (it is the app's
+// only accessible name — see the bar's markup in src/main.tsx), so every tap routed through it
+// would have kept PASSING while aiming at a 1×1 clipped box no finger can land on. The bar element
+// itself is the honest replacement and is not a lesser one: the rebuilt row leaves ~23px of bare
+// bar between the preset switcher and the mode selector at 360px, plus the full-width strip left
+// and right of the 30rem wrapper on anything wider, so this is exactly the surface a real
+// outside-tap lands on. Resolved by the class main.tsx puts on it, the same handle every other
+// bar-reading test in the suite uses.
+export const outsideTarget = () => {
+  const bar = document.querySelector('.htp-sticky-bar')
+  if (!bar) throw new Error('outsideTarget: no .htp-sticky-bar in the document')
+  return bar
+}
 
 // ── Finding the panel ─────────────────────────────────────────────────────────────────────────
 

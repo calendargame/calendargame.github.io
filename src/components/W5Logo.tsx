@@ -4,11 +4,21 @@ import { DOT_MARK_ROTATION, type DotOrientation } from '../lib/dotLayout.js'
 // positions 2 -> 3 -> 6 landing on the circled answer (6 = Saturday), with the rest of the
 // 7-position board as faint dots.
 //
-// Theme-aware: everything is drawn in `currentColor`, so it inherits the title's text color
+// Theme-aware: everything is drawn in `currentColor`, so it inherits the bar's text color
 // and stays legible on all five themes (light-on-dark for dusk/midnight/nebula, dark-on-light
-// for light/parchment) — no per-theme overrides needed. Decorative (aria-hidden); the adjacent
-// <h1> carries the accessible name. The viewBox tightly frames the glyph (drawn in the icon's
-// 512 coordinate space) so it sits at text height without the icon's purple tile/background.
+// for light/parchment) — no per-theme overrides needed. The viewBox tightly frames the glyph
+// (drawn in the icon's 512 coordinate space) so it sits at text height without the icon's purple
+// tile/background.
+//
+// ⚠ DECORATIVE (aria-hidden), AND THAT IS A DEBT THE BAR PAYS ELSEWHERE. It used to read "the
+// adjacent <h1> carries the accessible name", which was true while a visible "Calendar Game"
+// wordmark stood next to it. The top-bar rebuild deleted that wordmark, so for a moment the app's
+// name existed nowhere an assistive technology could reach — this mark is the only thing left at
+// the top left, and it announces nothing. The <h1> still exists, sr-only, inside a <header>/banner
+// landmark; src/main.tsx's markup argues both halves. ⚠ Do NOT "fix" this file by giving the glyph
+// a label instead: it is a picture of the answer trace, not a wordmark, so an aria-label here would
+// put a name on a drawing that does not say one — and it would say it at BOTH call sites, the bar
+// and the rotate-back overlay, where that frame already announces its own caption.
 //
 // ★ IT TURNS WITH THE DOT LAYOUT (Settings → Display → Dot Layout), and that is not decoration
 // for its own sake: the seven board dots below sit on the SAME seven cells the Dots answer input

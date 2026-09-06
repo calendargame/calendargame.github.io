@@ -649,14 +649,18 @@ describe('Settings → Display — radio semantics and the retired theme dropdow
     })
   })
 
-  // The theme CustomSelects are gone; the bar's mode selector is the app's last dropdown.
-  it('the panel holds no dropdown — the mode selector is the only listbox trigger left', () => {
+  // The theme CustomSelects are gone; every dropdown left in the app lives in the BAR, not in
+  // this panel. (It was "the mode selector is the only one" until the top-bar rebuild added the
+  // preset switcher beside it — so the assertion moved from a COUNT of one to the claim it was
+  // always making: none of them is inside the panel card.)
+  it('the panel holds no dropdown — the bar owns every listbox trigger', () => {
     mountPanel()
     const triggers = screen
       .getAllByRole('button', { hidden: true })
       .filter((b) => b.getAttribute('aria-haspopup') === 'listbox')
-    expect(triggers).toHaveLength(1)
-    expect(triggers[0].getAttribute('aria-label')).toBe('Mode')
+    // Document order, which in the bar is left to right: preset, then mode.
+    expect(triggers.map((t) => t.getAttribute('aria-label'))).toEqual(['Preset', 'Mode'])
+    for (const t of triggers) expect(panelEl().contains(t)).toBe(false)
   })
 })
 
