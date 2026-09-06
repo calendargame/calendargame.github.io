@@ -34,7 +34,7 @@ import {
 const btn = (name) => screen.getByRole('button', { name })
 const openPopup = () => act(() => fireEvent.click(footerButton('Save Defaults')))
 const popupTitle = () => screen.queryByText('Save current settings as your defaults?')
-const nField = () => screen.getByRole('textbox', { name: 'AoX Run Length' })
+const nField = () => screen.getByRole('textbox', { name: 'MoX Run Length' })
 const flashSlider = () => screen.getByRole('slider', { name: 'Flash Speed' })
 
 describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
@@ -71,7 +71,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
   })
 
   // ── Q7 round-6: Reset Settings now also restores the 4 mode-screen prefs (Flash speed, both Blitz
-  // timers, AoX run length) — the exact mirror of Save Defaults over the 18-value unit the gear judges.
+  // timers, MoX run length) — the exact mirror of Save Defaults over the 19-value unit the gear judges.
   it('Reset Settings restores the 4 mode-screen prefs to the FACTORY defaults when nothing is saved (non-capturable prefs untouched)', () => {
     const p = useModePrefs.getState()
     p.setFlashMs(800)

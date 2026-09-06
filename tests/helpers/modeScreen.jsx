@@ -92,7 +92,7 @@ export const correctDayName = ({ y, m, d }) => DAY[wday(y, m, d)]
 // ── The stats strip ───────────────────────────────────────────────────────────────────────────
 
 // The six readouts, by the name each cell announces. Save Stats withdraws them all.
-const STAT_LABELS = ['Score', 'Accuracy', 'Streak', 'Last', 'Average', 'Median']
+const STAT_LABELS = ['Score', 'Accuracy', 'Streak', 'Last', 'Mean', 'Median']
 
 // A stat cell is a button holding a label span and a value span — the idiom tests/classic.dom
 // established, and getAllByRole skips the display:none screens, so only the visible mode answers.

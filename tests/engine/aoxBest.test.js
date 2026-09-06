@@ -1,4 +1,4 @@
-// tests/engine/aoxBest.test.js — C2 Part 1: the AoX Best Average/Median reconcile (the COMPONENT
+// tests/engine/aoxBest.test.js — C2 Part 1: the AoX Best Mean/Median reconcile (the COMPONENT
 // wrapper layer the pure-reducer fuzz never sees), tested directly + fuzzed against an independent
 // oracle.
 //
@@ -8,7 +8,7 @@
 // standing stats); every post-completion stats change (a back-browse / retro / live-reversal
 // Override retracting or adding a credit on the ended run) re-fires the same write. So this drives
 // the real wrapper logic — no model, no drift — without the cost of rendering <App/>. The
-// independent oracle: across a session of runs, the Best Average must always equal the MINIMUM
+// independent oracle: across a session of runs, the Best Mean must always equal the MINIMUM
 // average among STANDING runs (recorded, currently holding ≥ n credits, taken at their CURRENT
 // stats), the Best Median the minimum median, and each metric's companion stat + run id must come
 // from the run that set it — computed by a plain ordered min-scan, no reconcile, no floor. A
@@ -127,7 +127,7 @@ describe('aoxBest — standing reconcile (the post-completion protocol)', () => 
 describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
   // Independent oracle: scan the runs in chronological order; among those that RECORDED and
   // currently STAND (good ≥ their n, stats computable), the first to reach a strictly-lower avg
-  // holds the Best Average (+ its own median as avgMed + its run id), likewise for the median.
+  // holds the Best Mean (+ its own median as avgMed + its run id), likewise for the median.
   // A plain ordered min-scan over each run's CURRENT stats — no reconcile, no floor, no snapshot.
   // (calcAvg/calcMed are shared with the driver deliberately: they're independently unit-tested
   // primitives; the logic under test is the reconcile/floor protocol, not the averaging.)

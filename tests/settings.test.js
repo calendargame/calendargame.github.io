@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 
 // settings.test.js — the ⚙ settings store. The store is the structural beachhead
-// for the mode-untangle, so its contract must be locked: (1) the 14 defaults,
+// for the mode-untangle, so its contract must be locked: (1) the 15 defaults,
 // (2) setters accept BOTH a direct value AND a React-style functional updater,
 // (3) resetToFactory restores every default. Persistence (localStorage) is
 // verified in-browser, not here, since jsdom/node localStorage timing differs
@@ -14,11 +14,13 @@ describe('settings store', () => {
     useSettings.getState().resetToFactory()
   })
 
-  it('exposes exactly the 14 documented defaults', () => {
-    expect(Object.keys(SETTINGS_DEFAULTS)).toHaveLength(14)
+  it('exposes exactly the 15 documented defaults', () => {
+    expect(Object.keys(SETTINGS_DEFAULTS)).toHaveLength(15)
     const s = useSettings.getState()
     expect(s.dateFormat).toBe('written-mdy')
     expect(s.inputStyle).toBe('buttons')
+    // Upright — the orientation the app icon, the launch PNGs and every screenshot already show.
+    expect(s.dotOrientation).toBe('columns')
     expect(s.randomFormat).toBe(false) // launches OFF (Round-2): newcomers see ONE consistent format
     expect(s.useJulian).toBe(true)
     expect(s.julianChance).toBe('random')

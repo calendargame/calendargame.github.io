@@ -13,7 +13,7 @@
 // performance.now in lockstep, so the C3a expiry tests fast-forward the per-question clock
 // deliberately with vi.advanceTimersByTime (qSec=1 via the modePrefs store).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
@@ -77,7 +77,7 @@ const visibleText = (text) => {
 // AoX panels also contain "Score" spans). The cell is the label span's PARENT, and its tag is the
 // affordance: StatPanel renders a cell carrying an `fn` as a <button> and one without as a plain
 // <div>. So the scoring trio (Score/Accuracy/Streak) is always <div>s, and a timing cell
-// (Last/Average/Median) is a <button> only while the mode is actually offering the Q8 hide toggle.
+// (Last/Mean/Median) is a <button> only while the mode is actually offering the Q8 hide toggle.
 // Returns null when no such cell is on screen. ONE lookup — the four readers below all used to ask
 // this same question in the same words, three of them with their own copy of the not-found throw.
 function statCell(label) {
@@ -97,6 +97,15 @@ function requireStatCell(label) {
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 function statValue(label) {
   return requireStatCell(label).querySelector('[data-statval]').textContent.trim()
+}
+// Close the round breakdown (the popup an ended strip's tap now opens — sub-group 3C). Used by the
+// Q8 tests, whose subject is the hide toggle: they still tap the strip, and this puts the screen
+// back so the assertions after the tap are about the strip and not about the popup over it.
+const closeBreakdown = () => {
+  const dialog = screen.getByRole('dialog', { name: 'Round breakdown' })
+  act(() => {
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+  })
 }
 // Tap a stat cell (Q8: a timing-trio cell is a button that toggles the visual-only hide). It fires
 // at the cell whether or not it is currently a button, deliberately — that is how a test can show
@@ -1070,7 +1079,7 @@ describe('Blitz — C3a freshness (suddenAmBest blocks fully-reset until wiped)'
   })
 })
 
-// ── Q8: the visual-only timing-stats hide toggle (Last/Average/Median) ───────────────────────
+// ── Q8: the visual-only timing-stats hide toggle (Last/Mean/Median) ───────────────────────
 // Blitz gained a per-mode timing-trio hide toggle that is VISUAL ONLY: it blanks the display but the
 // engine keeps timing (Blitz feeds the engine timingOff:false always). So there is NO "Enable and
 // Reset Stats?" arm — hiding can never desync — and the scoring trio (Score/Accuracy/Streak) stays
@@ -1117,12 +1126,12 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     begin()
     tick(500)
     click(correctName(readDate())) // one solve recorded and shown
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Score')).toBe('1/1')
-    clickStat('Average') // hide the timing trio
+    clickStat('Mean') // hide the timing trio
     // BLANK — C1's "you turned these off, and they ARE still recording" signal.
     expect(statValue('Last')).toBe('')
-    expect(statValue('Average')).toBe('')
+    expect(statValue('Mean')).toBe('')
     expect(statValue('Median')).toBe('')
     // Scoring trio is untoggleable — still visible.
     expect(statValue('Score')).toBe('1/1')
@@ -1131,7 +1140,7 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     // VISUAL ONLY: never the Classic/Flash/Deduction "Enable and Reset Stats?" confirmation.
     expect(screen.queryByText('Enable and Reset Stats?')).toBeNull()
     clickStat('Median') // tapping any timing box re-shows all three
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
   })
 
   it('the engine keeps timing while the trio is hidden — a solve made while hidden appears on re-show', () => {
@@ -1159,15 +1168,15 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     begin() // Per Round (default)
     tick(500)
     click(correctName(readDate()))
-    clickStat('Average') // hide in Per Round
-    expect(statValue('Average')).toBe('') // blank, not a dash (C1)
+    clickStat('Mean') // hide in Per Round
+    expect(statValue('Mean')).toBe('') // blank, not a dash (C1)
     clickText('Reset') // idle unlocks the sub-mode switch
     act(() => fireEvent.click(ctrl('Per Round'))) // → Per Question
     begin()
     tick(500)
     click(correctName(readDate())) // a Per Question solve
     expect(statValue('Score')).toBe('1/1')
-    expect(statValue('Average')).toBe('') // still hidden — the toggle is shared
+    expect(statValue('Mean')).toBe('') // still hidden — the toggle is shared
   })
 
   // Per Round, ended by the round countdown. Also the case that pins the WHOLE strip inert, since
@@ -1181,27 +1190,31 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     begin()
     tick(500)
     click(correctName(readDate())) // one 0.50s solve, round still running
-    expect(statValue('Average')).toBe('') // suppressed mid-round, as ever
-    expect(statIsToggle('Average')).toBe(true) // …and still offering the toggle
+    expect(statValue('Mean')).toBe('') // suppressed mid-round, as ever
+    expect(statIsToggle('Mean')).toBe(true) // …and still offering the toggle
     tick(10000) // the round countdown runs out
     expect(ctrl('Reset')).toBeInTheDocument() // the round is over
     // The ended round is a RESULT READOUT: it shows the times it recorded, hide toggle or not.
     expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
     // Every box, not just the three that changed — nothing on this strip takes a tap any more.
-    for (const label of ['Score', 'Accuracy', 'Streak', 'Last', 'Average', 'Median'])
+    for (const label of ['Score', 'Accuracy', 'Streak', 'Last', 'Mean', 'Median'])
       expect(statIsToggle(label)).toBe(false)
-    clickStat('Average') // and a tap lands on nothing
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    // …and a tap no longer TOGGLES. Since sub-group 3C it opens the round breakdown instead — the
+    // ended strip's one remaining gesture — so the tap is asserted through that, and the times it
+    // was hiding are still on the strip when the popup closes.
+    clickStat('Mean')
+    closeBreakdown()
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     // The pref was MASKED for this screen, never written — the hide is back for the next round.
     expect(useModePrefs.getState().blitzTimingOff).toBe(true)
     clickText('Reset')
-    expect(statIsToggle('Average')).toBe(true)
+    expect(statIsToggle('Mean')).toBe(true)
     begin()
     tick(500)
     click(correctName(readDate()))
-    expect(statValue('Average')).toBe('')
+    expect(statValue('Mean')).toBe('')
   })
 
   // Per Question, ended by a question clock — the other end of the same `timerDone` flag. Allow
@@ -1215,15 +1228,16 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     begin()
     tick(500)
     click(correctName(readDate())) // a 0.50s solve → advances on a fresh 1s clock
-    expect(statValue('Average')).toBe('')
+    expect(statValue('Mean')).toBe('')
     expect(statIsToggle('Last')).toBe(true)
     tick(1100) // that question's clock dies → the round ends
     expect(ctrl('Reset')).toBeInTheDocument()
     expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
-    for (const label of ['Last', 'Average', 'Median']) expect(statIsToggle(label)).toBe(false)
+    for (const label of ['Last', 'Mean', 'Median']) expect(statIsToggle(label)).toBe(false)
     clickStat('Median')
+    closeBreakdown()
     expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
     expect(useModePrefs.getState().blitzTimingOff).toBe(true)
   })
@@ -1238,12 +1252,12 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     begin()
     tick(500)
     click(correctName(readDate())) // one timed solve to have something to show
-    clickStat('Average') // hide MID-ROUND, the state the guard has to unmask
-    expect(statValue('Average')).toBe('')
+    clickStat('Mean') // hide MID-ROUND, the state the guard has to unmask
+    expect(statValue('Mean')).toBe('')
     click(wrongName(readDate())) // wrong → round over
     expect(statValue('Score')).toBe('1/2')
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/) // the round's time is shown regardless
-    expect(statIsToggle('Average')).toBe(false)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/) // the round's time is shown regardless
+    expect(statIsToggle('Mean')).toBe(false)
   })
 })
 

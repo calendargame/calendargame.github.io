@@ -48,7 +48,7 @@ const saveSnapshot = () => {
 // A row's tap-to-type readout (SliderValueEditor display mode) inside a dialog.
 const readout = (dialog, label) => within(dialog).getByRole('button', { name: `Edit ${label}` })
 // The shared card's four row labels, in their fixed order (the parity contract).
-const ROW_LABELS = ['AoX Run Length', 'Flash Speed', 'Blitz Round Timer', 'Blitz Question Timer']
+const ROW_LABELS = ['MoX Run Length', 'Flash Speed', 'Blitz Round Timer', 'Blitz Question Timer']
 const expectRowsInOrder = (dialog) => {
   const els = ROW_LABELS.map((t) => within(dialog).getByText(t))
   for (let i = 1; i < els.length; i++)
@@ -79,7 +79,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
       within(dialog).getByText("These are the factory defaults — you haven't saved your own."),
     ).toBeInTheDocument() // adapted subline
     // The factory values, through the card's own formatters/readouts.
-    expect(readout(dialog, 'AoX Run Length').textContent).toBe('10')
+    expect(readout(dialog, 'MoX Run Length').textContent).toBe('10')
     expect(readout(dialog, 'Flash Speed').textContent).toBe('2.0s')
     expect(readout(dialog, 'Blitz Round Timer').textContent).toBe('1m 0s')
     expect(readout(dialog, 'Blitz Question Timer').textContent).toBe('10s')
@@ -106,7 +106,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(view.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     openManager()
     const dialog = managerDialog()
-    expect(readout(dialog, 'AoX Run Length').textContent).toBe('25') // normalizeAoxN
+    expect(readout(dialog, 'MoX Run Length').textContent).toBe('25') // normalizeAoxN
     expect(readout(dialog, 'Flash Speed').textContent).toBe('0.8s') // fmtFlashT
     expect(readout(dialog, 'Blitz Round Timer').textContent).toBe('1m 30s') // fmtBlitzT
     expect(readout(dialog, 'Blitz Question Timer').textContent).toBe('10.5s') // +"s"
@@ -172,7 +172,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     const dialog = managerDialog()
     expect(readout(dialog, 'Blitz Question Timer').textContent).toBe('10s') // factory 10, forward-merged
     expect(readout(dialog, 'Flash Speed').textContent).toBe('0.8s') // the saved fields still read saved
-    expect(readout(dialog, 'AoX Run Length').textContent).toBe('25')
+    expect(readout(dialog, 'MoX Run Length').textContent).toBe('25')
   })
 
   it('editing turns the row btn-solid, swaps the footnote for the restricted-write note, and swaps Close for Cancel + Save', () => {
@@ -241,21 +241,21 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     openManager()
     const dialog = managerDialog()
     expect(within(dialog).queryAllByRole('textbox')).toHaveLength(0) // no box at rest — the ONE difference from the Save card
-    act(() => fireEvent.click(readout(dialog, 'AoX Run Length')))
-    const input = within(dialog).getByRole('textbox', { name: 'AoX Run Length' }) // editLabel — a count, not "(seconds)"
+    act(() => fireEvent.click(readout(dialog, 'MoX Run Length')))
+    const input = within(dialog).getByRole('textbox', { name: 'MoX Run Length' }) // editLabel — a count, not "(seconds)"
     act(() => fireEvent.change(input, { target: { value: '2000' } }))
     act(() => fireEvent.keyDown(input, { key: 'Enter' }))
-    expect(readout(dialog, 'AoX Run Length').textContent).toBe('1000') // Enter commits with the clamp
-    expect(readout(dialog, 'AoX Run Length').className).toContain('btn-solid') // the dirty accent on the readout
+    expect(readout(dialog, 'MoX Run Length').textContent).toBe('1000') // Enter commits with the clamp
+    expect(readout(dialog, 'MoX Run Length').className).toContain('btn-solid') // the dirty accent on the readout
     // Escape mid-edit reverts the edit only — the popup (and panel) survive the press.
-    act(() => fireEvent.click(readout(dialog, 'AoX Run Length')))
-    const input2 = within(dialog).getByRole('textbox', { name: 'AoX Run Length' })
+    act(() => fireEvent.click(readout(dialog, 'MoX Run Length')))
+    const input2 = within(dialog).getByRole('textbox', { name: 'MoX Run Length' })
     act(() => {
       input2.focus()
       fireEvent.change(input2, { target: { value: '77' } })
       fireEvent.keyDown(input2, { key: 'Escape' })
     })
-    expect(readout(dialog, 'AoX Run Length').textContent).toBe('1000')
+    expect(readout(dialog, 'MoX Run Length').textContent).toBe('1000')
     expect(savedManager()).toBeInTheDocument()
     expect(btn('Reset Settings')).toBeInTheDocument()
   })
@@ -266,8 +266,8 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(useUserDefaults.getState().saved).toBeNull()
     openManager()
     const dialog = managerDialog('Default settings')
-    act(() => fireEvent.click(readout(dialog, 'AoX Run Length')))
-    const input = within(dialog).getByRole('textbox', { name: 'AoX Run Length' })
+    act(() => fireEvent.click(readout(dialog, 'MoX Run Length')))
+    const input = within(dialog).getByRole('textbox', { name: 'MoX Run Length' })
     act(() => fireEvent.change(input, { target: { value: '25' } }))
     act(() => fireEvent.keyDown(input, { key: 'Enter' }))
     expect(screen.getByText('Saving here updates only these values.')).toBeInTheDocument()
@@ -305,7 +305,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     readout(saveDialog, 'Flash Speed') // the same tap-to-type readouts beside the sliders
     readout(saveDialog, 'Blitz Round Timer')
     readout(saveDialog, 'Blitz Question Timer')
-    expect(within(saveDialog).queryByRole('button', { name: 'Edit AoX Run Length' })).toBeNull()
+    expect(within(saveDialog).queryByRole('button', { name: 'Edit MoX Run Length' })).toBeNull()
     act(() => fireEvent.click(within(saveDialog).getByRole('button', { name: 'Cancel' })))
     // …and the manager: identical structure, except the AoX readout replaces the box.
     openManager()
@@ -317,7 +317,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
         .map((s) => s.getAttribute('aria-label')),
     ).toEqual(['Flash Speed', 'Blitz Round Timer', 'Blitz Question Timer'])
     expect(within(manageDialog).queryAllByRole('textbox')).toHaveLength(0)
-    readout(manageDialog, 'AoX Run Length')
+    readout(manageDialog, 'MoX Run Length')
     readout(manageDialog, 'Flash Speed')
     readout(manageDialog, 'Blitz Round Timer')
     readout(manageDialog, 'Blitz Question Timer')
@@ -413,7 +413,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     saveSnapshot()
     openManager()
     const dialog = managerDialog()
-    const first = readout(dialog, 'AoX Run Length') // the card's first control
+    const first = readout(dialog, 'MoX Run Length') // the card's first control
     const close = btn('Close') // …and its last (the resting read-only state)
     // Tab from the LAST control wraps to the first instead of escaping to the panel under the
     // scrim; Shift+Tab from the FIRST wraps back to the last.

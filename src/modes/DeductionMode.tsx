@@ -26,6 +26,7 @@ import type { FormatId, DatePart } from '../lib/format.js'
 import { rollFormat, isTouch } from '../lib/modeFormat.js'
 import type { DedPuzzle } from '../engine/gameReducer.js'
 import StatPanel from '../components/StatPanel.jsx'
+import CardNumber from '../components/CardNumber.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -448,11 +449,7 @@ function DeductionMode({
         </div>
         <div className="mt-4 rounded-2xl panel p-4">
           <div className="text-center relative">
-            {state.backDepth > 0 && (
-              <span className="absolute right-0 top-0 text-[11px] tabular-nums text-(--tx-300-60)">
-                Q{state.stack.length + 1}
-              </span>
-            )}
+            <CardNumber state={state} show={state.backDepth > 0} />
             <div className="text-3xl font-bold">
               {date ? fmtDatePartial(date.y, date.m, date.d, date._fmt, date.type) : '—'}
             </div>

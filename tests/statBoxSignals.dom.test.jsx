@@ -101,7 +101,7 @@ const stripSrText = () =>
     .join('')
 const isDimmed = (el) => el.className.split(/\s+/).includes('opacity-50')
 
-const SIX = ['Score', 'Accuracy', 'Streak', 'Last', 'Average', 'Median']
+const SIX = ['Score', 'Accuracy', 'Streak', 'Last', 'Mean', 'Median']
 // A strip with data in the scoring trio and nothing recorded in the timing trio — the two halves of
 // the "has data" / "no data yet" distinction in one fixture. The timing values are what the real
 // formatters return with an empty times array, so the dash here is the app's own dash.
@@ -110,7 +110,7 @@ const withData = (over = {}) => [
   { label: 'Accuracy', value: '75.0%', fn: () => {}, ...over.scoring },
   { label: 'Streak', value: '2/3', fn: () => {}, ...over.scoring },
   { label: 'Last', value: '—', fn: () => {}, ...over.timing },
-  { label: 'Average', value: '—', fn: () => {}, ...over.timing },
+  { label: 'Mean', value: '—', fn: () => {}, ...over.timing },
   { label: 'Median', value: '—', fn: () => {}, ...over.timing },
 ]
 
@@ -129,7 +129,7 @@ describe('StatPanel — the three signals (C1)', () => {
   it('group on with NO data yet: an em dash — the one thing a dash is allowed to mean', () => {
     render(<StatPanel stats={withData()} />)
     expect(valueOf('Last')).toBe('—')
-    expect(valueOf('Average')).toBe('—')
+    expect(valueOf('Mean')).toBe('—')
     expect(valueOf('Median')).toBe('—')
     expect(isDimmed(strip())).toBe(false)
   })
@@ -334,7 +334,7 @@ describe('Classic — your toggle and Save Stats are two separate signals (C1, t
   it('Classic launches with timing hidden: the timing trio is BLANK, the scoring trio is not', () => {
     mountApp()
     expect(valueOf('Last')).toBe('')
-    expect(valueOf('Average')).toBe('')
+    expect(valueOf('Mean')).toBe('')
     expect(valueOf('Median')).toBe('')
     expect(srTextOf('Median')).toBe('Off')
     expect(valueOf('Score')).toBe('0/0') // shown, and honestly empty
@@ -395,7 +395,7 @@ describe('Classic — your toggle and Save Stats are two separate signals (C1, t
     expect(valueOf('Streak')).toBe('')
     expect(srTextOf('Score')).toBe('Off')
     expect(valueOf('Last')).toBe('—') // the app's dash, not yours
-    expect(valueOf('Average')).toBe('—')
+    expect(valueOf('Mean')).toBe('—')
     expect(isDimmed(strip())).toBe(true) // and the one dim covers the whole strip
   })
 

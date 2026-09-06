@@ -12,11 +12,7 @@
 // reporting a genuine react-hooks/set-state-in-effect error (in the Full Reset safety net, see
 // ~line 545) to clean. Nothing about the code changes; only whether anything is looking at it.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-// ReactKeyboardEvent is ALIASED on purpose, and must stay aliased. This file registers four
-// document-level keydown listeners whose parameter is the DOM global `KeyboardEvent`; importing
-// React's synthetic one under its own name would shadow that global and silently retype all four.
-// The alias is used at exactly one place — trapModalTab, which really is a JSX handler.
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
+import type { RefObject } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { rangeHasLeapYear } from '../lib/calendar.js'
 import { fmt, numericFormatOf } from '../lib/format.js'
@@ -32,9 +28,17 @@ import DefaultsCard from './DefaultsCard.jsx'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { useBackButton } from './useBackButton.js'
 import {
+  MODAL_CARD_CLASS,
+  MODAL_CARD_SHADOW,
+  MODAL_SCRIM_CLASS,
+  trapModalTab,
+  useModalEscape,
+} from './modalContract.js'
+import {
   WRITTEN_FORMATS,
   NUMERIC_FORMATS,
   INPUT_STYLES,
+  DOT_ORIENTATIONS,
   DARK_THEMES,
   LIGHT_THEMES,
   CHANCE_OPTIONS,
@@ -95,7 +99,7 @@ import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 // panel is closed, resetSettings/fullReset (which reach App's whole world), and the Year Range text
 // mirrors (whose lifetime must outlive this component's — see useYearRangeMirrors).
 //
-// WHAT IT READS STRAIGHT FROM THE STORES: the fourteen settings values and their setters, and the
+// WHAT IT READS STRAIGHT FROM THE STORES: the fifteen settings values and their setters, and the
 // saved-defaults snapshot. Individually selected, never as one object selector, so the panel
 // re-renders only for the value that changed.
 // ============================================================
@@ -180,6 +184,8 @@ export function SettingsPanel({
   const setRandomFormat = useSettings((s) => s.setRandomFormat)
   const inputStyle = useSettings((s) => s.inputStyle)
   const setInputStyle = useSettings((s) => s.setInputStyle)
+  const dotOrientation = useSettings((s) => s.dotOrientation)
+  const setDotOrientation = useSettings((s) => s.setDotOrientation)
   const leapChance = useSettings((s) => s.leapChance)
   const setLeapChance = useSettings((s) => s.setLeapChance)
   const janFebChance = useSettings((s) => s.janFebChance)
@@ -206,7 +212,7 @@ export function SettingsPanel({
   const [fullResetArmed, setFullResetArmed] = useState(false)
   const fullResetBtnRef = useRef<HTMLButtonElement | null>(null)
   const fullResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Save Defaults (Q7) confirmation popup state. pendSettings snapshots the full 14-value panel at
+  // Save Defaults (Q7) confirmation popup state. pendSettings snapshots the full 15-value panel at
   // OPEN (the popup doesn't edit panel values); pendPrefs seeds the four editable mode-screen rows
   // from the live modePrefs store at open, and pendSeed keeps that seed for the shared card's
   // dirty-row comparison (Q5 round-6). Edits touch ONLY this pending snapshot — Cancel/scrim/Back
@@ -345,64 +351,11 @@ export function SettingsPanel({
     }
   }, [])
 
-  // Escape cancels the POPUP first — registered in the CAPTURE phase with stopPropagation so App's
-  // settings Escape handler (bubble phase, on document) never sees the same press and the panel
-  // stays open. TEXT-ENTRY inputs keep their own Escape handling (the N field discards its edit),
-  // mirroring that handler's guard — and like it, the guard excludes type="range": the popup's
-  // three sliders keep focus after an adjust and must not swallow the dismiss.
-  useEffect(() => {
-    if (!saveDefaultsOpen) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      const ae = document.activeElement as HTMLInputElement | null
-      if (ae && ae.tagName === 'INPUT' && ae.type !== 'range') return
-      e.preventDefault()
-      e.stopPropagation()
-      setSaveDefaultsOpen(false)
-    }
-    document.addEventListener('keydown', h, true)
-    return () => document.removeEventListener('keydown', h, true)
-  }, [saveDefaultsOpen])
-  // The defaults manager (Q5 round-6) gets the same capture-phase Escape INCLUDING the text-entry
-  // guard — it renders the shared editable card now, so a tap-to-type readout can be mid-edit (the
-  // editor's own Escape reverts the edit and stops propagation).
-  useEffect(() => {
-    if (!manageDefaultsOpen) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      const ae = document.activeElement as HTMLInputElement | null
-      if (ae && ae.tagName === 'INPUT' && ae.type !== 'range') return
-      e.preventDefault()
-      e.stopPropagation()
-      setManageDefaultsOpen(false)
-    }
-    document.addEventListener('keydown', h, true)
-    return () => document.removeEventListener('keydown', h, true)
-  }, [manageDefaultsOpen])
-  // The Clear confirm (Q5): input-free (two buttons), so no text-entry guard.
-  useEffect(() => {
-    if (!clearConfirmOpen) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopPropagation()
-      setClearConfirmOpen(false)
-    }
-    document.addEventListener('keydown', h, true)
-    return () => document.removeEventListener('keydown', h, true)
-  }, [clearConfirmOpen])
-  // The Changelog popup (Q6): input-free too, so no text-entry guard either.
-  useEffect(() => {
-    if (!changelogOpen) return
-    const h = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopPropagation()
-      setChangelogOpen(false)
-    }
-    document.addEventListener('keydown', h, true)
-    return () => document.removeEventListener('keydown', h, true)
-  }, [changelogOpen])
+  // Escape and Android Back — the two dismiss paths — are registered together below, beside the
+  // useBackButton calls, on the shared modal contract (components/modalContract). They used to be
+  // four hand-written capture-phase effects in a row right here; the argument for the capture phase,
+  // for stopPropagation, and for the text-entry guard now lives once, in that file.
+  //
   // The popup's modal a11y contract, part 1 of 2 (part 2 = the Tab trap on the scrim, below): on
   // open, move focus INTO the dialog — the card is tabIndex={-1} with role="dialog" +
   // aria-modal="true", so screen readers announce a modal and keyboard context starts inside it.
@@ -474,7 +427,7 @@ export function SettingsPanel({
       })
     setSaveDefaultsOpen(false)
   }
-  // The manager's Save (Q5 round-6) writes ONLY the four shown values into the snapshot: the 14
+  // The manager's Save (Q5 round-6) writes ONLY the four shown values into the snapshot: the 15
   // ⚙-panel values pass through AS-SAVED, byte-identical (never re-captured from the live store —
   // the owner's rule: this popup edits exactly what it shows). With nothing saved yet it CREATES
   // the snapshot — the factory ⚙ values plus these edits, the natural flow from the factory view
@@ -594,34 +547,18 @@ export function SettingsPanel({
   useBackButton(manageDefaultsOpen, closeManageDefaults, 'manage-defaults') // the defaults manager (Q12/Q5)
   useBackButton(clearConfirmOpen, closeClearConfirm, 'clear-defaults') // and the Clear confirm (Q5)
   useBackButton(changelogOpen, closeChangelog, 'changelog') // and the Changelog popup (Q6)
+  // …and Escape, the contract's other dismiss. The two popups that CONTAIN a text box guard against
+  // it (the N field and the tap-to-type readouts own their own Escape — it discards the edit, and a
+  // second press, with nothing focused, reaches the modal); the two that are buttons-only do not.
+  useModalEscape(saveDefaultsOpen, closeSaveDefaults, true)
+  useModalEscape(manageDefaultsOpen, closeManageDefaults, true)
+  useModalEscape(clearConfirmOpen, closeClearConfirm, false)
+  useModalEscape(changelogOpen, closeChangelog, false)
 
-  // Modal a11y contract, part 2 of 2 (part 1 = the focus-on-open effects above): the card is a real
-  // role="dialog" aria-modal, and the scrim's Tab handler is the focus trap — plain Tab / Shift+Tab
-  // cycle the popup's own controls and WRAP at the ends (native traversal in between), never
-  // escaping to the settings panel under the scrim. Shared by ALL FOUR settings modals (the Save
-  // Defaults card, the defaults manager Q12+Q5, the Clear confirm Q5, and the Changelog popup Q6 —
-  // the Changelog's single Close button is first===last, so Tab wraps in place). stopPropagation
-  // keeps the press from the app-wide Tab shortcut (which would open the mode selector behind the
-  // modal); that shortcut's own handler also bails while a modal is mounted, for presses that start
-  // outside the scrim's tree.
-  const trapModalTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== 'Tab') return
-    e.stopPropagation()
-    const f = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button,input'))
-    if (f.length === 0) return
-    const first = f[0],
-      last = f[f.length - 1],
-      ae = document.activeElement
-    if (e.shiftKey) {
-      if (ae === first || !e.currentTarget.contains(ae)) {
-        e.preventDefault()
-        last.focus()
-      }
-    } else if (ae === last || !e.currentTarget.contains(ae)) {
-      e.preventDefault()
-      first.focus()
-    }
-  }
+  // Modal a11y contract, part 2 of 2 (part 1 = the focus-on-open effects above) is trapModalTab,
+  // imported from the shared contract and put on each scrim's onKeyDown below. It is shared by all
+  // FIVE modals in the app now — these four and the run breakdown — which is why it no longer lives
+  // in this component; see components/modalContract for what it does and why.
 
   // Save Defaults confirmation popup (Q7). PORTALED to #root — deliberately OUTSIDE the popover
   // card (the ⚙ trigger's aria-controls menu), so its DOM is invisible to the press-drag controller
@@ -651,7 +588,7 @@ export function SettingsPanel({
       <div
         data-settings-modal
         role="presentation"
-        className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4"
+        className={MODAL_SCRIM_CLASS}
         onClick={(e) => {
           if (e.target === e.currentTarget) setSaveDefaultsOpen(false)
         }}
@@ -687,7 +624,7 @@ export function SettingsPanel({
       <div
         data-settings-modal
         role="presentation"
-        className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4"
+        className={MODAL_SCRIM_CLASS}
         onClick={(e) => {
           if (e.target === e.currentTarget) setManageDefaultsOpen(false)
         }}
@@ -729,7 +666,7 @@ export function SettingsPanel({
       <div
         data-settings-modal
         role="presentation"
-        className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4"
+        className={MODAL_SCRIM_CLASS}
         onClick={(e) => {
           if (e.target === e.currentTarget) setClearConfirmOpen(false)
         }}
@@ -741,7 +678,7 @@ export function SettingsPanel({
           role="dialog"
           aria-modal="true"
           aria-labelledby="clear-defaults-title"
-          style={{ boxShadow: '0 0 8px rgba(0,0,0,0.12)' }}
+          style={MODAL_CARD_SHADOW}
           className="card rounded-2xl p-4 w-full max-w-[20rem] space-y-3 focus:outline-hidden"
         >
           <div id="clear-defaults-title" className="text-sm font-semibold text-(--tx-50)">
@@ -800,7 +737,7 @@ export function SettingsPanel({
       <div
         data-settings-modal
         role="presentation"
-        className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4"
+        className={MODAL_SCRIM_CLASS}
         onClick={(e) => {
           if (e.target === e.currentTarget) setChangelogOpen(false)
         }}
@@ -812,8 +749,8 @@ export function SettingsPanel({
           role="dialog"
           aria-modal="true"
           aria-labelledby="changelog-title"
-          style={{ boxShadow: '0 0 8px rgba(0,0,0,0.12)' }}
-          className="card rounded-2xl py-4 w-full max-w-[20rem] space-y-3 focus:outline-hidden"
+          style={MODAL_CARD_SHADOW}
+          className={MODAL_CARD_CLASS}
         >
           {/* THE HEADING ROW: "What's new" left, the app's version right (2026-08-10). This popup is
               the version's ONLY home — not the ⚙ panel's "Last Updated" row, which has no space for
@@ -933,7 +870,7 @@ export function SettingsPanel({
         ref={cardRef}
         id="settings-popover"
         data-drag-dismiss
-        style={{ boxShadow: '0 0 8px rgba(0,0,0,0.12)' }}
+        style={MODAL_CARD_SHADOW}
         className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card py-4 space-y-4 flex flex-col max-h-[calc(100dvh_-_var(--bar-h)_-_0.5rem_-_1rem_-_env(safe-area-inset-bottom))]"
       >
         <div
@@ -1022,6 +959,31 @@ export function SettingsPanel({
             <div className="text-xs text-(--tx-200-80) pt-1">Input</div>
             <PillGroup label="Input" disabled={mode === 'deduction'}>
               <PillTray value={inputStyle} onChange={setInputStyle} options={INPUT_STYLES} />
+            </PillGroup>
+            {/* Dot Layout — Columns / Rows: which way the 7-dot layout is TURNED (lib/dotLayout,
+                the one array both the real input and How-to-Play's diagram derive from). One tray,
+                no families, directly under Input because it is the same subject: Input chooses
+                whether you answer with dots, this chooses how those dots sit.
+                ⚠ NOT CALLED "ROTATE", and that is a naming decision rather than taste: this app
+                already uses that word for "turn your device" (the portrait-lock screen,
+                components/RotateOverlay). The labels describe the picture instead — the two weekday
+                triples run down the side COLUMNS, or along the top and bottom ROWS.
+                ★ SAME LOCK AS INPUT, `mode === 'deduction'` EXACTLY, and shared on purpose: the two
+                describe one thing, the weekday dot input, which Deduction does not have. A live
+                picker sitting directly beneath a dead one — both about dots — would read as a bug
+                in the lock.
+                ⚠ THE ONE CONSEQUENCE, written down so it is not later reported as one: the title-bar
+                mark follows this setting in EVERY mode (main.tsx, components/W5Logo), so in Deduction
+                the mark's orientation is frozen rather than irrelevant. Frozen is the honest word —
+                nothing about it changes on the way into Deduction; it simply cannot be changed
+                while you are there, exactly like the answer layout above it. */}
+            <div className="text-xs text-(--tx-200-80) pt-1">Dot Layout</div>
+            <PillGroup label="Dot Layout" disabled={mode === 'deduction'}>
+              <PillTray
+                value={dotOrientation}
+                onChange={setDotOrientation}
+                options={DOT_ORIENTATIONS}
+              />
             </PillGroup>
             <div className="text-xs text-(--tx-200-80) pt-1">Theme</div>
             {/* Flipping Use System Settings OFF seeds the manual theme from what is ALREADY on

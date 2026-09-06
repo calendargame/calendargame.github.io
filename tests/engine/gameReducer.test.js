@@ -3,7 +3,7 @@
 // These mirror the Classic characterization (tests/classic.dom) at the reducer level —
 // the two must agree, which is what makes wiring the reducer into App (1c) safe.
 import { describe, it, expect } from 'vitest'
-import { gameReducer, initEngine } from '../../src/engine/gameReducer.js'
+import { gameReducer, initEngine, cardNumber } from '../../src/engine/gameReducer.js'
 import { wday } from '../../src/lib/calendar.js'
 
 const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
@@ -402,5 +402,74 @@ describe('gameReducer — complete (AoX last solve) + noAdvance (AoX failing ove
       nextDate: NEXT,
     })
     expect(s.date).toBe(NEXT) // advanced
+  })
+})
+
+// ── The lifetime card number — historyBase / cardNumber (the Q# badge) ─────────────────────────
+// The badge beside the Score box is the card's LIFETIME number, not its 1-based slot in the
+// in-session history stack. The two disagreed by exactly the prior-session total: a continuous
+// mode HYDRATES `played` at mount (initEngine's initialStats) while `stack` deliberately starts
+// empty, so a player 500 cards in pressed < and read "Q1" beside "471/501".
+//
+// `historyBase` closes it with no new persisted data: it records what `played` was when the stack
+// was last emptied, and the number is base + stack.length + 1. The cases below pin the four ways
+// the base is established (blank / hydrated / RESET / RESET_ROUND) plus the two ways the count
+// must NOT move — a Save-Stats-off card (neither counted nor pushed) and browsing.
+describe('gameReducer — historyBase / cardNumber (the Q# badge)', () => {
+  // A prior-session record the in-session stack cannot reconstruct — the owner's reported case.
+  const HYDRATED = { played: 500, good: 471, streak: 0, best: 12, times: [] }
+
+  it('a blank engine bases at 0 — the number is the old stack formula, unchanged', () => {
+    const s = initEngine(DATE)
+    expect(s.historyBase).toBe(0)
+    expect(cardNumber(s)).toBe(s.stack.length + 1)
+    expect(cardNumber(s)).toBe(1)
+  })
+
+  it('hydrated stats base the count at the prior-session played total', () => {
+    const s = initEngine(DATE, HYDRATED)
+    expect(s.historyBase).toBe(500)
+    expect(cardNumber(s)).toBe(501) // the live card is the 501st, beside a Score of 471/500
+  })
+
+  it('the number tracks played across a play + a browse round trip', () => {
+    let s = initEngine(DATE, HYDRATED)
+    s = answer(s, C) // credited + advanced → 472/501
+    expect(s.stats.played).toBe(501)
+    expect(cardNumber(s)).toBe(502) // the fresh live card is the 502nd
+    s = back(s) // browse to the card just played
+    expect(cardNumber(s)).toBe(501) // …which IS the 501st — it agrees with played
+    s = forward(s)
+    expect(cardNumber(s)).toBe(502)
+  })
+
+  it('RESET re-bases to 0 along with the stats it zeroes', () => {
+    let s = answer(initEngine(DATE, HYDRATED), C)
+    s = gameReducer(s, { type: 'RESET', timingOff: true, nextDate: NEXT })
+    expect(s.historyBase).toBe(0)
+    expect(cardNumber(s)).toBe(1)
+  })
+
+  it("RESET_ROUND re-bases to the KEPT played total (Flash's round Reset)", () => {
+    let s = answer(initEngine(DATE, HYDRATED), C) // played 501, one history entry
+    s = gameReducer(s, { type: 'RESET_ROUND' }) // history wiped, stats survive
+    expect(s.stats.played).toBe(501)
+    expect(s.historyBase).toBe(501)
+    expect(cardNumber(s)).toBe(502) // the next card is still the 502nd, not the 1st
+  })
+
+  it('a card played with Save Stats OFF is neither counted nor numbered', () => {
+    const s = answer(initEngine(DATE, HYDRATED), C, { saveStats: false })
+    expect(s.stats.played).toBe(500) // not counted
+    expect(s.stack).toEqual([]) // not pushed
+    expect(cardNumber(s)).toBe(501) // …so the next card is STILL the 501st
+  })
+
+  it('Override never moves the number — it never moves played', () => {
+    let s = answer(initEngine(DATE, HYDRATED), C) // 472/501, live card is the 502nd
+    expect(cardNumber(s)).toBe(502)
+    s = override(s) // Path 5: retro-flip the credit away — played untouched
+    expect(s.stats.played).toBe(501)
+    expect(cardNumber(s)).toBe(502)
   })
 })

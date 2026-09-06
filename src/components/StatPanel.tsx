@@ -3,7 +3,7 @@ import type { ElementType, ReactNode, Ref } from 'react'
 import { fitScale } from '../lib/statFit.js'
 
 // StatPanel — the horizontal stats strip (Score / Accuracy / Streak / Last /
-// Average / Median) shown under the header in the timed/scored modes.
+// Mean / Median) shown under the header in the timed/scored modes.
 //
 // Pure presentational shell: it renders whatever `stats` array it's given (each item
 // {label, value, fn?, off?}) as equal-width cells separated by thin dividers.
@@ -130,6 +130,8 @@ export default function StatPanel({
   dimmed,
   armedSpan,
   armedBtnRef,
+  onActivate,
+  activateLabel,
 }: {
   stats: StatItem[]
   // Nothing is being recorded (Save Stats off). The dim and the em dashes are ONE fact and are
@@ -146,8 +148,39 @@ export default function StatPanel({
   dimmed: boolean
   armedSpan?: ArmedSpan | null
   armedBtnRef?: Ref<HTMLButtonElement>
+  // ★ THE WHOLE STRIP AS ONE BUTTON (sub-group 3C) — how the run breakdown opens on a finished
+  // MoX run or Blitz round. When set, the strip's ROOT becomes the <button> and every cell renders
+  // as a plain div: the per-cell `fn` is IGNORED, not merged.
+  // The merged `armedSpan` warning button is ignored on the same terms and for the same reason.
+  // WHY IGNORED RATHER THAN DOCUMENTED-AS-DON'T: a <button> inside a <button> is invalid HTML with
+  // undefined behaviour, and a rule that lives only in a comment is a rule the sixth caller breaks.
+  // Ignoring makes it structurally impossible instead. It costs nothing real, because the two states
+  // are mutually exclusive by construction at every call site that exists: a mode hands the strip an
+  // opener exactly when its run has ENDED, and an ended run has already dropped its hide toggle (the
+  // toggle is for a run still going — see the notes in modes/BlitzMode and modes/AoxMode). So no
+  // caller is ever asking for both, and one that started to would lose the cell taps loudly rather
+  // than shipping nested buttons quietly.
+  // ⚠ It is the ROOT and not a sixth cell on purpose: the owner's rule is "tap ANYWHERE on the
+  // strip", and a strip of six tap targets with gaps between them is not anywhere. It also keeps the
+  // dividers and the auto-fit measuring exactly the boxes they measured before.
+  onActivate?: (() => void) | null
+  // The button's accessible name. Required WITH onActivate (the type makes them arrive together)
+  // because the strip's own text is six labels and six numbers — a perfectly good name for nothing.
+  activateLabel?: string
 }) {
-  const rootRef = useRef<HTMLDivElement | null>(null)
+  // HTMLElement, not HTMLDivElement: the root is a <div> or a <button> depending on onActivate, and
+  // everything this ref is used for (querySelectorAll for the fit, ResizeObserver) is on HTMLElement.
+  const rootRef = useRef<HTMLElement | null>(null)
+  // A CALLBACK ref, not `ref={rootRef}`, and the reason is the line above: the root is a <div> or a
+  // <button> depending on onActivate, so React types the `ref` slot as the INTERSECTION of both
+  // elements' refs — a RefObject<HTMLElement> satisfies neither half. A callback taking the base
+  // type satisfies both (a handler that accepts any HTMLElement accepts a div and a button alike),
+  // which is the honest shape anyway: this ref exists to querySelectorAll and to be observed, and
+  // both live on HTMLElement. It runs at commit, never during render, so it does not trip the
+  // ref-write rule.
+  const setRoot = (el: HTMLElement | null) => {
+    rootRef.current = el
+  }
   // Auto-fit every value box to its width: reset each value to the base font, measure its natural width
   // vs its cell's width, then set a font-size that fits (capped at the base). Batched (reset-all →
   // measure-all → apply-all) to avoid layout thrash. Runs after layout but BEFORE paint (useLayoutEffect)
@@ -207,10 +240,18 @@ export default function StatPanel({
     }
   }, [])
 
+  // The root's element and props — see the onActivate note above. `w-full` only in the button case:
+  // a <div> is block-level and already fills its parent, while a <button> is shrink-to-fit and would
+  // otherwise collapse the strip to its content's width.
+  const Root: ElementType = onActivate ? 'button' : 'div'
+  const rootProps = onActivate
+    ? { type: 'button' as const, onClick: onActivate, 'aria-label': activateLabel }
+    : {}
   return (
-    <div
-      ref={rootRef}
-      className={`mt-4 rounded-2xl panel flex overflow-hidden ${dimmed ? ' opacity-50' : ''}`}
+    <Root
+      ref={setRoot}
+      {...rootProps}
+      className={`mt-4 rounded-2xl panel flex overflow-hidden ${onActivate ? ' w-full' : ''}${dimmed ? ' opacity-50' : ''}`}
     >
       {/* The word that keeps the DIM from meaning nothing to a screen reader — see the header note.
           Absolutely positioned by `sr-only`, so it is outside the flex flow, adds no cell and costs
@@ -218,9 +259,14 @@ export default function StatPanel({
       {dimmed && <span className="sr-only">Stats are not being saved</span>}
       {(() => {
         const items: ReactNode[] = []
+        // Ignored while the strip itself is the button — see the note on onActivate. Unreachable
+        // today (the arm belongs to the three modes that STOP their clock when you hide timing, and
+        // none of them has a finished run to break down), which is exactly why it is enforced here
+        // rather than left to whoever writes the next call site.
+        const arm = onActivate ? null : armedSpan
         for (let i = 0; i < stats.length; i++) {
-          if (armedSpan && i === armedSpan.startIdx) {
-            const span = armedSpan.endIdx - armedSpan.startIdx + 1
+          if (arm && i === arm.startIdx) {
+            const span = arm.endIdx - arm.startIdx + 1
             // Bug #4 aesthetic: no ring or rounded corners on the merged warning button. The text change
             // ('Enable and Reset Stats?') is the sole visual cue. The standard vertical divider between
             // Streak and this button is already present (it was the Streak|Last divider in unarmed state)
@@ -238,15 +284,15 @@ export default function StatPanel({
                 key="armed-warning"
                 ref={armedBtnRef}
                 type="button"
-                onClick={armedSpan.onClick}
+                onClick={arm.onClick}
                 style={{ flex: span }}
                 className="flex items-center justify-center py-2 text-xs font-medium"
               >
-                {armedSpan.label}
+                {arm.label}
               </button>,
             )
             items.push(<div key="armed-spacer-r" className="w-px shrink-0" />)
-            if (armedSpan.endIdx < stats.length - 1) {
+            if (arm.endIdx < stats.length - 1) {
               items.push(
                 <div
                   key={`d-armed-${i}`}
@@ -254,12 +300,15 @@ export default function StatPanel({
                 />,
               )
             }
-            i = armedSpan.endIdx
+            i = arm.endIdx
             continue
           }
           const s = stats[i]
-          const Tag: ElementType = s.fn ? 'button' : 'div'
-          const props = s.fn ? { type: 'button' as const, onClick: s.fn } : {}
+          // `onActivate` wins outright — see the note on the prop. A cell button here would be a
+          // <button> inside the root <button>.
+          const cellFn = onActivate ? null : s.fn
+          const Tag: ElementType = cellFn ? 'button' : 'div'
+          const props = cellFn ? { type: 'button' as const, onClick: cellFn } : {}
           items.push(
             <Tag
               key={s.label}
@@ -301,6 +350,6 @@ export default function StatPanel({
         }
         return items
       })()}
-    </div>
+    </Root>
   )
 }

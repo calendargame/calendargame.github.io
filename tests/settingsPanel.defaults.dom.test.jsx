@@ -109,7 +109,7 @@ const modalSlider = (key, label) => within(modalCard(key)).getByRole('slider', {
 const modalReadout = (key, label) =>
   within(modalCard(key)).getByRole('button', { name: `Edit ${label}` })
 const saveCardAoxBox = () =>
-  within(modalCard('save')).getByRole('textbox', { name: 'AoX Run Length' })
+  within(modalCard('save')).getByRole('textbox', { name: 'MoX Run Length' })
 // The card's DIRTY-ROW accent — the visible "you changed this one" treatment, which is the only
 // readout the Save card's clean/edited state has (the manager also republishes it as Close →
 // Cancel + Save). Same category as isDimmed: a paint the user meets, named in one place.
@@ -125,7 +125,7 @@ const guidePanelStates = () => guidePanelHeaders().map((h) => h.getAttribute('ar
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────────────────────
 
-// The four capturable mode-screen prefs (Flash speed, both Blitz timers, the AoX run length) — the
+// The four capturable mode-screen prefs (Flash speed, both Blitz timers, the MoX run length) — the
 // only ones Save Defaults records and Reset Settings restores.
 const CAPTURABLE = ['flashMs', 'blitzSec', 'blitzQSec', 'aoxN']
 // …and the thirteen it deliberately does NOT: config the user sets on a mode screen and expects to
@@ -178,12 +178,13 @@ const divergeNonCapturable = () =>
     p.setClassicScoringOff(true)
   })
 
-// All fourteen settings, each moved off its factory value — the round-trip subject in G9 and the
+// All fifteen settings, each moved off its factory value — the round-trip subject in G9 and the
 // "one tap snaps everything back" subject in G7.
 const PERSONAL_SETTINGS = {
   randomFormat: true,
   dateFormat: 'numeric-ymd',
   inputStyle: 'dots',
+  dotOrientation: 'rows',
   useJulian: false,
   minY: 1600,
   maxY: 1900,
@@ -709,7 +710,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     expect(useUserDefaults.getState().saved.settings.leapChance).toBe(SETTINGS_DEFAULTS.leapChance)
   })
 
-  it('all fourteen settings round-trip through a saved snapshot', () => {
+  it('all fifteen settings round-trip through a saved snapshot', () => {
     applySettings(PERSONAL_SETTINGS)
     mountApp()
     openSettings()

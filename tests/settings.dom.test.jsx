@@ -129,6 +129,7 @@ const PICKERS = [
   'Dark theme',
   'Light theme',
   'Input',
+  'Dot Layout',
   'Julian Chance',
   'Leap Year Chance',
   'Jan/Feb Chance on Leap Years',

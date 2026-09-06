@@ -670,7 +670,11 @@ button:focus,select:focus{outline:none}
    4-row labelled-button grid so switching layouts never shrinks the answer panel; the square 3×3
    .dot-cluster (which carries data-answer-grid, so the pointer controller's drag-to-select AND the
    keyboard 0–9 children[idx] path both operate on it) is centred inside it. DOM order stays Sun..Sat;
-   the logo positions come from inline grid-row/column. Idle/flash/persist colours reuse the button
+   the logo positions come from inline grid-row/column — which orientation those positions describe
+   is Settings → Display → Dot Layout, resolved in JS (lib/dotLayout's DOT_CELLS) and NOT by a CSS
+   transform on this cluster: a transform would leave the DOM, the keyboard order and every hit
+   area below reasoning in the untransformed frame. Nothing in this block is orientation-specific.
+   Idle/flash/persist colours reuse the button
    state classes (surface-button / flash-* / btn-*-persist); .dot-btn only adds the circular shape +
    border WIDTH (no background/border-colour, so the state class wins those). --ans-h must equal
    BASE_BTN's metrics so the two layouts match height: 4 rows × (text-base 1.5rem line + py-3 1.5rem +
@@ -687,11 +691,16 @@ button:focus,select:focus{outline:none}
    box-shadow (follows the circle, unlike the square outline). On-device knobs: --ans-h (box height)
    + --dot-frac (dot diameter as a FRACTION of its grid cell — unitless since sub-group 1B, because
    the hit-area rule below divides by it; ×100% recovers the width it always was).
+   ⚠ NOTHING BELOW IS ORIENTATION-SPECIFIC, and it must stay that way: the cluster is a uniform 3×3
+   of identical square cells, so the same rules hold whichever two cells the turn leaves empty
+   (centre-top + centre-bottom upright, mid-left + mid-right rotated). Any rule that named a
+   particular cell would have to be written twice and would rot the moment a third orientation was
+   ever considered.
    ⚠ EACH DOT'S HIT AREA IS ITS WHOLE SQUARE CELL (sub-group 1B), which is the dot rule's whole
    content: with no gap in the cluster, the cell boundary IS the midpoint between two neighbouring
    dots, so "own your cell" and "split the space between two dots down the middle" are the same
    sentence — and the circle no longer throws away the ~48% of its cell that falls outside the round
-   shape. THE TWO EMPTY CELLS (centre-top, centre-bottom) STAY DEAD, and so do the margins either
+   shape. THE TWO EMPTY CELLS — wherever the current orientation puts them — STAY DEAD, and so do the margins either
    side of the cluster: a dot claims its own cell and not one pixel further, so the cluster keeps an
    in-cluster place to slide a press onto and cancel it. The ::after is CENTRED on the dot rather
    than inset from it (top/left 50% + a −50% translate), and that is what makes it exact: the
@@ -713,8 +722,8 @@ button:focus,select:focus{outline:none}
    while it is Off — and the dormant values never count (settingsAtDefaults in main.tsx says
    why). ⚠ AND IT IS NOT ONLY SETTINGS: since round 15 the two Year Range TEXT BOXES are compared
    too, so a year you have TYPED but not yet committed lights this bar on its own. That makes the
-   compared set 19 with Use System On and 18 with it Off — 17 or 16 of the Save Defaults snapshot's
-   18 values, PLUS the two box texts, which the snapshot does not hold at all. Deliberately NOT a
+   compared set 20 with Use System On and 19 with it Off — 18 or 17 of the Save Defaults snapshot's
+   19 values, PLUS the two box texts, which the snapshot does not hold at all. Deliberately NOT a
    subset of it: those two are compared and never saved, so pressing Save Defaults on a half-typed
    year leaves this bar lit until the box commits or discards (main.tsx says why at length).
    Since round 14 the same boolean also dims Save Defaults AND Reset Settings, so this

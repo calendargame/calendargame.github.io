@@ -3,6 +3,7 @@
 import type { Question } from '../engine/gameReducer.js'
 import type { FormatId } from '../lib/format.js'
 import type { InputStyle } from '../store/settings.js'
+import type { DotOrientation } from '../lib/dotLayout.js'
 import type { useGameEngine } from '../engine/useGameEngine.js'
 
 // --- Shared types for the typed App + mode components (Stage C, TypeScript, final file). ---
@@ -22,6 +23,7 @@ export interface ModeProps {
   dateFormat: FormatId
   randomFormat: boolean
   inputStyle?: InputStyle // day-of-week answer layout (buttons | dots); weekday modes only — Deduction ignores it
+  dotOrientation?: DotOrientation // which way that dot layout is turned (columns | rows); read only when inputStyle is 'dots'
   leapChance: string
   janFebChance: string
   julianChance: string

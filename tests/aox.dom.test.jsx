@@ -3,7 +3,7 @@
 // AoX mode — characterization tests (Stage C, Step 6, Step 5). AoX is the headline dedup: it
 // has its OWN near-duplicate engine (timer / stats / Override / Back-Forward / Show Codes) plus
 // a unique "average of N" (Ao-N) RUN layer — a run of N solves that completes on the Nth, fails
-// on a mistake (when Allow Mistakes is off), tracks Best Average / Best Median per config, and
+// on a mistake (when Allow Mistakes is off), tracks Best Mean / Best Median per config, and
 // supports One-by-One (date hidden until you reveal it). These lock TODAY's observable behavior
 // before folding the common engine onto the shared useGameEngine. Written against the current
 // <App/> (AoX already renders via AoxMode) as a black box, so they stay valid before AND after.
@@ -103,8 +103,8 @@ const tick = (ms) =>
   act(() => {
     vi.advanceTimersByTime(ms)
   })
-// Best Average / Best Median VALUE ("1.23s" or "—"). Picks the innermost "Best X:" line and
-// extracts just the time, ignoring the new-best ★ and the sibling Median/Average sub-line.
+// Best Mean / Best Median VALUE ("1.23s" or "—"). Picks the innermost "Best X:" line and
+// extracts just the time, ignoring the new-best ★ and the sibling Median/Mean sub-line.
 function bestVal(which) {
   const els = Array.from(document.querySelectorAll('div')).filter(
     (e) => !isHidden(e) && e.textContent.trim().startsWith(`Best ${which}:`),
@@ -154,12 +154,12 @@ describe('AoX — characterization (batch 1: a clean Ao2 run)', () => {
     document.getElementById('root')?.remove()
   })
 
-  it('idle: Begin shown, Score 0/0, date hidden, Best Average —', () => {
+  it('idle: Begin shown, Score 0/0, date hidden, Best Mean —', () => {
     mountApp()
     switchToAox()
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
-    expect(bestVal('Average')).toBe('—')
+    expect(bestVal('Mean')).toBe('—')
     // Back/Forward/Reveal/Override all disabled in idle.
     expect(isDisabled(ctrl('<'))).toBe(true)
     expect(isDisabled(ctrl('Reveal'))).toBe(true)
@@ -188,9 +188,9 @@ describe('AoX — characterization (batch 1: a clean Ao2 run)', () => {
     answerCorrect() // 2/2 → run completes
     expect(statValue('Score')).toBe('2/2')
     expect(statValue('Streak')).toBe('2/2')
-    // Run done: a Best Average is now recorded (a time, not —), and a solve time shows.
-    expect(bestVal('Average')).toMatch(/^\d+\.\d{2}s$/)
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    // Run done: a Best Mean is now recorded (a time, not —), and a solve time shows.
+    expect(bestVal('Mean')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
   })
 
   it('Reset returns to idle (Score 0/0, Begin shown) but keeps the recorded Best', () => {
@@ -200,12 +200,12 @@ describe('AoX — characterization (batch 1: a clean Ao2 run)', () => {
     click('Begin')
     answerCorrect()
     answerCorrect() // run done, best recorded
-    const best = bestVal('Average')
+    const best = bestVal('Mean')
     expect(best).toMatch(/^\d+\.\d{2}s$/)
     click('Reset')
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
-    expect(bestVal('Average')).toBe(best) // best value persists across Reset (same config)
+    expect(bestVal('Mean')).toBe(best) // best value persists across Reset (same config)
   })
 })
 
@@ -310,18 +310,18 @@ describe('AoX — characterization (batch 3b: Best rollback)', () => {
     document.getElementById('root')?.remove()
   })
 
-  it('Override on a completed run undoes the last solve and rolls the Best Average back to —', () => {
+  it('Override on a completed run undoes the last solve and rolls the Best Mean back to —', () => {
     mountApp()
     switchToAox()
     setN(2)
     click('Begin')
     answerCorrect()
-    answerCorrect() // run done; Best Average recorded
-    expect(bestVal('Average')).toMatch(/^\d+\.\d{2}s$/)
+    answerCorrect() // run done; Best Mean recorded
+    expect(bestVal('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(isDisabled(ctrl('Override'))).toBe(false) // the completing solve is reversible
     click('Override') // undo the last solve → its Best was this run's, so it rolls back
     expect(statValue('Score')).toBe('1/2') // one solve undone, both attempts still counted
-    expect(bestVal('Average')).toBe('—') // Best rolled back (it was set by this now-undone run)
+    expect(bestVal('Mean')).toBe('—') // Best rolled back (it was set by this now-undone run)
     expect(ctrl('Reset')).toBeInTheDocument() // run is over (failed) → locked
   })
 })
@@ -754,13 +754,13 @@ describe('AoX — bug fix (post-completion Override reconciles the Best, C2)', (
     click('Begin')
     answerCorrect() // 1/1, advance
     answerCorrect() // 2/2 → run completes, Best recorded
-    expect(bestVal('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(bestVal('Mean')).toMatch(/^\d+\.\d{2}s$/)
     click('<') // review the first solve
     expect(isDisabled(ctrl('Override'))).toBe(false)
     click('Override') // Path-1 un-credit: retract the first solve (2/2 → 1/2)
     expect(statValue('Score')).toBe('1/2')
     // The run no longer stands at 2 credits, so its recorded Best must not stand either.
-    expect(bestVal('Average')).toBe('—')
+    expect(bestVal('Mean')).toBe('—')
     expect(bestVal('Median')).toBe('—')
   })
 
@@ -774,13 +774,13 @@ describe('AoX — bug fix (post-completion Override reconciles the Best, C2)', (
     mountApp()
     switchToAox()
     setN(2)
-    // Run 1: two 2.0s solves → Best Average 2.00s.
+    // Run 1: two 2.0s solves → Best Mean 2.00s.
     click('Begin')
     tick(2000)
     answerCorrect()
     tick(2000)
     answerCorrect()
-    expect(bestVal('Average')).toBe('2.00s')
+    expect(bestVal('Mean')).toBe('2.00s')
     click('Reset')
     // Run 2: two 0.5s solves → a new record, 0.50s (overwriting the stored value).
     click('Begin')
@@ -788,13 +788,13 @@ describe('AoX — bug fix (post-completion Override reconciles the Best, C2)', (
     answerCorrect()
     tick(500)
     answerCorrect()
-    expect(bestVal('Average')).toBe('0.50s')
+    expect(bestVal('Mean')).toBe('0.50s')
     // Retract one of run 2's solves: run 2 no longer stands → run 1's 2.00s must come back —
     // not '—' (lost) and not 0.50s (fabricated).
     click('<')
     click('Override')
     expect(statValue('Score')).toBe('1/2')
-    expect(bestVal('Average')).toBe('2.00s')
+    expect(bestVal('Mean')).toBe('2.00s')
     expect(bestVal('Median')).toBe('2.00s')
   })
 
@@ -860,14 +860,14 @@ describe('AoX — C2: mode switch mid-run resets, done state survives', () => {
     click('Begin')
     answerCorrect()
     answerCorrect() // run done, Best recorded
-    const best = bestVal('Average')
+    const best = bestVal('Mean')
     expect(best).toMatch(/^\d+\.\d{2}s$/)
     act(() => {
       fireEvent.keyDown(window, { key: 'K' })
     })
     switchToAox()
     expect(statValue('Score')).toBe('2/2') // the finished run's summary is still there
-    expect(bestVal('Average')).toBe(best)
+    expect(bestVal('Mean')).toBe(best)
     expect(ctrl('Reset')).toBeInTheDocument()
   })
 })
@@ -970,7 +970,7 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
   })
   // The field gained its aria-label in the same batch (a Q18 gap-fill) — an accessible-name
   // lookup here is itself the regression test for it.
-  const nField = () => screen.getByRole('textbox', { name: 'AoX run length' })
+  const nField = () => screen.getByRole('textbox', { name: 'MoX run length' })
 
   it('rejects non-digits outright, normalize-commits on blur/Enter, and DISCARDS on Escape', () => {
     // ⚠ RE-BLESSED (round 15, B6) — the Escape leg at the foot of this case asserted the opposite
@@ -1085,7 +1085,7 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
   })
 })
 
-// ── Q7 round-6: Reset Settings now restores the AoX run length too, so a Reset Settings that
+// ── Q7 round-6: Reset Settings now restores the MoX run length too, so a Reset Settings that
 // changes a running/ended run's N reconciles it on the popover close — AoX's existing settings-close
 // reset rule, now triggered by the aoxN dep the close-effect gained. Uses a FACTORY panel so Reset
 // Settings touches ONLY the run length, isolating the mode-screen-pref path from the ⚙-panel path.
@@ -1123,7 +1123,7 @@ describe('AoX — Q7 round-6 (Reset Settings restoring the run length reconciles
   })
 })
 
-// ── Q8: the visual-only timing-stats hide toggle (Last/Average/Median) ───────────────────────
+// ── Q8: the visual-only timing-stats hide toggle (Last/Mean/Median) ───────────────────────
 // AoX gained a per-mode timing-trio hide toggle that is VISUAL ONLY: it blanks the display but the
 // engine keeps timing (AoX feeds the engine timingOff:false always). So there is NO "Enable and
 // Reset Stats?" arm — hiding can never desync — and the scoring trio stays untoggleable. Hiding
@@ -1157,11 +1157,11 @@ describe('AoX — Q8 visual-only timing hide', () => {
     click('Begin')
     tick(500)
     answerCorrect() // one solve; run still going
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
-    clickStat('Average') // hide the timing trio
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
+    clickStat('Mean') // hide the timing trio
     // BLANK — C1's "you turned these off, and they ARE still recording" signal.
     expect(statValue('Last')).toBe('')
-    expect(statValue('Average')).toBe('')
+    expect(statValue('Mean')).toBe('')
     expect(statValue('Median')).toBe('')
     // Scoring trio is untoggleable — still visible.
     expect(statValue('Score')).toBe('1/1')
@@ -1169,7 +1169,7 @@ describe('AoX — Q8 visual-only timing hide', () => {
     // VISUAL ONLY: never the Classic/Flash/Deduction "Enable and Reset Stats?" confirmation.
     expect(screen.queryByText('Enable and Reset Stats?')).toBeNull()
     clickStat('Median') // tapping any timing box re-shows all three
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
   })
 
   it('the engine keeps timing while the trio is hidden — a solve made while hidden appears on re-show', () => {
@@ -1199,11 +1199,11 @@ describe('AoX — Q8 visual-only timing hide', () => {
     setN(2)
     click('Begin')
     answerCorrect() // 1/2 → running, trio suppressed
-    expect(statValue('Average')).toBe('') // blank, not a dash (C1)
+    expect(statValue('Mean')).toBe('') // blank, not a dash (C1)
     answerCorrect() // 2/2 → run completes
     expect(statValue('Score')).toBe('2/2')
     // The completed run reveals its result regardless of the hide toggle (the average is the point).
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
   })
@@ -1309,7 +1309,7 @@ describe('AoX — Q3 round-9 (the run-length row equalizes by stretch, not by ma
     cleanup()
     document.getElementById('root')?.remove()
   })
-  const nField = () => screen.getByRole('textbox', { name: 'AoX run length' })
+  const nField = () => screen.getByRole('textbox', { name: 'MoX run length' })
 
   it('the control row stretches its items — items-stretch, never items-center', () => {
     mountApp()
@@ -1334,11 +1334,11 @@ describe('AoX — Q3 round-9 (the run-length row equalizes by stretch, not by ma
     expect(cls(wrapper)).not.toContain('items-center')
   })
 
-  it('the "Ao" label opts back out with self-center (a stretched span rides its text at the top)', () => {
+  it('the "Mo" label opts back out with self-center (a stretched span rides its text at the top)', () => {
     mountApp()
     switchToAox()
     const span = nField().parentElement.querySelector('span')
-    expect(span.textContent).toBe('Ao')
+    expect(span.textContent).toBe('Mo')
     expect(cls(span)).toContain('self-center')
   })
 })
@@ -1515,7 +1515,7 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     answerCorrect()
     answerCorrect() // the run COMPLETES — Save Stats off never stopped it running
     expect(ctrl('Reset')).toBeInTheDocument()
-    expect(bestVal('Average')).toBe('—')
+    expect(bestVal('Mean')).toBe('—')
     expect(useProgress.getState().aoxBest).toEqual({}) // nothing was written
     // …and the control: the same run, with the switch back on.
     click('Reset')
@@ -1527,6 +1527,6 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     answerCorrect()
     answerCorrect()
     expect(Object.keys(useProgress.getState().aoxBest)).toHaveLength(1)
-    expect(bestVal('Average')).not.toBe('—')
+    expect(bestVal('Mean')).not.toBe('—')
   })
 })

@@ -312,7 +312,7 @@ describe('the shared defaults card caps itself against a short viewport (round 1
     const scroller = scrollerOf(container)
     expect(scroller).toBeTruthy()
     for (const label of [
-      'AoX Run Length',
+      'MoX Run Length',
       'Flash Speed',
       'Blitz Round Timer',
       'Blitz Question Timer',

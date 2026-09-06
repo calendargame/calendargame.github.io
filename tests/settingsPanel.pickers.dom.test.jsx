@@ -166,19 +166,26 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   // G2.1 — the ONLY lock driver that is not a store value. The condition is `mode==='deduction'`
   // exactly, and five of the six modes that leave Input live had never been exercised: a rewrite
   // that reached for "not a weekday mode" or "a game mode" would pass every test that existed.
-  it('the Input picker is live in every mode except Deduction', () => {
+  // ★ TWO PICKERS SHARE THAT ONE CONDITION since Dot Layout joined the panel — the two describe one
+  // subject, the weekday dot input, which Deduction does not have — so both are walked through
+  // every mode HERE rather than one being spot-checked elsewhere. The pair is the point: they were
+  // written to lock together, and the failure worth catching is one of them drifting off the
+  // condition while the other still satisfies every case that names it.
+  const MODE_LOCKED_PICKERS = ['Input', 'Dot Layout']
+  it('the Input and Dot Layout pickers are live in every mode except Deduction', () => {
     standUp()
-    expectLock('Input', false) // classic, where the app opens
+    const both = (locked) => MODE_LOCKED_PICKERS.forEach((name) => expectLock(name, locked))
+    both(false) // classic, where the app opens
     for (const mode of ['flash', 'blitz', 'aox', 'lookup']) {
       goMode(mode)
-      expectLock('Input', false)
+      both(false)
     }
     goMode('deduction')
-    expectLock('Input', true)
+    both(true)
     goMode('classic')
-    expectLock('Input', false)
-    goGuide() // How to Play is a mode too, and it leaves Input live
-    expectLock('Input', false)
+    both(false)
+    goGuide() // How to Play is a mode too, and it leaves both live
+    both(false)
   })
 
   // G2.2 — REMOVED in the dedup pass, and split rather than dropped: "a lock PRESERVES the pick"
@@ -307,13 +314,19 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
 
   // G2.10 — unlocking restores exactly ONE tab stop, on the pill that is actually chosen, with no
   // interaction at all: the group's layout effect re-asserts it on the pass that clears the lock.
-  // Asserted for all four lockable pickers — only Date Format was covered before — and every pick
-  // below is deliberately NOT the first pill, so "restores a tab stop" cannot pass by landing on
-  // the front of the tray.
+  // Asserted for all FIVE lockable pickers — only Date Format was covered before, and Dot Layout
+  // joined the list when it joined the panel — and every pick below is deliberately NOT the first
+  // pill, so "restores a tab stop" cannot pass by landing on the front of the tray.
   const UNLOCK_CASES = [
     {
       name: 'Input',
       pick: 'Dots',
+      lock: () => goMode('deduction'),
+      unlock: () => goMode('classic'),
+    },
+    {
+      name: 'Dot Layout',
+      pick: 'Rows',
       lock: () => goMode('deduction'),
       unlock: () => goMode('classic'),
     },

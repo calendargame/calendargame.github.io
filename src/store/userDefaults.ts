@@ -7,7 +7,7 @@ import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
 
 // userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, Q7 "Save Defaults").
 //
-// The ⚙ footer's Save Defaults button snapshots the full 14-value settings panel PLUS the four
+// The ⚙ footer's Save Defaults button snapshots the full 15-value settings panel PLUS the four
 // capturable mode-screen prefs (Flash reveal speed, both Blitz timer lengths, the AoX run length —
 // deliberately NOT Blitz Per-Round/Per-Question, Deduction sub-type, Allow Mistakes, One-by-One,
 // or the show/hide stat toggles). From then on those saved values — not the factory constants —

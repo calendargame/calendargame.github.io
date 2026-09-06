@@ -102,3 +102,48 @@ describe('checkGameInvariants — catches structural corruption', () => {
     )
   })
 })
+
+// ── The card-number ledger (sub-group 3A) ─────────────────────────────────────────────────────
+// The Q# badge is `historyBase + stack.length + 1`, which is only a LIFETIME number because the
+// engine keeps one exact correspondence: every history entry is exactly one increment of `played`.
+// That is a true impossibility if it ever breaks, so it belongs here — the fuzz then proves it
+// across millions of generated games instead of it resting on an argument in a comment.
+describe('checkGameInvariants — the card-number ledger', () => {
+  it('holds on a fresh engine, hydrated or blank', () => {
+    expect(checkGameInvariants(initEngine(DATE), false)).toEqual([])
+    const hydrated = { played: 40, good: 30, streak: 2, best: 9, times: [] }
+    expect(checkGameInvariants(initEngine(DATE, hydrated), false)).toEqual([])
+  })
+
+  it('holds through a played card and a browse back onto it', () => {
+    const hydrated = { played: 40, good: 30, streak: 2, best: 9, times: [] }
+    let s = gameReducer(initEngine(DATE, hydrated), {
+      type: 'ANSWER',
+      idx: C,
+      useJulian: false,
+      elapsed: null,
+      tracking: false,
+      saveStats: true,
+      nextDate: NEXT,
+    })
+    expect(checkGameInvariants(s, false)).toEqual([])
+    s = gameReducer(s, { type: 'BACK' }) // the live card is now the isLive forward entry
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+
+  it('catches a base that drifted from played (the badge would lie about the score)', () => {
+    const s = { ...initEngine(DATE), historyBase: 3 } // 3 + 0 history + 0 live != played 0
+    expect(join(checkGameInvariants(s, false))).toContain('card ledger')
+  })
+
+  it('catches a history entry with no played behind it', () => {
+    const s = { ...initEngine(DATE), stack: [{ ...DATE, btns: { 0: 'correct' } }] }
+    expect(join(checkGameInvariants(s, false))).toContain('card ledger')
+  })
+
+  it('catches a non-integer base', () => {
+    expect(join(checkGameInvariants({ ...initEngine(DATE), historyBase: 1.5 }, false))).toContain(
+      'historyBase',
+    )
+  })
+})

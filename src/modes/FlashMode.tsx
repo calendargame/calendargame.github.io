@@ -14,6 +14,7 @@ import { fmtFlashT, SLIDER_READOUT_WIDEST } from '../lib/modeFormat.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
+import CardNumber from '../components/CardNumber.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
@@ -43,6 +44,7 @@ function FlashMode({
   dateFormat,
   randomFormat,
   inputStyle = 'buttons',
+  dotOrientation = 'columns',
   leapChance,
   janFebChance,
   julianChance,
@@ -453,16 +455,13 @@ function FlashMode({
         </div>
         <div className="mt-4 rounded-2xl panel p-4">
           <div className="text-center relative">
-            {state.backDepth > 0 && (
-              <span className="absolute right-0 top-0 text-[11px] tabular-nums text-(--tx-300-60)">
-                Q{state.stack.length + 1}
-              </span>
-            )}
+            <CardNumber state={state} show={state.backDepth > 0} />
             <div className="text-3xl font-bold">{dateText}</div>
           </div>
           <WeekdayAnswer
             key={state.gridEpoch}
             inputStyle={inputStyle}
+            dotOrientation={dotOrientation}
             persistBtns={state.persistBtns}
             flash={flash}
             optionsDisabled={optionsDisabled}

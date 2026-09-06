@@ -122,6 +122,11 @@ export interface EntryMeta {
   hasCredit?: boolean
   isLive?: boolean
   liveState?: LiveState
+  // THE TIME THIS CARD IS CURRENTLY CONTRIBUTING TO `stats.times` — see the times ledger in
+  // GameState. null = it is contributing none (a miss, a late correct, timing off). It is not "how
+  // long this card took": an Override that takes a credit away takes the time out of the pool AND
+  // out of this field in the same transition, because the two must never disagree.
+  solveTime?: number | null
 }
 // A history entry: a question plus its bookkeeping.
 export type StackEntry = Question & EntryMeta
@@ -171,6 +176,50 @@ export interface GameState {
   // change), survive every transition (spread), and re-zero on RESET (a fresh initEngine).
   bestFloor: number
   streakCarry: number
+  // ── The card ledger (what the Q# badge counts) ──────────────────────────────────────────────
+  // What `played` was when `stack` was last emptied — so the card being viewed is the
+  // (historyBase + stack.length + 1)-th card of this mode's LIFETIME, not the n-th of this session
+  // (see cardNumber). The badge sits beside a Score box that a continuous mode HYDRATES at mount
+  // while the stack deliberately starts empty, so the old in-session formula and the box next to it
+  // had never agreed: 500 cards in, pressing < read "Q1" beside "471/501" (the owner's report).
+  // WHY NO NEW PERSISTED DATA IS NEEDED: the engine already keeps an exact 1-to-1 correspondence —
+  // every browsable history entry is exactly one increment of `played`. advance() pushes iff the
+  // question was answered AND scored (saveStatsThisQ === true), which is precisely the condition
+  // under which some stat action already incremented `played` for it; Override moves `good` and
+  // never `played`; a card played with Save Stats OFF is neither counted nor pushed; a Blitz
+  // per-round timeout (LOCK_REVEAL) shows an answer without scoring it, and is likewise never
+  // pushed. So the ONE fact the stack cannot supply is where it started — this field. The
+  // correspondence is asserted outright by checkGameInvariants ('card ledger'), so the fuzz proves
+  // it across millions of generated games instead of it resting on this paragraph.
+  // It seeds at initEngine from the hydrated total (0 for a blank/timed start — which is why
+  // Blitz/AoX, whose Begin/Reset is a full RESET, are unchanged BY CONSTRUCTION rather than by a
+  // special case), re-zeroes on RESET with the stats it clears, and re-bases to the KEPT `played`
+  // on RESET_ROUND (the timed modes' mid-round Reset wipes history but keeps lifetime stats).
+  historyBase: number
+  // ── The TIMES ledger (what makes the run breakdown a proof rather than a second opinion) ─────
+  // `stats.times` is a bare pool of seconds: it says WHAT the mean is made of and nothing about
+  // WHICH card contributed each number. That was survivable while the only consumers were
+  // calcAvg/calcMed, and it stopped being survivable the moment a screen had to list the solves
+  // one per row — a solve rescued by Override keeps its time in the mean while its own row had no
+  // way to know, so the rows would silently fail to add up to the headline they sit under.
+  //
+  // So every card now carries the time it is contributing RIGHT NOW (StackEntry.solveTime), and
+  // this field is that same fact for the card in `state.date` — the one card that is not in a
+  // stack. Together they are a complete, per-card decomposition of the pool: every path that
+  // pushes a time into `stats.times` writes it here or onto an entry, and every path that drops
+  // one clears it in the same transition. checkGameInvariants asserts the two sides agree, so the
+  // fuzz proves the decomposition across millions of games instead of it resting on this comment.
+  //
+  // `timesBase` is the count of times that sit BEHIND the current history with no card to name
+  // them — exactly the role `historyBase` plays for `played`, and it exists for the same two
+  // reasons: a continuous mode HYDRATES saved `times` on mount with no history behind them, and
+  // RESET_ROUND wipes the history while keeping the stats. So the standing claim is
+  // `times.length === timesBase + (the ledger's non-null entries)`, and the ledger times are
+  // always a sub-multiset of the pool. When `timesBase` is 0 — which is every run/round mode, whose
+  // Begin is a full RESET — those two together force EXACT equality, which is the property the
+  // breakdown relies on (engine/runBreakdown).
+  liveSolveTime: number | null
+  timesBase: number
 }
 
 // ── The action set (discriminated union on `type`) ───────────────────────────
@@ -251,6 +300,7 @@ const stripEntryMeta = ({
   hasCredit,
   isLive,
   liveState,
+  solveTime,
   ...date
 }: StackEntry): Question => date
 
@@ -283,7 +333,39 @@ export const initEngine = (date: Question, initialStats?: Stats): GameState => (
   // The hydration baseline (see GameState): seed from the prior-session record, 0 for a blank start.
   bestFloor: initialStats?.best ?? 0,
   streakCarry: initialStats?.streak ?? 0,
+  // The card ledger's base (see GameState): the stack starts empty, so everything already played
+  // sits behind it. 0 for a blank start ⇒ the badge is the old stack-slot number, unchanged.
+  historyBase: initialStats?.played ?? 0,
+  // The times ledger (see GameState): a fresh card contributes nothing yet, and every hydrated time
+  // is carried-in — it has no card in this session's history to name it. 0 for a blank start ⇒ the
+  // ledger accounts for the whole pool, which is what the run modes rely on.
+  liveSolveTime: null,
+  timesBase: initialStats?.times.length ?? 0,
 })
+
+// The card's LIFETIME number — the figure the Q# badge shows beside the Score box. `stack` holds the
+// entries BEHIND the card being viewed (browsing back pops them), so the base plus that depth plus
+// one is the viewed card's 1-based position in everything this mode has ever played. One counter per
+// engine, so a mode with its own Score box (Deduction's Day/Month/Year each run their own) numbers
+// separately, which is exactly the rule "the badge follows the Score box it sits beside".
+export const cardNumber = (state: GameState): number => state.historyBase + state.stack.length + 1
+
+// DID THIS CARD EARN ITS POINT? — the rule, in one place, because three callers need it and two of
+// them used to spell it out for themselves. "Earned" is NOT "the grid shows green": a Reveal, a Show
+// Codes, a timeout and a reversed-to-wrong Override all leave a clean 'correct' on the grid without
+// crediting `good`, so computeHasCredit alone would call a give-up a credit. A card earned a point
+// only if it was a clean first-try correct — a green with no wrong beside it, the answer never shown
+// (`revealed`), and the question never burned (`countedWrong`). The genuine crediting advances (a
+// first-try ANSWER, Override Path 3) set neither flag, so this only ever drops a FALSE credit.
+// Callers: advance() stamping `hasCredit` onto the entry it pushes, liveStreakContribution folding
+// the parked live card into a streak recompute, and engine/runBreakdown reading the same card for
+// the run breakdown's rows. (Family of bugs found by the C2 fuzz survey, 2026-06-06; extracted to
+// one function when the breakdown became a third caller and a third copy was the alternative.)
+export const earnedCredit = (
+  btns: Btns | null | undefined,
+  revealed: boolean,
+  countedWrong: boolean,
+): boolean => computeHasCredit(btns) && !revealed && !countedWrong
 
 // The per-question frozen Save-Stats value (frozen on first stat-affecting action),
 // else the live setting. Mirrors App's effectiveSaveStats / saveStatsThisQRef.
@@ -320,22 +402,25 @@ const advance = (
       snapshot: state.prevStatsSnapshot ? { ...state.prevStatsSnapshot } : null,
       wrongTime: state.wrongTime,
     }
-    // hasCredit = "this question EARNED a point", NOT merely "the grid shows green". REVEAL / Show
-    // Codes / a timeout / a reversed-to-wrong Override all leave a clean 'correct' on the grid WITHOUT
-    // crediting good, so computeHasCredit(btns) alone would mislabel a give-up or a miss as a credit —
-    // and a later Override that recomputes the streak from history would then inflate streak/best PAST
-    // good (an impossible score that slips by the good≤played check). A question earned a point ONLY
-    // if it was a clean first-try correct: NOT revealed (the answer was never shown) AND NOT
-    // countedWrong (never burned by a wrong / Reveal / Show Codes). The genuine credit advances
-    // (first-try ANSWER, Override Path 3) set neither flag, so this only ever drops a FALSE credit,
-    // never a real one. (Family of bugs found by the C2 fuzz survey, 2026-06-06.)
+    // hasCredit = "this question EARNED a point", NOT merely "the grid shows green" — the rule and
+    // the bugs behind it are at earnedCredit above. Getting it wrong here inflates streak/best PAST
+    // good on the next Override that recomputes from history (an impossible score that slips by the
+    // good≤played check).
     const pushed = entryWithGreen(
       {
         ...state.date,
         btns,
         overrideUsed: false,
         capsule,
-        hasCredit: computeHasCredit(btns) && !state.revealed && !state.countedWrong,
+        hasCredit: earnedCredit(btns, state.revealed, state.countedWrong),
+        // The times ledger hands off here: the time the live card was contributing becomes the
+        // pushed card's, and the live half is cleared below. A card that is NOT pushed can never be
+        // holding one — a non-null liveSolveTime means some action put a real number into
+        // stats.times, which requires the frozen Save-Stats to be true, which is exactly the
+        // condition (`wasAnswered && saved && scored`) this branch is inside. The clear is
+        // unconditional anyway, so a future path that broke that reasoning would drop the time and
+        // trip the invariant rather than mis-attributing it to the next card.
+        solveTime: state.liveSolveTime,
       },
       useJulian,
     )
@@ -380,6 +465,7 @@ const advance = (
     prevStatsSnapshot: null,
     canOverrideCorrect: false,
     saveStatsThisQ: null,
+    liveSolveTime: null, //  handed to the pushed entry above; the fresh card contributes nothing
   }
 }
 
@@ -457,7 +543,7 @@ const liveStreakContribution = (live: StackEntry | undefined): 'credit' | 'miss'
   const btns = live.btns
   const wasAnswered = !!btns && Object.keys(btns).length > 0
   if (!wasAnswered || !ls || ls.saveStatsFrozen !== true) return null
-  return computeHasCredit(btns) && !ls.revealed && !ls.countedWrong ? 'credit' : 'miss'
+  return earnedCredit(btns, ls.revealed, ls.countedWrong) ? 'credit' : 'miss'
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -494,6 +580,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           // reversal (Path 1/5) removes this exact value, not a stale index.
           const recorded = elapsed != null && tracking && effective ? elapsed : null
           next.prevStatsSnapshot = snapshot(state.stats, false, recorded)
+          // The ledger's live half, written in the same breath as the pool below — they are one
+          // fact. A LATE correct (countedWrong, this whole block skipped) records no time at all
+          // and so contributes none: the card is a miss, and its breakdown row shows a dash for a
+          // time rather than a number the mean does not contain.
+          next.liveSolveTime = recorded
           next.canOverrideCorrect = true
           next.pendingWrongOverride = null
           let stats = state.stats
@@ -656,7 +747,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     // performTimingOn setting tStartRef).
     case 'REGEN_DATE': {
       const { nextDate } = action
-      if (state.countedWrong || state.revealed || state.backDepth > 0) return state
+      // `liveSolveTime != null` joins the bail list for the reason the other two terms are on it:
+      // you have USED this date. A card holding a recorded time is one that credited without
+      // advancing — AoX's held completing solve, the only such card in the app — and swapping the
+      // date under it would leave its second in the mean while the breakdown attributed it to a
+      // date the player never saw. No in-app path reaches it (AoX only regenerates while idle), so
+      // this changes no behaviour; it closes the gap rather than trusting the component to.
+      if (
+        state.countedWrong ||
+        state.revealed ||
+        state.backDepth > 0 ||
+        state.liveSolveTime != null
+      )
+        return state
       return { ...state, date: nextDate, questionId: state.questionId + 1 }
     }
 
@@ -744,6 +847,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         prevStatsSnapshot: null,
         wrongTime: null,
         saveStatsThisQ: null,
+        // Re-base the card ledger onto the stats that SURVIVE (unlike RESET, which zeroes them):
+        // the history behind them is gone, so everything counted so far is now "behind the empty
+        // stack". Flash's mid-round Reset therefore keeps numbering forward — the next card is the
+        // 502nd, not the 1st — while Blitz/AoX, which reset via RESET, restart at 1. Without this
+        // the badge would fall back to a session number the surviving Score box contradicts, which
+        // is the very defect this ledger exists to close.
+        historyBase: state.stats.played,
+        // …and the times ledger re-bases with it, for the identical reason: the surviving `times`
+        // keep every second they had, while the cards that earned them are gone. They become
+        // carried-in — counted by `timesBase`, named by nothing.
+        liveSolveTime: null,
+        timesBase: state.stats.times.length,
       }
     }
 
@@ -763,14 +878,22 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const times = [...state.stats.times]
         let stats: Stats
         let persistBtns: Btns
+        // The ledger moves with the credit. The card being browsed IS `state.date`, so its share of
+        // the pool is the LIVE half — BACK parked the live card's value in forwardStack and loaded
+        // this entry's in its place, which is what lets one field serve "whatever card is on screen".
+        let liveSolveTime = state.liveSolveTime
         if (u.wasWrong) {
-          if (state.wrongTime != null && tracking) times.push(state.wrongTime)
+          if (state.wrongTime != null && tracking) {
+            times.push(state.wrongTime)
+            liveSolveTime = state.wrongTime
+          }
           stats = { ...state.stats, good: state.stats.good + 1, times }
           persistBtns = oneBtn(correct, 'correct')
         } else {
           const cut = dropContributedTime(times, u.contributedTime)
           stats = { ...state.stats, good: Math.max(0, state.stats.good - 1), times: cut }
           persistBtns = oneBtn(correct, 'override-wrong')
+          liveSolveTime = null //  the credit is gone, so the time leaves the pool AND the card
         }
         const streaks = streaksFromStacks(
           state.stack,
@@ -797,6 +920,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           prevStatsSnapshot: null,
           wrongTime: null,
           canOverrideCorrect: false,
+          liveSolveTime,
         }
       }
 
@@ -845,6 +969,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           wrongTime: null,
           canOverrideCorrect: false,
           countedWrong: true,
+          // `cut` above removed this answer's second from the pool; the card must let go of it in
+          // the same transition, or the entry advance() pushes below would still name a time the
+          // mean no longer contains.
+          liveSolveTime: null,
         }
         // `noAdvance` (AoX): reversing the completing solve fails the run (Allow Mistakes off) —
         // stay on the question instead of advancing, so the component can lock it as failed.
@@ -868,10 +996,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // recalc streak, advance.
       if (state.countedWrong) {
         const times = [...state.stats.times]
-        if (state.wrongTime != null && tracking) times.push(state.wrongTime)
+        // The one number this path can add to the pool, computed once and used three ways: pushed
+        // into `times`, written onto the live card's ledger slot, and (in the held branch below)
+        // recorded as the snapshot's contributedTime so a later reversal removes exactly it.
+        const contributed = state.wrongTime != null && tracking ? state.wrongTime : null
+        if (contributed != null) times.push(contributed)
         let s: GameState = {
           ...s0,
           stats: { ...state.stats, good: state.stats.good + 1, times },
+          liveSolveTime: contributed,
           wrongTime: null,
           prevStatsSnapshot: null,
           countedWrong: false,
@@ -902,7 +1035,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         // (only the fuzz produces it) falls through to the normal advance, whose history credit is
         // reconstructable. The streak above (middle=true) already counts this live credit. (C2 fix.)
         if (noAdvance && state.saveStatsThisQ === true) {
-          const contributed = state.wrongTime != null && tracking ? state.wrongTime : null
           return {
             ...s,
             persistBtns: oneBtn(correct, 'correct'),
@@ -941,12 +1073,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         // the live stats is identical there and stays correct when stats have drifted. (C1 fuzz fix,
         // 2026-06-07 — the streak/best-inflation family the override-/reveal-heavy profiles surfaced.)
         const times = [...state.stats.times]
-        if (wrongTime != null && tracking) times.push(wrongTime)
+        const contributed = wrongTime != null && tracking ? wrongTime : null
+        if (contributed != null) times.push(contributed)
         const stats = { ...state.stats, good: state.stats.good + 1, times }
         const wd = correctIndexOf(last, useJulian)
         const newStack = [
           ...state.stack.slice(0, -1),
-          { ...last, btns: oneBtn(wd, 'correct'), overrideUsed: true, hasCredit: true },
+          {
+            ...last,
+            btns: oneBtn(wd, 'correct'),
+            overrideUsed: true,
+            hasCredit: true,
+            // The credit and the second belong to the SAME card — the previous one — so the ledger
+            // write goes on the entry, not on the live half. The fallback keeps a card that somehow
+            // already held one (it cannot: this target was burned, and a burn records nothing)
+            // rather than silently zeroing a contribution the pool still counts.
+            solveTime: contributed ?? last.solveTime ?? null,
+          },
         ]
         const { curStreak, bestStreak } = streaksFromStacks(
           newStack,
@@ -997,9 +1140,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         let stats: Stats
         let newLast: StackEntry
         if (u.wasWrong) {
-          if (cap.wrongTime != null && tracking) times.push(cap.wrongTime)
+          const contributed = cap.wrongTime != null && tracking ? cap.wrongTime : null
+          if (contributed != null) times.push(contributed)
           stats = { ...state.stats, good: state.stats.good + 1, times }
-          newLast = { ...target, btns: oneBtn(wd, 'correct'), overrideUsed: true, hasCredit: true }
+          newLast = {
+            ...target,
+            btns: oneBtn(wd, 'correct'),
+            overrideUsed: true,
+            hasCredit: true,
+            solveTime: contributed ?? target.solveTime ?? null,
+          }
         } else {
           const cut = dropContributedTime(times, u.contributedTime)
           stats = { ...state.stats, good: Math.max(0, state.stats.good - 1), times: cut }
@@ -1008,6 +1158,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             btns: oneBtn(wd, 'override-wrong'),
             overrideUsed: true,
             hasCredit: false,
+            solveTime: null, //  `cut` took it out of the pool; the card lets go of it here
           }
         }
         const newStack = [...state.stack.slice(0, -1), newLast]
@@ -1056,6 +1207,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 saveStatsFrozen: state.saveStatsThisQ,
               },
               hasCredit: fwdHC,
+              solveTime: state.liveSolveTime,
             }
           : {
               ...state.date,
@@ -1063,6 +1215,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               overrideUsed: state.overrideUsedThisQ,
               capsule: fwdCapsule,
               hasCredit: fwdHC,
+              solveTime: state.liveSolveTime,
             }
       const wasAnswered = prev.btns && Object.keys(prev.btns).length > 0
       const wasRevealed = !!(prev.btns && Object.values(prev.btns).includes('correct'))
@@ -1085,6 +1238,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         overrideUsedThisQ: prev.overrideUsed || false,
         backDepth: state.backDepth + 1,
         browseHasCredit: prev.hasCredit ?? computeHasCredit(prev.btns),
+        // The times ledger's live half follows the card on screen, exactly as persistBtns and
+        // browseHasCredit do: the card we are leaving takes its second into forwardStack (above),
+        // and the card we are arriving at brings its own back out. Nothing enters or leaves
+        // `stats.times` here — this is the same seconds changing hands, which is why Back/Forward
+        // can never move the mean.
+        liveSolveTime: prev.solveTime ?? null,
         saveStatsThisQ: true,
       }
     }
@@ -1107,6 +1266,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           overrideUsed: state.overrideUsedThisQ,
           capsule,
           hasCredit: state.browseHasCredit,
+          solveTime: state.liveSolveTime,
         },
         useJulian,
       )
@@ -1117,6 +1277,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         forwardStack: state.forwardStack.slice(0, -1),
         backDepth: Math.max(0, state.backDepth - 1),
         date: stripEntryMeta(fwd),
+        liveSolveTime: fwd.solveTime ?? null, //  the ledger hand-off, mirroring BACK
       }
       if (fwd.isLive) {
         const ls: Partial<LiveState> = fwd.liveState || {}

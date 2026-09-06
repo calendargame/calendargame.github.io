@@ -88,9 +88,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // footer link-row class — since split into FOOTER_META_ROW_CLASS + FOOTER_DEFAULTS_ROW_CLASS —
     // and NUM_INPUT_CLASS) left with the ⚙ card. Consumed now by
     // components/SettingsPanel + DefaultsCard + WeekdayAnswer and all five mode screens.
-    // DOT_CELL — the logo's 7-position layout for the Dots input → src/lib/dotLayout.ts. NOT imported
-    // here: App renders no answer input. Its two readers are components/WeekdayAnswer (the Dots grid
-    // itself) and components/GuidePage's DotDiagram, which derives its diagram from the same array.
+    // DOT_CELLS — the logo's 7-position layout for the Dots input, in both orientations →
+    // src/lib/dotLayout.ts. NOT imported here: App renders no answer input. Its readers are
+    // components/WeekdayAnswer (the Dots grid itself) and components/GuidePage's DotDiagram, which
+    // derives its diagram from the same data. What App DOES hold is the dotOrientation SETTING, and
+    // it hands that to the four weekday modes and to the title-bar mark (W5Logo, whose sibling
+    // DOT_MARK_ROTATION is likewise not imported here — the component applies it).
     // WeekdayAnswer -> src/components/WeekdayAnswer.tsx. NOT imported here: all five mode screens
     // render their own, and App renders none.
     // MONTH / DAY name tables → src/lib/format.js. NOT imported here — see the format entry below for
@@ -99,7 +102,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // lib/format itself uses MONTH internally in fmt/fmtPartial.
     // MODE_LABELS drives the header mode CustomSelect (the customSelect dropdown
     // that replaced the native <select>). Order here = order shown in the dropdown.
-    const MODE_LABELS=[{value:'classic',label:'Classic'},{value:'aox',label:'AoX'},{value:'deduction',label:'Deduction'},{value:'flash',label:'Flash'},{value:'blitz',label:'Blitz'},{value:'lookup',label:'Lookup'},{value:'guide',label:'How to Play'}];
+    const MODE_LABELS=[{value:'classic',label:'Classic'},{value:'aox',label:'MoX'},{value:'deduction',label:'Deduction'},{value:'flash',label:'Flash'},{value:'blitz',label:'Blitz'},{value:'lookup',label:'Lookup'},{value:'guide',label:'How to Play'}];
     // ⚙ Settings PICKER option arrays (WRITTEN_FORMATS / NUMERIC_FORMATS / INPUT_STYLES /
     // DARK_THEMES / LIGHT_THEMES / CHANCE_OPTIONS / LEAP_CHANCE_OPTIONS) -> src/components/
     // settingsOptions.ts, imported by the panel itself. MODE_LABELS above stayed here because it
@@ -386,16 +389,17 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
       // ⚙ Settings store (Stage C, Step 5a). ★ THE COUNT, AND WHICH SET IT COUNTS — three different
       // numbers live in this area and conflating them is how the old comments went wrong:
-      //   14 = the settings the ⚙ store HOLDS AND PERSISTS (store/settings SETTINGS_DEFAULTS, and
-      //        therefore PERSISTED_KEYS). App binds all 14 as values below: it needs every one for
-      //        settingsAtDefaults, and several again for date generation and the mode props.
+      //   15 = the settings the ⚙ store HOLDS AND PERSISTS (store/settings SETTINGS_DEFAULTS, and
+      //        therefore PERSISTED_KEYS). App binds all 15 as values below: it needs every one for
+      //        settingsAtDefaults, and several again for date generation, the mode props and the
+      //        title-bar mark.
       //    3 = the store FUNCTIONS App binds — setMinY, setMaxY (they feed the year-range mirrors
-      //        below) and applySettings (Reset Settings / Full Reset write all 14 in one shot). The
-      //        other eleven per-value setters are NOT bound here: the only writer of a settings
+      //        below) and applySettings (Reset Settings / Full Reset write all 15 in one shot). The
+      //        other twelve per-value setters are NOT bound here: the only writer of a settings
       //        value is the panel, and components/SettingsPanel selects its own.
-      //   18 = a different set entirely, and NOT what any of this judges — the Save Defaults
-      //        SNAPSHOT (those 14 + the 4 capturable mode prefs). It is counted at resetSettings
-      //        below, alongside how many of the 18 the gear actually compares.
+      //   19 = a different set entirely, and NOT what any of this judges — the Save Defaults
+      //        SNAPSHOT (those 15 + the 4 capturable mode prefs). It is counted at resetSettings
+      //        below, alongside how many of the 19 the gear actually compares.
       // The Year Range boxes' two TEXT MIRRORS are in none of those counts: they stay App state, in
       // components/useYearRangeMirrors (called below) — they are not settings, they are what the
       // user is currently typing, and they deliberately disagree with the store until it commits.
@@ -412,6 +416,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const dateFormat=useSettings(s=>s.dateFormat);
       const randomFormat=useSettings(s=>s.randomFormat);
       const inputStyle=useSettings(s=>s.inputStyle);
+      const dotOrientation=useSettings(s=>s.dotOrientation);
       const leapChance=useSettings(s=>s.leapChance);
       const janFebChance=useSettings(s=>s.janFebChance);
       const julianChance=useSettings(s=>s.julianChance);
@@ -1453,23 +1458,23 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // The gear-dot retirement USED to live here, as an effect watching [settingsOpen,gearDot]. It
       // moved up to toggleSettings (declared beside gearDot) — see the reasoning there. Nothing
       // else retires it, so this is the only pointer you need.
-      // Restores the settings the ⚙ panel owns — the 14 menu values + the 2 year-range text mirrors —
+      // Restores the settings the ⚙ panel owns — the 15 menu values + the 2 year-range text mirrors —
       // AND the four capturable mode-screen prefs (Flash speed, both Blitz timers, the AoX run length)
       // to their EFFECTIVE defaults: the user's saved personal defaults when they exist (Q7,
       // store/userDefaults), the factory launch values otherwise. This is the exact MIRROR of Save
-      // Defaults, which copies the same 18-value unit the other way — live → the snapshot.
-      // ★ 18 IS THE SNAPSHOT'S SIZE, NOT THE GEAR'S. Keep the two apart:
-      //   18 RESTORED / SAVED = the 14 store settings + the 4 capturable prefs. (This restore also
+      // Defaults, which copies the same 19-value unit the other way — live → the snapshot.
+      // ★ 19 IS THE SNAPSHOT'S SIZE, NOT THE GEAR'S. Keep the two apart:
+      //   19 RESTORED / SAVED = the 15 store settings + the 4 capturable prefs. (This restore also
       //      rewrites the 2 year-range text mirrors, which are stored nowhere and so have nothing to
-      //      copy back — hence 20 written here, 18 in the snapshot.)
-      //   19 or 18 COMPARED by the gear's "modified" bar: 11 plain settings + the 4 prefs + the
+      //      copy back — hence 21 written here, 19 in the snapshot.)
+      //   20 or 19 COMPARED by the gear's "modified" bar: 12 plain settings + the 4 prefs + the
       //      theme trio judged BY WHAT IS IN EFFECT (2 of the three with Use System On —
       //      darkTheme/lightTheme; 1 with it Off — manualTheme) + the 2 year-range TEXT MIRRORS.
       //      The dormant theme value(s) — one with Use System On, TWO with it Off — are never
       //      compared; settingsAtDefaults below says why at length.
-      // ⚠ SO IT IS NO LONGER A SUBSET OF THE 18, and round 15 is what changed that: the 2 mirrors
+      // ⚠ SO IT IS NO LONGER A SUBSET OF THE 19, and round 15 is what changed that: the 2 mirrors
       // are compared but not saved. Nothing breaks, because this restore WRITES them (the resetTo
-      // line below) even though the snapshot has nothing to write back — the 20-written / 18-saved
+      // line below) even though the snapshot has nothing to write back — the 21-written / 19-saved
       // asymmetry above is exactly what keeps "one tap clears a lit gear" true for the two terms
       // that are compared and not stored.
       // One tap therefore still always clears a lit gear
@@ -1483,7 +1488,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // timer/run-length too). Triggers the unified popover-settings effect, which regenerates the
       // current date as appropriate (Random Format / Date Format / Leap Chance are always-regen).
       const resetSettings=()=>{
-        // The 14 store-held settings in one shot (store/settings applySettings), then the 2 transient
+        // The 15 store-held settings in one shot (store/settings applySettings), then the 2 transient
         // text mirrors that live locally, then the 4 capturable mode-screen prefs (store/modePrefs
         // applyPrefs — the same call Full Reset makes; the other mode-prefs keep their live values).
         applySettingsStore(defSettings);
@@ -1534,7 +1539,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         setSettingsOpen(false);
         setAppAtBottom(true);
         setAppScrolledFromTop(false);
-        // Settings popover → EFFECTIVE defaults (14 store values incl. theme + the 2 transient
+        // Settings popover → EFFECTIVE defaults (15 store values incl. theme + the 2 transient
         // input mirrors — the user's saved personal defaults when present). Since round-6 Q7 this
         // ALSO applies the 4 capturable mode prefs; the resetModePrefs()+applyModePrefs(defPrefs) pair
         // below re-establishes them over the factory modePrefs reset, so that write is subsumed here
@@ -1588,7 +1593,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚠ NOT "every store value": at
       // least one of the theme trio is ALWAYS excluded (BOTH darkTheme and lightTheme while Use
       // System is Off), which is the whole point of themeAtDefaults just below —
-      // 13 of the 14 settings are compared with Use System On, 12 with it Off. Say it that way; an
+      // 14 of the 15 settings are compared with Use System On, 13 with it Off. Say it that way; an
       // "every value" phrasing here is the over-claim this comment used to make.
       // ★ AND IT IS THE PANEL, NOT THE STORE: the last two terms are the two year-range TEXT
       // MIRRORS (components/useYearRangeMirrors), so a year that has been TYPED but not yet
@@ -1621,7 +1626,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // both offered, permanently. Comparing only the live pair is both the honest definition and
       // the fix, and it retires the whole class of dormant-value false positives.
       const themeAtDefaults=useSystem?(darkTheme===defSettings.darkTheme&&lightTheme===defSettings.lightTheme):(manualTheme===defSettings.manualTheme);
-      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
+      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&dotOrientation===defSettings.dotOrientation&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
       // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator (Q8), the Save
       // Defaults dim AND the Reset Settings dim. True when live state diverges from the effective
       // defaults in EITHER store — any menu setting, either year BOX, or any of the four capturable
@@ -1682,7 +1687,18 @@ import BlitzMode from './modes/BlitzMode.jsx'
             <div className="flex items-center justify-between gap-2">
               {/* header left: title */}
               <div className="flex items-center gap-2 shrink-0">
-                <W5Logo className="shrink-0" />
+                {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Dot Layout). The app icon
+                    IS that 7-dot grid, coordinate for coordinate, so turning the input and leaving
+                    the mark upright would break the very claim How-to-Play makes about them. This
+                    is the ONE drawing of the mark that follows: the title bar is app chrome, with
+                    no static counterpart on screen beside it. The three full-screen frames —
+                    index.html's #boot, the Updating overlay and the rotate-back overlay — keep the
+                    canonical upright form, because they stand next to (or back-to-back with) the
+                    iOS launch PNGs that are pre-renders of #boot and cannot follow anything. That
+                    is why W5Logo takes an ORIENTATION PROP defaulting to upright rather than
+                    reading the store itself: the default IS the fixed brand mark, and a caller has
+                    to ask for the player's. lib/dotLayout's DOT_MARK_ROTATION states the rest. */}
+                <W5Logo className="shrink-0" dotOrientation={dotOrientation} />
                 <h1 className="text-xl font-semibold leading-none shrink-0">Calendar Game</h1>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1797,17 +1813,17 @@ import BlitzMode from './modes/BlitzMode.jsx'
               BOUNDARY now (not the inner component) so Full Reset remounts boundary+component
               together (clearing any caught error AND resetting the component's state). The
               always-mounted modes pass `active` so a hidden mode's crash paints nothing. */}
-          <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="AoX" active={mode==="aox"}>
-            <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} randomFormat={randomFormat} inputStyle={inputStyle} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
+          <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="MoX" active={mode==="aox"}>
+            <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"classic-"+classicResetKey} mode="Classic" active={mode==="classic"}>
-            <ClassicMode visible={mode==="classic"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
+            <ClassicMode visible={mode==="classic"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"flash-"+flashResetKey} mode="Flash" active={mode==="flash"}>
-            <FlashMode visible={mode==="flash"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
+            <FlashMode visible={mode==="flash"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"blitz-"+blitzResetKey} mode="Blitz" active={mode==="blitz"}>
-            <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
+            <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"deduction-"+deductionResetKey} mode="Deduction" active={mode==="deduction"}>
             <DeductionMode visible={mode==="deduction"} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} settingsOpen={settingsOpen} onFreshChange={setDeductionIsFresh}/>

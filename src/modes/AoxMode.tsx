@@ -1,7 +1,29 @@
-// AoxMode — the Average-of-X screen: a timed run of N questions with averaging, its own Best
-// standing, and the Allow Mistakes / One-By-One sub-modes. Extracted verbatim from main.tsx
-// (Q1 phase 1); it was already a module-level sibling of App taking everything through props,
-// so nothing about its behaviour changes by living here.
+// AoxMode — the MEAN-of-X screen: a timed run of N questions averaged, its own Best standing, and
+// the Allow Mistakes / One-By-One sub-modes. Extracted verbatim from main.tsx (Q1 phase 1); it was
+// already a module-level sibling of App taking everything through props, so nothing about its
+// behaviour changes by living here.
+//
+// ★ THE MODE IS "MoX" TO THE PLAYER AND "Aox/aox" IN THE CODE, ON PURPOSE — read this before
+// "finishing" the rename, because the mismatch is the decision, not an oversight.
+// WHY THE PLAYER-FACING NAME CHANGED (owner, sub-group 3C): this screen's headline figure is a
+// straight arithmetic MEAN of every solve. It does not trim, and it never has. Cubers reserve
+// "average" for a TRIMMED figure (an Ao5 drops the best and the worst) and use "Mo3" for exactly
+// an untrimmed mean — so "AoX"/"Average" was telling the one audience that knows the difference
+// the wrong thing. Every label a player reads is now Mean / MoX. ⚠ NO TRIMMING WAS ADDED: the
+// arithmetic is byte-identical, this was a naming defect and only a naming defect.
+// WHY THE IDENTIFIERS DID NOT FOLLOW: `aoxN`, `aoxBest`, `aoxAllowMistakes`, `aoxOneByOne` and
+// `aoxTimingOff` are PERSISTED FIELD NAMES inside the saved `cg-progress` / mode-prefs payloads,
+// and `bestKey` (below) is a config string that is itself a saved map key. Renaming them buys the
+// player nothing and costs a store migration per field, with every existing Best and every saved
+// personal default riding on it getting the migration right. The anchor is therefore the saved
+// data, and everything internal matches the anchor — one name in the code, not two. What is NOT
+// acceptable is a half-rename (`MoxMode` reading `aoxBest`), which is the state this note exists
+// to prevent.
+// ⚠ AND THE BESTS CARRY OVER BECAUSE NOTHING KEYED ON THE LABEL. `bestKey` is built from n,
+// allowMistakes, the format bucket, the three chances, the year range and useJulian — no display
+// string anywhere in it — and the store field is `aoxBest`, untouched. So a player who had a Best
+// Average yesterday sees the same number under "Best Mean" today, with no migration and no version
+// bump. (Pinned by tests/moxRename.dom — a Best recorded under the old label is still found.)
 import { useEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { FLASH_MS, useButtonFlash } from './modeHooks.js'
@@ -11,9 +33,12 @@ import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
+import CardNumber from '../components/CardNumber.jsx'
+import RunBreakdown from '../components/RunBreakdown.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
+import { buildRunBreakdown } from '../engine/runBreakdown.js'
 import { reconcileAoxStanding, aoxBestEqual, emptyAoxBest } from '../engine/aoxBest.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -26,7 +51,7 @@ import { useBackButton } from '../components/useBackButton.js'
 // AoxMode — the "average of N" run mode, FOLDED onto the shared useGameEngine (mode-untangle
 // Step 5, redone). Like Blitz, the engine runs the per-question loop (answer / credit / stats /
 // history / Override / Show Codes) and the COMPONENT owns the run layer: the run lifecycle
-// (idle/running/done/failed), the Ao-N count, Best Average/Median (per config, with rollback),
+// (idle/running/done/failed), the Mo-N count, Best Mean/Median (per config, with rollback),
 // One-by-One, and the fail-on-mistake rule. The run's stats ARE the engine stats — good =
 // credited solves, played = attempts, times = solve times, streak/best. The fold needs only
 // two general engine flags: `complete` (the Nth solve credits without advancing) and
@@ -44,6 +69,7 @@ function AoxMode({
   randomFormat = false,
   dateFormat = 'written-mdy',
   inputStyle = 'buttons',
+  dotOrientation = 'columns',
   saveStats = true,
   settingsOpen,
   onFreshChange,
@@ -63,6 +89,7 @@ function AoxMode({
     setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — dims the LIVE mid-run trio, but a completed run always shows its result
   const [runPhase, setRunPhase] = useState('idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop)
   const [shown, setShown] = useState(false) // One-by-One: is the current date revealed? (always true for non-One-by-One while running)
+  const [breakdownOpen, setBreakdownOpen] = useState(false) // the run breakdown popup (components/RunBreakdown) — ephemeral, dies with the run
   const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
   // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes,
   // format (random→'random' bucket), leapChance, janFebChance, julianChance, year range,
@@ -102,7 +129,7 @@ function AoxMode({
   // pause when the run flows date-to-date on its own). (C2 Q4 + the reveal-flash refinement.)
   const awaitingNext = resolvedMiss && (state.calcPenaltyActive || oneByOne)
 
-  // Per-config Best Average / Median (component-owned, like Blitz's Best Score). A run records
+  // Per-config Best Mean / Median (component-owned, like Blitz's Best Score). A run records
   // its Best on completion and keeps it RECONCILED while its stats move post-completion (a
   // back-browse / retro / live-reversal Override can retract or add a credit on the ended run):
   // standing (good ≥ n) → the pre-run floor improved by the current avg/median; not standing →
@@ -233,6 +260,7 @@ function AoxMode({
     flash === null &&
     Object.keys(state.persistBtns).length === 0 &&
     state.calcOpen === false &&
+    breakdownOpen === false &&
     state.canOverrideCorrect === false &&
     Object.keys(bests).length === 0 &&
     Object.keys(bestNew).length === 0 &&
@@ -278,7 +306,7 @@ function AoxMode({
   const scoreDisplay = runPhase === 'idle' ? '0/0' : `${doneCount}/${S.played}`
   const accuracyDisplay = fmtAccuracyPct(doneCount, S.played)
   const date = state.date
-  // The timing trio (Last/Average/Median) carries a VISUAL-ONLY hide toggle (Q8): tap any of the
+  // The timing trio (Last/Mean/Median) carries a VISUAL-ONLY hide toggle (Q8): tap any of the
   // three to blank them all. There is NO engine timingOff and NO reset arm — AoX always tracks
   // (saveStats:true above), so hiding can never desync. Hiding suppresses only the LIVE mid-run
   // trio; a COMPLETED run (runPhase "done") always shows its result regardless (the average is the
@@ -292,6 +320,33 @@ function AoxMode({
   const runComplete = runPhase === 'done'
   const timeHidden = timingOff && !runComplete
   const tFn = saveStats && !runComplete ? () => setTimingOff((v) => !v) : null
+  // ── THE RUN BREAKDOWN (sub-group 3C) ────────────────────────────────────────────────────────
+  // Tapping ANYWHERE on the stat strip of a COMPLETED run opens the solve-by-solve breakdown.
+  //
+  // ★ WHY THE GESTURE IS FREE, verified rather than assumed: on a completed run every one of the
+  // six boxes is already inert — the scoring trio never had an `fn`, and the timing trio's `tFn`
+  // goes null on `runComplete` one line above (an ended strip is a result readout, not a control).
+  // So the strip had a tap going spare and no competing meaning to displace. StatPanel enforces the
+  // exclusivity structurally: given an `onActivate` it ignores every per-cell `fn`, so this can
+  // never become a button inside a button even if that line above changes.
+  //
+  // ⚠ 'done' AND NOT 'failed', which is `runComplete` and not `isLocked`. A FAILED run keeps its
+  // hide toggle (`tFn` is live there — see `timeHidden` above), so wiring the opener to it would
+  // silently take the toggle away, and it has no completed mean to break down. `isLocked` is the
+  // wrong flag here even though it reads like the right one.
+  //
+  // ⚠ AND IT IS GATED ON saveStats. With Save Stats off the strip is dimmed and every value reads
+  // '—' — the app saying "nothing is being recorded". A door on that strip leading to the real
+  // times would contradict it in the same tap. (The run itself still tracks, as it always has; this
+  // is about what the screen is willing to claim.)
+  //
+  // ⚠ AND ON `visible`, which is not paranoia — it is the one guard the mode's own display:none
+  // cannot supply. The popup PORTALS to #root, so it sits outside this screen's hidden wrapper: a
+  // run left finished on screen and then a keyboard mode-switch (the shortcut keys still fire while
+  // the panel is up) would leave this card floating over a different mode. Gating availability on
+  // `visible` unmounts it with the screen it belongs to, which also pops its overlay registration.
+  const breakdownAvail = runComplete && saveStats && visible
+  const breakdownShown = breakdownOpen && breakdownAvail
 
   // Handlers.
   const begin = () => {
@@ -390,6 +445,7 @@ function AoxMode({
     setBestNew({})
     prevBestSnapRef.current = null
     currentRunIdRef.current = null
+    setBreakdownOpen(false) //  the breakdown belongs to the run being cleared
   }
   // Cancel a pending reveal auto-advance if the component unmounts mid-flash (Full Reset remount).
   useEffect(
@@ -471,12 +527,14 @@ function AoxMode({
           from `timeHidden`, and taps the toggle (tFn) when Save Stats is on — derivations above. */}
       <StatPanel
         dimmed={!saveStats}
+        onActivate={breakdownAvail ? () => setBreakdownOpen(true) : null}
+        activateLabel="Show run breakdown"
         stats={[
           { label: 'Score', value: scoreDisplay, fn: null },
           { label: 'Accuracy', value: accuracyDisplay, fn: null },
           { label: 'Streak', value: `${S.streak}/${S.best}`, fn: null },
           { label: 'Last', value: truncTime(calcLast(S.times)), off: timeHidden, fn: tFn },
-          { label: 'Average', value: fmtTime(calcAvg(S.times)), off: timeHidden, fn: tFn },
+          { label: 'Mean', value: fmtTime(calcAvg(S.times)), off: timeHidden, fn: tFn },
           { label: 'Median', value: fmtTime(calcMed(S.times)), off: timeHidden, fn: tFn },
         ]}
       />
@@ -485,12 +543,12 @@ function AoxMode({
           long one), and that space is a line-break opportunity the old "59.99s" never had.
           These four readouts sit in a flex-wrap row of shrinkable min-w-[125px] columns, so on a
           narrow phone a bare value would break across two lines mid-number and read as two numbers.
-          The label may still wrap — "Best" / "Average:" is legible; "1m" / "2.34s" is not. */}
+          The label may still wrap — "Best" / "Mean:" is legible; "1m" / "2.34s" is not. */}
       <div className="mt-3 text-xs text-(--tx-300-60)">
         <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-[125px]">
             <div>
-              Best Average: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
+              Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
               {bestNew[bestKey]?.avg && <NewBestStar />}
             </div>
             <div className="text-[11px] opacity-70">
@@ -503,7 +561,7 @@ function AoxMode({
               {bestNew[bestKey]?.med && <NewBestStar />}
             </div>
             <div className="text-[11px] opacity-70">
-              Average: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
+              Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
             </div>
           </div>
           {bestData.avgRoundId != null && bestData.medRoundId != null && (
@@ -526,7 +584,7 @@ function AoxMode({
         {/* The run-length field (Q18): the shared boxed-numeric idiom (NUM_INPUT_CLASS) + the
                 popup N field's validation trio — digits only while typing, blur and Enter
                 normalize-commit with the shared clamp (normalizeAoxN), and ESCAPE DISCARDS.
-                text-xs on the 'Ao' span too, so "Ao10" reads as one flush token.
+                text-xs on the 'Mo' span too, so "Mo10" reads as one flush token.
                 ★ ESCAPE DISCARDS — round 15 (B6), and it used to normalize-COMMIT like the other
                 two. Escape now means one thing in every box you can type a NUMBER into, which the
                 ⚙ Year Range boxes have meant since round 14 and the tap-to-type slider readouts
@@ -575,13 +633,13 @@ function AoxMode({
           <span
             className={`self-center text-xs leading-none text-(--tx-200-80) ${runPhase !== 'idle' ? ' opacity-60' : ''}`}
           >
-            Ao
+            Mo
           </span>
           <input
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            aria-label="AoX run length"
+            aria-label="MoX run length"
             readOnly={runPhase !== 'idle'}
             value={aoxN}
             onChange={(e) => {
@@ -633,13 +691,25 @@ function AoxMode({
           One-by-One
         </button>
       </div>
+      {/* THE RUN BREAKDOWN, mounted only while it is up (the component has no `open` prop — see its
+          header), so the walk over the run's history costs nothing on any other render. `data` is
+          rebuilt on each render while it IS up, which is what keeps it live: an Override on a
+          finished run moves the mean, and the rows move with it because they ARE the mean's parts.
+          ⚠ `breakdownShown` and not `breakdownOpen`: the flag is ANDed with availability so the
+          panel cannot outlive the state that justified it. Nothing behind a full-screen scrim is
+          reachable, so in practice the run cannot change underneath it — this is the guard for the
+          paths that do not go through a tap (a remount, a future opener). */}
+      {breakdownShown && (
+        <RunBreakdown
+          onClose={() => setBreakdownOpen(false)}
+          data={buildRunBreakdown(state)}
+          fmtDate={fmtDate}
+          title="Run breakdown"
+        />
+      )}
       <div className="mt-4 rounded-2xl panel p-4">
         <div className="text-center relative">
-          {(inBack || isLocked) && (
-            <span className="absolute right-0 top-0 text-[11px] tabular-nums text-(--tx-300-60)">
-              Q{state.stack.length + 1}
-            </span>
-          )}
+          <CardNumber state={state} show={inBack || isLocked} />
           <div className="text-3xl font-bold">
             {dateVisible ? fmtDate(date.y, date.m, date.d, date._fmt) : '—'}
           </div>
@@ -647,6 +717,7 @@ function AoxMode({
         <WeekdayAnswer
           key={state.gridEpoch}
           inputStyle={inputStyle}
+          dotOrientation={dotOrientation}
           persistBtns={state.persistBtns}
           flash={flash}
           optionsDisabled={optionsDisabled}

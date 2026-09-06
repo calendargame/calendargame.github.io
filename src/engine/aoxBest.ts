@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 // engine/aoxBest.ts — pure Best-record reconciliation for AoX (the component wrapper layer).
 //
-// AoX keeps a per-config Best Average / Best Median record — the FASTEST run a config has produced.
+// AoX keeps a per-config Best Mean / Best Median record — the FASTEST run a config has produced.
 // "Best" here means MINIMUM time (lower is better), the opposite of Blitz's maximum score. A run records
 // its Best on completion (the Nth credited solve); a post-completion Override that undoes that solve
 // rolls the Best back. The record holds, for EACH of the two metrics, the metric value PLUS its
@@ -75,7 +75,7 @@ export function reconcileAoxBest(
 // The recorded run's reconcile target as its standing stats move post-completion. While the run
 // STANDS (still has its n credits, with computable stats), Best[its key] = the pre-run record
 // improved by the run's CURRENT avg/median — re-fired on every post-completion stats edit, so a
-// credited miss (faster standing avg) improves the record and the displayed Average/Median can
+// credited miss (faster standing avg) improves the record and the displayed Mean/Median can
 // never silently beat the recorded Best. The moment it stops standing (good < n — a post-end
 // Override retracted a credit), the record reverts to the pre-run snapshot, as if the run never
 // completed. AoxMode calls this from its reconcile effect; the fuzz drives it directly.

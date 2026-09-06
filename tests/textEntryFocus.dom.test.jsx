@@ -51,18 +51,18 @@ const allSelected = (el) =>
 // A caret placed at `at` — what WebKit does as the tap's own default action, AFTER focus.
 const putCaret = (el, at) => el.setSelectionRange(at, at)
 
-const aoxField = () => screen.getByRole('textbox', { name: 'AoX run length' })
+const aoxField = () => screen.getByRole('textbox', { name: 'MoX run length' })
 const lookupField = () => document.querySelector('input[placeholder^="e.g.,"]')
 const modeTrigger = () => screen.getByRole('button', { name: 'Mode' })
 
 // ── EVERY BOX THE APP HAS ────────────────────────────────────────────────────────────────────
 // Six of them, and they are listed here BY ROUTE rather than by selector so this table doubles as
-// the inventory rule 1 has to cover. The AoX run length appears twice on purpose: the mode
+// the inventory rule 1 has to cover. The MoX run length appears twice on purpose: the mode
 // screen's own box and the Save Defaults popup's are two different <input>s in two different
 // files, not one component rendered twice.
 const BOXES = [
   {
-    name: 'the AoX run length (mode screen)',
+    name: 'the MoX run length (mode screen)',
     reach: () => {
       pressKey('A')
       return aoxField()
@@ -107,12 +107,12 @@ const BOXES = [
     },
   },
   {
-    name: 'the Save Defaults popup’s AoX run length',
+    name: 'the Save Defaults popup’s MoX run length',
     reach: () => {
       openSettings()
       makeSaveable()
       openModal('save')
-      return screen.getByRole('textbox', { name: 'AoX Run Length' })
+      return screen.getByRole('textbox', { name: 'MoX Run Length' })
     },
   },
 ]

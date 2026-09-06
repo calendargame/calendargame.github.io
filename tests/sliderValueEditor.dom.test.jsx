@@ -70,8 +70,8 @@ const aoxProps = {
   max: 1000,
   snap: 1,
   inputMode: 'numeric',
-  label: 'AoX Run Length',
-  editLabel: 'AoX Run Length',
+  label: 'MoX Run Length',
+  editLabel: 'MoX Run Length',
   format: String,
   toText: String,
   widest: '1000',
@@ -236,7 +236,7 @@ describe('SliderValueEditor', () => {
   })
 
   it('.svalue-input insets outward by exactly its own chrome, so the content box lands on the strut', () => {
-    // The AoX Run Length site is the proof case: widest "1000", and under round-7's w-full +
+    // The MoX Run Length site is the proof case: widest "1000", and under round-7's w-full +
     // border-box the content box was ~10px NARROWER than that strut, so typing a 4th digit
     // scrolled the leading one out of view. The rendered pixels are on-device truth; the algebra
     // is not, and it is what fixes the bug — so it is pinned here straight from the stylesheet.
@@ -261,7 +261,7 @@ describe('SliderValueEditor', () => {
     // And the class really is what the widest-strut site mounts.
     render(<SliderValueEditor {...aoxProps} onCommit={vi.fn()} />)
     expect(screen.getByText('1000')).toHaveClass('invisible')
-    act(() => fireEvent.click(readout('AoX Run Length')))
-    expect(screen.getByRole('textbox', { name: 'AoX Run Length' })).toHaveClass('svalue-input')
+    act(() => fireEvent.click(readout('MoX Run Length')))
+    expect(screen.getByRole('textbox', { name: 'MoX Run Length' })).toHaveClass('svalue-input')
   })
 })

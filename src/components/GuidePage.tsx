@@ -10,8 +10,9 @@ import {
 import Expander from './Expander.jsx'
 import { Kbd, SectionLabel, SECTION_LABEL_CLASS } from './primitives.jsx'
 import { DAY } from '../lib/format.js'
-import { DOT_CELL } from '../lib/dotLayout.js'
+import { DOT_CELLS } from '../lib/dotLayout.js'
 import { selectionSuppressesToggle } from '../lib/selectionGuard.js'
+import { useSettings } from '../store/settings.js'
 import {
   ACCORDION_EASE_CSS,
   accordionEase,
@@ -203,13 +204,30 @@ function UL({ children }: { children: ReactNode }) {
 }
 // DotDiagram — a small inline SVG of the 7-dot answer layout (Settings → Display →
 // Input → Dots), each dot labelled with its weekday. Everything is DERIVED from the
-// shared DOT_CELL grid (lib/dotLayout — the same array that positions the real Dots
+// shared DOT_CELLS grid (lib/dotLayout — the same data that positions the real Dots
 // input) + the DAY names (lib/format): grid cell (r,c) → SVG centre
 // (x = 30+(c-1)*60, y = 28+(r-1)*62), the label is the day's first three letters,
 // and the aria-label sentence reads the filled cells in row order — no hand-kept
 // copy of the layout exists here to drift. Drawn entirely in currentColor so it's
 // legible on every theme.
+// ★ IT SHOWS THE PLAYER'S OWN ORIENTATION (Settings → Display → Dot Layout), not a
+// fixed picture of the upright one: the section's heading is "Which dot is which",
+// and there is exactly one honest answer to that — the layout currently on screen.
+// A second diagram of the other orientation was considered and rejected: it would
+// document the setting twice (the words below already name both) while making the
+// answer to "which dot is which" ambiguous, which is the one thing the diagram is
+// for. Flipping the setting flips this picture, which is its own documentation.
+// The whole 3×3 frame is unchanged by the turn — only which cell each day occupies —
+// so the viewBox, the spacing and the labels-below-dots layout all still hold, and
+// the two rows of three labels the rotated form produces are the same count the
+// upright form's middle row already had.
+//   ⚠ A STORE SELECTOR, where every other consumer of this setting takes a prop. It is
+//     forced rather than chosen: GuidePage's entire signature is `visible` +
+//     `scrollerRef`, so a prop would mean opening a settings pipeline through the guide
+//     for one decorative SVG at the bottom of it. Selecting here also keeps the
+//     subscription at the leaf — the guide itself does not re-render on a flip.
 function DotDiagram() {
+  const DOT_CELL = DOT_CELLS[useSettings((s) => s.dotOrientation)]
   const dotX = (cell: { r: number; c: number }) => 30 + (cell.c - 1) * 60
   const dotY = (cell: { r: number; c: number }) => 28 + (cell.r - 1) * 62
   // The cell's position in words: the centre cell reads "centre"; every other filled
@@ -668,7 +686,7 @@ export default function GuidePage({
           </li>
           <li>
             Text around the app can't be selected or highlighted, so presses and drags always
-            operate the game. The exceptions are anywhere you type (the Year Range, Lookup, and AoX
+            operate the game. The exceptions are anywhere you type (the Year Range, Lookup, and MoX
             run length fields, plus any timer value you've tapped to type), the contact email, and
             everything in this How to Play guide, section titles included — guide text selects and
             copies like a normal page.
@@ -685,13 +703,13 @@ export default function GuidePage({
             <b>New</b> — load a fresh date. In timer modes, only available after pressing Begin.
           </li>
           <li>
-            <b>Begin</b> — timer modes only (Blitz, Flash, AoX). Starts a round or run; the timer
-            starts and the date is shown (Flash hides it after the configured duration; AoX hides it
+            <b>Begin</b> — timer modes only (Blitz, Flash, MoX). Starts a round or run; the timer
+            starts and the date is shown (Flash hides it after the configured duration; MoX hides it
             between solves only when One-by-One is on).
           </li>
           <li>
             <b>Reset</b> — timer modes only. In Blitz, ends the current round and unlocks settings;
-            in AoX, ends the current run. Saved bests are preserved either way. Press Reset then
+            in MoX, ends the current run. Saved bests are preserved either way. Press Reset then
             Begin to start a fresh round/run.
           </li>
           <li>
@@ -722,15 +740,21 @@ export default function GuidePage({
           <li>
             <b>Back (&lt;)</b> — return to the previous date. The answer is shown and the card is
             locked; no stat penalty. You can go back through your entire history in Classic, Flash,
-            and Deduction; in Blitz and AoX, through the current round or run.
+            and Deduction; in Blitz and MoX, through the current round or run.
           </li>
           <li>
             Every history entry shows the correct answer in green; a wrong guess appears as dimmed
             red alongside the green.
           </li>
           <li>
-            While browsing back, a small <b>Q#</b> label at the top-right of the date card shows
-            your position in history (e.g. Q3 = the third question viewed).
+            While browsing back, a small <b>Q#</b> label at the top-right of the date card numbers
+            the card you are looking at, and it counts whatever the <b>Score</b> box beside it
+            counts. In Classic, Flash and Deduction that score is your lifetime total, so browsing
+            back to the card you just answered on a 471/501 shows <b>Q501</b> — the 501st card you
+            have ever played, not the first of this sitting. Anything with its own Score box is
+            numbered on its own: Deduction's Day, Month and Year each count separately, and in Blitz
+            and MoX — where Begin and Reset clear the score — the numbering restarts at Q1 with it.
+            Reset Stats likewise re-starts the count along with the score it clears.
           </li>
           <li>
             <b>Forward (&gt;)</b> — move forward through dates you browsed past with Back. Forward
@@ -777,7 +801,7 @@ export default function GuidePage({
             the round, just like a wrong answer; with it on, the round keeps going.
           </li>
           <li>
-            <b>AoX</b> — without Allow Mistakes, overriding a correct answer ends the run.
+            <b>MoX</b> — without Allow Mistakes, overriding a correct answer ends the run.
           </li>
           <li>
             In both run modes, if a round/run ended because you answered wrong, revealed, or showed
@@ -786,7 +810,7 @@ export default function GuidePage({
           </li>
           <li>
             Override is <b>locked</b> when Save Stats is off in the casual modes (Classic, Flash,
-            Deduction) — there's nothing to record. In Blitz and AoX it works the same whether Save
+            Deduction) — there's nothing to record. In Blitz and MoX it works the same whether Save
             Stats is on or off (the run still tracks internally; it's just not saved).
           </li>
         </UL>
@@ -804,7 +828,7 @@ export default function GuidePage({
             <b>Flash</b> — freezes the countdown so the date stays on screen while you study.
           </li>
           <li>
-            <b>AoX</b> — without Allow Mistakes, opening Show Codes ends the run.
+            <b>MoX</b> — without Allow Mistakes, opening Show Codes ends the run.
           </li>
         </UL>
       </GuideSection>
@@ -814,7 +838,7 @@ export default function GuidePage({
         <UL>
           <li>
             <b>Score</b> — correct first-try answers out of total attempts. In Blitz, only the
-            current round. In AoX, correct answers out of total attempts; the run ends once correct
+            current round. In MoX, correct answers out of total attempts; the run ends once correct
             answers reach the set number.
           </li>
           <li>
@@ -825,9 +849,10 @@ export default function GuidePage({
             <b>Streak</b> — your current consecutive correct streak / your best this session.
           </li>
           <li>
-            <b>Last / Avg / Med</b> — timing stats from correct answers only. Last = most recent
-            correct time; Avg = average across all correct answers; Med = median (less skewed by
-            outliers).
+            <b>Last / Mean / Median</b> — timing stats from correct answers only. Last = most recent
+            correct time; Mean = the arithmetic mean of every correct answer's time, with nothing
+            dropped; Median = the middle time (less skewed by outliers). If you cube: this Mean is
+            an <i>untrimmed</i> mean, the Mo3 sense of the word, not a trimmed average.
           </li>
         </UL>
         <Subhead>How times are counted</Subhead>
@@ -840,12 +865,12 @@ export default function GuidePage({
           </li>
           <li>
             Saved solve times keep a rolling window of the most recent 1000 (older ones roll off so
-            saved progress stays small), so after a lot of practice Avg and Med reflect your recent
-            1000 rather than all-time. Within a single visit, every solve still counts.
+            saved progress stays small), so after a lot of practice Mean and Median reflect your
+            recent 1000 rather than all-time. Within a single visit, every solve still counts.
           </li>
           <li>
             <b>Formatting (WCA speedcubing convention)</b> — single times (Last) are{' '}
-            <i>truncated</i> to hundredths (the third decimal is dropped, never rounded); averages,
+            <i>truncated</i> to hundredths (the third decimal is dropped, never rounded); means,
             medians, and bests are <i>rounded</i> to the nearest hundredth. Truncating singles
             prevents fortunate rounding boundaries; rounding aggregates avoids systematic downward
             bias.
@@ -870,7 +895,7 @@ export default function GuidePage({
           <li>
             <b>A blank box</b> — that group is hidden. The label stays so you know what it is.
             Hiding is usually just hiding: Score, Accuracy and Streak keep recording in every mode,
-            and so do the timing stats in Blitz and AoX, so tapping brings the up-to-date numbers
+            and so do the timing stats in Blitz and MoX, so tapping brings the up-to-date numbers
             back. The timing stats in Classic, Deduction and Flash are the exception — hiding those
             genuinely stops the clock. &quot;Hiding stats&quot; below covers both cases, including
             what turning timing back on costs.
@@ -905,7 +930,7 @@ export default function GuidePage({
           confirm (turn on and full reset), or tap anywhere else to cancel.
         </p>
         <p>
-          When Save Stats is off, the whole stats strip dims site-wide (every mode, including AoX)
+          When Save Stats is off, the whole stats strip dims site-wide (every mode, including MoX)
           and every box that isn't already blank shows "—", because nothing is being recorded. The
           boxes also become non-interactive — toggling timing or scoring is disabled until Save
           Stats is turned back on, which prevents accidental stat desyncs. Turning Save Stats on
@@ -916,18 +941,51 @@ export default function GuidePage({
           current question exactly as you left it — same date, same answers, codes panel in the same
           state.
         </p>
-        <Subhead>Hiding stats (Blitz, AoX)</Subhead>
+        <Subhead>The breakdown (Blitz, MoX)</Subhead>
         <p>
-          Blitz and AoX hide timing <i>visually only</i>. Because a round's score and a run's
-          average depend on timing, the clock never stops in these modes: tap Last, Avg, or Med to
-          blank all three, and the times keep being recorded in the background — tap again and the
-          same numbers reappear. There is no pause and no "Enable and Reset Stats?" step, since
-          hiding can never cause a desync. Score and Accuracy always stay visible, along with Streak
+          When a MoX run finishes or a Blitz round ends, tap <i>anywhere</i> on the stats strip to
+          see that run or round solve by solve. A summary sits at the top — solves, accuracy, mean,
+          median, fastest, slowest, and the spread between the fastest and the slowest — over a
+          scrolling list of every date you were asked, in order, with its number and its time.
+        </p>
+        <UL>
+          <li>
+            <b>The fastest and the slowest are marked.</b> Those are the two a <i>trimmed</i>{' '}
+            average would throw away. This app does not trim — every solve counts toward the mean —
+            so they are pointed out and then counted like any other.
+          </li>
+          <li>
+            <b>A solve that didn't count is marked too</b> — <i>missed</i> if you picked a wrong
+            day, <i>shown</i> if the answer was put on screen for you (Reveal, Show Codes, or a
+            Blitz clock running out), or <i>overridden</i> if you took a credit back. A date with a
+            dash instead of a time contributed nothing to the mean: a miss, or a correct answer that
+            came after a wrong one.
+          </li>
+          <li>
+            <b>The list always adds up to the mean above it.</b> The summary is worked out from the
+            rows themselves, not from a second running total, so the two cannot drift apart — and an
+            Override on a finished run moves the rows and the mean together.
+          </li>
+          <li>
+            <b>It isn't saved.</b> The breakdown exists for as long as the finished run or round is
+            on screen; Reset clears it along with everything else, and nothing about it persists
+            between visits.
+          </li>
+        </UL>
+        <Subhead>Hiding stats (Blitz, MoX)</Subhead>
+        <p>
+          Blitz and MoX hide timing <i>visually only</i>. Because a round's score and a run's mean
+          depend on timing, the clock never stops in these modes: tap Last, Mean, or Median to blank
+          all three, and the times keep being recorded in the background — tap again and the same
+          numbers reappear. There is no pause and no "Enable and Reset Stats?" step, since hiding
+          can never cause a desync. Score and Accuracy always stay visible, along with Streak
           wherever the mode shows it — the score is the whole point of these modes. In both modes
-          hiding quiets the trio only while play is going: a finished AoX run and an ended Blitz
-          round always show their times, and there the three boxes stop responding to taps
-          altogether — what you are looking at is the result, not a control. Your hide setting is
-          not forgotten, only set aside; it applies again the moment the next round or run starts.
+          hiding quiets the trio only while play is going: a finished MoX run and an ended Blitz
+          round always show their times, and there the three boxes stop toggling — what you are
+          looking at is the result, not a control. A tap on the finished strip does something else
+          instead: it opens the breakdown of that run or round, solve by solve (see below). Your
+          hide setting is not forgotten, only set aside; it applies again the moment the next round
+          or run starts.
         </p>
       </GuideSection>
       <GuideSection
@@ -1050,7 +1108,7 @@ export default function GuidePage({
               </div>
               <div className="flex items-center gap-2">
                 <Kbd>A</Kbd>
-                <span>AoX</span>
+                <span>MoX</span>
               </div>
               <div className="flex items-center gap-2">
                 <Kbd>D</Kbd>
@@ -1077,7 +1135,7 @@ export default function GuidePage({
             etc.) passes through to the browser.
           </li>
           <li>
-            In every box you can type into — the Year Range boxes, the AoX run length, every time
+            In every box you can type into — the Year Range boxes, the MoX run length, every time
             readout you tap to type into, and the date box on the Lookup screen — those two keys do
             opposite things: <Kbd>Enter</Kbd> keeps what you typed and leaves the box,{' '}
             <Kbd>Esc</Kbd> throws the typing away and leaves the box. Whatever the box sits inside
@@ -1104,7 +1162,7 @@ export default function GuidePage({
           </li>
           <li>
             Reset Stats (<Kbd>S</Kbd>) only applies to the casual modes (Classic, Deduction, Flash);
-            pressing it in Blitz, AoX, or Lookup is a no-op, since those modes have no separate
+            pressing it in Blitz, MoX, or Lookup is a no-op, since those modes have no separate
             Reset Stats button (their round/run Reset clears in-round/in-run stats; persistent bests
             update only when set).
           </li>
@@ -1360,7 +1418,7 @@ export default function GuidePage({
         <Subhead>When a format change regenerates the date</Subhead>
         <UL>
           <li>
-            In Classic, Deduction, Flash, and AoX (idle), any format change — the Random Format
+            In Classic, Deduction, Flash, and MoX (idle), any format change — the Random Format
             toggle or the Date Format pick — regenerates an unanswered date so you don't return to a
             previously-seen date in a now-mismatched format. This applies across all modes at once.
           </li>
@@ -1370,7 +1428,7 @@ export default function GuidePage({
             next date.
           </li>
           <li>
-            In Blitz rounds and AoX runs — active or just ended — a format change resets the
+            In Blitz rounds and MoX runs — active or just ended — a format change resets the
             round/run when you close the ⚙ menu, so the round on screen always matches your
             settings.
           </li>
@@ -1382,12 +1440,16 @@ export default function GuidePage({
       </GuideSection>
       <GuideSection
         id="input"
-        title="Display — Input"
+        title="Display — Input & Dot Layout"
         openId={open}
         onToggle={toggle}
         durationMs={motionMs}
       >
-        <Lead>Answer with labelled weekday buttons, or with the seven-dot logo layout.</Lead>
+        <Lead>
+          Answer with labelled weekday buttons, or with the seven-dot logo layout — and choose which
+          way that layout is turned.
+        </Lead>
+        <Subhead>Input</Subhead>
         <UL>
           <li>
             <b>Buttons</b> (default) — the seven weekdays as labelled buttons.
@@ -1398,7 +1460,7 @@ export default function GuidePage({
         </UL>
         <p>
           Tap a dot, or press and slide to the one you want and release — exactly like the buttons.
-          The setting applies to the weekday modes (Classic, Flash, Blitz, AoX). In Deduction the
+          The setting applies to the weekday modes (Classic, Flash, Blitz, MoX). In Deduction the
           answers aren't weekdays, so the setting is shown but locked there (it keeps whatever you
           last chose and applies again in the weekday modes).
         </p>
@@ -1409,7 +1471,32 @@ export default function GuidePage({
         <p className="text-(--tx-300-70) text-[12px] text-center">
           Sunday sits in the centre. The dots are deliberately unlabelled — their positions follow
           the day-of-week practice movement, so choosing one is the same motion you trace when
-          calculating.
+          calculating. The diagram above always shows your current Dot Layout.
+        </p>
+        <Subhead>Dot Layout</Subhead>
+        <UL>
+          <li>
+            <b>Columns</b> (default) — the two runs of three weekdays go down the sides: Sat, Fri,
+            Thu down the left and Wed, Tue, Mon down the right.
+          </li>
+          <li>
+            <b>Rows</b> — the same seven dots turned a quarter turn anticlockwise, so those two runs
+            lie along the top and bottom instead: Wed, Tue, Mon across the top and Sat, Fri, Thu
+            across the bottom.
+          </li>
+        </UL>
+        <p>
+          Sunday stays in the centre either way, and the dots keep their tap-and-slide behaviour and
+          their keyboard numbers unchanged — only where each one sits on screen moves. Dot Layout is
+          locked in Deduction alongside Input, for the same reason.
+        </p>
+        <p>
+          <b>The logo turns with it.</b> The mark beside the title at the top of every screen{' '}
+          <i>is</i> this seven-dot layout, so choosing Rows turns that mark too. What can't follow
+          are the pictures your device saved earlier: the home-screen icon, the launch screen and
+          the link preview image are fixed image files, so those keep the upright logo whatever you
+          choose here. The full-screen launch screen and the <b>Rotate back to portrait</b> screen
+          keep the upright mark to match them.
         </p>
       </GuideSection>
       <GuideSection
@@ -1483,7 +1570,7 @@ export default function GuidePage({
             regenerated.
           </li>
           <li>
-            In Blitz rounds and AoX runs (active or just ended), a range change resets the round/run
+            In Blitz rounds and MoX runs (active or just ended), a range change resets the round/run
             when you close the ⚙ menu.
           </li>
         </UL>
@@ -1523,7 +1610,7 @@ export default function GuidePage({
           Both apply to all game modes' date generation; Lookup is unaffected. Changing any value
           regenerates the displayed date so the new setting takes effect when you close the ⚙ menu.
           If you've already wrong-guessed, revealed, or shown codes on the current date, the change
-          is deferred and applies to the next date. In Blitz rounds and AoX runs (active or just
+          is deferred and applies to the next date. In Blitz rounds and MoX runs (active or just
           ended), a chance change resets the round/run when you close the ⚙ menu.
         </p>
         <Subhead>Locking</Subhead>
@@ -1574,7 +1661,7 @@ export default function GuidePage({
             date was generated.
           </li>
           <li>
-            In Blitz rounds and AoX runs (active or just ended), a Julian toggle resets the
+            In Blitz rounds and MoX runs (active or just ended), a Julian toggle resets the
             round/run when you close the ⚙ menu.
           </li>
           <li>
@@ -1628,7 +1715,7 @@ export default function GuidePage({
             off — there's nothing to record.
           </li>
           <li>
-            In the run modes (Blitz, AoX), Override works the same whether Save Stats is on or off,
+            In the run modes (Blitz, MoX), Override works the same whether Save Stats is on or off,
             so a misclick can never throw away a whole round or run even in practice mode.
           </li>
         </UL>
@@ -1648,9 +1735,9 @@ export default function GuidePage({
             whether the round's Best Score and Best Streak update.
           </li>
           <li>
-            <b>AoX (run-level)</b> — in-run score, streak, times, and Back/Forward all work normally
+            <b>MoX (run-level)</b> — in-run score, streak, times, and Back/Forward all work normally
             regardless of the toggle. Whatever the toggle is when the run ends determines whether
-            Best Average, Best Median, and Best Streak update.
+            Best Mean, Best Median, and Best Streak update.
           </li>
         </UL>
       </GuideSection>
@@ -1679,7 +1766,7 @@ export default function GuidePage({
           </li>
           <li>
             <b>Per-mode setup</b> — Flash speed; both Blitz timer lengths, Allow Mistakes, and Per
-            Round vs Per Question; AoX run length, Allow Mistakes, and One-by-One; the Deduction
+            Round vs Per Question; MoX run length, Allow Mistakes, and One-by-One; the Deduction
             sub-type; and each mode's show / hide stat toggles.
           </li>
           <li>
@@ -1687,14 +1774,14 @@ export default function GuidePage({
           </li>
           <li>
             <b>All-time bests</b> — Blitz score and streak (kept separately for Per Round and for
-            Per Question with Allow Mistakes), Per Question sudden-death score, and AoX average and
+            Per Question with Allow Mistakes), Per Question sudden-death score, and MoX mean and
             median.
           </li>
           <li>
             <b>Lookup history</b> — the dates you've looked up.
           </li>
         </UL>
-        <p>Saved Average and Median use a rolling window of your most recent 1000 solves.</p>
+        <p>Saved Mean and Median use a rolling window of your most recent 1000 solves.</p>
         <Subhead>Not saved (resets each visit)</Subhead>
         <UL>
           <li>
@@ -1726,9 +1813,12 @@ export default function GuidePage({
           these values instead of the launch ones. One snapshot captures:
         </p>
         <UL>
-          <li>Every setting in the ⚙ menu (all of Display — Input included — Dates, and Stats).</li>
           <li>
-            Four values from the mode screens: AoX run length, Flash speed, and both Blitz timers
+            Every setting in the ⚙ menu (all of Display — Input and Dot Layout included — Dates, and
+            Stats).
+          </li>
+          <li>
+            Four values from the mode screens: MoX run length, Flash speed, and both Blitz timers
             (Per Round and Per Question).
           </li>
         </UL>
@@ -1801,7 +1891,7 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          …plus the same four mode-screen values Save Defaults captures: the AoX run length, the
+          …plus the same four mode-screen values Save Defaults captures: the MoX run length, the
           Flash speed, and both Blitz timers. That makes Reset Settings the exact mirror of Save
           Defaults — one copies your live setup into your defaults, the other copies your defaults
           back over your live setup — across the very same values the gear's violet bar watches, so
@@ -1811,7 +1901,7 @@ export default function GuidePage({
           It still leaves everything else alone: the other mode-screen choices (Blitz's Per Round
           versus Per Question, Allow Mistakes, One-by-One, the Deduction sub-type, and the show/hide
           stat toggles) and your stats and history. Restoring a mode-screen value while a Blitz
-          round or an AoX run is going resets that round or run when you close the menu, exactly as
+          round or an MoX run is going resets that round or run when you close the menu, exactly as
           a menu change does. No confirmation prompt — tap to apply. When everything the snapshot
           covers is already at your defaults, the button dims and locks, since tapping it would have
           no effect.
@@ -1820,13 +1910,13 @@ export default function GuidePage({
         <p>Restores the entire site to its launch state:</p>
         <UL>
           <li>
-            Wipes all stats, all-time bests (Blitz and AoX), Lookup history, and in-progress rounds
+            Wipes all stats, all-time bests (Blitz and MoX), Lookup history, and in-progress rounds
             and runs. Your stats, all-time bests, and Lookup history are saved on this device, so
             Full Reset clears that saved copy permanently.
           </li>
           <li>
             Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode
-            toggles. The menu settings and the four Save Defaults values (AoX run length, Flash
+            toggles. The menu settings and the four Save Defaults values (MoX run length, Flash
             speed, both Blitz timers) restore to <i>your</i> saved defaults; everything else (Per
             Round / Per Question, Deduction sub-types and toggles, Allow Mistakes, One-by-One, the
             show/hide stat toggles) returns to its launch value. The saved defaults themselves
@@ -1863,8 +1953,11 @@ export default function GuidePage({
           </li>
         </UL>
       </GuideSection>
-      <GuideSection id="aox" title="AoX" openId={open} onToggle={toggle} durationMs={motionMs}>
-        <Lead>Average your times over a set number of correct solves (2–1000).</Lead>
+      <GuideSection id="aox" title="MoX" openId={open} onToggle={toggle} durationMs={motionMs}>
+        <Lead>
+          The mean of your times over a set number of correct solves (2–1000) — every solve counts
+          and nothing is trimmed, which is why this mode is Mo(X) and not Ao(X).
+        </Lead>
         <p>
           The score shows correct answers out of total attempts; the run ends when correct answers
           reach your target. Press Begin to start a run.
@@ -1884,7 +1977,7 @@ export default function GuidePage({
             date.
           </li>
           <li>
-            <b>Last / Avg / Med</b> — tap any of these to show or hide all three time stats. Hiding
+            <b>Last / Mean / Med</b> — tap any of these to show or hide all three time stats. Hiding
             is visual only: your times keep recording, the clock never stops, and a finished run
             always shows its result.
           </li>
@@ -1905,30 +1998,30 @@ export default function GuidePage({
             or a Show Codes with Allow Mistakes off), Override credits that question and the run
             continues where it left off. You can also override past dates while browsing back. If
             overriding on the last question with Allow Mistakes on, a new date is generated to
-            complete the average. One override per question. Override works the same whether Save
-            Stats is on or off.
+            complete the mean. One override per question. Override works the same whether Save Stats
+            is on or off.
           </li>
         </UL>
         <Subhead>Stats and bests</Subhead>
         <p>
-          Stats in AoX always track — the clock never stops. You can blank the timing trio (Last /
-          Avg / Med) with a tap while a run is going, but it's visual only, and a completed run
-          always shows its result. Best average and best median are tracked independently — they can
+          Stats in MoX always track — the clock never stops. You can blank the timing trio (Last /
+          Mean / Median) with a tap while a run is going, but it's visual only, and a completed run
+          always shows its result. Best mean and best median are tracked independently — they can
           come from different runs. Beneath each best, the companion metric from the run that set it
-          is also shown (e.g. the median from the run that set your best average). A{' '}
-          <i>Same Round</i> or <i>Different Rounds</i> tag tells you whether your best average and
-          best median came from the same exceptional run, or from two different strong ones.
+          is also shown (e.g. the median from the run that set your best mean). A <i>Same Round</i>{' '}
+          or <i>Different Rounds</i> tag tells you whether your best mean and best median came from
+          the same exceptional run, or from two different strong ones.
         </p>
         <p>
           Bests stay honest under Override: a finished run's record follows its corrected stats —
           overriding away one of its credited solves (on the last question or while browsing back)
-          restores the best that stood before the run, and a correction that changes the run's
-          average or median updates its record to match. The score display freezes when a run ends
-          and only resets after pressing Reset. Leaving AoX mid-run resets it; a finished run's
-          summary is preserved when you return.
+          restores the best that stood before the run, and a correction that changes the run's mean
+          or median updates its record to match. The score display freezes when a run ends and only
+          resets after pressing Reset. Leaving MoX mid-run resets it; a finished run's summary is
+          preserved when you return.
         </p>
         <p>
-          Bests are tracked per exact configuration: AoX run length, Allow Mistakes, Date Format (or
+          Bests are tracked per exact configuration: MoX run length, Allow Mistakes, Date Format (or
           Random Format on its own bucket), Leap Year Chance, Jan/Feb Chance on Leap Years, Julian
           Chance, year range, and Calendar System (Julian on/off). Changing any of these creates a
           separate bucket — your previous bests remain stored and reappear when you switch back to
@@ -1938,6 +2031,14 @@ export default function GuidePage({
           The small <b>Q#</b> label at the top-right of the date card appears not only while
           back-browsing but also at run end (done/failed), so you can identify which question of the
           run you're viewing in the summary.
+        </p>
+        <Subhead>Run breakdown</Subhead>
+        <p>
+          Once a run is finished, tapping anywhere on the stats strip opens the run solve by solve —
+          the numbers behind the mean, with the fastest and slowest marked and any solve that didn't
+          count called out. It's described in full under Stats. It's available while the finished
+          run is on screen, and only when Save Stats is on: with Save Stats off the strip is showing
+          dashes, and it won't hand over numbers it is declining to display.
         </p>
       </GuideSection>
       <GuideSection
@@ -2063,11 +2164,12 @@ export default function GuidePage({
         <Lead>Answer as many dates as possible before time runs out.</Lead>
         <p>Score shows correct answers for the current round only.</p>
         <p>
-          Tap Last, Avg, or Med to hide the timing stats. This is visual only — the clock keeps
+          Tap Last, Mean, or Median to hide the timing stats. This is visual only — the clock keeps
           running and your times reappear unchanged when you tap again (see Stats). Score and
           Accuracy stay visible, along with Streak wherever the mode shows it. Hiding applies to a
-          round in progress: once a round ends, the three time boxes show that round's times and no
-          longer respond to taps. Your hide setting comes back with the next round.
+          round in progress: once a round ends, the three time boxes show that round's times and
+          stop toggling — a tap on the ended strip opens that round's breakdown instead (see Stats).
+          Your hide setting comes back with the next round.
         </p>
         <Subhead>Round options</Subhead>
         <UL>

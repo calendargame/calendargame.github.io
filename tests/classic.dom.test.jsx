@@ -343,9 +343,9 @@ describe('Classic — characterization (batch 5: timing-on, history & override n
     document.getElementById('root')?.remove()
   })
 
-  // Timing is OFF by default in Classic (Last/Average/Median hidden). Clicking the "Last"
+  // Timing is OFF by default in Classic (Last/Mean/Median hidden). Clicking the "Last"
   // stat cell toggles timing ON. The cell doubles as the toggle button.
-  it('with timing enabled, a correct answer records a solve time into Last/Average/Median', () => {
+  it('with timing enabled, a correct answer records a solve time into Last/Mean/Median', () => {
     mountApp()
     pressNewAndRead() // normalize the date format
     fireEvent.click(statCell('Last')) // enable timing → regenerates the (unanswered) date
@@ -355,7 +355,7 @@ describe('Classic — characterization (batch 5: timing-on, history & override n
     expect(statValue('Score')).toBe('1/1')
     // A time is now recorded — shape "N.NNs" (the exact value is wall-clock, so match the format).
     expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
-    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
   })
 

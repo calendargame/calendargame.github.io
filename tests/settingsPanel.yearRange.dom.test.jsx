@@ -533,7 +533,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     ['Flash speed', () => prefs().setFlashMs(800)],
     ['the Blitz round timer', () => prefs().setBlitzSec(30)],
     ['the Blitz per-question timer', () => prefs().setBlitzQSec(5)],
-    ['the AoX run length', () => prefs().setAoxN('25')],
+    ['the MoX run length', () => prefs().setAoxN('25')],
   ]
 
   it.each(CAPTURABLE_PREFS)(
@@ -598,14 +598,14 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     expect(offers().fullReset).toBe(true)
   })
 
-  // ── The AoX run length is text, and text is normalised before it is compared ─
+  // ── The MoX run length is text, and text is normalised before it is compared ─
 
   it.each([
     ['an empty box', ''],
     ['a padded 10', '0010'],
     ['0, which the clamp reads as 10 rather than as 2', '0'],
   ])(
-    'a transient AoX run length that normalises to the default leaves the gear dark (%s)',
+    'a transient MoX run length that normalises to the default leaves the gear dark (%s)',
     (_name, raw) => {
       // ⚠ The '0' row PINS pre-existing defect D5: the clamp is `parseInt(s) || 10`, and 0 is falsy,
       // so '0' becomes 10 and not the floor of 2. It is pinned rather than fixed — a future change
@@ -620,7 +620,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     ['007, which reads as 7', '007'],
     ['1, which the clamp lifts to 2', '1'],
   ])(
-    'a transient AoX run length that normalises to something else lights the gear (%s)',
+    'a transient MoX run length that normalises to something else lights the gear (%s)',
     (_name, raw) => {
       // The negative control for the case above, and it corrects the spec, which offered '007' as an
       // example of a string that should NOT light the gear: '007' parses to 7, and 7 is not the

@@ -4,7 +4,7 @@ import type { InputStyle } from '../store/settings.js'
 import type { ButtonState } from '../engine/answerButtons.js'
 import type { FlashState } from '../modes/modeTypes.js'
 import { DAY } from '../lib/format.js'
-import { DOT_CELL } from '../lib/dotLayout.js'
+import { DOT_CELLS, type DotOrientation } from '../lib/dotLayout.js'
 import { answerGridHitPad, colSpanClass } from '../lib/answerGrid.js'
 import { isTouch } from '../lib/modeFormat.js'
 import { buttonStateClass, BASE_BTN, ANSWER_GRID_GAP } from './controlClasses.js'
@@ -27,7 +27,7 @@ const WEEKDAY_HIT_PAD = answerGridHitPad(WEEKDAY_COLS, WEEKDAY_SPANS)
 // derivation (persist colour / flash / lock / dim) and the same release-aware onClick (the global
 // pointer controller makes every button press-drag-release + makes a data-answer-grid drag-to-select).
 // DOM order is always Sun..Sat so the keyboard 0–9 path (children[idx]) works in both; the dot layout
-// only repositions visually via DOT_CELL. idleClass is 'surface-button' for both (matches every
+// only repositions visually via DOT_CELLS. idleClass is 'surface-button' for both (matches every
 // weekday grid). The buttons branch matches the prior inline grids — Classic/Flash/Blitz verbatim,
 // and AoX now also blurs the answer on touch like the others (harmless: just drops focus after a
 // tap) — so behaviour, and the DOM tests that drive it, are unchanged. The dots are unlabelled
@@ -48,12 +48,14 @@ const WEEKDAY_HIT_PAD = answerGridHitPad(WEEKDAY_COLS, WEEKDAY_SPANS)
 // space around either grid, are where a press slides to CANCEL.
 function WeekdayAnswer({
   inputStyle,
+  dotOrientation,
   persistBtns,
   flash,
   optionsDisabled,
   onPick,
 }: {
   inputStyle: InputStyle
+  dotOrientation: DotOrientation
   persistBtns: Record<string, ButtonState | undefined>
   flash: FlashState | null
   optionsDisabled: boolean
@@ -77,6 +79,7 @@ function WeekdayAnswer({
     return { bCls, inert, shouldDim, onClick }
   }
   if (inputStyle === 'dots') {
+    const cells = DOT_CELLS[dotOrientation]
     return (
       <div className="mt-4 dot-box">
         <div className="dot-cluster" data-answer-grid="true">
@@ -88,7 +91,7 @@ function WeekdayAnswer({
                 type="button"
                 aria-label={nm}
                 onClick={o.onClick}
-                style={{ gridRow: DOT_CELL[i].r, gridColumn: DOT_CELL[i].c }}
+                style={{ gridRow: cells[i].r, gridColumn: cells[i].c }}
                 className={`dot-btn ${o.bCls} ${o.inert ? 'pointer-events-none' : ''} ${o.shouldDim ? 'opacity-60' : ''}`}
               />
             )

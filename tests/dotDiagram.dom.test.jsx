@@ -1,29 +1,63 @@
 // @vitest-environment jsdom
 //
 // How-to-Play DotDiagram ↔ shared dot layout consistency. The diagram (components/GuidePage) must be
-// a pure DERIVATION of the shared DOT_CELL grid (lib/dotLayout — the same array that positions the
-// real Dots answer input in main.tsx) + the DAY names (lib/format): dot positions from (r,c), labels
-// from the day names' first three letters, and the aria-label sentence from the filled cells in row
-// order. These tests pin BOTH ends: the canonical physical layout in DOT_CELL itself (so a data edit
+// a pure DERIVATION of the shared DOT_CELLS grid (lib/dotLayout — the same data that positions the
+// real Dots answer input) + the DAY names (lib/format): dot positions from (r,c), labels from the
+// day names' first three letters, and the aria-label sentence from the filled cells in row order.
+// These tests pin BOTH ends: the canonical physical layout in DOT_CELLS itself (so a data edit
 // can't silently pass a derivation-only check), and the rendered SVG/aria-label against that data.
+//
+// ★ AND SINCE THE LAYOUT TURNS (Settings → Display → Dot Layout) the same pair of claims is made
+// TWICE, once per orientation, with the rotated one's cells written out by hand here. That
+// hand-copy is the whole value of this file's half of the contract: lib/dotLayout BUILDS the
+// rotated array by mapping the upright one, so a test that re-derived it the same way would agree
+// with a wrong rotation just as happily as with a right one.
 import { describe, it, expect, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { renderGuidePage } from './helpers/guideScroller.jsx'
-import { DOT_CELL } from '../src/lib/dotLayout.js'
+import { useSettings } from '../src/store/settings.js'
+import { DOT_CELLS } from '../src/lib/dotLayout.js'
 import { DAY } from '../src/lib/format.js'
 
 // The physical truth, stated independently of the module under test: weekday index → grid cell.
-// Sun centre, Mon bottom-right, Tue mid-right, Wed top-right, Thu bottom-left, Fri mid-left,
-// Sat top-left; centre-top (1,2) and centre-bottom (3,2) stay empty.
-const CANONICAL_CELLS = [
-  { r: 2, c: 2 }, // Sunday
-  { r: 3, c: 3 }, // Monday
-  { r: 2, c: 3 }, // Tuesday
-  { r: 1, c: 3 }, // Wednesday
-  { r: 3, c: 1 }, // Thursday
-  { r: 2, c: 1 }, // Friday
-  { r: 1, c: 1 }, // Saturday
-]
+//   columns — Sun centre, Mon bottom-right, Tue mid-right, Wed top-right, Thu bottom-left,
+//             Fri mid-left, Sat top-left; centre-top (1,2) and centre-bottom (3,2) stay empty.
+//   rows    — the same seven a quarter turn ANTICLOCKWISE: the two weekday triples that ran down
+//             the side columns now lie along the top (Wed, Tue, Mon) and the bottom (Sat, Fri,
+//             Thu); Sunday is the turn's fixed point, and the empty pair moves to the middle row's
+//             two ends, (2,1) and (2,3).
+const CANONICAL = {
+  columns: [
+    { r: 2, c: 2 }, // Sunday
+    { r: 3, c: 3 }, // Monday
+    { r: 2, c: 3 }, // Tuesday
+    { r: 1, c: 3 }, // Wednesday
+    { r: 3, c: 1 }, // Thursday
+    { r: 2, c: 1 }, // Friday
+    { r: 1, c: 1 }, // Saturday
+  ],
+  rows: [
+    { r: 2, c: 2 }, // Sunday    — centre, unmoved
+    { r: 1, c: 3 }, // Monday    — was bottom-right → top-right
+    { r: 1, c: 2 }, // Tuesday   — was mid-right    → top-centre
+    { r: 1, c: 1 }, // Wednesday — was top-right    → top-left
+    { r: 3, c: 3 }, // Thursday  — was bottom-left  → bottom-right
+    { r: 3, c: 2 }, // Friday    — was mid-left     → bottom-centre
+    { r: 3, c: 1 }, // Saturday  — was top-left     → bottom-left
+  ],
+}
+// Which two cells are unoccupied in each orientation — the dead cells a press slides onto to cancel.
+const EMPTY = { columns: ['1,2', '3,2'], rows: ['2,1', '2,3'] }
+// What a screen reader announces, pinned verbatim per orientation. Derivable from the cells + DAY,
+// but asserted as a literal so a bug in the derivation AND the data can't cancel out.
+const SPOKEN = {
+  columns:
+    'Dots layout: Saturday top-left, Wednesday top-right, Friday middle-left, Sunday centre, ' +
+    'Tuesday middle-right, Thursday bottom-left, Monday bottom-right.',
+  rows:
+    'Dots layout: Wednesday top-left, Tuesday top-centre, Monday top-right, Sunday centre, ' +
+    'Saturday bottom-left, Friday bottom-centre, Thursday bottom-right.',
+}
 
 // GuideSection content sits inside an always-mounted Expander (collapsed 0fr grid row, never
 // unmounted), so the diagram is queryable without opening its section.
@@ -45,49 +79,63 @@ afterEach(() => {
   guide?.restore()
   guide = null
   cleanup()
+  useSettings.getState().resetToFactory()
 })
 
-describe('DotDiagram / DOT_CELL / DAY consistency', () => {
-  it('DOT_CELL is the canonical 7-dot layout: weekday-indexed, unique cells, (1,2)+(3,2) empty', () => {
-    expect(DAY).toHaveLength(7)
-    expect(DOT_CELL).toHaveLength(7)
-    expect(DOT_CELL).toEqual(CANONICAL_CELLS)
-    const keys = DOT_CELL.map(({ r, c }) => `${r},${c}`)
-    expect(new Set(keys).size).toBe(7)
-    expect(keys).not.toContain('1,2')
-    expect(keys).not.toContain('3,2')
-    for (const { r, c } of DOT_CELL) {
-      expect([1, 2, 3]).toContain(r)
-      expect([1, 2, 3]).toContain(c)
-    }
-  })
+describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
+  for (const orientation of ['columns', 'rows']) {
+    describe(`orientation: ${orientation}`, () => {
+      const cells = () => DOT_CELLS[orientation]
 
-  it('renders one labelled dot per weekday, in DAY order, at the DOT_CELL-derived SVG position', () => {
-    const svg = renderDiagram()
-    const groups = Array.from(svg.querySelectorAll('g'))
-    expect(groups).toHaveLength(7)
-    groups.forEach((g, i) => {
-      const circle = g.querySelector('circle')
-      const text = g.querySelector('text')
-      // Label = the weekday's first three letters, DOM order = DAY order (Sun..Sat).
-      expect(text.textContent).toBe(DAY[i].slice(0, 3))
-      // Position derived from the shared grid cell: x = 30+(c-1)*60, y = 28+(r-1)*62.
-      const { r, c } = DOT_CELL[i]
-      expect(circle.getAttribute('cx')).toBe(String(30 + (c - 1) * 60))
-      expect(circle.getAttribute('cy')).toBe(String(28 + (r - 1) * 62))
-      // The label sits centred just below its dot.
-      expect(text.getAttribute('x')).toBe(circle.getAttribute('cx'))
-      expect(text.getAttribute('y')).toBe(String(Number(circle.getAttribute('cy')) + 27))
+      it('is the canonical 7-dot layout: weekday-indexed, unique cells, the right pair empty', () => {
+        expect(DAY).toHaveLength(7)
+        expect(cells()).toHaveLength(7)
+        expect(cells()).toEqual(CANONICAL[orientation])
+        const keys = cells().map(({ r, c }) => `${r},${c}`)
+        expect(new Set(keys).size).toBe(7)
+        for (const dead of EMPTY[orientation]) expect(keys).not.toContain(dead)
+        for (const { r, c } of cells()) {
+          expect([1, 2, 3]).toContain(r)
+          expect([1, 2, 3]).toContain(c)
+        }
+      })
+
+      it('renders one labelled dot per weekday, in DAY order, at the cell-derived SVG position', () => {
+        useSettings.getState().setDotOrientation(orientation)
+        const svg = renderDiagram()
+        const groups = Array.from(svg.querySelectorAll('g'))
+        expect(groups).toHaveLength(7)
+        groups.forEach((g, i) => {
+          const circle = g.querySelector('circle')
+          const text = g.querySelector('text')
+          // Label = the weekday's first three letters, DOM order = DAY order (Sun..Sat). ⚠ DOM
+          // order is INVARIANT under the turn — only the drawn position moves — which is the
+          // diagram's half of the same promise the real input makes about children[idx].
+          expect(text.textContent).toBe(DAY[i].slice(0, 3))
+          // Position derived from the shared grid cell: x = 30+(c-1)*60, y = 28+(r-1)*62.
+          const { r, c } = CANONICAL[orientation][i]
+          expect(circle.getAttribute('cx')).toBe(String(30 + (c - 1) * 60))
+          expect(circle.getAttribute('cy')).toBe(String(28 + (r - 1) * 62))
+          // The label sits centred just below its dot.
+          expect(text.getAttribute('x')).toBe(circle.getAttribute('cx'))
+          expect(text.getAttribute('y')).toBe(String(Number(circle.getAttribute('cy')) + 27))
+        })
+      })
+
+      it('speaks the layout accurately: aria-label lists every day at its cell position, in row order', () => {
+        useSettings.getState().setDotOrientation(orientation)
+        expect(renderDiagram().getAttribute('aria-label')).toBe(SPOKEN[orientation])
+      })
     })
-  })
+  }
 
-  it('speaks the layout accurately: aria-label lists every day at its cell position, in row order', () => {
-    const svg = renderDiagram()
-    // Pinned verbatim — this is what a screen reader announces. Derivable from DOT_CELL + DAY, but
-    // asserted as a literal so a bug in the derivation AND the data can't cancel out.
-    expect(svg.getAttribute('aria-label')).toBe(
-      'Dots layout: Saturday top-left, Wednesday top-right, Friday middle-left, Sunday centre, ' +
-        'Tuesday middle-right, Thursday bottom-left, Monday bottom-right.',
-    )
+  // The two orientations must be the SAME SEVEN DAYS rearranged — not a second layout that happens
+  // to have seven dots in it. Stated against the hand-written pair above, so it holds even if
+  // lib/dotLayout stopped computing one from the other.
+  it('the two orientations are one layout turned: same seven cells, only Sunday fixed', () => {
+    const key = ({ r, c }) => `${r},${c}`
+    expect(new Set(CANONICAL.rows.map(key))).not.toEqual(new Set(CANONICAL.columns.map(key)))
+    expect(CANONICAL.rows[0]).toEqual(CANONICAL.columns[0]) // Sunday, the turn's fixed point
+    for (let i = 1; i < 7; i++) expect(CANONICAL.rows[i]).not.toEqual(CANONICAL.columns[i])
   })
 })

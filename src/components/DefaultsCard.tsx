@@ -142,7 +142,7 @@ function DefaultsCard({
         className={`${SCROLL_REGION_CLASS} min-h-0 space-y-3 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
       >
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-(--tx-200-80) shrink-0">AoX Run Length</span>
+          <span className="text-xs text-(--tx-200-80) shrink-0">MoX Run Length</span>
           {/* ★ ESCAPE DISCARDS — round 15 (B6). It used to normalize-COMMIT, which made this the
                 only field in the popup where Escape kept the edit: the tap-to-type readouts beside
                 the three sliders (SliderValueEditor, the `manage` branch below) have reverted
@@ -178,8 +178,8 @@ function DefaultsCard({
               snap={1}
               accent={dirtyAox}
               inputMode="numeric"
-              label="AoX Run Length"
-              editLabel="AoX Run Length"
+              label="MoX Run Length"
+              editLabel="MoX Run Length"
               format={String}
               toText={String}
               widest="1000"
@@ -190,7 +190,7 @@ function DefaultsCard({
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              aria-label="AoX Run Length"
+              aria-label="MoX Run Length"
               value={prefs.aoxN}
               onChange={(e) => {
                 const v = e.target.value

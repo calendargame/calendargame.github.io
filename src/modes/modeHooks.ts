@@ -181,7 +181,7 @@ export function useStatsHideToggles({
     { label: 'Accuracy', value: fmtAccuracyPct(S.good, S.played), off: scoringOff, fn: sFn },
     { label: 'Streak', value: `${S.streak}/${S.best}`, off: scoringOff, fn: sFn },
     { label: 'Last', value: truncTime(sLast), off: timingOff, fn: tFn },
-    { label: 'Average', value: fmtTime(sAvg), off: timingOff, fn: tFn },
+    { label: 'Mean', value: fmtTime(sAvg), off: timingOff, fn: tFn },
     { label: 'Median', value: fmtTime(sMed), off: timingOff, fn: tFn },
   ]
   const armedSpan =

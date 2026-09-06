@@ -971,7 +971,7 @@ export const escapeYear = (which) => keyInYear(which, 'Escape')
 // ── Everything the panel currently reads ──────────────────────────────────────────────────────
 
 // EVERY VALUE THE PANEL SHOWS, in one snapshot — the observable RESULT a reset or a round trip is
-// judged by. "Reset Settings snaps all fourteen values to their defaults" and "all fourteen
+// judged by. "Reset Settings snaps all fifteen values to their defaults" and "all fifteen
 // settings round-trip through a saved snapshot" are both one comparison against this.
 //
 // The theme keys are conditional because the panel's SHAPE is: with Use System ON the two rows are
@@ -983,6 +983,7 @@ export function panelValues() {
     randomFormat: switchState('Random Format'),
     dateFormat: pickerChosen('Date Format'),
     input: pickerChosen('Input'),
+    dotLayout: pickerChosen('Dot Layout'),
     useSystem: switchState('Use System Settings'),
     minYear: yearValue('min'),
     maxYear: yearValue('max'),

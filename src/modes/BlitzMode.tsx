@@ -16,11 +16,14 @@ import {
 } from '../lib/modeFormat.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
+import RunBreakdown from '../components/RunBreakdown.jsx'
+import CardNumber from '../components/CardNumber.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import BlitzBestRow from '../components/BlitzBestRow.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
+import { buildRunBreakdown } from '../engine/runBreakdown.js'
 import { reconcileBlitzBest, reconcileSuddenBest } from '../engine/blitzBest.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -51,6 +54,7 @@ function BlitzMode({
   dateFormat,
   randomFormat,
   inputStyle = 'buttons',
+  dotOrientation = 'columns',
   leapChance,
   janFebChance,
   julianChance,
@@ -67,6 +71,7 @@ function BlitzMode({
     setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the timing trio, the engine clock never stops (no arm/reset)
   const [active, setActive] = useState(false)
   const [timerDone, setTimerDone] = useState(false)
+  const [breakdownOpen, setBreakdownOpen] = useState(false) // the round breakdown popup (components/RunBreakdown) — ephemeral, dies with the round
   const [showTimerDate, setShowTimerDate] = useState(false)
   const blitzSec = useModePrefs((s) => s.blitzSec),
     setBlitzSec = useModePrefs((s) => s.setBlitzSec) // persisted (mode-prefs store)
@@ -427,6 +432,7 @@ function BlitzMode({
     eng.resetStats()
     setActive(false)
     setTimerDone(false)
+    setBreakdownOpen(false) //  the breakdown belongs to the round being cleared
     setShowTimerDate(false)
     stopRound()
     resetTimerBars()
@@ -610,6 +616,7 @@ function BlitzMode({
     state.calcOpen === false &&
     active === false &&
     timerDone === false &&
+    breakdownOpen === false &&
     showTimerDate === false &&
     perQ === false &&
     allowMistakes === true &&
@@ -637,7 +644,7 @@ function BlitzMode({
   // Streak is hidden only in per-Q sudden death: there a wrong ends the round, so streak
   // always equals score. With Allow Mistakes on it behaves exactly like per-round (C3a).
   const showStreak = !perQ || allowMistakes
-  // The timing trio (Last/Average/Median) carries a VISUAL-ONLY hide toggle (Q8): tap any of the
+  // The timing trio (Last/Mean/Median) carries a VISUAL-ONLY hide toggle (Q8): tap any of the
   // three to blank them all. Unlike Classic/Flash/Deduction there is NO engine timingOff and NO
   // "Enable and Reset Stats?" arm — Blitz always tracks (saveStats:true above), so hiding can never
   // desync (structurally desync-proof). (Persisted as blitzTimingOff — excluded from the defaults
@@ -678,12 +685,32 @@ function BlitzMode({
   // dimmed strip's uniform statement and it is exactly what AoX does in the same state.
   const timeHidden = timingOff && !timerDone
   const tFn = saveStats && !timerDone ? () => setTimingOff((v) => !v) : null
+  // ── THE ROUND BREAKDOWN (sub-group 3C) ──────────────────────────────────────────────────────
+  // The same panel MoX opens, on the same gesture and for the same reason: an ENDED round's stat
+  // strip is already inert (the line above drops `tFn` on `timerDone`, and the scoring boxes never
+  // had one), so tapping anywhere on it opens the round solve-by-solve. It fell out of the MoX work
+  // for the price of these three lines because Blitz's Begin is a full engine RESET — so the round's
+  // history IS the whole engine history, and the times ledger's carried-in count is 0, which is what
+  // makes the rows add up to the strip's Mean exactly.
+  // ⚠ `timerDone` is the right flag and it is NOT AoX's 'failed': every way a Blitz round can end
+  // routes through endRound(), and a round that ends on a wrong answer in sudden death still RECORDS
+  // its result. It is a finished round, not an abandoned one. (The long argument is in the timing
+  // note directly above.) Gated on `saveStats` for the reason MoX is: a dimmed strip reading '—'
+  // must not be a door to the numbers it is declining to show.
+  //
+  // ⚠ AND ON `visible`, which is not paranoia — it is the one guard the mode's own display:none
+  // cannot supply. The popup PORTALS to #root, so it sits outside this screen's hidden wrapper: a
+  // round left finished on screen and then a keyboard mode-switch (the shortcut keys still fire while
+  // the panel is up) would leave this card floating over a different mode. Gating availability on
+  // `visible` unmounts it with the screen it belongs to, which also pops its overlay registration.
+  const breakdownAvail = timerDone && saveStats && visible
+  const breakdownShown = breakdownOpen && breakdownAvail
   const statsArr = [
     { label: 'Score', value: `${S.good}/${S.played}`, fn: null },
     { label: 'Accuracy', value: fmtAccuracyPct(S.good, S.played), fn: null },
     ...(showStreak ? [{ label: 'Streak', value: `${S.streak}/${S.best}`, fn: null }] : []),
     { label: 'Last', value: truncTime(calcLast(S.times)), off: timeHidden, fn: tFn },
-    { label: 'Average', value: fmtTime(calcAvg(S.times)), off: timeHidden, fn: tFn },
+    { label: 'Mean', value: fmtTime(calcAvg(S.times)), off: timeHidden, fn: tFn },
     { label: 'Median', value: fmtTime(calcMed(S.times)), off: timeHidden, fn: tFn },
   ]
   const date = state.date
@@ -697,7 +724,21 @@ function BlitzMode({
           timing trio you hid yourself renders BLANK while the round is going, from `off` in
           statsArr — an ended round shows its times and takes no taps at all (timeHidden/tFn
           above). See StatPanel. */}
-      <StatPanel stats={statsArr} dimmed={!saveStats} />
+      <StatPanel
+        stats={statsArr}
+        dimmed={!saveStats}
+        onActivate={breakdownAvail ? () => setBreakdownOpen(true) : null}
+        activateLabel="Show round breakdown"
+      />
+      {/* Mounted only while up — see the component header, and the twin site in modes/AoxMode. */}
+      {breakdownShown && (
+        <RunBreakdown
+          onClose={() => setBreakdownOpen(false)}
+          data={buildRunBreakdown(state)}
+          fmtDate={fmtDate}
+          title="Round breakdown"
+        />
+      )}
       {!perQ && <BlitzBestRow rec={bScore} newFlags={blitzBestNew[blitzBk]} />}
       {perQ && allowMistakes && <BlitzBestRow rec={saScore} newFlags={suddenAmBestNew[suddenBk]} />}
       {perQ && !allowMistakes && (
@@ -844,16 +885,13 @@ function BlitzMode({
         )}
         <div className="mt-4 rounded-2xl panel p-4">
           <div className="text-center relative">
-            {state.backDepth > 0 && (
-              <span className="absolute right-0 top-0 text-[11px] tabular-nums text-(--tx-300-60)">
-                Q{state.stack.length + 1}
-              </span>
-            )}
+            <CardNumber state={state} show={state.backDepth > 0} />
             <div className="text-3xl font-bold">{dateText}</div>
           </div>
           <WeekdayAnswer
             key={state.gridEpoch}
             inputStyle={inputStyle}
+            dotOrientation={dotOrientation}
             persistBtns={state.persistBtns}
             flash={flash}
             optionsDisabled={optionsDisabled}

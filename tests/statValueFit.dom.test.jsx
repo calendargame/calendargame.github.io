@@ -138,7 +138,7 @@ describe('StatPanel value cell — the box the alignment rests on', () => {
           { label: 'Score', value: '940/1001' },
           { label: 'Accuracy', value: '93.9%' },
           { label: 'Last', value: '—' },
-          { label: 'Average', value: '1h 2m 3.45s', off: true },
+          { label: 'Mean', value: '1h 2m 3.45s', off: true },
         ]}
         dimmed={false}
       />,
@@ -167,7 +167,7 @@ describe('StatPanel value cell — the box the alignment rests on', () => {
   // which WOULD wrap: two lines inside a one-line-tall box, and a scrollWidth that reports the
   // wrapped width instead of the natural one the fit needs. Both failures, one missing class.
   it('a value can never wrap — the minutes shape put a space inside one', () => {
-    render(<StatPanel stats={[{ label: 'Average', value: '1m 2.34s' }]} dimmed={false} />)
+    render(<StatPanel stats={[{ label: 'Mean', value: '1m 2.34s' }]} dimmed={false} />)
     expect(valueSpans()[0].className).toContain('whitespace-nowrap')
     expect(valueSpans()[0].textContent).toBe('1m 2.34s')
   })

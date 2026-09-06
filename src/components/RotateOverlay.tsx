@@ -10,6 +10,14 @@ import W5Logo from './W5Logo.jsx'
 // splash's exact size (W5Logo size 188 = the 174×188 splash glyph — no duplicated SVG). The
 // fixed z-100 cover also blocks every interaction with the sideways app beneath it; rotating
 // back unmounts it, no dismiss affordance by design.
+// ⚠ IT DELIBERATELY DOES NOT PASS `dotOrientation`, so the mark here stays upright even when the
+// player has turned the Dots layout (Settings → Display → Dot Layout) and the TITLE BAR's mark has
+// turned with it. That is the whole reason W5Logo's prop defaults to upright: this frame is the
+// splash's glyph at the splash's size, and the splash is pinned to the static iOS launch PNGs
+// (public/apple-splash-*) that are pre-renders of index.html's #boot and can follow nothing. Turn
+// this one and the mark flips against a PNG that cannot. The argument in full is at W5Logo and at
+// lib/dotLayout's DOT_MARK_ROTATION; if the mismatch is ever reported as a bug, it is this comment
+// and not the code that should be read first.
 function RotateOverlay() {
   return (
     <div className="boot-overlay">

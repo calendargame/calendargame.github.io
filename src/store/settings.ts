@@ -2,18 +2,19 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import type { FormatId } from '../lib/format.js'
+import type { DotOrientation } from '../lib/dotLayout.js'
 
 // settings.js — the ⚙ Settings store (Stage C, Steps 5a + 5b).
 //
-// Holds the 14 values that live in the Settings popover (13 at the Stage-C extraction; the Input
-// style was added Session 10). Originally these were useState hooks inside App; centralizing them
+// Holds the 15 values that live in the Settings popover (13 at the Stage-C extraction; the Input
+// style was added Session 10, the Dot Layout in batch group 3). Originally these were useState hooks inside App; centralizing them
 // is the structural groundwork
 // for (a) saved-progress and (b) splitting the fused game modes apart later,
 // since the modes can read settings from here instead of receiving them all as
 // threaded props.
 //
 // Step 5b — PERSISTENCE: the store is wrapped in Zustand's `persist` middleware,
-// so the 14 settings save to the device (localStorage key 'cg-settings-v1') and
+// so the 15 settings save to the device (localStorage key 'cg-settings-v1') and
 // restore on reload. Only the data values are persisted (partialize strips the
 // setter functions); Zustand merges the saved values over the fresh store on
 // load, so the setters always come from the live code, never from storage. The
@@ -33,13 +34,19 @@ import type { FormatId } from '../lib/format.js'
 // The day-of-week answer input layout: the classic labelled buttons, or the logo's 7-dot grid
 // (Settings → Input). Stored as an enum (not a boolean) so more layouts can be added later.
 export type InputStyle = 'buttons' | 'dots'
+// DotOrientation ('columns' | 'rows') is NOT declared here: it is the shape of the dot grid itself,
+// so it lives with that geometry in lib/dotLayout and is re-exported below for the panel's benefit
+// — exactly the arrangement FormatId already has (lib/format). The store owns WHICH one is chosen,
+// never what the choices ARE.
+export type { DotOrientation }
 
-// The 14 settings values, then the full store (values + setters). Each setter takes a direct
+// The 15 settings values, then the full store (values + setters). Each setter takes a direct
 // value OR a React-style functional updater (prev => next), matching App's setX(v=>!v) call sites.
 export type SettingsValues = {
   randomFormat: boolean
   dateFormat: FormatId
   inputStyle: InputStyle
+  dotOrientation: DotOrientation
   useJulian: boolean
   minY: number
   maxY: number
@@ -57,6 +64,7 @@ export type SettingsState = SettingsValues & {
   setRandomFormat: (v: Updater<boolean>) => void
   setDateFormat: (v: Updater<FormatId>) => void
   setInputStyle: (v: Updater<InputStyle>) => void
+  setDotOrientation: (v: Updater<DotOrientation>) => void
   setUseJulian: (v: Updater<boolean>) => void
   setMinY: (v: Updater<number>) => void
   setMaxY: (v: Updater<number>) => void
@@ -82,6 +90,9 @@ export const SETTINGS_DEFAULTS: SettingsValues = {
   randomFormat: false,
   dateFormat: 'written-mdy',
   inputStyle: 'buttons',
+  // Launches upright — the orientation the app icon, the launch PNGs and every screenshot already
+  // show. 'rows' is the opt-in.
+  dotOrientation: 'columns',
   useJulian: true,
   minY: 1,
   maxY: 10000,
@@ -100,13 +111,13 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
   typeof next === 'function' ? (next as (prev: T) => T)(prev) : (next as T)
 
 // The set of keys we persist — exactly the data values (not the setters). DERIVED from
-// SETTINGS_DEFAULTS rather than listed, so the "14" every comment in this file quotes cannot drift
-// from the code: add a setting to SETTINGS_DEFAULTS and it is persisted by construction. ⚠ 14 here
-// counts the STORE's settings only. The Save Defaults snapshot is 18 (these 14 + 4 mode prefs) and
-// the gear's "modified" comparison is 19 or 18 — both counted in main.tsx, at resetSettings and
+// SETTINGS_DEFAULTS rather than listed, so the "15" every comment in this file quotes cannot drift
+// from the code: add a setting to SETTINGS_DEFAULTS and it is persisted by construction. ⚠ 15 here
+// counts the STORE's settings only. The Save Defaults snapshot is 19 (these 15 + 4 mode prefs) and
+// the gear's "modified" comparison is 20 or 19 — both counted in main.tsx, at resetSettings and
 // settingsAtDefaults respectively. Do not carry this number over to them.
-// ⚠ THE COMPARISON IS NOT A SUBSET OF THE SNAPSHOT, and round 15 is what changed that: it is 17 or
-// 16 of the snapshot's 18 (a dormant theme value is always excluded) PLUS the ⚙ panel's two Year
+// ⚠ THE COMPARISON IS NOT A SUBSET OF THE SNAPSHOT, and round 15 is what changed that: it is 18 or
+// 17 of the snapshot's 19 (a dormant theme value is always excluded) PLUS the ⚙ panel's two Year
 // Range TEXT BOXES, which live in components/useYearRangeMirrors and are stored nowhere. So a year
 // that has been TYPED but not committed counts as "modified" while there is nothing to save for it.
 const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
@@ -118,6 +129,7 @@ export const useSettings = create<SettingsState>()(
       setRandomFormat: (v) => set((s) => ({ randomFormat: resolve(v, s.randomFormat) })),
       setDateFormat: (v) => set((s) => ({ dateFormat: resolve(v, s.dateFormat) })),
       setInputStyle: (v) => set((s) => ({ inputStyle: resolve(v, s.inputStyle) })),
+      setDotOrientation: (v) => set((s) => ({ dotOrientation: resolve(v, s.dotOrientation) })),
       setUseJulian: (v) => set((s) => ({ useJulian: resolve(v, s.useJulian) })),
       setMinY: (v) => set((s) => ({ minY: resolve(v, s.minY) })),
       setMaxY: (v) => set((s) => ({ maxY: resolve(v, s.maxY) })),
@@ -129,7 +141,7 @@ export const useSettings = create<SettingsState>()(
       setDarkTheme: (v) => set((s) => ({ darkTheme: resolve(v, s.darkTheme) })),
       setLightTheme: (v) => set((s) => ({ lightTheme: resolve(v, s.lightTheme) })),
       setManualTheme: (v) => set((s) => ({ manualTheme: resolve(v, s.manualTheme) })),
-      // ⚠⚠ WHAT THIS IS: a FACTORY reset. It overwrites all 14 settings with SETTINGS_DEFAULTS,
+      // ⚠⚠ WHAT THIS IS: a FACTORY reset. It overwrites all 15 settings with SETTINGS_DEFAULTS,
       // unconditionally, ignoring anything the user has saved.
       // ⚠⚠ WHAT THIS IS NOT: the ⚙ panel's "RESET SETTINGS" BUTTON. That button is App's own
       // resetSettings in main.tsx, which restores the user's EFFECTIVE defaults — their SAVED
@@ -147,7 +159,7 @@ export const useSettings = create<SettingsState>()(
       //     resetAppState() — where factory-reset is exactly the wanted semantic.
       // Because the store is persisted, this also overwrites the saved copy back to factory.
       resetToFactory: () => set(() => ({ ...SETTINGS_DEFAULTS })),
-      // Apply a full 14-value snapshot in one shot — the values half of what App's Reset Settings
+      // Apply a full 15-value snapshot in one shot — the values half of what App's Reset Settings
       // and Full Reset restore (the user's SAVED personal defaults via store/userDefaults; the
       // factory SETTINGS_DEFAULTS only when none are saved). This, not resetToFactory above, is the
       // action app code should reach for. Persisted like any set, so the applied values become the

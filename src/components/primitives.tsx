@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 // primitives.tsx — tiny stateless presentational components reused across the UI.
 //
 // NewBestStar — the small ★ shown next to a stat value when a new personal best
-//               was just set (best Average / Median / Score panels).
+//               was just set (best Mean / Median / Score panels).
 // SectionLabel — the small uppercase tracking-widest heading used inside the
 //                Settings popover (Date Format, Calendar System, Year Range, …).
 // Kbd          — the <kbd> chip used by the keyboard-shortcut rows in How-to-Play.
