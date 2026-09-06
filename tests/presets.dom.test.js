@@ -146,7 +146,9 @@ describe('preset 1 is the data that was already there', () => {
     localStorage.removeItem('cg-presets-v1') // belt and braces: no registry has ever been written
     const fresh = await reopenApp()
     const reg = fresh.usePresets.getState()
-    expect(reg.presets).toEqual([{ id: 1, name: 'Preset 1' }])
+    // ⚠ `amnesic: false` is part of the claim, not noise: a device that has never seen presets
+    // must come up with its stats PERMANENT, which is the behaviour every build before amnesic had.
+    expect(reg.presets).toEqual([{ id: 1, name: 'Preset 1', amnesic: false }])
     expect(reg.activeId).toBe(1)
     // The data is all still there, read through the freshly-built stores…
     expect(fresh.settings.getState().minY).toBe(1583)
@@ -168,8 +170,8 @@ describe('the registry', () => {
     switchPreset(p2.id)
     const fresh = await reopenApp()
     expect(fresh.usePresets.getState().presets).toEqual([
-      { id: 1, name: 'Preset 1' },
-      { id: 2, name: 'Timed' },
+      { id: 1, name: 'Preset 1', amnesic: false },
+      { id: 2, name: 'Timed', amnesic: false },
     ])
     expect(fresh.usePresets.getState().activeId).toBe(2)
   })
@@ -190,7 +192,7 @@ describe('the registry', () => {
     expect(
       normalizeRegistry({
         presets: [
-          { id: 2, name: 'A' },
+          { id: 2, name: 'A', amnesic: 'yes' },
           { id: 2, name: 'B' },
           { id: 0, name: 'C' },
           { id: 1.5, name: 'D' },
@@ -198,7 +200,10 @@ describe('the registry', () => {
         activeId: 2,
         nextId: 3,
       }).presets,
-    ).toEqual([{ id: 2, name: 'A' }])
+      // ⚠ THE AMNESIC FLAG IS SCREENED TOO, and a truthy string is the case that matters: this
+      // field decides which STORAGE AREA a preset's stats are read from, so a tampered payload
+      // must not be able to point a preset at a session copy it never had. Only `true` is true.
+    ).toEqual([{ id: 2, name: 'A', amnesic: false }])
     // ★ nextId is forced above every listed id whatever the payload claimed — the line that makes
     // "ids are never reused" true even after tampering, and the one deleting preset 1 rests on.
     expect(
@@ -236,7 +241,7 @@ describe('creating a preset', () => {
     playOnThisPreset()
     const saved = { ...localStorage }
     const p2 = createPreset()
-    expect(p2).toEqual({ id: 2, name: 'Preset 2' })
+    expect(p2).toEqual({ id: 2, name: 'Preset 2', amnesic: false })
     expect(usePresets.getState().presets).toHaveLength(2)
     expect(usePresets.getState().activeId).toBe(1) // creating is not opening
     // Preset 1's four keys are exactly as they were; the only new entry is the registry itself.
@@ -406,7 +411,7 @@ describe('deleting a preset', () => {
       expect(localStorage.getItem(presetKey(base, 2))).toBeNull() // gone
       expect(localStorage.getItem(base)).toBe(preset1[base]) // untouched
     }
-    expect(usePresets.getState().presets).toEqual([{ id: 1, name: 'Preset 1' }])
+    expect(usePresets.getState().presets).toEqual([{ id: 1, name: 'Preset 1', amnesic: false }])
   })
 
   it('deleting the one you are on opens its neighbour, and that is a switch', () => {

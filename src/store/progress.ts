@@ -4,7 +4,8 @@ import type { Stats } from '../engine/gameReducer.js'
 import { captureError } from '../observability/sentry.js'
 import { checkStatsInvariants } from '../engine/invariants.js'
 import { dimEither } from '../lib/calendar.js'
-import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
+import { PRESET_STORE_KEYS, mergeOverDefaults } from './presets.js'
+import { presetStatsStorage } from './amnesic.js'
 import { useSettings } from './settings.js'
 
 // store/progress.ts — saved gameplay progress (Stage D1).
@@ -258,8 +259,12 @@ export const useProgress = create<ProgressState>()(
       // matters here more than anywhere, because live and staging share one browser origin.
       name: PRESET_STORE_KEYS.progress,
       // Presets 2, 3, 4… read and write a namespaced key instead. The `name` above never moves; the
-      // adapter rewrites it per read/write from the active preset. See store/presets.
-      storage: presetScopedStorage<Partial<ProgressState>>(),
+      // adapter rewrites it per read/write from the active preset — and, uniquely among the four
+      // stores, decides WHICH STORAGE AREA that key lives in. ★ THIS IS THE ONE STORE AMNESIC
+      // TOUCHES, and that is the whole of the CLEARS/KEEPS split: the settings, the per-mode setup
+      // and the saved personal defaults keep store/presets' permanent adapter, so an amnesic preset
+      // cannot forget any of them however this file changes. See store/amnesic.
+      storage: presetStatsStorage<Partial<ProgressState>>(),
       // v3 = the slim lookup-entry shape. The bump still records that shape change even though
       // `merge` below re-asserts it on every load: it is what tells a FUTURE migration which
       // payloads it is looking at.

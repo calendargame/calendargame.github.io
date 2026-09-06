@@ -1245,10 +1245,10 @@ export default function GuidePage({
             choosing it; the keys that move within a group are under Keyboard Input above.
           </li>
           <li>
-            The four On/Off switches carry their setting&apos;s name — Random Format, Use System
-            Settings, Julian Calendar, Save Stats — rather than reading as four identical buttons
-            called &quot;On&quot;. Both Year Range boxes name themselves Earliest Year and Latest
-            Year.
+            The five On/Off switches carry their setting&apos;s name — Random Format, Use System
+            Settings, Julian Calendar, Save Stats, Amnesic — rather than reading as five identical
+            buttons called &quot;On&quot;. Both Year Range boxes name themselves Earliest Year and
+            Latest Year.
           </li>
           <li>
             The ⚙ button says what&apos;s behind it: that a setting has been changed, and that an
@@ -1350,7 +1350,7 @@ export default function GuidePage({
             on Leap Years, and Julian Calendar (+ Julian Chance).
           </li>
           <li>
-            <b>Stats</b> — Save Stats.
+            <b>Stats</b> — Save Stats, and Amnesic directly under it.
           </li>
         </UL>
         <p>
@@ -1741,6 +1741,98 @@ export default function GuidePage({
           </li>
         </UL>
       </GuideSection>
+      <GuideSection
+        id="amnesic"
+        title="Stats — Amnesic"
+        openId={open}
+        onToggle={toggle}
+        durationMs={motionMs}
+      >
+        <Lead>
+          Off by default. When on, this preset stops writing its stats down — they last for as long
+          as the app is open, and are gone once it closes.
+        </Lead>
+        <p>
+          It is a guest mode. Hand the phone over, let someone play, and when the app closes nothing
+          they did is kept — while everything <i>you</i> had is still exactly where you left it.
+          Nothing is deleted to make that happen: while Amnesic is on, your saved stats are simply
+          never written to.
+        </p>
+        <Subhead>What it forgets</Subhead>
+        <UL>
+          <li>Score, accuracy, streak, and your solve times.</li>
+          <li>
+            The question history you browse with Back and Forward, and any round or run on screen.
+          </li>
+          <li>
+            All-time bests — Blitz score and streak, Per Question sudden-death score, and MoX mean
+            and median.
+          </li>
+          <li>Lookup history.</li>
+        </UL>
+        <Subhead>What it keeps</Subhead>
+        <UL>
+          <li>Every ⚙ setting, theme included.</li>
+          <li>
+            Your per-mode setup — timers, run length, the Deduction sub-type, and the show / hide
+            stat toggles.
+          </li>
+          <li>Your saved defaults.</li>
+          <li>The Amnesic switch itself. A preset stays amnesic until you turn it off.</li>
+        </UL>
+        <p>
+          So the split is stats, not setup: a preset stays itself across a close, and only forgets
+          how you did.
+        </p>
+        <Subhead>Turning it on and off</Subhead>
+        <UL>
+          <li>
+            <b>On</b> — your saved stats are parked, untouched, and the session starts from zero.
+          </li>
+          <li>
+            <b>Off</b> — the session&apos;s stats are discarded, and your saved stats come back
+            exactly as they were. The two are never merged: nothing done while Amnesic was on is
+            ever added to your real numbers.
+          </li>
+        </UL>
+        <p>
+          Either direction clears the screens, including a Blitz round or an MoX run in progress —
+          the same discard switching preset makes, and for the same reason: every screen has to be
+          re-read from whichever copy of your stats is now live.
+        </p>
+        <Subhead>Two things it deliberately is not</Subhead>
+        <UL>
+          <li>
+            <b>It is not Save Stats.</b> The switch above decides whether a question counts at all;
+            this one decides whether what was counted lasts. They are independent, so you can leave
+            Save Stats off inside an amnesic preset for throwaway questions and not even move the
+            session&apos;s count. With Save Stats off there is nothing being recorded for Amnesic to
+            be about, so this row dims and locks — it keeps its value, and comes back the moment you
+            turn Save Stats on.
+          </li>
+          <li>
+            <b>It is not a menu setting.</b> It belongs to the preset, the way its name does. Save
+            Defaults does not capture it, Reset Settings does not restore it, and it never lights
+            the ⚙ button&apos;s &quot;modified&quot; line. Full Reset inside an amnesic preset
+            resets the session and leaves your parked stats alone, for the same reason everything
+            else does.
+          </li>
+        </UL>
+        <Subhead>What &quot;closed&quot; honestly means</Subhead>
+        <p>
+          The stats last for the browsing session, and it is the browser that decides when one ends.
+          A refresh or a reload does not end it — come straight back and the session is still going.
+          Closing the app does.
+        </p>
+        <p>
+          On a phone there is no way to tell that apart from the inside. An app the system shuts
+          down in the background — because you left it a while, or because something else needed the
+          memory — looks exactly like one you closed yourself, and takes the session&apos;s stats
+          with it either way. That is true on iOS in particular, and no web app can promise
+          otherwise, so this one will not: treat an amnesic session as something you could lose at
+          any moment, because you can.
+        </p>
+      </GuideSection>
       <Divider label="Data" />
       <GuideSection
         id="saved-progress"
@@ -1791,6 +1883,13 @@ export default function GuidePage({
           </li>
           <li>The current tab — the app always opens to Classic.</li>
         </UL>
+        <p>
+          There is one exception, and it applies to a whole preset at a time. With <b>Amnesic</b> on
+          (⚙ &rarr; Stats), the last three entries in the first list — your stats, your all-time
+          bests, and your Lookup history — are not written to this device at all for that preset.
+          They last as long as the app is open and are gone once it closes. Everything else in that
+          list still saves normally. See <b>Stats &mdash; Amnesic</b> above.
+        </p>
         <p>
           <b>Full Reset</b> (below) clears everything that is saved — except your saved defaults,
           which it restores rather than clears.
@@ -1912,7 +2011,9 @@ export default function GuidePage({
           <li>
             Wipes all stats, all-time bests (Blitz and MoX), Lookup history, and in-progress rounds
             and runs. Your stats, all-time bests, and Lookup history are saved on this device, so
-            Full Reset clears that saved copy permanently.
+            Full Reset clears that saved copy permanently. In a preset with <b>Amnesic</b> on it
+            clears the session&apos;s stats instead and leaves your parked ones exactly as they are:
+            while Amnesic is on nothing writes to your saved stats, and that includes this button.
           </li>
           <li>
             Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode

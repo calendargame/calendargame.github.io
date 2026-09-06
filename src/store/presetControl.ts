@@ -7,27 +7,31 @@ import {
   FIRST_PRESET_ID,
 } from './presets.js'
 import type { Preset } from './presets.js'
+import { isAmnesic, discardSessionStats } from './amnesic.js'
 import { useSettings } from './settings.js'
 import { useModePrefs } from './modePrefs.js'
 import { useProgress } from './progress.js'
 import { useUserDefaults } from './userDefaults.js'
 
-// store/presetControl.ts — the four things you can DO to the set of presets, and the only place
+// store/presetControl.ts — the five things you can DO to the set of presets, and the only place
 // allowed to do them.
 //
 // WHY THIS IS NOT IN store/presets.ts. The registry file holds a saved value and the storage layer
-// that reads it; this file holds the operations, because two of them (switching, deleting) are not
-// registry edits at all — they are a registry edit PLUS four store rehydrations, and both halves
-// are load-bearing. Splitting them apart is what makes "did only the first half" impossible to
-// write by accident. It is also what keeps the dependency graph one-way: presets.ts knows nothing
+// that reads it; this file holds the operations, because three of them (switching, deleting,
+// and turning amnesic on or off) are not registry edits at all — they are a registry edit PLUS four
+// store rehydrations, and both halves are load-bearing. Splitting them apart is what makes "did
+// only the first half" impossible to write by accident. It is also what keeps the dependency graph one-way: presets.ts knows nothing
 // about the four data stores, this file imports all of them, and nothing imports this file back.
 //
 // ⚠ THERE IS A THIRD PART, AND IT IS DELIBERATELY NOT HERE: remounting the six always-mounted
 // screens. It cannot live in a store file — it is React state in src/main.tsx — and it is not an
 // argument to these functions either. main.tsx SUBSCRIBES to the registry and remounts whenever
-// `activeId` changes, so every path into that hazard is covered by construction rather than by a
-// caller remembering. The full argument, including the required-parameter design this replaced and
-// why the subscription must not be an effect, is at switchPreset below.
+// store/amnesic's `activeDataId` changes — "which preset, and which of its two storage areas its
+// stats live in" — so every path into that hazard is covered by construction rather than by a
+// caller remembering. It is NOT `activeId`: repointing the preset you are already on at
+// sessionStorage is the same hazard without activeId moving at all. The full argument, including
+// the required-parameter design this replaced and why the subscription must not be an effect, is at
+// switchPreset below.
 //
 // ⚠ THIS FILE IS THE PROGRAMMATIC API THE UI GROUP DRIVES. There is deliberately no UI, no top bar
 // and no settings-panel wiring here — `switchPreset(id)` is the whole call a CustomSelect needs.
@@ -64,6 +68,12 @@ const clearPresetStorage = (presetId: number) => {
   } catch {
     /* storage refused — nothing was ever written, so nothing is left behind */
   }
+  // …and the SECOND place a preset can have written: an amnesic preset's stats live in
+  // sessionStorage under the same key, and "remove exactly its keys and nothing else" has to mean
+  // both areas or a deleted preset leaves a session copy behind. Unconditional rather than gated on
+  // the flag — the preset is being removed from the registry in the same breath, so there would be
+  // nothing left to ask.
+  discardSessionStats(presetId)
 }
 
 // Is any of this preset's saved data already on disk? Used only when allocating an id — see
@@ -106,7 +116,15 @@ export function createPreset(name?: string): Preset {
   // was interrupted with keys still on disk.
   let id = Math.max(reg.nextId, FIRST_PRESET_ID + 1)
   while (presetStorageInUse(id)) id++
-  const preset: Preset = { id, name: normalizePresetName(name ?? defaultPresetName(id), id) }
+  // A new preset is PERMANENT until somebody says otherwise. Inheriting the current preset's
+  // amnesic flag was rejected on sight: creating a preset is not a decision about where its stats
+  // are kept, and the one direction of that mistake — a preset that silently forgets — is the one
+  // the player would only discover after losing something.
+  const preset: Preset = {
+    id,
+    name: normalizePresetName(name ?? defaultPresetName(id), id),
+    amnesic: false,
+  }
   usePresets.getState().applyRegistry({
     presets: [...reg.presets, preset],
     activeId: reg.activeId,
@@ -150,10 +168,11 @@ export function renamePreset(id: number, name: string): boolean {
  *   • it makes the remount a DUTY re-derived at every call site — a future deep link, a multi-tab
  *     sync, the UI that has not been written yet — when it is really a CONSEQUENCE of one fact:
  *     the active preset changed.
- * So src/main.tsx SUBSCRIBES to the registry and remounts whenever `activeId` changes (see
- * `remountScreens` there and the subscription beside it). Every path that can change the active
- * preset — this one, deletePreset, and anything added later — is covered by construction, and the
- * UI group's switcher is a one-liner: `switchPreset(id)`.
+ * So src/main.tsx SUBSCRIBES to the registry and remounts whenever store/amnesic's `activeDataId`
+ * changes (see `remountScreens` there and the subscription beside it), so setPresetAmnesic below
+ * rides the same wire. Every path that can repoint the data — this one, deletePreset,
+ * setPresetAmnesic, and anything added later — is covered by construction, and the UI group's
+ * switcher is a one-liner: `switchPreset(id)`.
  *   ⚠ A SUBSCRIPTION, NOT AN EFFECT, AND THAT IS THE LOAD-BEARING PART. zustand runs subscribers
  *     SYNCHRONOUSLY inside the `applyRegistry` set below, so the six remount-key bumps are already
  *     scheduled before the four rehydrations run and React commits the whole thing at once: the
@@ -175,6 +194,57 @@ export function switchPreset(id: number): boolean {
   if (id === reg.activeId || !reg.presets.some((p) => p.id === id)) return false
   usePresets.getState().applyRegistry({ ...reg, activeId: id })
   reloadPresetStores()
+  return true
+}
+
+/**
+ * Make a preset amnesic, or stop. Returns false when there is nothing to do (unknown id, or the
+ * flag is already what was asked for).
+ *
+ * ★★ IT IS THE SAME OPERATION AS switchPreset, WITH A DIFFERENT REASON. Flipping this flag repoints
+ * the progress store at the OTHER storage area (store/amnesic's presetStatsStorage), which is
+ * structurally identical to repointing it at another preset's keys — and the five always-mounted
+ * mode screens hydrate their stats ONCE, at mount, and mirror them back on every change. Leave them
+ * mounted across the flip and the next answered question writes the numbers they are still holding
+ * into whichever copy is now live. That is the 500-cards-becomes-4 bug with a different trigger, so
+ * it gets the identical treatment: registry write first (which schedules the remount, because
+ * src/main.tsx is subscribed to store/amnesic's activeDataId and not to activeId alone), then the
+ * rehydrations, all in one synchronous turn with no window in between.
+ *
+ * ★ THE TOGGLE RULE, WHICH IS WHAT MAKES THIS SAFE:
+ *     ON  → the saved stats are PARKED, UNTOUCHED; the session starts at ZERO.
+ *     OFF → the session's stats are DISCARDED; the saved stats come back exactly as they were.
+ *   Both directions are the SAME LINE — discard the session copy, then reload. Turning ON, the
+ *   discard is what guarantees a zero start even if this preset was amnesic earlier in the same
+ *   browsing session (the store then re-derives from store/amnesic's seed). Turning OFF, it is what
+ *   guarantees the session's numbers cannot be reconciled into the permanent ones afterwards:
+ *   ⚠⚠ MERGING A SESSION BACK IS BANNED, and this is the line that makes it unwritable — by the
+ *   time anything permanent is read again, the session's numbers no longer exist anywhere.
+ *
+ * ⚠ IT REHYDRATES ALL FOUR STORES, not just progress. Only progress can have moved, so the other
+ * three re-read the values they already hold — a genuine no-op, since every one of them writes
+ * synchronously on every set and none of them has an unsaved in-memory state to lose. It is
+ * reloadPresetStores for the same reason switchPreset uses it: ONE reload path means a fifth
+ * per-preset store added later is covered by being listed there, and there is no second, narrower
+ * copy for a future change to forget to widen.
+ *
+ * ⚠ SWITCHING AWAY AND BACK IS NOT A TOGGLE and deliberately keeps the session going: the session
+ * copy is keyed per preset and nothing here runs on a switch, so an amnesic preset you left and
+ * returned to still has its session. You never closed the app; that is the only event that ends one.
+ */
+export function setPresetAmnesic(id: number, amnesic: boolean): boolean {
+  const reg = usePresets.getState()
+  if (!reg.presets.some((p) => p.id === id) || isAmnesic(reg, id) === amnesic) return false
+  usePresets.getState().applyRegistry({
+    ...reg,
+    presets: reg.presets.map((p) => (p.id === id ? { ...p, amnesic } : p)),
+  })
+  discardSessionStats(id)
+  // Only the ACTIVE preset has anything loaded to reload. Flipping the flag on a preset you are not
+  // on changes nothing on screen and nothing in memory — it just decides where that preset's stats
+  // will be read from the next time it is opened, which is exactly what deletePreset's `wasActive`
+  // guard says about the same situation.
+  if (id === reg.activeId) reloadPresetStores()
   return true
 }
 

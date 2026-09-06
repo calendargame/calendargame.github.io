@@ -77,6 +77,17 @@ export const presetKey = (baseKey: string, presetId: number): string =>
 export type Preset = {
   id: number // allocated once, from `nextId`, and NEVER reused — see normalizeRegistry
   name: string
+  // ★ AMNESIC: this preset's STATS live in sessionStorage instead of on the device, so they are
+  // gone when the app is closed. The flag is a property of the PRESET rather than one of its ⚙
+  // settings, and store/amnesic argues why at length — the short version is that a settings value
+  // can be rewritten wholesale by Reset Settings' applySettings, with no rehydration and no screen
+  // remount, which is precisely how the stats of the preset you just left get written into the one
+  // you just opened. Every write to this field goes through applyRegistry, which src/main.tsx is
+  // already subscribed to.
+  // ⚠ It lives HERE, in the global registry, rather than in the preset's own saved payload, for a
+  // second reason: a preset UI has to show its "A" marker for presets you are not currently on,
+  // and only the registry can answer for all of them at once.
+  amnesic: boolean
 }
 
 export type PresetRegistryValues = {
@@ -103,8 +114,11 @@ export const defaultPresetName = (id: number): string => `Preset ${id}`
 // device does not even gain a `cg-presets-v1` entry — persist only writes on a set, and hydrating
 // from an absent payload is not a set. The first write happens when the player creates a second
 // preset, which is the first moment the registry says anything a default could not.
+// ⚠ `amnesic: false` is not a placeholder — it is the statement that the existing data is PERMANENT
+// data. A device that has never seen presets materialises exactly this registry, so the default has
+// to be the behaviour every build before amnesic had.
 export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
-  presets: [{ id: FIRST_PRESET_ID, name: defaultPresetName(FIRST_PRESET_ID) }],
+  presets: [{ id: FIRST_PRESET_ID, name: defaultPresetName(FIRST_PRESET_ID), amnesic: false }],
   activeId: FIRST_PRESET_ID,
   nextId: FIRST_PRESET_ID + 1,
 })
@@ -126,7 +140,16 @@ export function normalizeRegistry(
   const presets = (Array.isArray(raw?.presets) ? raw.presets : [])
     .filter((p): p is Preset => !!p && Number.isInteger(p.id) && p.id >= FIRST_PRESET_ID)
     .filter((p) => !seen.has(p.id) && (seen.add(p.id), true))
-    .map((p) => ({ id: p.id, name: normalizePresetName(p.name, p.id) }))
+    // ⚠ `=== true` rather than a cast: this field is read from the same untrusted storage the rest
+    // of the registry is, and it is the field that decides WHICH STORAGE AREA a preset's stats are
+    // read from. A truthy string out of a tampered payload must not be able to point a preset at a
+    // session copy it never had — and a payload written before amnesic existed simply lacks the
+    // key, which this turns into the permanent behaviour it had at the time.
+    .map((p) => ({
+      id: p.id,
+      name: normalizePresetName(p.name, p.id),
+      amnesic: p.amnesic === true,
+    }))
   // There is always at least one preset. "Zero presets" is not a state the app can render, and it
   // is not a state a player can reach either (deletePreset refuses the last one) — so a payload
   // claiming it is corrupt, and the honest recovery is the default registry, which points straight

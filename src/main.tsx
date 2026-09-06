@@ -35,6 +35,7 @@ import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogSignature, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
 import { usePresets } from './store/presets.js'
+import { activeDataId } from './store/amnesic.js'
 import { useSettings } from './store/settings.js'
 import { useModePrefs } from './store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, prefsMatchDefaults } from './store/userDefaults.js'
@@ -1375,10 +1376,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
         guideScrollYRef.current=0;
       },[]);
       // ★★ THE PRESET SWITCH'S REMOUNT, WIRED TO THE FACT RATHER THAN TO THE CALLER. Anything that
-      // changes which preset is active — store/presetControl's switchPreset, deleting the preset you
-      // are on, or whatever a later group adds — lands here, because the one thing all of them have
-      // in common is that the registry's activeId moved. presetControl therefore takes no remount
-      // callback: there is nothing for a call site to forget.
+      // changes which DATA the app is reading — store/presetControl's switchPreset, deleting the
+      // preset you are on, making the preset you are on amnesic, or whatever a later group adds —
+      // lands here, because the one thing all of them have in common is that the bytes underneath
+      // these six screens were swapped. presetControl therefore takes no remount callback: there is
+      // nothing for a call site to forget.
       // ⚠ store.subscribe, NOT a useEffect on the value, and the difference is load-bearing. zustand
       // runs subscribers SYNCHRONOUSLY inside the set, i.e. BEFORE switchPreset rehydrates the four
       // stores — and React batches every update made in one turn (18+ auto-batching, in a handler or
@@ -1390,9 +1392,19 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // screens still hold the old one; that render is harmless only for as long as no mode
       // screen's stat-mirror effect happens to re-fire in it, which is a dependency array's
       // business and not a contract anyone signed.
-      // ⚠ The comparison is on activeId alone: renaming or creating a preset rewrites the registry
-      // value too, and neither may throw away a run in progress.
-      useEffect(()=>usePresets.subscribe((s,prev)=>{if(s.activeId!==prev.activeId)remountScreens();}),[remountScreens]);
+      // ⚠ THE COMPARISON IS activeDataId AND NOT activeId — store/amnesic owns that expression, and
+      // owning it there rather than spelling it out here is the point. It answers one question:
+      // WHICH BYTES are underneath the always-mounted screens — which preset, and which of that
+      // preset's two storage areas its stats live in. Making a preset amnesic repoints the progress
+      // store at sessionStorage without activeId moving an inch, so an activeId-only comparison
+      // would leave the screens holding the parked stats while the store held the session's, and
+      // the next answered question would write one into the other: the same 500-cards-becomes-4
+      // failure, reached by a different door. A third repointing added later extends that one
+      // expression instead of this line.
+      // ⚠ It still ignores everything ELSE in the registry: renaming or creating a preset, or
+      // flipping some OTHER preset's amnesic flag, all rewrite the registry value and none of them
+      // may throw away a run in progress.
+      useEffect(()=>usePresets.subscribe((s,prev)=>{if(activeDataId(s)!==activeDataId(prev))remountScreens();}),[remountScreens]);
       // The two inner scroll regions the panel owns (its own list and the changelog popup's),
       // their useScrollEdgeState hooks, and the footer-button caption auto-fit with its dep-less
       // layout effect and its ResizeObserver -> components/SettingsPanel. Every one of them reads

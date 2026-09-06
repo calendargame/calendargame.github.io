@@ -60,6 +60,9 @@ import type { SettingsValues } from '../store/settings.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/userDefaults.js'
 import type { PrefDefaults } from '../store/userDefaults.js'
+import { usePresets } from '../store/presets.js'
+import { selectAmnesic } from '../store/amnesic.js'
+import { setPresetAmnesic } from '../store/presetControl.js'
 import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 
 // ============================================================
@@ -196,6 +199,30 @@ export function SettingsPanel({
   // saveStats prop itself (display dimming + Best-recording gate). Save Stats is not a
   // date-generation setting, so it never regenerates a date.
   const toggleSaveStats = () => setSaveStats((v) => !v)
+  // ── AMNESIC (the row directly under Save Stats) ──────────────────────────────────────────────
+  //
+  // ★ THE PAIR IS THE POINT, AND IT IS WHY THESE TWO ROWS TOUCH. Save Stats answers "does this
+  // COUNT"; amnesic answers "does it LAST". They are ORTHOGONAL, not exclusive — in an amnesic
+  // preset you may still want Save Stats off for throwaway questions so even the session's count
+  // does not move. A three-way picker (Saved / Amnesic / Off) was proposed and the owner correctly
+  // killed it: it would have made two independent facts look like one choice among three.
+  //
+  // ⚠ NOT A ⚙ SETTING, despite living in the ⚙ panel. The value belongs to the PRESET (store/presets'
+  // `Preset.amnesic`), so it is read from the registry and written through store/presetControl —
+  // which pairs the write with the storage work it implies. The reasons are argued in full at the
+  // top of store/amnesic; the one that matters here is that a settings value can be overwritten
+  // wholesale by Reset Settings, with no rehydration and no screen remount, and this flag decides
+  // WHICH STORAGE AREA the stats are read from. Two consequences to know when reading the panel:
+  // it is not in the Save Defaults snapshot, and it never lights the gear's "modified" bar — a
+  // preset's amnesia is not one of the values "reset to my defaults" is talking about.
+  const activePresetId = usePresets((s) => s.activeId)
+  const amnesic = usePresets(selectAmnesic)
+  // ⚠ NO CONFIRMATION DIALOG, deliberately, and the owner cut one that had been drafted ("I say
+  // neither, just leave it for htp"). A dialog would exist to stop somebody forgetting the state
+  // they were in — and people build a whole preset around being amnesic or not, so that is not the
+  // problem they have. The How-to-Play section carries the explanation instead.
+  // The teardown, the zero start and the discard all belong to setPresetAmnesic; this is a tap.
+  const toggleAmnesic = () => setPresetAmnesic(activePresetId, !amnesic)
   // The saved-defaults snapshot. A store value, so it is read here directly — but the EFFECTIVE
   // defaults derived from it (defPrefs) arrive as a prop, because their memo identity is load
   // bearing up in App.
@@ -1227,6 +1254,41 @@ export function SettingsPanel({
                 className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${saveStats ? 'btn-solid border-transparent' : 'surface-toggle text-(--tx-100-80)'}`}
               >
                 {saveStats ? 'On' : 'Off'}
+              </button>
+            </div>
+            {/* AMNESIC — "does it last", directly under "does it count". A SWITCH by THE PICKER
+                RULE above: label left, one On/Off button right, aria-label the row's label
+                VERBATIM. See toggleAmnesic for why this one row's value is a property of the
+                PRESET rather than a ⚙ setting, and store/amnesic for what it clears and keeps.
+                ⚠ THE LOCK, AND WHY IT IS DRAWN ON THE ROW RATHER THAN ON THE BUTTON. With Save
+                Stats off nothing is being recorded at all, so "does it last" has no subject and
+                the row dims — the app's established "dimmed means disabled". The dim goes on the
+                ROW so the label greys with its control, which is PillGroup's rule (a lock fades
+                one housing and CSS opacity covers every descendant, so the whole thing greys as
+                ONE piece); putting opacity-60 on both row and button would multiply to 0.36.
+                That is also why this is not NOT_OFFERED_BTN_CLASS: that token bundles the dim
+                with the cursor for a button that carries its own dim, and this one's dim is
+                inherited. The other two thirds of controlClasses' three-statement convention are
+                unchanged and both live on the button — aria-disabled ANNOUNCES it and the
+                handler guard is what actually makes it inert. No pointer-events-none, for round
+                15's reason: it would stop the not-allowed cursor from ever painting and would
+                leave a keyboard user pressing a silent control.
+                ⚠ THE VALUE IS PRESERVED WHILE LOCKED, like Julian Chance's selection — turning
+                Save Stats back on restores an amnesic preset to being amnesic. Locking it is what
+                stops the flip: a toggle from behind the dim would throw away the session and the
+                run in progress with it, for a setting the user was told did not apply. */}
+            <div className={`flex items-center justify-between ${saveStats ? '' : 'opacity-60'}`}>
+              <span className="text-xs text-(--tx-200-80)">Amnesic</span>
+              <button
+                type="button"
+                aria-label="Amnesic"
+                aria-disabled={!saveStats || undefined}
+                onClick={() => {
+                  if (saveStats) toggleAmnesic()
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${amnesic ? 'btn-solid border-transparent' : 'surface-toggle text-(--tx-100-80)'}${saveStats ? '' : ' cursor-not-allowed'}`}
+              >
+                {amnesic ? 'On' : 'Off'}
               </button>
             </div>
           </div>

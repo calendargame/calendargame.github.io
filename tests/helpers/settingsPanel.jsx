@@ -44,6 +44,7 @@ import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults } from '../../src/store/userDefaults.js'
 import { useProgress } from '../../src/store/progress.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
+import { discardSessionStats } from '../../src/store/amnesic.js'
 // Re-exported so the panel helper's API is complete at one import, while the definition lives in
 // the file that owns the question — mode-screen tests ask "is this offered" about game controls
 // that have nothing to do with settings, and should not be importing from a settings helper.
@@ -81,6 +82,17 @@ export { isOffered, isDimmed }
 // entry at all (store/presets — a default registry says nothing a missing one does not), which is
 // the state every case in this suite is entitled to assume.
 export function resetAppState() {
+  // ★ AN AMNESIC PRESET'S STATS ARE THE ONE PIECE OF APP STATE localStorage.clear() CANNOT REACH —
+  // they live in sessionStorage (store/amnesic) — so a case that turns Amnesic on would otherwise
+  // leave a session copy standing for every later case in its file, and the symptom would be
+  // "stats I never wrote" rather than anything naming amnesia. Discarded through the app's own
+  // call, so this file still never spells a storage key, and BEFORE the registry goes back to its
+  // defaults, because the registry is what says which presets have a copy to discard.
+  // ⚠ NOT sessionStorage.clear(). The other two things that live there are not app state — the
+  // post-update splash-skip flag and the update-attempt loop breaker (src/main.tsx) — and the two
+  // files that care about them keep their own explicit clear, where it reads as the setup for the
+  // thing they are testing instead of as a line nobody can account for.
+  for (const preset of usePresets.getState().presets) discardSessionStats(preset.id)
   usePresets.setState(makePresetRegistryDefaults())
   localStorage.clear()
   useSettings.getState().resetToFactory()
@@ -515,11 +527,16 @@ export const changelogDot = () => updateDot(changelogLink())
 // Every On/Off switch in the panel, by the setting it controls — the label a screen reader hears
 // and a caller writes. Exported as data so "change each of them individually" is a sweep rather
 // than four hand-written tests. Order is the panel's own, top to bottom.
+// ⚠ 'Amnesic' is the one entry that is NOT a ⚙ setting: the value belongs to the PRESET
+// (store/presets' `Preset.amnesic`) and is written through store/presetControl, so it is absent
+// from the Save Defaults snapshot and never lights the gear. It is listed here because this list is
+// "every On/Off switch in the panel", which is a question about the panel, not about the store.
 export const SWITCH_LABELS = [
   'Random Format',
   'Use System Settings',
   'Julian Calendar (pre-Oct 15, 1582)',
   'Save Stats',
+  'Amnesic',
 ]
 
 // A SWITCH, by the name of the setting it controls. This replaces
