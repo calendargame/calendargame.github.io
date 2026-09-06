@@ -74,37 +74,50 @@ const visibleText = (text) => {
   return els[0]
 }
 // Find a stat cell via its label <span>, scoped to the visible panel (the hidden Classic/Flash/
-// AoX panels also contain "Score" spans). The value is the cell's last <span>. The scoring trio
-// (Score/Accuracy/Streak) cells are <div>s; the timing trio (Last/Average/Median) cells are
-// <button>s since Q8 (the visual-only hide toggle) — statValue reads either the same way.
+// AoX panels also contain "Score" spans). The cell is the label span's PARENT, and its tag is the
+// affordance: StatPanel renders a cell carrying an `fn` as a <button> and one without as a plain
+// <div>. So the scoring trio (Score/Accuracy/Streak) is always <div>s, and a timing cell
+// (Last/Average/Median) is a <button> only while the mode is actually offering the Q8 hide toggle.
+// Returns null when no such cell is on screen. ONE lookup — the four readers below all used to ask
+// this same question in the same words, three of them with their own copy of the not-found throw.
+function statCell(label) {
+  const labelSpan = Array.from(document.querySelectorAll('span')).find(
+    (s) => s.textContent.trim() === label && !isHidden(s),
+  )
+  return labelSpan ? labelSpan.parentElement : null
+}
+function requireStatCell(label) {
+  const cell = statCell(label)
+  if (!cell) throw new Error(`stat "${label}" not found`)
+  return cell
+}
 // ⚠ Reads the value through its OWN marker, [data-statval] — the auto-fit target StatPanel puts on
 // the value span — and NOT "the cell's last span". A cell can carry a trailing screen-reader-only
 // span (the "Off" that names a blanked group, C1 round 16), and last-span would read that instead of
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 function statValue(label) {
-  const labelSpan = Array.from(document.querySelectorAll('span')).find(
-    (s) => s.textContent.trim() === label && !isHidden(s),
-  )
-  if (!labelSpan) throw new Error(`stat "${label}" not found`)
-  return labelSpan.parentElement.querySelector('[data-statval]').textContent.trim()
+  return requireStatCell(label).querySelector('[data-statval]').textContent.trim()
 }
-// Tap a stat cell (Q8: the timing-trio cells are buttons that toggle the visual-only hide). The
-// cell is the label span's parent (a <button> for the timing trio); clicking it fires the toggle.
+// Tap a stat cell (Q8: a timing-trio cell is a button that toggles the visual-only hide). It fires
+// at the cell whether or not it is currently a button, deliberately — that is how a test can show
+// that tapping a box the mode has made inert does nothing at all.
 function clickStat(label) {
-  const labelSpan = Array.from(document.querySelectorAll('span')).find(
-    (s) => s.textContent.trim() === label && !isHidden(s),
-  )
-  if (!labelSpan) throw new Error(`stat "${label}" not found`)
+  const cell = requireStatCell(label)
   act(() => {
-    fireEvent.click(labelSpan.parentElement)
+    fireEvent.click(cell)
   })
+}
+// Is this box OFFERING a tap? Read from the tag, per statCell above. It deliberately does NOT go
+// through tests/helpers/offered: that file answers "is this control withheld" for a control that
+// still exists (aria-disabled / pointer-events-none), and an inert stat box is not a withheld
+// button — it is not a button.
+function statIsToggle(label) {
+  return requireStatCell(label).tagName === 'BUTTON'
 }
 // Whether a stat cell with this label is rendered at all (visible) — for the C3a
 // streak-visibility pins (per-Q sudden death hides Streak; per-Q + AM shows it).
 function hasStat(label) {
-  return !!Array.from(document.querySelectorAll('span')).find(
-    (s) => s.textContent.trim() === label && !isHidden(s),
-  )
+  return statCell(label) !== null
 }
 function begin() {
   act(() => {
@@ -1069,6 +1082,17 @@ describe('Blitz — C3a freshness (suddenAmBest blocks fully-reset until wiped)'
 // mean one thing only — "no data yet, but there could be" — so that a shown-but-empty stat and a
 // stat you hid stop reading identically. Save Stats off is the third signal: dim, whole strip. Every
 // '—' in this describe that used to mean "hidden" is now '' and says so.
+//
+// ★ AND HIDING QUIETS ONLY A ROUND THAT IS STILL GOING (the completion guard, this round). An ENDED
+// round shows its times and its whole strip goes inert — the guard AoX has always had on a completed
+// run and the one thing Blitz was missing, so its time boxes stayed tappable on a screen where AoX's
+// were already dead. Blitz names nothing "complete": the signal is `timerDone`, whose single writer
+// endRound() is reached by EVERY way a round can finish in BOTH timing sub-modes, so the two cases
+// below (Per Round clock, Per Question clock) are pinning one flag from its two ends rather than two
+// behaviours. The `off` half and the `fn` half move together on purpose, and the second case is
+// where that matters: the tap is the only writer of blitzTimingOff in the app, so dropping the
+// toggle while leaving the times blanked would strand a player with three blank boxes and no way to
+// read the round they just played.
 describe('Blitz — Q8 visual-only timing hide', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -1144,6 +1168,82 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     click(correctName(readDate())) // a Per Question solve
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Average')).toBe('') // still hidden — the toggle is shared
+  })
+
+  // Per Round, ended by the round countdown. Also the case that pins the WHOLE strip inert, since
+  // per-Round shows all six boxes — that is the property the later "tap the stat strip of a
+  // finished round" affordance is built on, and it is free only while nothing else claims a tap.
+  it('an ended Per Round round shows its times through the hide toggle, and the whole strip goes inert', () => {
+    act(() => useModePrefs.getState().setBlitzTimingOff(true)) // hidden BEFORE the round
+    mountApp()
+    switchToBlitz()
+    act(() => useModePrefs.getState().setBlitzSec(10)) // slider min — a round short enough to sit through
+    begin()
+    tick(500)
+    click(correctName(readDate())) // one 0.50s solve, round still running
+    expect(statValue('Average')).toBe('') // suppressed mid-round, as ever
+    expect(statIsToggle('Average')).toBe(true) // …and still offering the toggle
+    tick(10000) // the round countdown runs out
+    expect(ctrl('Reset')).toBeInTheDocument() // the round is over
+    // The ended round is a RESULT READOUT: it shows the times it recorded, hide toggle or not.
+    expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
+    // Every box, not just the three that changed — nothing on this strip takes a tap any more.
+    for (const label of ['Score', 'Accuracy', 'Streak', 'Last', 'Average', 'Median'])
+      expect(statIsToggle(label)).toBe(false)
+    clickStat('Average') // and a tap lands on nothing
+    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    // The pref was MASKED for this screen, never written — the hide is back for the next round.
+    expect(useModePrefs.getState().blitzTimingOff).toBe(true)
+    clickText('Reset')
+    expect(statIsToggle('Average')).toBe(true)
+    begin()
+    tick(500)
+    click(correctName(readDate()))
+    expect(statValue('Average')).toBe('')
+  })
+
+  // Per Question, ended by a question clock — the other end of the same `timerDone` flag. Allow
+  // Mistakes is left at its default (on), so Streak renders here too (C3a).
+  it('an ended Per Question round shows its times through the hide toggle, and the trio goes inert', () => {
+    act(() => useModePrefs.getState().setBlitzTimingOff(true)) // hidden BEFORE the round
+    mountApp()
+    switchToBlitz()
+    clickText('Per Round') // → Per Question
+    act(() => useModePrefs.getState().setBlitzQSec(1)) // fastest clock (slider min)
+    begin()
+    tick(500)
+    click(correctName(readDate())) // a 0.50s solve → advances on a fresh 1s clock
+    expect(statValue('Average')).toBe('')
+    expect(statIsToggle('Last')).toBe(true)
+    tick(1100) // that question's clock dies → the round ends
+    expect(ctrl('Reset')).toBeInTheDocument()
+    expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/)
+    expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
+    for (const label of ['Last', 'Average', 'Median']) expect(statIsToggle(label)).toBe(false)
+    clickStat('Median')
+    expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
+    expect(useModePrefs.getState().blitzTimingOff).toBe(true)
+  })
+
+  // The end paths that are NOT the clock reach the same flag. Allow Mistakes off, Per Round: a
+  // wrong answer ends the round, and the strip must read the same way it does after an expiry —
+  // there is no "the clock ran out" special case in the guard, and this is what says so.
+  it('a round ended by a wrong answer (Allow Mistakes off) is inert too', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // OFF → a wrong answer ends the round
+    begin()
+    tick(500)
+    click(correctName(readDate())) // one timed solve to have something to show
+    clickStat('Average') // hide MID-ROUND, the state the guard has to unmask
+    expect(statValue('Average')).toBe('')
+    click(wrongName(readDate())) // wrong → round over
+    expect(statValue('Score')).toBe('1/2')
+    expect(statValue('Average')).toMatch(/^\d+\.\d{2}s$/) // the round's time is shown regardless
+    expect(statIsToggle('Average')).toBe(false)
   })
 })
 

@@ -5,8 +5,21 @@ import type { ButtonState } from '../engine/answerButtons.js'
 import type { FlashState } from '../modes/modeTypes.js'
 import { DAY } from '../lib/format.js'
 import { DOT_CELL } from '../lib/dotLayout.js'
+import { answerGridHitPad, colSpanClass } from '../lib/answerGrid.js'
 import { isTouch } from '../lib/modeFormat.js'
 import { buttonStateClass, BASE_BTN, ANSWER_GRID_GAP } from './controlClasses.js'
+
+// The labelled grid's shape, as NUMBERS — two columns, one span per day, and the last (Saturday)
+// spanning both so the odd seventh option is a full-width row. Both the col-span class each button
+// wears and the hit padding each one claims are derived from this one array (lib/answerGrid), so
+// the layout and its hit areas cannot disagree; the shape is fixed, so both are computed once at
+// module load rather than per render. ⚠ WEEKDAY_COLS and the `grid-cols-2` literal in the grid's
+// className below are the same fact stated twice — Tailwind only emits classes it can see in the
+// source, so the class cannot be built from the number. They sit two lines apart for that reason,
+// and tests/answerHitArea.dom re-derives the padding from the RENDERED classes to catch a drift.
+const WEEKDAY_COLS = 2
+const WEEKDAY_SPANS = DAY.map((_, i) => (i === DAY.length - 1 ? 2 : 1))
+const WEEKDAY_HIT_PAD = answerGridHitPad(WEEKDAY_COLS, WEEKDAY_SPANS)
 
 // WeekdayAnswer — the Sun..Sat answer grid shared by the four weekday modes (Classic/Flash/Blitz/
 // AoX), in EITHER the classic labelled-button layout or the logo's 7-dot layout (Settings → Input;
@@ -24,6 +37,15 @@ import { buttonStateClass, BASE_BTN, ANSWER_GRID_GAP } from './controlClasses.js
 // — .surface-button's hover transition would otherwise fade the green away (remounted elements
 // never transition from a predecessor's styles; reorder/useLayoutEffect alone proven insufficient).
 // Deduction keys its own puzzle-grid wrapper the same way.
+//
+// HIT AREAS ARE BIGGER THAN THE SHAPES (sub-group 1B), and the two layouts reach that differently
+// because their spacing is different. The labelled buttons carry data-hit-pad, whose value names the
+// sides that may claim half of the ANSWER_GRID_GAP gutter beside them (lib/answerGrid decides which;
+// index.css draws the invisible ::after). The dots need no attribute at all: their cluster has NO
+// gutter — it is a square 3×3 place-items:center grid — so "half the space between two dots" is
+// exactly "the rest of my own cell", which .dot-btn::after states once for all seven. Both stop at
+// the outer edge, and in the dot layout the two empty cells stay dead on purpose: they, and the
+// space around either grid, are where a press slides to CANCEL.
 function WeekdayAnswer({
   inputStyle,
   persistBtns,
@@ -79,12 +101,13 @@ function WeekdayAnswer({
     <div className={`mt-4 grid grid-cols-2 ${ANSWER_GRID_GAP}`} data-answer-grid="true">
       {DAY.map((nm, i) => {
         const o = opt(i)
-        const last = i === DAY.length - 1 ? 'col-span-2' : ''
+        const last = colSpanClass(WEEKDAY_SPANS[i])
         return (
           <button
             key={nm}
             type="button"
             onClick={o.onClick}
+            data-hit-pad={WEEKDAY_HIT_PAD[i]}
             className={`${BASE_BTN} ${o.bCls} ${o.inert ? 'pointer-events-none' : ''} ${o.shouldDim ? 'opacity-60' : ''} ${last}`}
           >
             {nm}

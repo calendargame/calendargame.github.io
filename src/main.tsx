@@ -29,6 +29,7 @@ import { useYearRangeMirrors } from './components/useYearRangeMirrors.js'
 import { SettingsPanel } from './components/SettingsPanel.jsx'
 import { SCROLLER_CORE_CLASS, scrollFadeClass, scrollEdgeGaps, isAtBottom, isScrolledFromTop, edgeShade, readShadeRampPx, writeShade, observeScrollExtent, BOTTOM_EDGE_BAND_PX } from './components/scrollRegion.js'
 import { installPointerGestures } from './lib/pointerGestures.js'
+import { installSelectAllOnEntry } from './lib/textEntry.js'
 import { readBuildStamp, writeBuildStamp, buildChanged } from './lib/buildStamp.js'
 import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
@@ -82,8 +83,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // _m1582 (monthOnly1582) — informational snapshots of per-mode toggles at spawn.
     // ─────────────────────────────────────────────────────────────────────────
     // Shared control className tokens + buttonStateClass -> src/components/controlClasses.ts. App
-    // no longer imports it: its last four tokens (RESET_BTN_CLASS, FOOTER_RESET_BTN_CLASS,
-    // FOOTER_LINK_ROW_CLASS, NUM_INPUT_CLASS) left with the ⚙ card. Consumed now by
+    // no longer imports it: its last four tokens (RESET_BTN_CLASS, FOOTER_RESET_BTN_CLASS, the
+    // footer link-row class — since split into FOOTER_META_ROW_CLASS + FOOTER_DEFAULTS_ROW_CLASS —
+    // and NUM_INPUT_CLASS) left with the ⚙ card. Consumed now by
     // components/SettingsPanel + DefaultsCard + WeekdayAnswer and all five mode screens.
     // DOT_CELL — the logo's 7-position layout for the Dots input → src/lib/dotLayout.ts. NOT imported
     // here: App renders no answer input. Its two readers are components/WeekdayAnswer (the Dots grid
@@ -1252,6 +1254,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // Q4: install the global press-drag-release input controller (slide-off-to-cancel on every button
       // + answer-grid drag-to-select). One set of document pointer listeners; cleanup on unmount.
       useEffect(()=>installPointerGestures(),[]);
+      // Round 18: the other app-wide input rule, installed the same way — entering any box you can
+      // type into highlights everything already in it, so typing replaces the value rather than
+      // appending to it. One set of document listeners for all six boxes; lib/textEntry argues why
+      // it is delegated rather than six onFocus props, and why the tap path needs three events.
+      useEffect(()=>installSelectAllOnEntry(),[]);
       // The Year Range boxes' text state, their refs, their two commits and their two focus-guarded
       // store→text sync effects — one unit, in components/useYearRangeMirrors. Called HERE rather
       // than up beside the store bindings so those two effects keep the exact ordinal position in

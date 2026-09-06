@@ -5,8 +5,9 @@ import { commitSliderText } from '../lib/sliderValue.js'
 // SliderValueEditor — the tap-to-type value readout beside every timer slider (Round-2).
 //
 // Display mode renders the readout the sliders always had (tabular-nums text-xs, right-aligned)
-// as a button; tapping it swaps in a small text input seeded with the current value
-// (auto-focused + selected so typing replaces it outright). The validation trio is the
+// as a button; tapping it swaps in a small text input seeded with the current value, auto-focused
+// — and the app-wide entry rule (lib/textEntry) highlights that seed, so typing replaces it
+// outright. The validation trio is the
 // AoX-N field's, adapted to numbers-with-units (lib/sliderValue):
 //   • onChange — permissive regex only (digits, plus one '.' OR ',' when inputMode is decimal:
 //     iOS/Android decimal keypads in comma-locales only offer ',', so rejecting it would silently
@@ -95,12 +96,16 @@ export default function SliderValueEditor({
   // commit, so the input never paints a frame in the locked state.
   if (disabled && text !== null) setText(null)
   const editing = text !== null && !disabled
-  // Focus + select the input the moment it mounts (select() so typing replaces the seed).
+  // Focus the input the moment it mounts, so the tap that opened the editor also puts the keyboard
+  // in it.
+  // ⚠ IT USED TO select() ON THE NEXT LINE, and that line is GONE rather than moved: round 18 made
+  // "entering a box highlights everything in it" an app-wide rule for all six typing surfaces
+  // (lib/textEntry, installed once by App), and this focus() trips it like any other. Two
+  // statements of one policy is the duplication that lets them drift, and the app-wide one is the
+  // one that is also right on a phone — it re-selects on the click that completes a tap, which a
+  // bare select() here never did.
   useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    }
+    if (editing) inputRef.current?.focus()
   }, [editing])
   // The cell from the width note above: the in-flow strut sizes it, the live control overlays it.
   const cell = (control: ReactNode) => (

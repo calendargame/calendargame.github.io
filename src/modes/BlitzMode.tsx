@@ -643,17 +643,48 @@ function BlitzMode({
   // desync (structurally desync-proof). (Persisted as blitzTimingOff — excluded from the defaults
   // system.) Save Stats off drops the toggle, exactly as it does for the scoring trio.
   //
-  // ★ `off` is the USER'S hide toggle and nothing else (C1, round 16) — so it is bare `timingOff`
-  // here, and the scoring trio (Score/Accuracy/Streak — untoggleable, the score IS the mode) carries
-  // no `off` at all. The Save-Stats fact is `dimmed` on the panel below: one flag, whole strip.
-  const tFn = saveStats ? () => setTimingOff((v) => !v) : null
+  // ★ `off` is the USER'S hide toggle and nothing else (C1, round 16) — so it is `timeHidden`
+  // below and NOT a `!saveStats` term, and the scoring trio (Score/Accuracy/Streak — untoggleable,
+  // the score IS the mode) carries no `off` at all. The Save-Stats fact is `dimmed` on the panel
+  // below: one flag, whole strip.
+  //
+  // ★★ HIDING QUIETS ONLY A ROUND THAT IS STILL GOING. An ENDED round (`timerDone`) shows its
+  // times and drops the toggle — the same guard AoX carries on a completed run, and Blitz was the
+  // one mode missing it, so its time boxes stayed tappable on a screen where AoX's were already
+  // inert. Two sibling modes disagreeing about the same screen.
+  //
+  // WHY `timerDone` IS THE SIGNAL, and it is worth being exact because Blitz names nothing
+  // "complete". `setTimerDone(true)` has exactly ONE writer — endRound() — and EVERY way a round
+  // can finish routes through it, in BOTH timing sub-modes: the Per Round countdown hitting 0, any
+  // single question's Per Question clock hitting 0, a wrong answer with Allow Mistakes off, Reveal,
+  // Show Codes, opening ⚙ mid-round, and an override-to-wrong with Allow Mistakes off. So there is
+  // no per-sub-mode branch to write here: one flag already means "this round is over" everywhere.
+  // It is also the flag the Best-reconcile effect gates on, which is what makes it AoX's 'done'
+  // rather than AoX's 'failed' — a Blitz round that ends on a wrong in sudden death still RECORDS
+  // its result, so it is a finished round, not an abandoned one. (AoX's 'failed' records nothing
+  // and is correctly still hideable there.)
+  //
+  // ⚠ BOTH HALVES MOVE TOGETHER — dropping `fn` while leaving `off: timingOff` would be a trap, not
+  // half a fix. Tapping a time box is the ONLY writer of blitzTimingOff in the whole app (it is
+  // excluded from the defaults system and survives Reset Settings; only Full Reset clears it), so a
+  // player who had hidden the trio would end a round facing three blank boxes and no way to reveal
+  // the round's own times without resetting the round away. Masking the pref on this screen and
+  // taking the toggle with it is one coherent state: the ended strip is a plain result readout.
+  // The pref itself is never written here — resume an ended round via Override (resumeRound clears
+  // timerDone) and the hide the player chose is back, untouched.
+  //
+  // ⚠ With Save Stats OFF the whole strip is dimmed to '—' and `tFn` was already null; an ended
+  // round now reads '—' there rather than blank, because `timeHidden` goes false. That is the
+  // dimmed strip's uniform statement and it is exactly what AoX does in the same state.
+  const timeHidden = timingOff && !timerDone
+  const tFn = saveStats && !timerDone ? () => setTimingOff((v) => !v) : null
   const statsArr = [
     { label: 'Score', value: `${S.good}/${S.played}`, fn: null },
     { label: 'Accuracy', value: fmtAccuracyPct(S.good, S.played), fn: null },
     ...(showStreak ? [{ label: 'Streak', value: `${S.streak}/${S.best}`, fn: null }] : []),
-    { label: 'Last', value: truncTime(calcLast(S.times)), off: timingOff, fn: tFn },
-    { label: 'Average', value: fmtTime(calcAvg(S.times)), off: timingOff, fn: tFn },
-    { label: 'Median', value: fmtTime(calcMed(S.times)), off: timingOff, fn: tFn },
+    { label: 'Last', value: truncTime(calcLast(S.times)), off: timeHidden, fn: tFn },
+    { label: 'Average', value: fmtTime(calcAvg(S.times)), off: timeHidden, fn: tFn },
+    { label: 'Median', value: fmtTime(calcMed(S.times)), off: timeHidden, fn: tFn },
   ]
   const date = state.date
   const dateText = shouldShowTimerDate ? fmtDate(date.y, date.m, date.d, date._fmt) : '—'
@@ -663,7 +694,9 @@ function BlitzMode({
   return (
     <div style={{ display: visible ? 'block' : 'none' }}>
       {/* dimmed = Save Stats off = nothing is being recorded (whole strip, every value '—'); the
-          timing trio you hid yourself renders BLANK, from `off` in statsArr. See StatPanel. */}
+          timing trio you hid yourself renders BLANK while the round is going, from `off` in
+          statsArr — an ended round shows its times and takes no taps at all (timeHidden/tFn
+          above). See StatPanel. */}
       <StatPanel stats={statsArr} dimmed={!saveStats} />
       {!perQ && <BlitzBestRow rec={bScore} newFlags={blitzBestNew[blitzBk]} />}
       {perQ && allowMistakes && <BlitzBestRow rec={saScore} newFlags={suddenAmBestNew[suddenBk]} />}

@@ -61,16 +61,51 @@ export const RESET_STATS_BTN_CLASS =
 // colour as RESET_BTN_CLASS — so "tap again to confirm" reads as a warning, not a normal button.
 export const RESET_STATS_ARMED_CLASS =
   'w-full px-3 py-1.5 rounded-xl bg-rose-600/90 text-white border border-transparent text-sm font-medium'
-// Settings-footer link-row shared className (round-7 Q2 — one gap for both rows): the
-// View/Clear saved-defaults row and the Last Updated / Check for updates / Changelog row
-// are the same kind of row (a wrapping line of muted footer text links), so they share one
-// class. gap-3 keeps ~4px of clearance between neighboring press-drag rings (each ring
-// extends px-1 = 4px past its text — see the ring comment at the rows); the Last Updated
-// row sat on a legacy gap-2 (rings touching at 0px clearance) until the rows were unified.
-// items-center keeps the Last Updated caption vertically aligned with its button links (a
-// no-op on the all-links row); flex-wrap is the narrow-viewport fallback — at normal
-// widths each row stays one line.
-export const FOOTER_LINK_ROW_CLASS = 'flex items-center flex-wrap gap-3'
+// ── THE ⚙ FOOTER'S TWO LINK ROWS — one class from round 7 until this round, now two ──────────
+// Round-7 Q2 hoisted a single FOOTER_LINK_ROW_CLASS over both of them on one argument: the
+// View/Clear saved-defaults row and the Last Updated / Check for updates / Changelog row were "the
+// same kind of row" — a wrapping line of muted footer text links, left-packed, one gap. Neither
+// half of that is true of either row any more, so the token could not stay honest as one string:
+//   • The saved-defaults pair MOVED INTO THE PINNED BUTTON BLOCK and stopped being left-packed at
+//     all — its two links are now centred on the row's THIRDS so they interlock with the three
+//     buttons above them. The geometry argument lives at the row itself, in SettingsPanel.
+//   • The metadata row stayed where it was and SPREAD: the stamp anchors left, Changelog anchors
+//     right as a whole element, and Check for updates sits exactly halfway between the two.
+// What a "common base" would have contained after that is the word `items-center` and nothing
+// else. A shared token that carries no shared decision is worse than two named ones — the point of
+// hoisting was to state a rule in one place, and there is no longer a rule in common — so this is
+// a SPLIT, not a rename. Both still live here beside FOOTER_RESET_BTN_CLASS because what makes a
+// footer token belong in this file is that it carries an argument, not that it has two callers.
+//
+// ⚠ THE ~4px RING-CLEARANCE RULE SURVIVED THE SPLIT, but only the metadata row can still state it
+// as a gap. Every footer text link wears `rounded-md px-1 -mx-1`: the padding gives the press-drag
+// ring 4px of breathing room around the glyphs, and the equal negative margin cancels it so the
+// TEXT keeps its exact flow position. So a row's margin boxes ARE its text boxes, and a 12px gap
+// between them leaves 12 − 4 − 4 = 4px between the rings the padding draws. gap-3 is that 12px.
+// The saved-defaults row cannot express the rule at all: a grid gap would move its two centres off
+// the exact thirds, so what clearance it has is whatever the thirds leave it — see the warning at
+// that row about how little that is on a narrow phone.
+//
+// The metadata row: justify-between is what puts the stamp hard left and Changelog hard right, and
+// because the three margin boxes are the three text boxes it also splits the slack into two EQUAL
+// text-to-text gaps — which is precisely "Check for updates sits halfway between the facing edges
+// of its neighbours" (owner's call, this round). gap-3 becomes the MINIMUM those two gaps can
+// reach, so the ring clearance above is a floor the free space only ever widens. items-center keeps
+// the Last Updated caption vertically aligned with its two button links; flex-wrap is the
+// narrow-viewport fallback — at normal widths the row stays one line, and on a line that DOES wrap
+// justify-between spreads whatever landed on it, which is the honest consequence of anchoring the
+// ends rather than a second rule.
+export const FOOTER_META_ROW_CLASS = 'flex items-center flex-wrap justify-between gap-3'
+// The saved-defaults pair, now the SECOND row of the pinned button block (SettingsPanel's
+// .popover-sticky-footer). Three equal columns and deliberately NO gap, so the column edges fall on
+// the exact thirds; each link is then placed across TWO adjacent columns and centred inside that
+// span, which lands one centre at 1/3 and the other at 2/3. (Why the spans overlap in the middle
+// column, and why that is the point rather than a bug, is argued at the row.)
+// It carries its own text tier because it no longer inherits one: it left the metadata block, whose
+// text-[11px] text-(--tx-300-60) used to reach it by inheritance, and the pinned block it moved
+// into declares no text styling at all.
+export const FOOTER_DEFAULTS_ROW_CLASS =
+  'grid grid-cols-3 items-center text-[11px] text-(--tx-300-60)'
 // Boxed numeric-input shared className (Q18; split base + surface Q7 round-7) — the app's
 // second shared input idiom beside SliderValueEditor: a bordered box with centered tabular
 // digits at the text-xs control tier. Used by the AoX run-length field (mode screen + the
@@ -134,7 +169,14 @@ export const BASE_BTN = 'w-full rounded-2xl border px-4 py-3 text-base shadow-xs
 // an identity that mixed gaps broke by a few px.
 // NOT a rule about "every answer grid": the Dots input is not gap-spaced at all (a square 3×3
 // place-items:center cluster whose spacing is --dot-frac), so it carries no gap token — see
-// .dot-cluster in index.css. ⚠ That same block's --ans-h (the dot box's height, which must equal
-// the 4-row weekday grid's) spells "3 × gap-3 0.75rem" into its own arithmetic; changing this
-// token means changing --ans-h with it.
+// .dot-cluster in index.css.
+// ⚠ CSS NEEDS THIS NUMBER TOO, AND CANNOT READ IT. A Tailwind class name is not something CSS can
+// resolve, so index.css declares its own --answer-gap — as the SPACING STEP this class carries,
+// `calc(var(--spacing) * 3)`, not the 0.75rem that resolves to, so the only thing copied across the
+// join is the integer 3 — and TWO rules spend it: .dot-box's
+// --ans-h (the dot box's height, which must equal the 4-row weekday grid's, and which counts three
+// of these gutters) and [data-hit-pad]'s --hit-half (half a gutter, the reach of an answer button's
+// extended hit area — sub-group 1B). Both now read the one variable, so the only join left to
+// police is this token against that variable, and tests/answerHitPad.test.js fails the build if
+// they ever disagree. Change this and change --answer-gap with it.
 export const ANSWER_GRID_GAP = 'gap-3'

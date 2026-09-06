@@ -543,21 +543,22 @@ export default function GuidePage({
           can still answer <b>Up to date</b> — asking again a little later finds it.
         </p>
         <p>
-          To see what an update actually changed, the <b>Changelog</b> link right next to Check for
-          updates opens a plain-words list of what recent updates changed, each entry dated and
-          listed newest first — the dates use the numeric form of your selected format, and the list
-          scrolls within the popup once it grows long. Its heading also carries the app&apos;s{' '}
-          <b>version number</b>, dimmed in the top-right corner — that is the one to quote if you
-          ever need to say exactly which copy of the app you have. Each dated entry covers a whole
-          day: if a day brought more than one update, that day's changes are gathered under the one
-          date. The list shows the ten most recent days that had an update — anything older than
-          that is no longer listed. After an update, a small <b>light-blue dot</b> points the way
-          there: it appears in the top-right corner of the gear button (⚙) until you open the menu,
-          and just after the Changelog link's own text until the first time you open the changelog.
-          The one beside Changelog appears only when this list has actually gained something since
-          you last saw it, so it never sends you to something you have already read; the gear's dot
-          marks every update either way. The gear's dot is separate from the small violet bar that
-          marks modified settings (see the Save Defaults section), and the two can show at once.
+          To see what an update actually changed, the <b>Changelog</b> link — at the right-hand end
+          of the ⚙ panel&apos;s last line, with Check for updates before it — opens a plain-words
+          list of what recent updates changed, each entry dated and listed newest first — the dates
+          use the numeric form of your selected format, and the list scrolls within the popup once
+          it grows long. Its heading also carries the app&apos;s <b>version number</b>, dimmed in
+          the top-right corner — that is the one to quote if you ever need to say exactly which copy
+          of the app you have. Each dated entry covers a whole day: if a day brought more than one
+          update, that day's changes are gathered under the one date. The list shows the ten most
+          recent days that had an update — anything older than that is no longer listed. After an
+          update, a small <b>light-blue dot</b> points the way there: it appears in the top-right
+          corner of the gear button (⚙) until you open the menu, and just after the Changelog link's
+          own text until the first time you open the changelog. The one beside Changelog appears
+          only when this list has actually gained something since you last saw it, so it never sends
+          you to something you have already read; the gear's dot marks every update either way. The
+          gear's dot is separate from the small violet bar that marks modified settings (see the
+          Save Defaults section), and the two can show at once.
         </p>
         <Subhead>The book and contact</Subhead>
         <p>
@@ -587,6 +588,20 @@ export default function GuidePage({
           <li>
             Press a button but slide your finger off before lifting and nothing happens — the tap is
             cancelled — so a misclick is easy to back out of.
+          </li>
+          <li>
+            Answer options reach a little further than they look. Each one responds across its whole
+            rectangle, rounded corners included, and half way into the space beside it — so the gap
+            between two options belongs to them, split down the middle, and a tap that lands between
+            two buttons goes to the nearer one instead of nowhere. In the seven-dot layout each dot
+            answers to its whole square, not just the circle. This is only about where you can
+            press: nothing moves, and nothing changes size.
+          </li>
+          <li>
+            The space <i>around</i> the answer grid stays dead on purpose, and so do the two unused
+            spots in the seven-dot layout (top-middle and bottom-middle). That is where a press goes
+            to be cancelled: slide onto any of them — or onto an option you have already tried — and
+            lifting your finger does nothing.
           </li>
           <li>
             On the weekday answer grid you can slide between options: press one, drag to the option
@@ -621,6 +636,20 @@ export default function GuidePage({
           <li>
             Timer sliders (Flash speed and both Blitz timers) — tap the value beside the slider to
             type an exact number of seconds instead of dragging.
+          </li>
+          <li>
+            Every box you can type into arrives with all of it already highlighted, so the first
+            thing you type replaces what was there and you never have to clear a box first. That
+            holds however you got in — a tap, <Kbd>Tab</Kbd>, dragging from the ⚙ gear onto a Year
+            Range box, or tapping a timer value to type it. Once you&apos;re in the box it behaves
+            normally again: tap a second time to put the cursor somewhere, or drag across part of
+            the value to select just that part.
+          </li>
+          <li>
+            Opening anything puts the keyboard away. Start typing in a box, then open the ⚙ panel,
+            the mode menu, Show Codes or this guide, and the keyboard closes with it instead of
+            sitting on top of what you opened. What you typed is <i>kept</i> — the box commits it
+            exactly as if you had tapped away from it. <Kbd>Esc</Kbd> is what throws an edit away.
           </li>
           <li>
             The sections of this guide open one at a time — opening a section closes the one before
@@ -804,9 +833,10 @@ export default function GuidePage({
         <Subhead>How times are counted</Subhead>
         <UL>
           <li>
-            Any time of 60 seconds or more — a single solve, a computed average/median, or any Best
-            — displays as "—". Times are still tracked internally and contribute to averages,
-            medians, and best-tracking; only the display is capped.
+            <b>A time is always shown as a time</b>, however long it took. Under a minute reads as
+            seconds — <b>9.30s</b>. A minute or more switches to minutes — <b>1m 2.34s</b> — and an
+            hour or more adds hours, <b>1h 2m 3.45s</b>. Nothing is ever hidden for being slow, so a
+            dash in a time box only ever means nothing has been recorded there yet.
           </li>
           <li>
             Saved solve times keep a rolling window of the most recent 1000 (older ones roll off so
@@ -834,7 +864,8 @@ export default function GuidePage({
         <UL>
           <li>
             <b>A dash ("—")</b> — nothing has been recorded yet, but it will be. Accuracy before
-            your first attempt, or a timing stat before your first correct answer.
+            your first attempt, or a timing stat before your first correct answer. That is the only
+            thing it means: a slow solve is shown as a slow time, never as a dash.
           </li>
           <li>
             <b>A blank box</b> — that group is hidden. The label stays so you know what it is.
@@ -892,9 +923,11 @@ export default function GuidePage({
           blank all three, and the times keep being recorded in the background — tap again and the
           same numbers reappear. There is no pause and no "Enable and Reset Stats?" step, since
           hiding can never cause a desync. Score and Accuracy always stay visible, along with Streak
-          wherever the mode shows it — the score is the whole point of these modes. In AoX, hiding
-          quiets the trio only while a run is going; a finished run always shows its result, since
-          the average is what you ran for.
+          wherever the mode shows it — the score is the whole point of these modes. In both modes
+          hiding quiets the trio only while play is going: a finished AoX run and an ended Blitz
+          round always show their times, and there the three boxes stop responding to taps
+          altogether — what you are looking at is the result, not a control. Your hide setting is
+          not forgotten, only set aside; it applies again the moment the next round or run starts.
         </p>
       </GuideSection>
       <GuideSection
@@ -1263,11 +1296,13 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          At the foot of the menu: <b>Save Defaults</b>, <b>Reset Settings</b>, and{' '}
-          <b>Full Reset</b> (see the Data section); directly under them the{' '}
+          At the foot of the menu, in one block: <b>Save Defaults</b>, <b>Reset Settings</b> and{' '}
+          <b>Full Reset</b> (see the Data section), and directly under them the{' '}
           <b>View saved defaults</b> link — joined, once you've saved your own defaults, by{' '}
-          <b>Clear saved defaults</b>; then your Contact email, the Last Updated timestamp, and the{' '}
-          <b>Check for updates</b> and <b>Changelog</b> links.
+          <b>Clear saved defaults</b>. Those two sit in the gaps between the three buttons above
+          rather than under them. Below the block: your Contact email, then a last line with the
+          Last Updated timestamp at the left edge, the <b>Changelog</b> link at the right edge, and{' '}
+          <b>Check for updates</b> midway between the two.
         </p>
         <p>
           Each of those three buttons greys out whenever pressing it would do nothing — there is
@@ -2030,7 +2065,9 @@ export default function GuidePage({
         <p>
           Tap Last, Avg, or Med to hide the timing stats. This is visual only — the clock keeps
           running and your times reappear unchanged when you tap again (see Stats). Score and
-          Accuracy stay visible, along with Streak wherever the mode shows it.
+          Accuracy stay visible, along with Streak wherever the mode shows it. Hiding applies to a
+          round in progress: once a round ends, the three time boxes show that round's times and no
+          longer respond to taps. Your hide setting comes back with the next round.
         </p>
         <Subhead>Round options</Subhead>
         <UL>

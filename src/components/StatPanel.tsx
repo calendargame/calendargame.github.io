@@ -42,17 +42,34 @@ import { fitScale } from '../lib/statFit.js'
 // so a dash could mean either "hidden" or "nothing yet" and a tap's effect was unpredictable. The
 // two facts are now two flags — `off` (yours, per group) and `dimmed` (the app's, whole strip).
 //
-// ⚠ A BLANK VALUE CELL STILL RESERVES ITS HEIGHT, via a non-breaking space. An empty inline box has
-// no line box and therefore no height, so without the strut the whole strip would jump the instant
-// you toggled a group off. A NBSP is used rather than a min-height because it is self-maintaining:
-// it is exactly one line box in whatever font and leading the value span happens to carry, so no
-// number here can ever drift out of sync with the classes above it. `.trim()` treats U+00A0 as
-// whitespace, so the cell still reads as empty to the tests and to text extraction alike.
+// ⚠ THE VALUE CELL IS A FIXED-HEIGHT BOX AND THE VALUE IS CENTRED IN IT — `h-[1lh]` on the wrapper
+// around each value span. It answers two things at once, and it replaced a NBSP the value span
+// rendered when blank (which answered only the first, and only for a blank cell):
+//   1. a BLANK cell still reserves its height. An empty inline box has no line box and therefore no
+//      height, so a cell that rendered literally nothing would collapse and the whole strip would
+//      jump the instant you toggled a group off.
+//   2. a SHRUNKEN cell keeps the same height, which the strut never covered. The auto-fit below
+//      sets a smaller font-size on the value span; a smaller span has a shorter line box, and in
+//      this top-packed column that put its glyphs HIGHER than its un-shrunk neighbours' — the
+//      owner's photo of "940/1001" sitting smaller AND higher than the "93.9%" beside it. It is the
+//      same class as the ⚙ footer-button catch (SettingsPanel's fitFooterBtns, 2026-07-13): a
+//      fitted size and an un-fitted strut in the same box do not share a line. Here the fix cannot
+//      be that one's ("size the container so the strut shrinks WITH the text") — these six boxes fit
+//      INDEPENDENTLY, so a shrinking strut would make each cell a different height. Instead the box
+//      stops depending on its content: one base-size line box tall always, value centred inside it.
+//      Sizes still differ between boxes — that is the auto-fit doing its job, and forcing every box
+//      down to the longest value's size would be a worse defect — but they now sit on one line.
+// `1lh` is the wrapper's OWN line box (its `text-sm leading-tight`), so this is self-maintaining in
+// exactly the way the NBSP was: change the base type and the height follows, with no number here to
+// drift out of sync. It is also not a fixed pixel height — rem-based, so it rides index.css's fluid
+// root font like everything else (tests/heightGuard.test.js). And the unit costs no browser support
+// this app did not already spend: Tailwind v4's own preflight ships a `min-height: 1lh` into our
+// built CSS, and v4's floor (Safari 16.4) is the same release that shipped `lh`.
 //
 // ⚠ AND IT CARRIES A SCREEN-READER-ONLY "Off" (a sibling `sr-only` span, so the auto-fit target
 // below stays a single plain text node). Blank is a perfectly good visual signal and no signal at
 // all to someone who cannot see it; without this word the cleanest state would also be the silent
-// one. The strut itself is invisible to assistive tech either way — NBSP is not announced.
+// one. The reserved height is silent either way — an empty box announces nothing.
 //
 // ⚠ THE DIM CARRIES A WORD TOO, FOR EXACTLY THE SAME REASON — one sr-only line at the top of the
 // strip when `dimmed`. C1 promoted the dim to a first-class signal with a meaning of its own
@@ -82,12 +99,21 @@ export interface StatItem {
   fn?: (() => void) | null //  null = the stat is present but non-interactive (Save Stats off / non-toggleable mode)
   off?: boolean //  the hide flag for this group, and ONLY that → the value cell renders blank (+ an sr-only "Off"). Never folded together with Save Stats — see the three-signal note above.
 }
-// The height strut a BLANK value cell renders instead of a value: a NBSP, which is exactly one line
-// box tall in whatever font the value span carries, invisible, not announced by assistive tech, and
-// whitespace to `String.trim()`. Written as an escape rather than a pasted character so it can never
-// be mistaken for — or "tidied" into — an ordinary space, which would collapse and take the height
-// with it. See the three-signal note at the top of this file for why the height must be reserved.
-const BLANK_STRUT = '\u00A0'
+// The fixed-height box each value is CENTRED in — the height every cell keeps whether its value is
+// blank, short, or shrunk by the auto-fit. Declared once, here, because it is also the element the
+// fit measures against (`s.parentElement.clientWidth` in fitAll below), so its three jobs have to be
+// read together. See the ⚠ note at the top of this file for the two defects it closes.
+//   • h-[1lh] ......... one line box of the wrapper's OWN type — the text-sm/leading-tight it also
+//                       carries, which is the base size the value span inherits. So the box is
+//                       exactly as tall as an unshrunk value: nothing moves for a value that never
+//                       shrinks, and a value that does shrink no longer shortens its own box.
+//   • w-full .......... ⚠ REQUIRED, and not for looks. Without it this wrapper is a shrink-to-fit
+//                       flex item, its `clientWidth` reports the VALUE's width instead of the
+//                       CELL's, and fitAll would then read every box as ~8px too narrow and shrink
+//                       it for ever. It is also what lets the centring below use the whole cell.
+//   • items/justify ... centre the value in the box on both axes — the alignment fix itself.
+const VALUE_CELL_CLASS =
+  'mt-0.5 w-full h-[1lh] text-sm leading-tight flex items-center justify-center'
 export interface ArmedSpan {
   startIdx: number
   endIdx: number
@@ -129,9 +155,14 @@ export default function StatPanel({
   // web-font load. `min-w-0` on the cells keeps each box at its 1/N share during the measure (a long
   // value overflows the fixed cell instead of widening it, so cell.clientWidth is the true target). In
   // jsdom (no layout → widths 0) fitScale returns 1, so this is a no-op and the value renders at base.
-  // A BLANK cell (`off`) holds a NBSP, so it measures as one narrow character and fitScale caps at 1 —
-  // no shrink, and no path to a zero divisor either way (fitScale guards natural > 0 for exactly the
+  // A BLANK cell (`off`) renders no text at all, so it measures 0 wide and fitScale returns 1 — no
+  // shrink, and no path to a zero divisor either way (fitScale guards natural > 0 for exactly the
   // case where a value box measures nothing at all).
+  // ⚠ THE SIZE GOES ON THE VALUE SPAN AND NOWHERE ELSE, and that is only safe because the span sits
+  // inside VALUE_CELL_CLASS's fixed-height box — a fitted size on a content-sized box is the
+  // misalignment this file's ⚠ note describes. `s.parentElement` IS that box (w-full, no padding,
+  // so its clientWidth is the cell's); if the value ever grows another wrapper, this read has to
+  // follow it or every box measures the wrong target.
   const fitAll = () => {
     const root = rootRef.current
     if (!root) return
@@ -238,16 +269,25 @@ export default function StatPanel({
               <span className="text-xs text-(--tx-200-80) leading-none whitespace-nowrap">
                 {s.label}
               </span>
-              {/* data-statval: the auto-fit target. text-sm is the base size; the layout effect shrinks
-                  the inline font-size to fit when the value is too wide. The text stays plain DOM text
-                  — one node, no element children — so it reads normally to screen readers and so
-                  `.textContent` is the value and nothing else. */}
-              <span
-                data-statval
-                className="text-sm font-semibold tabular-nums leading-tight mt-0.5"
-              >
-                {s.off ? BLANK_STRUT : dimmed ? '—' : s.value}
-              </span>
+              {/* The fixed-height value cell — see VALUE_CELL_CLASS. It owns the base type
+                  (text-sm/leading-tight) for BOTH itself and the span inside it, deliberately: `1lh`
+                  is only the right height while the two agree, and one declaration cannot disagree
+                  with itself. Don't re-add text-sm to the span. */}
+              <div className={VALUE_CELL_CLASS}>
+                {/* data-statval: the auto-fit target. It inherits the cell's base size; the layout
+                    effect shrinks its inline font-size to fit when the value is too wide, and the
+                    cell keeps it on its neighbours' line. `whitespace-nowrap` is load-bearing since
+                    the em-dash ceiling came off the time formatters: a time of a minute or more now
+                    reads "1m 2.34s" (lib/modeFormat), and that SPACE is a break opportunity the old
+                    times never had — without this class the value
+                    would wrap to two lines inside a one-line-tall box, and scrollWidth would report
+                    the wrapped width rather than the natural one the fit needs. The text stays plain
+                    DOM text — one node, no element children — so it reads normally to screen readers
+                    and so `.textContent` is the value and nothing else. */}
+                <span data-statval className="font-semibold tabular-nums whitespace-nowrap">
+                  {s.off ? '' : dimmed ? '—' : s.value}
+                </span>
+              </div>
               {/* The word that keeps "blank" from meaning "silent" — see the header note. Absolutely
                   positioned by `sr-only`, so it is outside the flex flow and costs no layout. */}
               {s.off && <span className="sr-only">Off</span>}

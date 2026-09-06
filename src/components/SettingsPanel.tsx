@@ -44,7 +44,8 @@ import {
   RESET_BTN_CLASS,
   FOOTER_RESET_BTN_CLASS,
   NOT_OFFERED_BTN_CLASS,
-  FOOTER_LINK_ROW_CLASS,
+  FOOTER_META_ROW_CLASS,
+  FOOTER_DEFAULTS_ROW_CLASS,
   NUM_INPUT_CLASS,
 } from './controlClasses.js'
 import { DEPLOY_TS } from '../deployStamp.js'
@@ -1380,39 +1381,66 @@ export function SettingsPanel({
               </span>
             </button>
           </div>
-        </div>
-        <div
-          data-drag-stay
-          className="pt-3 px-4 border-t border-(--bd-500-20) text-[11px] text-(--tx-300-60) space-y-0.5"
-        >
-          {/* All four footer text links carry rounded-md px-1 -mx-1: the padding gives the
-              press-drag ring breathing room around the text and the radius rounds its corners (vs a
-              square outline hugging the glyphs); the negative margin cancels the padding so the
-              text keeps its exact flow position. */}
-          {/* Saved-defaults link row (Q7 + Q12 + Q5 round-6). View saved defaults is ALWAYS visible
-              — with nothing saved it opens the defaults manager on its clearly-labelled FACTORY
-              view (there is always something to see, and to edit, now that the popup is the
-              editable manager — manageDefaultsJsx, declared above). Clear saved defaults still appears only while a snapshot
-              exists — with nothing saved there is nothing to clear. View sits LEFT of Clear,
-              matching the button trio's left→right escalation; the row wears the shared
-              FOOTER_LINK_ROW_CLASS (components/controlClasses, and worn by the Last Updated row
-              below — round-7 Q2): its gap-3 keeps ~4px between the two press-drag rings (each ring
-              extends px-1 past its text), its flex-wrap is the narrow-viewport fallback. Clear is
-              the ONLY way back to factory semantics (the Save Defaults popup's duplicate link was
-              removed in Round-4 — one action, one home), and it now opens a small CONFIRM modal
-              (Cancel + a red-tier Clear, above) instead of firing immediately.
-              This footer row (the same muted tier as Check for updates below) is always reachable:
-              the Save Defaults button dims + locks exactly when live == saved, but the footer never
-              hides behind it. FIRST link row, directly under the button trio (Round-2): these are
-              the only actionable settings in this block, and they belong to the trio's story —
-              below it the footer decays into contact info and metadata.
-              The row inherits the footer's data-drag-stay, so a drag-release on either link acts
-              with the panel staying open (each opens its modal over the panel). */}
-          <div className={FOOTER_LINK_ROW_CLASS}>
+          {/* Every footer text link — the four buttons (View / Clear saved defaults, Check for
+              updates, Changelog) and the Contact address below — carries rounded-md px-1 -mx-1: the
+              padding gives the press-drag ring breathing room around the text and the radius rounds
+              its corners (vs a square outline hugging the glyphs); the negative margin cancels the
+              padding so the text keeps its exact flow position. The recipe spans BOTH footer blocks
+              now, which is why it is stated here, at the first link, rather than inside one of
+              them. */}
+          {/* ── THE SAVED-DEFAULTS PAIR — the pinned block's SECOND ROW (Q7 + Q12 + Q5 round-6;
+              moved up here this round, owner's call). It sat below the divider as the metadata
+              block's first row from Round-2 until now, and the DIVIDER MOVED DOWN WITH IT: this
+              block reads [three buttons + two links] and the next one starts at Contact. The two
+              links are otherwise untouched — same order (View LEFT of Clear, matching the button
+              trio's left→right escalation), same modals, and they still inherit a data-drag-stay,
+              from the pinned footer now instead of the metadata block, so a drag-release on either
+              still acts with the panel staying open (each opens its modal over it).
+              View saved defaults is ALWAYS visible — with nothing saved it opens the defaults
+              manager on its clearly-labelled FACTORY view (there is always something to see, and to
+              edit, now that the popup is the editable manager — manageDefaultsJsx, declared above).
+              Clear saved defaults still appears only while a snapshot exists — with nothing saved
+              there is nothing to clear — and is the ONLY way back to factory semantics (the Save
+              Defaults popup's duplicate link was removed in Round-4: one action, one home); it
+              opens a small CONFIRM modal (Cancel + a red-tier Clear, above) rather than firing
+              immediately. The row is always reachable, unlike the button directly above it: Save
+              Defaults dims and locks exactly when live == saved, and these never hide behind that.
+              Below them the footer decays into contact info and metadata, which is why the divider
+              now falls where it does.
+
+              ★ WHY THE TWO CENTRES ARE THIRDS AND NOT HALVES. The three buttons above are flex-1
+              siblings, so their centres sit at 1/6, 1/2 and 5/6 of the row. The midpoint of the
+              first pair is 1/3 and of the second pair is 2/3 — so a link at each of those lands
+              exactly in a GAP between two buttons, and the two rows interlock like a brick course.
+              A generic space-around would have put them at 1/4 and 3/4, under the buttons rather
+              than between them; that is the thing this deliberately is not, so the thirds are
+              implemented as thirds and not approximated by a distribution keyword.
+              HOW: three equal columns and NO gap (a gap would push both centres off the thirds —
+              see FOOTER_DEFAULTS_ROW_CLASS), View placed across columns 1-2 and Clear across 2-3,
+              each centred within its own span. The centre of [0, 2/3] is 1/3 and the centre of
+              [1/3, 1] is 2/3. The two spans therefore OVERLAP in the middle column, and that is
+              what the rule costs rather than a slip to be tidied away: two boxes cannot both be
+              centred on the thirds AND tile the row. It also buys the better failure — each link
+              may grow to 2/3 of the row before the grid wraps it, where non-overlapping 1/3-wide
+              tracks would wrap both of these captions on any phone. The -mx-1 above is symmetric,
+              so centring the margin box centres the visible text with it.
+              Both links carry row-start-1 so they share the one row: with only Clear's column
+              stated explicitly, auto-placement would have found column 2 already behind the cursor
+              (View having just taken columns 1-2) and dropped Clear onto a second line.
+              ⚠ WHEN ONLY VIEW IS PRESENT it spans all three columns instead, so it centres on the
+              WHOLE row rather than sitting at 1/3 with nothing opposite it.
+              ⚠ THE THIRDS ARE TIGHT ON A NARROW PHONE and jsdom cannot say how tight. Centre to
+              centre is exactly one third of the row; at the panel's width on a 390pt iPhone that is
+              ~97px, against two captions whose half-widths already sum to about the same — so the
+              labels come near to touching, and the press-drag rings (4px past each caption) can
+              overlap while the text still does not. No implementation of "centres on the thirds"
+              avoids that: it is a property of the rule, not of this code. Only the owner's device
+              settles whether it reads as interlocked or as crowded. */}
+          <div className={`${FOOTER_DEFAULTS_ROW_CLASS} pt-3`}>
             <button
               type="button"
               onClick={openManageDefaults}
-              className="underline select-none rounded-md px-1 -mx-1"
+              className={`underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-1 justify-self-center ${savedDefaults !== null ? 'col-end-3' : 'col-end-4'}`}
             >
               View saved defaults
             </button>
@@ -1420,12 +1448,17 @@ export function SettingsPanel({
               <button
                 type="button"
                 onClick={() => setClearConfirmOpen(true)}
-                className="underline select-none rounded-md px-1 -mx-1"
+                className="underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-2 col-end-4 justify-self-center"
               >
                 Clear saved defaults
               </button>
             )}
           </div>
+        </div>
+        <div
+          data-drag-stay
+          className="pt-3 px-4 border-t border-(--bd-500-20) text-[11px] text-(--tx-300-60) space-y-0.5"
+        >
           <div>
             Contact:{' '}
             <a
@@ -1435,7 +1468,23 @@ export function SettingsPanel({
               dayoftheweekcalculation@gmail.com
             </a>
           </div>
-          <div className={FOOTER_LINK_ROW_CLASS}>
+          {/* ── THE APP-METADATA ROW, now the last thing in the panel and SPREAD ACROSS IT (owner's
+              call, this round — it was left-packed behind a gap-3 until the saved-defaults pair
+              moved out of this block and took the "same kind of row" argument with it; see
+              FOOTER_META_ROW_CLASS, which still owns the ring-clearance derivation).
+              The stamp ANCHORS LEFT, Changelog ANCHORS RIGHT, and Check for updates sits exactly
+              halfway between the two facing edges — all three out of one justify-between, because
+              every link's px-1 is cancelled by an equal -mx-1 and so the flex margin boxes ARE the
+              text boxes: spreading them equally spreads the visible gaps equally. gap-3 stays as
+              the FLOOR under those two gaps (the ~4px ring clearance), never as their size.
+              ⚠ NEITHER END MOVES WHEN ITS CONTENT CHANGES, which is what makes the middle stable:
+              Changelog is anchored as a WHOLE ELEMENT — its text plus the update-dot slot, which
+              UpdateDot reserves lit or unlit alike (index.css), so lighting the dot cannot shift
+              the row — and Check for updates is width-locked by the hidden strut described below,
+              so none of its four labels can move its neighbours either. The only thing here that
+              legitimately changes width is the stamp itself, and it grows from the left edge it is
+              anchored to. */}
+          <div className={FOOTER_META_ROW_CLASS}>
             <span>
               Last Updated:{' '}
               {(() => {
@@ -1470,9 +1519,11 @@ export function SettingsPanel({
                     2026-08-02, overriding an earlier justify-items-start that anchored them left).
                     The resting label is the widest, so it fills the cell exactly and centring
                     cannot move it — only the three status labels shift, which is the whole point.
-                    Note the CENTRE is the button's own fixed cell, NOT the row: it stays put
-                    however wide the date in the timestamp renders, so nothing here is
-                    position-dependent on that.
+                    Note that THIS centring is inside the button's own fixed cell and is a separate
+                    question from where the button sits in the row: the row's justify-between is
+                    what places the button (halfway between the stamp and Changelog, and a wider
+                    date does move it there — as a whole, still halfway), while the strut is what
+                    guarantees the label inside can never be the thing that moves anything.
                   • UNDERLINE ONLY AT REST. The other three labels are STATUS, not actions; wearing
                     the interaction signal while not being the interaction is the round-3
                     block-hover mistake. The button still IS pressable during a result — a tap
@@ -1503,10 +1554,11 @@ export function SettingsPanel({
               </span>
             </button>
             {/* Changelog (Q6), RIGHT of Check for updates — the two update-flavored links live
-                together, force-the-latest then read-what-changed. Same footer-link recipe, in a row
-                wearing the same shared FOOTER_LINK_ROW_CLASS as the View/Clear row above (round-7
-                Q2 — this row's legacy gap-2 left its rings touching at 0px clearance vs the ~4px
-                above); wears the INLINE UpdateDot until its first tap after a build change — the
+                together, force-the-latest then read-what-changed — and LAST in the row, which is
+                now also the row's right ANCHOR (see the row's own comment): justify-between pins
+                this element's trailing edge to the panel's, and "this element" means the text plus
+                the dot slot, not the word alone. Same footer-link recipe as the other three;
+                wears the INLINE UpdateDot until its first tap after a build change — the
                 second stage of the breadcrumb the gear's dot starts. ⚠ Since 2026-08-10 that dot
                 appears only when the changelog actually GAINED something, so an internal deploy
                 lights the gear and leaves this one dark.

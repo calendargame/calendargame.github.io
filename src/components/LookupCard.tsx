@@ -500,14 +500,22 @@ export default function LookupCard({
               value Escape was discarding. This input has NO onBlur at all — blurring it commits
               nothing — so there is no commit to lose the race to, and forcing a synchronous render
               here would be cargo cult.
-              ⚠ IT STOPS PROPAGATION, and that half of the precedent DOES carry, for the reason
-              round 14 wrote down at the year boxes and round 15 repeated at the AoX run length.
-              App's Escape listener (main.tsx) is a document keydown in the BUBBLE phase that asks
-              "does a text input have focus?" to decide the press is not its own; blur() below has
-              already run by then, so without the stop it would find nothing focused and close the ⚙
-              panel on a press meant for this box. The reachable order is the one aox.dom pins: the
-              keyboard is ALREADY here when the panel opens, because tapping the gear does not move
-              focus on iOS or Safari. Nothing else is lost by stopping it — VERIFIED rather than
+              ⚠ IT STOPS PROPAGATION, the same term the year boxes carry (round 14) and the AoX run
+              length repeated (round 15) — but read the next paragraph before believing the reason
+              that used to be written here. App's Escape listener (main.tsx) is a document keydown in
+              the BUBBLE phase that asks "does a text input have focus?" to decide the press is not
+              its own; blur() below has already run by then, so without the stop it would find
+              nothing focused and close the ⚙ panel on a press meant for this box.
+              ⚠ THAT ORDER IS NO LONGER REACHABLE FROM THIS BOX. It required the keyboard to be
+              ALREADY here when the panel opened — true on iOS and Safari, where tapping the gear
+              does not move focus — and round 18 (1D) closed it on the owner's report: opening ANY
+              overlay now takes the keyboard down, once, in the app's open-overlay registry
+              (dismissKeyboard inside pushOverlay, components/useBackButton). The stop stays because
+              it is one term of a contract six boxes share and four of them — both Year Range
+              fields, the Save Defaults N field, every tap-to-type readout — sit INSIDE the panel,
+              where it is reachable every time; the argument in full is at the AoX run-length box
+              (modes/AoxMode), which lost the same path on the same day. Nothing else is lost by
+              stopping it — VERIFIED rather than
               assumed: App's other keydown listener (the letter/mode map, on window) returns early
               for any INPUT and has no Escape branch at all; this card's own document listener bails
               the same way; CustomSelect's Escape is a React handler on its own trigger, which Tab

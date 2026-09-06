@@ -19,6 +19,7 @@ import {
   RESET_STATS_BTN_CLASS,
 } from '../components/controlClasses.js'
 import { YEAR_OPTION_DEFAULT, yearGridLayout, makeDedPuzzle } from '../lib/dedPuzzle.js'
+import { answerGridHitPad, colSpanClass } from '../lib/answerGrid.js'
 import { isJulianDate, wday, wdayJulian } from '../lib/calendar.js'
 import { DAY, fmtPartial, fmtYear } from '../lib/format.js'
 import type { FormatId, DatePart } from '../lib/format.js'
@@ -172,11 +173,11 @@ function DeductionMode({
     storedFmt: FormatId | undefined,
     missing: DatePart,
   ) => fmtPartial(y, m, d, storedFmt || dateFormat, missing)
-  const centerLastOpt = (index: number, total: number) => {
-    if (total <= 0) return ''
-    if (index === total - 1 && total % 3 === 1) return 'col-span-3'
-    return ''
-  }
+  // Day's column span for one option: a lone trailing option on the 3-column grid takes the whole
+  // last row instead of hanging off to the left. Returns the SPAN, not the class — the class comes
+  // from answerGrid's colSpanClass and the same number feeds the hit-padding maths (sub-group 1B).
+  const centerLastSpan = (index: number, total: number) =>
+    total > 0 && index === total - 1 && total % 3 === 1 ? 3 : 1
   // Can the range support a Year puzzle? Since the Q1 phase-1 split this screen is the only copy
   // in src — App's twin moved here with it. tests/dateGen.dom keeps a deliberately INDEPENDENT
   // model of this rule to drive its fuzz (the project's standing oracle rule: a reference model
@@ -321,6 +322,28 @@ function DeductionMode({
   const julPossible = useJulian && has1582 && (has1581 || has1583)
   const m1582Possible = useJulian && 1582 >= minY && 1582 <= maxY
 
+  // THE CURRENT PUZZLE'S ANSWER-GRID SHAPE, AS NUMBERS (sub-group 1B). Columns, and one column
+  // span per option — the single decision that the col-span class each button wears AND the hit
+  // padding each one claims are both read off (lib/answerGrid). Unlike the weekday grid's fixed
+  // 7-over-2, Deduction's shape moves with the sub-mode and with the PUZZLE (Year 2/3/5 options
+  // over 2/3/6 columns, Day 7 or the Oct-1582 4), so it is derived per render from `date` rather
+  // than once at module load. `yearLayout` is the same pure call the Year branch makes for its
+  // grid-cols class; asking it twice for one n is free and keeps that branch reading normally.
+  const yearLayout = date && date.type === 'year' ? yearGridLayout(date.options.length) : null
+  const gridCols = yearLayout ? yearLayout.cols : date && date.type === 'day' ? 3 : 2
+  const optionSpans = date
+    ? date.options.map((_, i) =>
+        yearLayout
+          ? yearLayout.spanFor(i)
+          : date.type === 'day'
+            ? centerLastSpan(i, date.options.length)
+            : i === date.options.length - 1
+              ? 2 // Month's odd seventh box takes a full-width last row, as the weekday grid's Saturday does
+              : 1,
+      )
+    : []
+  const hitPad = answerGridHitPad(gridCols, optionSpans)
+
   return (
     <div style={{ display: visible ? 'block' : 'none' }}>
       {/* dimmed = Save Stats off = nothing is being recorded (whole strip, every value '—'); a group
@@ -459,7 +482,7 @@ function DeductionMode({
               date.type === 'year' &&
               (() => {
                 const N = date.options.length
-                const { gridCls, colSpanFor } = yearGridLayout(N)
+                const { gridCls } = yearGridLayout(N)
                 const reserve = abCrossOnly && julCrossOnly && N === 2
                 const answerGrid = (
                   <div
@@ -486,7 +509,8 @@ function DeductionMode({
                             onAnswer(idx)
                             if (isTouch) (document.activeElement as HTMLElement | null)?.blur()
                           }}
-                          className={`${baseBtn} ${bCls} ${perLocked || optionsDisabled ? 'pointer-events-none' : ''} ${shouldDim ? 'opacity-60' : ''} ${colSpanFor(idx)}`}
+                          data-hit-pad={hitPad[idx]}
+                          className={`${baseBtn} ${bCls} ${perLocked || optionsDisabled ? 'pointer-events-none' : ''} ${shouldDim ? 'opacity-60' : ''} ${colSpanClass(optionSpans[idx])}`}
                         >
                           {fmtYear(y)}
                         </button>
@@ -515,7 +539,7 @@ function DeductionMode({
             {date && date.type === 'month' && (
               <div className={`grid grid-cols-2 ${ANSWER_GRID_GAP}`} data-answer-grid="true">
                 {date.options.map((mv, idx) => {
-                  const last = idx === date.options.length - 1 ? 'col-span-2' : ''
+                  const last = colSpanClass(optionSpans[idx])
                   const ps = state.persistBtns[idx]
                   const isFlashing = !!(gridFlash && gridFlash.idx === idx)
                   const bCls = buttonStateClass(ps, isFlashing, gridFlash?.type === 'good', idleBtn)
@@ -530,6 +554,7 @@ function DeductionMode({
                         onAnswer(idx)
                         if (isTouch) (document.activeElement as HTMLElement | null)?.blur()
                       }}
+                      data-hit-pad={hitPad[idx]}
                       className={`${baseBtn} ${bCls} ${perLocked || optionsDisabled ? 'pointer-events-none' : ''} ${shouldDim ? 'opacity-60' : ''} ${last}`}
                     >
                       {mv}
@@ -555,7 +580,8 @@ function DeductionMode({
                         onAnswer(idx)
                         if (isTouch) (document.activeElement as HTMLElement | null)?.blur()
                       }}
-                      className={`${baseBtn} ${bCls} ${perLocked || optionsDisabled ? 'pointer-events-none' : ''} ${shouldDim ? 'opacity-60' : ''} ${centerLastOpt(idx, date.options.length)}`}
+                      data-hit-pad={hitPad[idx]}
+                      className={`${baseBtn} ${bCls} ${perLocked || optionsDisabled ? 'pointer-events-none' : ''} ${shouldDim ? 'opacity-60' : ''} ${colSpanClass(optionSpans[idx])}`}
                     >
                       {dv}
                     </button>

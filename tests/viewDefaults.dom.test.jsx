@@ -26,6 +26,7 @@ import {
   gear,
   modalCard,
   queryModalCard,
+  panelFooter,
   resetAppState,
 } from './helpers/settingsPanel.jsx'
 
@@ -100,7 +101,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     saveSnapshot()
     const view = btn('View saved defaults')
     const clear = btn('Clear saved defaults')
-    // One flex row, View LEFT of Clear (non-destructive inspect before destructive wipe).
+    // One row, View LEFT of Clear (non-destructive inspect before destructive wipe).
     expect(view.parentElement).toBe(clear.parentElement)
     expect(view.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     openManager()
@@ -115,6 +116,45 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
         'Every ⚙ menu setting is also part of the snapshot, captured as it was when you saved.',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('lives in the pinned button block and places the pair on the row’s THIRDS — View alone centres on the whole row', () => {
+    useModePrefs.getState().setAoxN('25') // something to save, so Save Defaults is offered
+    mountApp()
+    openSettings()
+    // ⚠ jsdom HAS NO LAYOUT ENGINE, so nothing here measures a position — this pins the PLACEMENT
+    // RULE the geometry follows from. The row is three equal columns with NO gap (a gap would push
+    // both centres off the thirds); View spans columns 1-2 and Clear columns 2-3, each centred in
+    // its own span. Centre of [0, 2/3] is 1/3, centre of [1/3, 1] is 2/3 — the two links land in
+    // the GAPS between the three flex-1 buttons above, whose centres are 1/6, 1/2 and 5/6. Whether
+    // that reads as interlocked or as crowded at a phone's width is the owner's device call.
+    const view = () => btn('View saved defaults')
+    const row = view().parentElement
+    expect(row.className).toContain('grid-cols-3')
+    expect(row.className).not.toContain('gap-')
+    // Its home is the PINNED BUTTON BLOCK — the same fenced block as Save Defaults / Reset Settings
+    // / Full Reset — and no longer the metadata block's first row, which is what moved the divider
+    // down to Contact.
+    expect(row.parentElement).toBe(panelFooter())
+    expect(panelFooter().contains(btn('Full Reset'))).toBe(true)
+    // Nothing saved yet, so Clear is absent and View spans ALL THREE columns: centred on the whole
+    // row rather than sitting at one third with nothing opposite it.
+    expect(screen.queryByRole('button', { name: 'Clear saved defaults' })).toBeNull()
+    expect(view().className).toContain('col-start-1')
+    expect(view().className).toContain('col-end-4')
+    expect(view().className).toContain('justify-self-center')
+    // With a snapshot the pair takes its thirds.
+    saveSnapshot()
+    const clear = btn('Clear saved defaults')
+    expect(view().className).toContain('col-end-3') // 1/3
+    expect(clear.className).toContain('col-start-2')
+    expect(clear.className).toContain('col-end-4') // 2/3
+    expect(clear.className).toContain('justify-self-center')
+    // Both state row 1 explicitly. With only Clear's column placed, auto-placement would have found
+    // column 2 already behind the cursor (View having just taken columns 1-2) and dropped Clear
+    // onto a second line — a silent two-line footer.
+    expect(view().className).toContain('row-start-1')
+    expect(clear.className).toContain('row-start-1')
   })
 
   it('a legacy snapshot missing a field forward-merges to factory — never undefined', () => {

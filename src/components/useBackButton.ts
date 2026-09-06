@@ -1,7 +1,16 @@
 import { useEffect, useRef } from 'react'
+import { dismissKeyboard } from '../lib/textEntry.js'
 
-// Back-button manager for dismissable overlays (Q1 — Android hardware Back; round-7 Q3 — starving
-// the iOS PWA swipe-history).
+// The app's OPEN-OVERLAY REGISTRY, and the two things it does with the fact that an overlay opened
+// (Q1 — Android hardware Back; round-7 Q3 — starving the iOS PWA swipe-history; round 18 — taking
+// the keyboard down).
+//
+// ⚠ THE NAME UNDERSELLS IT, and that matters now that a second consumer has arrived. Every
+// dismissable overlay in the app registers HERE and nowhere else — the mode menu, ⚙ Settings and
+// its four popups, every ⚙ dropdown, Show Codes, How-to-Play — so this module holds the only
+// complete answer to "what is open, and in what order". Back-button handling is what it has always
+// DONE with that answer; it is not the reason the registry exists. See dismissKeyboard's call in
+// pushOverlay for the second thing it does with it.
 //
 // Everywhere WITH a Back affordance (Android hardware Back, desktop browsers, any Safari/Chrome
 // tab), Back with an overlay open (the mode menu, ⚙ Settings, Show Codes, How-to-Play) should
@@ -75,6 +84,30 @@ if (typeof window !== 'undefined') {
 function pushOverlay(id: string, close: () => void) {
   if (typeof window === 'undefined' || stack.some((e) => e.id === id)) return
   stack.push({ id, close })
+  // ★ OPENING AN OVERLAY TAKES THE KEYBOARD DOWN (round 18). The owner's rule, verbatim: "when the
+  // keyboard is open, doing anything at all should close it". What he reported was AoX — focus the
+  // run-length box, then open ⚙ Settings or the mode menu, and the keyboard just stays up over the
+  // thing you opened.
+  // THE ROOT CAUSE IS PLATFORM, NOT THIS APP: pressing a <button> does not move focus on iOS or
+  // Safari, so the gear tap leaves the caret exactly where it was and the overlay opens UNDER a
+  // keyboard. Desktop Chrome hides the bug because the button takes focus there and the box blurs
+  // on its own — which is also why the fix is the RIGHT one and not a papering-over: it makes every
+  // platform do what Chrome already did.
+  // ⚠ AND THIS IS THE SEAM, not the five openers. Every overlay in the app already registers here
+  // (see the note at the top of this file) — so this line is the rule stated once, for the overlays
+  // that exist and the ones that do not yet, where patching openers is five edits today and a
+  // forgotten sixth tomorrow.
+  // ⚠ IT BELONGS TO THE OPENING, NOT TO BEING OPEN, and the difference is the whole reason it lives
+  // down here beside the stack.push rather than up in the hook. Every box in the ⚙ panel is INSIDE
+  // an overlay, so a version that asked "is an overlay up?" on each render would take the keyboard
+  // off a year box mid-word and make the panel untypeable. Sitting after the already-registered
+  // guard keeps the two facts one decision: a call that does not add an entry is not an opening and
+  // must do nothing at all. tests/textEntryFocus pins that scope against exactly that mistake.
+  // ⚠ AND IT KEEPS THE EDIT, because each box's blur is its OWN contract and this only runs it. The
+  // five that commit on blur (both year boxes, both AoX run-length fields, every tap-to-type
+  // readout) normalize-commit; the Lookup date box has no onBlur at all, so its text is simply left
+  // standing. Either way opening something is not a discard — Escape is the discard, everywhere.
+  dismissKeyboard()
   if (!IOS_STANDALONE) window.history.pushState({ cgOverlay: id }, '')
 }
 

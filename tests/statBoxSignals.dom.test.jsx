@@ -72,11 +72,17 @@ const cells = () => [...strip().children].filter((el) => el.querySelector('[data
 const cellFor = (label) =>
   cells().find((c) => [...c.querySelectorAll('span')].some((s) => s.textContent.trim() === label))
 // What a readout READS, through the value span's own marker — never "the cell's last span", which a
-// blanked cell's trailing sr-only "Off" would answer instead. `.trim()` treats the blank cell's NBSP
-// strut as whitespace, so a blank cell reads as the empty string exactly as it looks.
+// blanked cell's trailing sr-only "Off" would answer instead. `.trim()` is kept so this stays a
+// statement about what the box SAYS rather than about whitespace: a blank cell reads as the empty
+// string exactly as it looks, whether or not the value ever carries padding of its own.
 const valueOf = (label) => cellFor(label).querySelector('[data-statval]').textContent.trim()
-// The RAW value node text — the blank cell's height strut is visible here and nowhere else.
+// The RAW value node text — untrimmed, so a height strut smuggled back into the value would show
+// here and nowhere else (the blank cell reserves its height with a fixed-height BOX now, not with
+// content; see the height test below).
 const rawValueOf = (label) => cellFor(label).querySelector('[data-statval]').textContent
+// The fixed-height box the value is centred in — the value span's own parent. It is what keeps a
+// blank cell, a short value and an auto-fit-shrunken value all the same height.
+const valueCellOf = (label) => cellFor(label).querySelector('[data-statval]').parentElement
 const srTextOf = (label) =>
   [...cellFor(label).querySelectorAll('.sr-only')].map((s) => s.textContent).join('')
 // The thin rules between cells. "Not a cell" no longer identifies them on its own: a dimmed strip
@@ -173,16 +179,23 @@ describe('StatPanel — the three signals (C1)', () => {
   })
 
   // ⚠ THE ONE THAT PROTECTS THE LAYOUT. An empty inline box has no line box and therefore no height,
-  // so a value cell that rendered literally nothing would collapse and the whole strip would jump
-  // the instant you toggled a group off. The blank cell holds a NBSP instead — invisible, not
-  // announced, whitespace to `.trim()`, and exactly one line box tall in whatever font the value
-  // span carries. jsdom has no layout engine, so what is pinned here is the STRUT ITSELF: the text
-  // node exists and is non-empty. (Rendered pixels are verified on-device, as everywhere else.)
-  it('a BLANK cell still reserves its height — the value node holds a NBSP strut, not nothing', () => {
-    render(<StatPanel stats={withData({ scoring: { off: true } })} />)
-    expect(rawValueOf('Score')).toBe('\u00A0')
-    expect(rawValueOf('Score').length).toBe(1)
-    expect(valueOf('Score')).toBe('') // and it still reads as empty, which is what it looks like
+  // so a value cell whose height came from its CONTENT would collapse the instant you toggled a
+  // group off, and the whole strip would jump. It used to be answered by a NBSP the blank cell
+  // rendered in place of a value; the guarantee moved to the BOX — the value now sits in a
+  // fixed-height `h-[1lh]` cell — because the strut only ever covered the blank case and left the
+  // auto-fit's SHRUNKEN values free to shorten their own boxes, which is what knocked them off their
+  // neighbours' line (tests/statValueFit.dom.test.jsx).
+  // jsdom has no layout engine, so what is pinned here is the INVARIANT the pixels rest on: the
+  // blank cell carries no strut text at all, and its box is described identically to a filled one.
+  // (Rendered heights are verified on-device, as everywhere else.)
+  it('a BLANK cell reserves its height with its BOX, not with strut text', () => {
+    const { rerender } = render(<StatPanel stats={withData()} />)
+    const filled = valueCellOf('Score').className
+    expect(filled).toContain('h-[1lh]') // the fixed height itself, named
+    rerender(<StatPanel stats={withData({ scoring: { off: true } })} />)
+    expect(rawValueOf('Score')).toBe('') // no NBSP, no space — nothing
+    expect(valueOf('Score')).toBe('')
+    expect(valueCellOf('Score').className).toBe(filled) // same box, blank or not
   })
 
   // ⚠ THE SAME CASE FOR THE DIM, which C1 promoted to a signal with a meaning of its own and which

@@ -6,6 +6,7 @@
 // since main.tsx imports the modes. main.tsx re-exports makeDedPuzzle so
 // tests/dateGen.dom.test.jsx keeps importing it from exactly where it always did; no test changes.
 import { rint } from './dateGen.js'
+import { colSpanClass } from './answerGrid.js'
 import { rollFormat } from './modeFormat.js'
 import { isGapDate, isJulianDate, isLeap, isLeapJulian, wday, wdayJulian } from './calendar.js'
 import type { DatePart } from './format.js'
@@ -28,10 +29,22 @@ const YEAR_OPTION_DEFAULT = 5,
 // rows on a 6-column grid: three thirds over two halves. n=3 and the Oct-1582-straddle n=2 are
 // plain equal columns and span nothing. Combined with ANSWER_GRID_GAP every one of those lands
 // on the same column edges as Month's 2-col and Day's 3-col grids.
-const yearGridLayout = (n: number) => ({
-  gridCls: n === 2 ? 'grid-cols-2' : n === 5 ? 'grid-cols-6' : 'grid-cols-3',
-  colSpanFor: (idx: number) => (n === 5 ? (idx < 3 ? 'col-span-2' : 'col-span-3') : ''),
-})
+// NUMBERS FIRST, CLASSES DERIVED (sub-group 1B). The layout is decided ONCE, as `cols` and
+// `spanFor` — plain integers — and `gridCls`/`colSpanFor` are read off them through
+// answerGrid's colSpanClass. The hit-padding maths needs the integers and Tailwind needs the
+// literal class names, and this is what stops those two from becoming two descriptions of the
+// shape that can disagree. (Tailwind emits only classes it can SEE, so `grid-cols-${cols}`
+// would ship nothing — the class side has to stay literal, which is why it is the derived one.)
+const yearGridLayout = (n: number) => {
+  const cols = n === 2 ? 2 : n === 5 ? 6 : 3
+  const spanFor = (idx: number) => (n === 5 ? (idx < 3 ? 2 : 3) : 1)
+  return {
+    cols,
+    spanFor,
+    gridCls: cols === 2 ? 'grid-cols-2' : cols === 6 ? 'grid-cols-6' : 'grid-cols-3',
+    colSpanFor: (idx: number) => colSpanClass(spanFor(idx)),
+  }
+}
 // Month deduction boxes — 7 fixed boxes grouping months by shared doomsday code
 // Each box: {label:displayed text, months:[month numbers in that box]}
 const MONTH_BOXES_COMMON = [

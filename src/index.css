@@ -616,6 +616,55 @@ button:focus,select:focus{outline:none}
    still reads on every theme (same inset outline, only the color changes; the .dot-btn box-shadow
    variant below reads the same var, so dots are covered too). */
 .btn-solid.drag-target,.btn-correct-persist.drag-target,.btn-wrong-persist.drag-target{--drag-ring:rgba(255,255,255,.85)}
+/* ANSWER HIT AREAS (sub-group 1B) — an answer option's PRESSABLE shape, which is deliberately
+   bigger than the shape it draws. Two pure losses are reclaimed by the invisible ::after below:
+     • THE FOUR CORNERS. Hit-testing honours border-radius, so a rounded-2xl button's corners were
+       inside its box and outside its shape, and a finger landing on one fell through to the panel
+       behind. Pseudo-elements do not inherit border-radius, so this ::after is a plain rectangle
+       and hands the button its whole box back. It costs nothing and takes nothing from anyone.
+     • HALF THE GUTTER, on every side that has a neighbour. Every point in an ANSWER_GRID_GAP
+       gutter is nearer to one of the two options it separates than to anything else.
+   ⚠ WHAT IS DELIBERATELY NOT RECLAIMED, AND WHY IT IS NOT AN OVERSIGHT. The gutter splits down the
+   middle EVEN WHEN the neighbour is already answered and inert, and nothing reaches past the
+   grid's OUTER edge. Dead space is a FEATURE: sliding a press onto it is how you cancel that press
+   (lib/pointerGestures' slide-off-to-cancel), and the owner aims at dead buttons on purpose to do
+   it. A live button swallowing a dead one's half would quietly delete that escape. Which sides an
+   option may claim is decided per option by lib/answerGrid's answerGridHitPad and arrives here as
+   the attribute value; the letters are read with ~= so an empty value is a real "corners only".
+   ⚠ THE +var(--hit-bd) IN EVERY INSET IS THE WHOLE TRAP, NOT A FUDGE FACTOR. An absolutely
+   positioned box is offset from its containing block's PADDING edge, which on a bordered button is
+   one border-width INSIDE the edge you can see. So a plain inset of -1 × --hit-half stops a border
+   short of the border box on each side, and between two 1px-bordered neighbours the two halves
+   then miss each other by 2px — a dead line down the exact centre of the gutter, which is
+   precisely where a finger aiming at the gap lands. (Reproduced before this was written.) Adding
+   the border width first puts the ::after edge exactly ON the border box, and the halves MEET: the
+   left neighbour's ends at its border-box right + half; the right one's begins at its border-box
+   left − half = (left's border-box right + gap) − half = the same coordinate.
+   ⚠ THERE IS NO ODD PIXEL TO HAND TO EITHER SIDE. Both halves are one computed length — half of
+   one --answer-gap, in rem off the fluid root — so the value is normally a FRACTION of a pixel and
+   there is no integer to round or split. The two edges resolve to the same sub-pixel coordinate:
+   no seam, no overlap. A hit exactly on it is settled by paint order (the later sibling wins),
+   which is deterministic and lands on a real button either way.
+   ⚠ --hit-bd:1px IS A CLAIM ABOUT BASE_BTN's bare `border` utility, and --answer-gap is a claim
+   about ANSWER_GRID_GAP that CSS cannot check (a Tailwind class can't be read from CSS).
+   tests/answerHitPad.test.js fails if either drifts.
+   ⚠ HOVER NOW REACHES INTO THE GUTTER, on purpose. :hover matches the originating element while
+   the pointer is over its generated content, so a mouse in the gutter lights the button that owns
+   it. That is the hit area showing itself; a control that lit up nowhere it can be pressed would
+   be the lie. On touch nothing shows until the drag ring, exactly as before. */
+/* --answer-gap — the answer grids' gutter, and the ONE place CSS names it. Written as a Tailwind
+   spacing STEP rather than a resolved length, exactly as --guide-panel-gap above is: ANSWER_GRID_GAP
+   is the string `gap-3`, and `gap-3` IS calc(var(--spacing) * 3), so this restates only the integer
+   the class actually carries. A literal 0.75rem would restate the RESULT instead, and would then
+   have to be re-resolved by hand if Tailwind's spacing scale ever moved under it — a second number
+   to keep in step, for nothing. 0.75rem = 12.69px at the owner's 16.92px fluid root. */
+:root{--answer-gap:calc(var(--spacing) * 3)}
+[data-hit-pad]{position:relative;--hit-bd:1px;--hit-half:calc(var(--answer-gap) / 2);--hit-t:0px;--hit-r:0px;--hit-b:0px;--hit-l:0px}
+[data-hit-pad~="t"]{--hit-t:var(--hit-half)}
+[data-hit-pad~="r"]{--hit-r:var(--hit-half)}
+[data-hit-pad~="b"]{--hit-b:var(--hit-half)}
+[data-hit-pad~="l"]{--hit-l:var(--hit-half)}
+[data-hit-pad]::after{content:"";position:absolute;top:calc(-1 * (var(--hit-bd) + var(--hit-t)));right:calc(-1 * (var(--hit-bd) + var(--hit-r)));bottom:calc(-1 * (var(--hit-bd) + var(--hit-b)));left:calc(-1 * (var(--hit-bd) + var(--hit-l)))}
 /* 7-dot day-of-week input (Settings → Input → Dots) — the logo's 7-position layout as an alternate
    answer grid for the weekday modes (Classic/Flash/Blitz/AoX). .dot-box keeps the SAME height as the
    4-row labelled-button grid so switching layouts never shrinks the answer panel; the square 3×3
@@ -625,18 +674,35 @@ button:focus,select:focus{outline:none}
    state classes (surface-button / flash-* / btn-*-persist); .dot-btn only adds the circular shape +
    border WIDTH (no background/border-colour, so the state class wins those). --ans-h must equal
    BASE_BTN's metrics so the two layouts match height: 4 rows × (text-base 1.5rem line + py-3 1.5rem +
-   1px×2 border) + 3 × gap-3 0.75rem = 14.25rem + 8px (the rem part tracks the fluid root, so the dot
-   box scales with the buttons across devices). ⚠ That gap-3 term is ANSWER_GRID_GAP, which lives in
-   src/components/controlClasses.ts (not main.tsx, which no longer imports that module at all), and
-   this is the ONLY place the answer-grid gutter is spelled outside that constant (a Tailwind class
-   can't be read from CSS) — if ANSWER_GRID_GAP changes, this arithmetic changes with it. The dot
-   layout has no gutter of its OWN: the cluster is a square 3×3 place-items:center grid spaced by
-   --dot-frac, so unlike the labelled grid it wears no gap utility at all. The .dot-btn.drag-target
-   ring is a box-shadow (follows the circle, unlike the square outline). On-device knobs: --ans-h
-   (box height) + --dot-frac (dot diameter as a % of its grid cell). */
-.dot-box{--ans-h:calc(14.25rem + 8px);block-size:var(--ans-h);display:grid;place-items:center}
-.dot-cluster{--dot-frac:72%;inline-size:min(var(--ans-h),100%);aspect-ratio:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);place-items:center}
-.dot-btn{inline-size:var(--dot-frac);aspect-ratio:1;border-radius:50%;border-width:1px;border-style:solid}
+   1px×2 border) + 3 gutters = 12rem + 8px + 3 × --answer-gap (the rem part tracks the fluid root, so
+   the dot box scales with the buttons across devices). ⚠ THAT GUTTER TERM IS NO LONGER SPELLED OUT
+   HERE, and the change is the point: it used to read `14.25rem + 8px`, with the three gap-3s already
+   folded into the 14.25 where nothing could see them, above a comment admitting the number was a
+   hand-copy of ANSWER_GRID_GAP. The gutter now enters as var(--answer-gap) — declared once, up in
+   the hit-area block above, which is the OTHER thing that needs it — so this arithmetic cannot drift
+   from the labelled grid any more. What CSS still cannot do is read the Tailwind class itself, so
+   --answer-gap is checked against ANSWER_GRID_GAP by tests/answerHitPad.test.js. The dot layout has
+   no gutter of its OWN: the cluster is a square 3×3 place-items:center grid spaced by --dot-frac, so
+   unlike the labelled grid it wears no gap utility at all. The .dot-btn.drag-target ring is a
+   box-shadow (follows the circle, unlike the square outline). On-device knobs: --ans-h (box height)
+   + --dot-frac (dot diameter as a FRACTION of its grid cell — unitless since sub-group 1B, because
+   the hit-area rule below divides by it; ×100% recovers the width it always was).
+   ⚠ EACH DOT'S HIT AREA IS ITS WHOLE SQUARE CELL (sub-group 1B), which is the dot rule's whole
+   content: with no gap in the cluster, the cell boundary IS the midpoint between two neighbouring
+   dots, so "own your cell" and "split the space between two dots down the middle" are the same
+   sentence — and the circle no longer throws away the ~48% of its cell that falls outside the round
+   shape. THE TWO EMPTY CELLS (centre-top, centre-bottom) STAY DEAD, and so do the margins either
+   side of the cluster: a dot claims its own cell and not one pixel further, so the cluster keeps an
+   in-cluster place to slide a press onto and cancel it. The ::after is CENTRED on the dot rather
+   than inset from it (top/left 50% + a −50% translate), and that is what makes it exact: the
+   pseudo, the dot's padding box, the dot's border box and the cell are all concentric, so the
+   padding-box offset trap described in the hit-area block above cannot apply on either axis. Its
+   size is the cell, recovered from the dot: border box ÷ --dot-frac, and the border box is the
+   padding box (100%) plus the two borders. */
+.dot-box{--ans-h:calc(12rem + 8px + 3 * var(--answer-gap));block-size:var(--ans-h);display:grid;place-items:center}
+.dot-cluster{--dot-frac:.72;inline-size:min(var(--ans-h),100%);aspect-ratio:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);place-items:center}
+.dot-btn{--hit-bd:1px;position:relative;inline-size:calc(var(--dot-frac) * 100%);aspect-ratio:1;border-radius:50%;border-width:var(--hit-bd);border-style:solid}
+.dot-btn::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);inline-size:calc((100% + 2 * var(--hit-bd)) / var(--dot-frac));aspect-ratio:1}
 .dot-btn.drag-target{outline:none;box-shadow:0 0 0 2px var(--drag-ring)}
 /* Q8 — the ⚙ gear "modified" indicator: a flush inside-bottom 2px violet bar shown while any
    CURRENTLY-IN-EFFECT menu setting, or any of the four capturable mode-screen prefs (Flash speed,

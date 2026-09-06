@@ -480,21 +480,31 @@ function AoxMode({
           { label: 'Median', value: fmtTime(calcMed(S.times)), off: timeHidden, fn: tFn },
         ]}
       />
+      {/* ⚠ EVERY TIME HERE IS WRAPPED IN `whitespace-nowrap`, and it is not decoration. A time of a
+          minute or more now formats as "1m 2.34s" (lib/modeFormat — the em dash no longer hides a
+          long one), and that space is a line-break opportunity the old "59.99s" never had.
+          These four readouts sit in a flex-wrap row of shrinkable min-w-[125px] columns, so on a
+          narrow phone a bare value would break across two lines mid-number and read as two numbers.
+          The label may still wrap — "Best" / "Average:" is legible; "1m" / "2.34s" is not. */}
       <div className="mt-3 text-xs text-(--tx-300-60)">
         <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-[125px]">
             <div>
-              Best Average: {fmtTime(bestData.avg)}
+              Best Average: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
               {bestNew[bestKey]?.avg && <NewBestStar />}
             </div>
-            <div className="text-[11px] opacity-70">Median: {fmtTime(bestData.avgMed)}</div>
+            <div className="text-[11px] opacity-70">
+              Median: <span className="whitespace-nowrap">{fmtTime(bestData.avgMed)}</span>
+            </div>
           </div>
           <div className="min-w-[125px]">
             <div>
-              Best Median: {fmtTime(bestData.med)}
+              Best Median: <span className="whitespace-nowrap">{fmtTime(bestData.med)}</span>
               {bestNew[bestKey]?.med && <NewBestStar />}
             </div>
-            <div className="text-[11px] opacity-70">Average: {fmtTime(bestData.medAvg)}</div>
+            <div className="text-[11px] opacity-70">
+              Average: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
+            </div>
           </div>
           {bestData.avgRoundId != null && bestData.medRoundId != null && (
             <span className="shrink-0 ml-auto">
@@ -540,17 +550,27 @@ function AoxMode({
                 this press mine?" by asking what has focus; blur() below runs first, so without the
                 stop it would find nothing focused and close the ⚙ panel on what the user meant as a
                 field dismiss.
-                ⚠ THE REACHABLE PATH, named because a defensive line with a wrong reason attached is
-                worse than none. It is NOT "Tab walks out of the panel" — an earlier draft said that
-                and it is false: App intercepts plain Tab on a document keydown and, with no
-                [data-settings-modal] up, preventDefaults it and sends focus to the mode selector
-                (main.tsx), so Tab cannot leave the panel onto this screen at all. What DOES reach
-                it is the opposite order — this field already holds focus, and THEN the ⚙ panel
-                opens. Tapping a <button> does not move focus on iOS or Safari, so the gear tap
-                leaves the keyboard in this box with `settingsOpen` now true, and the very next
-                Escape is the press this stop exists for. tests/aox.dom pins exactly that sequence.
-                (App's outside-press handler blurs a focused input before closing the panel, but
-                only one INSIDE the popover — this box is on the screen behind it.) */}
+                ⚠ THE PATH IT WAS WRITTEN FOR IS NOW CLOSED, and this note is rewritten rather than
+                left standing because a defensive line with a wrong reason attached is worse than
+                none. Two orders were ever proposed. "Tab walks out of the panel" was always false —
+                App intercepts plain Tab on a document keydown and, with no [data-settings-modal]
+                up, preventDefaults it and sends focus to the mode selector (main.tsx), so Tab
+                cannot leave the panel onto this screen at all. The one that WAS reachable is the
+                opposite order: this field already holds focus, and THEN the ⚙ panel opens, because
+                tapping a <button> does not move focus on iOS or Safari. Round 18 (1D) closed that
+                one on the owner's report — opening ANY overlay now takes the keyboard down, in the
+                app's open-overlay registry (dismissKeyboard inside pushOverlay,
+                components/useBackButton) — so this box can no longer be holding an Escape while the
+                panel is up, and no test on this screen can observe the stop any more.
+                ⚠ SO WHY IT STAYS, plainly: it is one term of a contract shared by six boxes, and
+                four of them — both ⚙ Year Range fields, the Save Defaults popup's N field, every
+                tap-to-type readout — live INSIDE the panel, where the stop is reachable every time
+                and is what keeps their Escape from slamming the panel shut (tests/settingsPanel.
+                yearRange, tests/saveDefaults, tests/sliderValueEditor.dom pin it there). An Escape
+                contract that holds in four boxes and not the other two is not a contract; it is a
+                trap for whoever writes the seventh. The honest reading of this line today is "this
+                box handled the press", which is true on every path, rather than "this box is
+                defending the panel", which is no longer any path at all. */}
         <div className="flex items-stretch shrink-0">
           <span
             className={`self-center text-xs leading-none text-(--tx-200-80) ${runPhase !== 'idle' ? ' opacity-60' : ''}`}

@@ -678,7 +678,7 @@ describe('Lookup date box — Escape discards the edit and lets go (round 17)', 
   })
 })
 
-describe('Lookup date box — Escape does not take the ⚙ panel down with it (round 17)', () => {
+describe('Lookup date box — opening the ⚙ panel takes the keyboard with it (round 18)', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
@@ -688,15 +688,21 @@ describe('Lookup date box — Escape does not take the ⚙ panel down with it (r
     document.getElementById('root')?.remove()
   })
 
-  // The twin of the AoX run-length case (tests/aox.dom), and it exists for the same reason: this
-  // is what the stopPropagation is FOR. Without it, Escape's own blur() runs first, App's
-  // document-level settings listener then finds nothing focused so its text-input guard no longer
-  // applies, and the whole panel closes on a press the user meant for the box.
+  // ★ RE-BLESSED (round 18, 1D), and it is the twin of the AoX run-length case (tests/aox.dom) on
+  // the far side of the same change. Both used to click the gear, assert the box STILL held the
+  // keyboard, and pin `e.stopPropagation()` as what kept the resulting Escape from closing the
+  // panel. The owner reported that lingering keyboard as a defect of its own — "when the keyboard
+  // is open, doing anything at all should close it" — so the state the old case protected is gone.
   //
-  // ⚠ fireEvent.click ON THE GEAR IS THE POINT. A click that does not move focus is what a real
-  // tap does on iOS and Safari, so this reproduces the reachable order — the keyboard is ALREADY
-  // in the box when the panel opens — rather than the desktop path where the box blurs anyway.
-  it('the panel stands, and the edit is the only thing discarded', () => {
+  // ⚠ fireEvent.click ON THE GEAR IS STILL THE POINT. A click that does not move focus is what a
+  // real tap does on iOS and Safari, so this drives the order that used to strand the keyboard,
+  // rather than the desktop path where the box blurred on its own.
+  //
+  // ⚠ AND THIS BOX IS THE OTHER HALF OF THE STORY, which is why the twin case is not a copy: it has
+  // NO onBlur, so the blur that closes the keyboard commits nothing and typing is simply left in
+  // place. The AoX box commits on blur, so the same rule normalize-commits its edit there. One rule,
+  // two honest outcomes, each the box's own contract.
+  it('the keyboard goes down with the gear tap, and the typing is left where it was', () => {
     mountApp()
     act(() => fireEvent.keyDown(window, { key: 'L' })) // to Lookup
     const field = () => document.querySelector('input[placeholder^="e.g.,"]')
@@ -710,11 +716,13 @@ describe('Lookup date box — Escape does not take the ⚙ panel down with it (r
       field().focus()
       fireEvent.change(field(), { target: { value: '7/4/17' } })
     })
-    act(() => fireEvent.click(gear())) // …and the panel opens with the keyboard still in the box
-    expect(gear().getAttribute('aria-controls')).toBe('settings-popover') // it really is open
-    expect(document.activeElement).toBe(field()) // …and the box really still has the keyboard
-    act(() => fireEvent.keyDown(field(), { key: 'Escape' }))
-    expect(field().value).toBe('7/4/1776') // the box's own Escape ran
-    expect(gear().getAttribute('aria-controls')).toBe('settings-popover') // and the panel stands
+    expect(document.activeElement).toBe(field()) // the keyboard is in the box…
+    act(() => fireEvent.click(gear()))
+    expect(gear().getAttribute('aria-controls')).toBe('settings-popover') // …the panel opened…
+    expect(document.activeElement).not.toBe(field()) // …and the keyboard went down with it
+    expect(field().value).toBe('7/4/17') // nothing committed, nothing discarded
+    // The next Escape belongs to the panel now, because no box is holding one.
+    act(() => fireEvent.keyDown(document, { key: 'Escape' }))
+    expect(gear().getAttribute('aria-controls')).toBeNull()
   })
 })

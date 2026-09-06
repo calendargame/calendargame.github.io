@@ -1024,23 +1024,32 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
     expect(nField().value).toBe('25') // Escape DISCARDS: back to the value at focus, not 2
   })
 
-  it('Escape in the box does not take the ⚙ panel down with it (the stopPropagation, pinned)', () => {
-    // WHAT THIS PROTECTS is the `e.stopPropagation()` on the Escape branch, and it is here because
-    // round 15 shipped that line with a FALSE reason attached: "the panel is a popover, not a focus
-    // trap, so Tab can walk out of it onto this screen". Tab cannot — App intercepts plain Tab on a
-    // document keydown and redirects it to the mode selector whenever no settings MODAL is up, so
-    // the panel never leaks focus this way. The reachable order is the opposite one, and it is what
-    // this case drives: the keyboard is ALREADY in this box when the ⚙ panel opens.
+  it('opening the ⚙ panel takes the keyboard out of the box, and commits what was typed', () => {
+    // ★ RE-BLESSED (round 18, 1D) — AND THE OLD ASSERTION WAS THE BUG. This case used to drive the
+    // opposite: it clicked the gear, asserted the box STILL held the keyboard, and pinned the
+    // `e.stopPropagation()` on the Escape branch as the thing that stopped the resulting press from
+    // closing the panel. The owner reported that state as a defect in its own right — focus the run
+    // length, open Settings or the mode menu, and the keyboard just sits there over what you opened
+    // — and his rule is "when the keyboard is open, doing anything at all should close it". So the
+    // scenario the old case protected no longer exists to protect.
     //
-    // ⚠ fireEvent.click ON THE GEAR IS THE POINT, not a shortcut. A click event that does not move
-    // focus is exactly what a real tap does on iOS and Safari, where pressing a <button> leaves
-    // focus where it was — so this reproduces the real device rather than approximating it. (A
-    // .click() through the element's own method behaves the same way; what would NOT reproduce it
-    // is focusing the gear first, which is the desktop-Chrome path where the box blurs anyway.)
+    // ⚠ fireEvent.click ON THE GEAR IS STILL THE POINT, and it is now the point twice over. A click
+    // that does not move focus is exactly what a real tap does on iOS and Safari, where pressing a
+    // <button> leaves focus where it was — which is WHY the keyboard used to survive the gear tap on
+    // his phone and never did in desktop Chrome (there the button takes focus and the box blurs on
+    // its own). Driving it this way is what makes this a test of the app's rule rather than of the
+    // platform's accident. (Focusing the gear first would prove nothing: that is the path that
+    // already worked.)
     //
-    // Without the stop, Escape's own blur() runs first, App's document-level settings Escape
-    // listener then finds nothing focused, its input-has-focus guard no longer applies, and the
-    // whole panel closes on a press the user meant for the box.
+    // The rule itself is ONE line, in the app's open-overlay registry — dismissKeyboard() inside
+    // pushOverlay, components/useBackButton — so this case covers the gear, the mode menu, Show
+    // Codes, How to Play and the four ⚙ popups at once. tests/textEntryFocus.dom walks the rest.
+    //
+    // ⚠ WHAT PINS THE stopPropagation NOW: nothing on this screen, because it is no longer
+    // observable from here — with the keyboard gone at open, the box can no longer be holding an
+    // Escape while the panel is up. It stays in the source as one term of a contract its four
+    // siblings inside the panel still need; tests/settingsPanel.yearRange and tests/saveDefaults
+    // pin it where it is reachable. See the note beside it in modes/AoxMode.
     mountApp()
     switchToAox()
     act(() => {
@@ -1052,12 +1061,17 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
       nField().focus()
       fireEvent.change(nField(), { target: { value: '1' } })
     })
-    act(() => fireEvent.click(gear())) // the panel opens with the keyboard still in the box
-    expect(gear().getAttribute('aria-controls')).toBe('settings-popover') // …it really is open
-    expect(document.activeElement).toBe(nField()) // …and the box really still has the keyboard
-    act(() => fireEvent.keyDown(nField(), { key: 'Escape' }))
-    expect(nField().value).toBe('10') // the field's own Escape ran: the edit is discarded
-    expect(gear().getAttribute('aria-controls')).toBe('settings-popover') // and the panel stands
+    expect(document.activeElement).toBe(nField()) // the keyboard is in the box…
+    act(() => fireEvent.click(gear()))
+    expect(gear().getAttribute('aria-controls')).toBe('settings-popover') // …the panel opened…
+    expect(document.activeElement).not.toBe(nField()) // …and the keyboard went down with it
+    // KEPT, NOT DROPPED. The blur is this box's commit, so opening an overlay normalize-commits the
+    // half-typed value exactly as tapping away on desktop always did: '1' clamps up to the Ao2 floor
+    // rather than reverting to 10. Escape is what throws an edit away; opening something is not.
+    expect(nField().value).toBe('2')
+    // And the very next Escape now belongs to the panel, because no box is holding one.
+    act(() => fireEvent.keyDown(document, { key: 'Escape' }))
+    expect(gear().getAttribute('aria-controls')).toBeNull()
   })
 
   it('the box wears the shared interactive surface (border surface-tray), never the container panel (Q7 round-7)', () => {

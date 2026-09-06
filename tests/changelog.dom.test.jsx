@@ -646,15 +646,29 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(check.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('both settings-footer link rows share one row class — equal link gaps (round-7 Q2)', () => {
+  it('the metadata row anchors its ends and keeps the ring-gap floor — and no longer shares the saved-defaults row’s class', () => {
     mountApp()
     openSettings()
-    // The View/Clear row and the Last Updated / Check for updates / Changelog row both wear the
-    // hoisted FOOTER_LINK_ROW_CLASS — the guard that the second row can never drift back to its
-    // legacy gap-2 (rings touching) while the first sits at gap-3 (~4px ring clearance).
-    const viewRow = screen.getByRole('button', { name: 'View saved defaults' }).parentElement
-    const updatesRow = screen.getByRole('button', { name: 'Check for updates' }).parentElement
-    expect(updatesRow.className).toBe(viewRow.className)
-    expect(viewRow.className).toContain('gap-3')
+    // ⚠ THIS CASE REPLACES "both settings-footer link rows share one row class" (round-7 Q2). That
+    // one asserted the two classNames were EQUAL, on the argument that the View/Clear row and this
+    // one were the same kind of row. They are not any more: the saved-defaults pair moved into the
+    // pinned button block and centres on the row's thirds, while this row spreads edge-to-edge, so
+    // the hoisted token split in two (FOOTER_META_ROW_CLASS / FOOTER_DEFAULTS_ROW_CLASS). Keeping
+    // the equality assertion would have meant a test that can only pass by re-uniting rows that
+    // must differ, so what is pinned now is what each row separately promises.
+    const metaRow = screen.getByRole('button', { name: 'Check for updates' }).parentElement
+    // justify-between is the whole anchoring rule in one token: the stamp hard left, Changelog hard
+    // right, and — because every footer link's px-1 is cancelled by an equal -mx-1, so the flex
+    // margin boxes ARE the text boxes — the slack split into two EQUAL visible gaps, which is
+    // "Check for updates sits exactly halfway between its two neighbours".
+    expect(metaRow.className).toContain('justify-between')
+    // gap-3 survives as the FLOOR under those two gaps (12px between margin boxes → ~4px between
+    // the press-drag rings the px-1 draws), never as their size. Its legacy gap-2 left them
+    // touching at 0px, which is the regression this half of the old case existed to catch.
+    expect(metaRow.className).toContain('gap-3')
+    // And the split is real: two different rows, two different classes.
+    const defaultsRow = screen.getByRole('button', { name: 'View saved defaults' }).parentElement
+    expect(defaultsRow).not.toBe(metaRow)
+    expect(defaultsRow.className).not.toBe(metaRow.className)
   })
 })
