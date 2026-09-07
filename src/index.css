@@ -599,7 +599,7 @@ button:focus,select:focus{outline:none}
    ⚠ AND THE READER LOST SOMETHING IN THAT SAME SENTENCE, which is worth stating plainly rather
    than leaving as an implication of "moot". While the document scrolled the guide, the bar was
    INSIDE the scroller's ancestor chain, so a finger that came down anywhere on the bar — the empty
-   space beside the two buttons included — panned How to Play. #appScroll is the bar's sibling, so
+   space beside its controls included — panned How to Play. #appScroll is the bar's sibling, so
    the top --bar-h of the screen (≈57-67px, the app's own measurement) has stopped being a scroll
    surface on the one screen where it was one. That is a real loss on the app's only long reading
    page and it is not being engineered back: it is the same rule every other screen has always

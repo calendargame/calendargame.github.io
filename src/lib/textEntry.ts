@@ -1,11 +1,17 @@
 // lib/textEntry.ts — what counts as a box you can type into, and the two APP-WIDE rules that hold
 // for every one of them. Both rules are stated HERE, once, and nowhere else.
 //
-// The boxes, all six of them: the two ⚙ Year Range fields (components/SettingsPanel), the AoX run
+// The boxes, all seven of them: the two ⚙ Year Range fields (components/SettingsPanel), the AoX run
 // length — which exists TWICE, as the mode screen's own box (modes/AoxMode) and as the Save
-// Defaults popup's (components/DefaultsCard) — the Lookup date box (components/LookupCard), and
-// the tap-to-type slider readout (components/SliderValueEditor), which is one component covering
-// seven sites. Every one of them holds a SETTING that already has a value in it.
+// Defaults popup's (components/DefaultsCard) — the Lookup date box (components/LookupCard), the
+// tap-to-type slider readout (components/SliderValueEditor), which is one component covering seven
+// sites, and the preset RENAME field (components/PresetManager), which is the first of them to
+// exist once PER ROW rather than once. Every one of them holds a value the box already shows.
+// ⚠ THE SEVENTH IS THE ONE THIS FILE WAS WRITTEN FOR. Its whole argument below is that a delegated
+// listener covers boxes that do not exist yet, where six onFocus props cover only the six somebody
+// remembered — and components/PresetManager adds a box, and N copies of it, without touching this
+// file or knowing it exists. If that ever stops being true, the design has been broken rather than
+// outgrown.
 //
 // ── RULE 1: ENTERING A BOX SELECTS EVERYTHING IN IT ───────────────────────────────────────────
 // The owner's ask, verbatim: "when you click/tap into any of them, everything inside is already

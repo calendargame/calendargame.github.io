@@ -29,7 +29,8 @@ import {
 // — which is also why it can afford to be a live proof of the mean rather than a report about it.
 // The maths lives in engine/runBreakdown; this file only formats it.
 //
-// It is the app's FIFTH modal and owes the same contract as the four ⚙ popups — focus on open,
+// It is the app's one modal outside the ⚙ panel, and owes the same contract as the five ⚙ popups
+// — focus on open,
 // capture-phase Escape, Android Back, the Tab trap, the [data-settings-modal] marker — which is now
 // shared code rather than a checklist; see components/modalContract. The card, scrim, shadow, and
 // the scroll region's fades are the changelog popup's, literally: same tokens, same recipe.

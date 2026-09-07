@@ -29,7 +29,13 @@ import { render, screen, cleanup, act } from '@testing-library/react'
 // case at the foot of the file deliberately imports its OWN fresh copy — that is the whole point of
 // it, and it says so there.
 import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
-import { createPreset, switchPreset, deletePreset } from '../src/store/presetControl.js'
+import {
+  createPreset,
+  movePreset,
+  renamePreset,
+  switchPreset,
+  deletePreset,
+} from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
 import { useProgress } from '../src/store/progress.js'
 import { resetAppState, mountApp, tap, documentTheme } from './helpers/settingsPanel.jsx'
@@ -257,9 +263,11 @@ describe('switching presets, with the app running', () => {
   })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════
-  // Creating and renaming rewrite the registry too. Neither moves the active preset, so neither may
-  // throw away the run the player is in the middle of — the cheap way to get this wrong is to
-  // remount on any registry write at all.
+  // Creating, renaming and REORDERING rewrite the registry too. None of the three moves the active
+  // preset or repoints its storage, so none of them may throw away the run the player is in the
+  // middle of — and the cheap way to get this wrong is to remount on any registry write at all.
+  // (What makes it right is that main.tsx's subscription compares store/amnesic's activeDataId,
+  // which is deliberately blind to names and to order.)
   it('creating a preset does not disturb the one you are playing', () => {
     mountApp()
     pinReadableQuestions()
@@ -270,6 +278,25 @@ describe('switching presets, with the app running', () => {
     expect(readDate()).toEqual(live) // same question, still answered
     expect(statValue('Score')).toBe('1/1')
     expect(isOffered(ctrl('Override'))).toBe(true) // the run is intact, not restarted
+  })
+
+  it('renaming and reordering do not disturb it either', () => {
+    // The two operations sub-group 4C added to the manager. A reorder is the one registry write
+    // that changes NOTHING about which bytes the screens are reading, so a remount here would be
+    // pure loss — a player tidying their list mid-run would lose the run to a cosmetic change.
+    mountApp()
+    pinReadableQuestions()
+    const second = createPreset('Second')
+    pressNew()
+    answerCorrectly()
+    const live = readDate()
+    act(() => renamePreset(second.id, 'Renamed'))
+    act(() => movePreset(second.id, -1)) // …and now the active preset is second in the list
+    expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Renamed', 'Preset 1'])
+    expect(usePresets.getState().activeId).toBe(1)
+    expect(readDate()).toEqual(live)
+    expect(statValue('Score')).toBe('1/1')
+    expect(isOffered(ctrl('Override'))).toBe(true)
   })
 })
 

@@ -25,6 +25,7 @@ import { PillTray } from './PillTray.jsx'
 import { PillGroup } from './PillGroup.jsx'
 import { UpdateDot } from './UpdateDot.jsx'
 import DefaultsCard from './DefaultsCard.jsx'
+import PresetManager from './PresetManager.jsx'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { useBackButton } from './useBackButton.js'
 import {
@@ -66,7 +67,7 @@ import { setPresetAmnesic } from '../store/presetControl.js'
 import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 
 // ============================================================
-// SettingsPanel — the ⚙ popover card and its four modals.
+// SettingsPanel — the ⚙ popover card and its five modals.
 //
 // ★ IT IS RENDERED ONLY WHILE THE PANEL IS OPEN: App renders `{settingsOpen && <SettingsPanel …/>}`.
 // That is a HARD constraint, not a style choice. A closed panel must have no DOM at all — the test
@@ -217,6 +218,13 @@ export function SettingsPanel({
   // preset's amnesia is not one of the values "reset to my defaults" is talking about.
   const activePresetId = usePresets((s) => s.activeId)
   const amnesic = usePresets(selectAmnesic)
+  // The active preset's NAME, for the Presets section's one line of prose at the head of the panel.
+  // A selector rather than `activePreset()` from store/presetControl: this has to RE-RENDER when the
+  // name changes (the manage modal below can rename it while the panel is open), and a plain
+  // getState() read would not. The `?? ''` covers the one frame a caller could read between an
+  // applyRegistry and its own next line — store/presets' normalizeRegistry guarantees activeId names
+  // a listed preset on every load, so it is a type obligation rather than a state the app reaches.
+  const activePresetName = usePresets((s) => s.presets.find((p) => p.id === s.activeId)?.name ?? '')
   // ⚠ NO CONFIRMATION DIALOG, deliberately, and the owner cut one that had been drafted ("I say
   // neither, just leave it for htp"). A dialog would exist to stop somebody forgetting the state
   // they were in — and people build a whole preset around being amnesic or not, so that is not the
@@ -269,6 +277,16 @@ export function SettingsPanel({
   // lights them; this popup only READS the link's and asks App to retire it.
   const [changelogOpen, setChangelogOpen] = useState(false)
   const changelogCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
+  // The preset manager (sub-group 4C) — the FIFTH user of the modal contract, opened from the
+  // Presets section at the head of the panel. Its state is one boolean here and everything else is
+  // components/PresetManager's: the card holds its own pending rename and its own delete
+  // confirmation, because both die with the modal and neither is anything the panel can answer.
+  // ⚠ IT CARRIES NO PENDING SNAPSHOT, unlike the two DefaultsCard modals, and that is the design
+  // rather than an omission: every act inside it — create, rename, reorder, delete — is committed
+  // to the registry the moment it happens, so there is nothing for Cancel to discard and the card's
+  // one dismiss control is a plain Close. Deleting is the only irreversible one, and it is the one
+  // with a confirmation.
+  const [presetsOpen, setPresetsOpen] = useState(false)
 
   // Scroll-state tracking for the two inner scroll regions this component owns — the popover's
   // scroll wrapper and the changelog popup's list — both on the shared useScrollEdgeState
@@ -401,6 +419,13 @@ export function SettingsPanel({
   useEffect(() => {
     if (changelogOpen) changelogCardRef.current?.focus()
   }, [changelogOpen]) // and the Changelog popup (Q6)
+  // ⚠ THE PRESET MANAGER IS THE ONE MODAL WITH NO focus-on-open EFFECT HERE, AND IT IS NOT SKIPPING
+  // THE TERM — it OWNS it. That card has two views (the list, and the delete confirmation), each
+  // rendering its own dialog element, so "focus the card when it opens" is really "focus the card
+  // whenever the card is replaced", and the second half is a fact only the card knows. Splitting it
+  // — the open here, the swap there — would leave a term with two owners and one of them blind to
+  // the case that matters. So components/PresetManager holds its own ref and focuses itself, which
+  // is also why it takes no cardRef prop where the other four do.
 
   // Save Defaults (Q7): open the confirmation popup, seeding the pending snapshot from the LIVE
   // stores (panel captured whole; the four mode-screen prefs become editable rows). The seed is
@@ -437,6 +462,7 @@ export function SettingsPanel({
   const closeManageDefaults = useCallback(() => setManageDefaultsOpen(false), [])
   const closeClearConfirm = useCallback(() => setClearConfirmOpen(false), [])
   const closeChangelog = useCallback(() => setChangelogOpen(false), [])
+  const closePresets = useCallback(() => setPresetsOpen(false), [])
   // Opening the changelog retires the link's dot — the breadcrumb's last stop. First tap only in
   // effect: once the flag is cleared the guard never re-fires (nothing re-marks it until the next
   // build change). The flag itself is App's, so the retire is a callback up.
@@ -574,6 +600,12 @@ export function SettingsPanel({
   useBackButton(manageDefaultsOpen, closeManageDefaults, 'manage-defaults') // the defaults manager (Q12/Q5)
   useBackButton(clearConfirmOpen, closeClearConfirm, 'clear-defaults') // and the Clear confirm (Q5)
   useBackButton(changelogOpen, closeChangelog, 'changelog') // and the Changelog popup (Q6)
+  // …and the preset manager (4C). ⚠ ONE Back ENTRY FOR BOTH OF ITS VIEWS, deliberately: Back
+  // dismisses the whole card, delete confirmation and all. The alternative — a second entry for the
+  // confirmation, so Back stepped back to the list — is the nested-modal machinery
+  // components/PresetManager exists to avoid, and it would buy a step backwards out of a question
+  // whose Cancel button is already on screen.
+  useBackButton(presetsOpen, closePresets, 'presets')
   // …and Escape, the contract's other dismiss. The two popups that CONTAIN a text box guard against
   // it (the N field and the tap-to-type readouts own their own Escape — it discards the edit, and a
   // second press, with nothing focused, reaches the modal); the two that are buttons-only do not.
@@ -581,6 +613,11 @@ export function SettingsPanel({
   useModalEscape(manageDefaultsOpen, closeManageDefaults, true)
   useModalEscape(clearConfirmOpen, closeClearConfirm, false)
   useModalEscape(changelogOpen, closeChangelog, false)
+  // The preset manager CONTAINS text boxes (one per row, each the rename field), so it takes the
+  // guard: the first Escape belongs to the field that has the keyboard — it discards that rename —
+  // and a second, with nothing focused, reaches here and dismisses the card. Exactly the ladder the
+  // two DefaultsCard modals above already use.
+  useModalEscape(presetsOpen, closePresets, true)
 
   // Modal a11y contract, part 2 of 2 (part 1 = the focus-on-open effects above) is trapModalTab,
   // imported from the shared contract and put on each scrim's onKeyDown below. It is shared by all
@@ -593,7 +630,7 @@ export function SettingsPanel({
   // overflow/max-height context (a true centered modal — scrim + the popover's own card/shadow
   // language). data-settings-modal marks the whole tree (scrim included) "inside" for App's
   // settings click-outside handler (the same marker as the manager, Clear confirm, and Changelog
-  // popups below — one guard covers all four modals); the scrim itself cancels the POPUP only
+  // popups below — one guard covers all five modals); the scrim itself cancels the POPUP only
   // (target===currentTarget, so card clicks never do), and Escape + Android Back + any settings
   // close also cancel (the effects above, plus this whole component unmounting). The card itself is
   // the shared DefaultsCard (Q5 round-6 — the one place the four rows, their recipes, and the
@@ -850,6 +887,29 @@ export function SettingsPanel({
       document.getElementById('root')!,
     )
 
+  // The preset manager (4C): the same portal / scrim recipes and the same modal contract as the
+  // four above (focus-on-open — owned by the card itself, see the note beside the other four —
+  // capture Escape with the text-entry guard, close with settings, Android Back, the shared
+  // trapModalTab + data-settings-modal marker). The card is components/PresetManager, which holds
+  // the whole surface: the list, the rename fields, the reorder pair, and the delete confirmation
+  // it swaps itself into rather than stacking a second dialog on top of.
+  const presetsJsx =
+    presetsOpen &&
+    createPortal(
+      <div
+        data-settings-modal
+        role="presentation"
+        className={MODAL_SCRIM_CLASS}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setPresetsOpen(false)
+        }}
+        onKeyDown={trapModalTab}
+      >
+        <PresetManager onClose={closePresets} />
+      </div>,
+      document.getElementById('root')!,
+    )
+
   return (
     <>
       {/* ★ THE CARD IS THE FIRST CHILD OF THIS FRAGMENT AND HAS NO WRAPPER. It renders at the bar's
@@ -910,7 +970,62 @@ export function SettingsPanel({
               header; the former per-setting headings are now muted sub-labels (the Leap-Year
               header+sub-label pattern). Every control + its behaviour is unchanged — purely a
               regroup. */}
+          {/* ── PRESETS — THE PANEL'S FIRST SECTION, AND FIRST IS THE ARGUMENT ─────────────────
+              A preset is not a setting; it is the CONTAINER every setting below belongs to. Put it
+              at the head of the panel and the rest of the card reads as "these are <name>'s" —
+              which is the owner's one-line rule ("only the current preset, ALL settings apply to
+              that preset only including defaults and all that") expressed as layout rather than as
+              a sentence somebody has to find. Put it anywhere else and the panel opens on fifteen
+              settings with nothing saying whose they are.
+              ⚠ IT IS WHY Display NOW WEARS `pt-3 border-t` — that section was the panel's first and
+              so was the one section with no divider above it; the rule is that the divider separates
+              sections, not that Display never has one.
+              ⚠ IT COSTS THE PANEL ~70px OF SCROLL, which is the honest trade and not an oversight:
+              this section is read once and acted on rarely, and it pushes the Date Format tray
+              further down a card that already scrolls. Nothing cheaper was available — a footer
+              link (beside View saved defaults) would have been ~0px, and it would have filed "which
+              copy of the app am I in" under the same heading as the app's contact email.
+              ⚠ THE LINE OF PROSE IS NOT DUPLICATION OF THE GUIDE. How to Play explains what a
+              preset IS; this says which one you are in and what the three buttons at the foot of
+              THIS card will reach — a question asked by someone whose finger is already over Full
+              Reset. The guide is where they would find out afterwards.
+              THE BUTTON is a full-width `surface-toggle` — the Cancel/Close recipe at the panel's
+              own control tier (text-xs, py-1.5), not btn-solid: opening a manager is neither
+              constructive nor destructive, and violet in this panel means "this saves something"
+              (Save Defaults). It is deliberately NOT drawn as a switch row — THE PICKER RULE below
+              reserves label-left/one-button-right for on/off settings, and a modal opener wearing
+              that shape would read as a setting that is currently "Manage Presets". */}
           <div className="space-y-2">
+            <SectionLabel>Presets</SectionLabel>
+            <div className="text-xs text-(--tx-200-80)">
+              You are on <b>{activePresetName}</b>. Everything in this menu, and both Reset buttons
+              at the foot of it, belong to that preset alone — no other preset is touched.
+            </div>
+            {/* ⚠⚠ data-drag-stay, AND IT IS NOT DECORATION — IT IS WHAT MAKES THIS BUTTON WORK AT
+                ALL FROM THE GESTURE THE OWNER USES MOST. The ⚙ card is data-drag-dismiss, so a
+                press-drag that starts on the gear and releases on a control inside it clicks the
+                control AND closes the panel (lib/pointerGestures: `menu.hasAttribute
+                ('data-drag-dismiss') && !member.closest('[data-drag-stay]')`). That is right for a
+                setting — release on a theme pill and the panel gets out of the way — and it is
+                catastrophic for a MODAL OPENER: the panel closing unmounts this component, and the
+                modal it just opened goes with it, so the gesture would look like a button that does
+                nothing. The ⚙ footer already carries this attribute for exactly this reason (its
+                Save Defaults, View/Clear saved defaults and Changelog links all open modals); this
+                is the first modal opener OUTSIDE that footer, so it has to say it for itself.
+                ⚠ ON THE BUTTON, NOT ON THE SECTION. `closest` walks up from the release target, so
+                either would work — but the section's other two children are a heading and a line of
+                prose, neither of which is a gesture target, so marking them would be claiming an
+                opt-out for elements that can never use one. */}
+            <button
+              type="button"
+              data-drag-stay
+              onClick={() => setPresetsOpen(true)}
+              className="w-full px-3 py-1.5 rounded-xl text-xs font-medium border surface-toggle text-(--tx-100-80)"
+            >
+              Manage Presets
+            </button>
+          </div>
+          <div className="space-y-2 pt-3 border-t border-(--bd-500-20)">
             <SectionLabel>Display</SectionLabel>
             <div className="text-xs text-(--tx-200-80)">Date Format</div>
             {/* ★ EVERY SWITCH NAMES ITS SETTING (aria-label), on all four of them — this one, Use
@@ -1613,6 +1728,7 @@ export function SettingsPanel({
       {manageDefaultsJsx}
       {clearConfirmJsx}
       {changelogJsx}
+      {presetsJsx}
     </>
   )
 }

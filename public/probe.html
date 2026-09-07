@@ -391,13 +391,31 @@
         if (log.length > 60) log = log.slice(-60)
         sset(localStorage, LOG_KEY, JSON.stringify(log))
 
+        // ⚠⚠ THE INSTRUMENT'S OWN BLIND SPOT, CLOSED 2026-09-07 AFTER IT COST A REAL RUN.
+        // Every storage call here is wrapped in a silent catch — right for not breaking the page,
+        // disastrous for a diagnostic. The first attempt came back with a single row and "gap —",
+        // and there was no way to tell "you only launched it once" from "nothing is saving", because
+        // a FAILED WRITE AND AN EMPTY LOG LOOK IDENTICAL. So the write is now verified by reading it
+        // straight back, and the answer is stated on screen. A probe that cannot say whether it
+        // recorded anything is not a probe.
+        var persisted = false
+        try {
+          var back = JSON.parse(sget(localStorage, LOG_KEY) || '[]')
+          persisted = Array.isArray(back) && back.length === log.length
+        } catch (e) {
+          persisted = false
+        }
+
         var v = document.getElementById('verdict')
         v.setAttribute('data-state', ended ? 'ended' : 'alive')
         document.getElementById('vline').textContent = ended ? 'Session ended' : 'Session kept'
-        document.getElementById('vwhy').textContent = ended
-          ? 'The browser threw the session away before this launch. An amnesic preset would have wiped its stats here.'
-          : 'The session from your last visit is still alive. An amnesic preset would have kept its stats.'
+        document.getElementById('vwhy').textContent = !persisted
+          ? '⚠ This page cannot save anything on this device, so the log below can never grow past one row and nothing here means anything. That is itself the finding — tell Claude.'
+          : ended
+            ? 'The browser threw the session away before this launch. An amnesic preset would have wiped its stats here.'
+            : 'The session from your last visit is still alive. An amnesic preset would have kept its stats.'
         document.getElementById('meta').innerHTML = [
+          ['Saving', persisted ? 'works' : 'NOT SAVING'],
           ['Opened as', openedAs()],
           ['Time now', clock(now)],
           ['Since last open', fmtGap(gap)],

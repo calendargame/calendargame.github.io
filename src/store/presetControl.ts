@@ -13,7 +13,7 @@ import { useModePrefs } from './modePrefs.js'
 import { useProgress } from './progress.js'
 import { useUserDefaults } from './userDefaults.js'
 
-// store/presetControl.ts — the five things you can DO to the set of presets, and the only place
+// store/presetControl.ts — the six things you can DO to the set of presets, and the only place
 // allowed to do them.
 //
 // WHY THIS IS NOT IN store/presets.ts. The registry file holds a saved value and the storage layer
@@ -143,6 +143,49 @@ export function renamePreset(id: number, name: string): boolean {
       p.id === id ? { ...p, name: normalizePresetName(name, id) } : p,
     ),
   })
+  return true
+}
+
+/**
+ * Move a preset one place along the list — `delta` −1 for up, +1 for down. Returns false when
+ * there is nothing to do (unknown id, or it is already at that end).
+ *
+ * ★ THE ONLY OPERATION IN THIS FILE THAT IS A REGISTRY EDIT AND NOTHING ELSE, and the reason is
+ * worth stating because it is what makes it cheap: ORDER IS THE ARRAY ORDER (store/presets rejected
+ * a separate `order` field on sight), and `presetKey` is a pure function of a preset's ID, which
+ * this never touches. So a reorder moves no bytes — not one storage key changes, nothing rehydrates
+ * — and it must NOT remount the screens either: store/amnesic's activeDataId deliberately ignores
+ * everything about the registry except which preset is live and which of its two storage areas its
+ * stats are in, so a player reordering the list mid-run keeps the run. That exclusion is written
+ * down at activeDataId; this function is the second thing relying on it (renaming was the first).
+ * ⚠ IT STILL LIVES HERE RATHER THAN AS AN ACTION ON THE STORE, and for the opposite reason to its
+ * neighbours: not because it needs the storage work they need, but because `applyRegistry` is
+ * deliberately the registry's ONE low-level door and this file is the only room it opens into. A
+ * second door on the store — even a harmless one — is what store/presets' "state plus one applier"
+ * note refuses, because the next one added would not be harmless.
+ *
+ * ★★ UP/DOWN CONTROLS, NOT DRAG-TO-REORDER, AND THE PRICE OF THE OTHER ANSWER IS ALREADY PAID.
+ * Dragging is the obvious gesture for an ordered list. This app has TWO recorded cases of a pointer
+ * gesture that passed in Chromium every time and FAILED on the owner's iPhone (round 11's mode
+ * selector, cases A and B), and both were cured by DELETING gesture code rather than by writing
+ * more — the platform reason is at the top of components/CustomSelect. There is no drag-reorder
+ * machinery in this repo, so introducing some would be a third chance to re-derive that bug, for a
+ * list that is realistically two or three rows long. A swap is one array write and cannot fail on
+ * a platform.
+ */
+export function movePreset(id: number, delta: number): boolean {
+  const reg = usePresets.getState()
+  const from = reg.presets.findIndex((p) => p.id === id)
+  const to = from + delta
+  // The BOUNDS CHECK is the whole guard, and it is what makes `delta` safe to trust rather than
+  // validate: the two call sites pass ±1, and any `to` that falls off either end of the list is
+  // refused here — so the worst a wrong delta can do is move a preset to a real position or be
+  // told no. `from < 0` covers the unknown id (findIndex's −1), which would otherwise compute a
+  // plausible-looking `to` of 0 for delta +1.
+  if (from < 0 || to < 0 || to >= reg.presets.length) return false
+  const presets = [...reg.presets]
+  ;[presets[from], presets[to]] = [presets[to], presets[from]]
+  usePresets.getState().applyRegistry({ ...reg, presets })
   return true
 }
 

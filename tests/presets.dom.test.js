@@ -23,6 +23,7 @@ import {
 import {
   createPreset,
   renamePreset,
+  movePreset,
   switchPreset,
   deletePreset,
   activePreset,
@@ -265,6 +266,50 @@ describe('creating a preset', () => {
   it('skips an id whose saved data already exists on disk', () => {
     localStorage.setItem(presetKey(PRESET_STORE_KEYS.progress, 2), '{"state":{},"version":3}')
     expect(createPreset().id).toBe(3)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// REORDERING — the one operation that is a registry edit and NOTHING else, which is the whole of
+// what these cases have to prove. Order is the array order (a separate `order` field was rejected
+// on sight), ids are what storage keys are derived from, and movePreset never touches an id — so
+// the claim is that a reorder moves presentation and not one byte of anybody's saved data.
+describe('reordering presets', () => {
+  beforeEach(resetAll)
+
+  it('swaps a preset with its neighbour, in both directions, without renumbering anything', () => {
+    createPreset('Timed')
+    createPreset('Guest')
+    expect(movePreset(1, 1)).toBe(true)
+    expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Timed', 'Preset 1', 'Guest'])
+    expect(movePreset(1, -1)).toBe(true)
+    expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Preset 1', 'Timed', 'Guest'])
+    expect(usePresets.getState().presets.map((p) => p.id)).toEqual([1, 2, 3])
+  })
+
+  it('refuses the ends, and an id that names nothing', () => {
+    createPreset('Timed')
+    expect(movePreset(1, -1)).toBe(false) // already first
+    expect(movePreset(2, 1)).toBe(false) // already last
+    // An unknown id must not be treated as index −1 and then moved to a plausible-looking 0 — the
+    // `from < 0` half of the bounds check is what stops exactly that.
+    expect(movePreset(99, -1)).toBe(false)
+    expect(movePreset(99, 1)).toBe(false)
+    expect(usePresets.getState().presets.map((p) => p.id)).toEqual([1, 2])
+  })
+
+  it('moves no saved data, and leaves the active preset where it was', () => {
+    playOnThisPreset()
+    createPreset('Timed')
+    const saved = { ...localStorage }
+    movePreset(1, 1)
+    // Every key byte-for-byte what it was, the registry excepted — which is the only thing a
+    // reorder is entitled to rewrite.
+    for (const base of Object.values(PRESET_STORE_KEYS))
+      expect(localStorage.getItem(base)).toBe(saved[base])
+    expect(usePresets.getState().activeId).toBe(1)
+    expect(useProgress.getState().stats.classic).toEqual(PLAYED)
+    expect(activePreset().id).toBe(1)
   })
 })
 

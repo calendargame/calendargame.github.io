@@ -102,7 +102,7 @@ export function resetAppState() {
 }
 
 // Mounts the real <App/> with the panel CLOSED, and returns Testing Library's render result.
-// The #root div is not decoration: the bar's mode dropdown and all four settings modals portal
+// The #root div is not decoration: the bar's two dropdowns and all five settings modals portal
 // into it, so without one they render nowhere. App's own tree mounts into RTL's container, so
 // there is no duplicate auto-mount. Pair with the usual `cleanup()` +
 // `document.getElementById('root')?.remove()` in an afterEach.
@@ -1083,17 +1083,25 @@ export function checkUpdatesState() {
   }
 }
 
-// ── The four modals ───────────────────────────────────────────────────────────────────────────
+// ── The five modals ───────────────────────────────────────────────────────────────────────────
 
-// THE FOUR SETTINGS MODALS, by short key, with the title each one publishes as its accessible
+// THE FIVE SETTINGS MODALS, by short key, with the title each one publishes as its accessible
 // name. The manager carries two titles because it retitles itself for the FACTORY view (nothing
 // saved yet), and both are the same modal — so the key resolves either, while a caller that means
 // one specific view still passes that exact title.
+//
+// ⚠ `presets` NAMES THE PRESET MANAGER'S **LIST** VIEW ONLY. That card has a second view — its
+// delete confirmation, "Delete this preset?" — which replaces the list inside the SAME dialog
+// rather than stacking a second one on it (components/PresetManager argues why at length). So the
+// table's job here is unchanged: it names the view every modal OPENS on, which is the view every
+// `openModal` loop below is about. A case that means the confirmation asks for that title by name,
+// and tests/presetManager.dom is where those live.
 export const MODAL_TITLES = {
   save: 'Save current settings as your defaults?',
   manage: /^(Your saved defaults|Default settings)$/,
   clear: 'Clear your saved defaults?',
   changelog: "What's new",
+  presets: 'Presets',
 }
 export const MODAL_KEYS = Object.keys(MODAL_TITLES)
 const titleFor = (nameOrKey) =>
@@ -1126,13 +1134,23 @@ export function modalScrim(key) {
   return scrim
 }
 
-// How each modal is OPENED from the panel — three footer links and one footer button. Keyed the
-// same way, so `openModal('clear')` reads as the user's route and not as a lookup.
+// The ⚙ panel's Presets section — its one control, at the HEAD of the card rather than in the
+// footer with the other four modal openers. Resolved by its accessible name and scoped to the
+// panel, which is the same resolution footerButton makes; it is a separate export only because
+// calling a button in the first section a "footer" button would be a lie the next reader has to
+// unpick. (Why the section sits first at all is argued in components/SettingsPanel: a preset is the
+// CONTAINER every setting under it belongs to.)
+export const managePresetsButton = () => panel().getByRole('button', { name: 'Manage Presets' })
+
+// How each modal is OPENED from the panel — three footer links, one footer button, and the Presets
+// section's. Keyed the same way, so `openModal('clear')` reads as the user's route and not as a
+// lookup.
 const MODAL_OPENERS = {
   save: () => footerButton('Save Defaults'),
   manage: () => footerButton('View saved defaults'),
   clear: () => footerButton('Clear saved defaults'),
   changelog: changelogLink,
+  presets: managePresetsButton,
 }
 export function openModal(key) {
   const opener = MODAL_OPENERS[key]

@@ -836,21 +836,28 @@ export default function GuidePage({
           </li>
         </UL>
       </GuideSection>
-      {/* PRESETS — Rule 4's half of the top-bar rebuild. The bar put a NEW control on screen (the
-          preset switcher, standing where the "Calendar Game" wordmark used to) and a new marker
-          inside it (the "A"), and neither could be documented honestly before the bar that hosts
-          them existed — which is why components/PresetSwitcher deliberately left this section to
-          the change that mounted it.
-          ★ WHAT THIS SECTION MAY NOT DO IS PROMISE A SECOND PRESET. There is no create, rename or
-          delete anywhere in the UI yet: the registry ships with exactly one preset and the only
-          things that make a second one are code. So the prose describes the control that EXISTS —
-          what it shows, what picking a row does, what the "A" means — and says plainly that the
-          list has one row today. ⚠ THE CHANGE THAT ADDS A CREATE/DELETE UI OWNS THE SENTENCE THAT
-          SAYS SO; until then, anything here about making presets would be a promise the app cannot
-          keep. Sources: the control = components/PresetSwitcher (its ariaLabel, its options list,
-          the ", amnesic" sr-only sibling); what a switch actually swaps = store/presetControl's
-          PER_PRESET_STORES, all four of them; the screen clear = main.tsx's registry subscription
-          calling remountScreens. */}
+      {/* PRESETS — the app's biggest feature, and the guide section that documents all of it. The
+          top-bar rebuild put the SWITCHER on screen and this section described it; sub-group 4C
+          added the MANAGER (⚙ → Presets → Manage Presets), which is the half that lets a player
+          have more than one preset at all — so the "there is no way to make a second preset yet"
+          paragraph that stood here has been DELETED rather than softened, together with the ⚠ in
+          this comment that said the change adding a create/delete UI would own that sentence. This
+          is that change.
+          ★ THE SECTION LEADS WITH THE OWNER'S OWN RULE, in his words' plain sense: "only the current
+          preset, ALL settings apply to that preset only including defaults and all that." It is
+          stated ONCE, here, as its own block — and every other section that used to say "your
+          stats" or "your settings" as though there were one set of them now points at it instead of
+          repeating it. That sweep is the largest rule-4 obligation this guide has had; the sections
+          it touched are Saved Progress, Save Defaults / Reset Settings / Full Reset, Settings
+          Overview, and Accessibility.
+          Sources, so a reader can check any sentence against the code: the control = components/
+          PresetSwitcher (its ariaLabel, its options list, the ", amnesic" sr-only sibling); the
+          manager = components/PresetManager (every button's accessible name, the delete
+          confirmation's two views, the withheld ✕ on a last preset); what a switch actually swaps =
+          store/presetControl's PER_PRESET_STORES, all four of them; what a delete actually removes =
+          its clearPresetStorage, which is derived from store/presets' PRESET_STORE_KEYS; the screen
+          clear = main.tsx's registry subscription calling remountScreens; the 12-character cap =
+          store/presets' MAX_PRESET_NAME. */}
       <GuideSection
         id="presets"
         title="Presets"
@@ -867,18 +874,25 @@ export default function GuidePage({
           <li>stats, all-time bests, and Lookup history;</li>
           <li>per-mode setup — timers, run length, the Deduction sub-type, the stat toggles;</li>
           <li>every ⚙ setting, theme included;</li>
-          <li>saved defaults.</li>
+          <li>saved defaults;</li>
+          <li>
+            its <b>Amnesic</b> switch — a preset is amnesic or not in its own right, whichever one
+            you happen to be on.
+          </li>
         </UL>
         <p>
-          Switching swaps all of that at once. Nothing is merged and nothing is thrown away — the
-          preset you left is exactly where you left it when you come back.
+          <b>Only the preset you are on is ever touched.</b> Every setting in the ⚙ menu, every
+          default you save, <b>Reset Settings</b>, <b>Full Reset</b>, and each mode&apos;s{' '}
+          <b>Reset Stats</b> apply to that preset and to no other. Nothing is shared between
+          presets, and nothing is merged: switching swaps all of it at once, and the preset you left
+          is exactly where you left it when you come back.
         </p>
-        <Subhead>Using it</Subhead>
+        <Subhead>Switching</Subhead>
         <UL>
           <li>
-            Tap it for the list, then tap a preset to switch. Press and drag down to a row and
-            release, exactly like the mode selector beside it — and the same five things close it
-            (choosing, pressing outside, <Kbd>Esc</Kbd>, <Kbd>Tab</Kbd>, and your device&apos;s
+            Tap the control for the list, then tap a preset to switch. Press and drag down to a row
+            and release, exactly like the mode selector beside it — and the same five things close
+            it (choosing, pressing outside, <Kbd>Esc</Kbd>, <Kbd>Tab</Kbd>, and your device&apos;s
             Back).
           </li>
           <li>
@@ -893,11 +907,56 @@ export default function GuidePage({
             A long name is cut short with an … so the bar can never be pushed wider than the screen.
           </li>
         </UL>
+        <Subhead>Making and managing them</Subhead>
         <p>
-          There is no way to make a second preset from inside the app yet, so today the list has one
-          row in it. The control still earns its place: it names the copy of the app the numbers on
-          screen belong to.
+          ⚙ &rarr; <b>Presets</b>, at the top of the menu, names the preset you are on and opens{' '}
+          <b>Manage Presets</b>. Everything you can do to the set of presets is in that one popup:
         </p>
+        <UL>
+          <li>
+            <b>New Preset</b> — adds one at the foot of the list, starting from the{' '}
+            <i>factory defaults</i>. It is not a copy of the preset you are on, and it does not
+            switch you into it, so making one never disturbs the round you are in. Use the control
+            at the top left when you want to go there.
+          </li>
+          <li>
+            <b>Rename</b> — the name in each row is a box; tap it and it is all selected, so you can
+            just type. <Kbd>Enter</Kbd> or tapping away keeps the new name, <Kbd>Esc</Kbd> throws it
+            away. Names are capped at 12 characters, which is what the top bar can show without
+            being pushed wider than the screen; leave one blank and it goes back to &quot;Preset
+            2&quot;, &quot;Preset 3&quot; and so on.
+          </li>
+          <li>
+            <b>Order</b> — the ↑ and ↓ beside each row move it one place. That order is the order
+            the top-left list shows them in, and nothing else: moving a preset changes no stats and
+            no settings. The arrows grey out at the ends of the list, where there is nowhere to go.
+          </li>
+          <li>
+            <b>Delete</b> — the ✕ asks first, in the same popup, and names what is about to go. See
+            below.
+          </li>
+          <li>
+            A <b>✓</b> marks the preset you are on, and the same <b>A</b> marks the amnesic ones.
+          </li>
+        </UL>
+        <Subhead>Deleting is permanent</Subhead>
+        <UL>
+          <li>
+            Deleting a preset removes <i>everything</i> it holds — its stats, all-time bests and
+            Lookup history, its per-mode setup, every ⚙ setting it was on, and its saved defaults.
+            It cannot be undone, and no other preset is touched.
+          </li>
+          <li>
+            You can delete the preset you are currently on. The popup says so, and names the one it
+            will open instead — the row below it, or the row above when it was the last. That is a
+            switch like any other, so the screens clear with it.
+          </li>
+          <li>
+            The <i>last</i> preset cannot be deleted — there is always at least one — so its ✕ is
+            greyed out and the popup says why. <b>Full Reset</b> is how you empty a preset without
+            removing it.
+          </li>
+        </UL>
       </GuideSection>
       <GuideSection id="stats" title="Stats" openId={open} onToggle={toggle} durationMs={motionMs}>
         <Lead>What each stat means, how times are measured, and hiding stats.</Lead>
@@ -1344,6 +1403,14 @@ export default function GuidePage({
             <b>A</b> beside it isn&apos;t the only place that fact is said.
           </li>
           <li>
+            Inside <b>Manage Presets</b>, each row&apos;s name box is called Preset name — the name
+            itself is the box&apos;s contents, so it is read out with it — and the three buttons
+            beside it name the preset they act on: &quot;Move Weekend up&quot;, &quot;Move Weekend
+            down&quot;, &quot;Delete Weekend&quot;. The <b>✓</b> on the row you are on says
+            &quot;Current preset&quot; and the <b>A</b> says &quot;Amnesic&quot;, so neither marker
+            is only a shape.
+          </li>
+          <li>
             In the seven-dot answer layout every dot carries its weekday name, so the dots offer the
             same seven named choices the labelled buttons do.
           </li>
@@ -1359,11 +1426,19 @@ export default function GuidePage({
         <Subhead>Panels and popups</Subhead>
         <UL>
           <li>
-            The four ⚙ popups — Save Defaults, the saved-defaults list, the confirmation before
-            clearing them, and the Changelog — are proper dialogs. Opening one puts the keyboard
-            inside it, <Kbd>Tab</Kbd> and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> cycle that popup&apos;s
-            own controls and wrap around at the ends rather than wandering into the menu beneath,
-            and <Kbd>Esc</Kbd> closes it.
+            The five ⚙ popups — Save Defaults, the saved-defaults list, the confirmation before
+            clearing them, the Changelog, and Manage Presets — are proper dialogs. Opening one puts
+            the keyboard inside it, <Kbd>Tab</Kbd> and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> cycle that
+            popup&apos;s own controls and wrap around at the ends rather than wandering into the
+            menu beneath, and <Kbd>Esc</Kbd> closes it.
+          </li>
+          <li>
+            Manage Presets asks its delete question <i>in place</i>: the list is replaced by the
+            confirmation inside the same popup, rather than a second popup opening on top of the
+            first. The keyboard moves to the question when it appears and back to the list when you
+            cancel, and <Kbd>Esc</Kbd> and your device&apos;s Back close the whole popup from either
+            view. As in every other box in the app, the first <Kbd>Esc</Kbd> belongs to a name you
+            are typing in.
           </li>
           <li>
             The ⚙ menu itself is not a dialog — it&apos;s a menu hanging off its button, and it
@@ -1435,10 +1510,15 @@ export default function GuidePage({
         durationMs={motionMs}
       >
         <Lead>
-          The ⚙ menu groups every setting into three categories, with the Save Defaults and Reset
-          buttons at the bottom.
+          The ⚙ menu opens on the preset you are in, groups every setting into three categories, and
+          keeps the Save Defaults and Reset buttons at the bottom.
         </Lead>
         <UL>
+          <li>
+            <b>Presets</b> — first, and not a setting: it names the preset you are on, says that
+            everything below it belongs to that preset alone, and opens <b>Manage Presets</b> (see{' '}
+            <b>Presets</b> in the first section).
+          </li>
           <li>
             <b>Display</b> — how dates are shown and how you answer: Date Format (incl. Random
             Format), Input (Buttons / Dots), and Theme.
@@ -1940,9 +2020,15 @@ export default function GuidePage({
       >
         <Lead>What persists on this device between visits — and what resets each time.</Lead>
         <p>
-          The app saves the following on this device and restores them when you return — after
-          closing the app, refreshing, updating to a new version, or revisiting later (an app update
-          never resets your saved data):
+          Everything in this section is saved <b>per preset</b>. Each preset has its own complete
+          copy of the list below, and only the one you are on is ever read or written — see{' '}
+          <b>Presets</b> above. Which preset you were on is remembered too, so the app opens where
+          you left it.
+        </p>
+        <p>
+          For that preset, the app saves the following on this device and restores them when you
+          return — after closing the app, refreshing, updating to a new version, or revisiting later
+          (an app update never resets your saved data):
         </p>
         <UL>
           <li>
@@ -1988,8 +2074,10 @@ export default function GuidePage({
           list still saves normally. See <b>Stats &mdash; Amnesic</b> above.
         </p>
         <p>
-          <b>Full Reset</b> (below) clears everything that is saved — except your saved defaults,
-          which it restores rather than clears.
+          <b>Full Reset</b> (below) clears everything that is saved for the preset you are on —
+          except that preset&apos;s saved defaults, which it restores rather than clears. Every
+          other preset is left exactly as it was. Removing a preset&apos;s saved copy outright is{' '}
+          <b>Delete</b>, in ⚙ &rarr; Presets &rarr; Manage Presets.
         </p>
       </GuideSection>
       <GuideSection
@@ -2001,8 +2089,14 @@ export default function GuidePage({
       >
         <Lead>
           Three buttons at the foot of the ⚙ menu — save your own defaults, restore the menu, or
-          reset the whole site.
+          reset the preset you are on.
         </Lead>
+        <p>
+          All three, and the saved defaults they read and write, belong to{' '}
+          <b>the preset you are on</b> and reach no other one. A second preset has its own defaults,
+          its own settings and its own stats, and none of these buttons can touch them — see{' '}
+          <b>Presets</b>.
+        </p>
         <Subhead>Save Defaults (left)</Subhead>
         <p>
           Makes the current setup <i>your</i> defaults — from then on, the two Reset buttons restore
@@ -2103,7 +2197,7 @@ export default function GuidePage({
           no effect.
         </p>
         <Subhead>Full Reset (right)</Subhead>
-        <p>Restores the entire site to its launch state:</p>
+        <p>Restores the preset you are on to its launch state:</p>
         <UL>
           <li>
             Wipes all stats, all-time bests (Blitz and MoX), Lookup history, and in-progress rounds
@@ -2130,9 +2224,10 @@ export default function GuidePage({
         <p>
           Requires two taps to confirm: tap once and the button changes to "Confirm?"; tap again to
           fire. Auto-cancels after a few seconds, when you close ⚙, or if you tap any other control.
-          When every setting, toggle, stat, best, history entry, and live state across the entire
-          site is already where Full Reset would put it, the button dims and locks since tapping it
-          would have no effect.
+          When every setting, toggle, stat, best, history entry, and live state in the preset you
+          are on is already where Full Reset would put it, the button dims and locks since tapping
+          it would have no effect. It never counts anything in another preset, and it never clears
+          one — the way to remove a whole preset is <b>Delete</b>, in ⚙ &rarr; Presets.
         </p>
       </GuideSection>
       <Divider label="Modes" />

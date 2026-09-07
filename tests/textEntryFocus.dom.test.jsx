@@ -56,10 +56,14 @@ const lookupField = () => document.querySelector('input[placeholder^="e.g.,"]')
 const modeTrigger = () => screen.getByRole('button', { name: 'Mode' })
 
 // ── EVERY BOX THE APP HAS ────────────────────────────────────────────────────────────────────
-// Six of them, and they are listed here BY ROUTE rather than by selector so this table doubles as
+// Seven of them, and they are listed here BY ROUTE rather than by selector so this table doubles as
 // the inventory rule 1 has to cover. The MoX run length appears twice on purpose: the mode
 // screen's own box and the Save Defaults popup's are two different <input>s in two different
 // files, not one component rendered twice.
+// ⚠ THE SEVENTH — the preset rename field — IS THE FIRST BOX THAT EXISTS ONCE PER ROW rather than
+// once, and it reaches this table having added not one line to src/lib/textEntry. That is the
+// delegated listener's whole claim (its header states it), so the entry is here to keep the claim
+// falsifiable rather than merely asserted.
 const BOXES = [
   {
     name: 'the MoX run length (mode screen)',
@@ -113,6 +117,16 @@ const BOXES = [
       makeSaveable()
       openModal('save')
       return screen.getByRole('textbox', { name: 'MoX Run Length' })
+    },
+  },
+  {
+    name: 'a preset rename field (Manage Presets)',
+    reach: () => {
+      openSettings()
+      openModal('presets')
+      // The registry always holds at least one preset, so the first row is there on a fresh
+      // install and its box already reads "Preset 1" — no seeding needed, unlike the Lookup box.
+      return screen.getAllByRole('textbox', { name: 'Preset name' })[0]
     },
   },
 ]

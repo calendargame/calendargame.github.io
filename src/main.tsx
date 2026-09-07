@@ -13,7 +13,7 @@ import ErrorBoundary, { ModeErrorBoundary } from './ErrorBoundary'
 import { initObservability, captureError } from './observability/sentry'
 // createRoot only. This used to reconstruct a ReactDOM object carrying createPortal too, because
 // the modern modular build splits them ('react-dom/client' vs 'react-dom') and this file portalled
-// the four settings modals; those went to components/SettingsPanel, which imports createPortal
+// the settings modals; those went to components/SettingsPanel, which imports createPortal
 // itself, so the shim had nothing left to reconstruct.
 import { createRoot } from 'react-dom/client'
 import { fmt } from './lib/format.js'
@@ -1319,11 +1319,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
       };
       const settingsRef=useRef<HTMLDivElement | null>(null);
       const settingsPopoverRef=useRef<HTMLDivElement | null>(null);
-      // The Full Reset two-tap machine and all four settings modals (their open flags, cards,
+      // The Full Reset two-tap machine and all five settings modals (their open flags, cards,
       // pending snapshots, openers, commits, capture-phase Escape handlers, focus-on-open effects
       // and Android-Back registrations) moved WHOLE into components/SettingsPanel. Their lifetime
       // is the panel's open state, and the panel now unmounts on close — so unmounting IS the
-      // discard, and the four "close the popup when settings closes" effects that used to live
+      // discard, and the five "close the popup when settings closes" effects that used to live
       // here are gone with them rather than reimplemented. App keeps only what the GEAR needs.
       // aoxIsFresh — reported up from AoxMode via the onFreshChange prop. AoxMode's ~24
       // internal state fields are otherwise opaque to the App, so we mirror their combined
@@ -1439,10 +1439,17 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // case so dragging the scrollbar doesn't close the popover.
         const onScrollbar=target===document.documentElement||target===document.body;
         if(onScrollbar)return;
-        // The open CustomSelect dropdown panel (the bar's mode select — the app's last one since
-        // the theme selects became PillTray rows) portals out to #root with role="listbox", so a
-        // tap on an option lands OUTSIDE the popover in the DOM. Treat that as "inside" so
-        // picking a mode doesn't slam the settings popover shut before the selection registers.
+        // An open CustomSelect dropdown panel portals out to #root with role="listbox", so a tap
+        // on an option lands OUTSIDE the popover in the DOM. Treat that as "inside" so picking a
+        // row doesn't slam the settings popover shut before the selection registers.
+        // ⚠ THIS CLAUSE IS GENERIC ON PURPOSE, and that is exactly why mounting the preset
+        // switcher required no edit to this line: it matches WHICHEVER select is open — the bar's
+        // mode select or its preset select — instead of naming one by ref. (It used to read "the
+        // bar's mode select, the app's last one since the theme selects became PillTray rows";
+        // the top-bar rebuild put a second select in the bar and made that false.)
+        // ⚠ WHAT IT DOES NOT COVER IS A CLOSED SELECT'S TRIGGER — there is no listbox in the DOM
+        // to match yet, so the press that OPENS a menu is not caught here. That is the whole job
+        // of the two wrapper refs above, one per select, and why neither is redundant with this.
         const inListbox=!!(target&&target.closest&&target.closest('[role="listbox"]'));
         // The settings modals (Save Defaults Q7 / the defaults manager Q12+Q5 / the Clear confirm
         // Q5 / Changelog Q6) portal to #root with a full-screen scrim — clicks on any (scrim
@@ -1546,9 +1553,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // are both in the panel, so the panel gets the boolean and this callback and never touches
       // storage itself. useCallback so a panel re-render is never caused by this identity.
       const retireChangelogDot=useCallback(()=>{clearUpdateDot(CHANGELOG_DOT_KEY);},[]); // notifies → the dot re-reads false
-      // The four modals' openers, closers and commits (openSaveDefaults / openManageDefaults /
-      // openChangelog / commitSaveDefaults / commitManageDefaults / confirmClearDefaults and their
-      // close callbacks) -> components/SettingsPanel, with the state they drive.
+      // The five modals' openers, closers and commits (openSaveDefaults / openManageDefaults /
+      // openChangelog / openPresets / commitSaveDefaults / commitManageDefaults /
+      // confirmClearDefaults and their close callbacks) -> components/SettingsPanel, with the
+      // state they drive.
       // Full Reset — back to the launch state, where "launch" honors the user's SAVED personal
       // defaults (Q7): the ⚙ panel and the four captured mode prefs restore to the
       // store/userDefaults snapshot when one exists, everything else to factory (and the snapshot
@@ -1886,7 +1894,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   • CONDITIONALLY RENDERED. A closed panel must have NO DOM — the suite's role
                     queries are unscoped by design, so an always-mounted-and-hidden panel would
                     double every radio in the document. It is also what makes unmount the discard
-                    for the four modals and the Full Reset arm.
+                    for the five modals and the Full Reset arm.
                   • THIS POSITION. It is a sibling of the title/gear row inside the bar's `relative`
                     inner wrapper, and the card is `absolute top-full left-4 right-4` against that
                     wrapper. Anywhere else, or inside a wrapper of its own, and the panel silently
