@@ -1303,9 +1303,18 @@ export const pickMode = (label) => tap(screen.getByRole('option', { name: label 
 // attribute instead of writing 'false', which is the more conventional spelling — would leave that
 // version finding nothing while changing nothing a user meets. This form asks the question the
 // markup actually answers.
+//
+// ⚠ AND IT LOOKS INSIDE THE VALUE CELL, not at the whole button. The trigger's accessible name is
+// COMPOSED from two nodes — an sr-only span carrying the setting's name, then the cell holding the
+// options — so the button's first leaf span is now the word "Mode," itself. The cell is reached the
+// way the name is: through aria-labelledby's second id, which is the component's own statement of
+// which node is the value.
 export function currentMode() {
-  const trigger = screen.getByRole('button', { name: 'Mode' })
-  const live = [...trigger.querySelectorAll('span')].find(
+  const trigger = screen.getByRole('button', { name: /^Mode,/ })
+  const valueId = (trigger.getAttribute('aria-labelledby') ?? '').split(' ')[1]
+  const cell = valueId && document.getElementById(valueId)
+  if (!cell) throw new Error("currentMode(): the bar's mode trigger names no value node")
+  const live = [...cell.querySelectorAll('span')].find(
     (s) => s.children.length === 0 && s.getAttribute('aria-hidden') !== 'true',
   )
   if (!live) throw new Error("currentMode(): the bar's mode trigger has no live label span")

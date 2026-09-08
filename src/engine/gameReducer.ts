@@ -340,7 +340,14 @@ export const initEngine = (date: Question, initialStats?: Stats): GameState => (
   // is carried-in — it has no card in this session's history to name it. 0 for a blank start ⇒ the
   // ledger accounts for the whole pool, which is what the run modes rely on.
   liveSolveTime: null,
-  timesBase: initialStats?.times.length ?? 0,
+  // ⚠ BOTH LINKS ARE OPTIONAL, and the second one is not symmetry for its own sake: `initialStats`
+  // is a hydrated payload out of localStorage, so `times` is only an array because the last build
+  // to write it said so. engine/invariants REPORTS a silo with counters and no times array (it is
+  // one of the shapes checkStatsInvariants names) rather than repairing it — and a bare
+  // `.times.length` would not survive to be reported: it throws inside the engine's initializer, at
+  // mount, on every boot, and the player meets the error card instead of the app. `?? 0` is the
+  // same answer a blank start gives, which is the honest reading of a silo that names no times.
+  timesBase: initialStats?.times?.length ?? 0,
 })
 
 // The card's LIFETIME number — the figure the Q# badge shows beside the Score box. `stack` holds the

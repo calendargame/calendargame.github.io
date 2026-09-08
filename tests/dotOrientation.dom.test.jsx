@@ -16,15 +16,17 @@
 //      a CSS transform on the cluster would have moved the pixels and left the keyboard 0–9 path
 //      (children[idx]) and the screen-reader walk describing the upright layout. The two halves are
 //      asserted together because either alone passes for the wrong implementation.
-//   2. THE PICKER. Columns/Rows flips the setting in a weekday mode, and is locked — value
-//      preserved — in Deduction, sharing Input's lock because it shares Input's subject.
+//   2. THE PICKER. Columns/Rows flips the setting in a weekday mode with Dots chosen, and is
+//      locked — value preserved — in the two states where there are no dots to turn: Deduction
+//      (sharing Input's lock, because it shares Input's subject) and any mode while Input is on
+//      Buttons.
 //   3. THE MARK. The TITLE BAR's W5 glyph turns with the setting; the rotate-back overlay's does
 //      NOT, and W5Logo's default is upright. That asymmetry is deliberate and easy to "fix" by
 //      accident, which is exactly why it is pinned: the full-screen frames stand next to the static
 //      iOS launch PNGs (public/apple-splash-*, pre-renders of index.html's #boot) that can follow
 //      nothing, so a frame that turned would flip the mark against a PNG that cannot.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react'
 import { useSettings } from '../src/store/settings.js'
 import { DAY } from '../src/lib/format.js'
 import { DOT_CELLS, DOT_MARK_ROTATION } from '../src/lib/dotLayout.js'
@@ -33,6 +35,7 @@ import RotateOverlay from '../src/components/RotateOverlay.jsx'
 import {
   mountApp,
   openSettings,
+  picker,
   pickerLockState,
   expectLock,
   resetAppState,
@@ -96,9 +99,17 @@ describe('Settings → Dot Layout picker', () => {
     resetAppState()
   })
 
+  // Every case below wants the picker LIVE, and the panel's launch state is not: Input starts on
+  // Buttons, where Dot Layout is locked because there is nothing on screen it could turn (see the
+  // Buttons case at the foot of this describe). Chosen through the panel rather than written into
+  // the store, so the setup is the gesture a player makes.
+  const chooseDots = () =>
+    fireEvent.click(within(picker('Input')).getByRole('radio', { name: 'Dots' }))
+
   it('flips between Columns and Rows in a weekday mode, and is not locked', () => {
     mountApp() // opens in Classic (a weekday mode)
     openSettings('key')
+    chooseDots()
     expect(useSettings.getState().dotOrientation).toBe('columns')
     fireEvent.click(screen.getByRole('radio', { name: 'Rows' }))
     expect(useSettings.getState().dotOrientation).toBe('rows')
@@ -109,11 +120,17 @@ describe('Settings → Dot Layout picker', () => {
     expect(screen.getByRole('radio', { name: 'Rows' }).getAttribute('aria-checked')).toBe('false')
   })
 
-  // It shares Input's lock because it shares Input's subject — the weekday dot input, which
+  // It shares Input's mode lock because it shares Input's subject — the weekday dot input, which
   // Deduction does not have. Asserted as a PAIR: the two moving apart is the failure this case
   // exists to catch, and neither picker's own state would show it.
+  // ⚠ THE PAIR IS ABOUT THIS CONDITION ONLY, and the two are NOT interchangeable: Dot Layout has a
+  // second lock Input does not (Buttons — the case below), because Input chooses whether there are
+  // dots at all and cannot lock itself out.
   it('is locked (dimmed, value preserved) in Deduction, exactly with Input', () => {
     mountApp()
+    openSettings('key')
+    chooseDots() // …so the lock this case reads is the MODE's, not the Buttons one
+    expectLock('Dot Layout', false)
     act(() => {
       fireEvent.keyDown(window, { key: 'D' }) // switch to Deduction
     })
@@ -131,10 +148,35 @@ describe('Settings → Dot Layout picker', () => {
   it('is a two-segment tray inside a named radiogroup, one tab stop, exactly one lit', () => {
     mountApp()
     openSettings('key')
+    chooseDots()
     const s = pickerLockState('Dot Layout')
     expect(s.segments).toHaveLength(2)
     expect(s.tabStops).toBe(1)
     expect(s.chosen).toEqual(['Columns'])
+  })
+
+  // ★ THE SECOND LOCK, and the one the setting SHIPPED WITHOUT: with Input on Buttons there are no
+  // dots on screen to turn, so the only thing this picker could still move is the title-bar mark —
+  // a control whose whole visible effect is somewhere else, permanently, with nothing it
+  // corresponds to. The owner's requirement is that the mark turn WITH THE INPUT. So the picker
+  // locks exactly as it does in Deduction: same housing, same dim, value preserved.
+  it('is locked while the answer input is Buttons, and unlocks the moment Dots is chosen', () => {
+    mountApp() // Classic, Input at its factory Buttons
+    openSettings('key')
+    expectLock('Dot Layout', true)
+    expectLock('Input', false) // …and Input itself stays live, or there would be no way out
+    // The guard behind the lock holds: a click dispatched at a segment changes nothing.
+    fireEvent.click(within(picker('Dot Layout')).getByRole('radio', { name: 'Rows' }))
+    expect(useSettings.getState().dotOrientation).toBe('columns')
+    chooseDots()
+    expectLock('Dot Layout', false)
+    fireEvent.click(within(picker('Dot Layout')).getByRole('radio', { name: 'Rows' }))
+    expect(useSettings.getState().dotOrientation).toBe('rows')
+    // …and going back to Buttons re-locks it with the pick intact, rather than resetting it.
+    fireEvent.click(within(picker('Input')).getByRole('radio', { name: 'Buttons' }))
+    expectLock('Dot Layout', true)
+    expect(pickerLockState('Dot Layout').chosen).toEqual(['Rows'])
+    expect(useSettings.getState().dotOrientation).toBe('rows')
   })
 })
 

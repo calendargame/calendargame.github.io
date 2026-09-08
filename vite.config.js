@@ -516,12 +516,7 @@ export default defineConfig(({ command, mode }) => ({
       // default globPatterns (**/*.{js,wasm,css,html}) doesn't match PNGs today; this pins the
       // exclusion explicitly so no future globPatterns widening can ever precache them. (User
       // globIgnores REPLACES the default, so the stock node_modules ignore is restated.)
-      // ⚠⚠ '**/probe.html' IS TEMPORARY (2026-09-05) AND LEAVES WITH public/probe.html.
-      // It is a staging-only diagnostic, linked from nowhere and imported by nothing; without
-      // this line the default globPatterns (which DO match html) would precache it into every
-      // visitor's offline cache. Both the file and this entry are a scheduled removal in
-      // PROJECT.md — if you are reading this after the amnesic question was settled, delete both.
-      workbox: { globIgnores: ['**/node_modules/**/*', '**/apple-splash-*.png', '**/probe.html'] },
+      workbox: { globIgnores: ['**/node_modules/**/*', '**/apple-splash-*.png'] },
       manifest: webManifest,
       // The SW never runs in dev (keeps HMR clean) — offline is verified against a production
       // build via `vite preview`.

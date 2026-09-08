@@ -22,6 +22,17 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 //     data", a build that has never heard of presets and a build that has agree about preset 1 BY
 //     CONSTRUCTION — because the un-namespaced keys are the only thing "your data" could possibly
 //     mean to a build that has never heard of presets.
+//     ⚠ WHAT "AGREE" MEANS, EXACTLY, because it is stronger about the KEYS than about the BYTES.
+//     The keys are identical, so neither build can ever read or write the other's preset — that is
+//     the loss this design deletes, and it is absolute. The PAYLOAD is a weaker promise, and it is
+//     each store's own `partialize` that weakens it: an old build writes back only the fields it
+//     knows, so any field a NEWER build added is dropped from the shared key the next time the old
+//     build saves, and the new build then reads that field as its factory value. It is bounded
+//     (one setting reverts; nothing is mis-attributed and no stats are lost) and it is inherent to
+//     two builds sharing one key rather than a fault of this scheme — a copy migration would have
+//     had the same interleaving with data loss on top. Today's one instance is store/settings'
+//     `dotOrientation`, the 15th setting, added after this design shipped; the note is at that
+//     store's `name` option.
 //
 // WHAT LIVES IN THIS FILE, and why they live together:
 //   • the REGISTRY store — the list of presets and which one is active. It is GLOBAL: it is the
@@ -180,6 +191,34 @@ export function normalizeRegistry(
   const maxId = presets.reduce((m, p) => (p.id > m ? p.id : m), FIRST_PRESET_ID)
   const claimed = Number.isInteger(raw?.nextId) ? (raw!.nextId as number) : 0
   return { presets, activeId, nextId: Math.max(claimed, maxId + 1) }
+}
+
+/**
+ * The registry AS IT IS ON DISK at this instant — normalized, or null when there is nothing
+ * readable there (never saved, a corrupt payload, or a browser that refuses storage).
+ *
+ * ⚠⚠ IT IS NOT A SECOND SOURCE OF TRUTH AND NO RENDER MAY READ IT. The live registry above is what
+ * the app runs on; this reads the same key BEHIND it. It exists for exactly one question, which the
+ * in-memory copy cannot answer: has ANOTHER TAB on this origin allocated a preset id since this tab
+ * last hydrated? The whole argument is at presetControl's createPreset, which is its only caller —
+ * and the reason it must be a fresh READ rather than `usePresets.persist.rehydrate()` is that
+ * rehydrating would ADOPT the other tab's registry wholesale, moving the active preset out from
+ * under a player mid-run. An id allocation needs one number, not a new reality.
+ */
+export function readStoredRegistry(): PresetRegistryValues | null {
+  try {
+    const raw = window.localStorage.getItem(PRESET_REGISTRY_KEY)
+    if (raw === null) return null
+    const envelope: unknown = JSON.parse(raw)
+    if (!envelope || typeof envelope !== 'object') return null
+    const state = (envelope as { state?: unknown }).state
+    if (!state || typeof state !== 'object') return null
+    // The same unconditional screen the live store's `merge` runs, for the same reason: this is
+    // untrusted storage, and normalizeRegistry is what forces nextId above every listed id.
+    return normalizeRegistry(state as Partial<PresetRegistryValues>)
+  } catch {
+    return null
+  }
 }
 
 // ── The registry store ────────────────────────────────────────────────────────────────────────

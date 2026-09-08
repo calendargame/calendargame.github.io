@@ -198,21 +198,25 @@ export default function PresetSwitcher({
       // a second step would be the 500-cards-becomes-4 bug waiting for someone to forget it.
       onChange={(v) => switchPreset(Number(v))}
       options={options}
-      // ⚠ ariaLabel is passed to the trigger AND to the listbox, and on the trigger an aria-label
-      // REPLACES the content — so a screen reader hears "Preset, collapsed" without the active
-      // preset's name, exactly as the mode selector announces "Mode" without "Classic". That is a
-      // real gap and it is the SHARED component's, not this call site's: matching the mode selector
-      // is the requirement here, and fixing it in one control and not the other would leave the two
-      // announcing differently. Flagged for a change that fixes CustomSelect for both at once.
+      // ⚠ ariaLabel names the trigger AND the listbox, and the two are named DIFFERENTLY on
+      // purpose — CustomSelect's doing, not this call site's. The listbox is "Preset". The TRIGGER
+      // composes this label with the selected option's own text, so it announces "Preset, Weekend,
+      // amnesic" rather than the bare "Preset, collapsed" it said while an aria-label was replacing
+      // its content. That fix belongs to the shared component (the mode selector had the identical
+      // gap — "Mode" without "Classic") and the argument is written out there; what matters here is
+      // that the ", amnesic" this file renders sr-only is INSIDE the option label, which is why it
+      // reaches the trigger's name for free.
       ariaLabel="Preset"
       showChevron
       pressDrag
-      // The mode selector's trigger classes, with ONE deliberate difference: pr-6 where it wears
-      // pr-9. The chevron is `absolute right-2` in both, so the glyph lands in exactly the same
-      // place; the 12px the mode selector leaves as slack between its text and that glyph is space
-      // this control spends on the name instead, and it can afford to because its text truncates
-      // rather than pushes. (`px-2.5` then `pr-6` is the same pattern the mode selector already
-      // relies on: Tailwind emits pr-* after px-*, so the later rule wins.)
+      // The mode selector's trigger classes, CHARACTER FOR CHARACTER — the two controls sit side by
+      // side in the same bar, so anything that differed would read as one of them being wrong.
+      // ⚠ IT WAS pr-6 AGAINST THE MODE SELECTOR'S pr-9 WHEN THIS CONTROL WAS WRITTEN, and the top-bar
+      // rebuild — the change that mounts it — cut the mode selector to pr-6 as well, to buy back the
+      // width the bar was overflowing by at 360px (the measurement is in main.tsx's budget block, and
+      // the ⚠⚠ note above records the same correction). The chevron is `absolute right-2` in both, so
+      // 1.5rem of right padding leaves it ~9px of clearance and nothing else needs to know.
+      // (`px-2.5` then `pr-6`: Tailwind emits pr-* after px-*, so the later rule wins.)
       className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left"
     />
   )

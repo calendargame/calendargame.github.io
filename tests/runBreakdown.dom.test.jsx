@@ -292,4 +292,42 @@ describe('the round breakdown — Blitz', () => {
     expect(figure(dlg, 'Mean')).toBe(stripMean)
     expect(rows(dlg)).toHaveLength(1)
   })
+
+  // ★★ THE PAGE UNDERNEATH IS INERT, AND THIS CARD IS WHY IT HAD TO BECOME TRUE. App's keyboard
+  // handler walks the DOM for a visible [data-key] button and clicks it — and until this modal
+  // existed, every modal in the app sat over the ⚙ PANEL, where there was nothing of the sort to
+  // find. The breakdown is the first one over a live game screen, and the walk went straight
+  // through the scrim: press O and it clicked Override, which RESUMED the finished round and
+  // reverted the Best that round had provisionally saved. The player would have seen the card
+  // vanish and their round come back to life.
+  // ⚠ WHAT THIS CASE DOES NOT CLAIM: that the mode letters are blocked too. They are deliberately
+  // not — see "leaving the mode takes the popup with it" above, which is the same handler's
+  // Category 3 doing exactly what it is supposed to. The gate covers the two categories that reach
+  // INTO the page (the [data-key] walk here, and the 0–9 answer grid, which rides the same line).
+  it('swallows a game-loop shortcut aimed through its scrim — O does not reach Override', () => {
+    mountApp()
+    switchTo('B')
+    act(() => {
+      useModePrefs.getState().setBlitzSec(10)
+      useModePrefs.getState().setBlitzAllowMistakes(false) // …so one wrong answer ENDS the round
+    })
+    click('Begin')
+    tick(2000)
+    answerWrong()
+    expect(ctrl('Reset')).toBeInTheDocument() // the round is over
+    expect(isOffered(ctrl('Override'))).toBe(true) // …and Override is sitting there, live
+    const score = statValue('Score')
+
+    tapStat('Score')
+    expect(screen.queryByRole('dialog', { name: 'Round breakdown' })).not.toBeNull()
+    act(() => {
+      fireEvent.keyDown(window, { key: 'O' })
+    })
+    // Nothing moved: the card is still up, the round is still over, and the wrong answer was not
+    // credited behind it.
+    expect(screen.queryByRole('dialog', { name: 'Round breakdown' })).not.toBeNull()
+    expect(ctrl('Reset')).toBeInTheDocument()
+    expect(isOffered(ctrl('Override'))).toBe(true)
+    expect(statValue('Score')).toBe(score)
+  })
 })

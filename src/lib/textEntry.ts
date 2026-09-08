@@ -1,14 +1,16 @@
 // lib/textEntry.ts — what counts as a box you can type into, and the two APP-WIDE rules that hold
 // for every one of them. Both rules are stated HERE, once, and nowhere else.
 //
-// The boxes, all seven of them: the two ⚙ Year Range fields (components/SettingsPanel), the AoX run
-// length — which exists TWICE, as the mode screen's own box (modes/AoxMode) and as the Save
-// Defaults popup's (components/DefaultsCard) — the Lookup date box (components/LookupCard), the
-// tap-to-type slider readout (components/SliderValueEditor), which is one component covering seven
-// sites, and the preset RENAME field (components/PresetManager), which is the first of them to
-// exist once PER ROW rather than once. Every one of them holds a value the box already shows.
-// ⚠ THE SEVENTH IS THE ONE THIS FILE WAS WRITTEN FOR. Its whole argument below is that a delegated
-// listener covers boxes that do not exist yet, where six onFocus props cover only the six somebody
+// The boxes, all seven of them — and THIS LIST IS THE ONLY PLACE IN THE APP THAT COUNTS THEM, so
+// nothing anywhere else can go stale when an eighth arrives: the two ⚙ Year Range fields
+// (components/SettingsPanel), the MoX Run Length — which exists TWICE, as the mode screen's own
+// box (modes/AoxMode) and as the Save Defaults popup's (components/DefaultsCard) — the Lookup date
+// box (components/LookupCard), the tap-to-type slider readout (components/SliderValueEditor),
+// which is one component covering seven sites, and the preset RENAME field
+// (components/PresetManager), which is the first of them to exist once PER ROW rather than once.
+// Every one of them holds a value the box already shows.
+// ⚠ THE LAST ONE IS THE ONE THIS FILE WAS WRITTEN FOR. Its whole argument below is that a delegated
+// listener covers boxes that DO NOT EXIST YET, where a prop per box covers only the ones somebody
 // remembered — and components/PresetManager adds a box, and N copies of it, without touching this
 // file or knowing it exists. If that ever stops being true, the design has been broken rather than
 // outgrown.
@@ -20,14 +22,14 @@
 // always means replacing that value, never appending to it. Nothing in the app wants a caret
 // parked mid-number.
 //
-// ⚠ WHY ONE DELEGATED LISTENER AND NOT SIX onFocus PROPS. The six boxes do not share a component —
-// SliderValueEditor is one of the six, not a base class for the other five, which are hand-written
-// <input>s in four different files. A shared handler would therefore have to be spread into those
-// four JSX sites, and TWO of them (AoxMode, LookupCard) already own an onFocus that captures the
-// Escape discard target, so the spread would have to be composed with theirs by hand at each site.
-// That is exactly the shape this project rejects: it works today and the seventh box, whenever it
-// is written, forgets. A document-level listener is the one seam where "a text box just took
-// focus" can be answered for boxes that exist AND boxes that do not yet. Same idiom, same
+// ⚠ WHY ONE DELEGATED LISTENER AND NOT ONE onFocus PROP PER BOX. These boxes do not share a
+// component — SliderValueEditor is one of them, not a base class for the rest, which are
+// hand-written <input>s in four different files. A shared handler would therefore have to be spread
+// into those four JSX sites, and TWO of them (AoxMode, LookupCard) already own an onFocus that
+// captures the Escape discard target, so the spread would have to be composed with theirs by hand
+// at each site. That is exactly the shape this project rejects: it works today and the NEXT box,
+// whenever it is written, forgets. A document-level listener is the one seam where "a text box just
+// took focus" can be answered for boxes that exist AND boxes that do not yet. Same idiom, same
 // argument, as the module-level popstate listener in components/useBackButton.
 //
 // ⚠ AND WHY IT TAKES THREE EVENTS RATHER THAN ONE — the iOS half, and the reason a focus-only

@@ -939,7 +939,12 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
       openSettings()
       openModal('save')
       dragSlider('save', 'Flash Speed', 1200)
-      pressKey(key) // the mode/panel shortcuts are NOT blocked by the modal guard (it covers Tab)
+      // The mode/panel shortcuts are DELIBERATELY not blocked by the modal guard. That guard now
+      // covers three of App's four shortcut categories — Tab, the answer grid, and the [data-key]
+      // walk — and this is the one it deliberately skips: those three OPERATE the page behind the
+      // scrim, which a modal must forbid, while G and a mode letter REPLACE that page and take
+      // every modal on it along. This case is what pins the difference.
+      pressKey(key)
       expect(anyModalOpen()).toBe(false)
       expect(isSettingsOpen()).toBe(false)
       expect(useUserDefaults.getState().saved).toBeNull() // the pending snapshot went with it

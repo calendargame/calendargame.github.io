@@ -53,7 +53,7 @@ const putCaret = (el, at) => el.setSelectionRange(at, at)
 
 const aoxField = () => screen.getByRole('textbox', { name: 'MoX run length' })
 const lookupField = () => document.querySelector('input[placeholder^="e.g.,"]')
-const modeTrigger = () => screen.getByRole('button', { name: 'Mode' })
+const modeTrigger = () => screen.getByRole('button', { name: /^Mode,/ })
 
 // ── EVERY BOX THE APP HAS ────────────────────────────────────────────────────────────────────
 // Seven of them, and they are listed here BY ROUTE rather than by selector so this table doubles as

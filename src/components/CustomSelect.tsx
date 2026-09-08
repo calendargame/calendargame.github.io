@@ -125,6 +125,26 @@ export default function CustomSelect({
   // CSS selector), so useId's separator characters are harmless here.
   const listboxId = useId()
   const optionId = (i: number) => `${listboxId}-opt-${i}`
+  // ★★ THE TRIGGER'S ACCESSIBLE NAME IS THE LABEL *PLUS* THE VALUE, and it takes two ids because
+  // an `aria-label` cannot express it. An aria-label REPLACES an element's content, so the trigger
+  // used to wear one and announce "Mode, collapsed" / "Preset, collapsed" — the setting's name with
+  // the selected option's text, the one thing a reader needs from a closed dropdown, silently
+  // dropped. (The owner's requirement for the preset control's amnesic marker was explicit: an
+  // indicator "with a real accessible name". Reading the preset control without its preset name
+  // fails that on the enclosing control instead of on the marker.)
+  //   WHY aria-labelledby RATHER THAN A COMPOSED STRING. Option labels are ReactNodes, not text —
+  // the preset switcher's is a whole element tree carrying a truncating name cell and an `sr-only`
+  // ", amnesic" sibling. There is nothing to concatenate at render time. Referencing the two NODES
+  // instead hands the name computation to the platform, which walks the selected option's subtree
+  // and reads exactly what a sighted user sees plus what the sr-only text adds: "Preset, Weekend,
+  // amnesic". The unselected options stacked in the same grid cell are `aria-hidden`, and a hidden
+  // node that is not itself the referenced one contributes nothing to a name — which is what keeps
+  // the other six modes out of it.
+  //   ⚠ THE COMMA LIVES ON THE LABEL, for the same reason PresetSwitcher's marker puts one on
+  // ", amnesic": the name-from-content algorithm TRIMS each referenced node's text before joining
+  // them with a space, so a separator has to be a printing character or there is none.
+  const labelId = `${listboxId}-label`
+  const valueId = `${listboxId}-value`
   const selectedIdx = options.findIndex((o) => o.value === value)
   // panelRef points at the PORTALED panel so the click-outside handler can
   // treat taps inside it as "inside" (the panel is no longer a DOM descendant
@@ -351,13 +371,21 @@ export default function CustomSelect({
         onKeyDown={handleTriggerKeyDown}
         data-select-trigger={pressDrag || undefined}
         className={className}
-        aria-label={ariaLabel}
+        // Label + value (see the two ids above). With no `ariaLabel` there is nothing to compose,
+        // so the trigger falls back to naming itself from its own content — the selected option —
+        // which is the correct answer for a caller that never named the control.
+        aria-labelledby={ariaLabel ? `${labelId} ${valueId}` : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={open && activeIdx >= 0 ? optionId(activeIdx) : undefined}
       >
-        <span className="grid items-center">
+        {ariaLabel && (
+          <span id={labelId} className="sr-only">
+            {ariaLabel},
+          </span>
+        )}
+        <span id={valueId} className="grid items-center">
           {options.map((o) => (
             <span
               key={o.value}

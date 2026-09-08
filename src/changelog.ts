@@ -85,14 +85,39 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-08',
+    items: [
+      'The app can now hold several separate set-ups at once, called presets. Each one keeps its own settings, stats, bests, saved defaults and lookup history, so a preset you practise in and a preset you experiment in never touch each other. Switch between them with the new picker at the top of the screen — press and slide down to it, the same way the mode picker works. Make, rename, reorder and delete presets under ⚙ Settings → Manage Presets.',
+      'The top of the screen is rearranged to make room for that picker: logo on the far left, then the preset picker, then the mode picker, with the gear on the far right. The "Calendar Game" wordmark has gone to pay for the space.',
+      'Any preset can be made Amnesic, under ⚙ Settings → Stats. While that is on, the preset records nothing — no stats, no bests, no lookup history — and everything from the session goes when the app closes. It is there for handing your phone to someone else, or for playing without it counting. Presets with it on are marked with an A in the picker.',
+      'When a Blitz or MoX run finishes, tapping its row of stats now opens the whole run question by question, with your fastest and slowest marked and the mean, fastest and slowest shown together.',
+      'AoX is now called MoX, and "average" is now "mean" everywhere it appeared. A cubing average throws away your fastest and slowest solve before averaging, and this app has never done that — so the old name was quietly claiming something the maths does not do. Nothing about the maths or your saved bests has changed, only the words.',
+      'A new Dot Layout setting, under ⚙ Settings → Display, turns the seven dots a quarter turn: the weekday triples can run down the two side columns as before, or along the top and bottom rows. The mark in the top left corner turns with them.',
+      'Buttons are easier to hit. Every button now covers its whole rectangle instead of stopping at its rounded corners, and the gap between two buttons splits evenly between them. The blank spaces stay blank on purpose, so sliding your finger onto one to cancel a press still works.',
+      'The saved-defaults links at the foot of the Settings menu now sit in line with the three buttons above them rather than below.',
+      'Every text box now selects what is already in it when you tap it, so you can type straight over it — and opening the Settings menu or a picker now puts the keyboard away.',
+      'Fixed: the question number beside your Score is now a lifetime count, so the two finally agree. It used to count only the cards you could still page back through, which meant it could read Q1 next to a Score of 471/501.',
+      'Fixed: a time of a minute or more now reads as a time — 1:04, or 1:02:30 — instead of a dash. A dash now means one thing only, that nothing has been recorded yet.',
+      'Fixed: a long number in a stat box no longer rides higher than the numbers beside it when it shrinks to fit.',
+      'Fixed: in Blitz, the time boxes stop responding to taps once a round has ended, which is what MoX already did.',
+    ],
+  },
+  {
     date: '2026-09-05',
     items: [
       'Nothing you can see changed this time — just work underneath to keep things running smoothly.',
     ],
   },
-  // ★ THE CAP BIT FOR THE FIRST TIME on 2026-09-05: adding the day above made eleven, so
-  // 2026-07-17 moved to CHANGELOG-ARCHIVE.md in the same change. The array is AT ten again —
-  // the next new day retires 2026-07-19 (see the ten-entry rule in the charter above).
+  // ★ THE CAP HAS NOW BITTEN TWICE. On 2026-09-05 it retired 2026-07-17; adding 2026-09-08 above
+  // made eleven again, so 2026-07-19 moved to CHANGELOG-ARCHIVE.md in the same change. The array is
+  // AT ten — the next new day retires 2026-07-21 (see the ten-entry rule in the charter above).
+  // ⚠ THE 2026-09-05 ENTRY ABOVE REACHES PRODUCTION FOR THE FIRST TIME IN THIS DEPLOY, and it stays
+  // rather than being merged away. That day shipped to STAGING ONLY, so a live player is seeing it
+  // and 2026-09-08 together — but the same-day merge rule is about one DAY's net effect, and these
+  // are two days. Deleting it would also split the two repos' changelogs, and they must stay
+  // byte-identical: the two sites share a browser origin and CHANGELOG_SEEN_KEY stores a signature
+  // of the NEWEST entry, so divergent arrays would flip the Changelog dot every time the owner moved
+  // between them. The line is true for both audiences anyway — nothing visible did change that day.
   {
     date: '2026-08-10',
     items: [
@@ -195,18 +220,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Guide panels open and close with a smooth, matched motion that keeps your place on the page.',
       'Fixed: the Lookup page no longer scrolls as a whole — long history lists scroll inside their own box again.',
       'This changelog and the Lookup history list now scroll the same way as the settings menu: content fades softly at the edges, and the scrollbar stays clear of the text.',
-    ],
-  },
-  {
-    date: '2026-07-19',
-    items: [
-      'Added this changelog: after an update, a small light-blue dot appears on the gear button, and then on the Changelog link inside, until you have taken a look.',
-      'The brief updating screen now also appears when a new version arrived quietly between visits, so an update never slips by unannounced.',
-      'Typing a timer value no longer stretches its box while you edit.',
-      'Guide panels open and close at one smooth, even pace, whatever their length.',
-      'View saved defaults is always available, shows the launch values until you save your own, and now lets you edit and save right from the popup; clearing saved defaults asks for confirmation first.',
-      'Reset Settings now restores everything your saved defaults cover, including the four mode-screen values.',
-      'Blitz and AoX can hide their time stats; timing quietly carries on, so nothing is lost when you show them again.',
     ],
   },
 ]

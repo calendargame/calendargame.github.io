@@ -1209,6 +1209,29 @@ import BlitzMode from './modes/BlitzMode.jsx'
       useEffect(()=>{if(updating)dismissBootSplash();},[updating]);
       useEffect(()=>{const onKey=(e: KeyboardEvent)=>{
         if(e.repeat||e.isComposing)return;
+        // ★★ WHAT AN OPEN MODAL BLOCKS, AND WHAT IT DELIBERATELY DOES NOT — the whole rule, in one
+        // place, because it is exactly one line different for each half and the difference is the
+        // point. A modal is up ⇒ the page underneath is INERT (components/modalContract), so the two
+        // categories that REACH INTO that page bail: Category 1's answer grid and Category 2's
+        // [data-key] DOM walk both find a live button under the scrim and CLICK it. That is not
+        // theoretical — it shipped: Blitz with Allow Mistakes off, answer wrong, tap the stat strip
+        // to open the round breakdown, press O, and the walk clicked Override behind the scrim,
+        // resumed the finished round and reverted its provisional Best. The run breakdown is what
+        // made it reachable, being the first modal to sit over a LIVE GAME SCREEN rather than over
+        // the settings panel; the bail used to live in the Tab branch alone.
+        // ⚠ CATEGORY 3 STAYS LIVE, and that is a DECISION with two tests standing on it, not an
+        // oversight. The mode letters, H and G do not operate the page underneath — they REPLACE
+        // what is on screen, and every modal goes with it: the four ⚙ popups are children of the
+        // panel these shortcuts close (tests/settingsPanel.defaults — "G, and a mode letter, close
+        // the modal and the panel together and discard the pending snapshot"), and the run
+        // breakdown's own availability is gated on its mode screen being VISIBLE for exactly this
+        // reason (modes/AoxMode, tests/runBreakdown "leaving the mode takes the popup with it").
+        // Gating them would take a documented escape hatch away and leave a card that can only be
+        // dismissed by the controls under the finger.
+        // The scrim's trap already stopPropagation()s presses inside the modal's own tree; this
+        // covers presses that start outside it. Asked lazily — one DOM query, and only for a press
+        // that has already turned out to belong to one of the two gated categories.
+        const modalUp=()=>!!document.querySelector('[data-settings-modal]');
         // Tab: toggle the mode selector dropdown. Plain Tab only — Ctrl+Tab, Ctrl+Shift+Tab,
         // Shift+Tab, Alt+Tab all pass through to the browser. Works universally, including
         // when an input is focused (Esc/Enter already blur inputs, so the standard "leave
@@ -1216,11 +1239,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // arrow-nav handler (handleTriggerKeyDown on the trigger) sees subsequent keys.
         if(e.key==='Tab'){
           if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey)return;
-          // An open settings MODAL (Save Defaults / the defaults manager / Clear confirm / Changelog) owns Tab while
-          // it's up (its scrim's focus trap) — opening the mode dropdown behind an aria-modal dialog
-          // would break the modal contract. The trap already stopPropagation()s presses inside its
-          // tree; this covers presses that start outside it.
-          if(document.querySelector('[data-settings-modal]'))return;
+          // An open modal owns Tab while it is up (its scrim's focus trap) — opening the mode
+          // dropdown behind an aria-modal dialog would break the modal contract.
+          if(modalUp())return;
           if(modeSelectRef.current){
             const trigger=modeSelectRef.current.querySelector('button');
             if(trigger){e.preventDefault();trigger.focus();trigger.click();}
@@ -1231,8 +1252,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
         const k=e.key;
         const ae=document.activeElement as HTMLElement | null;
         if(ae){const tag=ae.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||ae.isContentEditable)return;}
-        // Category 1: 0–9 → answer grid
+        // Category 1: 0–9 → answer grid — GATED, it clicks a button on the page underneath
         if(k>='0'&&k<='9'){
+          if(modalUp())return;
           const grids=document.querySelectorAll<HTMLElement>('[data-answer-grid="true"]');
           let visible: HTMLElement | null=null;
           for(const g of grids){if(g.offsetParent!==null){visible=g;break;}}
@@ -1258,7 +1280,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
         if(dataKey==='H'){e.preventDefault();switchMode(m=>m==='guide'?(prevNonGuideModeRef.current||'classic'):'guide');setSettingsOpen(false);return;}
         // Category 3c: G — toggle settings popover
         if(dataKey==='G'){e.preventDefault();toggleSettings();return;}
-        // Category 2: data-key DOM walk for game-loop letters and arrows
+        // Category 2: data-key DOM walk for game-loop letters and arrows — GATED for the same
+        // reason as Category 1, and it is the one that shipped the bug (Override, through a scrim).
+        if(modalUp())return;
         const tagged=document.querySelectorAll<HTMLElement>(`[data-key="${dataKey}"]`);
         for(const btn of tagged){
           if(btn.tagName!=='BUTTON')continue;
@@ -1274,7 +1298,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       useEffect(()=>installPointerGestures(),[]);
       // Round 18: the other app-wide input rule, installed the same way — entering any box you can
       // type into highlights everything already in it, so typing replaces the value rather than
-      // appending to it. One set of document listeners for all six boxes; lib/textEntry argues why
+      // appending to it. One set of document listeners for every one of them; lib/textEntry argues why
       // it is delegated rather than six onFocus props, and why the tap path needs three events.
       useEffect(()=>installSelectAllOnEntry(),[]);
       // The Year Range boxes' text state, their refs, their two commits and their two focus-guarded

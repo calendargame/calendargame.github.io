@@ -378,6 +378,16 @@ function BlitzMode({
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
+    // ⚠ THE BREAKDOWN BELONGS TO THE ROUND THAT ENDED, and this is the one door that puts an ENDED
+    // round back on the clock (AoX's override-resume is the same door in that mode, with the same
+    // line). `breakdownShown` ANDs the flag with availability, so the popup is already off the
+    // screen the instant the round is live again — but the FLAG would survive, and the next time
+    // this round ended the breakdown would spring open with nobody having asked for it. Belt and
+    // braces: the only route into this state with the popup up was App's keyboard handler walking
+    // the DOM for [data-key="O"] and finding Override through the scrim, which the same change
+    // closed (src/main.tsx, the modal gate on its Category 1 and 2). This line is what makes it not
+    // matter.
+    setBreakdownOpen(false)
     if (!perQ) {
       blitzStartRef.current = performance.now() - (blitzSec - blitzRemainRef.current) * 1000
       blitzPausedAccRef.current = 0

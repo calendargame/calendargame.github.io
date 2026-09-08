@@ -46,8 +46,12 @@ const bar = () => screen.getByRole('banner')
 // is also the class the budget below is about — see that case for why a class read is the honest
 // most this environment can offer.
 const row = () => bar().querySelector('.justify-between')
-const presetTrigger = () => screen.getByRole('button', { name: 'Preset' })
-const modeTrigger = () => screen.getByRole('button', { name: 'Mode' })
+// ⚠ ASKED BY A NAME PREFIX, not by an exact one, and that is the contract rather than a
+// convenience: a CustomSelect trigger names itself with its SETTING and its current VALUE
+// (components/CustomSelect composes the two), so these read "Preset, Preset 1" and "Mode,
+// Classic". The case below pins the whole composed name; everything else only needs the control.
+const presetTrigger = () => screen.getByRole('button', { name: /^Preset,/ })
+const modeTrigger = () => screen.getByRole('button', { name: /^Mode,/ })
 // The mark. aria-hidden by design (W5Logo says why), so it has no role to ask for — and its
 // absence from the accessibility tree is exactly why the <h1> below has to exist.
 const logo = () => bar().querySelector('svg[aria-hidden="true"]')
@@ -115,6 +119,32 @@ describe("the owner's layout: logo, preset, mode, gear", () => {
     expect(groups).toHaveLength(2) // left (mark + preset), right (mode + gear)
     expect(groups[0].firstElementChild).toBe(logo())
     expect(groups[1].lastElementChild.contains(gear())).toBe(true)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ★ THE BAR'S TWO DROPDOWNS NAME THEMSELVES WITH THEIR VALUE, and this is where that is pinned for
+// BOTH — it is one shared component's behaviour (components/CustomSelect), and the failure it
+// replaces was shared too: an `aria-label` on the trigger REPLACES the element's content, so each
+// control announced its setting and swallowed its value. "Preset, collapsed" told a screen-reader
+// user everything except which preset they were in — on the one control the bar exists to carry.
+// ⚠ ASSERTED BY ACCESSIBLE NAME, never by an attribute: the name is COMPOSED from two nodes, so
+// reading `aria-label` (or `aria-labelledby`) back would pin the mechanism and not the outcome.
+describe('the preset and mode triggers announce their value, not just their setting', () => {
+  it('names each control with its setting AND what it is currently set to', () => {
+    mountApp()
+    expect(screen.getByRole('button', { name: 'Preset, Preset 1' })).toBe(presetTrigger())
+    expect(screen.getByRole('button', { name: 'Mode, Classic' })).toBe(modeTrigger())
+  })
+
+  it('follows the value when it changes', () => {
+    mountApp()
+    tap(modeTrigger())
+    tap(screen.getByRole('option', { name: 'Flash' }))
+    expect(screen.getByRole('button', { name: 'Mode, Flash' })).toBe(modeTrigger())
+    // …and the six unselected options stacked in the same cell contribute nothing to it: they are
+    // aria-hidden, and a hidden node that is not itself referenced adds no text to a name.
+    expect(screen.queryByRole('button', { name: /Classic/ })).toBeNull()
   })
 })
 

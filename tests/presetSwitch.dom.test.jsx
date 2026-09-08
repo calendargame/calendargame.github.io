@@ -321,32 +321,79 @@ describe('a browser that refuses localStorage', () => {
     restore = null
   })
 
-  it('still boots, and still switches presets — in memory, for the session', async () => {
+  it('still boots — and presets still ISOLATE, in memory, for the session', async () => {
     restore = blockStorage()
     vi.resetModules()
     // Imported with no #root in the document, so main.jsx's real-build auto-mount stays skipped and
     // this case owns the only copy of the app.
-    const [{ App: FreshApp }, control] = await Promise.all([
+    const [{ App: FreshApp }, control, settings] = await Promise.all([
       import('../src/main.jsx'),
       import('../src/store/presetControl.js'),
+      import('../src/store/settings.js'),
     ])
     const root = document.createElement('div')
     root.id = 'root'
     document.body.appendChild(root)
     render(<FreshApp />)
 
+    // ⚠ THE STATIC IMPORTS AT THE TOP OF THIS FILE ARE THE WRONG SINGLETONS IN HERE — the module
+    // graph was reset, so this app is running on the copies imported above. Hence the local
+    // versions of the two fixtures.
+    const pinHere = () =>
+      act(() => {
+        const s = settings.useSettings.getState()
+        s.setRandomFormat(false)
+        s.setDateFormat('numeric-ymd')
+        s.setMinY(1583)
+        s.setMaxY(10000)
+      })
+    const wearHere = (name) =>
+      act(() => {
+        settings.useSettings.getState().setUseSystem(false)
+        settings.useSettings.getState().setManualTheme(name)
+      })
+
     // "Still on screen" is asked of a VISIBLE control, not of the app's heading — since the
     // top-bar rebuild that heading is sr-only, so it cannot distinguish a painted app from a
     // rendered-but-blank one. The preset switcher is the apt one here: it is the control this
     // whole file is about, and it re-reads the registry on every switch.
-    const switcher = () => screen.getByRole('button', { name: 'Preset' })
+    const switcher = () => screen.getByRole('button', { name: /^Preset,/ })
     expect(switcher()).toBeInTheDocument()
-    // Every per-preset store is memory-only for this session, so persist never attached and
-    // presetControl's `store.persist?.rehydrate()` guard is the only thing between a switch and a
-    // TypeError. The switch still has to work: the registry lives in memory just fine.
+
+    // ★★ THE CLAIM, AND IT USED TO BE MERELY "NOTHING THREW". Every per-preset store is memory-only
+    // for this session — zustand attaches `api.persist` only when a storage exists, so all four
+    // have none — and the version of reloadPresetStores that SKIPPED those stores made this the one
+    // browser where switching preset did nothing at all: the registry moved, the screens remounted,
+    // and preset 2 opened wearing preset 1's score and preset 1's theme, then accumulated the
+    // session's answers onto them. Nothing reaches disk here, so nothing is permanently lost; what
+    // was broken is the whole promise a preset makes. A case that asked only `not.toThrow` passed
+    // throughout.
+    pinHere()
+    wearHere('nebula')
+    pressNew()
+    playCorrect(2)
+    expect(statValue('Score')).toBe('2/2')
+    expect(documentTheme()).toBe('nebula')
+
     const p2 = control.createPreset()
-    expect(() => act(() => control.switchPreset(p2.id))).not.toThrow()
+    act(() => control.switchPreset(p2.id))
     expect(switcher()).toBeInTheDocument()
+    // A preset with no saved copy is a preset holding the FACTORY values, which is what a browser
+    // that saves nothing has for every preset but the one in memory.
+    expect(statValue('Score')).toBe('0/0')
+    expect(documentTheme()).toBe(settings.SETTINGS_DEFAULTS.lightTheme)
+
+    // …and the same in the other direction: playing here must not reach back into preset 1, and
+    // returning must not find preset 1 wearing what preset 2 did.
+    pinHere()
+    wearHere('midnight')
+    pressNew()
+    playCorrect(1)
+    expect(statValue('Score')).toBe('1/1')
+    act(() => control.switchPreset(1))
+    expect(statValue('Score')).toBe('0/0') // preset 1's numbers were never SAVED, so they are gone
+    expect(documentTheme()).toBe(settings.SETTINGS_DEFAULTS.lightTheme)
+
     expect(() => act(() => control.deletePreset(p2.id))).not.toThrow()
     expect(switcher()).toBeInTheDocument()
   })

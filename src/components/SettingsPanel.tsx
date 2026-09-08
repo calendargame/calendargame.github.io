@@ -1110,17 +1110,27 @@ export function SettingsPanel({
                 already uses that word for "turn your device" (the portrait-lock screen,
                 components/RotateOverlay). The labels describe the picture instead — the two weekday
                 triples run down the side COLUMNS, or along the top and bottom ROWS.
-                ★ SAME LOCK AS INPUT, `mode === 'deduction'` EXACTLY, and shared on purpose: the two
-                describe one thing, the weekday dot input, which Deduction does not have. A live
-                picker sitting directly beneath a dead one — both about dots — would read as a bug
-                in the lock.
+                ★ IT LOCKS WHENEVER THERE ARE NO DOTS ON SCREEN TO TURN, which is two conditions and
+                not one: Deduction (whose answers are not weekdays at all — the same
+                `mode === 'deduction'` the Input picker above uses, shared on purpose, because a live
+                picker sitting directly beneath a dead one, both about dots, would read as a bug in
+                the lock), and ANY mode while Input is on Buttons. The second half was missing for one
+                round and the result was a picker whose only observable effect was somewhere else
+                entirely: a player on Buttons could set Rows and watch nothing change but the
+                TITLE-BAR MARK, permanently, with no dots anywhere on screen for it to correspond to.
+                The owner's requirement is that the mark turn WITH THE INPUT; a control that turns it
+                while the input cannot follow is that requirement inverted.
+                ⚠ IT IS A LOCK, NOT A RESET — same housing, same dim, value preserved, exactly how
+                Julian Chance behaves when the year range makes it moot. Switch Input back to Dots and
+                the orientation you chose is still the one selected.
                 ⚠ THE ONE CONSEQUENCE, written down so it is not later reported as one: the title-bar
-                mark follows this setting in EVERY mode (main.tsx, components/W5Logo), so in Deduction
-                the mark's orientation is frozen rather than irrelevant. Frozen is the honest word —
-                nothing about it changes on the way into Deduction; it simply cannot be changed
-                while you are there, exactly like the answer layout above it. */}
+                mark follows this setting in EVERY mode and at EITHER input style (main.tsx,
+                components/W5Logo), so wherever this picker is locked the mark's orientation is FROZEN
+                rather than irrelevant. Frozen is the honest word — nothing about it changes on the way
+                into Deduction or on the way to Buttons; it simply cannot be changed from there,
+                exactly like the answer layout above it. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Dot Layout</div>
-            <PillGroup label="Dot Layout" disabled={mode === 'deduction'}>
+            <PillGroup label="Dot Layout" disabled={mode === 'deduction' || inputStyle !== 'dots'}>
               <PillTray
                 value={dotOrientation}
                 onChange={setDotOrientation}

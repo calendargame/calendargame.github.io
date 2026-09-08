@@ -172,6 +172,14 @@ export const useSettings = create<SettingsState>()(
       // else — which is only checkable if one place can enumerate them. ⚠ THE STRING IS UNCHANGED,
       // and that is the whole preset design in one line: preset 1 does not receive the existing
       // saved settings, preset 1 IS them.
+      // ⚠ THIS STORE IS WHERE THAT PROMISE IS AT ITS WEAKEST, and it is worth stating here rather
+      // than leaving to be rediscovered: the live site and staging share this origin, so an OLD
+      // build and this one really do interleave on this key. The key they agree about is identical;
+      // the PAYLOAD is only as complete as the older build's own `partialize`. `dotOrientation` was
+      // the 15th setting and post-dates several builds still cached on devices, so an old build
+      // saving settings drops it, and the next boot here reads it as the factory 'columns' — the
+      // player's Dot Layout quietly reverts. Nothing is mis-attributed and no stats are involved;
+      // it is the price of one key serving two builds, argued in full in store/presets' header.
       name: PRESET_STORE_KEYS.settings,
       // …and this is what makes presets 2, 3, 4… land somewhere else. The `name` above never
       // changes; the adapter rewrites it to the ACTIVE preset's key at each read and each write.

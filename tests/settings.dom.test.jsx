@@ -658,8 +658,14 @@ describe('Settings → Display — radio semantics and the retired theme dropdow
     const triggers = screen
       .getAllByRole('button', { hidden: true })
       .filter((b) => b.getAttribute('aria-haspopup') === 'listbox')
-    // Document order, which in the bar is left to right: preset, then mode.
-    expect(triggers.map((t) => t.getAttribute('aria-label'))).toEqual(['Preset', 'Mode'])
+    // Document order, which in the bar is left to right: preset, then mode. Asked by ACCESSIBLE
+    // NAME rather than by reading an aria-label attribute, because there no longer is one: a
+    // trigger names itself with its setting AND its current value (components/CustomSelect composes
+    // the two through aria-labelledby), so "Preset" and "Mode" are the openings of those names.
+    expect(triggers).toEqual([
+      screen.getByRole('button', { name: /^Preset,/, hidden: true }),
+      screen.getByRole('button', { name: /^Mode,/, hidden: true }),
+    ])
     for (const t of triggers) expect(panelEl().contains(t)).toBe(false)
   })
 })
@@ -696,6 +702,13 @@ describe('Settings — the radiogroup keyboard contract', () => {
   // told assistive tech there were seven groups.
   it('every group is ONE tab stop, on the selected pill, in both Use-System states', () => {
     mountPanel()
+    // Dot Layout is LOCKED while the answer input is Buttons — there are no dots to turn — and a
+    // locked group appoints no tab stop at all, which is its own contract (tests/dotOrientation
+    // .dom). So the sweep below asks its question of a panel where every picker is live, which is
+    // what "every group" is about.
+    act(() => {
+      fireEvent.click(group('Input').getByRole('radio', { name: 'Dots' }))
+    })
     PICKERS.forEach(expectOneTabStop)
     // The five pills the group spans include a whole tray with nothing selected in it: the tab
     // stop is a property of the CHOICE, so the empty tray contributes none.

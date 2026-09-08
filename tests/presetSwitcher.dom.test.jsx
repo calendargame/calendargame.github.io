@@ -41,7 +41,7 @@ const resetRegistry = () =>
 // file reads it back — the ref's effect is App's, and tests/topBar.dom is where it is pinned.
 const mount = () => render(<PresetSwitcher wrapperRef={createRef()} />)
 
-const trigger = () => screen.getByRole('button', { name: 'Preset' })
+const trigger = () => screen.getByRole('button', { name: /^Preset,/ })
 const options = () => screen.getAllByRole('option')
 const openMenu = () => fireEvent.click(trigger())
 const activeId = () => usePresets.getState().activeId
@@ -209,6 +209,12 @@ describe('the amnesic marker', () => {
     mount()
     // Same label element serves the trigger and the rows, so the bar shows the state at a glance.
     expect(triggerLabel()).toContain('amnesic')
+    // …and it reaches the trigger's ACCESSIBLE NAME, which is the half that matters here: the
+    // marker's whole requirement is that it be a word a screen reader says, and the trigger used to
+    // wear an aria-label that replaced its content — announcing "Preset" and dropping the preset,
+    // the ", amnesic" and everything else. The name is composed from the setting plus the selected
+    // option's own text (components/CustomSelect), so this is the marker arriving through it.
+    expect(screen.getByRole('button', { name: 'Preset, Preset 1, amnesic' })).toBe(trigger())
   })
 })
 

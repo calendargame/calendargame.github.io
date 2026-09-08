@@ -171,9 +171,14 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   // every mode HERE rather than one being spot-checked elsewhere. The pair is the point: they were
   // written to lock together, and the failure worth catching is one of them drifting off the
   // condition while the other still satisfies every case that names it.
+  // ⚠ DOT LAYOUT CARRIES A SECOND LOCK — Input on Buttons, where there are no dots to turn; its
+  // exact condition is pinned in tests/dotOrientation.dom, with the rest of that setting's story,
+  // rather than copied here. This walk therefore chooses DOTS first: without that the picker is
+  // locked in all seven modes and the case would pass while saying nothing about the mode at all.
   const MODE_LOCKED_PICKERS = ['Input', 'Dot Layout']
   it('the Input and Dot Layout pickers are live in every mode except Deduction', () => {
     standUp()
+    pickPill('Input', 'Dots')
     const both = (locked) => MODE_LOCKED_PICKERS.forEach((name) => expectLock(name, locked))
     both(false) // classic, where the app opens
     for (const mode of ['flash', 'blitz', 'aox', 'lookup']) {
@@ -327,6 +332,9 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
     {
       name: 'Dot Layout',
       pick: 'Rows',
+      // The only case that needs an ARRANGE step: this picker's other lock is Input on Buttons,
+      // which is where the panel opens, so it has to be unlocked before it can be picked from.
+      arrange: () => pickPill('Input', 'Dots'),
       lock: () => goMode('deduction'),
       unlock: () => goMode('classic'),
     },
@@ -349,9 +357,10 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
       unlock: () => toggleSwitch(JULIAN_SWITCH),
     },
   ]
-  UNLOCK_CASES.forEach(({ name, pick, lock, unlock }) => {
+  UNLOCK_CASES.forEach(({ name, pick, arrange, lock, unlock }) => {
     it(`unlocking ${name} puts its one tab stop back on the chosen pill, untouched`, () => {
       standUp()
+      arrange?.()
       pickPill(name, pick)
       expect(tabStopLabel(name)).toBe(pick)
       lock()

@@ -260,12 +260,48 @@ describe('creating a preset', () => {
   })
 
   // MULTI-TAB, and it is reachable: two tabs on this origin each hold their own copy of the
-  // registry, so a tab whose copy is stale would allocate an id the other tab already used and the
-  // two presets would SHARE a namespace — merging two sets of a player's data. Skipping ids whose
-  // keys already exist cannot fix the divergence, but it makes that outcome impossible.
+  // registry (for this app the live PWA and the staging site are literally the same origin), so a
+  // tab whose copy is stale would allocate an id the other tab already used and the two presets
+  // would SHARE a namespace — merging two sets of a player's data. Neither case below fixes the
+  // divergence, which nothing at allocation time can; together they make that MERGE impossible.
   it('skips an id whose saved data already exists on disk', () => {
     localStorage.setItem(presetKey(PRESET_STORE_KEYS.progress, 2), '{"state":{},"version":3}')
     expect(createPreset().id).toBe(3)
+  })
+
+  // ⚠ THE HALF THE SKIP LOOP CANNOT SEE, and it is the likelier half of the two: a preset the other
+  // tab has CREATED but never OPENED has no per-preset keys at all — createPreset writes the
+  // registry and nothing else — so "are this id's keys on disk" answers NO for exactly the preset
+  // most likely to be raced. The stored registry is what answers it, and it is read fresh at
+  // allocation time rather than trusted from memory.
+  it("takes the other tab's nextId from the STORED registry, not the one in memory", () => {
+    // The other tab created preset 2 and left it unopened. It wrote the registry synchronously;
+    // this tab's in-memory copy predates that write and still says the next id is 2.
+    localStorage.setItem(
+      'cg-presets-v1',
+      JSON.stringify({
+        state: {
+          presets: [
+            { id: 1, name: 'Preset 1', amnesic: false },
+            { id: 2, name: 'Preset 2', amnesic: false },
+          ],
+          activeId: 1,
+          nextId: 3,
+        },
+        version: 1,
+      }),
+    )
+    expect(usePresets.getState().nextId).toBe(2) // this tab has not seen it…
+    for (const base of Object.values(PRESET_STORE_KEYS))
+      expect(localStorage.getItem(presetKey(base, 2))).toBe(null) // …and there is nothing to skip
+    expect(createPreset().id).toBe(3)
+  })
+
+  // …and a stored registry that will not parse cannot break allocation: the read is a floor, not a
+  // source of truth, so a corrupt or absent payload just leaves the in-memory answer standing.
+  it('falls back to the in-memory nextId when the stored registry is unreadable', () => {
+    localStorage.setItem('cg-presets-v1', '{"state":{"presets":[')
+    expect(createPreset().id).toBe(2)
   })
 })
 

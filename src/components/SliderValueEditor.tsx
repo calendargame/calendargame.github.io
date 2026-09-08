@@ -99,8 +99,8 @@ export default function SliderValueEditor({
   // Focus the input the moment it mounts, so the tap that opened the editor also puts the keyboard
   // in it.
   // ⚠ IT USED TO select() ON THE NEXT LINE, and that line is GONE rather than moved: round 18 made
-  // "entering a box highlights everything in it" an app-wide rule for all six typing surfaces
-  // (lib/textEntry, installed once by App), and this focus() trips it like any other. Two
+  // "entering a box highlights everything in it" an app-wide rule for every typing surface in the
+  // app (lib/textEntry, installed once by App), and this focus() trips it like any other. Two
   // statements of one policy is the duplication that lets them drift, and the app-wide one is the
   // one that is also right on a phone — it re-selects on the click that completes a tap, which a
   // bare select() here never did.

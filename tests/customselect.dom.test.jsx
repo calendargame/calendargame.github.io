@@ -29,7 +29,7 @@ function openWith(value = 'b') {
   root.id = 'root'
   document.body.appendChild(root)
   render(<CustomSelect value={value} onChange={() => {}} options={OPTIONS} ariaLabel="Test" />)
-  const trigger = screen.getByRole('button', { name: 'Test' })
+  const trigger = screen.getByRole('button', { name: /^Test,/ })
   fireEvent.click(trigger) // open the popover
   return trigger
 }
@@ -82,7 +82,7 @@ describe('CustomSelect — active-cursor highlight', () => {
     root.id = 'root'
     document.body.appendChild(root)
     render(<CustomSelect value="b" onChange={() => {}} options={OPTIONS} ariaLabel="Test" />)
-    const trigger = screen.getByRole('button', { name: 'Test' })
+    const trigger = screen.getByRole('button', { name: /^Test,/ })
     for (const key of ['Enter', ' ', 'ArrowDown', 'ArrowUp']) {
       fireEvent.keyDown(trigger, { key })
       expect(screen.queryAllByRole('option').length).toBe(0) // stays closed — no keyboard open from the trigger
@@ -99,6 +99,39 @@ describe('CustomSelect — active-cursor highlight', () => {
     expect(hasBox(gamma)).toBe(false) // touch → no box (mobile stays clean)
     fireEvent.pointerEnter(gamma, { pointerType: 'mouse' })
     expect(hasBox(gamma)).toBe(true) // mouse → box (desktop hover)
+  })
+})
+
+// ── The trigger's ACCESSIBLE NAME ────────────────────────────────────────────────────────────
+//
+// It is the label PLUS the selected option, and it has to be composed rather than declared: an
+// `aria-label` REPLACES an element's content, so the trigger used to announce its setting and
+// swallow its value — "Mode" without "Classic", "Preset" without the preset. Both live call sites
+// are pinned end-to-end in tests/topBar.dom; these two cases are the component's own contract,
+// including the branch neither call site exercises (no ariaLabel at all).
+describe('CustomSelect — the trigger names its setting AND its value', () => {
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const mountBare = (props) => {
+    const root = document.createElement('div')
+    root.id = 'root'
+    document.body.appendChild(root)
+    render(<CustomSelect value="b" onChange={() => {}} options={OPTIONS} {...props} />)
+  }
+
+  it('joins the two with a comma, and leaves the unselected options out of it', () => {
+    mountBare({ ariaLabel: 'Test' })
+    expect(screen.getByRole('button', { name: 'Test, Beta' })).toBeTruthy()
+    // Alpha and Gamma are stacked in the same cell, aria-hidden; a hidden node that is not itself
+    // referenced contributes no text to a name.
+    expect(screen.queryByRole('button', { name: /Alpha|Gamma/ })).toBeNull()
+  })
+
+  it('falls back to naming itself from its content when the caller gave no label', () => {
+    mountBare({})
+    expect(screen.getByRole('button', { name: 'Beta' })).toBeTruthy()
   })
 })
 
@@ -194,7 +227,7 @@ describe('CustomSelect — the fixed portal panel (position, what closes it, --b
     render(
       <CustomSelect value="b" onChange={() => {}} options={OPTIONS} ariaLabel="Test" {...props} />,
     )
-    return screen.getByRole('button', { name: 'Test' })
+    return screen.getByRole('button', { name: /^Test,/ })
   }
   const panel = () => screen.getByRole('listbox')
 

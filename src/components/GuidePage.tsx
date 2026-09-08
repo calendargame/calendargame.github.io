@@ -1255,6 +1255,13 @@ export default function GuidePage({
             modifier (Ctrl/Cmd/Alt/Shift) is held.
           </li>
           <li>
+            The answer keys and the Game Actions above are ignored while a popup is open, too —
+            whatever is behind a popup is out of reach until you close it, so an answer or an
+            Override can't be pressed through one. The Overlays and Mode Switching keys still work:
+            a mode letter or <Kbd>H</Kbd> leaves the screen, and any popup belonging to it goes at
+            the same moment, while <Kbd>G</Kbd> opens and closes the ⚙ menu with its own popups.
+          </li>
+          <li>
             <Kbd>Tab</Kbd> is the exception — it toggles the mode selector even from inputs (use{' '}
             <Kbd>Esc</Kbd> or <Kbd>Enter</Kbd> to leave an input first if you'd rather; the next
             note says what each of those does). Tab plus any modifier (Ctrl+Tab, Ctrl+Shift+Tab,
@@ -1304,14 +1311,15 @@ export default function GuidePage({
           reader SAYS. Sources, in order: the NAME-AND-BANNER paragraph = src/main.tsx's bar markup
           — the sr-only <h1> and the <header> element that makes the bar a banner landmark, added
           when the visible wordmark was removed (that markup argues why one without the other is not
-          the fix, and tests/topBar.dom pins both); the preset control's two lines = the ariaLabel
-          and the ", amnesic" sr-only sibling in components/PresetSwitcher, plus CustomSelect's
-          open-state key handler for "the same keys do the same things"; its GAP line = the same
+          the fix, and tests/topBar.dom pins both); the bar's two lists = CustomSelect's
+          COMPOSED trigger name (the caller's label plus the selected option's own text, which is
+          what carries PresetSwitcher's ", amnesic" sr-only sibling into the bar), plus that
+          component's open-state key handler for "the same keys do the same things"; its GAP line = the same
           handler's closed branch ("NO key opens the dropdown from the trigger") together with
           main.tsx's global Tab binding, which resolves modeSelectRef and nothing else — so a
           keyboard genuinely cannot open the preset list, and that is a thing the code does not do
-          rather than a thing not yet written about; the named groups = PillGroup's role/aria-label (all six
-          pickers pass a `label`; the Theme block's name follows Use System Settings, which is why
+          rather than a thing not yet written about; the named groups = PillGroup's role/aria-label (every
+          picker passes a `label`; the Theme block's name follows Use System Settings, which is why
           the wording is "the setting you're changing" and not a fixed list); the four switches +
           both year boxes = their aria-labels in components/SettingsPanel; the gear = its computed
           aria-label in main.tsx; the dots = WeekdayAnswer's per-dot aria-label; the stats strip's
@@ -1383,9 +1391,10 @@ export default function GuidePage({
         <UL>
           <li>
             Every picker in the ⚙ menu is one named group of choices, not a row of loose buttons,
-            and it&apos;s named for the setting you&apos;re changing — Date Format, Input, Theme,
-            Leap Year Chance, Jan/Feb Chance on Leap Years, Julian Chance. Landing on an option is
-            choosing it; the keys that move within a group are under Keyboard Input above.
+            and it&apos;s named for the setting you&apos;re changing — Date Format, Input, Dot
+            Layout, Theme, Leap Year Chance, Jan/Feb Chance on Leap Years, Julian Chance. Landing on
+            an option is choosing it; the keys that move within a group are under Keyboard Input
+            above.
           </li>
           <li>
             The five On/Off switches carry their setting&apos;s name — Random Format, Use System
@@ -1398,9 +1407,12 @@ export default function GuidePage({
             update is waiting, whenever either is true.
           </li>
           <li>
-            The preset control names itself Preset, and every preset in its list reads its own name.
-            A preset that forgets reads its name followed by &quot;amnesic&quot;, so the small{' '}
-            <b>A</b> beside it isn&apos;t the only place that fact is said.
+            The two lists in the top bar say what they are set to, not just what they are: the
+            preset control reads &quot;Preset&quot; and then the preset you are on, and the mode
+            selector reads &quot;Mode&quot; and then the mode you are in — so a closed list still
+            tells you where you are. Every preset in the list reads its own name, and a preset that
+            forgets reads its name followed by &quot;amnesic&quot;, in the list and in the bar
+            alike, so the small <b>A</b> beside it isn&apos;t the only place that fact is said.
           </li>
           <li>
             Inside <b>Manage Presets</b>, each row&apos;s name box is called Preset name — the name
@@ -1494,10 +1506,12 @@ export default function GuidePage({
             their own (the copies inside Save Defaults do).
           </li>
           <li>
-            Two kinds of greying out, not one. The three buttons at the foot of the ⚙ menu, and Show
-            Codes, are marked unavailable while they&apos;re greyed. The rest of the game&apos;s
-            buttons — Reveal, Override, <b>&lt;</b> and <b>&gt;</b> — are only dimmed, so they still
-            read as ordinary buttons even when pressing one would do nothing.
+            Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: the
+            three buttons at the foot of the ⚙ menu, Show Codes, every locked picker and the Amnesic
+            switch while Save Stats is off, and — in Manage Presets — the <b>↑</b> on the first
+            preset, the <b>↓</b> on the last, and <b>✕</b> when only one preset is left. The rest of
+            the game&apos;s buttons — Reveal, Override, <b>&lt;</b> and <b>&gt;</b> — are only
+            dimmed, so they still read as ordinary buttons even when pressing one would do nothing.
           </li>
         </UL>
       </GuideSection>
@@ -1521,7 +1535,7 @@ export default function GuidePage({
           </li>
           <li>
             <b>Display</b> — how dates are shown and how you answer: Date Format (incl. Random
-            Format), Input (Buttons / Dots), and Theme.
+            Format), Input (Buttons / Dots), Dot Layout, and Theme.
           </li>
           <li>
             <b>Dates</b> — which dates get generated: Year Range, Leap Year Chance, Jan/Feb Chance
@@ -1666,7 +1680,9 @@ export default function GuidePage({
         <p>
           Sunday stays in the centre either way, and the dots keep their tap-and-slide behaviour and
           their keyboard numbers unchanged — only where each one sits on screen moves. Dot Layout is
-          locked in Deduction alongside Input, for the same reason.
+          locked whenever there are no dots to turn: in Deduction, alongside Input and for the same
+          reason, and in every mode while Input is set to Buttons. It keeps whatever you last chose
+          — and so does the logo below.
         </p>
         <p>
           <b>The logo turns with it.</b> The mark at the top left of every screen <i>is</i> this
@@ -2032,8 +2048,8 @@ export default function GuidePage({
         </p>
         <UL>
           <li>
-            <b>⚙ Settings</b> — date format, answer input (Buttons / Dots), calendar system, year
-            range, the leap / Jan-Feb / Julian chances, Save Stats, and theme.
+            <b>⚙ Settings</b> — date format, answer input (Buttons / Dots), dot layout, calendar
+            system, year range, the leap / Jan-Feb / Julian chances, Save Stats, and theme.
           </li>
           <li>
             <b>Your saved defaults</b> — the Save Defaults snapshot (next section), which even

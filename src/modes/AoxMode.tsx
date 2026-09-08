@@ -431,11 +431,26 @@ function AoxMode({
     const failNow = toWrong && !allowMistakes
     if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct }) // crediting the current wrong → green flash
     eng.override({ noAdvance: !!((reverseCompleting && failNow) || completeViaOverride) }) // any Best impact reconciles in the effect above
-    if (failNow)
+    if (failNow) {
       setRunPhase('failed') // a to-wrong override with no mistakes fails the run (bug #2 / unified rule)
-    else if (crediting && runPhase === 'failed')
-      setRunPhase('running') // crediting the wrong that failed the run resumes it (the completion effect then flips a completing one to done)
-    else if (reverseCompleting && allowMistakes) setRunPhase('running') // Allow Mistakes on: reversing the completing solve resumes the run
+    } else if ((crediting && runPhase === 'failed') || (reverseCompleting && allowMistakes)) {
+      // The two RESUME cases, and they are one branch rather than two `else if`s only so the line
+      // under them is written once: crediting the wrong that failed the run resumes it (the
+      // completion effect then flips a completing one to done), and — with Allow Mistakes on —
+      // reversing the completing solve resumes it too. Both used to call this identical setter
+      // separately; merging them changes no behaviour.
+      setRunPhase('running')
+      // ⚠ THE BREAKDOWN BELONGS TO THE RUN THAT FINISHED, and this is the one door that puts a
+      // FINISHED run back on the clock (Blitz's resumeRound is the same door in that mode, with the
+      // same line). `breakdownShown` ANDs the flag with availability, so the popup is already gone
+      // from the screen the instant the run is live again — but the FLAG would survive, and the
+      // next time this run completed the breakdown would spring open with nobody having asked for
+      // it. Belt and braces: the only route into this state with the popup up was App's keyboard
+      // handler walking the DOM for [data-key="O"] and finding Override through the scrim, which
+      // the same change closed (src/main.tsx, the modal gate on its Category 1 and 2). This line is
+      // what makes it not matter.
+      setBreakdownOpen(false)
+    }
   }
   const reset = () => {
     cancelRevealAdvance()

@@ -80,6 +80,12 @@ export const prefsMatchDefaults = (live: PrefDefaults, def: PrefDefaults): boole
   live.blitzQSec === def.blitzQSec &&
   normalizeAoxN(live.aoxN) === normalizeAoxN(def.aoxN)
 
+// This store's launch value, as a FACTORY — the one the `merge` below composes and the one
+// store/presetControl reloads a memory-only browser to. Named rather than written inline at both
+// so "no saved copy means no personal defaults" has a single home; a second literal is exactly how
+// a preset switch and a cold start would come to disagree about what a fresh preset holds.
+export const makeUserDefaultsDefaults = (): Pick<UserDefaultsState, 'saved'> => ({ saved: null })
+
 export const useUserDefaults = create<UserDefaultsState>()(
   persist(
     (set) => ({
@@ -104,7 +110,7 @@ export const useUserDefaults = create<UserDefaultsState>()(
       // four: without it, opening a preset that has never saved defaults would leave the LAST
       // preset's snapshot standing, and a Full Reset inside the new preset would restore another
       // preset's settings. See mergeOverDefaults.
-      merge: mergeOverDefaults(() => ({ saved: null })),
+      merge: mergeOverDefaults(makeUserDefaultsDefaults),
     },
   ),
 )

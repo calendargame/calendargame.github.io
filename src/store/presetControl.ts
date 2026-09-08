@@ -3,15 +3,16 @@ import {
   presetKey,
   normalizePresetName,
   defaultPresetName,
+  readStoredRegistry,
   PRESET_STORE_KEYS,
   FIRST_PRESET_ID,
 } from './presets.js'
 import type { Preset } from './presets.js'
 import { isAmnesic, discardSessionStats } from './amnesic.js'
-import { useSettings } from './settings.js'
-import { useModePrefs } from './modePrefs.js'
-import { useProgress } from './progress.js'
-import { useUserDefaults } from './userDefaults.js'
+import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
+import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
+import { useProgress, makeProgressDefaults } from './progress.js'
+import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 
 // store/presetControl.ts — the six things you can DO to the set of presets, and the only place
 // allowed to do them.
@@ -36,25 +37,61 @@ import { useUserDefaults } from './userDefaults.js'
 // ⚠ THIS FILE IS THE PROGRAMMATIC API THE UI GROUP DRIVES. There is deliberately no UI, no top bar
 // and no settings-panel wiring here — `switchPreset(id)` is the whole call a CustomSelect needs.
 
+// ⚠⚠ THE TWO WAYS A STORE CAN BE POINTED AT A NEW PRESET, and BOTH are needed — see
+// reloadPresetStores below, where the second one's absence was a silent isolation failure. A store
+// that has storage REHYDRATES; a store that has none is set to the factory values a hydration from
+// an absent payload would have produced. The defaults are the SAME factories each store hands its
+// own `merge`, imported rather than re-typed, so the two answers to "what does a preset with no
+// saved copy hold" cannot drift apart.
+type PresetStore<T> = {
+  // Optional BY NECESSITY rather than by taste: zustand's type says `persist` is always there, and
+  // in a browser that refuses localStorage it is genuinely undefined (argued below).
+  persist?: { rehydrate: () => void | Promise<void> }
+  setState: (partial: Partial<T>) => void
+}
+const reloader =
+  <T>(store: PresetStore<T>, makeDefaults: () => Partial<T>) =>
+  () => {
+    if (store.persist) store.persist.rehydrate()
+    else store.setState(makeDefaults())
+  }
+
 // ★ ORDERED, AND THE ORDER IS A REQUIREMENT, NOT A LIST. store/progress' `migrate` reads
 // `useSettings.getState().julianChance` to complete a pre-v2 AoX best's key. So settings must
 // rehydrate BEFORE progress, or a preset whose saved progress is old enough to need that migration
 // would be re-keyed under the preset you just LEFT — a best that then belongs to no configuration
 // the player can reach. `Object.values(...)` over a record would have gotten this right by luck
 // and lost it the first time someone reordered the record.
-const PER_PRESET_STORES = [useSettings, useModePrefs, useProgress, useUserDefaults]
+const PER_PRESET_STORES = [
+  reloader(useSettings, () => ({ ...SETTINGS_DEFAULTS })),
+  reloader(useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
+  reloader(useProgress, makeProgressDefaults),
+  reloader(useUserDefaults, makeUserDefaultsDefaults),
+]
 
 // Reload all four from the active preset's keys, in one synchronous turn.
 //
-// ⚠ `persist?.` IS NOT DEFENSIVE NOISE. Zustand attaches `api.persist` only when a storage exists;
-// in a browser that refuses localStorage the middleware returns before that assignment, so
-// `store.persist` is genuinely undefined and an unguarded call would throw. In that browser there
-// is nothing to reload anyway — every store is memory-only for the session.
+// ⚠⚠ THE NO-STORAGE BRANCH IS NOT DEFENSIVE NOISE, AND IT MUST NOT GO BACK TO BEING A SKIP.
+// Zustand attaches `api.persist` only when a storage EXISTS; in a browser that refuses localStorage
+// (iOS's "Block All Cookies", or any private mode that throws on the property access) the
+// middleware returns before that assignment, so `store.persist` is genuinely undefined for all four
+// stores at once. The first version of this line was `store.persist?.rehydrate()` and reasoned that
+// "there is nothing to reload anyway". That was wrong, and the failure it left was not a crash but
+// a LIE: the registry write still fires the screen remount, so the app opened "preset 2" wearing
+// preset 1's score and preset 1's theme, and then accumulated every answer of the session onto
+// preset 1's numbers — in both directions, all session, presenting one preset's data as another's.
+// Nothing reaches disk in that browser, so nothing is permanently lost; what is broken is the one
+// promise a preset makes.
+// ★ SO A STORE WITH NO STORAGE IS RESET TO ITS FACTORY VALUES, which is not an approximation of a
+// rehydrate — it is exactly what one does here. store/presets' mergeOverDefaults turns "no saved
+// copy" into the factory values, and a memory-only browser has no saved copy for ANY preset, this
+// one included. (`setState` with a partial merges, so each store keeps its own actions.)
 // ⚠ Rehydration writes NOTHING. Zustand's hydrate() lands the loaded state through the RAW `set`,
 // not the persist-wrapped one, so reloading a preset that has never been saved does not create its
-// keys, and reloading one that has does not rewrite them.
+// keys, and reloading one that has does not rewrite them. The defaults branch writes nothing
+// either — there is no storage for it to write to.
 const reloadPresetStores = () => {
-  for (const store of PER_PRESET_STORES) store.persist?.rehydrate()
+  for (const reload of PER_PRESET_STORES) reload()
 }
 
 // Remove one preset's saved copy — its four keys and nothing else. Derived from the key record
@@ -107,14 +144,28 @@ export function createPreset(name?: string): Preset {
   // ★ IDS ARE ALLOCATED FORWARD AND NEVER REUSED (store/presets' normalizeRegistry forces nextId
   // above every listed id, whatever the payload claimed). That is what lets `presetKey` be a pure
   // function of the id: a namespace, once vacated, is never handed to a different preset.
-  // ⚠ THE SKIP LOOP IS FOR MULTI-TAB, and it is reachable. Two tabs on this origin each hold their
-  // own copy of the registry; if the other tab created preset 2 after this tab last read the
-  // registry, this tab would allocate 2 as well and the two presets would SHARE a namespace —
-  // merging two players' data, which is worse than any amount of registry divergence. Skipping ids
-  // whose keys already exist cannot fix the divergence (the lists still differ until a reload) but
-  // it does make the data-merging outcome impossible. It doubles as the recovery from a delete that
-  // was interrupted with keys still on disk.
-  let id = Math.max(reg.nextId, FIRST_PRESET_ID + 1)
+  // ⚠⚠ MULTI-TAB IS REACHABLE HERE, AND FOR THIS OWNER IT IS ROUTINE: the LIVE PWA and the STAGING
+  // site are the same browser origin, so two tabs really do hold two copies of this registry. If
+  // the other tab created a preset after this tab last hydrated, an allocation from the in-memory
+  // `nextId` alone hands out an id that tab already used, and the two presets SHARE a namespace —
+  // two players' data merged, which is worse than any amount of registry divergence.
+  // ★ SO THE FLOOR IS THE STORED REGISTRY, NOT THE ONE IN MEMORY. The other tab's `applyRegistry`
+  // wrote its `nextId` to disk synchronously, so re-reading the key here sees an id it allocated
+  // even for a preset NOBODY HAS OPENED YET — which is the window the skip loop below cannot see
+  // into, because a preset's four per-preset keys do not exist until it is first opened, and that
+  // is precisely when a just-created preset is most likely to be raced.
+  //   The residual window is one synchronous turn (this read, then the write below) instead of the
+  //   whole life of the tab. Closing that last sliver would take a lock this platform does not
+  //   offer for localStorage; nothing here can be made to wait.
+  //   ⚠ IT DOES NOT FIX THE DIVERGENCE, and cannot: this tab still writes back ITS list, so the
+  //   other tab's new preset is dropped from the registry until one of them reloads. That is a
+  //   listing disagreement between two tabs of the same app, and it heals on any reload; a merged
+  //   namespace never heals.
+  // ⚠ THE SKIP LOOP STAYS, for the case the stored registry cannot answer either: keys left on disk
+  // by a delete that was interrupted between the registry write and the removal. It is also the
+  // second net under the sliver above.
+  const stored = readStoredRegistry()
+  let id = Math.max(reg.nextId, stored?.nextId ?? 0, FIRST_PRESET_ID + 1)
   while (presetStorageInUse(id)) id++
   // A new preset is PERMANENT until somebody says otherwise. Inheriting the current preset's
   // amnesic flag was rejected on sight: creating a preset is not a decision about where its stats

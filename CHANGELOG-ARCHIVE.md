@@ -14,6 +14,16 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 
 ## Retired entries
 
+### 2026-07-19
+
+- Added this changelog: after an update, a small light-blue dot appears on the gear button, and then on the Changelog link inside, until you have taken a look.
+- The brief updating screen now also appears when a new version arrived quietly between visits, so an update never slips by unannounced.
+- Typing a timer value no longer stretches its box while you edit.
+- Guide panels open and close at one smooth, even pace, whatever their length.
+- View saved defaults is always available, shows the launch values until you save your own, and now lets you edit and save right from the popup; clearing saved defaults asks for confirmation first.
+- Reset Settings now restores everything your saved defaults cover, including the four mode-screen values.
+- Blitz and AoX can hide their time stats; timing quietly carries on, so nothing is lost when you show them again.
+
 ### 2026-07-17
 
 - Blitz Per Question gains an Allow Mistakes option, with its own best score and best streak.
