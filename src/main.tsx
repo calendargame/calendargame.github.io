@@ -17,6 +17,7 @@ import { initObservability, captureError } from './observability/sentry'
 // itself, so the shim had nothing left to reconstruct.
 import { createRoot } from 'react-dom/client'
 import { fmt } from './lib/format.js'
+import { dotOrientationFor } from './lib/dotLayout.js'
 import { randomDate } from './lib/dateGen.js'
 import { makeDedPuzzle } from './lib/dedPuzzle.js'
 import { UpdateDot } from './components/UpdateDot.jsx'
@@ -37,11 +38,13 @@ import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogSignature, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
 import { usePresets } from './store/presets.js'
 import { activeDataId, selectAmnesic, discardParkedStats } from './store/amnesic.js'
+import { setPresetAmnesic } from './store/presetControl.js'
 import { useSettings } from './store/settings.js'
 import { useModePrefs } from './store/modePrefs.js'
-import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, prefsMatchDefaults } from './store/userDefaults.js'
-import { useProgress, addLookupEntry } from './store/progress.js'
-import type { LookupEntry } from './store/progress.js'
+import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
+import { useProgress } from './store/progress.js'
+import { useLookupHistory, useLookupSession, addLookupEntry, moveEntryToTop, mergeForDisplay } from './store/lookupHistory.js'
+import type { LookupEntry } from './store/lookupHistory.js'
 import { reportWebVitals } from './dev/webVitals.js'
 import type { FormatId } from './lib/format.js'
 import type { CodeDate } from './components/MethodBreakdown.jsx'
@@ -67,9 +70,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // types are inferred from those components, so the contract is enforced without this file
     // importing it. Consumed by src/modes/* and the engine.
     // AoxBest / BlitzBest / SuddenBest moved to store/progress.ts (the persisted store owns them).
-    // NOT imported here either — of that module App takes useProgress, addLookupEntry and the
-    // LookupEntry type ALONE. The three best types are read by AoxMode, BlitzMode,
-    // components/BlitzBestRow and src/engine/{aoxBest,blitzBest}.
+    // NOT imported here either — of that module App takes useProgress ALONE now. The three best
+    // types are read by AoxMode, BlitzMode, components/BlitzBestRow and src/engine/{aoxBest,blitzBest}.
+    // LookupEntry / addLookupEntry / moveEntryToTop / mergeForDisplay, and the two stores that split
+    // Lookup's history into a permanent shared list and a session-only amnesic overflow, moved OUT of
+    // store/progress entirely (Q1, round 20) to store/lookupHistory.ts — see that file's header for
+    // why Lookup's history stopped being preset data. App takes useLookupHistory, useLookupSession,
+    // addLookupEntry, moveEntryToTop and mergeForDisplay from it; nothing else reaches that module.
 
     // ─────────────────────────────────────────────────────────────────────────
     // Date snapshot fields. Every generated date object carries these stamps
@@ -93,9 +100,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // DOT_CELLS — the logo's 7-position layout for the Dots input, in both orientations →
     // src/lib/dotLayout.ts. NOT imported here: App renders no answer input. Its readers are
     // components/WeekdayAnswer (the Dots grid itself) and components/GuidePage's DotDiagram, which
-    // derives its diagram from the same data. What App DOES hold is the dotOrientation SETTING, and
-    // it hands that to the four weekday modes and to the top bar's mark (W5Logo, whose sibling
-    // DOT_MARK_ROTATION is likewise not imported here — the component applies it).
+    // derives its diagram from the same data. What App DOES hold is the rotateDots SETTING (the
+    // boolean; the geometry's own two-valued DotOrientation lives only in lib/dotLayout), and
+    // `dotOrientationFor` — the ONE place that boolean is turned back into DotOrientation — IS
+    // imported here, because the top bar's mark needs a SECOND, stricter derivation the four weekday
+    // modes don't: the mark only turns while inputStyle is 'dots' (Q3, round 20 — see the W5Logo
+    // call site for why). DOT_MARK_ROTATION itself stays unimported; W5Logo applies it.
     // WeekdayAnswer -> src/components/WeekdayAnswer.tsx. NOT imported here: all five mode screens
     // render their own, and App renders none.
     // MONTH / DAY name tables → src/lib/format.js. NOT imported here — see the format entry below for
@@ -425,7 +435,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const dateFormat=useSettings(s=>s.dateFormat);
       const randomFormat=useSettings(s=>s.randomFormat);
       const inputStyle=useSettings(s=>s.inputStyle);
-      const dotOrientation=useSettings(s=>s.dotOrientation);
+      const rotateDots=useSettings(s=>s.rotateDots);
+      // The raw derivation — passed to the four weekday mode screens (and, through them, to
+      // WeekdayAnswer), which only ever consult it while inputStyle is already 'dots' (they render
+      // no other branch that reads it), so no additional gate belongs here. The top bar's mark needs
+      // a STRICTER one — see its own call site below — and computes that separately rather than
+      // reusing this name for two different meanings.
+      const dotOrientation=dotOrientationFor(rotateDots);
       const leapChance=useSettings(s=>s.leapChance);
       const janFebChance=useSettings(s=>s.janFebChance);
       const julianChance=useSettings(s=>s.julianChance);
@@ -484,11 +500,19 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // App-side useRefs, exactly like settingsPopoverRef: the panel attaches them, the hook's two
       // focus guards read them, and nothing else touches them.
       const minInputRef=useRef<HTMLInputElement | null>(null),maxInputRef=useRef<HTMLInputElement | null>(null);
-      // Lookup history persists across reloads (Stage D1): sourced from the progress store
-      // instead of local useState. The store setter accepts a direct value OR a functional
-      // updater, so the push/move/clear handlers below stay unchanged.
-      const lookupHistory=useProgress(s=>s.lookupHistory);
-      const setLookupHistory=useProgress(s=>s.setLookupHistory);
+      // Lookup history persists across reloads (Stage D1), and since Q1 (round 20) is SHARED across
+      // every preset instead of living inside the progress store: sourced from store/lookupHistory's
+      // two stores instead of local useState. lookupHistory is the PERMANENT shared list;
+      // sessionLookupEntries is this browsing session's overflow for lookups made while the ACTIVE
+      // preset was amnesic at the moment they were added (never written to the permanent list — see
+      // pushLookupHistory below) — displayLookupHistory (declared further down, once fmtDate/dateFormat
+      // are in scope) is the two merged for LookupCard to render. Both setters accept a direct value
+      // OR a functional updater, so the push/move/clear handlers below read exactly like they did
+      // when there was one list.
+      const lookupHistory=useLookupHistory(s=>s.history);
+      const setLookupHistory=useLookupHistory(s=>s.setHistory);
+      const sessionLookupEntries=useLookupSession(s=>s.sessionEntries);
+      const setSessionLookupEntries=useLookupSession(s=>s.setSessionEntries);
       const resetProgress=useProgress(s=>s.resetProgress);   // Full Reset wipes saved progress too (Stage D1)
       const resetModePrefs=useModePrefs(s=>s.resetModePrefs);   // Full Reset restores the per-mode setup too
       const [lookupInput,setLookupInput]=useState("");
@@ -1306,10 +1330,34 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // than up beside the store bindings so those two effects keep the exact ordinal position in
       // App's effect order that they had when they were written out on these lines.
       const yearRange=useYearRangeMirrors(minY,maxY,setMinY,setMaxY,minInputRef,maxInputRef);
-      // Newest to the front, capped — the rule and its number live in store/progress (addLookupEntry).
-      const pushLookupHistory=(entry: LookupEntry)=>setLookupHistory(prev=>addLookupEntry(prev,entry));
-      const moveHistoryEntryToTop=(id: string)=>setLookupHistory(prev=>{const idx=prev.findIndex(e=>e.id===id);if(idx<=0)return prev;const entry=prev[idx];return[entry,...prev.slice(0,idx),...prev.slice(idx+1)];});
-      const clearLookupHistory=()=>setLookupHistory([]);
+      // Newest to the front, capped — the rule and its number live in store/lookupHistory (addLookupEntry).
+      // ⚠ WHICH LIST an entry joins is decided HERE, once, at the moment it is added — the identical
+      // shape as fullReset's own `selectAmnesic(usePresets.getState())` check below. While the ACTIVE
+      // preset is amnesic the entry goes into the SESSION overflow instead of the permanent list, so
+      // it can never reach permanent storage; it still shows on screen for the rest of this browsing
+      // session via displayLookupHistory (below), and it can never be promoted into the permanent list
+      // later — turning Amnesic off does not reach back and adopt it, the same "no merge on toggle-
+      // off" rule store/amnesic states for stats. See store/lookupHistory's header for the full
+      // argument for why this is a separate mechanism from Amnesic's own per-preset session stats.
+      const pushLookupHistory=(entry: LookupEntry)=>{
+        if(selectAmnesic(usePresets.getState()))setSessionLookupEntries(prev=>addLookupEntry(prev,entry));
+        else setLookupHistory(prev=>addLookupEntry(prev,entry));
+      };
+      // Re-asking a question you already have moves it to the front of WHICHEVER list it lives in —
+      // the session overflow if it was added while amnesic, the permanent list otherwise. It can
+      // never jump lists: a session entry re-asked while still amnesic stays a session entry.
+      const moveHistoryEntryToTop=(id: string)=>{
+        if(sessionLookupEntries.some(e=>e.id===id))setSessionLookupEntries(prev=>moveEntryToTop(prev,id));
+        else setLookupHistory(prev=>moveEntryToTop(prev,id));
+      };
+      // Clear History is a direct, manual, whole-list request from whoever is looking at the screen
+      // right now — it wipes everything CURRENTLY ON SCREEN, both buckets. Full Reset reaches for
+      // this SAME function (see fullReset below) rather than duplicating the two-bucket clear.
+      const clearLookupHistory=()=>{setLookupHistory([]);setSessionLookupEntries([]);};
+      // What LookupCard actually renders — the permanent list with this session's amnesic overflow
+      // merged in front of it (store/lookupHistory's mergeForDisplay; see pushLookupHistory above for
+      // why a session entry never reaches `lookupHistory` itself).
+      const displayLookupHistory=mergeForDisplay(lookupHistory,sessionLookupEntries);
       // Date format / randomFormat / leapChance / janFebChance / julianChance now from the
       // settings store (bound at top of App). Semantics unchanged:
       //   dateFormat: 'written-mdy'|'written-dmy'|'numeric-mdy'|'numeric-dmy'|'numeric-ymd'.
@@ -1382,9 +1430,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ★★ THROW AWAY EVERYTHING THE SIX ALWAYS-MOUNTED SCREENS ARE HOLDING. Bumping the six keys
       // above remounts them, so every useState/useRef in each one runs its initializer again and
       // re-reads the stores as they are NOW. The two App-owned transients that belong to those
-      // screens rather than to App go with them: Lookup's five (its history lives in store/progress,
-      // so lookupSelectedHistoryId names an entry in whatever the store held a moment ago) and the
-      // guide's saved reading offset (captured against a panel that is about to be closed).
+      // screens rather than to App go with them: Lookup's five (its history lives in
+      // store/lookupHistory, so lookupSelectedHistoryId names an entry in whatever the store held a
+      // moment ago) and the guide's saved reading offset (captured against a panel that is about to
+      // be closed).
       // ⚠ TWO CALLERS, AND THAT IS THE WHOLE POINT OF EXTRACTING IT. Full Reset has always done
       // this; a PRESET SWITCH is structurally a second Full Reset and must do exactly the same
       // discard, or the outgoing preset's run keeps playing on the incoming preset's data — the
@@ -1554,6 +1603,24 @@ import BlitzMode from './modes/BlitzMode.jsx'
         applySettingsStore(defSettings);
         yearRange.resetTo(defSettings.minY,defSettings.maxY);
         applyModePrefs(defPrefs);
+        // …and (round-20 Q4, owner's explicit, confirmed decision) the SAVED AMNESIC STATE, onto the
+        // ACTIVE preset. setPresetAmnesic no-ops when the flag already matches; when it actually flips
+        // it reloads all four per-preset stores (store/presetControl's reloadPresetStores), which is a
+        // documented genuine no-op for the two of those four this function just wrote — useSettings
+        // (applySettingsStore) and useModePrefs (applyModePrefs); it never touches useProgress or
+        // useUserDefaults. Both writes persist SYNCHRONOUSLY on every set, so storage already holds
+        // today's applySettingsStore/applyModePrefs values by the time that reload reads them back
+        // (useProgress/useUserDefaults are simply untouched by this function, so their reload is a
+        // no-op for the ordinary reason — nothing here changed them — not because of that guarantee).
+        // ⚠ resetSettings is ALSO fullReset's delegate for the
+        // ENTIRE settings restore (see the note above pressResetSettings), so this line means Full
+        // Reset restores the saved Amnesic state too — not just the footer's own Reset Settings button.
+        // That reading is deliberate, not incidental: it keeps this function's "total, unconditional
+        // contract" intact rather than special-casing Amnesic out of Full Reset's path, and it cannot
+        // resurrect anything either way — fullReset's own discardParkedStats call below re-reads
+        // selectAmnesic AFTER this line runs, so it already accounts for whichever state this leaves
+        // the preset in.
+        setPresetAmnesic(usePresets.getState().activeId,effectiveAmnesicDefault(savedDefaults));
       };
       // ★ THE FOOTER BUTTON'S HANDLER, and the round-14 dimmed-button guard lives HERE rather than
       // inside resetSettings ON PURPOSE. resetSettings is also fullReset's delegate for the ENTIRE
@@ -1610,10 +1677,21 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // footer button (pressResetSettings) and not in here, or a Full Reset stops restoring the
         // very values "modified" is blind to. See the note above pressResetSettings.
         resetSettings();
-        // Saved gameplay progress → wiped (Stage D1): clears lifetime stats + all-time bests + Lookup
-        // history in the persisted store, making Full Reset permanent. Runs BEFORE the remount-key bumps
-        // below, so the continuous modes re-hydrate from the now-empty store (blank stats).
+        // Saved gameplay progress → wiped (Stage D1): clears lifetime stats + all-time bests in the
+        // persisted store, making Full Reset permanent. Runs BEFORE the remount-key bumps below, so
+        // the continuous modes re-hydrate from the now-empty store (blank stats).
         resetProgress();
+        // ⚠ LOOKUP HISTORY LEFT THE PROGRESS STORE (Q1, round 20) BUT NOT FULL RESET'S REACH — the
+        // owner's explicit call, and it is the ONE thing in this function that is not scoped to the
+        // preset you pressed the button from. Every other line here is "wipe THIS preset's copy of
+        // something"; Lookup history has exactly one copy, shared by every preset, so wiping it from
+        // ANY preset wipes the only one there is. clearLookupHistory() (declared above, alongside
+        // pushLookupHistory) already clears BOTH buckets — the permanent list and this session's
+        // amnesic overflow — which is exactly right here too: a guest's session-only lookups should
+        // not survive a Full Reset either, and a second, narrower clear would just be this one
+        // rewritten. Runs here rather than folding into clearLookupHistory's own definition, because
+        // this IS Full Reset choosing to reach for it, not a property of the function itself.
+        clearLookupHistory();
         // ⚠ AND, IN AN AMNESIC PRESET, THE PARKED COPY TOO. resetProgress() writes through the
         // progress store, which while amnesic points at the SESSION copy — so on its own it would
         // leave the permanent stats sitting untouched behind the session, and turning Amnesic off
@@ -1634,11 +1712,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // when nothing is saved (defPrefs = the factory values).
         applyModePrefs(defPrefs);
         // Remount all six always-mounted screens → their internal state resets to launch defaults,
-        // and the transients that belong to them go too (Lookup's five — its history itself was
-        // cleared by resetProgress above — and the guide's saved reading offset, which switchMode
-        // at the top of this function already captured on the way out of the guide, so this clears
-        // it AFTER the capture rather than instead of it). ★ THE SAME CALL A PRESET SWITCH MAKES;
-        // see remountScreens, which is shared precisely so the two can never drift apart.
+        // and the transients that belong to them go too (Lookup's five UI fields — its saved HISTORY
+        // is untouched, on purpose, same as resetProgress above — and the guide's saved reading
+        // offset, which switchMode at the top of this function already captured on the way out of
+        // the guide, so this clears it AFTER the capture rather than instead of it). ★ THE SAME CALL
+        // A PRESET SWITCH MAKES; see remountScreens, which is shared precisely so the two can never
+        // drift apart.
         // How to Play is in the six for its ONE piece of state, the open panel: it used to be
         // conditionally rendered, so leaving it dropped that for free — now that it stays mounted
         // (Q6, round 9), a reset that left a panel hanging open would not be the launch state.
@@ -1695,7 +1774,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // both offered, permanently. Comparing only the live pair is both the honest definition and
       // the fix, and it retires the whole class of dormant-value false positives.
       const themeAtDefaults=useSystem?(darkTheme===defSettings.darkTheme&&lightTheme===defSettings.lightTheme):(manualTheme===defSettings.manualTheme);
-      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&dotOrientation===defSettings.dotOrientation&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
+      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&rotateDots===defSettings.rotateDots&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
       // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator (Q8), the Save
       // Defaults dim AND the Reset Settings dim. True when live state diverges from the effective
       // defaults in EITHER store — any menu setting, either year BOX, or any of the four capturable
@@ -1707,12 +1786,20 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // Every per-mode piece of state now lives in the always-mounted mode components, which
       // each report a comprehensive freshness flag (config + stats + history + UI toggles) up
       // via onFreshChange. So isFullyReset = the launch mode (classic) + the ⚙ panel at its
-      // effective defaults + the Lookup state (which lives here in App) + all five freshness flags.
+      // effective defaults + the Lookup UI state (which lives here in App) + all five freshness flags.
       // It reads settingsAtDefaults, NOT settingsModified: the four capturable mode prefs reach
       // it through the freshness flags instead, which also cover the thirteen non-capturable ones.
       // Sharing that one term is what puts Full Reset on the SAME reading of a half-typed year as
       // the other three offers (round 15, the owner's call — see the note above it).
-      const isFullyReset=mode==='classic'&&settingsAtDefaults&&lookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&aoxIsFresh&&classicIsFresh&&flashIsFresh&&blitzIsFresh&&deductionIsFresh;
+      // ⚠ LOOKUP HISTORY IS STILL A TERM HERE (Q1, round 20; the owner's explicit call, overriding an
+      // earlier "Full Reset no longer touches it" draft this comment used to describe). Full Reset
+      // still clears it — see fullReset above, which now calls clearLookupHistory() — so it still
+      // belongs in "would pressing the button right now do anything". `displayLookupHistory` is used
+      // rather than `lookupHistory` alone because it already merges in this session's amnesic
+      // overflow (store/lookupHistory's mergeForDisplay), and Full Reset clears BOTH buckets in one
+      // call — checking only the permanent list would leave the button lit while an amnesic session's
+      // entries sat on screen with nothing left for the press to actually remove.
+      const isFullyReset=mode==='classic'&&settingsAtDefaults&&displayLookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&aoxIsFresh&&classicIsFresh&&flashIsFresh&&blitzIsFresh&&deductionIsFresh;
       // The "disarm if state flips to fully-reset while armed" safety net went into the panel with
       // the rest of the two-tap machine. It used to have to sit exactly HERE, after the declaration
       // above, because its dependency array read isFullyReset and an earlier position was a real
@@ -1742,34 +1829,47 @@ import BlitzMode from './modes/BlitzMode.jsx'
             the screen edge against a 15.59px gutter on the left. That asymmetry WAS the visible
             symptom, and it is why "just add a fourth control" was never an option.
 
-            WHAT THIS ROW COSTS NOW (four controls, no wordmark) — 306.11px of 328.81px, so 22.70px
-            of SLACK, scrollWidth == clientWidth:
-                logo 24.00 + gap 5.84 + preset 117.03            = 146.88
-                slack (justify-between puts it HERE, between the two groups)
-                mode 107.30 + gap 5.84 + ⚙ 40.25                 = 153.39
-            The ⚙'s right edge lands at 344.41 — 15.59px from the screen edge, matching the left
-            gutter to the pixel, which is the same fact as "it fits" stated so a human can see it.
+            WHAT THIS ROW COSTS NOW (Q6, round 20) — THERE IS NO SLACK LEFT TO MEASURE, BY
+            CONSTRUCTION, and that is the invariant that replaced "22.70px of slack sits in the
+            gap between two groups": the row is ONE flat flex container, three controls are
+            `shrink-0` (fixed, content-sized) and the FOURTH — the preset switcher — is
+            `flex-1 min-w-0`, so it consumes whatever the other three and their gaps do not, always,
+            with nothing left over for `justify-between` to distribute any more (that utility is
+            gone from the row for exactly this reason). scrollWidth == clientWidth at every width
+            below, which is now a STRUCTURAL fact rather than a coincidence of an arithmetic sum
+            landing under the ceiling — a flex-1 min-w-0 child cannot overflow its container by
+            growing; it can only be squeezed toward its own MINIMUM (PRESET_NAME_COL,
+            components/PresetSwitcher) if the other three ever grew too large to fit alongside it.
+            FIXED (what the other three + three gaps cost, measured 360×800, root 15.6px):
+                logo 24.00 + gap 5.84 + mode 107.30 + gap 5.84 + ⚙ 40.25 + gap 5.84  = 189.08
+            FLOATS: the preset switcher gets whatever is left of the row's own content box —
+            328.81 − 189.08 = 139.73px at 360×800 (up from the OLD fixed 117.03px it shipped Q4-5
+            with; the reclaimed slack is exactly where it went). The ⚙'s right edge still lands at
+            344.41 — 15.59px from the screen edge, matching the left gutter to the pixel, which is
+            the same fact as "it fits" stated so a human can see it.
 
-            THE THREE THINGS THAT PAID FOR IT, in order of how much they gave:
-              1. the wordmark, −135.05px (the owner's call, and the a11y cost of it is handled at
-                 the <h1> below — that note is not optional reading);
-              2. the mode selector's pr-9 → pr-6, −11.70px (the chevron is `absolute right-2` and
-                 ~7px wide, so pr-9 was reserving ~20px of clearance for a glyph that needs ~8);
-              3. gap-2 → gap-1.5 on all three gaps, −5.85px.
-            Spent: the preset switcher, +117.03px (components/PresetSwitcher's PRESET_NAME_COL is
-            the constant that fixes that width, and MAX_PRESET_NAME is pinned to it).
+            THE THREE THINGS THAT PAID FOR THE FOURTH CONTROL IN THE FIRST PLACE (Q4-5, unchanged
+            by Q6 — the fixed sum above is the same 189.08 either way, just regrouped): the
+            wordmark's removal (−135.05px, the owner's call — the a11y cost is handled at the <h1>
+            below), the mode selector's pr-9 → pr-6 (−11.70px), and gap-2 → gap-1.5 on all three
+            gaps (−5.85px). Q6 spent nothing further and freed nothing further — it only changed
+            WHO gets to spend whatever is left over turn by turn, from "nobody, it sits as a gap"
+            to "the preset switcher, unconditionally".
 
-            ⚠ THE BUDGET IS STATED AT 360×800, BUT IT IS NOT THE WORST CASE — the root font grows
-            with viewport height, so a 360-wide phone that is TALLER is tighter, not roomier. The
-            ceiling for any 360-wide device is 16.64px (the `0.95rem + 0.4vw` term caps there and
-            `1.95vh` overtakes it at ~853px of height), and at 360×900 the same row measures 324.51
-            of 326.75 — 2.24px of slack, still no overflow. So the fit holds for EVERY 360-wide
-            viewport at any height, with the thinnest margin at the tall end. Cut 2 or 3 above and
-            that margin goes negative again; tests/topBar.dom guards both as class reads, which is
-            the most a jsdom suite can do about a number no jsdom suite can compute.
+            ⚠ THE FIXED SUM ABOVE IS THE THING TO WATCH NOW, not a slack number — the switcher's
+            own MINIMUM (PRESET_NAME_COL) is what actually stops fitting first if the fixed sum
+            ever grows. At 360×900 (root font 16.64px, the ceiling for any 360-wide device — the
+            `0.95rem + 0.4vw` term caps there and `1.95vh` overtakes it at ~853px of height), the
+            row's content box shrinks to 326.75 and the switcher still gets 126.95px of it —
+            comfortably clear of the 6em (≈104px at that root) floor. tests/topBar.dom guards the
+            structural half (which children carry `shrink-0` vs `flex-1 min-w-0`) as class reads,
+            which is the most a jsdom suite can do about geometry no jsdom suite can compute.
             ⚠ AND CHROMIUM IS NOT AN IPHONE. Glyph advances differ, the system UI stack differs, and
             ONLY THE OWNER'S DEVICE can confirm the real thing. What is claimed here is that the
-            arithmetic is no longer guesswork, not that the phone has agreed.
+            arithmetic is no longer guesswork, not that the phone has agreed. (All of the numbers
+            in this block, Q6's included, are a REAL headless-Chromium measurement of the dev
+            build — not the paper arithmetic components/PresetSwitcher's own history warns against
+            trusting on its own.)
 
             ⚠ --bar-h IS UNCHANGED BY ALL OF THIS, and that was checked rather than assumed: the
             resting bar measures 56.594px before and after, byte-identical, because the row's height
@@ -1833,84 +1933,117 @@ import BlitzMode from './modes/BlitzMode.jsx'
                 honest version of the claim: the heading exists, it is sr-only, and NO visible node
                 in the bar renders the words. */}
             <h1 className="sr-only">Calendar Game</h1>
-            <div className="flex items-center justify-between gap-1.5">
-              {/* LEFT: the mark, then the preset. */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Dot Layout). The app icon
-                    IS that 7-dot grid, coordinate for coordinate, so turning the input and leaving
-                    the mark upright would break the very claim How-to-Play makes about them. This
-                    is the ONE drawing of the mark that follows: the title bar is app chrome, with
-                    no static counterpart on screen beside it. The three full-screen frames —
-                    index.html's #boot, the Updating overlay and the rotate-back overlay — keep the
-                    canonical upright form, because they stand next to (or back-to-back with) the
-                    iOS launch PNGs that are pre-renders of #boot and cannot follow anything. That
-                    is why W5Logo takes an ORIENTATION PROP defaulting to upright rather than
-                    reading the store itself: the default IS the fixed brand mark, and a caller has
-                    to ask for the player's. lib/dotLayout's DOT_MARK_ROTATION states the rest. */}
-                <W5Logo className="shrink-0" dotOrientation={dotOrientation} />
-                {/* THE PRESET SWITCHER, standing exactly where the wordmark stood — the owner's
-                    layout, and the trade the wordmark's real estate paid for: a name you already
-                    know, replaced by the one fact the bar could not otherwise tell you (which
-                    preset the numbers on screen belong to).
-                    It is a CustomSelect, so it inherits the mode selector's press-drag gesture and
-                    its portaled panel wholesale; components/PresetSwitcher argues why reuse is a
-                    hard requirement rather than a preference, and why its name cell is a fixed
-                    width instead of shrink-to-fit like the mode selector's. wrapperRef is REQUIRED
-                    there and feeds the ⚙ click-outside exclusion above — see that handler. */}
+            {/* ONE FLAT ROW, four direct children — logo, preset, mode, gear — rather than the two
+                nested shrink-0 groups the bar shipped with (Q6, round 20). `justify-between` is
+                GONE too: it existed to put the slack SOMEWHERE between two shrink-0 groups, and
+                once one control is meant to consume that slack itself, a gap between groups is not
+                where it belongs any more — see the budget block above for why the preset switcher
+                is that one control. `flex-1 min-w-0` sits on the switcher's OWN wrapper below;
+                every other child keeps `shrink-0`, unchanged from before. */}
+            <div className="flex items-center gap-1.5">
+              {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Dot Layout) — BUT ONLY
+                  WHILE Input IS Dots (Q3, round 20). The app icon IS that 7-dot grid, coordinate
+                  for coordinate, so turning the input and leaving the mark upright would break the
+                  very claim How-to-Play makes about them — while turning the mark when there are
+                  no dots ANYWHERE on screen for it to correspond to is a different bug, and the one
+                  this round fixes: `rotateDots` alone used to reach this prop unconditionally, so a
+                  player on Buttons could leave it on and the mark sat turned forever with nothing
+                  on screen it matched. `inputStyle==='dots' &&` is the fix, folded into the SAME
+                  dotOrientationFor() call every other consumer uses rather than a separate branch —
+                  the four weekday mode screens (and WeekdayAnswer through them) get the plain
+                  derivation above instead, because they only ever consult it already inside their
+                  own `inputStyle==='dots'` render branch and a second gate there would be dead code.
+                  This is the ONE drawing of the mark that follows: the title bar is app chrome, with
+                  no static counterpart on screen beside it. The three full-screen frames —
+                  index.html's #boot, the Updating overlay and the rotate-back overlay — keep the
+                  canonical upright form, because they stand next to (or back-to-back with) the
+                  iOS launch PNGs that are pre-renders of #boot and cannot follow anything. That
+                  is why W5Logo takes an ORIENTATION PROP defaulting to upright rather than
+                  reading the store itself: the default IS the fixed brand mark, and a caller has
+                  to ask for the player's. lib/dotLayout's DOT_MARK_ROTATION states the rest. */}
+              <W5Logo className="shrink-0" dotOrientation={dotOrientationFor(inputStyle==='dots'&&rotateDots)} />
+              {/* THE PRESET SWITCHER, standing exactly where the wordmark stood — the owner's
+                  layout, and the trade the wordmark's real estate paid for: a name you already
+                  know, replaced by the one fact the bar could not otherwise tell you (which
+                  preset the numbers on screen belong to).
+                  It is a CustomSelect, so it inherits the mode selector's press-drag gesture and
+                  its portaled panel wholesale; components/PresetSwitcher argues why reuse is a
+                  hard requirement rather than a preference, and — since Q6 — why its trigger is
+                  the ONE control in this row that GROWS rather than sizing to content, with a
+                  MINIMUM name-cell width rather than the fixed one it shipped with. wrapperRef is
+                  REQUIRED there and feeds the ⚙ click-outside exclusion above — see that handler.
+                  ⚠ `flex-1 min-w-0` LIVES ON THIS WRAPPING DIV, NOT ON THE TRIGGER ITSELF, and
+                  that split is deliberate rather than incidental: CustomSelect's own top-level div
+                  (the actual flex ITEM of the row above) is internal to that component and takes
+                  no className from any caller, so THIS div is what stands in for it as the row's
+                  flex item, with nothing between them for anything to disagree about — CustomSelect's
+                  own div, `position:relative` and otherwise unstyled, defaults to filling 100% of
+                  it (ordinary block behaviour, not a flex property). PresetSwitcher's OWN
+                  `w-full min-w-0` on the trigger button is the other half of this chain — see that
+                  file's export for where it picks up from here. */}
+              <div className="flex-1 min-w-0">
                 <PresetSwitcher wrapperRef={presetSelectRef} />
               </div>
-              {/* RIGHT: the mode selector, then the ⚙ at the far edge. The gear moved from the
-                  INSIDE of this pair to the OUTSIDE of it (owner's layout: gear far right). Nothing
-                  else about the pair changed — and note what the swap does NOT disturb: the ⚙ panel
-                  is `absolute left-4 right-4 top-full` against the wrapper two lines up, never
+              {/* THE MODE SELECTOR. Wrapped in its own `shrink-0` div for the identical structural
+                  reason the switcher above is wrapped in `flex-1 min-w-0`: CustomSelect's own
+                  top-level div takes no className, so making IT a `shrink-0` row item — rather than
+                  leaving its sizing to flexbox's default (which shrinks by default, and would let
+                  this control get squeezed once the switcher next to it is free to grow) — needs a
+                  div of this file's own to carry the class. Nothing about the CONTROL changed: it
+                  is still exactly as content-sized as it always was, just explicitly protected now
+                  that content-sized is no longer everyone's default in this row.
+                  Mode CustomSelect. Replaced the original native <select> as part of the
+                  site-wide CustomSelect rollout that fixed iOS Safari's native picker
+                  auto-close bug — see the CustomSelect component for full context.
+                  wrapperRef={modeSelectRef} so the existing settings click-outside handler
+                  keeps treating taps inside the mode dropdown the same way it treated taps
+                  on the original <select>. showChevron renders the same ▲▼ indicator.
+                  The menu always opens DOWNWARD, with no prop and no longer any flip logic to
+                  say so (Q8, round 11 deleted round-8's auto-flip): the trigger sits IN the bar
+                  the flip measured the space above against, so that space was structurally
+                  negative and the branch was unreachable. This trigger is also WHY the panel can
+                  be viewport-fixed and measured once per open — fixed chrome is the one place no
+                  scroller can move it out from under the panel (see the caller contract at the
+                  top of components/CustomSelect).
+                  ⚠ pr-6, NOT pr-9 — one of the two cuts that paid for the fourth control (the
+                  budget block above the bar has the arithmetic). The chevron is `absolute right-2`
+                  and ~7px wide in both selects, so the glyph does not move: pr-9 was reserving
+                  ~20px of clearance between the label and a glyph that needs ~8. pr-6 is what the
+                  preset switcher beside it already wears, so the two now match by construction
+                  instead of by coincidence. */}
+              <div className="shrink-0">
+                <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{switchMode(v);setSettingsOpen(false);}} options={MODE_LABELS} ariaLabel="Mode" showChevron pressDrag className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left"/>
+              </div>
+              {/* THE ⚙ AT THE FAR EDGE. The gear moved from the INSIDE of the old right-hand pair
+                  to the OUTSIDE of it (owner's layout: gear far right); flattening the row to four
+                  siblings did not move it again. What the swap never disturbed: the ⚙ panel is
+                  `absolute left-4 right-4 top-full` against the wrapper two lines up, never
                   against the gear, so it hangs in exactly the same place whichever end its button
                   sits at. The corner UpdateDot rides inside the button's own padding
                   ([data-update-dot="corner"] is inset .21em), so pushing the button to the row's
-                  right edge cannot push the badge off it. */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* mode selector */}
-                {/* Mode CustomSelect. Replaced the original native <select> as part of the
-                    site-wide CustomSelect rollout that fixed iOS Safari's native picker
-                    auto-close bug — see the CustomSelect component for full context.
-                    wrapperRef={modeSelectRef} so the existing settings click-outside handler
-                    keeps treating taps inside the mode dropdown the same way it treated taps
-                    on the original <select>. showChevron renders the same ▲▼ indicator.
-                    The menu always opens DOWNWARD, with no prop and no longer any flip logic to
-                    say so (Q8, round 11 deleted round-8's auto-flip): the trigger sits IN the bar
-                    the flip measured the space above against, so that space was structurally
-                    negative and the branch was unreachable. This trigger is also WHY the panel can
-                    be viewport-fixed and measured once per open — fixed chrome is the one place no
-                    scroller can move it out from under the panel (see the caller contract at the
-                    top of components/CustomSelect).
-                    ⚠ pr-6, NOT pr-9 — one of the two cuts that paid for the fourth control (the
-                    budget block above the bar has the arithmetic). The chevron is `absolute right-2`
-                    and ~7px wide in both selects, so the glyph does not move: pr-9 was reserving
-                    ~20px of clearance between the label and a glyph that needs ~8. pr-6 is what the
-                    preset switcher beside it already wears, so the two now match by construction
-                    instead of by coincidence. */}
-                <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{switchMode(v);setSettingsOpen(false);}} options={MODE_LABELS} ariaLabel="Mode" showChevron pressDrag className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left"/>
-                {/* gear settings button */}
-                <div className="relative" ref={settingsRef}>
-                  {/* C2: the ⚙ is a press-drag trigger — pointerdown OPENS the panel so you can drag straight
-                      into it + release on a control. aria-controls names its menu (the popover card,
-                      id="settings-popover") so the pointer controller pairs the gesture with THIS panel,
-                      resolved live by id (a press that CLOSES the panel pairs with nothing → inert). The
-                      isPrimary/button guard mirrors the controller's pointer latch: a second finger or a
-                      right-click must not toggle. onClick is kept for keyboard/tests; the controller
-                      suppresses the trigger's click on a real press so it doesn't double-toggle.
-                      gear-modified (Q8, the flush inside-bottom violet bar — index.css) marks live state ≠
-                      the saved defaults while the panel is CLOSED (the open gear is solid purple, no
-                      bar); the CORNER UpdateDot marks an update landed since the panel was last opened
-                      (opening clears the flag — toggleSettings, which BOTH handlers below call — so it
-                      too only ever shows CLOSED).
-                      The gear is the one host in the app that clears the corner badge's per-axis
-                      padding precondition (components/UpdateDot + index.css spell it out); its own
-                      literal `relative` is what makes it the marker's containing block, since neither
-                      indicator's class may be counted on to be present. The marker is aria-hidden, so
-                      the aria-label carries BOTH booleans in every combination — the only accessible
-                      name this button has, its visible content being a bare glyph. */}
-                  <button type="button" data-select-trigger aria-controls={settingsOpen?"settings-popover":undefined} onPointerDown={e=>{if(!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;toggleSettings();}} onClick={()=>toggleSettings()} className={`relative px-2.5 py-2 rounded-xl text-sm border ${settingsOpen?"btn-solid border-transparent":`panel text-(--tx-100-80) ${settingsModified?" gear-modified":""}`}`} aria-label={(()=>{const parts=[settingsModified?"modified":"",gearDot?"update":""].filter(Boolean);return parts.length?`Settings (${parts.join(", ")})`:"Settings";})()}>⚙<UpdateDot placement="corner" lit={gearDot}/></button>
-                </div>
+                  right edge cannot push the badge off it. `shrink-0` joins the existing `relative`
+                  here rather than needing a wrapping div of its own — this IS this file's own div
+                  already, so there is nothing to stand in for. */}
+              <div className="relative shrink-0" ref={settingsRef}>
+                {/* C2: the ⚙ is a press-drag trigger — pointerdown OPENS the panel so you can drag straight
+                    into it + release on a control. aria-controls names its menu (the popover card,
+                    id="settings-popover") so the pointer controller pairs the gesture with THIS panel,
+                    resolved live by id (a press that CLOSES the panel pairs with nothing → inert). The
+                    isPrimary/button guard mirrors the controller's pointer latch: a second finger or a
+                    right-click must not toggle. onClick is kept for keyboard/tests; the controller
+                    suppresses the trigger's click on a real press so it doesn't double-toggle.
+                    gear-modified (Q8, the flush inside-bottom violet bar — index.css) marks live state ≠
+                    the saved defaults while the panel is CLOSED (the open gear is solid purple, no
+                    bar); the CORNER UpdateDot marks an update landed since the panel was last opened
+                    (opening clears the flag — toggleSettings, which BOTH handlers below call — so it
+                    too only ever shows CLOSED).
+                    The gear is the one host in the app that clears the corner badge's per-axis
+                    padding precondition (components/UpdateDot + index.css spell it out); its own
+                    literal `relative` is what makes it the marker's containing block, since neither
+                    indicator's class may be counted on to be present. The marker is aria-hidden, so
+                    the aria-label carries BOTH booleans in every combination — the only accessible
+                    name this button has, its visible content being a bare glyph. */}
+                <button type="button" data-select-trigger aria-controls={settingsOpen?"settings-popover":undefined} onPointerDown={e=>{if(!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;toggleSettings();}} onClick={()=>toggleSettings()} className={`relative px-2.5 py-2 rounded-xl text-sm border ${settingsOpen?"btn-solid border-transparent":`panel text-(--tx-100-80) ${settingsModified?" gear-modified":""}`}`} aria-label={(()=>{const parts=[settingsModified?"modified":"",gearDot?"update":""].filter(Boolean);return parts.length?`Settings (${parts.join(", ")})`:"Settings";})()}>⚙<UpdateDot placement="corner" lit={gearDot}/></button>
               </div>
             </div>
             {/* ⚙ THE SETTINGS PANEL, at the slot its markup used to occupy inline. Three things
@@ -2008,7 +2141,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               very bug the list's old fixed 440-pixel cap existed to prevent). height:0 adds nothing,
               the parent stays at its min-height (one screenful), and flex-auto grows this back to
               fill it. Rests on the same definite-height #root the clamped scroller already needs. */}
-          {mode==="lookup"&&(<ModeErrorBoundary mode="Lookup" active={true}><div className="mt-5 flex flex-col flex-auto h-0 min-h-0"><LookupCard history={lookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div></ModeErrorBoundary>)}
+          {mode==="lookup"&&(<ModeErrorBoundary mode="Lookup" active={true}><div className="mt-5 flex flex-col flex-auto h-0 min-h-0"><LookupCard history={displayLookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div></ModeErrorBoundary>)}
           {/* How to Play is always-mounted like the five game modes (Q6, round 9), and for the same
               reason they are: leaving a screen must not destroy what you had set up on it. It used
               to be conditionally rendered, which is why a detour into a game mode closed whichever

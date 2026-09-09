@@ -85,6 +85,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-09',
+    items: [
+      'Presets can now be reordered by dragging them — grab the handle beside a preset in ⚙ Settings → Manage Presets and drop it where you want it. With a handle selected by keyboard, the arrow keys do the same thing.',
+      'The preset picker at the top of the screen now fills the space the app’s name used to take up, so a longer preset name has real room to show instead of disappearing behind an ellipsis right away.',
+      'Lookup history is now shared across every preset, so you never have to remember which preset you looked something up in. It still isn’t added to permanently while a preset is Amnesic.',
+      'Whether a preset was Amnesic is now part of what Save Defaults remembers and Reset Settings restores, alongside everything else those already covered.',
+      'Dot Layout, in Settings → Display, is now a plain on/off switch instead of a Columns/Rows choice — and the small mark in the top-left corner only turns when Dots is your answer style, instead of staying turned with nothing on screen for it to match.',
+      'View Saved Defaults and Clear Saved Defaults are now always both there at the bottom of the Settings menu; Clear dims and does nothing until there is something saved to clear, rather than disappearing.',
+      'Fixed: in MoX and Blitz, a run that only tied your best mean or median could sometimes still show the new-best star, from a difference too small to ever see on screen. Only a run that is faster once rounded to the hundredth — same as what’s printed — counts as a new best now.',
+    ],
+  },
+  {
     date: '2026-09-08',
     items: [
       'The app can now hold several separate set-ups at once, called presets. Each one keeps its own settings, stats, bests, saved defaults and lookup history, so a preset you practise in and a preset you experiment in never touch each other. Switch between them with the new picker at the top of the screen — press and slide down to it, the same way the mode picker works. Make, rename, reorder and delete presets under ⚙ Settings → Manage Presets.',
@@ -108,16 +120,9 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Nothing you can see changed this time — just work underneath to keep things running smoothly.',
     ],
   },
-  // ★ THE CAP HAS NOW BITTEN TWICE. On 2026-09-05 it retired 2026-07-17; adding 2026-09-08 above
-  // made eleven again, so 2026-07-19 moved to CHANGELOG-ARCHIVE.md in the same change. The array is
-  // AT ten — the next new day retires 2026-07-21 (see the ten-entry rule in the charter above).
-  // ⚠ THE 2026-09-05 ENTRY ABOVE REACHES PRODUCTION FOR THE FIRST TIME IN THIS DEPLOY, and it stays
-  // rather than being merged away. That day shipped to STAGING ONLY, so a live player is seeing it
-  // and 2026-09-08 together — but the same-day merge rule is about one DAY's net effect, and these
-  // are two days. Deleting it would also split the two repos' changelogs, and they must stay
-  // byte-identical: the two sites share a browser origin and CHANGELOG_SEEN_KEY stores a signature
-  // of the NEWEST entry, so divergent arrays would flip the Changelog dot every time the owner moved
-  // between them. The line is true for both audiences anyway — nothing visible did change that day.
+  // ★ THE CAP HAS NOW BITTEN THREE TIMES. 2026-09-05 retired 2026-07-17; 2026-09-08 retired
+  // 2026-07-19; adding 2026-09-09 above retired 2026-07-21 in the same change. The array is AT ten
+  // — the next new day retires 2026-07-26 (see the ten-entry rule in the charter above).
   {
     date: '2026-08-10',
     items: [
@@ -208,18 +213,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Fixed: in AoX, the codes panel no longer swaps what it shows while it is sliding shut.',
       'The Show Codes button now stands exactly as tall as the buttons beside it.',
       'The settings controls and the Show Codes button now describe themselves properly to screen readers.',
-    ],
-  },
-  {
-    date: '2026-07-21',
-    items: [
-      'The small links at the bottom of the settings menu now share consistent spacing.',
-      'Side-swiping no longer flips the installed app through pages on iPhone.',
-      'Typing a timer value no longer nudges the slider.',
-      'Every input box now wears the same border as the buttons.',
-      'Guide panels open and close with a smooth, matched motion that keeps your place on the page.',
-      'Fixed: the Lookup page no longer scrolls as a whole — long history lists scroll inside their own box again.',
-      'This changelog and the Lookup history list now scroll the same way as the settings menu: content fades softly at the edges, and the scrollbar stays clear of the text.',
     ],
   },
 ]

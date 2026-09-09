@@ -10,7 +10,7 @@ import {
 import Expander from './Expander.jsx'
 import { Kbd, SectionLabel, SECTION_LABEL_CLASS } from './primitives.jsx'
 import { DAY } from '../lib/format.js'
-import { DOT_CELLS } from '../lib/dotLayout.js'
+import { DOT_CELLS, dotOrientationFor } from '../lib/dotLayout.js'
 import { selectionSuppressesToggle } from '../lib/selectionGuard.js'
 import { useSettings } from '../store/settings.js'
 import {
@@ -227,7 +227,11 @@ function UL({ children }: { children: ReactNode }) {
 //     for one decorative SVG at the bottom of it. Selecting here also keeps the
 //     subscription at the leaf — the guide itself does not re-render on a flip.
 function DotDiagram() {
-  const DOT_CELL = DOT_CELLS[useSettings((s) => s.dotOrientation)]
+  // Q3 (round 20): the store field is the boolean `rotateDots`; dotOrientationFor is the one place
+  // it is turned back into DotOrientation. Read RAW, deliberately not gated on inputStyle — see the
+  // header comment above (the diagram documents what turning the toggle ON would look like even
+  // when Buttons is the player's current Input, the same way it renders at all regardless of Input).
+  const DOT_CELL = DOT_CELLS[dotOrientationFor(useSettings((s) => s.rotateDots))]
   const dotX = (cell: { r: number; c: number }) => 30 + (cell.c - 1) * 60
   const dotY = (cell: { r: number; c: number }) => 28 + (cell.r - 1) * 62
   // The cell's position in words: the centre cell reads "centre"; every other filled
@@ -856,8 +860,10 @@ export default function GuidePage({
           confirmation's two views, the withheld ✕ on a last preset); what a switch actually swaps =
           store/presetControl's PER_PRESET_STORES, all four of them; what a delete actually removes =
           its clearPresetStorage, which is derived from store/presets' PRESET_STORE_KEYS; the screen
-          clear = main.tsx's registry subscription calling remountScreens; the 12-character cap =
-          store/presets' MAX_PRESET_NAME. */}
+          clear = main.tsx's registry subscription calling remountScreens; the live typing cap that
+          replaced the old fixed character count (Q6, round 20) = lib/presetNameWidth, measured
+          against components/PresetSwitcher's own rendered cell; store/presets' MAX_PRESET_NAME is
+          now a separate, more generous backstop for a name this app never watched get typed. */}
       <GuideSection
         id="presets"
         title="Presets"
@@ -871,7 +877,7 @@ export default function GuidePage({
         </Lead>
         <p>A preset is a complete, separate copy of the app. Each one keeps its own:</p>
         <UL>
-          <li>stats, all-time bests, and Lookup history;</li>
+          <li>stats and all-time bests;</li>
           <li>per-mode setup — timers, run length, the Deduction sub-type, the stat toggles;</li>
           <li>every ⚙ setting, theme included;</li>
           <li>saved defaults;</li>
@@ -883,9 +889,15 @@ export default function GuidePage({
         <p>
           <b>Only the preset you are on is ever touched.</b> Every setting in the ⚙ menu, every
           default you save, <b>Reset Settings</b>, <b>Full Reset</b>, and each mode&apos;s{' '}
-          <b>Reset Stats</b> apply to that preset and to no other. Nothing is shared between
+          <b>Reset Stats</b> apply to that preset and to no other. Nothing above is shared between
           presets, and nothing is merged: switching swaps all of it at once, and the preset you left
           is exactly where you left it when you come back.
+        </p>
+        <p>
+          <b>Lookup history is the one thing that is NOT in that list.</b> It is shared by every
+          preset — the same list, however many presets you have or whichever one you switch to —
+          because a Lookup is a question you asked, not a record of how you did. See{' '}
+          <b>Saved Progress</b> below for what that means for Amnesic and for Full Reset.
         </p>
         <Subhead>Switching</Subhead>
         <UL>
@@ -922,14 +934,15 @@ export default function GuidePage({
           <li>
             <b>Rename</b> — the name in each row is a box; tap it and it is all selected, so you can
             just type. <Kbd>Enter</Kbd> or tapping away keeps the new name, <Kbd>Esc</Kbd> throws it
-            away. Names are capped at 12 characters, which is what the top bar can show without
-            being pushed wider than the screen; leave one blank and it goes back to &quot;Preset
-            2&quot;, &quot;Preset 3&quot; and so on.
+            away. Typing stops taking new characters once the name is as wide as the control at the
+            top left can currently show — that limit moves with the screen, not with a fixed
+            character count, so how many letters fit can differ by device; leave one blank and it
+            goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot; and so on.
           </li>
           <li>
-            <b>Order</b> — the ↑ and ↓ beside each row move it one place. That order is the order
-            the top-left list shows them in, and nothing else: moving a preset changes no stats and
-            no settings. The arrows grey out at the ends of the list, where there is nowhere to go.
+            <b>Order</b> — drag a row by the handle beside it (the three small bars) to move it, or
+            select the handle and press the up/down arrow keys. That order is the order the top-left
+            list shows them in, and nothing else: moving a preset changes no stats and no settings.
           </li>
           <li>
             <b>Delete</b> — the ✕ asks first, in the same popup, and names what is about to go. See
@@ -942,9 +955,11 @@ export default function GuidePage({
         <Subhead>Deleting is permanent</Subhead>
         <UL>
           <li>
-            Deleting a preset removes <i>everything</i> it holds — its stats, all-time bests and
-            Lookup history, its per-mode setup, every ⚙ setting it was on, and its saved defaults.
-            It cannot be undone, and no other preset is touched.
+            Deleting a preset removes <i>everything</i> it holds — its stats and all-time bests, its
+            per-mode setup, every ⚙ setting it was on, and its saved defaults. It cannot be undone,
+            and no other preset is touched. Your Lookup history is untouched too, for the same
+            reason switching presets does not change what Lookup shows: it was never any
+            preset&apos;s to hold.
           </li>
           <li>
             You can delete the preset you are currently on. The popup says so, and names the one it
@@ -1391,16 +1406,15 @@ export default function GuidePage({
         <UL>
           <li>
             Every picker in the ⚙ menu is one named group of choices, not a row of loose buttons,
-            and it&apos;s named for the setting you&apos;re changing — Date Format, Input, Dot
-            Layout, Theme, Leap Year Chance, Jan/Feb Chance on Leap Years, Julian Chance. Landing on
-            an option is choosing it; the keys that move within a group are under Keyboard Input
-            above.
+            and it&apos;s named for the setting you&apos;re changing — Date Format, Input, Theme,
+            Leap Year Chance, Jan/Feb Chance on Leap Years, Julian Chance. Landing on an option is
+            choosing it; the keys that move within a group are under Keyboard Input above.
           </li>
           <li>
-            The five On/Off switches carry their setting&apos;s name — Random Format, Use System
-            Settings, Julian Calendar, Save Stats, Amnesic — rather than reading as five identical
-            buttons called &quot;On&quot;. Both Year Range boxes name themselves Earliest Year and
-            Latest Year.
+            The six On/Off switches carry their setting&apos;s name — Random Format, Dot Layout, Use
+            System Settings, Julian Calendar, Save Stats, Amnesic — rather than reading as six
+            identical buttons called &quot;On&quot;. Both Year Range boxes name themselves Earliest
+            Year and Latest Year.
           </li>
           <li>
             The ⚙ button says what&apos;s behind it: that a setting has been changed, and that an
@@ -1416,11 +1430,12 @@ export default function GuidePage({
           </li>
           <li>
             Inside <b>Manage Presets</b>, each row&apos;s name box is called Preset name — the name
-            itself is the box&apos;s contents, so it is read out with it — and the three buttons
-            beside it name the preset they act on: &quot;Move Weekend up&quot;, &quot;Move Weekend
-            down&quot;, &quot;Delete Weekend&quot;. The <b>✓</b> on the row you are on says
-            &quot;Current preset&quot; and the <b>A</b> says &quot;Amnesic&quot;, so neither marker
-            is only a shape.
+            itself is the box&apos;s contents, so it is read out with it — and the two controls
+            beside it name the preset they act on: the reorder handle reads &quot;Reorder Weekend,
+            position 2 of 3&quot; (the position updates after every move, so the same name is
+            announced again with a new number), and &quot;Delete Weekend&quot;. The <b>✓</b> on the
+            row you are on says &quot;Current preset&quot; and the <b>A</b> says
+            &quot;Amnesic&quot;, so neither marker is only a shape.
           </li>
           <li>
             In the seven-dot answer layout every dot carries its weekday name, so the dots offer the
@@ -1508,10 +1523,11 @@ export default function GuidePage({
           <li>
             Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: the
             three buttons at the foot of the ⚙ menu, Show Codes, every locked picker and the Amnesic
-            switch while Save Stats is off, and — in Manage Presets — the <b>↑</b> on the first
-            preset, the <b>↓</b> on the last, and <b>✕</b> when only one preset is left. The rest of
-            the game&apos;s buttons — Reveal, Override, <b>&lt;</b> and <b>&gt;</b> — are only
-            dimmed, so they still read as ordinary buttons even when pressing one would do nothing.
+            switch while Save Stats is off, and — in Manage Presets — <b>✕</b> when only one preset
+            is left. The reorder handle beside each row never greys out; it has no end it cannot
+            move toward. The rest of the game&apos;s buttons — Reveal, Override, <b>&lt;</b> and
+            <b>&gt;</b> — are only dimmed, so they still read as ordinary buttons even when pressing
+            one would do nothing.
           </li>
         </UL>
       </GuideSection>
@@ -1548,10 +1564,11 @@ export default function GuidePage({
         <p>
           At the foot of the menu, in one block: <b>Save Defaults</b>, <b>Reset Settings</b> and{' '}
           <b>Full Reset</b> (see the Data section), and directly under them the{' '}
-          <b>View saved defaults</b> link — joined, once you've saved your own defaults, by{' '}
-          <b>Clear saved defaults</b>. Those two sit in the gaps between the three buttons above
-          rather than under them. Below the block: your Contact email, then a last line with the
-          Last Updated timestamp at the left edge, the <b>Changelog</b> link at the right edge, and{' '}
+          <b>View Saved Defaults</b> and <b>Clear Saved Defaults</b> links — both always there;
+          Clear dims and locks until you&apos;ve saved your own defaults, the same way the three
+          buttons above it do. Those two sit in the gaps between the three buttons above rather than
+          under them. Below the block: your Contact email, then a last line with the Last Updated
+          timestamp at the left edge, the <b>Changelog</b> link at the right edge, and{' '}
           <b>Check for updates</b> midway between the two.
         </p>
         <p>
@@ -1638,8 +1655,8 @@ export default function GuidePage({
         durationMs={motionMs}
       >
         <Lead>
-          Answer with labelled weekday buttons, or with the seven-dot logo layout — and choose which
-          way that layout is turned.
+          Answer with labelled weekday buttons, or with the seven-dot logo layout — and turn that
+          layout a quarter turn if you like.
         </Lead>
         <Subhead>Input</Subhead>
         <UL>
@@ -1666,17 +1683,15 @@ export default function GuidePage({
           calculating. The diagram above always shows your current Dot Layout.
         </p>
         <Subhead>Dot Layout</Subhead>
-        <UL>
-          <li>
-            <b>Columns</b> (default) — the two runs of three weekdays go down the sides: Sat, Fri,
-            Thu down the left and Wed, Tue, Mon down the right.
-          </li>
-          <li>
-            <b>Rows</b> — the same seven dots turned a quarter turn anticlockwise, so those two runs
-            lie along the top and bottom instead: Wed, Tue, Mon across the top and Sat, Fri, Thu
-            across the bottom.
-          </li>
-        </UL>
+        <p>
+          <b>Off</b> (default) — the two runs of three weekdays go down the sides: Sat, Fri, Thu
+          down the left and Wed, Tue, Mon down the right.
+        </p>
+        <p>
+          <b>On</b> — the same seven dots turned a quarter turn anticlockwise, so those two runs lie
+          along the top and bottom instead: Wed, Tue, Mon across the top and Sat, Fri, Thu across
+          the bottom.
+        </p>
         <p>
           Sunday stays in the centre either way, and the dots keep their tap-and-slide behaviour and
           their keyboard numbers unchanged — only where each one sits on screen moves. Dot Layout is
@@ -1685,8 +1700,12 @@ export default function GuidePage({
           — and so does the logo below.
         </p>
         <p>
-          <b>The logo turns with it.</b> The mark at the top left of every screen <i>is</i> this
-          seven-dot layout, so choosing Rows turns that mark too. What can't follow are the pictures
+          <b>The logo turns with it — but only while Dots is your Input.</b> The mark at the top
+          left of every screen <i>is</i> this seven-dot layout, so turning Dot Layout on turns that
+          mark too, whenever Input is set to Dots. The rest of the time — in Deduction, or in any
+          mode while Input is set to Buttons — the mark stays upright, for the same reason Dot
+          Layout itself locks there: with no dots anywhere on screen, there is nothing for a turned
+          mark to correspond to. What can't follow even when Dots is your Input are the pictures
           your device saved earlier: the home-screen icon, the launch screen and the link preview
           image are fixed image files, so those keep the upright logo whatever you choose here. The
           full-screen launch screen and the <b>Rotate back to portrait</b> screen keep the upright
@@ -1962,7 +1981,6 @@ export default function GuidePage({
             All-time bests — Blitz score and streak, Per Question sudden-death score, and MoX mean
             and median.
           </li>
-          <li>Lookup history.</li>
         </UL>
         <Subhead>What it keeps</Subhead>
         <UL>
@@ -1977,6 +1995,16 @@ export default function GuidePage({
         <p>
           So the split is stats, not setup: a preset stays itself across a close, and only forgets
           how you did.
+        </p>
+        <Subhead>Lookup history is neither, quite</Subhead>
+        <p>
+          Lookup history is shared across every preset (see <b>Presets</b> above), so it is not this
+          preset&apos;s to forget or to keep. A lookup you make while a preset is amnesic still
+          works exactly as normal, but it does not join that shared list — it is held only for the
+          rest of this browsing session, the same &quot;never written down&quot; treatment your
+          parked stats get, and it never becomes a permanent entry afterwards. Switching to a
+          different preset, turning Amnesic off, or coming back later all leave it exactly as gone
+          as closing the app does.
         </p>
         <Subhead>Turning it on and off</Subhead>
         <UL>
@@ -2005,10 +2033,11 @@ export default function GuidePage({
             turn Save Stats on.
           </li>
           <li>
-            <b>It is not a menu setting.</b> It belongs to the preset, the way its name does. Save
-            Defaults does not capture it, Reset Settings does not restore it, and it never lights
-            the ⚙ button&apos;s &quot;modified&quot; line. Full Reset still clears everything,
-            though — see below.
+            <b>It is not a menu setting.</b> It belongs to the preset, the way its name does, so it
+            never lights the ⚙ button&apos;s &quot;modified&quot; line the way a setting would. Save
+            Defaults does capture it, silently, alongside the snapshot, and both Reset Settings and
+            Full Reset restore it along with everything else they cover — see{' '}
+            <b>Save Defaults, Reset Settings, and Full Reset</b> below.
           </li>
         </UL>
         <Subhead>What &quot;closed&quot; honestly means</Subhead>
@@ -2036,10 +2065,11 @@ export default function GuidePage({
       >
         <Lead>What persists on this device between visits — and what resets each time.</Lead>
         <p>
-          Everything in this section is saved <b>per preset</b>. Each preset has its own complete
-          copy of the list below, and only the one you are on is ever read or written — see{' '}
-          <b>Presets</b> above. Which preset you were on is remembered too, so the app opens where
-          you left it.
+          Everything in this section is saved <b>per preset</b> — except your Lookup history, which
+          is shared by every preset instead (see <b>Presets</b> above, and the note below the list).
+          Each preset has its own complete copy of the per-preset list below, and only the one you
+          are on is ever read or written. Which preset you were on is remembered too, so the app
+          opens where you left it.
         </p>
         <p>
           For that preset, the app saves the following on this device and restores them when you
@@ -2068,11 +2098,17 @@ export default function GuidePage({
             Per Question with Allow Mistakes), Per Question sudden-death score, and MoX mean and
             median.
           </li>
-          <li>
-            <b>Lookup history</b> — the dates you've looked up.
-          </li>
         </UL>
         <p>Saved Mean and Median use a rolling window of your most recent 1000 solves.</p>
+        <p>
+          <b>Lookup history</b> — the dates you&apos;ve looked up — is saved on this device too, the
+          same way and through the same visits, but it is not part of the per-preset list above: it
+          is <i>one</i> list, the same one no matter which preset is open, and it survives a preset
+          switch and a preset delete alike &mdash; but not a <b>Full Reset</b>, which clears it from
+          wherever you press it, exactly because there is only one copy to clear. See <b>Presets</b>{' '}
+          above for why, and <b>Stats &mdash; Amnesic</b> for the one thing that changes what it
+          does while a preset is amnesic.
+        </p>
         <Subhead>Not saved (resets each visit)</Subhead>
         <UL>
           <li>
@@ -2084,16 +2120,19 @@ export default function GuidePage({
         </UL>
         <p>
           There is one exception, and it applies to a whole preset at a time. With <b>Amnesic</b> on
-          (⚙ &rarr; Stats), the last three entries in the first list — your stats, your all-time
-          bests, and your Lookup history — are not written to this device at all for that preset.
-          They last as long as the app is open and are gone once it closes. Everything else in that
-          list still saves normally. See <b>Stats &mdash; Amnesic</b> above.
+          (⚙ &rarr; Stats), the last two entries in the first list — your stats and your all-time
+          bests — are not written to this device at all for that preset. They last as long as the
+          app is open and are gone once it closes. Everything else in that list still saves
+          normally. Lookup history follows a related but separate rule of its own, because it is not
+          this preset&apos;s to begin with — see <b>Stats &mdash; Amnesic</b> above.
         </p>
         <p>
           <b>Full Reset</b> (below) clears everything that is saved for the preset you are on —
           except that preset&apos;s saved defaults, which it restores rather than clears. Every
-          other preset is left exactly as it was. Removing a preset&apos;s saved copy outright is{' '}
-          <b>Delete</b>, in ⚙ &rarr; Presets &rarr; Manage Presets.
+          other preset is left exactly as it was, with one exception: your <b>Lookup history</b>{' '}
+          isn&apos;t any preset&apos;s alone, so it goes too — press Full Reset from any preset and
+          the one shared list is gone for all of them. Removing a preset&apos;s saved copy outright
+          is <b>Delete</b>, in ⚙ &rarr; Presets &rarr; Manage Presets.
         </p>
       </GuideSection>
       <GuideSection
@@ -2127,6 +2166,11 @@ export default function GuidePage({
             Four values from the mode screens: MoX run length, Flash speed, and both Blitz timers
             (Per Round and Per Question).
           </li>
+          <li>
+            Whether this preset is <b>Amnesic</b> (⚙ &rarr; Stats) at the moment you save — captured
+            silently alongside the rest; it is not shown or editable in this popup, or in{' '}
+            <b>View Saved Defaults</b> below.
+          </li>
         </UL>
         <p>
           Nothing else from the mode screens is captured — Blitz's Per Round vs Per Question, the
@@ -2157,7 +2201,7 @@ export default function GuidePage({
           </li>
           <li>
             Your saved defaults survive Full Reset — that's the point: Full Reset restores{' '}
-            <i>them</i>. <b>View saved defaults</b>, at the foot of the ⚙ menu (below the reset
+            <i>them</i>. <b>View Saved Defaults</b>, at the foot of the ⚙ menu (below the reset
             buttons), opens a popup with the same four rows as the Save Defaults popup, showing your
             saved mode-screen values (every menu setting is also part of the snapshot, captured as
             it was when you saved). The link is always there: before you've saved any defaults it
@@ -2172,12 +2216,13 @@ export default function GuidePage({
             the menu settings captured at their launch values.
           </li>
           <li>
-            <b>Clear saved defaults</b>, to the right of View saved defaults and shown only while
-            you have saved defaults, is the way back to the launch defaults. It asks for
-            confirmation in a small popup before it forgets the snapshot; your current settings are
-            untouched. The links live in the footer rather than the Save Defaults popup because that
-            button — and with it its popup — dims whenever everything already matches your defaults;
-            the footer links are always reachable.
+            <b>Clear Saved Defaults</b>, to the right of View Saved Defaults, is the way back to the
+            launch defaults. It is always there too, but dims and locks until you have saved
+            defaults to clear — the same treatment the three buttons above it use for "nothing to do
+            right now". Tapping it asks for confirmation in a small popup before it forgets the
+            snapshot; your current settings are untouched. The links live in the footer rather than
+            the Save Defaults popup because that button — and with it its popup — dims whenever
+            everything already matches your defaults; the footer links are always reachable.
           </li>
         </UL>
         <Subhead>Reset Settings (middle)</Subhead>
@@ -2204,24 +2249,42 @@ export default function GuidePage({
           a single tap clears that bar whatever changed.
         </p>
         <p>
-          It still leaves everything else alone: the other mode-screen choices (Blitz's Per Round
-          versus Per Question, Allow Mistakes, One-by-One, the Deduction sub-type, and the show/hide
-          stat toggles) and your stats and history. Restoring a mode-screen value while a Blitz
-          round or an MoX run is going resets that round or run when you close the menu, exactly as
-          a menu change does. No confirmation prompt — tap to apply. When everything the snapshot
-          covers is already at your defaults, the button dims and locks, since tapping it would have
-          no effect.
+          It also restores whether this preset was <b>Amnesic</b> at the moment you saved your
+          defaults, switching it on or off to match — exactly as if you had flipped the{' '}
+          <b>Amnesic</b> switch yourself (see <b>Stats &mdash; Amnesic</b> above for what that
+          switch does). That means pressing Reset Settings for an unrelated reason, mid-session, can
+          move it too: if it turns Amnesic off, whatever the session had recorded is discarded the
+          same as always, and if it turns Amnesic on, your saved stats are parked exactly as they
+          were the moment before.
+        </p>
+        <p>
+          It still leaves the other mode-screen choices alone: Blitz's Per Round versus Per
+          Question, Allow Mistakes, One-by-One, the Deduction sub-type, and the show/hide stat
+          toggles all stay exactly as you have them. Your stats and history are untouched too —
+          <i>unless</i> the <b>Amnesic</b> restore above actually moves the switch, in which case
+          whatever that flip discards or parks (see the paragraph above) is gone the moment you tap,
+          not held back until anything closes. Restoring one of the four capturable mode-screen
+          values while a Blitz round or an MoX run is going resets that round or run when you close
+          the menu, exactly as an ordinary ⚙ panel change does — but an <b>Amnesic</b> flip is not a
+          menu value reconciling on close, it is a preset property changing outright, so it (and the
+          run or round it can take with it) lands immediately on the tap itself, before the menu is
+          ever closed. No confirmation prompt either way — tap to apply. When everything the
+          snapshot covers is already at your defaults, the button dims and locks, since tapping it
+          would have no effect.
         </p>
         <Subhead>Full Reset (right)</Subhead>
         <p>Restores the preset you are on to its launch state:</p>
         <UL>
           <li>
-            Wipes all stats, all-time bests (Blitz and MoX), Lookup history, and in-progress rounds
-            and runs. Your stats, all-time bests, and Lookup history are saved on this device, so
+            Wipes all stats, all-time bests (Blitz and MoX), your <b>Lookup history</b>, and
+            in-progress rounds and runs. Your stats and all-time bests are saved on this device, so
             Full Reset clears that saved copy permanently. That is true in a preset with{' '}
             <b>Amnesic</b> on as well: it clears both the session you are in and the saved stats
             waiting behind it, so nothing comes back when you turn Amnesic off again. Amnesic stops
             your play from being recorded; it does not shield anything from a reset you asked for.
+            Lookup history is the one thing on this list that isn&apos;t only this preset&apos;s —
+            it is shared by every preset (see <b>Presets</b> above), so Full Reset clears it for all
+            of them, not just this one.
           </li>
           <li>
             Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode
@@ -2229,7 +2292,10 @@ export default function GuidePage({
             speed, both Blitz timers) restore to <i>your</i> saved defaults; everything else (Per
             Round / Per Question, Deduction sub-types and toggles, Allow Mistakes, One-by-One, the
             show/hide stat toggles) returns to its launch value. The saved defaults themselves
-            survive.
+            survive. Full Reset also restores whether the preset was <b>Amnesic</b> to whatever you
+            last saved — the same restore <b>Reset Settings</b> makes, above — but it changes
+            nothing about the wipe just above: both copies of your stats are already gone by the
+            time it happens, whichever way Amnesic ends up afterward.
           </li>
           <li>
             Closes any open overlay (⚙ menu, codes, method breakdown) and switches to Classic. How

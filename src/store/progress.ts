@@ -3,7 +3,6 @@ import { persist } from 'zustand/middleware'
 import type { Stats } from '../engine/gameReducer.js'
 import { captureError } from '../observability/sentry.js'
 import { checkStatsInvariants } from '../engine/invariants.js'
-import { dimEither } from '../lib/calendar.js'
 import { PRESET_STORE_KEYS, mergeOverDefaults } from './presets.js'
 import { presetStatsStorage } from './amnesic.js'
 import { useSettings } from './settings.js'
@@ -22,9 +21,6 @@ import { useSettings } from './settings.js'
 //     sudden death (score only), per-question with Allow Mistakes (score/streak, C3a),
 //     and AoX (average/median). These already lived as component state; the store
 //     now owns them (and their types).
-//   • Lookup history (the newest LOOKUP_HISTORY_CAP lookups — see addLookupEntry below) — see
-//     LookupEntry below: the INPUTS only, never the rendered text (that is derived at paint time
-//     from the live settings).
 //
 // WHAT DOES *NOT* PERSIST (intentionally — mid-run/round state is discarded):
 //   • The engine's live question, history stacks, locked/revealed flags, etc.
@@ -32,6 +28,12 @@ import { useSettings } from './settings.js'
 //     only their bests above persist.
 //   • The "new best ★" markers and the override-rollback refs — ephemeral per-session
 //     UI state; they stay as local state in the mode components.
+//
+// ⚠ LOOKUP HISTORY USED TO LIVE HERE AND NO LONGER DOES (Q1, round 20) — it moved to its own
+// store/lookupHistory, because it stopped being PRESET data: it is now one shared list read by
+// every preset, not one of the four things a preset switch swaps out. See that file's header for
+// the full argument. Its old field on THIS store's persisted payload is handled at the bottom of
+// this file's `persist` options (the version bump, and why no `migrate` step is needed for it).
 //
 // Solve-`times` arrays are capped to a rolling window in setModeStats (below) so the
 // persisted payload can't grow without bound across sessions.
@@ -57,38 +59,6 @@ export interface SuddenBest {
   roundId: number | null
 }
 
-// A saved Lookup history entry — the persisted shape, owned HERE (the store is what versions and
-// migrates it; it used to be declared in the LookupCard UI component and imported backwards).
-// It carries only what the user actually supplied: the parsed date, a stable id for selection, and
-// the Oct 5–14, 1582 gap marker. Everything the card SHOWS — the formatted label, the weekday(s) —
-// is derived from y/m/d against the LIVE Date Format, so changing it re-renders every row and the
-// answer slot together. (Before v3 the rendered text was stored too, and a format change left an
-// old-format result sentence above a new-format row.) There is deliberately no calendar field
-// either: a pre-reform date is shown in BOTH calendars, so there is nothing per-entry to freeze and
-// no way for a stored date to be re-read as a different — or an impossible — one later.
-export interface LookupEntry {
-  id: string
-  y: number
-  m: number
-  d: number
-  isGap?: boolean
-}
-
-// The Lookup history WINDOW, and the one function that applies it. Newest to the front, and past
-// the cap the oldest simply falls off the end — the same bounded-payload rule STATS_TIMES_CAP
-// below states for solve-times, for the same reason (localStorage must not grow without bound
-// across sessions). 100 entries of {id,y,m,d} is a few KB.
-// The RULE lives here rather than at the one call site because it had two writers and one of them
-// was a test: main.tsx's pushLookupHistory and the controlled host in tests/lookupCard.dom each
-// wrote `[entry, ...prev].slice(0, 20)` out by hand, so the number lived in three places (this
-// comment being the third) and could drift in any of them.
-// (Keep the How-to-Play wording in sync with this number — GuidePage's Lookup section states it,
-// once. The Saved Progress list carried a second copy for one commit and now just names the thing
-// that is saved, which is what that list is for.)
-export const LOOKUP_HISTORY_CAP = 100
-export const addLookupEntry = (prev: LookupEntry[], entry: LookupEntry): LookupEntry[] =>
-  [entry, ...prev].slice(0, LOOKUP_HISTORY_CAP)
-
 // The five lifetime-stats silos: the continuous modes plus Deduction's three sub-modes.
 export type StatsKey = 'classic' | 'flash' | 'dedDay' | 'dedMonth' | 'dedYear'
 
@@ -103,7 +73,6 @@ export type ProgressValues = {
   // simply lacks the key and zustand's shallow merge leaves the default {} standing.
   suddenAmBest: Record<string, BlitzBest>
   aoxBest: Record<string, AoxBest>
-  lookupHistory: LookupEntry[]
 }
 
 type Updater<T> = T | ((prev: T) => T)
@@ -113,7 +82,6 @@ export type ProgressState = ProgressValues & {
   setSuddenBest: (v: Updater<Record<string, SuddenBest>>) => void
   setSuddenAmBest: (v: Updater<Record<string, BlitzBest>>) => void
   setAoxBest: (v: Updater<Record<string, AoxBest>>) => void
-  setLookupHistory: (v: Updater<LookupEntry[]>) => void
   resetProgress: () => void
 }
 
@@ -139,7 +107,6 @@ export const makeProgressDefaults = (): ProgressValues => ({
   suddenBest: {},
   suddenAmBest: {},
   aoxBest: {},
-  lookupHistory: [],
 })
 
 // resolve(next, prev): support React-style functional updaters (prev => next), like settings.
@@ -152,7 +119,6 @@ const PERSISTED_KEYS: (keyof ProgressValues)[] = [
   'suddenBest',
   'suddenAmBest',
   'aoxBest',
-  'lookupHistory',
 ]
 
 // v1 → v2: AoX Best keys gain the julianChance dimension (C2). The original key omitted it —
@@ -177,57 +143,6 @@ export function migrateAoxBestKeys(
   return out
 }
 
-// The lookup-history normalizer, and the ONLY thing that decides what shape a stored entry has.
-//
-// SHAPE (v3): an entry is {id, y, m, d, isGap?} and nothing else. It used to also carry three
-// RENDERED fields (label/weekday/result) — snapshots of how the date read at lookup time, so after
-// a Date Format change the result sentence on screen disagreed with the history row right below
-// it. LookupCard derives all three now, which makes the stored copies not just redundant but
-// wrong, so this drops them. Lossless: y/m/d have been on the entry since the app's first commit
-// in this repo, long before the persist store existed (Stage D1).
-//
-// VALIDATION: the filter asserts exactly what the consumers dereference. LookupCard carries no
-// per-field guards of its own any more — the store owns the shape, so the store has to guarantee
-// it, or a truncated/tampered payload reaches the card as {id} alone and renders MONTH[NaN] and a
-// blank weekday, or trips the mode error boundary. An entry that can't answer "which date?" has
-// nothing to show and is dropped.
-//
-// The date must also be a REAL one, not merely a number-shaped one. This is the same either-calendar
-// rule Lookup validates with (dimEither): a date counts if it exists in a calendar it can be read
-// in, so pre-reform February keeps Julian's 29th, and February 30 or day 32 exists nowhere and is
-// dropped. Without this check a tampered or truncated payload would be ANSWERED rather than refused
-// — the card would print a confident weekday for a date that never happened, since the underlying
-// day-number arithmetic happily rolls February 30 into March. Whole numbers for the same reason:
-// month 1.5 indexes MONTH to `undefined` and day 1.5 produces a weekday belonging to no day.
-// Deliberately NOT bounded to Lookup's 1–10000 years: an out-of-range year still names a real date
-// and still reads correctly, so there is nothing wrong to drop — unlike an impossible day, which
-// can only be answered wrongly.
-//
-// This runs on EVERY rehydrate (see `merge` below), not just the v2→v3 upgrade: a v3 payload is
-// read from the same untrusted localStorage as a v2 one. Exported for tests.
-export function normalizeLookupEntries(entries: unknown): LookupEntry[] {
-  if (!Array.isArray(entries)) return []
-  return entries
-    .filter(
-      (e): e is LookupEntry =>
-        !!e &&
-        typeof e === 'object' &&
-        typeof e.id === 'string' &&
-        Number.isInteger(e.y) &&
-        Number.isInteger(e.m) &&
-        Number.isInteger(e.d) &&
-        e.m >= 1 &&
-        e.m <= 12 &&
-        e.d >= 1 &&
-        e.d <= dimEither(e.y, e.m),
-    )
-    .map((e) =>
-      e.isGap
-        ? { id: e.id, y: e.y, m: e.m, d: e.d, isGap: true }
-        : { id: e.id, y: e.y, m: e.m, d: e.d },
-    )
-}
-
 export const useProgress = create<ProgressState>()(
   persist(
     (set) => ({
@@ -245,7 +160,6 @@ export const useProgress = create<ProgressState>()(
       setSuddenBest: (v) => set((s) => ({ suddenBest: resolve(v, s.suddenBest) })),
       setSuddenAmBest: (v) => set((s) => ({ suddenAmBest: resolve(v, s.suddenAmBest) })),
       setAoxBest: (v) => set((s) => ({ aoxBest: resolve(v, s.aoxBest) })),
-      setLookupHistory: (v) => set((s) => ({ lookupHistory: resolve(v, s.lookupHistory) })),
       // Wipe all saved progress back to launch defaults. Because the store is persisted, this
       // also overwrites the saved copy — so Full Reset's call here makes the wipe permanent.
       resetProgress: () => set(() => makeProgressDefaults()),
@@ -265,15 +179,21 @@ export const useProgress = create<ProgressState>()(
       // and the saved personal defaults keep store/presets' permanent adapter, so an amnesic preset
       // cannot forget any of them however this file changes. See store/amnesic.
       storage: presetStatsStorage<Partial<ProgressState>>(),
-      // v3 = the slim lookup-entry shape. The bump still records that shape change even though
-      // `merge` below re-asserts it on every load: it is what tells a FUTURE migration which
-      // payloads it is looking at.
-      version: 3,
+      // v4 = lookupHistory LEFT the shape (Q1, round 20 — see store/lookupHistory). The bump
+      // still records that change even though nothing here has to REWRITE anything for it: an old
+      // payload's `lookupHistory` field is not in PERSISTED_KEYS above any more, so partialize
+      // simply stops re-writing it, and `mergeOverDefaults` below spreads the raw persisted object
+      // in as its last step regardless — a stray field along for that ride lands on the live state
+      // as an inert property nothing in this app reads any more (every consumer moved to the new
+      // store), and it is gone from disk the moment anything next calls a setter here. No `migrate`
+      // step earns its keep deleting a field that already has zero effect on any behavior; the
+      // version bump exists only so a FUTURE migration can tell, from the stored number alone,
+      // whether a payload predates the move. tests/progress.dom pins the "loads without throwing,
+      // and the stray field does nothing" half of this claim.
+      version: 4,
       // Saved-shape migrations — the version-gated REWRITES, run once at hydrate when the stored
       // version is older. Only aoxBest needs one: its keys gained a dimension, information a later
-      // read cannot reconstruct. (The lookup-history shape is NOT here; it is normalized
-      // unconditionally in `merge`, because a v3 payload is read from the same untrusted storage
-      // as a v2 one and version-gating it would leave the go-forward path unguarded.)
+      // read cannot reconstruct.
       migrate: (persisted, version) => {
         const state = persisted as Partial<ProgressValues>
         if (version < 2 && state?.aoxBest && typeof state.aoxBest === 'object') {
@@ -287,25 +207,20 @@ export const useProgress = create<ProgressState>()(
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<ProgressState>,
-      // Two guarantees, composed, and they are separate concerns:
-      //   • mergeOverDefaults — hydration REPLACES the saved progress rather than patching it over
-      //     whatever is in memory. At a cold start that is byte-identical to zustand's default
-      //     merge (memory already holds makeProgressDefaults()); on a PRESET SWITCH it is the whole
-      //     ballgame, because the default would let a preset with no saved copy of a silo inherit
-      //     the last preset's stats and bests — and the first answered question would make that
-      //     inheritance permanent. Argued in full in store/presets.
-      //   • the lookupHistory screen, which is normalized here rather than in `migrate` so it
-      //     covers every load at every version — that is what makes LookupCard's guard-free
-      //     rendering safe. Runs after migrate, so a v1/v2 payload arrives already rewritten.
-      // ⚠ ORDER: the screen must be applied AFTER the spread, or the saved (unscreened) history
-      // would overwrite it.
-      merge: (persisted, current) => {
-        const saved = (persisted ?? {}) as Partial<ProgressValues>
-        return {
-          ...mergeOverDefaults<ProgressValues, ProgressState>(makeProgressDefaults)(saved, current),
-          lookupHistory: normalizeLookupEntries(saved.lookupHistory),
-        }
-      },
+      // mergeOverDefaults — hydration REPLACES the saved progress rather than patching it over
+      // whatever is in memory. At a cold start that is byte-identical to zustand's default merge
+      // (memory already holds makeProgressDefaults()); on a PRESET SWITCH it is the whole ballgame,
+      // because the default would let a preset with no saved copy of a silo inherit the last
+      // preset's stats and bests — and the first answered question would make that inheritance
+      // permanent. Argued in full in store/presets.
+      // ⚠ ITS LAST STEP SPREADS THE RAW PERSISTED OBJECT IN, unscreened — which is exactly what
+      // lets an old payload's stray `lookupHistory` field pass through harmlessly rather than
+      // erroring (see the version-bump comment above): there is no per-field allowlist here to
+      // reject an unknown key, only ProgressValues' own fields ever being READ back out of the
+      // result. A store that still owned a validated-on-every-load field (lookupHistory itself,
+      // when this store had it) would compose its own screen on top of this, same as before; this
+      // store no longer has one.
+      merge: mergeOverDefaults<ProgressValues, ProgressState>(makeProgressDefaults),
       // Tripwire: after the saved copy loads, verify it. Corrupt saved progress (good>played from an
       // old bug, or storage truncation/tampering on a real device) is a silent integrity problem —
       // report it to Sentry (prod only, via captureError). Report-only: behavior is unchanged (the

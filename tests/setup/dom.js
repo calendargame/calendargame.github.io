@@ -24,6 +24,7 @@ import '@testing-library/jest-dom/vitest'
 import { beforeEach } from 'vitest'
 import { useProgress } from '../../src/store/progress.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
+import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
 
 if (typeof window !== 'undefined') {
   if (!window.matchMedia) {
@@ -55,13 +56,33 @@ if (typeof window !== 'undefined') {
   // call. The app's BFCache scroll-reset effect calls it on mount, so override it
   // unconditionally with a true no-op to keep the harness output clean.
   window.scrollTo = () => {}
+  // Same shape, same reason: HTMLCanvasElement.prototype.getContext IS defined, but jsdom logs
+  // "Not implemented: ... without installing the canvas npm package" on every call and then
+  // returns null anyway (verified — see tests/presetNameWidth.dom.test.js's own probe case,
+  // which is what this stub exists to keep quiet). lib/presetNameWidth's measureTextWidthPx
+  // already degrades to a 0-width measurement whenever this returns null (the same "measure
+  // nothing, refuse nothing" fallback lib/statFit's fitScale uses for a 0-width box) — this
+  // override does not change that outcome, it only silences the noise getting there. A test that
+  // needs a REAL (fabricated) measurement overrides this again locally, per file.
+  if (window.HTMLCanvasElement) {
+    window.HTMLCanvasElement.prototype.getContext = () => null
+  }
 }
 
 // Saved progress (Stage D1) is a module singleton the app reads, so — like the settings store —
-// it can leak stats / bests / Lookup history between tests. Reset it before EVERY test (the
-// DOM tests also localStorage.clear() + resetToFactory() in their own beforeEach). Cheap + idempotent.
+// it can leak stats / bests between tests. Reset it before EVERY test (the DOM tests also
+// localStorage.clear() + resetToFactory() in their own beforeEach). Cheap + idempotent.
 beforeEach(() => {
   useProgress.getState().resetProgress()
   // The per-mode setup store (Stage D follow-up) is the same kind of persisted singleton.
   useModePrefs.getState().resetModePrefs()
+  // Lookup history (Q1, round 20) left store/progress for its own two stores, and it is a module
+  // singleton for the SAME reason the two above are: localStorage.clear() (wherever a test file
+  // does its own) cannot reach an in-memory value already sitting in either store, so a test that
+  // looked something up would otherwise leak it into every later test in the suite — permanent
+  // history into the localStorage-backed store, session-only entries into the sessionStorage one.
+  // Reset directly rather than via any "resetX" action neither store needs for app code: setting
+  // each list to [] both clears memory and (through persist) overwrites whatever was on disk.
+  useLookupHistory.getState().setHistory([])
+  useLookupSession.getState().setSessionEntries([])
 })

@@ -129,7 +129,6 @@ const PICKERS = [
   'Dark theme',
   'Light theme',
   'Input',
-  'Dot Layout',
   'Julian Chance',
   'Leap Year Chance',
   'Jan/Feb Chance on Leap Years',
@@ -395,9 +394,11 @@ describe('Settings — THE PICKER RULE', () => {
     document.getElementById('root')?.remove()
   })
 
-  // Every on/off setting, by the label text its row is found through.
+  // Every on/off setting, by the label text its row is found through. Order is the panel's own,
+  // top to bottom — Dot Layout joined here in Q3 (round 20), a switch now rather than a picker.
   const SWITCHES = [
     'Random Format',
+    'Dot Layout',
     'Use System Settings',
     'Julian Calendar (pre-Oct 15, 1582)',
     'Save Stats',
@@ -702,13 +703,9 @@ describe('Settings — the radiogroup keyboard contract', () => {
   // told assistive tech there were seven groups.
   it('every group is ONE tab stop, on the selected pill, in both Use-System states', () => {
     mountPanel()
-    // Dot Layout is LOCKED while the answer input is Buttons — there are no dots to turn — and a
-    // locked group appoints no tab stop at all, which is its own contract (tests/dotOrientation
-    // .dom). So the sweep below asks its question of a panel where every picker is live, which is
-    // what "every group" is about.
-    act(() => {
-      fireEvent.click(group('Input').getByRole('radio', { name: 'Dots' }))
-    })
+    // Every remaining PICKER is live at the panel's launch state — Dot Layout, the one member that
+    // used to need Input on Dots to be live, left this sweep in Q3 (round 20): it is a SWITCH now,
+    // not a radiogroup, and its own lock/tab-stop contract is pinned in tests/dotOrientation.dom.
     PICKERS.forEach(expectOneTabStop)
     // The five pills the group spans include a whole tray with nothing selected in it: the tab
     // stop is a property of the CHOICE, so the empty tray contributes none.

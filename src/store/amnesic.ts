@@ -53,16 +53,29 @@ import type { ProgressValues } from './progress.js'
 // is no second place that knows what amnesic forgets.
 //
 // CLEARS (this list) — score, accuracy, streak and the solve times (`stats`, the five lifetime
-// silos); the ALL-TIME BESTS (blitzBest, suddenBest, suddenAmBest, aoxBest); and the Lookup
-// history. The browsable question history is not named because it is not saved by anyone: it is
-// engine state inside the always-mounted mode screens, and the remount that accompanies every
-// amnesic change throws it away with everything else those screens hold.
+// silos); and the ALL-TIME BESTS (blitzBest, suddenBest, suddenAmBest, aoxBest). The browsable
+// question history is not named because it is not saved by anyone: it is engine state inside the
+// always-mounted mode screens, and the remount that accompanies every amnesic change throws it away
+// with everything else those screens hold.
 //
 // KEEPS (everything not named here) — which is, today, the whole of the other three per-preset
 // stores: every ⚙ setting including theme, the per-mode setup, and the saved personal defaults.
 // They are kept by CONSTRUCTION rather than by an exclusion list: this file only ever repoints the
 // PROGRESS store, so the other three cannot be reached from here at all. The split is STATS, NOT
 // CONFIGURATION — an amnesic preset stays itself across a close and only forgets how you did.
+//
+// ⚠ LOOKUP HISTORY USED TO BE A THIRD CLEARS ENTRY AND NO LONGER CAN BE (Q1, round 20) — it left
+// store/progress entirely (see store/lookupHistory), which means it left what THIS LIST is even
+// capable of describing: `keyof ProgressValues` cannot name a field that is not part of
+// ProgressValues, so leaving it here would have failed to compile the moment the move landed. That
+// compile error is a feature, not a casualty — read it as confirmation the type guard below is
+// doing its job, not as something to work around. Removing it from this list does NOT mean an
+// amnesic session's lookups now join the permanent shared history: they still don't, and still
+// can't. store/lookupHistory grew its OWN suppression for exactly this — a session-only bucket a
+// new entry goes into instead of the permanent one, decided by the same `selectAmnesic` check this
+// file exports, at the moment main.tsx pushes the entry — because a SHARED, non-preset-scoped list
+// cannot be "cleared" by repointing one preset's storage the way this file repoints PROGRESS: there
+// is no preset-scoped copy of it to repoint away from in the first place.
 //
 // ⚠ TYPED AS `keyof ProgressValues`, which is the half a comment cannot enforce: renaming a
 // persisted progress key without updating this list is a compile error rather than a silently
@@ -74,7 +87,6 @@ export const AMNESIC_CLEARS: readonly (keyof ProgressValues)[] = [
   'suddenBest',
   'suddenAmBest',
   'aoxBest',
-  'lookupHistory',
 ]
 
 // ── Reading the flag ──────────────────────────────────────────────────────────────────────────

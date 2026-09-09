@@ -3,8 +3,10 @@
 // The defaults manager (Q12, made editable in Q5 round-6) — the ⚙ footer's window onto the
 // saved (or factory) defaults, on the ONE shared DefaultsCard with the Save Defaults popup.
 //
-// Drives the real <App/> like a user: the "View saved defaults" link is ALWAYS visible, LEFT of
-// "Clear saved defaults" (which still appears only while a snapshot exists). It opens the shared
+// Drives the real <App/> like a user: the "View Saved Defaults" link is ALWAYS visible, LEFT of
+// "Clear Saved Defaults" (round-20 Q5: also always mounted now — it dims and locks instead of
+// disappearing while nothing is saved, the same three-part convention the three buttons above it
+// withhold with). It opens the shared
 // card seeded from the EFFECTIVE defaults: read-only at rest (one full-width Close), the factory
 // view when nothing is saved (adapted title and subline), and fully editable — a dirty row's
 // value goes btn-solid, the restricted-write note replaces the footnote, and Save writes ONLY the
@@ -28,11 +30,13 @@ import {
   queryModalCard,
   panelFooter,
   resetAppState,
+  isOffered,
+  footerOfferState,
 } from './helpers/settingsPanel.jsx'
 
 // ── Harness helpers (tests/helpers/settingsPanel, plus the manager's own) ──
 const btn = (name) => screen.getByRole('button', { name })
-const openManager = () => act(() => fireEvent.click(btn('View saved defaults')))
+const openManager = () => act(() => fireEvent.click(btn('View Saved Defaults')))
 // "The manager is open on the SAVED view" — asked of the dialog itself, by its accessible name,
 // rather than of the title text. A text query cannot answer it any more: How to Play is
 // always-mounted since Q6 (round 9), so its display:none copy of the guide is in the DOM on every
@@ -66,11 +70,22 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     document.getElementById('root')?.remove()
   })
 
-  it('the View link is ALWAYS visible; with nothing saved it opens the labeled FACTORY view, Clear hidden', () => {
+  it('the View link is ALWAYS visible; with nothing saved it opens the labeled FACTORY view, Clear dims and locks', () => {
     mountApp()
     openSettings()
-    expect(btn('View saved defaults')).toBeInTheDocument() // no snapshot needed any more
-    expect(screen.queryByRole('button', { name: 'Clear saved defaults' })).toBeNull() // nothing to clear
+    expect(btn('View Saved Defaults')).toBeInTheDocument() // no snapshot needed any more
+    // Round-20 Q5: Clear is always MOUNTED too now, never absent — with nothing to clear it dims and
+    // locks instead, the identical three-part convention (drawn, announced, inert) the three
+    // buttons above it withhold with.
+    expect(btn('Clear Saved Defaults')).toBeInTheDocument()
+    expect(footerOfferState('Clear Saved Defaults')).toMatchObject({
+      offered: false,
+      dimmed: true,
+      announced: 'true',
+      tabStop: true, // reachable-but-inert, never dropped from the tab order
+    })
+    act(() => fireEvent.click(btn('Clear Saved Defaults'))) // a press against the lock is a no-op
+    expect(screen.queryByText('Clear your saved defaults?')).toBeNull() // the confirm never opened
     openManager()
     const dialog = managerDialog('Default settings') // adapted title
     expect(dialog).toHaveAttribute('aria-modal', 'true')
@@ -99,8 +114,8 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     mountApp()
     openSettings()
     saveSnapshot()
-    const view = btn('View saved defaults')
-    const clear = btn('Clear saved defaults')
+    const view = btn('View Saved Defaults')
+    const clear = btn('Clear Saved Defaults')
     // One row, View LEFT of Clear (non-destructive inspect before destructive wipe).
     expect(view.parentElement).toBe(clear.parentElement)
     expect(view.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -118,7 +133,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     ).toBeInTheDocument()
   })
 
-  it('lives in the pinned button block and places the pair on the row’s THIRDS — View alone centres on the whole row', () => {
+  it('lives in the pinned button block and places the pair on the row’s THIRDS — unconditionally now, both links always mounted (round-20 Q5)', () => {
     useModePrefs.getState().setAoxN('25') // something to save, so Save Defaults is offered
     mountApp()
     openSettings()
@@ -128,7 +143,8 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     // its own span. Centre of [0, 2/3] is 1/3, centre of [1/3, 1] is 2/3 — the two links land in
     // the GAPS between the three flex-1 buttons above, whose centres are 1/6, 1/2 and 5/6. Whether
     // that reads as interlocked or as crowded at a phone's width is the owner's device call.
-    const view = () => btn('View saved defaults')
+    const view = () => btn('View Saved Defaults')
+    const clear = () => btn('Clear Saved Defaults')
     const row = view().parentElement
     expect(row.className).toContain('grid-cols-3')
     expect(row.className).not.toContain('gap-')
@@ -137,24 +153,27 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     // down to Contact.
     expect(row.parentElement).toBe(panelFooter())
     expect(panelFooter().contains(btn('Full Reset'))).toBe(true)
-    // Nothing saved yet, so Clear is absent and View spans ALL THREE columns: centred on the whole
-    // row rather than sitting at one third with nothing opposite it.
-    expect(screen.queryByRole('button', { name: 'Clear saved defaults' })).toBeNull()
+    // Round-20 Q5 DELETED the conditional span-width branch: both links are PERMANENT equal
+    // siblings and sit on the thirds from the very first render, nothing saved or not — Clear just
+    // dims and locks instead of widening View to span the whole row.
+    expect(clear()).toBeInTheDocument()
+    expect(isOffered(clear())).toBe(false) // nothing saved yet
     expect(view().className).toContain('col-start-1')
-    expect(view().className).toContain('col-end-4')
+    expect(view().className).toContain('col-end-3') // 1/3, unconditionally
     expect(view().className).toContain('justify-self-center')
-    // With a snapshot the pair takes its thirds.
-    saveSnapshot()
-    const clear = btn('Clear saved defaults')
-    expect(view().className).toContain('col-end-3') // 1/3
-    expect(clear.className).toContain('col-start-2')
-    expect(clear.className).toContain('col-end-4') // 2/3
-    expect(clear.className).toContain('justify-self-center')
+    expect(clear().className).toContain('col-start-2')
+    expect(clear().className).toContain('col-end-4') // 2/3, unconditionally
+    expect(clear().className).toContain('justify-self-center')
     // Both state row 1 explicitly. With only Clear's column placed, auto-placement would have found
     // column 2 already behind the cursor (View having just taken columns 1-2) and dropped Clear
     // onto a second line — a silent two-line footer.
     expect(view().className).toContain('row-start-1')
-    expect(clear.className).toContain('row-start-1')
+    expect(clear().className).toContain('row-start-1')
+    // Saving flips Clear from dimmed-and-locked to offered — the layout itself never moves.
+    saveSnapshot()
+    expect(isOffered(clear())).toBe(true)
+    expect(view().className).toContain('col-end-3')
+    expect(clear().className).toContain('col-end-4')
   })
 
   it('a legacy snapshot missing a field forward-merges to factory — never undefined', () => {
@@ -281,7 +300,8 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
       blitzQSec: MODE_PREFS_DEFAULTS.blitzQSec,
       aoxN: '25',
     })
-    expect(btn('Clear saved defaults')).toBeInTheDocument() // the Clear link appears with the snapshot
+    expect(saved.amnesic).toBe(false) // factory (round-20 Q4) — the manager never shows or edits it
+    expect(isOffered(btn('Clear Saved Defaults'))).toBe(true) // the link ENABLES with the snapshot
     openManager()
     expect(savedManager()).toBeInTheDocument() // and the manager now opens on the saved view
   })
@@ -323,12 +343,12 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     readout(manageDialog, 'Blitz Question Timer')
   })
 
-  it('the CLEAR CONFIRM popup: Cancel keeps the snapshot, Clear forgets it (View stays, Clear link hides)', () => {
+  it('the CLEAR CONFIRM popup: Cancel keeps the snapshot, Clear forgets it (View stays, Clear link dims and locks)', () => {
     act(() => useModePrefs.getState().setFlashMs(800))
     mountApp()
     openSettings()
     saveSnapshot()
-    act(() => fireEvent.click(btn('Clear saved defaults')))
+    act(() => fireEvent.click(btn('Clear Saved Defaults')))
     const dialog = managerDialog('Clear your saved defaults?')
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(document.activeElement).toBe(dialog) // focus landed IN the dialog on open
@@ -336,12 +356,14 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()
     expect(useUserDefaults.getState().saved).not.toBeNull() // Cancel keeps it
     expect(btn('Reset Settings')).toBeInTheDocument() // the settings panel survived
-    act(() => fireEvent.click(btn('Clear saved defaults')))
+    act(() => fireEvent.click(btn('Clear Saved Defaults')))
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' })))
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()
     expect(useUserDefaults.getState().saved).toBeNull() // back to factory semantics
-    expect(screen.queryByRole('button', { name: 'Clear saved defaults' })).toBeNull() // the link hides itself
-    expect(btn('View saved defaults')).toBeInTheDocument() // View is permanent
+    // Round-20 Q5: the link stays MOUNTED — it dims and locks rather than disappearing.
+    expect(btn('Clear Saved Defaults')).toBeInTheDocument()
+    expect(isOffered(btn('Clear Saved Defaults'))).toBe(false)
+    expect(btn('View Saved Defaults')).toBeInTheDocument() // View is permanent
   })
 
   it('the Clear confirm carries full modal parity: scrim, Escape, and close-with-settings', () => {
@@ -349,7 +371,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     mountApp()
     openSettings()
     saveSnapshot()
-    act(() => fireEvent.click(btn('Clear saved defaults')))
+    act(() => fireEvent.click(btn('Clear Saved Defaults')))
     // The settings click-outside handler must treat the scrim as "inside" (mousedown path)…
     const scrim = document.querySelector('[data-settings-modal]')
     act(() => fireEvent.mouseDown(scrim))
@@ -359,11 +381,11 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()
     expect(useUserDefaults.getState().saved).not.toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
-    act(() => fireEvent.click(btn('Clear saved defaults')))
+    act(() => fireEvent.click(btn('Clear Saved Defaults')))
     act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // capture-phase popup handler wins
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
-    act(() => fireEvent.click(btn('Clear saved defaults')))
+    act(() => fireEvent.click(btn('Clear Saved Defaults')))
     act(() => fireEvent.click(gear())) // any settings close counts
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()
     expect(useUserDefaults.getState().saved).not.toBeNull() // dismissal never clears
@@ -483,7 +505,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
       }
       window.removeEventListener('popstate', count)
     })
-    act(() => fireEvent.click(btn('Clear saved defaults')))
+    act(() => fireEvent.click(btn('Clear Saved Defaults')))
     expect(screen.getByText('Clear your saved defaults?')).toBeInTheDocument()
     act(() => window.dispatchEvent(new PopStateEvent('popstate')))
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()

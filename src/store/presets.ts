@@ -30,9 +30,10 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 //     build saves, and the new build then reads that field as its factory value. It is bounded
 //     (one setting reverts; nothing is mis-attributed and no stats are lost) and it is inherent to
 //     two builds sharing one key rather than a fault of this scheme — a copy migration would have
-//     had the same interleaving with data loss on top. Today's one instance is store/settings'
-//     `dotOrientation`, the 15th setting, added after this design shipped; the note is at that
-//     store's `name` option.
+//     had the same interleaving with data loss on top. Today's instance is store/settings'
+//     `rotateDots` (the 15th setting, added after this design shipped, and since renamed from
+//     `dotOrientation` — Q3, round 20); the note, including the one direction a `migrate` step now
+//     recovers instead of reverting, is at that store's `name` option.
 //
 // WHAT LIVES IN THIS FILE, and why they live together:
 //   • the REGISTRY store — the list of presets and which one is active. It is GLOBAL: it is the
@@ -53,7 +54,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 // version (it would sweep up anything that happened to match); deriving them from this record is
 // exact, and a fifth per-preset store added later becomes deletable by the act of being listed.
 // ⚠ The `-v1` in these strings is the ORIGINAL key version and is frozen history — the live shape
-// version is each store's own `version` option (progress is on 3). Do not "tidy" them.
+// version is each store's own `version` option (progress is on 4). Do not "tidy" them.
 export const PRESET_STORE_KEYS = {
   settings: 'cg-settings-v1',
   modePrefs: 'cg-modeprefs-v1',
@@ -112,24 +113,38 @@ export type PresetRegistryValues = {
   nextId: number
 }
 
-// ★ HOW LONG A PRESET NAME MAY BE, and the number is DERIVED rather than picked. It was 24 while
-// nothing rendered a name; the control that renders them (components/PresetSwitcher) lives in the
-// fixed top bar, where the space the "Calendar Game" wordmark vacates is ~111-122px at a 360px
-// phone — about SIX EM of text at the bar's text-sm tier, and an average mixed-case character in
-// the system UI stack advances ≈0.5em, so twelve characters. The full arithmetic, the fluid-root
-// reason the cell is measured in `em`, and the ⚠ that none of it can be verified without the
-// owner's iPhone are all written out at PRESET_NAME_COL in that file.
-// ⚠ IT IS HALF OF A PAIR AND MUST MOVE WITH THE OTHER HALF. This cap bounds CHARACTERS; the
-// switcher's fixed cell plus `truncate` bound PIXELS, which a character cap cannot do in a
-// proportional font (twelve W's are nearly twice twelve i's). Widen one without the other and the
-// promise breaks in one of two directions: raise this alone and names become permanently unreadable
-// behind an ellipsis, widen the cell alone and the bar overflows on the narrowest phone.
-// ⚠ LOWERING IT IS RETROACTIVE, BY DESIGN. normalizePresetName slices on every read, so a name
-// saved under an older, longer cap is shortened the next time the registry hydrates rather than
-// being kept as a value the UI cannot show. That is the honest behaviour — the alternative is a
-// stored name no screen in the app can display — and it costs nothing today: presets shipped with
-// no naming UI at all, so the only names in existence are `defaultPresetName`'s ("Preset 10" = 9).
-export const MAX_PRESET_NAME = 12
+// ★★ HOW LONG A PRESET NAME MAY BE — round 20 Q6 CHANGED WHAT THIS NUMBER IS FOR, and that is
+// worth stating before the number itself. It used to be DERIVED, pinned exactly to the switcher's
+// then-FIXED display cell (6em at text-sm, ≈12 characters) so that a typed name could never
+// truncate under ordinary conditions. Q6 made that cell FLEXIBLE — it now grows with the top bar
+// (components/PresetSwitcher's PRESET_NAME_COL is a MINIMUM width today, not a fixed one) — and
+// put a LIVE, PIXEL-MEASURED cap on the one place a name is actually typed (the rename field,
+// components/PresetManager, measured against the switcher's own current rendered width — see
+// lib/presetNameWidth for the mechanism). That live cap is what answers "how many characters fit
+// right now", and it is a moving target by construction: the same name that fits a wide phone can
+// overflow a narrow one, and this constant cannot chase a number that changes per device.
+//
+// ★ SO THIS CONSTANT'S JOB NARROWED TO ONE THING: screening a name this app did NOT just watch get
+// typed — one that arrived from localStorage (an older build, a smaller-cap build, a tampered or
+// truncated payload) or cross-device sync, none of which ever passed through the live typing UI at
+// all. `normalizePresetName` is the enforcement point (it slices on every read, not only on typed
+// input), and it needs SOME hard ceiling independent of any measurement, because there is no live
+// switcher cell to measure against a value that is being loaded, only one it is about to be shown
+// in.
+// ⚠ SO IT IS DELIBERATELY MORE GENEROUS THAN ANY SINGLE DEVICE'S TYPING CAP, not equal to it. The
+// switcher's widest realistic budget — the top bar's own max-w-[30rem] (480px) container, at the
+// fluid root's largest size — comes out to roughly 25 characters of headroom by the same em-based
+// arithmetic PRESET_NAME_COL used to use (fixed chrome ~230px of a ~442px content box at the
+// clamp's tall-and-wide end, leaving ~212px ÷ ~8.3px/char ≈ 25). 40 clears that with real margin —
+// enough that a name honestly typed against a generous device's live cap is never retroactively
+// shortened here — while still being a firm, bounded ceiling against a payload nobody typed: it
+// caps storage size and render cost the same way the old 12 did, just at a number chosen for what
+// this screen is FOR now rather than for a pixel budget it no longer owns.
+// ⚠ LOWERING IT IS RETROACTIVE, BY DESIGN, UNCHANGED FROM BEFORE. normalizePresetName slices on
+// every read, so a name saved under an older, longer cap is shortened the next time the registry
+// hydrates rather than being kept as a value this screen decided it would rather not trust. That
+// is the honest behaviour — the alternative is a stored name with no ceiling at all.
+export const MAX_PRESET_NAME = 40
 
 export const defaultPresetName = (id: number): string => `Preset ${id}`
 
@@ -155,7 +170,7 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
 export const normalizePresetName = (name: string, id: number): string =>
   (typeof name === 'string' ? name.trim().slice(0, MAX_PRESET_NAME) : '') || defaultPresetName(id)
 
-// ★ THE REGISTRY IS READ FROM UNTRUSTED STORAGE, exactly as store/progress' lookupHistory is, and
+// ★ THE REGISTRY IS READ FROM UNTRUSTED STORAGE, exactly as store/lookupHistory's own list is, and
 // it gets the same treatment for the same reason: the screen is UNCONDITIONAL, not version-gated,
 // because a current-shape payload comes out of the same localStorage a tampered or truncated one
 // does. The stakes are higher here than anywhere else in the app — an activeId naming a preset that
@@ -335,9 +350,9 @@ export const presetScopedStorage = <T>() =>
 // clone. It also closes a smaller pre-existing hole on the same line: a `persist.rehydrate()` on a
 // live store used to keep in-memory values for any key the payload lacked.
 //
-// ⚠ The persisted half is spread LAST and unscreened, exactly as before — per-store screening
-// (progress' lookupHistory normalisation) still belongs to that store's own merge, which composes
-// this one rather than replacing it.
+// ⚠ The persisted half is spread LAST and unscreened, exactly as before — any store that still
+// needs to validate untrusted entries on every load (store/lookupHistory's own normalisation) owns
+// that screen itself, in its own `merge`, rather than this shared helper trying to know about it.
 export const mergeOverDefaults =
   <V extends object, S>(makeDefaults: () => V) =>
   (persisted: unknown, current: S): S =>

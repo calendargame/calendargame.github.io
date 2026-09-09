@@ -15,6 +15,8 @@ import { screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { useSettings } from '../src/store/settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
+import { usePresets } from '../src/store/presets.js'
+import { selectAmnesic } from '../src/store/amnesic.js'
 import {
   mountApp,
   openSettings,
@@ -26,6 +28,8 @@ import {
   isOffered,
   makeSaveable,
   resetAppState,
+  switchState,
+  toggleSwitch,
 } from './helpers/settingsPanel.jsx'
 
 // ── Harness helpers (tests/helpers/settingsPanel, plus this file's own) ──────
@@ -221,6 +225,95 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(isOffered(footerButton('Save Defaults'))).toBe(false)
   })
 
+  // ── Round-20 Q4: Amnesic joins the Save Defaults / Reset Settings / Full Reset contract ────────
+  // Owner's explicit, confirmed decision (flagged as a real tradeoff, reaffirmed anyway): Save
+  // Defaults captures whether the active preset is Amnesic at the moment of saving; Reset Settings
+  // and Full Reset both restore it. Amnesic itself never lights the gear's "modified" bar (that is
+  // pinned elsewhere, in tests/amnesic.dom), so every case below arranges a SEPARATE divergence to
+  // make the button it presses actually offered.
+  it('the Save Defaults popup captures the LIVE Amnesic value at commit — both Off and On', () => {
+    mountApp()
+    openSettings()
+    // Off first: Amnesic starts Off and nothing else needs to diverge to prove the capture.
+    makeSaveable()
+    openPopup()
+    act(() => fireEvent.click(btn('Save')))
+    expect(useUserDefaults.getState().saved.amnesic).toBe(false)
+    // Flip Amnesic On — it does not light Save Defaults on its own, so a fresh divergence is what
+    // reopens the popup, not the toggle.
+    toggleSwitch('Amnesic')
+    expect(isOffered(footerButton('Save Defaults'))).toBe(false)
+    makeSaveable()
+    openPopup()
+    act(() => fireEvent.click(btn('Save')))
+    expect(useUserDefaults.getState().saved.amnesic).toBe(true)
+  })
+
+  it("the manager's Save passes the PREVIOUSLY SAVED Amnesic value through unchanged, never the live one", () => {
+    mountApp()
+    openSettings()
+    toggleSwitch('Amnesic') // On
+    makeSaveable()
+    openPopup()
+    act(() => fireEvent.click(btn('Save'))) // saved.amnesic = true
+    expect(useUserDefaults.getState().saved.amnesic).toBe(true)
+    toggleSwitch('Amnesic') // live flips back Off — a re-capture would show up here
+    // Edit one shown row through the manager and Save — the manager's own rule (mirrors the
+    // settings-byte-identical case in tests/settingsPanel.defaults.dom): it writes only what it
+    // shows, never Amnesic.
+    act(() => fireEvent.click(footerButton('View Saved Defaults')))
+    const dialog = modalCard('Your saved defaults')
+    act(() =>
+      fireEvent.change(within(dialog).getByRole('slider', { name: 'Flash Speed' }), {
+        target: { value: '1200' },
+      }),
+    )
+    act(() => fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })))
+    expect(useUserDefaults.getState().saved.amnesic).toBe(true) // unchanged — never re-captured
+  })
+
+  it('Reset Settings restores the saved Amnesic state onto the active preset', () => {
+    mountApp()
+    openSettings()
+    toggleSwitch('Amnesic') // On
+    makeSaveable()
+    openPopup()
+    act(() => fireEvent.click(btn('Save'))) // saved.amnesic = true
+    toggleSwitch('Amnesic') // live diverges to Off — Reset Settings must put it back
+    act(() => useSettings.getState().setLeapChance('75')) // something else, so the tap is live
+    act(() => fireEvent.click(btn('Reset Settings')))
+    expect(switchState('Amnesic')).toBe('On')
+    expect(selectAmnesic(usePresets.getState())).toBe(true)
+  })
+
+  it('with nothing saved, Reset Settings restores Amnesic to factory (Off)', () => {
+    mountApp()
+    openSettings()
+    toggleSwitch('Amnesic') // live On, nothing ever saved
+    act(() => useSettings.getState().setLeapChance('75')) // something capturable diverges too
+    act(() => fireEvent.click(btn('Reset Settings')))
+    expect(switchState('Amnesic')).toBe('Off')
+    expect(selectAmnesic(usePresets.getState())).toBe(false)
+  })
+
+  // The surprising half of this group's scope, called out on its own rather than left as inherited
+  // coverage: fullReset delegates its ENTIRE settings restore to resetSettings (main.tsx's own
+  // comment says so), so Amnesic rides along there too — Full Reset restores it exactly as Reset
+  // Settings does, not just the footer's own middle button.
+  it('Full Reset ALSO restores the saved Amnesic state (not just the Reset Settings button)', () => {
+    mountApp()
+    openSettings()
+    toggleSwitch('Amnesic') // On
+    makeSaveable()
+    openPopup()
+    act(() => fireEvent.click(btn('Save'))) // saved.amnesic = true
+    toggleSwitch('Amnesic') // live diverges to Off
+    act(() => useSettings.getState().setLeapChance('75')) // something else, so Full Reset has work
+    act(() => fireEvent.click(btn('Full Reset')))
+    act(() => fireEvent.click(btn('Confirm?'))) // fires; the panel closes
+    expect(selectAmnesic(usePresets.getState())).toBe(true)
+  })
+
   it('popup Cancel discards edits; Save persists the EDITED values; live stores stay untouched', () => {
     mountApp()
     openSettings()
@@ -334,38 +427,45 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     mountApp()
     openSettings()
     openPopup()
-    expect(screen.queryByRole('button', { name: /Clear saved defaults/ })).toBeNull() // nothing saved yet — no link anywhere
+    // Round-20 Q5: the footer link is always MOUNTED now, never absent — nothing saved yet means it
+    // dims and locks instead. It still carries no popup-scoped twin, which is the rest of this case.
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false)
     act(() => fireEvent.click(btn('Save')))
     // Saving parked live == saved, which dims Save Defaults — and since round 14 (D7) a dimmed
     // Save Defaults is inert, so getting back INTO the popup takes a fresh divergence.
     makeSaveable()
     openPopup()
     // The Save Defaults popup's duplicate "(back to factory)" link was removed in Round-4 —
-    // the ⚙ footer's "Clear saved defaults" is the ONLY clear affordance.
+    // the ⚙ footer's "Clear Saved Defaults" is the ONLY clear affordance.
     const dialog = modalCard('Save current settings as your defaults?')
-    expect(within(dialog).queryByRole('button', { name: /Clear saved defaults/ })).toBeNull()
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear saved defaults' })))
+    expect(within(dialog).queryByRole('button', { name: /Clear Saved Defaults/ })).toBeNull()
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(true) // now reachable — a snapshot exists
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear Saved Defaults' })))
     // The link asks first now (Q5 round-6): nothing is cleared until the confirm's red-tier Clear.
     expect(useUserDefaults.getState().saved).not.toBeNull()
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' })))
     expect(useUserDefaults.getState().saved).toBeNull() // back to factory semantics
-    expect(screen.queryByRole('button', { name: /Clear saved defaults/ })).toBeNull() // the link hides itself…
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // dims and locks again…
     expect(btn('Save')).toBeInTheDocument() // …and the open popup survives, still saveable
   })
 
-  it('the ⚙ footer Clear-saved-defaults link: hidden without a snapshot, reachable at steady state (Save Defaults dimmed), clears via its confirm', () => {
+  it('the ⚙ footer Clear Saved Defaults link: dimmed and locked without a snapshot, reachable at steady state (Save Defaults dimmed), clears via its confirm', () => {
     mountApp()
     openSettings()
-    expect(screen.queryByRole('button', { name: 'Clear saved defaults' })).toBeNull() // nothing saved
+    expect(footerButton('Clear Saved Defaults')).toBeInTheDocument() // always mounted (round-20 Q5)
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // …but nothing saved, so it is inert
+    act(() => fireEvent.click(footerButton('Clear Saved Defaults'))) // a press against the lock is a no-op
+    expect(screen.queryByText('Clear your saved defaults?')).toBeNull() // the confirm never opened
     makeSaveable() // round 14 (D7): a dimmed Save Defaults no longer opens its popup — see the helper
     openPopup()
     act(() => fireEvent.click(btn('Save'))) // live == saved → the Save Defaults button dims…
     expect(isOffered(footerButton('Save Defaults'))).toBe(false) // …making the POPUP's clear link unreachable
-    const footerLink = screen.getByRole('button', { name: 'Clear saved defaults' }) // the footer link is the escape hatch
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(true) // the footer link is the escape hatch
+    const footerLink = screen.getByRole('button', { name: 'Clear Saved Defaults' })
     act(() => fireEvent.click(footerLink))
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' }))) // through the confirm popup (Q5 round-6)
     expect(useUserDefaults.getState().saved).toBeNull() // snapshot forgotten (live settings untouched)
-    expect(screen.queryByRole('button', { name: 'Clear saved defaults' })).toBeNull() // and the link hides itself
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // dims and locks again
   })
 
   it('the shared card in the Save popup: an edited row goes btn-solid; Cancel + Save always; no restricted-write note', () => {

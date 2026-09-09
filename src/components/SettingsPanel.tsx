@@ -39,7 +39,6 @@ import {
   WRITTEN_FORMATS,
   NUMERIC_FORMATS,
   INPUT_STYLES,
-  DOT_ORIENTATIONS,
   DARK_THEMES,
   LIGHT_THEMES,
   CHANCE_OPTIONS,
@@ -188,8 +187,8 @@ export function SettingsPanel({
   const setRandomFormat = useSettings((s) => s.setRandomFormat)
   const inputStyle = useSettings((s) => s.inputStyle)
   const setInputStyle = useSettings((s) => s.setInputStyle)
-  const dotOrientation = useSettings((s) => s.dotOrientation)
-  const setDotOrientation = useSettings((s) => s.setDotOrientation)
+  const rotateDots = useSettings((s) => s.rotateDots)
+  const setRotateDots = useSettings((s) => s.setRotateDots)
   const leapChance = useSettings((s) => s.leapChance)
   const setLeapChance = useSettings((s) => s.setLeapChance)
   const janFebChance = useSettings((s) => s.janFebChance)
@@ -472,11 +471,19 @@ export function SettingsPanel({
   }
   // Save commits the EDITED pending snapshot (never the live stores — they stay untouched); from
   // here on Reset Settings / Full Reset / the gear indicator mean THESE values by "default".
+  // ⚠ amnesic RIDES ALONG, READ LIVE AT COMMIT (round-20 Q4) — NOT frozen into a ref at open like
+  // pendSettingsRef. The popup has no UI for it (it is not shown or editable here — see the note at
+  // toggleAmnesic), so unlike the 15 settings values there is nothing a user could edit out from
+  // under a captured-at-open snapshot; reading the bound `amnesic` (line ~219, a live store
+  // subscription) at the moment of commit is equivalent to capturing it at open and one line
+  // simpler. The owner's confirmed decision — flagged as a real tradeoff and reaffirmed — is that
+  // this value is real ARCHITECTURE from here on: Reset Settings and Full Reset both restore it.
   const commitSaveDefaults = () => {
     if (pendSettingsRef.current)
       saveUserDefaults({
         settings: pendSettingsRef.current,
         prefs: { ...pendPrefs, aoxN: normalizeAoxN(pendPrefs.aoxN) },
+        amnesic,
       })
     setSaveDefaultsOpen(false)
   }
@@ -485,10 +492,16 @@ export function SettingsPanel({
   // the owner's rule: this popup edits exactly what it shows). With nothing saved yet it CREATES
   // the snapshot — the factory ⚙ values plus these edits, the natural flow from the factory view
   // (the footer's Clear link appears with it).
+  // ⚠ amnesic PASSES THROUGH UNCHANGED, THE SAME AS THE 15 SETTINGS (round-20 Q4) — this popup shows
+  // and edits none of it (PresetManager and this file's manage-defaults markup both confirm Amnesic
+  // is read-only outside ⚙ → Stats), so it is not this popup's to re-capture. Previously-saved value
+  // when one exists, factory (false — a fresh preset is never amnesic) when creating the snapshot
+  // from the factory view — mirroring effectiveAmnesicDefault's own "nothing saved = factory" rule.
   const commitManageDefaults = () => {
     saveUserDefaults({
       settings: savedDefaults ? savedDefaults.settings : SETTINGS_DEFAULTS,
       prefs: { ...managePrefs, aoxN: normalizeAoxN(managePrefs.aoxN) },
+      amnesic: savedDefaults ? savedDefaults.amnesic : false,
     })
     setManageDefaultsOpen(false)
   }
@@ -568,7 +581,10 @@ export function SettingsPanel({
   // It is reachable, despite the note this inherited calling it defensive: arm the button by tap,
   // then reach Reset Settings by KEYBOARD and press Enter. The site-wide disarm listener above only
   // watches mousedown/touchstart, so no press ever cancels the arm, and if the rest of the app was
-  // already fresh then settings returning to default is the thirteenth term falling into place.
+  // already fresh then settings returning to default is one of isFullyReset's thirteen terms
+  // falling into place — Q1/round 20 moved Lookup history out of the progress store, but the
+  // owner's own mid-flight correction kept Full Reset clearing it (see main.tsx's isFullyReset),
+  // so that term survives too, merely renamed to displayLookupHistory.length===0.
   // What it prevents is cosmetic but real: the button would sit at "Confirm?" on a control that is
   // simultaneously dimmed, announced unavailable and refused by armFullReset's own first line (B7
   // took its pointer-events-none away in round 15, so that guard is now the whole of its inertness)
@@ -983,7 +999,7 @@ export function SettingsPanel({
               ⚠ IT COSTS THE PANEL ~70px OF SCROLL, which is the honest trade and not an oversight:
               this section is read once and acted on rarely, and it pushes the Date Format tray
               further down a card that already scrolls. Nothing cheaper was available — a footer
-              link (beside View saved defaults) would have been ~0px, and it would have filed "which
+              link (beside View Saved Defaults) would have been ~0px, and it would have filed "which
               copy of the app am I in" under the same heading as the app's contact email.
               ⚠ THE LINE OF PROSE IS NOT DUPLICATION OF THE GUIDE. How to Play explains what a
               preset IS; this says which one you are in and what the three buttons at the foot of
@@ -1010,7 +1026,7 @@ export function SettingsPanel({
                 catastrophic for a MODAL OPENER: the panel closing unmounts this component, and the
                 modal it just opened goes with it, so the gesture would look like a button that does
                 nothing. The ⚙ footer already carries this attribute for exactly this reason (its
-                Save Defaults, View/Clear saved defaults and Changelog links all open modals); this
+                Save Defaults, View/Clear Saved Defaults and Changelog links all open modals); this
                 is the first modal opener OUTSIDE that footer, so it has to say it for itself.
                 ⚠ ON THE BUTTON, NOT ON THE SECTION. `closest` walks up from the release target, so
                 either would work — but the section's other two children are a heading and a line of
@@ -1102,41 +1118,56 @@ export function SettingsPanel({
             <PillGroup label="Input" disabled={mode === 'deduction'}>
               <PillTray value={inputStyle} onChange={setInputStyle} options={INPUT_STYLES} />
             </PillGroup>
-            {/* Dot Layout — Columns / Rows: which way the 7-dot layout is TURNED (lib/dotLayout,
-                the one array both the real input and How-to-Play's diagram derive from). One tray,
-                no families, directly under Input because it is the same subject: Input chooses
-                whether you answer with dots, this chooses how those dots sit.
-                ⚠ NOT CALLED "ROTATE", and that is a naming decision rather than taste: this app
-                already uses that word for "turn your device" (the portrait-lock screen,
-                components/RotateOverlay). The labels describe the picture instead — the two weekday
-                triples run down the side COLUMNS, or along the top and bottom ROWS.
+            {/* Dot Layout — which way the 7-dot layout is TURNED (lib/dotLayout, the one array both
+                the real input and How-to-Play's diagram derive from). Q3 (round 20): this used to be
+                a two-option PillTray (Columns / Rows) and is a SWITCH now, on THE PICKER RULE's own
+                logic — a choice between exactly two named alternatives IS an on/off shape, and this
+                one always was. Built on the AMNESIC switch's exact pattern a few rows below (read
+                that block's comment in full before touching this one): the dim lives on the ROW's
+                wrapping div via opacity-60 when locked, never on the button itself (opacity would
+                otherwise multiply); aria-disabled ANNOUNCES the lock and the onClick guard is what
+                actually makes it inert; cursor-not-allowed is folded into the button's className
+                string; no pointer-events-none, so a keyboard user reaches the button and is told why
+                it does nothing rather than meeting a silent one.
+                ⚠ NOT LABELLED "ROTATE", for the same reason the old picker's two pill labels never
+                said it either: this app already uses that word for "turn your device" (the
+                portrait-lock screen, components/RotateOverlay), one screen away from this one — a
+                second meaning here is confusion worth avoiding rather than a word worth reusing. "Dot
+                Layout" names the same setting it always has.
                 ★ IT LOCKS WHENEVER THERE ARE NO DOTS ON SCREEN TO TURN, which is two conditions and
-                not one: Deduction (whose answers are not weekdays at all — the same
-                `mode === 'deduction'` the Input picker above uses, shared on purpose, because a live
-                picker sitting directly beneath a dead one, both about dots, would read as a bug in
-                the lock), and ANY mode while Input is on Buttons. The second half was missing for one
-                round and the result was a picker whose only observable effect was somewhere else
-                entirely: a player on Buttons could set Rows and watch nothing change but the
-                TITLE-BAR MARK, permanently, with no dots anywhere on screen for it to correspond to.
-                The owner's requirement is that the mark turn WITH THE INPUT; a control that turns it
-                while the input cannot follow is that requirement inverted.
-                ⚠ IT IS A LOCK, NOT A RESET — same housing, same dim, value preserved, exactly how
-                Julian Chance behaves when the year range makes it moot. Switch Input back to Dots and
-                the orientation you chose is still the one selected.
-                ⚠ THE ONE CONSEQUENCE, written down so it is not later reported as one: the title-bar
-                mark follows this setting in EVERY mode and at EITHER input style (main.tsx,
-                components/W5Logo), so wherever this picker is locked the mark's orientation is FROZEN
-                rather than irrelevant. Frozen is the honest word — nothing about it changes on the way
-                into Deduction or on the way to Buttons; it simply cannot be changed from there,
-                exactly like the answer layout above it. */}
-            <div className="text-xs text-(--tx-200-80) pt-1">Dot Layout</div>
-            <PillGroup label="Dot Layout" disabled={mode === 'deduction' || inputStyle !== 'dots'}>
-              <PillTray
-                value={dotOrientation}
-                onChange={setDotOrientation}
-                options={DOT_ORIENTATIONS}
-              />
-            </PillGroup>
+                not one — UNCHANGED from the picker: Deduction (whose answers are not weekdays at all
+                — the same `mode === 'deduction'` the Input picker above uses, shared on purpose,
+                because a live control sitting directly beneath a dead one, both about dots, would
+                read as a bug in the lock), and ANY mode while Input is on Buttons — the second half
+                is what makes the mark's own fix (below) necessary in the first place: with Input on
+                Buttons there is nothing on screen for a turned mark to correspond to, so the CONTROL
+                that could turn it locks too, not just the mark itself.
+                ⚠ IT IS A LOCK, NOT A RESET — value preserved while locked, exactly how Julian Chance
+                behaves when the year range makes it moot and exactly how Amnesic behaves while Save
+                Stats is off. Switch Input back to Dots and the choice you made is still selected.
+                ⚠ THE ONE CONSEQUENCE, written down so it is not later reported as one, and CORRECTED
+                by this same round: the title-bar mark now follows this setting ONLY while Input is
+                Dots (main.tsx gates `<W5Logo>`'s prop on `inputStyle==='dots'`, not just this
+                setting) — it used to follow in EVERY mode and at EITHER input style, which was
+                precisely the bug (a mark rotated with nothing on screen it corresponded to). So
+                wherever this toggle is locked the mark's orientation is FROZEN at upright, same as
+                the rest of the answer layout it sits beside. */}
+            <div
+              className={`flex items-center justify-between ${mode === 'deduction' || inputStyle !== 'dots' ? 'opacity-60' : ''}`}
+            >
+              <span className="text-xs text-(--tx-200-80)">Dot Layout</span>
+              <button
+                type="button"
+                aria-label="Dot Layout"
+                aria-disabled={mode === 'deduction' || inputStyle !== 'dots' || undefined}
+                onClick={() => {
+                  if (mode !== 'deduction' && inputStyle === 'dots') setRotateDots((v) => !v)
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${rotateDots ? 'btn-solid border-transparent' : 'surface-toggle text-(--tx-100-80)'}${mode === 'deduction' || inputStyle !== 'dots' ? ' cursor-not-allowed' : ''}`}
+              >
+                {rotateDots ? 'On' : 'Off'}
+              </button>
+            </div>
             <div className="text-xs text-(--tx-200-80) pt-1">Theme</div>
             {/* Flipping Use System Settings OFF seeds the manual theme from what is ALREADY on
                 screen (activeTheme — App's, because it folds in an OS signal App owns), so the
@@ -1530,7 +1561,7 @@ export function SettingsPanel({
               </span>
             </button>
           </div>
-          {/* Every footer text link — the four buttons (View / Clear saved defaults, Check for
+          {/* Every footer text link — the four buttons (View / Clear Saved Defaults, Check for
               updates, Changelog) and the Contact address below — carries rounded-md px-1 -mx-1: the
               padding gives the press-drag ring breathing room around the text and the radius rounds
               its corners (vs a square outline hugging the glyphs); the negative margin cancels the
@@ -1545,14 +1576,19 @@ export function SettingsPanel({
               trio's left→right escalation), same modals, and they still inherit a data-drag-stay,
               from the pinned footer now instead of the metadata block, so a drag-release on either
               still acts with the panel staying open (each opens its modal over it).
-              View saved defaults is ALWAYS visible — with nothing saved it opens the defaults
-              manager on its clearly-labelled FACTORY view (there is always something to see, and to
-              edit, now that the popup is the editable manager — manageDefaultsJsx, declared above).
-              Clear saved defaults still appears only while a snapshot exists — with nothing saved
-              there is nothing to clear — and is the ONLY way back to factory semantics (the Save
-              Defaults popup's duplicate link was removed in Round-4: one action, one home); it
-              opens a small CONFIRM modal (Cancel + a red-tier Clear, above) rather than firing
-              immediately. The row is always reachable, unlike the button directly above it: Save
+              BOTH LINKS ARE NOW ALWAYS MOUNTED (round-20 Q5 — they used to be a conditional pair:
+              View spanning the whole row alone, Clear mounting only once a snapshot existed). View
+              Saved Defaults opens the defaults manager on its clearly-labelled FACTORY view when
+              nothing is saved (there is always something to see, and to edit, now that the popup is
+              the editable manager — manageDefaultsJsx, declared above) — unchanged by this round.
+              Clear Saved Defaults is the ONLY way back to factory semantics (the Save Defaults
+              popup's duplicate link was removed in Round-4: one action, one home); it opens a small
+              CONFIRM modal (Cancel + a red-tier Clear, above) rather than firing immediately — but
+              with nothing saved there is nothing FOR it to clear, so it DIMS AND LOCKS instead of
+              disappearing, the identical three-part convention the three buttons above it withhold
+              with (see the Reset Settings button's own comment, above): NOT_OFFERED_BTN_CLASS draws
+              it unavailable, aria-disabled announces it, and the onClick guard is what actually
+              makes it inert. The row is always reachable, unlike the button directly above it: Save
               Defaults dims and locks exactly when live == saved, and these never hide behind that.
               Below them the footer decays into contact info and metadata, which is why the divider
               now falls where it does.
@@ -1576,8 +1612,11 @@ export function SettingsPanel({
               Both links carry row-start-1 so they share the one row: with only Clear's column
               stated explicitly, auto-placement would have found column 2 already behind the cursor
               (View having just taken columns 1-2) and dropped Clear onto a second line.
-              ⚠ WHEN ONLY VIEW IS PRESENT it spans all three columns instead, so it centres on the
-              WHOLE row rather than sitting at 1/3 with nothing opposite it.
+              ⚠ ROUND-20 Q5 DELETED THE THIRD BRANCH THIS PARAGRAPH USED TO ARGUE — "when only View
+              is present it spans all three columns instead". Both links are unconditional now (see
+              above), so the layout is ALWAYS the two-column split described here; there is no wider
+              case left to special-case, which is what makes this the simpler shape and not a
+              regression of the one it replaced.
               ⚠ THE THIRDS ARE TIGHT ON A NARROW PHONE and jsdom cannot say how tight. Centre to
               centre is exactly one third of the row; at the panel's width on a 390pt iPhone that is
               ~97px, against two captions whose half-widths already sum to about the same — so the
@@ -1589,19 +1628,27 @@ export function SettingsPanel({
             <button
               type="button"
               onClick={openManageDefaults}
-              className={`underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-1 justify-self-center ${savedDefaults !== null ? 'col-end-3' : 'col-end-4'}`}
+              className="underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-1 col-end-3 justify-self-center"
             >
-              View saved defaults
+              View Saved Defaults
             </button>
-            {savedDefaults !== null && (
-              <button
-                type="button"
-                onClick={() => setClearConfirmOpen(true)}
-                className="underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-2 col-end-4 justify-self-center"
-              >
-                Clear saved defaults
-              </button>
-            )}
+            {/* Round-20 Q5: permanent, never unmounted. With nothing saved there is nothing to
+                clear, so it withholds the identical way the three buttons above it do — see the
+                Reset Settings button's own comment for the three-part convention this reuses
+                (NOT_OFFERED_BTN_CLASS draws it, aria-disabled announces it, the guard makes it
+                inert) — rather than the `disabled` attribute, which this codebase avoids on
+                every footer control for the documented reasons at NOT_OFFERED_BTN_CLASS: it would
+                drop the link from the tab order instead of leaving it reachable-but-inert. */}
+            <button
+              type="button"
+              onClick={() => {
+                if (savedDefaults !== null) setClearConfirmOpen(true)
+              }}
+              aria-disabled={savedDefaults === null || undefined}
+              className={`underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-2 col-end-4 justify-self-center ${savedDefaults === null ? NOT_OFFERED_BTN_CLASS : ''}`}
+            >
+              Clear Saved Defaults
+            </button>
           </div>
         </div>
         <div

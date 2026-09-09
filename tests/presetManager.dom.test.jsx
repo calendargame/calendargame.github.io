@@ -15,11 +15,18 @@
 // ⚠⚠ WHAT NO CASE HERE CAN PROVE, said plainly rather than implied. jsdom has NO LAYOUT ENGINE. It
 // does not lay out the row's flex box, it does not resolve the card's max-w or the list's max-h, it
 // reports every width and height as 0, and it never scrolls. So: whether the three small row
-// buttons are comfortable under a thumb, whether a 12-character name fits beside them at 360px,
-// whether the list's scroll region ever shows its fades, and whether a newly created preset scrolls
-// into view are ALL DEVICE QUESTIONS and only the owner's iPhone can answer them. What is asserted
-// below is the structure and the behaviour those outcomes rest on.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+// buttons are comfortable under a thumb, whether a typed name fits beside them at 360px, whether
+// the list's scroll region ever shows its fades, and whether a newly created preset scrolls into
+// view are ALL DEVICE QUESTIONS and only the owner's iPhone can answer them. What is asserted below
+// is the structure and the behaviour those outcomes rest on.
+// ⚠ AND — SPECIFICALLY FOR THE RENAME FIELD'S WIDTH CAP (Q6, round 20) — lib/presetNameWidth's own
+// measurement is MOCKED in this file rather than exercised for real: jsdom has no canvas either
+// (verified in tests/presetNameWidth.dom, which owns the real mechanism end to end, fake canvas and
+// all), so what belongs here is narrower — does PresetManager's onChange call that function with
+// the typed candidate and TRUST its answer, does the width-language note track `capped` for the
+// right row and no other, does it clear on commit and on discard. The measurement itself is a
+// different file's claim to make.
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { cleanup, screen, within, act, fireEvent } from '@testing-library/react'
 import {
   resetAppState,
@@ -39,6 +46,15 @@ import {
 import { usePresets, PRESET_STORE_KEYS, presetKey, MAX_PRESET_NAME } from '../src/store/presets.js'
 import { createPreset, setPresetAmnesic, switchPreset } from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
+
+// The mock: onChange's ONE call into lib/presetNameWidth, controllable per test. Defaults to
+// "everything fits, unchanged" (the shape every case that is not ABOUT the cap wants), so cases
+// which do not mention it at all keep typing exactly what they type — the pre-Q6 behaviour, and
+// the same reason a mock with a sane default beats a mock every case must configure.
+const presetNameWidth = vi.hoisted(() => ({
+  capCandidateToSwitcherWidth: vi.fn((candidate) => ({ text: candidate, capped: false })),
+}))
+vi.mock('../src/lib/presetNameWidth.js', () => presetNameWidth)
 
 // ── Reaching the card ─────────────────────────────────────────────────────────────────────────
 
@@ -68,22 +84,41 @@ const queryConfirmCard = () => screen.queryByRole('dialog', { name: CONFIRM_TITL
 // the box is the row's only element the app names.
 const nameBoxes = () => within(card()).getAllByRole('textbox', { name: 'Preset name' })
 const listedNames = () => nameBoxes().map((el) => el.value)
+// The row div this file queries by — the name box's OWN parent, i.e. the inner flex row (checkmark,
+// name box, amnesic marker, handle, ✕). The OUTER div one level up is components/PresetManager's own
+// ref target for measuring the row's real position and applying its live drag transform — nothing in
+// this file needs that one, since jsdom cannot lay it out anyway (the pointer-wiring cases below stub
+// getBoundingClientRect directly on it, reached via `rowOf(name).parentElement`).
 const rowOf = (name) => nameBoxes().find((el) => el.value === name).parentElement
-// A row's three controls, by the accessible name each publishes. Every one of them names the
-// PRESET, because a button has no value of its own to be read out — where the name BOX does, which
-// is why that one is called only "Preset name". Spelling the three names out here rather than
-// composing them from a verb is deliberate: this table is the assertion that they read as English
-// ("Move Preset 1 up"), which a `${verb} ${name}` template would silently stop being.
+// The row's remaining named controls. Delete names the preset outright ("Delete Weekend"), because a
+// button has no value of its own to be read out — where the name BOX does, which is why that one is
+// called only "Preset name".
 const ROW_ACTION_NAMES = {
-  up: (name) => `Move ${name} up`,
-  down: (name) => `Move ${name} down`,
   delete: (name) => `Delete ${name}`,
 }
 const rowButton = (name, action) =>
   within(rowOf(name)).getByRole('button', { name: ROW_ACTION_NAMES[action](name) })
+// The reorder handle. Its accessible name carries the row's CURRENT POSITION (components/
+// PresetManager's own reasoning: with no aria-live anywhere in this app, a changed name on a still-
+// FOCUSED element is what a screen reader announces after a keyboard move), so — unlike Delete — it
+// cannot be looked up by a fixed string: this matches the stable "Reorder NAME, position " prefix and
+// leaves the trailing "N of M" free to change out from under a test that just reordered the list.
+const reorderHandle = (name) =>
+  within(rowOf(name)).getByRole('button', {
+    name: new RegExp(`^Reorder ${name}, position \\d+ of \\d+$`),
+  })
 const registry = () => usePresets.getState()
 
-beforeEach(resetAppState)
+beforeEach(() => {
+  resetAppState()
+  // Back to the "everything fits, unchanged" default before every case — a test that configures
+  // its own answer does so inside itself, and must not leak it into the next one.
+  presetNameWidth.capCandidateToSwitcherWidth.mockReset()
+  presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((candidate) => ({
+    text: candidate,
+    capped: false,
+  }))
+})
 afterEach(() => {
   cleanup()
   document.getElementById('root')?.remove()
@@ -204,6 +239,10 @@ describe('renaming', () => {
   const enter = (box) => act(() => fireEvent.keyDown(box, { key: 'Enter' }))
   const escape = (box) => act(() => fireEvent.keyDown(box, { key: 'Escape' }))
   const focus = (box) => act(() => box.focus())
+  // The EXACT note text, never a loose substring — "display" alone also matches unrelated prose
+  // elsewhere in the mounted app (the ⚙ panel's date-format copy, the guide). This is also the
+  // width-language claim itself: the whole point is that it never mentions a character count.
+  const capNote = () => screen.queryByText("That's as long as this name can display.")
 
   it('Enter commits, and a blur commits', () => {
     openManager()
@@ -250,16 +289,90 @@ describe('renaming', () => {
     expect(registry().presets[0].name).toBe('Half')
   })
 
-  it('caps the name at MAX_PRESET_NAME as it is typed', () => {
+  // ── The live, pixel-width typing cap (Q6, round 20) ─────────────────────────────────────────
+  //
+  // lib/presetNameWidth is MOCKED for this whole file (see the ⚠ at the top) — these cases are
+  // about the WIRING: does every keystroke reach it with the raw candidate, does the field show
+  // what it returns rather than the raw typed text, does the width-language note track its
+  // `capped` flag for the right row and clear at the right moments. tests/presetNameWidth.dom owns
+  // whether the real measurement is CORRECT.
+  it('calls the width cap on every keystroke, with the typed candidate, and shows what it returns', () => {
     openManager()
+    presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((candidate) => ({
+      text: candidate.toUpperCase(), // a deliberately-wrong echo, so the field must be SHOWING it
+      capped: false,
+    }))
     focus(nameBoxes()[0])
-    // maxLength is the BROWSER's half and jsdom does not apply it to a programmatic write, so what
-    // this drives is the onChange slice — which is the half that actually holds for a paste.
-    type(nameBoxes()[0], 'Monday morning practice')
-    expect(nameBoxes()[0].value).toHaveLength(MAX_PRESET_NAME)
+    type(nameBoxes()[0], 'weekend')
+    expect(presetNameWidth.capCandidateToSwitcherWidth).toHaveBeenCalledWith('weekend')
+    // The field shows the FUNCTION's answer, not the raw keystroke — proving onChange trusts it
+    // rather than mirroring the event value straight through.
+    expect(nameBoxes()[0].value).toBe('WEEKEND')
+  })
+
+  it('shows a WIDTH-language note exactly while the field is capped, never a character count', () => {
+    openManager()
+    presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((candidate) => ({
+      text: candidate.slice(0, 5),
+      capped: candidate.length > 5,
+    }))
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Week')
+    expect(capNote()).toBeNull() // fits — no note yet
+    type(nameBoxes()[0], 'Weekend')
+    expect(capNote()).toBeTruthy()
+    // …and a backspace back under budget un-refuses it, exactly like `capped` going false again.
+    type(nameBoxes()[0], 'Week')
+    expect(capNote()).toBeNull()
+  })
+
+  it('clears the note on commit (Enter) and on discard (Escape)', () => {
+    openManager()
+    presetNameWidth.capCandidateToSwitcherWidth.mockReturnValue({ text: 'Weeke', capped: true })
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend Mornings')
+    expect(capNote()).toBeTruthy()
     enter(nameBoxes()[0])
-    expect(registry().presets[0].name).toBe('Monday morni')
-    // The other half is declared on the element, where a real browser reads it.
+    expect(capNote()).toBeNull()
+
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend Mornings')
+    expect(capNote()).toBeTruthy()
+    escape(nameBoxes()[0])
+    expect(capNote()).toBeNull()
+  })
+
+  it("does not leak one row's capped note onto another row", () => {
+    act(() => {
+      createPreset('Timed')
+    })
+    openManager()
+    presetNameWidth.capCandidateToSwitcherWidth.mockReturnValue({ text: 'Weeke', capped: true })
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend Mornings')
+    expect(capNote()).toBeTruthy()
+    // Moving to the second row blurs the first (which commits and clears the flag via
+    // commitRename) before this row's own onFocus seeds a fresh edit — onFocus never calls the
+    // width cap at all, only onChange does, so there is nothing here FOR a leak to ride in on.
+    focus(nameBoxes()[1])
+    expect(capNote()).toBeNull()
+  })
+
+  it('the trimmed text is what actually gets SAVED, exactly as typed for a fit that never trims', () => {
+    openManager()
+    presetNameWidth.capCandidateToSwitcherWidth.mockReturnValue({ text: 'Weeke', capped: true })
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend Mornings')
+    enter(nameBoxes()[0])
+    expect(registry().presets[0].name).toBe('Weeke')
+  })
+
+  it('maxLength stays on the element as a coarser, independent backstop', () => {
+    // The store's own hard ceiling (store/presets' MAX_PRESET_NAME) — no longer sized to fit the
+    // switcher exactly, but still the last line of defence if the live width cap cannot run at
+    // all. The width cap is mocked in this file, so this case only pins the ATTRIBUTE itself, not
+    // which of the two cuts actually catches a given keystroke.
+    openManager()
     expect(nameBoxes()[0].getAttribute('maxlength')).toBe(String(MAX_PRESET_NAME))
   })
 
@@ -284,46 +397,262 @@ describe('renaming', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
+// reordering — the DRAG HANDLE (Q7, round 20), replacing the ↑/↓ buttons this round removed.
+//
+// Three groups: the KEYBOARD path (ArrowUp/ArrowDown on the handle — fully provable in jsdom, no
+// layout needed), the POINTER path (a real pointerdown → pointermove → pointerup/cancel sequence
+// against the actual handlers, jsdom's getBoundingClientRect limitation worked around the same way
+// tests/presetNameWidth.dom does — stub the method per element rather than trust a real layout),
+// and the handle's own STRUCTURE (touch-action, no disabled state). None of this can prove the
+// gesture FEELS right — that is a device-only question, stated at the top of this file.
 describe('reordering', () => {
-  it('Move down and Move up swap a preset with its neighbour, and change no data', () => {
-    act(() => {
-      createPreset('Timed')
-      createPreset('Guest')
+  describe('the keyboard path', () => {
+    it('ArrowDown and ArrowUp on the handle swap a preset with its neighbour, and change no data', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      act(() => fireEvent.keyDown(reorderHandle('Preset 1'), { key: 'ArrowDown' }))
+      expect(listedNames()).toEqual(['Timed', 'Preset 1', 'Guest'])
+      act(() => fireEvent.keyDown(reorderHandle('Preset 1'), { key: 'ArrowUp' }))
+      expect(listedNames()).toEqual(['Preset 1', 'Timed', 'Guest'])
+      // ★ ORDER IS PRESENTATION AND NOTHING ELSE. Ids are what storage keys are derived from
+      // (store/presets' presetKey is a pure function of the id), so a reorder must not renumber
+      // anything — if it did, two presets would trade saved copies in silence.
+      expect(registry().presets.map((p) => p.id)).toEqual([1, 2, 3])
+      expect(registry().activeId).toBe(1)
     })
-    openManager()
-    tap(rowButton('Preset 1', 'down'))
-    expect(listedNames()).toEqual(['Timed', 'Preset 1', 'Guest'])
-    tap(rowButton('Preset 1', 'up'))
-    expect(listedNames()).toEqual(['Preset 1', 'Timed', 'Guest'])
-    // ★ ORDER IS PRESENTATION AND NOTHING ELSE. Ids are what storage keys are derived from
-    // (store/presets' presetKey is a pure function of the id), so a reorder must not renumber
-    // anything — if it did, two presets would trade saved copies in silence.
-    expect(registry().presets.map((p) => p.id)).toEqual([1, 2, 3])
-    expect(registry().activeId).toBe(1)
+
+    it('boundary presses at either end are silent no-ops — no disabled visual, matching the design', () => {
+      // The handle has no end it cannot move toward the way the old buttons did (movePreset's own
+      // bounds check is the only guard, silently refusing rather than the handler pre-checking) —
+      // so this asks for the ABSENCE of aria-disabled too, not only that the press does nothing.
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      const first = reorderHandle('Preset 1')
+      expect(first.hasAttribute('aria-disabled')).toBe(false)
+      act(() => fireEvent.keyDown(first, { key: 'ArrowUp' }))
+      expect(listedNames()).toEqual(['Preset 1', 'Timed'])
+      const last = reorderHandle('Timed')
+      expect(last.hasAttribute('aria-disabled')).toBe(false)
+      act(() => fireEvent.keyDown(last, { key: 'ArrowDown' }))
+      expect(listedNames()).toEqual(['Preset 1', 'Timed'])
+    })
+
+    it('the accessible name carries the CURRENT position, and updates after a move', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      expect(reorderHandle('Preset 1').getAttribute('aria-label')).toBe(
+        'Reorder Preset 1, position 1 of 3',
+      )
+      act(() => fireEvent.keyDown(reorderHandle('Preset 1'), { key: 'ArrowDown' }))
+      expect(reorderHandle('Preset 1').getAttribute('aria-label')).toBe(
+        'Reorder Preset 1, position 2 of 3',
+      )
+    })
+
+    // ★★ THE ONE PIECE OF THE ACCESSIBILITY STORY THAT SILENTLY FAILS IF WRONG (the brief's own
+    // words) — this app uses NO aria-live anywhere (SettingsPanel's Check-for-updates button
+    // argues why), so the new position is announced ONLY if the SAME element stays focused across
+    // the re-render that follows a move. Proved here, not assumed: focus a handle, move it, and
+    // check document.activeElement is the handle for that SAME preset at its NEW position — not
+    // merely "a handle", and not <body>.
+    it('focus survives a keyboard reorder onto the SAME preset`s handle at its new position', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      const handle = reorderHandle('Preset 1')
+      act(() => handle.focus())
+      expect(document.activeElement).toBe(handle)
+      act(() => fireEvent.keyDown(handle, { key: 'ArrowDown' }))
+      const movedHandle = reorderHandle('Preset 1')
+      expect(document.activeElement).toBe(movedHandle)
+      expect(movedHandle.getAttribute('aria-label')).toBe('Reorder Preset 1, position 2 of 3')
+      // Two more moves, back-to-back, to prove it is not a one-shot coincidence.
+      act(() => fireEvent.keyDown(movedHandle, { key: 'ArrowDown' }))
+      expect(document.activeElement).toBe(reorderHandle('Preset 1'))
+      expect(document.activeElement.getAttribute('aria-label')).toBe(
+        'Reorder Preset 1, position 3 of 3',
+      )
+    })
+
+    it('preventDefault keeps the arrow keys from also scrolling the modal', () => {
+      openManager()
+      const evt = new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        bubbles: true,
+        cancelable: true,
+      })
+      reorderHandle('Preset 1').dispatchEvent(evt)
+      expect(evt.defaultPrevented).toBe(true)
+    })
   })
 
-  it('the ends are withheld in all three ways at once — drawn, announced, and inert', () => {
-    // The app's convention (controlClasses' NOT_OFFERED_BTN_CLASS): the class DRAWS it unavailable,
-    // aria-disabled ANNOUNCES it, and the handler guard is what is TRUE. Asked as one claim,
-    // because any one of them alone passes for a control that is greyed and still fires.
-    act(() => {
-      createPreset('Timed')
+  describe('the handle`s own structure', () => {
+    it('touch-action:none sits on the handle only — never the row, never the list container', () => {
+      openManager()
+      expect(reorderHandle('Preset 1').style.touchAction).toBe('none')
+      expect(rowOf('Preset 1').style.touchAction).toBe('')
+      expect(rowOf('Preset 1').parentElement.style.touchAction).toBe('')
+      // The scroll region — components/scrollRegion's SCROLL_REGION_CLASS div wrapping every row.
+      expect(rowOf('Preset 1').parentElement.parentElement.style.touchAction).toBe('')
     })
-    openManager()
-    const up = rowButton('Preset 1', 'up')
-    expect(isOffered(up)).toBe(false)
-    expect(isDimmed(up)).toBe(true)
-    expect(up.getAttribute('aria-disabled')).toBe('true')
-    tap(up) // reaches the handler — the app uses aria-disabled precisely so it still can
-    expect(listedNames()).toEqual(['Preset 1', 'Timed'])
-    const down = rowButton('Timed', 'down')
-    expect(isOffered(down)).toBe(false)
-    tap(down)
-    expect(listedNames()).toEqual(['Preset 1', 'Timed'])
-    // …and the two that are NOT at an end are offered, so the case above is a withholding and not
-    // a control that never works.
-    expect(isOffered(rowButton('Preset 1', 'down'))).toBe(true)
-    expect(isOffered(rowButton('Timed', 'up'))).toBe(true)
+
+    it('is a div with role="button", never a native <button>', () => {
+      // The reason is mechanical, not cosmetic (components/PresetManager's own comment on the
+      // handle): lib/pointerGestures' global press-drag controller latches onto anything a bare
+      // `closest('button')` finds, so a real <button> here would be swept into that unrelated,
+      // document-level gesture system on every press. Asserted directly on the tag, which is the
+      // one thing a role attribute cannot fake.
+      openManager()
+      expect(reorderHandle('Preset 1').tagName).toBe('DIV')
+    })
+  })
+
+  // ── The pointer path — a real pointerdown/pointermove/pointerup(-or-cancel) sequence ─────────
+  describe('the pointer path', () => {
+    // jsdom has NO LAYOUT ENGINE — getBoundingClientRect reports a zero rect for every element
+    // unless stubbed (the same limitation tests/presetNameWidth.dom works around the same way:
+    // override the method on the specific element rather than trust a real layout). Each row is
+    // given a FABRICATED, evenly-spaced rect — the exact shape lib/presetReorder's own pure tests
+    // already prove the arithmetic against — so what this group proves is the WIRING: does a real
+    // gesture on the handle end up calling movePreset the right number of times, in the right
+    // direction. Whether the drag LOOKS right is a device-only question (top of this file).
+    const ROW_HEIGHT = 40
+    const stubRowRects = (names) => {
+      names.forEach((name, i) => {
+        const top = i * ROW_HEIGHT
+        // The OUTER div — one level up from `rowOf`'s inner flex row — is components/PresetManager's
+        // own ref target (rowRefs), and so the element beginDrag actually measures.
+        rowOf(name).parentElement.getBoundingClientRect = () => ({
+          top,
+          bottom: top + ROW_HEIGHT,
+          height: ROW_HEIGHT,
+          left: 0,
+          right: 0,
+          width: 0,
+          x: 0,
+          y: top,
+        })
+      })
+    }
+    // jsdom ships NO PointerEvent constructor — the exact limitation tests/helpers/settingsPanel's
+    // own pointerEvent() works around, by the same recipe: a hand-built MouseEvent carrying
+    // pointerId/isPrimary/pointerType/clientY, which is everything the real guards and handlers
+    // below read. `button: 0` so the mouse-button guard in beginDrag passes.
+    const pointerEvt = (type, clientY) => {
+      const e = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientY })
+      Object.defineProperty(e, 'pointerId', { value: 7 })
+      Object.defineProperty(e, 'isPrimary', { value: true })
+      Object.defineProperty(e, 'pointerType', { value: 'touch' })
+      return e
+    }
+
+    it('a full drag past a neighbour reorders the presets, and touches no id', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      // Preset 1 / Timed / Guest start at centers 20 / 60 / 100.
+      stubRowRects(['Preset 1', 'Timed', 'Guest'])
+      const handle = reorderHandle('Preset 1')
+      act(() => handle.dispatchEvent(pointerEvt('pointerdown', 20)))
+      // Drags Preset 1's own center from 20 to 85 — past Timed's center (60) and Guest's (100) is
+      // still ahead, resolving to the last slot.
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', 85)))
+      act(() => handle.dispatchEvent(pointerEvt('pointerup', 85)))
+      expect(listedNames()).toEqual(['Timed', 'Guest', 'Preset 1'])
+      // ★ ORDER IS PRESENTATION AND NOTHING ELSE. The ARRAY order changed (that is the whole
+      // point), but no preset traded its id for another's — ids are what storage keys are derived
+      // from (store/presets' presetKey is a pure function of the id), so a reorder renumbering one
+      // would mean two presets silently trading saved copies.
+      const byId = Object.fromEntries(registry().presets.map((p) => [p.id, p.name]))
+      expect(byId).toEqual({ 1: 'Preset 1', 2: 'Timed', 3: 'Guest' })
+    })
+
+    // ★★ THE INVARIANT THE fix to lib/presetReorder exists for: a drag that goes somewhere and
+    // then comes BACK to exactly where it started, released there, must change nothing — not "the
+    // neighbouring slot", nothing. Before that fix, `targetIndexForCenter` treated landing exactly
+    // on a row's OWN resting center as having already passed it, so even a round-trip back to the
+    // start previewed (and, on release, committed) a swap nothing asked for.
+    it('a drag that returns to its own start slot before releasing changes nothing', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed'])
+      const handle = reorderHandle('Preset 1')
+      act(() => handle.dispatchEvent(pointerEvt('pointerdown', 20)))
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', 50))) // partway toward Timed
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', 20))) // …and back to exactly the start
+      act(() => handle.dispatchEvent(pointerEvt('pointerup', 20)))
+      expect(listedNames()).toEqual(['Preset 1', 'Timed'])
+    })
+
+    it('pointercancel commits wherever the preview currently sits, exactly like pointerup', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed'])
+      const handle = reorderHandle('Preset 1')
+      act(() => handle.dispatchEvent(pointerEvt('pointerdown', 20)))
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', 61)))
+      act(() => handle.dispatchEvent(pointerEvt('pointercancel', 61)))
+      expect(listedNames()).toEqual(['Timed', 'Preset 1'])
+    })
+
+    it('a non-primary pointer (a second finger) cannot start a drag', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed'])
+      const handle = reorderHandle('Preset 1')
+      const e = new MouseEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientY: 20,
+      })
+      Object.defineProperty(e, 'pointerId', { value: 9 })
+      Object.defineProperty(e, 'isPrimary', { value: false }) // the guard this case exists to prove
+      Object.defineProperty(e, 'pointerType', { value: 'touch' })
+      act(() => handle.dispatchEvent(e))
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', 61)))
+      act(() => handle.dispatchEvent(pointerEvt('pointerup', 61)))
+      expect(listedNames()).toEqual(['Preset 1', 'Timed']) // no drag ever latched, nothing moved
+    })
+
+    it('a right mouse button cannot start a drag', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed'])
+      const handle = reorderHandle('Preset 1')
+      const e = new MouseEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientY: 20,
+      })
+      Object.defineProperty(e, 'pointerId', { value: 9 })
+      Object.defineProperty(e, 'isPrimary', { value: true })
+      Object.defineProperty(e, 'pointerType', { value: 'mouse' }) // the guard only applies to mice
+      act(() => handle.dispatchEvent(e))
+      act(() => handle.dispatchEvent(pointerEvt('pointerup', 61)))
+      expect(listedNames()).toEqual(['Preset 1', 'Timed'])
+    })
   })
 })
 

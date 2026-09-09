@@ -11,10 +11,14 @@
 // independent oracle: across a session of runs, the Best Mean must always equal the MINIMUM
 // average among STANDING runs (recorded, currently holding ≥ n credits, taken at their CURRENT
 // stats), the Best Median the minimum median, and each metric's companion stat + run id must come
-// from the run that set it — computed by a plain ordered min-scan, no reconcile, no floor. A
-// reconcile bug — a fabricated Best standing after its credit was retracted, or a rollback dropping
-// below an earlier run — breaks the equality. End-to-end reachability through the real UI is pinned
-// by aox.dom batch 9 (back-browse retract, cross-run floor, mid-done key move).
+// from the run that set it — computed by a plain ordered min-scan, no reconcile, no floor. The
+// comparison (and the stored value) is at DISPLAY precision — rounded to hundredths, exactly what
+// fmtTime prints — not raw float, because that's the whole fix this file exists to pin: a raw `<`
+// used to plant a ★ on a difference no player could ever see (BUG PROOF cases below). A reconcile
+// bug — a fabricated Best standing after its credit was retracted, a rollback dropping below an
+// earlier run, or a comparison drifting back to raw precision — breaks the equality. End-to-end
+// reachability through the real UI is pinned by aox.dom batch 9 (back-browse retract, cross-run
+// floor, mid-done key move).
 import { describe, it, expect } from 'vitest'
 import {
   reconcileAoxBest,
@@ -23,6 +27,7 @@ import {
   emptyAoxBest,
 } from '../../src/engine/aoxBest.js'
 import { calcAvg, calcMed } from '../../src/engine/stats.js'
+import { roundCentis } from '../../src/lib/modeFormat.js'
 import { mulberry32 } from '../helpers/rng.js'
 
 describe('aoxBest — reconcile unit cases', () => {
@@ -72,6 +77,32 @@ describe('aoxBest — reconcile unit cases', () => {
     expect(next.avgRoundId).toBe(1)
     expect(next.medRoundId).toBe(1)
   })
+
+  // ★ BUG PROOF (this is the defect this file exists to fix). Before the fix, reconcileAoxBest
+  // compared `avg < cur.avg` at raw float precision, but Best Mean / Mean are only ever DISPLAYED
+  // through fmtTime, which rounds to hundredths. So a run whose raw average is a hair below the
+  // stored record — pure division noise, invisible on screen — used to plant a ★ on a "new best"
+  // that read IDENTICALLY to the old one. 2.129999999999999 is genuinely < 2.13 at raw float
+  // precision (proving the old `<` really would have fired), but both round to "2.13s".
+  it('BUG PROOF: a raw-only difference that displays identically does NOT register as an improvement', () => {
+    const cur = reconcileAoxBest(emptyAoxBest(), 2.13, 2.13, 1).next
+    expect(cur.avg).toBe(2.13)
+    const { next, avgImp, medImp } = reconcileAoxBest(cur, 2.129999999999999, 2.129999999999999, 2)
+    expect(avgImp).toBe(false)
+    expect(medImp).toBe(false)
+    expect(next).toEqual(cur) // untouched — no phantom ★, no reassigned round id
+  })
+
+  // The companion, real-improvement case: a run that is faster at DISPLAY precision (not just raw
+  // float noise) still correctly registers — the fix narrows the comparison, it doesn't disable it.
+  it('a genuine improvement at display precision still registers', () => {
+    const cur = reconcileAoxBest(emptyAoxBest(), 2.13, 2.13, 1).next
+    const { next, avgImp, medImp } = reconcileAoxBest(cur, 2.12, 2.12, 2) // one whole hundredth faster
+    expect(avgImp).toBe(true)
+    expect(medImp).toBe(true)
+    expect(next.avg).toBe(2.12)
+    expect(next.avgRoundId).toBe(2)
+  })
 })
 
 describe('aoxBest — standing reconcile (the post-completion protocol)', () => {
@@ -116,6 +147,21 @@ describe('aoxBest — standing reconcile (the post-completion protocol)', () => 
     expect(next.avgRoundId).toBe(1)
   })
 
+  // ★ BUG PROOF, end-to-end through the real caller. Two different Ao3s that print the identical
+  // "2.13s" Mean — calcAvg's division genuinely lands them on opposite sides of 2.13 at raw float
+  // precision ([2.10, 2.15, 2.14] → 2.1300000000000003; [2.08, 2.15, 2.15] → 2.126666666666667, which
+  // IS raw-less-than the first). Before the fix the second run's post-completion reconcile would have
+  // overwritten the record (and its round id) for a difference that never appears on screen.
+  it('BUG PROOF (via calcAvg noise): two runs that print the same Mean do not reassign the record', () => {
+    expect(calcAvg([2.1, 2.15, 2.14])).toBeGreaterThan(calcAvg([2.08, 2.15, 2.15])) // the raw ordering
+    const floor = reconcileAoxStanding(emptyAoxBest(), 3, 3, [2.1, 2.15, 2.14], 1).next
+    expect(floor.avg).toBe(2.13) // stored at display precision
+    const { next, avgImp } = reconcileAoxStanding(floor, 3, 3, [2.08, 2.15, 2.15], 2)
+    expect(avgImp).toBe(false)
+    expect(next.avg).toBe(2.13)
+    expect(next.avgRoundId).toBe(1) // record stays with run 1 — run 2 never actually beat it on screen
+  })
+
   it('aoxBestEqual: field-wise equality', () => {
     const a = reconcileAoxBest(emptyAoxBest(), 2, 3, 1).next
     expect(aoxBestEqual(a, { ...a })).toBe(true)
@@ -126,16 +172,26 @@ describe('aoxBest — standing reconcile (the post-completion protocol)', () => 
 
 describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
   // Independent oracle: scan the runs in chronological order; among those that RECORDED and
-  // currently STAND (good ≥ their n, stats computable), the first to reach a strictly-lower avg
-  // holds the Best Mean (+ its own median as avgMed + its run id), likewise for the median.
-  // A plain ordered min-scan over each run's CURRENT stats — no reconcile, no floor, no snapshot.
-  // (calcAvg/calcMed are shared with the driver deliberately: they're independently unit-tested
-  // primitives; the logic under test is the reconcile/floor protocol, not the averaging.)
+  // currently STAND (good ≥ their n, stats computable), the first to reach a strictly-lower avg AT
+  // DISPLAY PRECISION holds the Best Mean (+ its own median as avgMed + its run id), likewise for
+  // the median. A plain ordered min-scan over each run's CURRENT stats — no reconcile, no floor, no
+  // snapshot. (calcAvg/calcMed are shared with the driver deliberately: they're independently
+  // unit-tested primitives; the logic under test is the reconcile/floor protocol, not the averaging.)
+  //
+  // "At display precision" — not raw float — because that's what reconcileAoxBest itself now does
+  // (see its header comment): Best Mean/Median are only ever shown through fmtTime, which rounds to
+  // hundredths, so the oracle rounds through the SAME roundCentis (also independently unit-tested, in
+  // modeFormat.test.js) before comparing, and returns the ROUNDED value — matching what reconcileAoxBest
+  // stores. Reusing roundCentis here isn't reusing the logic under test: what's under test is the
+  // reconcile/floor protocol (does the record track the right run, does rollback restore the right
+  // floor), not whether roundCentis itself rounds correctly.
   function expectedBest(runs) {
-    let avg = null,
+    let avgCentis = null,
+      avg = null,
       avgMed = null,
       avgRoundId = null
-    let med = null,
+    let medCentis = null,
+      med = null,
       medAvg = null,
       medRoundId = null
     for (const r of runs) {
@@ -143,14 +199,18 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
       const a = calcAvg(r.times),
         m = calcMed(r.times)
       if (a == null || m == null) continue
-      if (avg == null || a < avg) {
-        avg = a
-        avgMed = m
+      const aC = roundCentis(a),
+        mC = roundCentis(m)
+      if (avgCentis == null || aC < avgCentis) {
+        avgCentis = aC
+        avg = aC / 100
+        avgMed = mC / 100
         avgRoundId = r.rid
       }
-      if (med == null || m < med) {
-        med = m
-        medAvg = a
+      if (medCentis == null || mC < medCentis) {
+        medCentis = mC
+        med = mC / 100
+        medAvg = aC / 100
         medRoundId = r.rid
       }
     }

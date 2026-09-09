@@ -2,8 +2,8 @@
 //
 // lookupCard.dom.test.jsx — LookupCard's BEHAVIOUR (round-8 Q2, extended by round-11 Q2). The
 // component had no behaviour test at all before round 8: scrollRegion.dom pins its geometry
-// classes, progress.* pins the saved shape, but nothing described what the card actually does when
-// you type into it.
+// classes, lookupHistory.* pins the saved shape (progress.* did, before Q1/round 20 moved it out),
+// but nothing described what the card actually does when you type into it.
 //
 // Three contracts are locked here.
 //
@@ -36,7 +36,7 @@ import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import LookupCard from '../src/components/LookupCard.jsx'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
-import { addLookupEntry, LOOKUP_HISTORY_CAP } from '../src/store/progress.js'
+import { addLookupEntry, LOOKUP_HISTORY_CAP } from '../src/store/lookupHistory.js'
 import { fmt } from '../src/lib/format.js'
 import { isOffered } from './helpers/offered.js'
 
@@ -437,7 +437,15 @@ describe('Lookup — Full Reset freshness (isFullyReset reads lookupOutput)', ()
     expect(isOffered(fullReset())).toBe(false) // …and it was only ever text
   })
 
-  it('a real lookup lights Full Reset; Clear + Clear History dim it again', () => {
+  // ⚠ RESTRUCTURED TWICE (Q1, round 20): the first pass dropped `lookupHistory.length===0` from
+  // isFullyReset on the assumption Full Reset would stop reaching the (now-shared) history — the
+  // owner overruled that: Full Reset still clears it, from whichever preset you press it (there is
+  // only one copy). So the term is back, reading `displayLookupHistory` (the permanent list plus
+  // this session's amnesic overflow — main.tsx), and BOTH Clear and Clear History are needed to
+  // re-dim Full Reset again, exactly as before this feature existed: Clear alone resets the other
+  // five Lookup terms (input, output, calcDate, selection, calcOpen) but LEAVES the history entry
+  // standing, so the button stays lit until Clear History (or Full Reset itself) empties the list.
+  it('a real lookup lights Full Reset; it takes both Clear and Clear History to dim it again', () => {
     mountApp()
     act(() => fireEvent.keyDown(window, { key: 'L' }))
     const input = document.querySelector('input[placeholder^="e.g.,"]')
@@ -451,11 +459,22 @@ describe('Lookup — Full Reset freshness (isFullyReset reads lookupOutput)', ()
     toggleSettings() // close the panel
     act(() => fireEvent.keyDown(window, { key: 'L' }))
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' })))
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear History' })))
     expect(screen.getByText(HINT)).toBeTruthy()
+    // The entry is still in the History list — Clear only clears the INPUT/answer, never the saved
+    // list — so Full Reset must stay lit: there is still something on screen it would remove.
+    expect(screen.getByRole('button', { name: 'Clear History' })).toBeTruthy()
     act(() => fireEvent.keyDown(window, { key: 'K' }))
     toggleSettings()
-    expect(isOffered(fullReset())).toBe(false)
+    expect(isOffered(fullReset())).toBe(true) // Clear alone was NOT enough — the entry remains
+    toggleSettings()
+    // Clear History empties the list, and with the other five Lookup terms already reset by Clear
+    // above, that is what finally brings Full Reset back down.
+    act(() => fireEvent.keyDown(window, { key: 'L' }))
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear History' })))
+    expect(screen.queryByRole('button', { name: 'Clear History' })).toBeNull()
+    act(() => fireEvent.keyDown(window, { key: 'K' }))
+    toggleSettings()
+    expect(isOffered(fullReset())).toBe(false) // both steps together were enough
   })
 })
 
@@ -463,7 +482,7 @@ describe('Lookup — Full Reset freshness (isFullyReset reads lookupOutput)', ()
 // The history WINDOW and the count beside the heading (round 13).
 // The cap has always existed and nothing described it; it moved 20 → 100 this round, and the
 // count is what makes it visible without opening a menu. The rule's one owner is
-// store/progress (addLookupEntry), so this reads the real number rather than restating it.
+// store/lookupHistory (addLookupEntry), so this reads the real number rather than restating it.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 const dated = (i) => ({ id: `h${i}`, y: 1900 + (i % 120), m: (i % 12) + 1, d: (i % 28) + 1 })
 const header = () => document.querySelector('.lookup-history-header')

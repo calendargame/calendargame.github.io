@@ -79,8 +79,10 @@ import {
   pickPill,
   arrowPicker,
   LOCKABLE_PICKERS,
+  settingSwitch,
   switchState,
   toggleSwitch,
+  isOffered,
   typeYear,
   commitYear,
   yearValue,
@@ -166,20 +168,25 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   // G2.1 — the ONLY lock driver that is not a store value. The condition is `mode==='deduction'`
   // exactly, and five of the six modes that leave Input live had never been exercised: a rewrite
   // that reached for "not a weekday mode" or "a game mode" would pass every test that existed.
-  // ★ TWO PICKERS SHARE THAT ONE CONDITION since Dot Layout joined the panel — the two describe one
-  // subject, the weekday dot input, which Deduction does not have — so both are walked through
-  // every mode HERE rather than one being spot-checked elsewhere. The pair is the point: they were
-  // written to lock together, and the failure worth catching is one of them drifting off the
-  // condition while the other still satisfies every case that names it.
+  // ★ INPUT AND DOT LAYOUT SHARE THAT ONE CONDITION — the two describe one subject, the weekday dot
+  // input, which Deduction does not have — so both are walked through every mode HERE rather than
+  // one being spot-checked elsewhere. The pair is the point: they were written to lock together, and
+  // the failure worth catching is one of them drifting off the condition while the other still
+  // satisfies every case that names it. Q3 (round 20) made Dot Layout a SWITCH rather than a
+  // picker, so it is read through isOffered here rather than expectLock — a different assertion for
+  // the same claim, and the reason this walk cannot simply loop a shared name list any more.
   // ⚠ DOT LAYOUT CARRIES A SECOND LOCK — Input on Buttons, where there are no dots to turn; its
-  // exact condition is pinned in tests/dotOrientation.dom, with the rest of that setting's story,
-  // rather than copied here. This walk therefore chooses DOTS first: without that the picker is
-  // locked in all seven modes and the case would pass while saying nothing about the mode at all.
-  const MODE_LOCKED_PICKERS = ['Input', 'Dot Layout']
-  it('the Input and Dot Layout pickers are live in every mode except Deduction', () => {
+  // exact condition, and its full aria-disabled/dim contract, are pinned in tests/dotOrientation.dom
+  // with the rest of that setting's story, rather than copied here. This walk therefore chooses
+  // DOTS first: without that the switch is locked in all seven modes and the case would pass while
+  // saying nothing about the MODE lock at all.
+  it('Input and Dot Layout are live in every mode except Deduction', () => {
     standUp()
     pickPill('Input', 'Dots')
-    const both = (locked) => MODE_LOCKED_PICKERS.forEach((name) => expectLock(name, locked))
+    const both = (locked) => {
+      expectLock('Input', locked)
+      expect(isOffered(settingSwitch('Dot Layout'))).toBe(!locked)
+    }
     both(false) // classic, where the app opens
     for (const mode of ['flash', 'blitz', 'aox', 'lookup']) {
       goMode(mode)
@@ -319,22 +326,17 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
 
   // G2.10 — unlocking restores exactly ONE tab stop, on the pill that is actually chosen, with no
   // interaction at all: the group's layout effect re-asserts it on the pass that clears the lock.
-  // Asserted for all FIVE lockable pickers — only Date Format was covered before, and Dot Layout
-  // joined the list when it joined the panel — and every pick below is deliberately NOT the first
-  // pill, so "restores a tab stop" cannot pass by landing on the front of the tray.
+  // Asserted for all FOUR lockable pickers, and every pick below is deliberately NOT the first pill,
+  // so "restores a tab stop" cannot pass by landing on the front of the tray.
+  // ⚠ DOT LAYOUT USED TO BE A FIFTH CASE HERE, and Q3 (round 20) removed it rather than converting
+  // it: it is a SWITCH now, and a switch never loses its tab stop while locked in the first place
+  // (aria-disabled announces the lock; the button stays reachable so a keyboard user is told why it
+  // does nothing) — so "unlocking restores the tab stop" is not a claim that shape can even make.
+  // Its own preserved-value-through-a-lock claim is tests/dotOrientation.dom's, in switch terms.
   const UNLOCK_CASES = [
     {
       name: 'Input',
       pick: 'Dots',
-      lock: () => goMode('deduction'),
-      unlock: () => goMode('classic'),
-    },
-    {
-      name: 'Dot Layout',
-      pick: 'Rows',
-      // The only case that needs an ARRANGE step: this picker's other lock is Input on Buttons,
-      // which is where the panel opens, so it has to be unlocked before it can be picked from.
-      arrange: () => pickPill('Input', 'Dots'),
       lock: () => goMode('deduction'),
       unlock: () => goMode('classic'),
     },

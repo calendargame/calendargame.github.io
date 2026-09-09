@@ -667,7 +667,7 @@ describe('the Changelog popup (modal parity + content)', () => {
     // touching at 0px, which is the regression this half of the old case existed to catch.
     expect(metaRow.className).toContain('gap-3')
     // And the split is real: two different rows, two different classes.
-    const defaultsRow = screen.getByRole('button', { name: 'View saved defaults' }).parentElement
+    const defaultsRow = screen.getByRole('button', { name: 'View Saved Defaults' }).parentElement
     expect(defaultsRow).not.toBe(metaRow)
     expect(defaultsRow.className).not.toBe(metaRow.className)
   })

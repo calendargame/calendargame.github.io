@@ -34,11 +34,15 @@ import type { DotOrientation } from '../lib/dotLayout.js'
 // The day-of-week answer input layout: the classic labelled buttons, or the logo's 7-dot grid
 // (Settings → Input). Stored as an enum (not a boolean) so more layouts can be added later.
 export type InputStyle = 'buttons' | 'dots'
-// DotOrientation ('columns' | 'rows') is NOT declared here: it is the shape of the dot grid itself,
-// so it lives with that geometry in lib/dotLayout and is re-exported below for the panel's benefit
-// — exactly the arrangement FormatId already has (lib/format). The store owns WHICH one is chosen,
-// never what the choices ARE.
-export type { DotOrientation }
+// Q3 (round 20): `dotOrientation: DotOrientation` ('columns' | 'rows', a PillTray choice of two
+// named options) became `rotateDots: boolean` below — the two options were always an on/off shape,
+// and the bug the rename fixes was never in this store at all: main.tsx's W5Logo used to read this
+// setting UNCONDITIONALLY, so a player on Buttons could leave it on and the title-bar mark sat
+// rotated forever with no dots on screen it corresponded to. DotOrientation itself is unchanged and
+// stays exactly where it always lived — lib/dotLayout, the geometry file — and is no longer
+// re-exported here: every remaining reader (WeekdayAnswer, W5Logo, GuidePage's DotDiagram,
+// modes/modeTypes) imports it straight from there, and lib/dotLayout's `dotOrientationFor` is the
+// one place this store's boolean is turned back into that type.
 
 // The 15 settings values, then the full store (values + setters). Each setter takes a direct
 // value OR a React-style functional updater (prev => next), matching App's setX(v=>!v) call sites.
@@ -46,7 +50,7 @@ export type SettingsValues = {
   randomFormat: boolean
   dateFormat: FormatId
   inputStyle: InputStyle
-  dotOrientation: DotOrientation
+  rotateDots: boolean
   useJulian: boolean
   minY: number
   maxY: number
@@ -64,7 +68,7 @@ export type SettingsState = SettingsValues & {
   setRandomFormat: (v: Updater<boolean>) => void
   setDateFormat: (v: Updater<FormatId>) => void
   setInputStyle: (v: Updater<InputStyle>) => void
-  setDotOrientation: (v: Updater<DotOrientation>) => void
+  setRotateDots: (v: Updater<boolean>) => void
   setUseJulian: (v: Updater<boolean>) => void
   setMinY: (v: Updater<number>) => void
   setMaxY: (v: Updater<number>) => void
@@ -91,8 +95,8 @@ export const SETTINGS_DEFAULTS: SettingsValues = {
   dateFormat: 'written-mdy',
   inputStyle: 'buttons',
   // Launches upright — the orientation the app icon, the launch PNGs and every screenshot already
-  // show. 'rows' is the opt-in.
-  dotOrientation: 'columns',
+  // show. `true` (turned) is the opt-in.
+  rotateDots: false,
   useJulian: true,
   minY: 1,
   maxY: 10000,
@@ -122,6 +126,20 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
 // that has been TYPED but not committed counts as "modified" while there is nothing to save for it.
 const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
 
+// v1 → v2: the picker's old `dotOrientation` ('columns' | 'rows') collapses to the boolean it was
+// always describing — 'rows' is the turned/opt-in state, so it becomes `rotateDots: true`;
+// 'columns' becomes `false`. The old field name is not carried forward (nothing in this store's
+// shape reads it any more, and PERSISTED_KEYS — derived from SETTINGS_DEFAULTS — will never
+// re-persist it either). Mirrors progress.ts's `migrateAoxBestKeys`: a small pure rewrite, exported
+// so the transformation is tested directly rather than only through a simulated rehydrate. Called
+// only once `migrate` below has confirmed `dotOrientation` is actually present.
+export function migrateDotOrientation(
+  state: Partial<SettingsValues> & { dotOrientation?: DotOrientation },
+): Partial<SettingsValues> {
+  const { dotOrientation, ...rest } = state
+  return { ...rest, rotateDots: dotOrientation === 'rows' }
+}
+
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
@@ -129,7 +147,7 @@ export const useSettings = create<SettingsState>()(
       setRandomFormat: (v) => set((s) => ({ randomFormat: resolve(v, s.randomFormat) })),
       setDateFormat: (v) => set((s) => ({ dateFormat: resolve(v, s.dateFormat) })),
       setInputStyle: (v) => set((s) => ({ inputStyle: resolve(v, s.inputStyle) })),
-      setDotOrientation: (v) => set((s) => ({ dotOrientation: resolve(v, s.dotOrientation) })),
+      setRotateDots: (v) => set((s) => ({ rotateDots: resolve(v, s.rotateDots) })),
       setUseJulian: (v) => set((s) => ({ useJulian: resolve(v, s.useJulian) })),
       setMinY: (v) => set((s) => ({ minY: resolve(v, s.minY) })),
       setMaxY: (v) => set((s) => ({ maxY: resolve(v, s.maxY) })),
@@ -175,17 +193,37 @@ export const useSettings = create<SettingsState>()(
       // ⚠ THIS STORE IS WHERE THAT PROMISE IS AT ITS WEAKEST, and it is worth stating here rather
       // than leaving to be rediscovered: the live site and staging share this origin, so an OLD
       // build and this one really do interleave on this key. The key they agree about is identical;
-      // the PAYLOAD is only as complete as the older build's own `partialize`. `dotOrientation` was
-      // the 15th setting and post-dates several builds still cached on devices, so an old build
-      // saving settings drops it, and the next boot here reads it as the factory 'columns' — the
-      // player's Dot Layout quietly reverts. Nothing is mis-attributed and no stats are involved;
-      // it is the price of one key serving two builds, argued in full in store/presets' header.
+      // the PAYLOAD is only as complete as the older build's own `partialize`. A build that still
+      // writes the old `dotOrientation` field (pre-Q3) saves its OWN `version: 1` alongside it, so
+      // THIS build's `migrate` below still catches it on the next boot here and `rotateDots` comes
+      // back correct — the one case the interleaving cannot silently lose. A build from before
+      // dotOrientation existed at all writes neither field, and that boot reads the factory
+      // `rotateDots: false`, the same silent-revert shape every setting added after launch already
+      // has. Nothing is mis-attributed and no stats are involved either way; it is the price of one
+      // key serving more than one build in flight, argued in full in store/presets' header.
       name: PRESET_STORE_KEYS.settings,
       // …and this is what makes presets 2, 3, 4… land somewhere else. The `name` above never
       // changes; the adapter rewrites it to the ACTIVE preset's key at each read and each write.
       // See store/presets for why that beat swapping the name on every switch.
       storage: presetScopedStorage<Partial<SettingsState>>(),
-      version: 1,
+      // v2 = dotOrientation LEFT the shape (Q3, round 20 — see the `migrate` step immediately
+      // below, and the field's own comment near SettingsValues above).
+      version: 2,
+      // Saved-shape migrations — the version-gated REWRITE, run once at hydrate when the stored
+      // version is older. Only dotOrientation → rotateDots needs one: a stored 'rows'/'columns' is
+      // information a later read cannot reconstruct from the boolean alone, exactly the shape
+      // progress.ts's own v1→v2 aoxBest migration argues in full (this store follows that precedent
+      // rather than re-deriving it). `migrate` runs BEFORE `merge` below, so by the time the
+      // unscreened persisted-spread in `merge` sees this object it already carries `rotateDots` (or
+      // nothing at all, for a payload that never had `dotOrientation` either) — `merge` itself needs
+      // no special-casing for the same reason progress.ts's `mergeOverDefaults` needed none for
+      // aoxBest: the rewrite already produced the CURRENT shape.
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<SettingsValues> & { dotOrientation?: DotOrientation }
+        return version < 2 && state && 'dotOrientation' in state
+          ? migrateDotOrientation(state)
+          : state
+      },
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<SettingsState>,

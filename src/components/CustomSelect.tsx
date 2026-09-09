@@ -466,7 +466,21 @@ export default function CustomSelect({
                 >
                   {opt.value === value ? '✓' : ''}
                 </span>
-                <span>{opt.label}</span>
+                {/* min-w-0 flex-1 — Q6, added for the preset switcher's flexible name cell, and
+                    harmless for every other caller (the mode selector's plain-text labels draw
+                    identically inside a wider invisible box). This span is a FLEX ITEM of the row
+                    above (blockified by being a direct child of `flex items-center gap-2.5`), so
+                    without flex-1 it stays content-sized — which is exactly right for a caller
+                    whose label is plain text, and exactly wrong for one whose label is a cell that
+                    needs to fill the row so its OWN children can fill IT in turn. `min-w-0` is the
+                    same "let a truncating child shrink" fix as the trigger's own wrapper: without
+                    it a flex item's content-based minimum can refuse to shrink at all.
+                    ⚠ EVERY ROW GETS THE SAME TREATMENT, which is what keeps a caller's per-row
+                    markers (components/PresetSwitcher's amnesic "A") in a COLUMN: every option
+                    button is the same width (`w-full` of one shared panel), so flex-1 stretches
+                    every row's label cell to that same shared width regardless of that row's own
+                    text length — a hardcoded per-row width is no longer what aligns them. */}
+                <span className="min-w-0 flex-1">{opt.label}</span>
               </button>
             ))}
           </div>,

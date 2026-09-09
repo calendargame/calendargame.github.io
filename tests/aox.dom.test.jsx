@@ -1466,6 +1466,7 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
           blitzQSec: MODE_PREFS_DEFAULTS.blitzQSec,
           aoxN: MODE_PREFS_DEFAULTS.aoxN,
         },
+        amnesic: false, // this fixture's preset is never amnesic — Reset Settings must not disturb it
       }),
     )
   }

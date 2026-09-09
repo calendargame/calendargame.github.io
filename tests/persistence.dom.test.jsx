@@ -20,10 +20,22 @@
 //
 // ⚠ WHAT IS DELIBERATELY NOT HERE. The build stamp, the two update-dot flags, the changelog
 // seen-signature and the two sessionStorage flags are all persisted, and none of them is a player's
-// saved data — they describe the CODE THAT RAN or this device's current session. They stay GLOBAL
-// across presets (a preset switch must not make the update dot reappear), so they are not the
-// subject of this net; tests/buildStamp.dom and tests/changelog.dom already own them and must keep
-// passing unchanged through the preset work, which is itself the assertion that they stayed global.
+// PER-PRESET saved data — they describe the CODE THAT RAN or this device's current session. They
+// stay GLOBAL across presets (a preset switch must not make the update dot reappear), so they are
+// not the subject of this net; tests/buildStamp.dom and tests/changelog.dom already own them and
+// must keep passing unchanged through the preset work, which is itself the assertion that they
+// stayed global.
+//
+// ⚠ LOOKUP HISTORY JOINED THAT LIST (Q1, round 20). It used to live inside `progress`, one of the
+// four stores this net exists to prove ARE independent per-preset places — but it is a player's
+// saved data that is nonetheless GLOBAL, the one exception the file header on store/lookupHistory
+// argues for at length: a Lookup is a question you asked, not a record of how you did, so it reads
+// the same whichever preset is open. It moved to its own store/lookupHistory.ts and its own test
+// file, tests/lookupHistory.dom, which owns proving it survives a reopen, a preset switch and a
+// preset delete — but NOT a Full Reset, which still clears it (the owner's explicit call: there is
+// only one shared copy, and pressing Full Reset from any preset removes the only one there is). That
+// is the identical shape of proof this file gives the four stores below, just for a store that is
+// not one of them any more.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { cleanup, screen, act } from '@testing-library/react'
 import {
@@ -56,16 +68,16 @@ const PLAYED = { played: 5, good: 3, streak: 2, best: 2, times: [1200, 900, 1500
 // An AoX record, and a Blitz one, under the key shapes the modes compose today.
 const AOX_KEY = '10|false|numeric-ymd|random|random|random|1583-10000|true'
 const AOX_REC = { avg: 1.5, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: 1.5, medRoundId: 1 }
-const LOOKUP = [{ id: 'a', y: 1776, m: 7, d: 4 }]
 
 // Seed a device that has been PLAYED ON — through the stores' own setters, because a payload the
-// app never wrote is not evidence about what the app saves.
+// app never wrote is not evidence about what the app saves. Lookup history is deliberately not
+// seeded here any more (Q1, round 20) — it left `progress` for its own global store, so it is no
+// longer part of what "a played-in preset" means; tests/lookupHistory.dom seeds and asserts it now.
 function seedAPlayedDevice() {
   const p = progress.getState()
   p.setModeStats('classic', PLAYED)
   p.setModeStats('flash', { ...PLAYED, played: 9, good: 7 })
   p.setAoxBest({ [AOX_KEY]: AOX_REC })
-  p.setLookupHistory(LOOKUP)
 }
 
 afterEach(() => {
@@ -147,26 +159,27 @@ describe('what you saved is there when you come back', () => {
     expect(back.classicTimingOff).toBe(false)
   })
 
-  it('lifetime stats, an all-time best, and the Lookup history', async () => {
+  it('lifetime stats and an all-time best', async () => {
     seedAPlayedDevice()
     const fresh = await reopenApp()
     const back = fresh.progress.getState()
     expect(back.stats.classic).toEqual(PLAYED)
     expect(back.stats.flash.played).toBe(9)
     expect(back.aoxBest[AOX_KEY]).toEqual(AOX_REC)
-    expect(back.lookupHistory).toEqual(LOOKUP)
   })
 
   it('the saved personal defaults', async () => {
     userDefaults.getState().saveDefaults({
       settings: { ...settings.getState(), minY: 1600, leapChance: '75' },
       prefs: { flashMs: 800, blitzSec: 120, blitzQSec: 20, aoxN: '25' },
+      amnesic: true, // round-20 Q4 — non-default so the round trip is a real claim, not a coincidence
     })
     const fresh = await reopenApp()
     const back = fresh.userDefaults.getState().saved
     expect(back.settings.minY).toBe(1600)
     expect(back.settings.leapChance).toBe('75')
     expect(back.prefs).toEqual({ flashMs: 800, blitzSec: 120, blitzQSec: 20, aoxN: '25' })
+    expect(back.amnesic).toBe(true)
   })
 
   // The bounded-payload promise, stated as the player meets it: a long practice history does not
@@ -205,35 +218,17 @@ describe('an older save still opens', () => {
     expect(Object.keys(best)[0]).toContain('always') // …completed with the live setting
   })
 
-  it('a Lookup date saved by an older release still opens, and an impossible one is dropped', async () => {
-    seedSaved(
-      progress,
-      {
-        ...progress.getState(),
-        lookupHistory: [
-          // The older shape carried the RENDERED text as well; the date is what matters.
-          { id: 'a', y: 1776, m: 7, d: 4, label: 'July 4, 1776', weekday: 'Thursday' },
-          { id: 'bad', y: 1900, m: 2, d: 30 }, // a date that exists in no calendar
-        ],
-      },
-      2,
-    )
-    const fresh = await reopenApp()
-    expect(fresh.progress.getState().lookupHistory).toEqual([{ id: 'a', y: 1776, m: 7, d: 4 }])
-  })
-
-  // The screening is NOT version-gated, and that is the promise: a current-shape payload is read
-  // from the same untrusted storage an old one is, so a tampered or truncated entry is refused on
-  // every load rather than only on an upgrade.
-  it('a junk entry in a CURRENT-shape save is refused too', async () => {
-    seedSaved(
-      progress,
-      { ...progress.getState(), lookupHistory: [{ id: 'x' }, { id: 'a', y: 1776, m: 7, d: 4 }] },
-      3,
-    )
-    const fresh = await reopenApp()
-    expect(fresh.progress.getState().lookupHistory).toEqual([{ id: 'a', y: 1776, m: 7, d: 4 }])
-  })
+  // ⚠ THE TWO LOOKUP-HISTORY CASES THAT USED TO STAND HERE ARE GONE, DELIBERATELY, NOT MOVED. They
+  // proved "a Lookup date saved by an older release still opens" — a promise this app no longer
+  // makes for that field (Q1, round 20): lookupHistory left `progress` for its own global store,
+  // and this app never migrates a field forward by copying it out of an old payload (the same
+  // "preset 1 IS the data, never a copy" principle store/presets states for itself — see
+  // store/lookupHistory's header). A device's pre-move saved lookups are simply left behind under
+  // the old key. What tests/progress.dom now pins instead is the harmless HALF of that: an old
+  // payload that still carries the field loads without error, because nothing reads it any more.
+  // The screening/migration behaviour those two cases actually exercised — an entry surviving a
+  // shape upgrade, a junk entry refused on every load — still exists, just for a different key now;
+  // tests/lookupHistory.dom owns proving it there.
 
   // Re-opening again must not re-run the upgrade. Stated as the failure it prevents: a record
   // migrated twice would land under a key nothing looks up, and the player's best would vanish on
@@ -289,7 +284,6 @@ describe('storage that refuses does not cost you the app', () => {
     seedSavedRaw(progress, '{"state":{"stats":{"classic"')
     const fresh = await reopenApp()
     expect(fresh.progress.getState().stats.classic.played).toBe(0)
-    expect(fresh.progress.getState().lookupHistory).toEqual([])
   })
 })
 
@@ -303,7 +297,7 @@ describe('storage that refuses does not cost you the app', () => {
 describe('the three resets clear exactly what they clear', () => {
   beforeEach(() => resetAppState())
 
-  it('Reset Settings restores the panel and leaves your stats, bests and history alone', async () => {
+  it('Reset Settings restores the panel and leaves your stats and bests alone', async () => {
     seedAPlayedDevice()
     mountApp()
     openSettings()
@@ -324,7 +318,6 @@ describe('the three resets clear exactly what they clear', () => {
     const fresh = await reopenApp()
     expect(fresh.progress.getState().stats.classic).toEqual(PLAYED)
     expect(fresh.progress.getState().aoxBest[AOX_KEY]).toEqual(AOX_REC)
-    expect(fresh.progress.getState().lookupHistory).toEqual(LOOKUP)
   })
 
   it('Reset Settings leaves the mode setup it does not cover', async () => {
@@ -362,8 +355,11 @@ describe('the three resets clear exactly what they clear', () => {
     expect(back.stats.classic.played).toBe(0)
     expect(back.stats.flash.played).toBe(0)
     expect(back.aoxBest).toEqual({})
-    expect(back.lookupHistory).toEqual([])
     expect(fresh.modePrefs.getState().blitzPerQ).toBe(false) // Full Reset DOES cover this one
+    // Lookup history is not re-asserted here (Q1, round 20 moved it out of `progress`, so it is no
+    // longer this file's subject) — but it IS still cleared by this same tap, through a genuine cold
+    // start exactly like the assertions above; tests/lookupHistory.dom owns proving it, to keep this
+    // file's scope to the four stores it is actually about.
   })
 
   it('Reset Stats clears the mode you are on and nothing else', async () => {
@@ -378,7 +374,6 @@ describe('the three resets clear exactly what they clear', () => {
     expect(back.stats.classic.played).toBe(0)
     expect(back.stats.flash.played).toBe(9) // another mode's record is not yours to clear
     expect(back.aoxBest[AOX_KEY]).toEqual(AOX_REC)
-    expect(back.lookupHistory).toEqual(LOOKUP)
   })
 })
 
@@ -394,6 +389,7 @@ describe('saved personal defaults outlive a Full Reset', () => {
     userDefaults.getState().saveDefaults({
       settings: { ...settings.getState(), minY: 1600, leapChance: '75' },
       prefs: { flashMs: 800, blitzSec: 120, blitzQSec: 20, aoxN: '25' },
+      amnesic: false,
     })
     act(() => {
       settings.getState().setMinY(1)

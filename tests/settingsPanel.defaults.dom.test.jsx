@@ -51,6 +51,7 @@ import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 import { useProgress } from '../src/store/progress.js'
+import { useLookupHistory } from '../src/store/lookupHistory.js'
 import { CHANGELOG_DOT_KEY, markUpdateDot } from '../src/changelog.js'
 import { installGuideScroller } from './helpers/guideScroller.jsx'
 import {
@@ -65,6 +66,7 @@ import {
   footerCaptions,
   fullResetButton,
   fullResetState,
+  isOffered,
   isSettingsOpen,
   modalButtons,
   modalCard,
@@ -184,7 +186,7 @@ const PERSONAL_SETTINGS = {
   randomFormat: true,
   dateFormat: 'numeric-ymd',
   inputStyle: 'dots',
-  dotOrientation: 'rows',
+  rotateDots: true,
   useJulian: false,
   minY: 1600,
   maxY: 1900,
@@ -277,7 +279,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     divergeNonCapturable()
     act(() => {
       const p = useProgress.getState()
-      p.setLookupHistory([{ id: 'seed-1', y: 1900, m: 3, d: 4 }])
+      useLookupHistory.getState().setHistory([{ id: 'seed-1', y: 1900, m: 3, d: 4 }])
       p.setModeStats('classic', { played: 7, good: 6, streak: 3, best: 4, times: [1200] })
       p.setBlitzBest({ 'a-config': { score: 12, streak: 5, scoreRoundId: 1, streakRoundId: 1 } })
     })
@@ -297,7 +299,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     expect(useUserDefaults.getState().saved).toBe(savedBefore) // the snapshot itself: untouched
     expect(useProgress.getState().stats.classic).toEqual(statsBefore) // lifetime stats
     expect(useProgress.getState().blitzBest).toEqual(bestsBefore) // all-time bests
-    expect(useProgress.getState().lookupHistory).toHaveLength(1) // Lookup history
+    expect(useLookupHistory.getState().history).toHaveLength(1) // Lookup history (shared, untouched anyway)
     expect(currentMode()).toBe('Classic') // the current mode
     expect(isSettingsOpen()).toBe(true) // the panel's open state
     expect(prefs(NON_CAPTURABLE)).not.toEqual(factoryPrefs(NON_CAPTURABLE)) // the thirteen
@@ -329,6 +331,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
       useUserDefaults.getState().saveDefaults({
         settings: { ...SETTINGS_DEFAULTS, dateFormat: 'numeric-ymd', minY: 1700, maxY: 1700 },
         prefs: pick(MODE_PREFS_DEFAULTS, CAPTURABLE),
+        amnesic: false,
       }),
     )
     act(() => {
@@ -441,10 +444,23 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
     // panel says so — which is the point, and why Full Reset is the only way back.
     //
     // The second ingredient is a NON-SETTINGS reason for the app not to be fresh, because Full
-    // Reset asks a wider question than "has anything changed": one Lookup someone did earlier is
-    // enough to offer it in a state the other three offers read as pristine. Deliberately not a
-    // panel value — that would light the other three and the guard under test would never bite.
-    act(() => useProgress.getState().setLookupHistory([{ id: 'seed-1', y: 1900, m: 3, d: 4 }]))
+    // Reset asks a wider question than "has anything changed": a played Classic question is enough
+    // to offer it in a state the other three offers read as pristine. Deliberately not a panel value
+    // — that would light the other three and the guard under test would never bite.
+    // ⚠ USED TO BE A SEEDED LOOKUP, still WOULD work (Q1, round 20 moved lookupHistory out of the
+    // progress store, but the owner's later call kept it inside Full Reset's reach — see main.tsx's
+    // isFullyReset, which reads `displayLookupHistory` again). Switched to a played Classic question
+    // during the move and left that way rather than reverted: a mode-store freshness flag
+    // (classicIsFresh, one of isFullyReset's five per-mode terms) is the same kind of "wider than
+    // settings" fact this case needs, one that survives the mode component's own mount-time
+    // hydration from the store the way a local useState-only fact could not — and it is one fewer
+    // store this case has to reach into. Either seed proves the same claim; this file keeps the one
+    // already here.
+    act(() =>
+      useProgress
+        .getState()
+        .setModeStats('classic', { played: 1, good: 1, streak: 1, best: 1, times: [1] }),
+    )
     mountApp()
     openSettings()
     toggleSwitch('Use System Settings')
@@ -506,7 +522,7 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
     }
   })
 
-  it('wipes the stats, the bests and the Lookup history for good, and returns the screen in play to its launch state', () => {
+  it('wipes the stats, the bests, and Lookup history for good, and returns the screen in play to its launch state', () => {
     act(() => {
       const s = useSettings.getState()
       s.setRandomFormat(false)
@@ -515,7 +531,7 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
     })
     act(() => {
       const p = useProgress.getState()
-      p.setLookupHistory([{ id: 'seed-1', y: 1900, m: 3, d: 4 }])
+      useLookupHistory.getState().setHistory([{ id: 'seed-1', y: 1900, m: 3, d: 4 }])
       p.setBlitzBest({ 'some-config': { score: 12, streak: 5, scoreRoundId: 1, streakRoundId: 1 } })
     })
     const view = mountApp()
@@ -524,15 +540,21 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
     openSettings()
     fireFullReset()
     expect(statValue('Score')).toBe('0/0') // the screen came back at launch state
-    expect(useProgress.getState().lookupHistory).toEqual([])
     expect(useProgress.getState().blitzBest).toEqual({})
-    // …and it stays gone across a reload: the wipe went through the persisted store, so the next
-    // launch hydrates from nothing.
+    // ★ LOOKUP HISTORY IS WIPED TOO (Q1, round 20 — the owner's explicit call, overriding an earlier
+    // draft of this whole feature that would have left it standing). It left the progress store for
+    // its own global one, but Full Reset — unlike every OTHER button in this panel, which only ever
+    // reaches the preset it was pressed in — still reaches this ONE shared list, precisely because
+    // there is only one copy for any preset's Full Reset to clear. See main.tsx's fullReset, which
+    // calls clearLookupHistory() explicitly for exactly this reason.
+    expect(useLookupHistory.getState().history).toEqual([])
+    // …and the bests stay gone across a reload: the wipe went through the persisted store, so the
+    // next launch hydrates from nothing — Lookup history included, the same as the bests.
     view.unmount()
     document.getElementById('root').remove()
     mountApp()
     expect(statValue('Score')).toBe('0/0')
-    expect(useProgress.getState().lookupHistory).toEqual([])
+    expect(useLookupHistory.getState().history).toEqual([])
   })
 
   it('leaves the saved-defaults snapshot and a pending update mark standing', () => {
@@ -548,7 +570,7 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
     fireFullReset()
     expect(useUserDefaults.getState().saved).toEqual(savedBefore) // restoring YOUR defaults needs them to survive
     openSettings()
-    expect(footerButton('Clear saved defaults')).toBeInTheDocument() // still the one way back to factory
+    expect(footerButton('Clear Saved Defaults')).toBeInTheDocument() // still the one way back to factory
     expect(changelogDot()).toBe('true') // the update breadcrumb is not gameplay state
   })
 
@@ -635,7 +657,10 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
   // with a comment calling it unreachable. It is not unreachable: the site-wide disarm listener
   // watches mousedown/touchstart only, so ACTIVATING Reset Settings by keyboard leaves the arm
   // standing, and if the rest of the app was already fresh then settings landing on default is the
-  // last of isFullyReset's thirteen terms. The net had no case here, so when the safety net was
+  // last of isFullyReset's thirteen terms (briefly twelve mid-round-20, when an earlier draft of
+  // Q1 dropped `displayLookupHistory.length===0` on the assumption Full Reset would stop reaching
+  // it — the owner's later call put the term back; see main.tsx's isFullyReset). The net had no
+  // case here, so when the safety net was
   // rewritten (from a setState-in-effect to a during-render adjustment) 1113 green cases said
   // nothing either way. This case is what says it: without the net it reads "Confirm?".
   it('an arm does not outlive the app becoming fully reset, even with no press to disarm it', () => {
@@ -743,17 +768,19 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     }
   })
 
-  it('View saved defaults is always there and opens the labelled factory view; Clear appears only once something is saved', () => {
+  it('View Saved Defaults and Clear Saved Defaults are both always there; Clear dims and locks until something is saved (round-20 Q5)', () => {
     divergeCapturable()
     mountApp()
     openSettings()
-    expect(footerButton('View saved defaults')).toBeInTheDocument()
-    expect(within(panelEl()).queryByRole('button', { name: 'Clear saved defaults' })).toBeNull()
+    expect(footerButton('View Saved Defaults')).toBeInTheDocument()
+    expect(footerButton('Clear Saved Defaults')).toBeInTheDocument() // mounted, not absent
+    expect(offers()).toMatchObject({ gear: true }) // sanity: the fixture really diverged
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // nothing saved yet
     openModal('manage')
     expect(modalCard('Default settings')).toBeInTheDocument() // the FACTORY view, said out loud
     closeModal('manage')
     saveSnapshot()
-    expect(footerButton('Clear saved defaults')).toBeInTheDocument()
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(true)
     openModal('manage')
     expect(modalCard('Your saved defaults')).toBeInTheDocument()
   })
@@ -816,7 +843,11 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     expect(panelValues()).toEqual(shown) // not one visible setting moved…
     // …but "default" now means factory, so the same live state is suddenly a divergence.
     expect(offers()).toMatchObject({ gear: true, saveDefaults: true, resetSettings: true })
-    expect(within(panelEl()).queryByRole('button', { name: 'Clear saved defaults' })).toBeNull()
+    // Round-20 Q5: the link stays MOUNTED — it dims and locks rather than disappearing.
+    expect(
+      within(panelEl()).getByRole('button', { name: 'Clear Saved Defaults' }),
+    ).toBeInTheDocument()
+    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false)
   })
 
   it('a snapshot saved before a setting existed reads factory for it, and never strands the gear lit', () => {

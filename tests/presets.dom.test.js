@@ -60,6 +60,7 @@ function playOnThisPreset({ minY = 1583, blitzSec = 45, theme = 'nebula' } = {})
   useUserDefaults.getState().saveDefaults({
     settings: { ...useSettings.getState() },
     prefs: { flashMs: 800, blitzSec, blitzQSec: 20, aoxN: '25' },
+    amnesic: false,
   })
 }
 

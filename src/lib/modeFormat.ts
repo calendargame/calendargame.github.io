@@ -85,7 +85,11 @@ const fmtCentis = (c: number) => {
 // expression's numerator, so its own float behaviour (0.29 * 100 = 28.999999999999996, so 0.29
 // truncates to "0.28s" — WCA truncation, floating point, and this app agreeing to be pessimistic)
 // is carried over untouched.
-const roundCentis = (t: number) => {
+// Exported (not just fmtTime-internal) so anything that needs to COMPARE two times at the same
+// precision the player sees them at — engine/aoxBest.ts's Best-record reconcile, specifically — can
+// reuse this exact quantizer instead of writing a second one that could silently disagree with it on
+// a boundary case like 59.995 (see above).
+export const roundCentis = (t: number) => {
   const [whole, frac] = t.toFixed(2).split('.')
   return Number(whole) * 100 + Number(frac)
 }

@@ -50,21 +50,55 @@ import { switchPreset } from '../store/presetControl.js'
 // ★ IT MUST NOT SIZE ITSELF TO ITS LONGEST OPTION. CustomSelect's trigger renders EVERY option
 // stacked in a one-cell grid (all but the selected one `invisible`), so its width is the width of
 // the widest label. For a fixed list of seven mode names that is exactly right — the control is as
-// wide as it needs to be and never moves. For PRESET names it is wrong, and not subtly: the names
-// are PLAYER-TYPED, so one long name would permanently widen the top bar for as long as that preset
-// exists, shoving the gear and the mode selector toward the edge of a 360px phone that has no slack
-// to give (the bar's own overflow at that width is a known defect this round is fixing).
-//   THE FIX IS ONE CONSTANT, `PRESET_NAME_COL` BELOW: every option's label is a FIXED-WIDTH cell,
-//   so the trigger's shrink-to-fit width is the same number whatever the names are, and a name too
-//   wide for the cell truncates with an ellipsis instead of pushing. Two mechanisms, not one, and
-//   both are needed: a CHARACTER cap (store/presets' MAX_PRESET_NAME) bounds what a player can type,
-//   and the fixed cell + `truncate` bound the PIXELS — a character cap cannot do that on its own in
-//   a proportional font, where twelve W's are nearly twice twelve i's.
+// wide as it needs to be and never moves. For PRESET names, sizing to content is wrong from BOTH
+// directions: the names are PLAYER-TYPED, so a shrink-to-fit trigger would resize itself under the
+// player's thumb on every rename, and (before round 20 Q6) a long enough name would permanently
+// widen the top bar for as long as that preset existed.
 //
-// ⚠ NOTE WHAT IS *NOT* CONSTRAINED: the portaled dropdown panel. It is an overlay
+// ★★ Q6 CHANGED WHO GIVES, AND PRESET_NAME_COL WITH IT. Rounds 18-19 fixed the width this cell
+// bore so it could never widen the bar; round 20 gave this control FIRST CLAIM on the bar's own
+// slack instead — main.tsx's row puts `flex-1 min-w-0` on THIS control alone, and every other
+// control keeps `shrink-0` (see the budget block above the bar's markup there for the arithmetic
+// and why the switcher is the one that gives). PRESET_NAME_COL followed the same turn: it went
+// from the ONE fixed width every option's name cell wore to a MINIMUM one, applied via `minWidth`
+// rather than `width` below. Everything that used to make the cell exactly PRESET_NAME_COL wide
+// now makes it AT LEAST that wide, and the rest is ordinary block-fill: this cell
+// (`display:flex`, no width of its own) sits inside a chain of boxes that each default to 100% of
+// their own parent once something upstream hands them a definite size to fill — the trigger's
+// `w-full` below is that upstream size, and CustomSelect's grid, its grid-item cells, and this
+// cell each just inherit it one layer at a time. NOTHING IN CustomSelect NEEDED TO CHANGE for
+// that half of the chain — its className is entirely this file's to set, which is the whole
+// reason `w-full` on the trigger below is enough on its own.
+//   ⚠ THE ONE PLACE CustomSelect DID need a matching change is the DROPDOWN rows, which are a
+//   structurally different flex row (not the trigger's stacked grid) and would NOT have picked up
+//   the same fill by construction — see that file's option-row rendering for the fix and why it
+//   was needed to keep the amnesic marker's column alignment once this cell stopped being a fixed
+//   constant.
+//   THE FLOOR STAYS because the menu does not always have something to grow against: the portaled
+//   dropdown panel is `width:max-content` (see the ⚠ below), so nothing forces a SHORT name's row
+//   wide, and PRESET_NAME_COL is what stops it collapsing toward bare content — the same number
+//   the whole cell used to be pinned to, kept now as a "never smaller than this" rather than an
+//   "always exactly this". `em`, not px or rem, for the reason it always was: the root font-size
+//   is FLUID (index.css's clamp), so a px floor would be a fixed number of pixels holding a
+//   variable number of characters, and `em` keeps the floor a fixed number of CHARACTERS at every
+//   root size instead — 6em is roomier in the dropdown's larger text tier than in the trigger's
+//   `text-sm` automatically, with no second constant.
+//
+// ⚠ NOTE WHAT IS *STILL NOT CONSTRAINED* BY THE BAR: the portaled dropdown panel. It is an overlay
 // (`width:max-content`, `maxWidth:90vw`) that answers to the viewport, not to the bar, so nothing
-// it does can widen anything. Its rows carry the same fixed cell anyway — not to contain the panel,
-// but because that shared width is what makes the amnesic markers line up as a COLUMN (below).
+// it does can widen the bar itself.
+//
+// ⚠⚠ TWO MECHANISMS STILL BOUND A NAME, BUT THEY NO LONGER AGREE BY CONSTRUCTION THE WAY TWO FIXED
+// CONSTANTS DID. store/presets' MAX_PRESET_NAME is now a generous, DEVICE-INDEPENDENT ceiling for
+// names this app never watched get typed — a stored payload, an old build, a tampered value (the
+// full argument is at that constant). The cap that actually governs ordinary TYPING is measured
+// LIVE, against THIS control's own rendered cell, and lives one level up from either file: see
+// lib/presetNameWidth. `PRESET_NAME_CELL_SELECTOR`, exported below beside PRESET_NAME_COL, is the
+// DOM hook that measurement reads — components/PresetManager's rename field is mounted in a
+// completely different part of the tree (a ⚙ modal, not the fixed top bar), so it cannot reach
+// this cell through React props or context; it reads the live element the same way this app
+// already reaches across an unrelated component boundary elsewhere (main.tsx's
+// `[data-settings-modal]`, the game's `[data-key="..."]` shortcuts).
 //
 // ── THE AMNESIC MARKER ────────────────────────────────────────────────────────────────────────
 //
@@ -88,54 +122,33 @@ import { switchPreset } from '../store/presetControl.js'
 // the bar and be invisible on the panel in the three dark themes. Inheriting `currentColor` and
 // dimming with opacity is the one treatment that is right in both places.
 
-// ★ THE WIDTH OF A PRESET NAME, and the single number the whole control is measured from.
-//
-// THE ARITHMETIC (a PAPER measurement — see the warning under it). At the narrowest phone width the
-// app supports, 360px, the bar's inner wrapper is `max-w-[30rem] px-4`, so its content box is
-// 360 − 2×1rem ≈ 329px at that viewport's fluid root size (~15.6px; index.css clamps it). What is
-// already spoken for on that line, all at text-sm (0.875rem ≈ 13.7px):
-//     ⚙ gear         px-2.5 + 1px borders + a ~1em glyph          ≈  46-48px
-//     gap-2                                                       ≈   8px
-//     mode selector  px-2.5 + pr-9 + "How to Play" (the widest)   ≈ 120-122px
-//     W5Logo         24px + its gap-2                             ≈  32px
-//     the row's own gap-2 between the two groups                  ≈   8px
-//   329 − (48 + 8 + 122 + 32 + 8) ≈ 111px, and the same sum with slightly narrower glyph metrics
-//   comes out at ~122px. That range brackets the ~122px the earlier scoping pass measured for the
-//   wordmark this control replaces, from the other direction, which is the only cross-check
-//   available without a device.
-// SPENDING IT: the trigger is `px-2.5 pr-6`, i.e. 0.625rem + 1.5rem = 2.125rem ≈ 33px of chrome
-// (the chevron itself sits at right-2 and is ~7px wide, so 1.5rem leaves it ~9px of clearance).
-//   111px − 33px ≈ 78px of name, and 6em at text-sm is 6 × 13.7 ≈ 82px. In the system UI stack an
-//   average mixed-case character advances ≈ 0.5em, so 6em is TWELVE characters — which is where
-//   store/presets' MAX_PRESET_NAME is pinned, so that a typical name never truncates anywhere and
-//   the ellipsis is left as the safety net for wide glyphs it is meant to be. Total trigger width:
-//   6 × 0.875rem + 2.125rem = 7.375rem ≈ 115px.
-//
-// WHY `em` AND NOT px OR rem. The root font-size is FLUID (index.css:
-// `clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)`), so a px width would be a fixed number
-// of pixels holding a variable number of characters — the one thing this cell must not be. In `em`
-// the cell is a fixed number of CHARACTERS at every root size, which is what the cap above means.
-// It also makes the cell 0.875rem-wide in the trigger and 15px-wide in the dropdown rows (the panel
-// runs a larger text tier) automatically, so the rows are always a little roomier than the trigger
-// — a name that fits the bar certainly fits the menu, for free, with no second constant.
-//
-// ⚠⚠ THE BLOCK ABOVE IS ARITHMETIC — jsdom has no layout engine, so no test in this repo can
-// confirm a single number in it. THE BAR IT LANDED IN HAS SINCE BEEN MEASURED, in a real layout
-// engine, and the outcome is recorded at the budget block above the bar's markup in src/main.tsx.
-// Three corrections to the estimates above, kept here rather than silently rewritten, because the
-// gap between an estimate and a measurement is the useful part:
-//   • the wordmark this control replaced was 135.05px, not the ~122px the scoping pass guessed;
-//   • the trigger measures 117.03px, not ~115 (the estimate omitted the `panel` border, 1px a side);
-//   • the row it sits in no longer wears gap-2 or pr-9 — the rebuild cut both to buy the space, so
-//     the "already spoken for" table above describes the OLD bar, and main.tsx's block the new one.
-// At 360×800 the finished row leaves 22.70px of slack, and at the tightest a 360-wide viewport can
-// get (a root font of 16.64px, reached at ~853px of height) it still leaves 2.24px. So this cell is
-// not the thing under pressure any more.
-// ⚠ THAT WAS DESKTOP CHROMIUM. Glyph advances and the system UI stack differ on iOS, so ONLY THE
-// OWNER'S IPHONE CAN CONFIRM THE FIT. If the bar overflows at 360px there, this constant is the one
-// to turn — and MAX_PRESET_NAME must move with it, or the cap starts promising characters the
-// control cannot show.
+// ★ THE FLOOR OF A PRESET NAME'S CELL — pre-Q6 this was the ONLY number the whole control was
+// measured from (the trigger's exact width, and MAX_PRESET_NAME derived from it); post-Q6 the
+// trigger's width is no longer this file's to state at all — it is whatever main.tsx's row does
+// not spend on the logo, the mode selector, the gear and their gaps, and THAT arithmetic now lives
+// at the budget block above the bar's markup in src/main.tsx, measured in a real layout engine the
+// same way this constant always was.
+//   WHAT'S LEFT HERE IS JUST THE FLOOR: 6em, unchanged in value from the old fixed width, kept for
+// continuity (it is the number this control has always rendered a name at, at minimum) rather than
+// picked afresh. At text-sm that is ≈82px — comfortably inside even the tightest budget main.tsx
+// records (the switcher's floor has never been the constraint the bar's fit turned on; the logo,
+// mode selector and gear's combined chrome was) — and the dropdown's larger text tier renders the
+// same 6em roomier still, automatically, with no second constant.
 export const PRESET_NAME_COL = '6em'
+// The DOM hook lib/presetNameWidth reads to learn this control's LIVE rendered cell width — see
+// the ⚠⚠ block above. Scoped to `[data-select-trigger]` (the trigger button CustomSelect marks
+// with that attribute for `pressDrag`) so it can only ever match one of the seven cells STACKED IN
+// THE TRIGGER, never a row in the portaled dropdown (which carries a DIFFERENT attribute,
+// `data-select-group`, on an entirely separate portaled element) — an ambiguity that would matter
+// if the switcher's own menu happened to be open at the same moment the rename field is measuring,
+// which the ⚙ Presets modal and this control's dropdown can, in fact, both be open at once (the
+// same exclusion that lets pressing this trigger with the ⚙ panel open open the menu instead of
+// closing the panel — see the click-outside note near the top of this file). All seven stacked
+// cells share the exact same rendered width regardless of which is the visible one (that sharing
+// is the whole "stack every option in one grid cell" trick CustomSelect's trigger already relies
+// on), so matching the FIRST one in document order is exactly as correct as matching the selected
+// one, without needing to also filter for `aria-hidden="false"`.
+export const PRESET_NAME_CELL_SELECTOR = '[data-select-trigger] [data-preset-name-cell]'
 
 export default function PresetSwitcher({
   // ⚠ REQUIRED, not optional, and that is the whole reason it exists (see the ⚠⚠ block above). Its
@@ -159,14 +172,30 @@ export default function PresetSwitcher({
   const options = presets.map((p) => ({
     value: String(p.id),
     label: (
-      // The fixed-width name cell (see PRESET_NAME_COL). `flex` makes it a block-level flex
-      // container, so inside the trigger's grid cell AND inside a dropdown row it is the same box
-      // with the same rules — one structure serving both, which is what stops the two from drifting.
-      <span className="flex items-center" style={{ width: PRESET_NAME_COL }}>
+      // The name cell (floor PRESET_NAME_COL, grows past it — see the ⚠⚠ block above). `flex`
+      // makes it a block-level flex container, so inside the trigger's grid cell AND inside a
+      // dropdown row it is the same box with the same rules — one structure serving both, which is
+      // what stops the two from drifting. No `width` any more, only `minWidth`: the cell's actual
+      // width now comes from filling whatever its ancestor chain hands it (see the trigger's
+      // `w-full` below), and `data-preset-name-cell` is the hook lib/presetNameWidth's live
+      // measurement reads off THIS exact element via PRESET_NAME_CELL_SELECTOR.
+      <span
+        className="flex items-center"
+        style={{ minWidth: PRESET_NAME_COL }}
+        data-preset-name-cell="true"
+      >
         {/* `truncate` (overflow-hidden + ellipsis + nowrap) goes on the NAME, not on the cell: a
             flex container's own text-overflow never fires, because the ellipsis rule applies to a
             block box's inline content and this box's children are flex items. Put it here and the
-            name shortens with a real "…" while the marker beside it stays put. */}
+            name shortens with a real "…" while the marker beside it stays put.
+            ⚠⚠ THE ELLIPSIS STAYS UNCONDITIONALLY, even with a live typing-time cap in front of it
+            (lib/presetNameWidth) — argued at length in components/PresetManager, where that cap is
+            actually applied. Short version: a typing-time cap can only promise "fit under THESE
+            conditions at the moment typed", never "fits forever" — the live site and staging share
+            one origin with proven build-skew bugs already, the switcher's own width can change
+            after typing (a rotation, a text-size accessibility setting, a viewport resize), and a
+            canvas measurement is not bit-for-bit identical to this element's own DOM layout. This
+            is the safety net that makes all three survivable instead of an overflowing name. */}
         <span className="truncate">{p.name}</span>
         {p.amnesic && (
           <>
@@ -209,15 +238,26 @@ export default function PresetSwitcher({
       ariaLabel="Preset"
       showChevron
       pressDrag
-      // The mode selector's trigger classes, CHARACTER FOR CHARACTER — the two controls sit side by
-      // side in the same bar, so anything that differed would read as one of them being wrong.
+      // The mode selector's trigger classes, CHARACTER FOR CHARACTER, plus two the mode selector
+      // does NOT wear — the two controls sit side by side in the same bar, so anything that
+      // differed without a reason would read as one of them being wrong, and these two have one.
       // ⚠ IT WAS pr-6 AGAINST THE MODE SELECTOR'S pr-9 WHEN THIS CONTROL WAS WRITTEN, and the top-bar
       // rebuild — the change that mounts it — cut the mode selector to pr-6 as well, to buy back the
       // width the bar was overflowing by at 360px (the measurement is in main.tsx's budget block, and
       // the ⚠⚠ note above records the same correction). The chevron is `absolute right-2` in both, so
       // 1.5rem of right padding leaves it ~9px of clearance and nothing else needs to know.
       // (`px-2.5` then `pr-6`: Tailwind emits pr-* after px-*, so the later rule wins.)
-      className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left"
+      // ⚠⚠ `w-full min-w-0` IS THE Q6 ADDITION, AND IT IS THE WHOLE MECHANISM — everything the
+      // ⚠⚠ block above this file's PRESET_NAME_CELL_SELECTOR export says about "an upstream size
+      // to fill" starts HERE. `w-full` gives this trigger a DEFINITE width (100% of CustomSelect's
+      // own wrapper div, which itself defaults to 100% of main.tsx's `flex-1 min-w-0` row item —
+      // see the budget block above the bar's markup there), which is what lets the grid inside
+      // (CustomSelect's stacked-option cell) fill it rather than shrink-wrap to the widest label.
+      // `min-w-0` is NOT the flex-item fix it would be on a flex child (this button's own parent
+      // is not a flex container) — it is here defensively, so a future wrapping change cannot
+      // reintroduce a content-based floor on the one control that is supposed to have none. The
+      // MODE SELECTOR deliberately keeps NEITHER class: it stays shrink-to-fit, exactly as before.
+      className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left w-full min-w-0"
     />
   )
 }

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
 // progress.dom.test.js — the saved-progress store against REAL (jsdom) localStorage, end to end.
-// Two distinct paths meet here and the tests keep them apart:
-//   • the VERSION-GATED migration (`migrate`), which runs once per upgrade and only where a read
-//     cannot reconstruct the information — today just the v1 → v2 aoxBest key rewrite;
-//   • the UNCONDITIONAL lookup-history screen (`merge`), which runs on EVERY load at EVERY
-//     version, because every load reads the same untrusted localStorage.
+// The VERSION-GATED migration (`migrate`) runs once per upgrade and only where a read cannot
+// reconstruct the information — today just the v1 → v2 aoxBest key rewrite. (The lookup-history
+// screen this file used to also prove — an UNCONDITIONAL `merge` step, since every load reads the
+// same untrusted localStorage a stale one does — left with the field itself in Q1, round 20; it is
+// tests/lookupHistory.dom's claim now, against store/lookupHistory's own key.)
 // The pure rewrites are unit-tested in progress.test.js (Node); this file proves the wiring, via
 // useProgress.persist.rehydrate() — the same zustand entry point a real reload takes.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -13,18 +13,6 @@ import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { useSettings } from '../src/store/settings.js'
 
 const rec = { avg: 1.5, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: 1.5, medRoundId: 1 }
-
-// A pre-v3 saved Lookup entry: the date PLUS the three rendered fields v3 strips.
-const v2Entry = (over = {}) => ({
-  id: 'e1',
-  label: 'July 4, 1776',
-  weekday: 'Thursday',
-  result: 'July 4, 1776 is a Thursday.',
-  y: 1776,
-  m: 7,
-  d: 4,
-  ...over,
-})
 
 describe('progress store — v1 envelope rehydrates through the migration', () => {
   beforeEach(() => {
@@ -52,7 +40,6 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
         },
         suddenBest: {},
         aoxBest: { '10|false|numeric-ymd|random|random|1583-10000|true': rec },
-        lookupHistory: [v2Entry()],
       },
       version: 1,
     }
@@ -64,89 +51,62 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     expect(s.aoxBest).toEqual({
       '10|false|numeric-ymd|random|random|always|1583-10000|true': rec,
     })
-    // The v1 payload is two versions behind, so BOTH steps must have run on it (Q2): the steps
-    // are cumulative, not either/or.
-    expect(s.lookupHistory).toEqual([{ id: 'e1', y: 1776, m: 7, d: 4 }])
     // Everything else passed through untouched.
     expect(s.blitzBest['n60|numeric-ymd|random|random|random|1583-10000|true']?.score).toBe(4)
     expect(s.stats.classic).toEqual({ played: 0, good: 0, streak: 0, best: 0, times: [] })
   })
 
-  // v2 → v3 (Q2): the stored result sentence and label were snapshots of the Date Format in force
-  // at lookup time; the card derives them now, so the migration drops them. Lossless — y/m/d have
-  // been on the entry since long before this store existed, so no saved entry can lack them.
-  it('a v2 payload loses its rendered Lookup fields and keeps the date (incl. the gap marker)', async () => {
-    const v2 = {
-      state: {
-        ...makeProgressDefaults(),
-        lookupHistory: [
-          v2Entry(),
-          v2Entry({ id: 'g', y: 1582, m: 10, d: 10, weekday: 'Does Not Exist', isGap: true }),
-        ],
-      },
-      version: 2,
-    }
-    localStorage.setItem('cg-progress-v1', JSON.stringify(v2))
-    await useProgress.persist.rehydrate()
-    expect(useProgress.getState().lookupHistory).toEqual([
-      { id: 'e1', y: 1776, m: 7, d: 4 },
-      { id: 'g', y: 1582, m: 10, d: 10, isGap: true },
-    ])
-  })
-
   it('a current-version (v3) payload rehydrates unchanged — no migration re-fires', async () => {
     const newKey = '10|false|numeric-ymd|random|random|random|1583-10000|true'
     const v3 = {
-      state: {
-        ...makeProgressDefaults(),
-        aoxBest: { [newKey]: rec },
-        lookupHistory: [{ id: 'e1', y: 1776, m: 7, d: 4 }],
-      },
+      state: { ...makeProgressDefaults(), aoxBest: { [newKey]: rec } },
       version: 3,
     }
     localStorage.setItem('cg-progress-v1', JSON.stringify(v3))
     await useProgress.persist.rehydrate()
     const s = useProgress.getState()
     expect(s.aoxBest).toEqual({ [newKey]: rec })
-    expect(s.lookupHistory).toEqual([{ id: 'e1', y: 1776, m: 7, d: 4 }])
   })
 
-  // The lookup-history screen is NOT version-gated, and this is why: a v3 payload comes out of the
-  // same untrusted localStorage a v2 one does, and LookupCard renders entries without per-field
-  // guards of its own. An entry that can't say which date it is would reach the screen as
-  // MONTH[NaN] with a blank weekday, or trip the mode error boundary. Version-gating the screen
-  // would have left exactly the go-forward path unguarded.
-  it('a CURRENT-version payload is still screened — corrupt entries never reach the card', async () => {
-    localStorage.setItem(
-      'cg-progress-v1',
-      JSON.stringify({
-        state: {
-          ...makeProgressDefaults(),
-          lookupHistory: [
-            { id: 'trunc' }, // a write that stopped mid-entry
-            { id: 'e1', y: 1776, m: 7, d: 4 },
-            { id: 'bad', y: 1776, m: null, d: 4 },
-          ],
-        },
-        version: 3,
-      }),
-    )
-    await useProgress.persist.rehydrate()
-    expect(useProgress.getState().lookupHistory).toEqual([{ id: 'e1', y: 1776, m: 7, d: 4 }])
-  })
-
-  // Same reason, one step further out: a lookupHistory that isn't a list at all still has to land
-  // as the empty history rather than as something the card will try to map over.
-  it('a lookupHistory of the wrong type hydrates as an empty history', async () => {
-    localStorage.setItem(
-      'cg-progress-v1',
-      JSON.stringify({
-        state: { ...makeProgressDefaults(), lookupHistory: 'nope' },
-        version: 3,
-      }),
-    )
-    await useProgress.persist.rehydrate()
-    expect(useProgress.getState().lookupHistory).toEqual([])
+  // ── lookupHistory LEFT THE SHAPE (Q1, round 20 — v3 → v4) ────────────────────────────────────
+  // The four cases that used to stand here proved the OLD lookup-history migration/screening — a
+  // v2 payload losing its rendered fields, a corrupt entry refused, a wrong-typed field landing as
+  // []. That behaviour still exists, just for a different key now (store/lookupHistory's own
+  // normalizeLookupEntries, exercised against 'cg-lookup-v1' in tests/lookupHistory.dom) — this
+  // file's job is narrower now: prove that a v3-or-older payload which still carries the OLD
+  // `lookupHistory` field loads cleanly, since this app never migrates a field forward by copying
+  // it out of an abandoned key (store/lookupHistory's header argues why at length). The field is
+  // simply along for the ride through mergeOverDefaults' unscreened final spread (see the version
+  // comment on this store's `persist` options) — inert, since nothing in this app reads
+  // useProgress().lookupHistory any more, and gone from disk the instant anything next saves here.
+  it('an old payload that still carries lookupHistory loads without error, and the field does nothing', async () => {
+    const stale = {
+      state: {
+        ...makeProgressDefaults(),
+        aoxBest: { '10|false|numeric-ymd|random|random|random|1583-10000|true': rec },
+        // The pre-move shape, rendered fields and all — exactly what a device that last saved
+        // before Q1/round 20 still has sitting in its 'cg-progress-v1' payload.
+        lookupHistory: [
+          { id: 'e1', y: 1776, m: 7, d: 4, label: 'July 4, 1776', weekday: 'Thursday' },
+        ],
+      },
+      version: 3,
+    }
+    localStorage.setItem('cg-progress-v1', JSON.stringify(stale))
+    await expect(useProgress.persist.rehydrate()).resolves.not.toThrow()
+    const s = useProgress.getState()
+    // Everything this store still owns is intact and unaffected by the stray field…
+    expect(s.aoxBest).toEqual({
+      '10|false|numeric-ymd|random|random|random|1583-10000|true': rec,
+    })
+    // …and the field itself is not part of the TYPED contract any more: ProgressState no longer
+    // declares it, so no app code can read it back through useProgress — the only thing left to
+    // assert is that reading it did not crash, which the resolves.not.toThrow() above already did.
+    // A second setter call proves the store is fully usable afterwards, and (via partialize, which
+    // no longer lists the key) drops the stray field from the saved copy on this very write.
+    s.setAoxBest({})
+    const saved = useProgress.persist.getOptions().partialize(useProgress.getState())
+    expect(saved).not.toHaveProperty('lookupHistory')
   })
 
   // C3a no-migration pin: suddenAmBest was ADDED as a fresh key space (v2 stayed v2). A payload
@@ -185,7 +145,6 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     expect(Object.keys(out).sort()).toEqual([
       'aoxBest',
       'blitzBest',
-      'lookupHistory',
       'stats',
       'suddenAmBest',
       'suddenBest',
@@ -284,14 +243,8 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
             },
           ]),
         ),
-        lookupHistory: Array.from({ length: Math.floor(rnd() * 6) }, (_, i) => ({
-          id: `e${seed}-${i}`,
-          y: 1583 + Math.floor(rnd() * 400),
-          m: 1 + Math.floor(rnd() * 12),
-          d: 1 + Math.floor(rnd() * 28),
-        })),
       }
-      localStorage.setItem('cg-progress-v1', JSON.stringify({ state: values, version: 3 }))
+      localStorage.setItem('cg-progress-v1', JSON.stringify({ state: values, version: 4 }))
       await useProgress.persist.rehydrate()
       const s = useProgress.getState()
       expect(s.stats, `seed ${seed}`).toEqual(values.stats)
@@ -299,7 +252,6 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
       expect(s.suddenBest, `seed ${seed}`).toEqual(values.suddenBest)
       expect(s.suddenAmBest, `seed ${seed}`).toEqual(values.suddenAmBest)
       expect(s.aoxBest, `seed ${seed}`).toEqual(values.aoxBest)
-      expect(s.lookupHistory, `seed ${seed}`).toEqual(values.lookupHistory)
     }
   })
 

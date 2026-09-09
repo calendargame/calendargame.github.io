@@ -21,8 +21,22 @@
 /** Which way the 7-dot layout is turned. The names describe WHAT YOU SEE — the two
  *  weekday triples running down the side columns, or along the top and bottom rows —
  *  deliberately not "rotate", which in this app already means "turn your device"
- *  (components/RotateOverlay). */
+ *  (components/RotateOverlay). This is the GEOMETRY's own type — two physical layouts — and it
+ *  stays two-valued even though the ⚙ setting that picks one (Settings → Display, `rotateDots`
+ *  in store/settings) is a boolean: the picker's two named options were always an on/off shape,
+ *  but a grid cell still has to be told WHICH of the two layouts to place a dot on. */
 export type DotOrientation = 'columns' | 'rows'
+
+/** The boolean setting → the geometry it selects. The ONE place that ternary is written — every
+ *  consumer (main.tsx's W5Logo and the four mode screens, WeekdayAnswer, GuidePage's DotDiagram)
+ *  derives through this function rather than repeating `rotateDots ? 'rows' : 'columns'` at each
+ *  call site, which is exactly the class of duplication this codebase's own comments warn against
+ *  (see aoxBest.ts / modeFormat.ts's shared roundCentis). Callers differ only in what they gate
+ *  the ARGUMENT on — W5Logo additionally requires `inputStyle==='dots'` (there is nothing on
+ *  screen for the mark to correspond to otherwise), while WeekdayAnswer and DotDiagram pass
+ *  `rotateDots` straight through for their own separate reasons (see each call site). */
+export const dotOrientationFor = (rotateDots: boolean): DotOrientation =>
+  rotateDots ? 'rows' : 'columns'
 
 /** A 1-indexed CSS grid cell inside the 3×3 cluster. */
 export type DotCell = { r: number; c: number }

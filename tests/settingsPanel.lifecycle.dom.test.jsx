@@ -100,7 +100,8 @@ function freshApp(setup) {
 }
 
 // A PERSONAL DEFAULTS SNAPSHOT, seeded before the mount. Needed by every case that involves the
-// 'Clear saved defaults' link, which the footer only renders once a snapshot exists.
+// 'Clear Saved Defaults' link, which the footer now always renders but leaves dimmed and locked
+// until a snapshot exists (round-20 Q5) — this is what makes it reachable.
 function seedSavedDefaults() {
   const prefs = useModePrefs.getState()
   useUserDefaults.getState().saveDefaults({
@@ -111,6 +112,7 @@ function seedSavedDefaults() {
       blitzQSec: prefs.blitzQSec,
       aoxN: prefs.aoxN,
     },
+    amnesic: false,
   })
 }
 
@@ -480,7 +482,7 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
       // The settings were diverged before the mount, so this is a reset with something to undo.
       ['Reset Settings', () => `leap ${pickerChosen('Leap Year Chance')}`, 'leap Random'],
       ['Full Reset', () => `caption ${fullResetState().caption}`, 'caption Confirm?'],
-      ['View saved defaults', () => `manager ${queryModalCard('manage') !== null}`, 'manager true'],
+      ['View Saved Defaults', () => `manager ${queryModalCard('manage') !== null}`, 'manager true'],
       ['Changelog', () => `changelog ${queryModalCard('changelog') !== null}`, 'changelog true'],
     ]
     const acted = []

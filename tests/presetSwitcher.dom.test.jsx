@@ -23,7 +23,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createRef } from 'react'
 import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react'
-import PresetSwitcher, { PRESET_NAME_COL } from '../src/components/PresetSwitcher.jsx'
+import PresetSwitcher, {
+  PRESET_NAME_COL,
+  PRESET_NAME_CELL_SELECTOR,
+} from '../src/components/PresetSwitcher.jsx'
 import { usePresets, makePresetRegistryDefaults, MAX_PRESET_NAME } from '../src/store/presets.js'
 import { createPreset, renamePreset, setPresetAmnesic } from '../src/store/presetControl.js'
 
@@ -220,19 +223,43 @@ describe('the amnesic marker', () => {
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('the control must not size itself to its longest option', () => {
-  it('gives every option the SAME fixed-width name cell, short name or long', () => {
+  it('gives every option the SAME MINIMUM-width name cell — a floor, not a fixed width any more', () => {
+    // Q6, round 20: the cell used to be exactly PRESET_NAME_COL wide (a `width` style); now it is
+    // AT LEAST that wide (a `minWidth` style), and the actual width — how much wider — is jsdom's
+    // to not know, since it has no layout engine (main.tsx's budget block and
+    // components/PresetSwitcher's own comments are where that arithmetic lives now). What this
+    // environment CAN still pin: `width` is gone (the mechanism that made the cell rigid), and
+    // `minWidth` is still the same exported constant, applied identically everywhere the label
+    // renders — the floor that stops a short name's row collapsing in the menu.
     act(() => {
       createPreset('W'.repeat(MAX_PRESET_NAME)) // the widest name the store will accept
       createPreset('Hi')
     })
     mount()
     openMenu()
-    // Every row, and every one of the trigger's stacked cells, is exactly PRESET_NAME_COL wide.
-    // That is the whole mechanism: the trigger's shrink-to-fit width is then the same number
-    // whatever the names are, so a player-typed name can never widen the top bar.
+    // Every row, and every one of the trigger's stacked cells.
     const cells = [...options().map(optionWrapper), ...triggerWrappers()].map(nameCell)
     expect(cells).toHaveLength(6) // 3 presets, each rendered once in the menu and once in the stack
-    for (const cell of cells) expect(cell.style.width).toBe(PRESET_NAME_COL)
+    for (const cell of cells) {
+      expect(cell.style.width).toBe('')
+      expect(cell.style.minWidth).toBe(PRESET_NAME_COL)
+    }
+  })
+
+  it('marks every cell with the DOM hook lib/presetNameWidth reads across the component boundary', () => {
+    // data-preset-name-cell is what PRESET_NAME_CELL_SELECTOR (this file) and
+    // lib/presetNameWidth's readSwitcherBudget agree on — proven here against the REAL rendered
+    // trigger, not a hand-built stand-in (tests/presetNameWidth.dom owns the fabricated-DOM cases
+    // for readSwitcherBudget's own fallback behaviour).
+    mount()
+    const found = document.querySelector(PRESET_NAME_CELL_SELECTOR)
+    expect(found).not.toBeNull()
+    expect(found.hasAttribute('data-preset-name-cell')).toBe(true)
+    // …and it is inside the TRIGGER, never a dropdown row — the selector's whole point. Closed
+    // right now (openMenu() was never called), so the only matches at all are the seven stacked
+    // trigger cells; this also confirms the selector cannot be satisfied by anything the trigger
+    // itself is not.
+    expect(found.closest('[data-select-trigger]')).not.toBeNull()
   })
 
   it('puts `truncate` on the NAME rather than on the cell', () => {
@@ -251,10 +278,13 @@ describe('the control must not size itself to its longest option', () => {
     }
   })
 
-  it('the store caps what can be typed, so the ellipsis stays a safety net', () => {
-    // The two halves of one measurement: MAX_PRESET_NAME bounds CHARACTERS, PRESET_NAME_COL bounds
-    // PIXELS. A character cap cannot bound pixels in a proportional font, which is why both exist —
-    // and this is the case that fails if the cap is ever raised past what the cell was sized for.
+  it("the store's own ceiling still bounds a name this control never watched get typed", () => {
+    // Post-Q6, MAX_PRESET_NAME no longer promises "fits the cell without truncating" — the LIVE
+    // typing-time cap (lib/presetNameWidth, exercised against components/PresetManager's rename
+    // field) is what makes that promise now, for names typed through the app. What MAX_PRESET_NAME
+    // still guarantees is the coarser one: nothing reaching this control's `options` array, however
+    // it got there, is unbounded — createPreset here stands in for any route that was never typed
+    // through the live UI (store/presets argues the real list: an old build, a tampered payload).
     let p2
     act(() => {
       p2 = createPreset('x'.repeat(80))

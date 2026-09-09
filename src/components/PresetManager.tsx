@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
 import { usePresets, MAX_PRESET_NAME } from '../store/presets.js'
+import type { Preset } from '../store/presets.js'
 import { createPreset, deletePreset, movePreset, renamePreset } from '../store/presetControl.js'
+import { capCandidateToSwitcherWidth } from '../lib/presetNameWidth.js'
+import {
+  targetIndexForCenter,
+  stepsToReorder,
+  previewShift,
+  averageRowHeight,
+} from '../lib/presetReorder.js'
 
 // ============================================================
 // PresetManager — the card behind the ⚙ menu's "Manage Presets" button: make a preset, rename one,
@@ -23,7 +32,7 @@ import { createPreset, deletePreset, movePreset, renamePreset } from '../store/p
 //     could grow a rename field and a confirmation step is a panel that changes height while it is
 //     open, which is exactly the thing that contract says it does not survive.
 // The ⚙ panel is where every other thing you do TO your saved data already lives — Save Defaults,
-// the defaults manager, Clear saved defaults, Reset Settings, Full Reset — and it already has a
+// the defaults manager, Clear Saved Defaults, Reset Settings, Full Reset — and it already has a
 // modal idiom with a shared contract. So this is the FIFTH user of that contract, not a fifth
 // style: components/modalContract's five terms, the same scrim, the same card, the same tokens.
 //
@@ -55,18 +64,67 @@ import { createPreset, deletePreset, movePreset, renamePreset } from '../store/p
 // player out of the round they are in. The new row appears at the foot of the list; the switcher in
 // the top bar is how you go to it.
 //
-// ★ RENAMING IS CAPPED AT THE INPUT, TWICE OVER, and both are needed. `maxLength` is the BROWSER's
-// enforcement — it refuses the thirteenth keystroke, so the field never shows a character it is
-// about to lose, which is what makes typing feel right. The `slice` in onChange is what actually
-// HOLDS: maxLength is not applied to a value set programmatically (which is every route jsdom has,
-// so it is also the only half the suite can prove) and store/presets' normalizePresetName slices
-// again on the way in. Three cuts sounds like duplication and is not — they are the keystroke, the
-// paste-shaped write, and the untrusted-storage screen, and no one of them covers another's case.
+// ★★ RENAMING IS CAPPED AT THE INPUT, AND — SINCE Q6, ROUND 20 — BY WIDTH RATHER THAN BY COUNT.
+// It used to be a character count, twice over (a `maxLength` for the browser's own enforcement,
+// plus a `slice` in onChange for the paste-shaped write maxLength does not cover). That worked only
+// because the switcher's display cell was ALSO a fixed count of characters; once the cell became
+// flexible (components/PresetSwitcher), a character cap stopped answering the question that
+// actually matters — "will this fit the switcher, RIGHT NOW, on THIS device" — so onChange now
+// calls lib/presetNameWidth's capCandidateToSwitcherWidth on every keystroke, which measures the
+// candidate against the switcher's LIVE rendered cell width (a real canvas measurement against a
+// real DOM element in another part of the tree entirely — see that file for the mechanism and why
+// it is not a React prop or a store) and trims to the longest prefix that fits, exactly the shape
+// `maxLength` gives a paste. `nameWidthCapped` is what that trim sets, and it drives the small
+// WIDTH-language note below the field ("That's as long as this name can display.") rather than a
+// character count, because a character count is no longer the true reason.
+// ⚠ `maxLength={MAX_PRESET_NAME}` STAYS ON THE ELEMENT, as a SEPARATE, coarser backstop — the
+// store's own hard ceiling (store/presets argues why it is now a generous, device-independent
+// number rather than a pixel-tuned one), reached only if the width cap somehow fails to fire (a
+// browser with canvas disabled, say). In ordinary use the width cap is reached first, well under
+// it. Layering them is the same "no one cut alone covers every case" reasoning this field always
+// used, just with a different pair of cuts.
 //
-// ★ MOVING IS TWO BUTTONS, NEVER A DRAG. The argument is store/presetControl's, at movePreset, and
-// it is the most expensive lesson this feature inherits: two pointer gestures have now passed on a
-// development machine and failed on the owner's iPhone. This one cannot, because it is not a
-// gesture.
+// ★★ MOVING IS A DEDICATED DRAG HANDLE, AS OF Q7 ROUND 20 — REPLACING THE ↑/↓ PAIR THIS COMMENT
+// USED TO ARGUE AGAINST A DRAG FOR. The owner's call, made explicit rather than re-litigated here:
+// no arrow buttons, one control that is both a pointer/touch drag and a keyboard reorder action.
+// The two prior pointer gestures that passed in Chromium and failed on the owner's iPhone (round
+// 11's mode selector) were a DIFFERENT SHAPE of gesture in a different part of this app — press,
+// drag across an open surface, release wherever — and neither reason they failed is a reason a
+// dedicated handle has to fail the same way:
+//   • THE GESTURE NEVER STARTS ANYWHERE BUT THE HANDLE. The mode selector's failure mode was a
+//     press ambiguous between "open a menu" and "start scrolling/panning", decided differently by
+//     iOS than by Chromium. This list is inside a scroll region (components/scrollRegion), and the
+//     one thing that keeps a drag from fighting that scroller is that only ONE small element per
+//     row — never the row, never the name field, never the list itself — ever attaches a drag
+//     listener at all. Touching anywhere else is unconditionally an ordinary scroll or tap.
+//   • touch-action:none IS DECLARED ON THAT ONE ELEMENT, and nowhere wider (below), which is the
+//     platform's own opt-out of exactly the ambiguity that broke the mode selector — told to the
+//     browser, not inferred from timing.
+//   • THE MECHANISM IS NATIVE POINTER EVENTS WITH EXPLICIT CAPTURE (setPointerCapture on
+//     pointerdown), rather than a bespoke touch/mouse pair. ⚠ THIS IS THE FIRST USE OF BROWSER
+//     CAPTURE IN THIS APP — a claim that it shares "the same primitive" as lib/pointerGestures
+//     stood here until it was checked against that file: pointerGestures latches its own gesture
+//     with a plain module-scope `pointerId` variable and DOCUMENT-level listeners, never the
+//     browser's own capture API. What the two genuinely share is the GUARD, not the mechanism —
+//     "only the primary contact of a left-button mouse, or any primary touch/pen, may start a
+//     gesture" is copied verbatim from CustomSelect's pressDrag (see beginDrag below) — and that
+//     part IS accurate. Capture was chosen here anyway, over pointerGestures' pattern, because
+//     THIS gesture is scoped to one small element rather than the whole document — capture keeps
+//     onPointerMove/Up attached to the handle itself with no listener to install or tear down at
+//     the document level, which pointerGestures' document-wide reach genuinely needs and this
+//     control does not.
+// None of that is a promise the drag will read as smooth ON DEVICE — it cannot be, from here (see
+// lib/presetReorder for what the mechanism actually does, and PROJECT.md's standing rule that a
+// gesture is device-verified or it is not verified at all). It is the argument for why this design
+// has a real chance where a plain "onPointerMove sets a translateY" implementation would not.
+//
+// ★ THE ARITHMETIC ITSELF IS lib/presetReorder's, kept OUT of this component on purpose — jsdom has
+// no layout engine, so the "which slot is the pointer over" decision has to be provable against
+// fabricated numbers, independent of any real render. This file only wires real pointer/keyboard
+// events to it and to store/presetControl's movePreset, which is completely unchanged by this
+// round: a drag commits, once, at the finger lift, as the same ±1 adjacent-swap calls the keyboard
+// path (and the old buttons before it) already made one at a time. See movePreset's own comment for
+// why that single primitive is enough for both.
 //
 // ★ DELETING IS PERMANENT AND THE CARD SAYS SO IN THOSE WORDS. Two cases are real and both are
 // handled out loud rather than hidden:
@@ -86,25 +144,77 @@ import { createPreset, deletePreset, movePreset, renamePreset } from '../store/p
 // spending a reader's attention on a fact that cannot help them decide.
 // ============================================================
 
-// The three row glyphs, named here rather than written inline — the row below is dense enough that
-// three bare arrows in the markup would read as decoration rather than as the controls they label.
-// ⚠ NONE OF THEM IS aria-hidden AND NONE NEEDS TO BE: every button carrying one also carries an
+// The row glyphs, named here rather than written inline — the row below is dense enough that a
+// bare arrow or ✕ in the markup would read as decoration rather than as the control it labels.
+// ⚠ NEITHER IS aria-hidden AND NEITHER NEEDS TO BE: every control carrying one also carries an
 // aria-label, and an aria-label REPLACES an element's content for a screen reader, so the glyph is
 // already unspoken. (That is the opposite of the ✓ and A markers below, which are bare spans with
 // no name of their own and therefore do need hiding plus an sr-only word.)
-const MOVE_UP = '↑'
-const MOVE_DOWN = '↓'
+// ⚠ TWO OF THE ORIGINAL THREE ARE GONE, AS OF Q7 ROUND 20: MOVE_UP ('↑') and MOVE_DOWN ('↓') named
+// the old reorder buttons this round removed. The SAME reasoning that put them here — name a glyph
+// rather than write it inline, once a row is dense enough for a bare character to read as
+// decoration — is why the handle that replaced them gets a name too (ReorderHandleIcon below); it
+// just cannot be a one-line string constant, because "three plain rounded bars" is markup, not text.
 const DELETE_GLYPH = '✕'
 
-// A row's small square controls. `shrink-0` because the NAME is the thing that gives way when the
-// card is narrow — a reorder button that shrank to a sliver would be the wrong casualty. The
-// surface is `surface-toggle`, the same no-fill interactive tier the modal Cancel buttons wear:
-// none of these three is a destructive act on its own (the ✕ only OPENS the confirmation, exactly
-// as the footer's "Clear saved defaults" link opens its own), so none of them wears the rose fill.
+// THE REORDER HANDLE'S GLYPH — three plain horizontal bars, rounded ends, no arrowheads: iOS's own
+// native system reorder icon, shown to the owner and approved before this round began. An inline
+// SVG rather than a Unicode "hamburger"/"equals" character, which renders as three bars of
+// inconsistent weight and spacing across engines — this app never uses icon fonts (see W5Logo,
+// GuidePage's dot diagrams for the house pattern: raw <svg>, stroke/fill: currentColor so it always
+// matches the surrounding text colour, no external asset).
+// aria-hidden="true" here for the identical reason DELETE_GLYPH above needs none of its own: the
+// element that renders this always carries its own aria-label (the row's current position, at the
+// handle below), which replaces this SVG for a screen reader — so the glyph is already unspoken,
+// and the attribute is belt-and-suspenders, matching every other icon in the app.
+function ReorderHandleIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+      <line
+        x1="3"
+        y1="4"
+        x2="13"
+        y2="4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <line
+        x1="3"
+        y1="8"
+        x2="13"
+        y2="8"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <line
+        x1="3"
+        y1="12"
+        x2="13"
+        y2="12"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+// A row's small square controls — the handle and ✕, now two rather than the original three.
+// `shrink-0` because the NAME is the thing that gives way when the card is narrow — a control that
+// shrank to a sliver would be the wrong casualty. The surface is `surface-toggle`, the same no-fill
+// interactive tier the modal Cancel buttons wear: neither of these two is a destructive act on its
+// own (the ✕ only OPENS the confirmation, exactly as the footer's "Clear Saved Defaults" link opens
+// its own; the handle's two actions are a reorder, not a delete), so neither wears the rose fill.
+// The handle wears this SAME token rather than inventing its own sizing, for the visual consistency
+// the ✕ beside it already relies on — even though the handle is a role="button" div and not a
+// <button>, matching classNames is what makes the row still read as one control tier.
 // ⚠ TOUCH SIZE IS A DEVICE-ONLY QUESTION. At the card's ~288px of content these land near 30×26px,
 // which is the ⚙ panel's existing control tier (its On/Off switches are px-3 py-1.5 text-xs) and
 // not a new, smaller one — but jsdom lays nothing out, so only the owner's iPhone can say whether
-// three of them in a row are comfortable. If they are not, the fix is a taller row (py-2), not a
+// two of them side by side are comfortable, and whether the handle is easy to grab precisely rather
+// than easy to miss. If either is not, the fix is a taller row (py-2) or a wider handle, not a
 // narrower name cell.
 const ROW_BTN_CLASS =
   'shrink-0 px-2 py-1.5 rounded-xl text-xs border surface-toggle text-(--tx-100-80)'
@@ -131,6 +241,13 @@ export default function PresetManager({
   // otherwise, so a preset that is not being typed into can only ever show what is saved.
   const [editing, setEditing] = useState<{ id: number; text: string } | null>(null)
   const editingText = (id: number, name: string) => (editing?.id === id ? editing.text : name)
+
+  // ★ WHETHER THE MOST RECENT KEYSTROKE HAD TO BE TRIMMED, for the width-language note beside the
+  // field (below). One flag, not one per row, for the identical reason `editing` itself is one
+  // value: only one field can hold the keyboard, so only one field can ever be the one this is
+  // about. Reset wherever `editing` itself resets — a fresh row, a commit, a discard — so the note
+  // can never survive past the field it was about.
+  const [nameWidthCapped, setNameWidthCapped] = useState(false)
 
   // The delete confirmation's subject, or null while the list is showing. An ID and not the preset
   // object: the registry can be rewritten under this card (another row renamed, one moved), and a
@@ -169,6 +286,7 @@ export default function PresetManager({
     if (!editing) return
     renamePreset(editing.id, editing.text)
     setEditing(null)
+    setNameWidthCapped(false)
   }
 
   // ⚠ THE ESCAPE DISCARD MUST BE FLUSHED BEFORE THE BLUR, and this is the ⚙ Year Range boxes' bug
@@ -188,7 +306,10 @@ export default function PresetManager({
   // Escape, with nothing focused, reaches that handler and dismisses the card: the app's dismissal
   // ladder, unchanged.
   const discardRename = (el: HTMLInputElement) => {
-    flushSync(() => setEditing(null))
+    flushSync(() => {
+      setEditing(null)
+      setNameWidthCapped(false)
+    })
     el.blur()
   }
 
@@ -222,6 +343,159 @@ export default function PresetManager({
   const confirmDelete = () => {
     if (pendingDelete) deletePreset(pendingDelete.id)
     setPendingDeleteId(null)
+  }
+
+  // ── Reordering (drag + keyboard) ────────────────────────────────────────────────────────────
+  //
+  // ★ ONE DRAG STATE, HELD AS AN OBJECT OR null, FOR THE SAME REASON `editing` ABOVE IS ONE
+  // VALUE — only one row can be mid-drag at a time, so a per-row array would be N−1 rows always
+  // at rest and one that might disagree with the others. Every row's transform and every pointer
+  // handler below reads this one value directly rather than juggling several booleans.
+  //
+  // `slotMidpoints[i]` is the vertical center the row THAT STARTED AT INDEX i occupied at the
+  // moment the drag began — captured ONCE, from a getBoundingClientRect() on every row, and never
+  // re-measured mid-drag. That is lib/presetReorder's contract for targetIndexForCenter and
+  // previewShift, and it is correct for the whole gesture only because nothing moves in the DOM's
+  // actual flow while a drag is in flight (that file's own header comment argues why the model
+  // commits once, at the finger-lift, rather than rewriting the list live).
+  //
+  // `pointerId` latches the gesture the same way lib/pointerGestures and CustomSelect's pressDrag
+  // latch theirs: onPointerMove/onPointerUp/onPointerCancel below all ignore any pointer id but
+  // the one that started this drag, so a second finger landing on the handle mid-drag can neither
+  // hijack it nor restart it.
+  type DragState = {
+    id: number
+    pointerId: number
+    startIndex: number
+    previewIndex: number
+    slotMidpoints: number[]
+    startPointerY: number
+    transformY: number
+  }
+  const [drag, setDrag] = useState<DragState | null>(null)
+
+  // One ref per row, keyed by the preset's ID rather than its index — an index is exactly what a
+  // reorder changes, and a ref keyed by the wrong thing would measure the wrong row on the NEXT
+  // drag's pointerdown. The callback ref below adds/removes its own entry, so a deleted preset's
+  // detached node cannot linger in the map.
+  const rowRefs = useRef(new Map<number, HTMLDivElement>())
+
+  const beginDrag = (p: Preset, index: number) => (e: ReactPointerEvent<HTMLDivElement>) => {
+    // Mirrors CustomSelect's pressDrag guard verbatim (same primitive, same reasoning, see that
+    // file's onPointerDown): only the primary contact of a left-button mouse — or any primary
+    // touch/pen — may start a gesture, so a second finger or a right-click cannot.
+    if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return
+    // Native capture: once set, this exact element keeps receiving THIS pointerId's move/up
+    // events even after the finger drifts off it, which is what lets onPointerMove stay attached
+    // to the handle itself rather than to `window`. Optional-chained because jsdom has no
+    // implementation to call — there is nothing DOM-layout-dependent about the guard above it,
+    // which is what the unit tests below actually exercise.
+    // ⚠ ALSO try/catch'd, matching this app's own idiom for a browser call that can throw rather
+    // than quietly no-op (store/amnesic's openSessionStorage, lib/presetNameWidth's canvas guard,
+    // presetScopedStorage's own localStorage try — this is the same shape of defensiveness applied
+    // to a browser API instead of storage). setPointerCapture throws `NotFoundError` for a pointer
+    // id the browser does not currently recognise as active; the drag has already been armed above
+    // (the guard on line 377 already refused anything but a genuine primary press), so a throw here
+    // is not a reason to abandon the gesture — it only means capture did not take, and the drag
+    // continues on whatever ambient bubbling still reaches this handler. Never observed from a real
+    // press in this round's device-stand-in testing; guarded anyway; the identical reasoning is
+    // below at releasePointerCapture.
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId)
+    } catch {
+      /* capture refused — the gesture still proceeds on ordinary event bubbling */
+    }
+    // Keeps the browser from also starting a touch-scroll/pan of the list underneath — belt and
+    // suspenders with the handle's own touch-action:none.
+    // ⚠⚠ AND IT TAKES THE ELEMENT'S OWN FOCUS-ON-POINTERDOWN WITH IT, VERIFIED ON A REAL BROWSER
+    // RATHER THAN ASSUMED — jsdom has no notion of "default browser behaviour" for a pointerdown
+    // to suppress, so this could not have been caught by the suite above; only a real Chromium
+    // instance (this round's on-device stand-in, see the file header) showed it: preventDefault on
+    // pointerdown ALSO cancels the browser's own "focus this on press" behaviour for anything that
+    // is not a native form control, which a `role="button"` div is not exempt from. Without the
+    // explicit focus() below, a real drag (mouse or touch) would end with the handle un-focused —
+    // silently breaking the "focus survives a reorder" accessibility claim above for every route
+    // EXCEPT the keyboard one (Tab already focuses it, so the tests above never exercised a press
+    // starting from unfocused). Calling focus() here is unaffected by preventDefault — only the
+    // browser's OWN implicit behaviour was ever suppressed, never a programmatic call.
+    e.currentTarget.focus()
+    e.preventDefault()
+    const slotMidpoints = presets.map((preset) => {
+      const rect = rowRefs.current.get(preset.id)?.getBoundingClientRect()
+      return rect ? (rect.top + rect.bottom) / 2 : 0
+    })
+    setDrag({
+      id: p.id,
+      pointerId: e.pointerId,
+      startIndex: index,
+      previewIndex: index,
+      slotMidpoints,
+      startPointerY: e.clientY,
+      transformY: 0,
+    })
+  }
+
+  const onDragMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag || e.pointerId !== drag.pointerId) return
+    const transformY = e.clientY - drag.startPointerY
+    // The dragged row's CURRENT center — its start center plus how far it has moved — never the
+    // raw pointer position, per targetIndexForCenter's contract.
+    const currentCenter = drag.slotMidpoints[drag.startIndex] + transformY
+    setDrag({
+      ...drag,
+      transformY,
+      previewIndex: targetIndexForCenter(currentCenter, drag.slotMidpoints),
+    })
+  }
+
+  // One handler for both a real release and a system-cancelled gesture (the pointer became a
+  // scroll, the app was backgrounded mid-press) — stepsToReorder is computed from wherever the
+  // preview currently sits either way, so a cancelled drag still lands where it was visually
+  // headed rather than silently reverting.
+  const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag || e.pointerId !== drag.pointerId) return
+    // Same try/catch as setPointerCapture above and for the identical reason: releasing a capture
+    // that was never actually granted (the throw above, or a capture the browser already dropped
+    // on its own — losing capture mid-gesture is a real, documented case, not hypothetical) would
+    // otherwise abort this handler BEFORE the reorder below ever runs, turning a harmless capture
+    // hiccup into a dropped drop.
+    try {
+      e.currentTarget.releasePointerCapture?.(e.pointerId)
+    } catch {
+      /* nothing to release */
+    }
+    for (const step of stepsToReorder(drag.startIndex, drag.previewIndex)) movePreset(drag.id, step)
+    setDrag(null)
+  }
+
+  // The keyboard path — unchanged in spirit from the ↑/↓ buttons it replaces, just moved onto the
+  // handle. movePreset is already bounds-checked and silently a no-op at either end, so there is
+  // nothing here to guard (matching the design's own call not to grow a disabled visual state the
+  // handle never had). preventDefault keeps the arrow keys from also scrolling the modal's own
+  // scroll region (components/scrollRegion) in addition to, or instead of, moving the row.
+  const onHandleKeyDown = (p: Preset) => (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      movePreset(p.id, -1)
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      movePreset(p.id, 1)
+    }
+  }
+
+  // The live transform for the row at `index`/`id` — the dragged row tracks the pointer exactly,
+  // with zero lag; every other row gets the pure "make room" nudge from previewShift. Both are 0
+  // whenever no drag is in flight, which is also what keeps the CSS transition below inert except
+  // while a drag is actually reshuffling the list.
+  const rowTransform = (id: number, index: number): number => {
+    if (!drag) return 0
+    if (id === drag.id) return drag.transformY
+    return previewShift(
+      index,
+      drag.startIndex,
+      drag.previewIndex,
+      averageRowHeight(drag.slotMidpoints),
+    )
   }
 
   // ── The confirmation view ───────────────────────────────────────────────────────────────────
@@ -300,21 +574,51 @@ export default function PresetManager({
         className={`${SCROLL_REGION_CLASS} max-h-[45vh] space-y-2 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
       >
         {presets.map((p, i) => (
-          <div key={p.id} className="flex items-center gap-1">
-            {/* THE CURRENT-PRESET MARK, in a reserved fixed-width slot so every name box starts at
+          <div
+            key={p.id}
+            ref={(el) => {
+              if (el) rowRefs.current.set(p.id, el)
+              else rowRefs.current.delete(p.id)
+            }}
+            style={{
+              transform: `translateY(${rowTransform(p.id, i)}px)`,
+              position: drag?.id === p.id ? 'relative' : undefined,
+              zIndex: drag?.id === p.id ? 10 : undefined,
+            }}
+            // Only a row that is NOT the one being dragged transitions — the dragged row must
+            // track the pointer with zero lag (lib/presetReorder's own reasoning for why the live
+            // half is a raw pointer delta), while every other row's previewShift nudge gets its
+            // "sliding to make room" feel from this transition alone, no JS animation of its own.
+            // Absent outside a drag entirely, so the list's normal re-renders (a rename, a create)
+            // never pick up a stray transition.
+            className={
+              drag && drag.id !== p.id ? 'transition-transform duration-150 ease-out' : undefined
+            }
+          >
+            <div
+              className={`flex items-center gap-1 ${
+                // A small lift while THIS row is the one being dragged — existing shadow token
+                // (index.css's elev-shadow-down, the app's one "elevated above the surface" cue,
+                // reused rather than a bespoke box-shadow) plus a hair of scale. Both device-only
+                // to confirm: jsdom lays nothing out, so only the owner's iPhone can say whether
+                // this reads as "lifted" rather than merely "shifted".
+                drag?.id === p.id ? 'elev-shadow-down rounded-xl scale-[1.02]' : ''
+              }`}
+            >
+              {/* THE CURRENT-PRESET MARK, in a reserved fixed-width slot so every name box starts at
                 the same x whether the row is marked or not — the same reason CustomSelect gives its
                 ✓ column a width of its own. aria-hidden + an sr-only word, the idiom every quiet
                 marker in this app uses (the switcher's "A", the footer's Changelog dot), because a
                 bare ✓ is a glyph rather than an accessible name. */}
-            <span className="w-3 shrink-0 text-center text-xs text-(--tx-200-80)">
-              {p.id === activeId && (
-                <>
-                  <span aria-hidden="true">✓</span>
-                  <span className="sr-only">Current preset</span>
-                </>
-              )}
-            </span>
-            {/* THE NAME, AS A TEXT BOX — the rename IS the field, with no edit mode to enter and no
+              <span className="w-3 shrink-0 text-center text-xs text-(--tx-200-80)">
+                {p.id === activeId && (
+                  <>
+                    <span aria-hidden="true">✓</span>
+                    <span className="sr-only">Current preset</span>
+                  </>
+                )}
+              </span>
+              {/* THE NAME, AS A TEXT BOX — the rename IS the field, with no edit mode to enter and no
                 pencil to find.
                 ⚠ IT NAMES ITSELF "Preset name" AND NOTHING MORE, deliberately. A textbox's VALUE is
                 read out with it, so the row's own name is already spoken and a label carrying it as
@@ -324,40 +628,46 @@ export default function PresetManager({
                 ⚠ SELECT-ALL ON ENTRY COMES FOR FREE and must not be added here: lib/textEntry
                 installs it once, at the document, precisely so that the seventh box in the app —
                 this one — gets the rule without a call site remembering it. */}
-            <input
-              type="text"
-              aria-label="Preset name"
-              maxLength={MAX_PRESET_NAME}
-              value={editingText(p.id, p.name)}
-              onFocus={() => {
-                // Seed the pending edit from the SAVED name.
-                // ⚠ THE GUARD IS NOT REDUNDANT, AND THE CASE IT COVERS IS NOT MOVING BETWEEN ROWS.
-                // Leaving a field always blurs it first, and the blur commits and clears `editing`,
-                // so an ordinary tab or tap arrives here with nothing pending — the guard is silent
-                // for every route inside the app. What it is for is the WINDOW regaining focus: a
-                // browser re-fires `focus` on the element that already had it when you come back
-                // from another app or another tab, and without this line that return would silently
-                // throw away a half-typed name. iOS does it every time you switch away and back,
-                // which is the likeliest way anyone would ever meet it.
-                if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
-              }}
-              onChange={(e) =>
-                setEditing({ id: p.id, text: e.target.value.slice(0, MAX_PRESET_NAME) })
-              }
-              onBlur={commitRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  commitRename()
-                  e.currentTarget.blur()
-                } else if (e.key === 'Escape') {
-                  e.stopPropagation()
-                  discardRename(e.currentTarget)
-                }
-              }}
-              className="min-w-0 flex-1 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs focus:outline-hidden focus-ring"
-            />
-            {/* The amnesic marker, the SAME letter the switcher shows and in a reserved slot for
+              <input
+                type="text"
+                aria-label="Preset name"
+                maxLength={MAX_PRESET_NAME}
+                value={editingText(p.id, p.name)}
+                onFocus={() => {
+                  // Seed the pending edit from the SAVED name.
+                  // ⚠ THE GUARD IS NOT REDUNDANT, AND THE CASE IT COVERS IS NOT MOVING BETWEEN ROWS.
+                  // Leaving a field always blurs it first, and the blur commits and clears `editing`,
+                  // so an ordinary tab or tap arrives here with nothing pending — the guard is silent
+                  // for every route inside the app. What it is for is the WINDOW regaining focus: a
+                  // browser re-fires `focus` on the element that already had it when you come back
+                  // from another app or another tab, and without this line that return would silently
+                  // throw away a half-typed name. iOS does it every time you switch away and back,
+                  // which is the likeliest way anyone would ever meet it.
+                  if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
+                }}
+                onChange={(e) => {
+                  // lib/presetNameWidth — measures the candidate against the SWITCHER's live cell
+                  // width (a different, separately-mounted control), not this field's own room, and
+                  // trims to the longest prefix that fits when it does not. See that file and the ★★
+                  // note above for the mechanism and why the cap moved here from a character count.
+                  const { text, capped } = capCandidateToSwitcherWidth(e.target.value)
+                  setEditing({ id: p.id, text })
+                  setNameWidthCapped(capped)
+                }}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    commitRename()
+                    e.currentTarget.blur()
+                  } else if (e.key === 'Escape') {
+                    e.stopPropagation()
+                    discardRename(e.currentTarget)
+                  }
+                }}
+                className="min-w-0 flex-1 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs focus:outline-hidden focus-ring"
+              />
+              {/* The amnesic marker, the SAME letter the switcher shows and in a reserved slot for
                 the same reason the ✓ above is: every row's buttons line up whether or not the row
                 is marked. It is read-only here — Amnesic is flipped in ⚙ → Stats, and only for the
                 preset you are on — so this is purely the answer to "which of these forget", which
@@ -365,54 +675,73 @@ export default function PresetManager({
                 ⚠ DIMMED BY OPACITY, NEVER TINTED, and inheriting currentColor: components/
                 PresetSwitcher argues it (a themed colour token would read correctly in one of the
                 two places this letter appears and be invisible in the other). */}
-            <span className="w-3 shrink-0 text-center">
-              {p.amnesic && (
-                <>
-                  <span aria-hidden="true" className="text-[0.8em] font-semibold opacity-70">
-                    A
-                  </span>
-                  <span className="sr-only">Amnesic</span>
-                </>
-              )}
-            </span>
-            {/* THE TWO REORDER BUTTONS. Each is withheld at the end it cannot move toward, in the
-                app's three-statement convention — the class draws it, aria-disabled announces it,
-                and the guard inside the handler is what makes it true. movePreset would refuse the
-                press anyway; the guard is here so that the button's INERTNESS is a property of the
-                button rather than a fact about a store function a reader has to go and check. */}
-            <button
-              type="button"
-              aria-label={`Move ${p.name} up`}
-              aria-disabled={i === 0 || undefined}
-              onClick={() => {
-                if (i > 0) movePreset(p.id, -1)
-              }}
-              className={`${ROW_BTN_CLASS} ${i === 0 ? NOT_OFFERED_BTN_CLASS : ''}`}
-            >
-              {MOVE_UP}
-            </button>
-            <button
-              type="button"
-              aria-label={`Move ${p.name} down`}
-              aria-disabled={i === presets.length - 1 || undefined}
-              onClick={() => {
-                if (i < presets.length - 1) movePreset(p.id, 1)
-              }}
-              className={`${ROW_BTN_CLASS} ${i === presets.length - 1 ? NOT_OFFERED_BTN_CLASS : ''}`}
-            >
-              {MOVE_DOWN}
-            </button>
-            <button
-              type="button"
-              aria-label={`Delete ${p.name}`}
-              aria-disabled={!canDelete || undefined}
-              onClick={() => {
-                if (canDelete) setPendingDeleteId(p.id)
-              }}
-              className={`${ROW_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
-            >
-              {DELETE_GLYPH}
-            </button>
+              <span className="w-3 shrink-0 text-center">
+                {p.amnesic && (
+                  <>
+                    <span aria-hidden="true" className="text-[0.8em] font-semibold opacity-70">
+                      A
+                    </span>
+                    <span className="sr-only">Amnesic</span>
+                  </>
+                )}
+              </span>
+              {/* THE REORDER HANDLE — one control that is both a pointer/touch drag (pointerdown
+                → pointermove → pointerup/cancel, wired to lib/presetReorder's pure arithmetic
+                above) AND a keyboard reorder action (ArrowUp/ArrowDown), replacing the two ↑/↓
+                buttons this round removed. No disabled visual at either end — matching the design
+                decision recorded above the handlers: movePreset already no-ops there silently.
+                ⚠ A DIV WITH role="button", NOT A <button> — deliberately, and it is not merely a
+                visual-tier choice (ROW_BTN_CLASS's own comment covers that half). lib/
+                pointerGestures' global press-drag controller latches onto ANY element a bare
+                `closest('button')` finds — that is literally its TARGET_SELECTOR — so a real
+                <button> here would ALSO be swept into that separate, document-level gesture
+                system on every press, two independent pointer-capture mechanisms reacting to the
+                same pointerdown. A div the tag-name selector cannot match is invisible to that
+                system by construction, the same way withheld controls elsewhere in this app are
+                kept out of it by a selector rather than by coordination (see that file's own
+                gestureTarget comment). The accessible name carries the CURRENT POSITION so a
+                screen reader announces a new value after a keyboard move — this app uses no
+                aria-live (SettingsPanel's Check-for-updates button argues why), so a changed name
+                on a still-FOCUSED element is what gets announced, which is exactly what point 4 of
+                the brief that built this exists to prove rather than assume. */}
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`Reorder ${p.name}, position ${i + 1} of ${presets.length}`}
+                className={ROW_BTN_CLASS}
+                style={{ touchAction: 'none' }}
+                onPointerDown={beginDrag(p, i)}
+                onPointerMove={onDragMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onKeyDown={onHandleKeyDown(p)}
+              >
+                <ReorderHandleIcon />
+              </div>
+              <button
+                type="button"
+                aria-label={`Delete ${p.name}`}
+                aria-disabled={!canDelete || undefined}
+                onClick={() => {
+                  if (canDelete) setPendingDeleteId(p.id)
+                }}
+                className={`${ROW_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
+              >
+                {DELETE_GLYPH}
+              </button>
+            </div>
+            {/* THE WIDTH-CAP NOTE — WIDTH LANGUAGE, NEVER A CHARACTER COUNT, because a character
+              count is no longer the true reason a keystroke stopped landing (lib/presetNameWidth,
+              and the ★★ note above this component). Shown only for the row currently being typed
+              into, only while its most recent keystroke actually had to be trimmed — it disappears
+              the moment a backspace brings the candidate back under budget, on the same `capped`
+              flag that trim reports. Same visual tier as the "cannot be deleted" note below, for
+              the same reason: a small fact about why a control just did what it did. */}
+            {editing?.id === p.id && nameWidthCapped && (
+              <div className="pl-4 pt-1 text-[11px] text-(--tx-300-60)">
+                That&apos;s as long as this name can display.
+              </div>
+            )}
           </div>
         ))}
       </div>

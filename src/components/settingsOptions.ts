@@ -13,7 +13,6 @@
 // not part of the panel and stays in main.tsx.
 import type { FormatId } from '../lib/format.js'
 import type { InputStyle } from '../store/settings.js'
-import type { DotOrientation } from '../lib/dotLayout.js'
 
 // Date Format — five ids across TWO trays but ONE setting and ONE radiogroup, so whichever half
 // doesn't hold the active id simply shows no selected segment. Sharing a group is also why 'MDY'
@@ -33,15 +32,11 @@ export const INPUT_STYLES: { value: InputStyle; label: string }[] = [
   { value: 'buttons', label: 'Buttons' },
   { value: 'dots', label: 'Dots' },
 ]
-// Dot Layout — which way the 7-dot layout is turned. The labels DESCRIBE WHAT YOU SEE (the two
-// weekday triples running down the side columns, or along the top and bottom rows) rather than
-// naming the operation: "Rotate" is spoken for in this app, where it means "turn your device"
-// (components/RotateOverlay), and a second meaning on the screen right above that one is the
-// confusion worth spending two words to avoid. Both names are unique in the panel, so no ariaLabel.
-export const DOT_ORIENTATIONS: { value: DotOrientation; label: string }[] = [
-  { value: 'columns', label: 'Columns' },
-  { value: 'rows', label: 'Rows' },
-]
+// Dot Layout — Q3 (round 20): no longer a picker array. The setting is a boolean now
+// (store/settings' `rotateDots`), drawn as an On/Off switch like Amnesic/Save Stats rather than a
+// PillTray, so there is no options table to keep here — see components/SettingsPanel's Dot Layout
+// block for the control itself and lib/dotLayout's `dotOrientationFor` for the boolean → geometry
+// derivation every consumer shares.
 // Theme — two independent picks under Use System Settings, one pick ACROSS both rows when it's off
 // (see the Theme block in the panel).
 export const DARK_THEMES = [

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { useSettings, SETTINGS_DEFAULTS, migrateDotOrientation } from '../src/store/settings.js'
 
 // settings.test.js — the ⚙ settings store. The store is the structural beachhead
 // for the mode-untangle, so its contract must be locked: (1) the 15 defaults,
@@ -20,7 +20,7 @@ describe('settings store', () => {
     expect(s.dateFormat).toBe('written-mdy')
     expect(s.inputStyle).toBe('buttons')
     // Upright — the orientation the app icon, the launch PNGs and every screenshot already show.
-    expect(s.dotOrientation).toBe('columns')
+    expect(s.rotateDots).toBe(false)
     expect(s.randomFormat).toBe(false) // launches OFF (Round-2): newcomers see ONE consistent format
     expect(s.useJulian).toBe(true)
     expect(s.julianChance).toBe('random')
@@ -80,5 +80,36 @@ describe('settings store', () => {
     for (const [k, v] of Object.entries(snapshot)) {
       expect(s[k]).toBe(v)
     }
+  })
+})
+
+// Q3 (round 20): dotOrientation ('columns' | 'rows') collapsed to the boolean rotateDots. The pure
+// rewrite is unit-tested here (Node); the wiring — that a stored v1 payload actually reaches this
+// function via useSettings.persist.rehydrate() — is settings.dom.test.jsx's claim (needs jsdom
+// localStorage), mirroring exactly how progress.test.js/progress.dom.test.js split the same concern
+// for migrateAoxBestKeys.
+describe('settings store — migrateDotOrientation (v1 → v2)', () => {
+  it('rows becomes rotateDots: true — the turned/opt-in state', () => {
+    expect(migrateDotOrientation({ dotOrientation: 'rows' })).toEqual({ rotateDots: true })
+  })
+
+  it('columns becomes rotateDots: false — the upright/factory state', () => {
+    expect(migrateDotOrientation({ dotOrientation: 'columns' })).toEqual({ rotateDots: false })
+  })
+
+  it('drops the old field name entirely rather than carrying it forward alongside the new one', () => {
+    const out = migrateDotOrientation({ dotOrientation: 'rows', dateFormat: 'written-mdy' })
+    expect(out).not.toHaveProperty('dotOrientation')
+    expect(out).toEqual({ dateFormat: 'written-mdy', rotateDots: true })
+  })
+
+  it('passes every other field through untouched', () => {
+    const out = migrateDotOrientation({
+      dotOrientation: 'columns',
+      inputStyle: 'dots',
+      minY: 1600,
+      maxY: 1900,
+    })
+    expect(out).toEqual({ inputStyle: 'dots', minY: 1600, maxY: 1900, rotateDots: false })
   })
 })

@@ -21,10 +21,12 @@
 // and closes the back-browse hole (before the fix, only the live-edge reversal rolled the Best back,
 // so a back-browse un-credit left a FABRICATED Best standing on a run with fewer than n credits).
 // Extracted from main.tsx so it can be fuzzed directly against an independent oracle (best == the
-// min avg/median among standing runs). Pure — no React, no app state. Mirrors engine/blitzBest.ts.
-// (C2 Part 1.)
+// min avg/median among standing runs, compared and stored at DISPLAY precision — see the ★ comments
+// on reconcileAoxBest below for why raw-float comparison was a bug, not a simplification). Pure — no
+// React, no app state. Mirrors engine/blitzBest.ts. (C2 Part 1.)
 // ─────────────────────────────────────────────────────────────────────────
 import { calcAvg, calcMed } from './stats.js'
+import { roundCentis } from '../lib/modeFormat.js'
 
 // The shape the persisted store keeps per config (store/progress.ts owns the canonical copy; redeclared
 // here, like blitzBest.ts's BlitzBest/SuddenBest, so the engine layer carries no store dependency — the
@@ -53,20 +55,48 @@ export const emptyAoxBest = (): AoxBest => ({
 // companion stat) — a later run that merely ties does not displace it. Returns the next record plus
 // which metric(s) improved (for the "new best ★" marker). The caller snapshots the PRE-call `cur` for
 // rollback (restore-on-undo), so this stays a pure forward fold.
+//
+// ★ COMPARE AT DISPLAY PRECISION, NOT RAW FLOAT PRECISION. Best Mean / Best Median / Mean / Median are
+// NEVER shown to the player except through fmtTime (modeFormat.ts), which rounds to hundredths via
+// roundCentis (WCA reg 9f1). So two runs can print IDENTICALLY — "2.13s" and "2.13s" — while their raw
+// avg/med floats differ in the fourth-plus decimal (calcAvg/calcMed divide sums, which is where that
+// noise comes from). A raw `avg < cur.avg` still fires on that invisible difference and plants a ★ on
+// a "new best" no player can ever see or verify — that was the actual bug here, not the strict-`<`
+// tie rule itself (a genuine full-precision tie correctly not counting as an improvement is correct
+// and unchanged). roundCentis is imported from modeFormat rather than reimplemented: that file's own
+// comment explains in detail why a second `Math.round(t * 100)` would silently disagree with it on a
+// boundary case like 59.995, and two rounding implementations that can disagree with EACH OTHER is
+// exactly the bug class this codebase's comments repeatedly warn against.
+//
+// ★ STORAGE follows the same reasoning one step further. Once a run improves the record, `next.avg` /
+// `next.med` store the ROUNDED value (roundCentis(..)/100), not the raw float — and so do the
+// companion stats avgMed/medAvg, which are displayed through fmtTime too. This app's whole philosophy
+// is that a stat means exactly what's printed and carries no hidden state (see modeFormat.ts's EM_DASH
+// block for the same principle applied to the dash); a persisted Best that is secretly MORE precise
+// than anything a player could ever compare it against is exactly the kind of ghost precision that
+// philosophy rules out, and it's also what would let a future raw compare reintroduce this same bug.
+// This doesn't cost the NEXT comparison anything: roundCentis is idempotent on its own output — for
+// every whole-hundredth value in range, centis/100 round-trips through it to the identical centis
+// (verified 0..60000s, i.e. every WCA-legal single/average) — so once a value is stored rounded, every
+// future compare is exact centis-integer vs. centis-integer and can never itself drift.
 export function reconcileAoxBest(
   cur: AoxBest,
   avg: number,
   med: number,
   rid: number | null,
 ): { next: AoxBest; avgImp: boolean; medImp: boolean } {
-  const avgImp = cur.avg == null || avg < cur.avg
-  const medImp = cur.med == null || med < cur.med
+  const avgCentis = roundCentis(avg)
+  const medCentis = roundCentis(med)
+  const curAvgCentis = cur.avg == null ? null : roundCentis(cur.avg)
+  const curMedCentis = cur.med == null ? null : roundCentis(cur.med)
+  const avgImp = curAvgCentis == null || avgCentis < curAvgCentis
+  const medImp = curMedCentis == null || medCentis < curMedCentis
   const next: AoxBest = {
-    avg: avgImp ? avg : cur.avg,
-    avgMed: avgImp ? med : cur.avgMed,
+    avg: avgImp ? avgCentis / 100 : cur.avg,
+    avgMed: avgImp ? medCentis / 100 : cur.avgMed,
     avgRoundId: avgImp ? rid : cur.avgRoundId,
-    med: medImp ? med : cur.med,
-    medAvg: medImp ? avg : cur.medAvg,
+    med: medImp ? medCentis / 100 : cur.med,
+    medAvg: medImp ? avgCentis / 100 : cur.medAvg,
     medRoundId: medImp ? rid : cur.medRoundId,
   }
   return { next, avgImp, medImp }

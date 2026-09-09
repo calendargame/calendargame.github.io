@@ -43,6 +43,7 @@ import { useSettings } from '../../src/store/settings.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults } from '../../src/store/userDefaults.js'
 import { useProgress } from '../../src/store/progress.js'
+import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
 import { discardSessionStats } from '../../src/store/amnesic.js'
 // Re-exported so the panel helper's API is complete at one import, while the definition lives in
@@ -66,6 +67,15 @@ export { isOffered, isDimmed }
 // test that saves personal defaults leaks them into every later test in its file unless the store
 // itself is cleared. Three of the seven files omitted it and got away with it only because they
 // never save a snapshot. Including it costs those three nothing and removes the trap.
+//
+// LOOKUP HISTORY IS THE SAME TRAP, ONE STORE OVER (Q1, round 20). It is no longer one of the four
+// per-preset stores above — it moved to its own store/lookupHistory, precisely because it is SHARED
+// across every preset rather than swapped per preset — but it is still an in-memory module
+// singleton `localStorage.clear()` cannot reach, so a case that looks something up leaks it into
+// every later case in its file unless reset directly, same as tests/setup/dom.js's global net
+// already does before every test in the whole suite. It is included here too, redundantly with
+// that net, for the same reason resetProgress() already is: a case reading this function does not
+// have to go check a second file to know what a "clean device" means.
 //
 // sessionStorage is DELIBERATELY NOT HERE. It is not app state — it holds the post-update
 // splash-skip flag and the update-attempt loop breaker (src/main.tsx), which only the two files
@@ -99,6 +109,8 @@ export function resetAppState() {
   useModePrefs.getState().resetModePrefs()
   useUserDefaults.getState().clearDefaults()
   useProgress.getState().resetProgress()
+  useLookupHistory.getState().setHistory([])
+  useLookupSession.getState().setSessionEntries([])
 }
 
 // Mounts the real <App/> with the panel CLOSED, and returns Testing Library's render result.
@@ -546,8 +558,12 @@ export const changelogDot = () => updateDot(changelogLink())
 // (store/presets' `Preset.amnesic`) and is written through store/presetControl, so it is absent
 // from the Save Defaults snapshot and never lights the gear. It is listed here because this list is
 // "every On/Off switch in the panel", which is a question about the panel, not about the store.
+// ⚠ 'Dot Layout' joined in Q3 (round 20) — it was a two-option PillTray before and is a switch now
+// (store/settings' `rotateDots`), on THE PICKER RULE's own logic: a choice between exactly two
+// named alternatives IS an on/off shape.
 export const SWITCH_LABELS = [
   'Random Format',
+  'Dot Layout',
   'Use System Settings',
   'Julian Calendar (pre-Oct 15, 1582)',
   'Save Stats',
@@ -754,8 +770,8 @@ export function arrowPicker(name, key) {
 // ── The footer ────────────────────────────────────────────────────────────────────────────────
 
 // ANY control in the panel, by its accessible name — the three footer buttons (Save Defaults,
-// Reset Settings, Full Reset) and the footer's four text links (View saved defaults, Clear saved
-// defaults, Check for updates, Changelog) alike. They are all <button>, and one accessor covers
+// Reset Settings, Full Reset) and the footer's four text links (View Saved Defaults, Clear Saved
+// Defaults, Check for updates, Changelog) alike. They are all <button>, and one accessor covers
 // them because the only thing that differs is which tier of affordance they wear, which is paint.
 //
 // Scoped to the panel, so it can never accidentally resolve to a same-named button inside one of
@@ -1015,7 +1031,9 @@ export function panelValues() {
     randomFormat: switchState('Random Format'),
     dateFormat: pickerChosen('Date Format'),
     input: pickerChosen('Input'),
-    dotLayout: pickerChosen('Dot Layout'),
+    // Dot Layout is a SWITCH now (Q3, round 20), not a picker — read through switchState like every
+    // other On/Off setting in this snapshot, rather than pickerChosen.
+    dotLayout: switchState('Dot Layout'),
     useSystem: switchState('Use System Settings'),
     minYear: yearValue('min'),
     maxYear: yearValue('max'),
@@ -1147,8 +1165,8 @@ export const managePresetsButton = () => panel().getByRole('button', { name: 'Ma
 // lookup.
 const MODAL_OPENERS = {
   save: () => footerButton('Save Defaults'),
-  manage: () => footerButton('View saved defaults'),
-  clear: () => footerButton('Clear saved defaults'),
+  manage: () => footerButton('View Saved Defaults'),
+  clear: () => footerButton('Clear Saved Defaults'),
   changelog: changelogLink,
   presets: managePresetsButton,
 }

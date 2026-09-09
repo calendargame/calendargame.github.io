@@ -14,6 +14,16 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 
 ## Retired entries
 
+### 2026-07-21
+
+- The small links at the bottom of the settings menu now share consistent spacing.
+- Side-swiping no longer flips the installed app through pages on iPhone.
+- Typing a timer value no longer nudges the slider.
+- Every input box now wears the same border as the buttons.
+- Guide panels open and close with a smooth, matched motion that keeps your place on the page.
+- Fixed: the Lookup page no longer scrolls as a whole — long history lists scroll inside their own box again.
+- This changelog and the Lookup history list now scroll the same way as the settings menu: content fades softly at the edges, and the scrollbar stays clear of the text.
+
 ### 2026-07-19
 
 - Added this changelog: after an update, a small light-blue dot appears on the gear button, and then on the Changelog link inside, until you have taken a look.

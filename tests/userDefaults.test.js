@@ -3,6 +3,7 @@ import {
   useUserDefaults,
   effectiveSettingsDefaults,
   effectivePrefDefaults,
+  effectiveAmnesicDefault,
   normalizeAoxN,
   prefsMatchDefaults,
 } from '../src/store/userDefaults.js'
@@ -27,6 +28,9 @@ const FACTORY_PREFS = {
   blitzQSec: MODE_PREFS_DEFAULTS.blitzQSec,
   aoxN: MODE_PREFS_DEFAULTS.aoxN,
 }
+// Round-20 Q4 — diverges from the factory `false` the same way the settings/prefs fixtures above
+// diverge from theirs, so a round-trip through it proves something rather than being a coincidence.
+const CUSTOM_AMNESIC = true
 
 describe('userDefaults store', () => {
   beforeEach(() => {
@@ -39,10 +43,13 @@ describe('userDefaults store', () => {
   })
 
   it('saveDefaults round-trips a snapshot; clearDefaults returns to null', () => {
-    useUserDefaults.getState().saveDefaults({ settings: CUSTOM_SETTINGS, prefs: CUSTOM_PREFS })
+    useUserDefaults
+      .getState()
+      .saveDefaults({ settings: CUSTOM_SETTINGS, prefs: CUSTOM_PREFS, amnesic: CUSTOM_AMNESIC })
     const saved = useUserDefaults.getState().saved
     expect(saved.settings).toEqual(CUSTOM_SETTINGS)
     expect(saved.prefs).toEqual(CUSTOM_PREFS)
+    expect(saved.amnesic).toBe(CUSTOM_AMNESIC)
     useUserDefaults.getState().clearDefaults()
     expect(useUserDefaults.getState().saved).toBeNull()
   })
@@ -50,7 +57,7 @@ describe('userDefaults store', () => {
   it('saveDefaults copies the snapshot — mutating the input never leaks into the store', () => {
     const settings = { ...CUSTOM_SETTINGS }
     const prefs = { ...CUSTOM_PREFS }
-    useUserDefaults.getState().saveDefaults({ settings, prefs })
+    useUserDefaults.getState().saveDefaults({ settings, prefs, amnesic: CUSTOM_AMNESIC })
     settings.leapChance = 'random'
     prefs.flashMs = 12345
     expect(useUserDefaults.getState().saved.settings.leapChance).toBe('75')
@@ -72,6 +79,18 @@ describe('userDefaults pure helpers', () => {
     expect(effectivePrefDefaults(saved)).toEqual(CUSTOM_PREFS)
   })
 
+  // Round-20 Q4 — mirrors the two tests above: factory (false) when nothing is saved, the saved
+  // value (in EITHER direction) when a snapshot exists.
+  it('effectiveAmnesicDefault: factory (false) when null, the saved value when present', () => {
+    expect(effectiveAmnesicDefault(null)).toBe(false)
+    expect(
+      effectiveAmnesicDefault({ settings: CUSTOM_SETTINGS, prefs: CUSTOM_PREFS, amnesic: true }),
+    ).toBe(true)
+    expect(
+      effectiveAmnesicDefault({ settings: CUSTOM_SETTINGS, prefs: CUSTOM_PREFS, amnesic: false }),
+    ).toBe(false)
+  })
+
   it('a saved snapshot is FORWARD-MERGED over factory — fields a release adds after the save mean factory, never undefined', () => {
     // Simulate a snapshot persisted by an OLDER build: strip a field from each half. Without the
     // merge, the missing fields would come back undefined — permanently failing every at-defaults
@@ -87,6 +106,10 @@ describe('userDefaults pure helpers', () => {
       ...CUSTOM_PREFS,
       blitzQSec: FACTORY_PREFS.blitzQSec,
     })
+    // amnesic wasn't SPREAD onto `saved` at all here — the one-boolean equivalent of "a release adds
+    // this field after the save": a build from before round-20 Q4 never wrote it, so `saved.amnesic`
+    // is `undefined` rather than merely absent from an object spread. Must still read factory (false).
+    expect(effectiveAmnesicDefault(saved)).toBe(false)
   })
 
   it('normalizeAoxN applies the AoX commit clamp (2–1000, non-numeric → 10)', () => {

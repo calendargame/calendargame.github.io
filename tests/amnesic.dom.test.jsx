@@ -83,8 +83,13 @@ const keptCopies = (presetId = 1) =>
 // screens; the store-level describes below have no app and the boundary costs them nothing.
 const setAmnesic = (on, id = usePresets.getState().activeId) => act(() => setPresetAmnesic(id, on))
 
-// Put real, distinguishable stats in every one of the six persisted progress values, through the
+// Put real, distinguishable stats in every one of the five persisted progress values, through the
 // store's own setters — a payload the app never wrote would be no evidence about what it saves.
+// ⚠ LOOKUP HISTORY IS DELIBERATELY NOT SEEDED HERE (Q1, round 20; used to be a sixth call). It left
+// `progress` for its own global store, and this file's whole claim — "while Amnesic is on, nothing
+// writes THIS PRESET'S permanent stats" — has nothing left to say about a value that was never this
+// preset's to begin with. Its own suppression mechanism (a session-only entry never joining the
+// shared list while the active preset is amnesic) is tests/lookupHistory.dom's claim, not this one's.
 const AOX_KEY = '10|false|numeric-ymd|random|random|random|1583-10000|true'
 function recordEverything(n = 7) {
   const p = useProgress.getState()
@@ -96,7 +101,6 @@ function recordEverything(n = 7) {
   p.setAoxBest({
     [AOX_KEY]: { avg: 1.5, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: 1.5, medRoundId: 1 },
   })
-  p.setLookupHistory([{ id: 'a', y: 2000, m: 1, d: 1 }])
 }
 
 // Re-read the progress store from wherever it is now pointed — the store-level stand-in for the
@@ -114,7 +118,7 @@ const relaunch = () => {
   })
 }
 
-// The six persisted progress values as the store currently holds them — the readout every "started
+// The five persisted progress values as the store currently holds them — the readout every "started
 // at zero" / "came back exactly" claim is made against.
 const liveProgress = () => {
   const s = useProgress.getState()
@@ -132,10 +136,10 @@ describe('an amnesic preset never writes its stats down', () => {
     expect(untouched).not.toBeNull() // else the comparison below would be vacuous
 
     setAmnesic(true)
-    // Everything the app can do to stats, in one go: play, set a new best, look a date up, and the
-    // most destructive write there is.
+    // Everything the app can do to stats, in one go: play, set a new best, and the most destructive
+    // write there is. (A Lookup is no longer part of this list — it stopped being progress's data to
+    // touch; its own amnesic-session behaviour is tests/lookupHistory.dom's claim.)
     recordEverything(99)
-    useProgress.getState().setLookupHistory([{ id: 'b', y: 1900, m: 3, d: 4 }])
     useProgress.getState().resetProgress()
     recordEverything(1234)
 
@@ -196,6 +200,7 @@ describe('an amnesic preset never writes its stats down', () => {
     useUserDefaults.getState().saveDefaults({
       settings: { ...useSettings.getState() },
       prefs: { flashMs: 1500, blitzSec: 45, blitzQSec: 10, aoxN: '12' },
+      amnesic: false,
     })
     const kept = keptCopies()
 

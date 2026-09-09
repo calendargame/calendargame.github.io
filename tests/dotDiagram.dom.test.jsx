@@ -12,6 +12,14 @@
 // hand-copy is the whole value of this file's half of the contract: lib/dotLayout BUILDS the
 // rotated array by mapping the upright one, so a test that re-derived it the same way would agree
 // with a wrong rotation just as happily as with a right one.
+//
+// ⚠ Q3 (round 20): the store field driving this is the boolean `rotateDots`, set here through
+// setRotateDots(orientation === 'rows') — the diagram itself still derives through DOT_CELLS keyed
+// by 'columns' | 'rows', via GuidePage's own dotOrientationFor(rotateDots) call. UNLIKE the title-bar
+// mark (tests/dotOrientation.dom), this diagram is NOT gated on inputStyle — see the standalone case
+// at the foot of this file for why, and GuidePage's own header comment for the fuller argument
+// (it documents what turning the toggle on WOULD look like, regardless of the player's current
+// Input choice, the same way it renders at all regardless of Input).
 import { describe, it, expect, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { renderGuidePage } from './helpers/guideScroller.jsx'
@@ -101,7 +109,7 @@ describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
       })
 
       it('renders one labelled dot per weekday, in DAY order, at the cell-derived SVG position', () => {
-        useSettings.getState().setDotOrientation(orientation)
+        useSettings.getState().setRotateDots(orientation === 'rows')
         const svg = renderDiagram()
         const groups = Array.from(svg.querySelectorAll('g'))
         expect(groups).toHaveLength(7)
@@ -123,7 +131,7 @@ describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
       })
 
       it('speaks the layout accurately: aria-label lists every day at its cell position, in row order', () => {
-        useSettings.getState().setDotOrientation(orientation)
+        useSettings.getState().setRotateDots(orientation === 'rows')
         expect(renderDiagram().getAttribute('aria-label')).toBe(SPOKEN[orientation])
       })
     })
@@ -137,5 +145,24 @@ describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
     expect(new Set(CANONICAL.rows.map(key))).not.toEqual(new Set(CANONICAL.columns.map(key)))
     expect(CANONICAL.rows[0]).toEqual(CANONICAL.columns[0]) // Sunday, the turn's fixed point
     for (let i = 1; i < 7; i++) expect(CANONICAL.rows[i]).not.toEqual(CANONICAL.columns[i])
+  })
+
+  // ⚠ UNLIKE THE TITLE-BAR MARK (tests/dotOrientation.dom), this diagram is NOT gated on
+  // inputStyle — stated as its own case rather than left implicit, since Q3 added exactly that gate
+  // to the OTHER consumer of this setting and a reader could otherwise wonder why this one lacks it.
+  // GuidePage's own header comment argues why: the diagram documents what turning Dot Layout on
+  // WOULD look like, so a player who currently has Buttons selected can still see it — the same way
+  // the diagram renders at all regardless of which Input they have chosen.
+  it('reflects rotateDots regardless of inputStyle — Buttons included', () => {
+    useSettings.getState().setInputStyle('buttons')
+    useSettings.getState().setRotateDots(true)
+    const svg = renderDiagram()
+    const circles = Array.from(svg.querySelectorAll('circle'))
+    expect(circles.map((c) => ({ cx: c.getAttribute('cx'), cy: c.getAttribute('cy') }))).toEqual(
+      DOT_CELLS.rows.map(({ r, c }) => ({
+        cx: String(30 + (c - 1) * 60),
+        cy: String(28 + (r - 1) * 62),
+      })),
+    )
   })
 })

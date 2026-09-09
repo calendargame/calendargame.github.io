@@ -39,9 +39,17 @@ import { useUserDefaults } from '../../src/store/userDefaults.js'
 export const LIVE_STORES = {
   settings: useSettings, // the ⚙ panel's values, theme included
   modePrefs: useModePrefs, // the per-mode setup that lives ON each mode's screen
-  progress: useProgress, // lifetime stats, all-time bests, Lookup history
+  progress: useProgress, // lifetime stats, all-time bests
   userDefaults: useUserDefaults, // the player's saved personal defaults
 }
+// ⚠ LOOKUP HISTORY IS DELIBERATELY NOT A FIFTH ENTRY HERE (Q1, round 20). It used to live inside
+// `progress`, but it is not one of "the four kinds of thing a preset owns" any more — it moved to
+// its own store/lookupHistory precisely because it is SHARED across every preset instead of being
+// swapped per preset, which is the one fact this whole file's net (and the preset-switch/delete
+// contracts built on it) exists to exercise. It joins the build stamp and the two changelog flags
+// tests/persistence.dom.test.jsx's own header already names as "WHAT IS DELIBERATELY NOT HERE":
+// GLOBAL, not a preset's, and owned by its own test file (tests/lookupHistory.dom) rather than by
+// this one.
 export const STORE_IDS = Object.keys(LIVE_STORES)
 
 // ── Where a store reads and writes, resolved BY OBSERVATION ───────────────────────────────────
