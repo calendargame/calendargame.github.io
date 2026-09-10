@@ -671,7 +671,7 @@ button:focus,select:focus{outline:none}
    .dot-cluster (which carries data-answer-grid, so the pointer controller's drag-to-select AND the
    keyboard 0–9 children[idx] path both operate on it) is centred inside it. DOM order stays Sun..Sat;
    the logo positions come from inline grid-row/column — which orientation those positions describe
-   is Settings → Display → Dot Layout, resolved in JS (lib/dotLayout's DOT_CELLS) and NOT by a CSS
+   is Settings → Display → Rotate Dots CCW, resolved in JS (lib/dotLayout's DOT_CELLS) and NOT by a CSS
    transform on this cluster: a transform would leave the DOM, the keyboard order and every hit
    area below reasoning in the untransformed frame. Nothing in this block is orientation-specific.
    Idle/flash/persist colours reuse the button

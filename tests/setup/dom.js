@@ -25,6 +25,8 @@ import { beforeEach } from 'vitest'
 import { useProgress } from '../../src/store/progress.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
+import { discardAllSessionModes } from '../../src/store/sessionMode.js'
+import { discardAllSessionRounds } from '../../src/store/sessionRound.js'
 
 if (typeof window !== 'undefined') {
   if (!window.matchMedia) {
@@ -85,4 +87,14 @@ beforeEach(() => {
   // each list to [] both clears memory and (through persist) overwrites whatever was on disk.
   useLookupHistory.getState().setHistory([])
   useLookupSession.getState().setSessionEntries([])
+  // The per-preset SESSION PAGE (store/sessionMode, round-21 Q3) is sessionStorage-backed and keyed
+  // by preset id, so a test that switches modes leaves a page choice that a later test's cold
+  // mountApp() would restore instead of opening on the launch Classic. Same class of leak as the
+  // singletons above; cleared the same way, before every test.
+  discardAllSessionModes()
+  // The per-(preset, mode) PARKED ROUND (store/sessionRound, round-21 Q11) is the same shape of leak:
+  // a sessionStorage-backed singleton keyed by preset id, so a test that finishes a Blitz round or a
+  // MoX run leaves a parked snapshot a later test's cold mountApp() would restore onto the timed
+  // screen. Cleared the same way, before every test.
+  discardAllSessionRounds()
 })

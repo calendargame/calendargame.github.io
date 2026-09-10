@@ -74,19 +74,23 @@ import { switchPreset } from '../store/presetControl.js'
 //   the same fill by construction — see that file's option-row rendering for the fix and why it
 //   was needed to keep the amnesic marker's column alignment once this cell stopped being a fixed
 //   constant.
-//   THE FLOOR STAYS because the menu does not always have something to grow against: the portaled
-//   dropdown panel is `width:max-content` (see the ⚠ below), so nothing forces a SHORT name's row
-//   wide, and PRESET_NAME_COL is what stops it collapsing toward bare content — the same number
-//   the whole cell used to be pinned to, kept now as a "never smaller than this" rather than an
-//   "always exactly this". `em`, not px or rem, for the reason it always was: the root font-size
-//   is FLUID (index.css's clamp), so a px floor would be a fixed number of pixels holding a
-//   variable number of characters, and `em` keeps the floor a fixed number of CHARACTERS at every
-//   root size instead — 6em is roomier in the dropdown's larger text tier than in the trigger's
-//   `text-sm` automatically, with no second constant.
+//   THE FLOOR STAYS as the TRIGGER-GRID floor and a defensive one. Since Q10 (round 21) the
+//   portaled panel is `dropdownWidth="match-trigger"` — it takes this trigger's live rendered
+//   width, not `max-content` — so a menu row now DOES have something to fill (the label cell is
+//   `flex-1` of a `w-full` row of a panel sized to the trigger), and PRESET_NAME_COL rarely binds
+//   in the menu any more. It still binds in the trigger's own stacked grid, and it is still the
+//   thing that stops a name cell collapsing toward bare content if the trigger is ever squeezed
+//   toward its own minimum — kept as a "never smaller than this" rather than an "always exactly
+//   this". `em`, not px or rem, for the reason it always was: the root font-size is FLUID
+//   (index.css's clamp), so a px floor would be a fixed number of pixels holding a variable number
+//   of characters, and `em` keeps the floor a fixed number of CHARACTERS at every root size
+//   instead — the same PRESET_NAME_COL floor is roomier in the dropdown's larger text tier than
+//   in the trigger's `text-sm` automatically, with no second constant.
 //
-// ⚠ NOTE WHAT IS *STILL NOT CONSTRAINED* BY THE BAR: the portaled dropdown panel. It is an overlay
-// (`width:max-content`, `maxWidth:90vw`) that answers to the viewport, not to the bar, so nothing
-// it does can widen the bar itself.
+// ⚠ NOTE WHAT IS *STILL NOT CONSTRAINED* BY THE BAR: the portaled dropdown panel. Since Q10 it is
+// `width:<this trigger's live px>` rather than `width:max-content`, but it is still an overlay
+// (`position:fixed`, `maxWidth:90vw`) that answers to the viewport, not to the bar — and the width
+// it now copies is one the bar already handed the trigger, so nothing it does can widen the bar.
 //
 // ⚠⚠ TWO MECHANISMS STILL BOUND A NAME, BUT THEY NO LONGER AGREE BY CONSTRUCTION THE WAY TWO FIXED
 // CONSTANTS DID. store/presets' MAX_PRESET_NAME is now a generous, DEVICE-INDEPENDENT ceiling for
@@ -128,13 +132,18 @@ import { switchPreset } from '../store/presetControl.js'
 // not spend on the logo, the mode selector, the gear and their gaps, and THAT arithmetic now lives
 // at the budget block above the bar's markup in src/main.tsx, measured in a real layout engine the
 // same way this constant always was.
-//   WHAT'S LEFT HERE IS JUST THE FLOOR: 6em, unchanged in value from the old fixed width, kept for
-// continuity (it is the number this control has always rendered a name at, at minimum) rather than
-// picked afresh. At text-sm that is ≈82px — comfortably inside even the tightest budget main.tsx
-// records (the switcher's floor has never been the constraint the bar's fit turned on; the logo,
-// mode selector and gear's combined chrome was) — and the dropdown's larger text tier renders the
-// same 6em roomier still, automatically, with no second constant.
-export const PRESET_NAME_COL = '6em'
+//   WHAT'S LEFT HERE IS JUST THE FLOOR: 4.5em. It was 6em (the old fixed width) through round 20,
+// but Q10 (round 21) widened the mode selector to match its own dropdown and that +34.72px came
+// straight out of THIS control's flex-1 share — the switcher's trigger is ~105px at 360×800 now,
+// not ~140px. A 6em floor (~82px at text-sm) then exceeded the trigger's usable inner width once
+// px-2.5 + pr-6 (the chevron lane) were taken out (~69px), so a near-floor name overflowed UNDER
+// the ▲▼ on the tightest layout AND the live cap (lib/presetNameWidth, which measures this cell's
+// rect) read the inflated floor and let too-wide names through. 4.5em (~61px at text-sm) sits
+// inside the tightest usable width with margin, so the cell can never be forced past what is
+// visible and the cap reads a true number. It is still a MINIMUM, not a fixed width — on a roomier
+// phone the cell block-fills well past it and the cap allows a correspondingly longer name; the
+// dropdown's larger text tier renders the same 4.5em roomier still, automatically.
+export const PRESET_NAME_COL = '4.5em'
 // The DOM hook lib/presetNameWidth reads to learn this control's LIVE rendered cell width — see
 // the ⚠⚠ block above. Scoped to `[data-select-trigger]` (the trigger button CustomSelect marks
 // with that attribute for `pressDrag`) so it can only ever match one of the seven cells STACKED IN
@@ -238,6 +247,12 @@ export default function PresetSwitcher({
       ariaLabel="Preset"
       showChevron
       pressDrag
+      // Q10: the portaled menu takes THIS trigger's live width instead of shrink-wrapping to the
+      // widest preset name. The trigger already fills the row's leftover space (w-full inside
+      // main.tsx's flex-1 min-w-0), so the menu now fills it too — no more a narrow dropdown under
+      // a wide trigger, and still nothing that can widen the bar (the panel answers to the
+      // viewport, and 90vw still clamps it). The mode selector keeps the default 'content'.
+      dropdownWidth="match-trigger"
       // The mode selector's trigger classes, CHARACTER FOR CHARACTER, plus two the mode selector
       // does NOT wear — the two controls sit side by side in the same bar, so anything that
       // differed without a reason would read as one of them being wrong, and these two have one.

@@ -352,3 +352,86 @@ describe('CustomSelect — the fixed portal panel (position, what closes it, --b
     expect(panel().style.top).toBe(`${71 + 6}px`)
   })
 })
+
+// ── Q10: dropdownWidth + triggerMatchesDropdown ─────────────────────────────────────────────────
+//
+// Two opposite width behaviours the one shared component now has to carry, so the mode selector's
+// trigger can match its own (unchanged) dropdown while the preset switcher's dropdown matches its
+// (space-filling) trigger. jsdom lays out nothing and reports every rect as 0, so what is pinned
+// here is the WIRING — which style each prop produces — not the pixel result (that is verified in a
+// real browser and recorded at src/main.tsx's budget block).
+describe('CustomSelect — Q10 width props', () => {
+  let rectSpy
+  afterEach(() => {
+    rectSpy?.mockRestore()
+    rectSpy = undefined
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const mountBare = (props) => {
+    const root = document.createElement('div')
+    root.id = 'root'
+    document.body.appendChild(root)
+    return render(
+      <CustomSelect value="b" onChange={() => {}} options={OPTIONS} ariaLabel="Test" {...props} />,
+    )
+  }
+  const panel = () => screen.getByRole('listbox')
+
+  it("defaults dropdownWidth to 'content' — the panel stays width:max-content", () => {
+    mountBare({})
+    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+    expect(panel().style.width).toBe('max-content')
+    expect(panel().style.maxWidth).toBe('90vw')
+  })
+
+  it("dropdownWidth='match-trigger' sizes the panel to the trigger wrapper's measured width", () => {
+    // Mock the wrapper rect so the panel has a concrete width to copy (jsdom's real rects are 0).
+    rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 40,
+      bottom: 63,
+      left: 100,
+      right: 320,
+      x: 100,
+      y: 40,
+      width: 220,
+      height: 23,
+      toJSON: () => ({}),
+    })
+    mountBare({ dropdownWidth: 'match-trigger' })
+    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+    expect(panel().style.width).toBe('220px') // the trigger wrapper's rect width, not max-content
+    expect(panel().style.maxWidth).toBe('90vw') // the clamp survives
+  })
+
+  it('triggerMatchesDropdown renders a hidden width-mirror that is invisible to roles and the user', () => {
+    const { container } = mountBare({ triggerMatchesDropdown: true })
+    // Closed: still zero options, zero listboxes — the mirror carries no role.
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(screen.queryAllByRole('listbox')).toHaveLength(0)
+    // The mirror: aria-hidden, visibility:hidden, out of flow, one row per option.
+    const mirror = container.querySelector('div[aria-hidden="true"][style*="visibility: hidden"]')
+    expect(mirror).not.toBeNull()
+    expect(mirror.style.position).toBe('absolute')
+    expect(mirror.querySelectorAll(':scope > div')).toHaveLength(OPTIONS.length)
+    // Each mirror row is boxed by the SAME shared class string as a real dropdown row — the width
+    // pieces (text tier, side padding, gap) must match or the mirror measures the wrong number.
+    const mirrorRow = mirror.querySelector(':scope > div').className.split(/\s+/)
+    for (const c of ['text-[15px]', 'pl-4', 'pr-4', 'gap-2.5', 'flex']) {
+      expect(mirrorRow).toContain(c)
+    }
+    // …and the real rows carry it too (open the menu and read one).
+    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+    const realRow = screen.getAllByRole('option')[0].className.split(/\s+/)
+    for (const c of ['text-[15px]', 'pl-4', 'pr-4', 'gap-2.5', 'flex']) {
+      expect(realRow).toContain(c)
+    }
+  })
+
+  it('without a layout engine, triggerMatchesDropdown leaves the trigger with no forced min-width', () => {
+    // The 0-width mirror measurement is discarded (the > 0 guard), so the trigger keeps its
+    // natural width — all "match" can mean where nothing has a width.
+    mountBare({ triggerMatchesDropdown: true })
+    expect(screen.getByRole('button', { name: /^Test,/ }).style.minWidth).toBe('')
+  })
+})

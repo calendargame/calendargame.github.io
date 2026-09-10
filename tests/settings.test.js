@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useSettings, SETTINGS_DEFAULTS, migrateDotOrientation } from '../src/store/settings.js'
 
 // settings.test.js — the ⚙ settings store. The store is the structural beachhead
-// for the mode-untangle, so its contract must be locked: (1) the 15 defaults,
+// for the mode-untangle, so its contract must be locked: (1) the 16 defaults,
 // (2) setters accept BOTH a direct value AND a React-style functional updater,
 // (3) resetToFactory restores every default. Persistence (localStorage) is
 // verified in-browser, not here, since jsdom/node localStorage timing differs
@@ -14,11 +14,13 @@ describe('settings store', () => {
     useSettings.getState().resetToFactory()
   })
 
-  it('exposes exactly the 15 documented defaults', () => {
-    expect(Object.keys(SETTINGS_DEFAULTS)).toHaveLength(15)
+  it('exposes exactly the 16 documented defaults', () => {
+    expect(Object.keys(SETTINGS_DEFAULTS)).toHaveLength(16)
     const s = useSettings.getState()
     expect(s.dateFormat).toBe('written-mdy')
     expect(s.inputStyle).toBe('buttons')
+    // Every preset opens on Classic until the player changes Default Mode (round-21 Q3).
+    expect(s.defaultMode).toBe('classic')
     // Upright — the orientation the app icon, the launch PNGs and every screenshot already show.
     expect(s.rotateDots).toBe(false)
     expect(s.randomFormat).toBe(false) // launches OFF (Round-2): newcomers see ONE consistent format

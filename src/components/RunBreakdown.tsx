@@ -76,8 +76,9 @@ export default function RunBreakdown({
   onClose: () => void
   data: RunBreakdownData
   fmtDate: FmtDate
-  // "Run breakdown" (MoX) or "Round breakdown" (Blitz). The mode owns the word for its own unit of
-  // play — Blitz has no runs and MoX has no rounds — and this component owns nothing but the layout.
+  // The card's heading, chosen by the mode for what that mode actually measures: "Mean Breakdown"
+  // (MoX), "Round Breakdown" (Blitz per round) or "Run Breakdown" (Blitz per question). The mode
+  // owns the word for its own unit of play; this component owns nothing but the layout.
   title: string
 }) {
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -88,7 +89,7 @@ export default function RunBreakdown({
   useEffect(() => {
     cardRef.current?.focus()
   }, [])
-  useModalEscape(true, onClose, false) //  buttons only — no text box to guard
+  useModalEscape(true, onClose, false) //  no text box to guard (and, since round 21, no buttons at all)
   useBackButton(true, onClose, 'run-breakdown')
 
   const { rows, summary, fastestIdx, slowestIdx } = data
@@ -180,15 +181,11 @@ export default function RunBreakdown({
             </li>
           ))}
         </ul>
-        <div className="px-4 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full px-3 py-2 rounded-xl text-sm font-medium border surface-toggle text-(--tx-100-80)"
-          >
-            Close
-          </button>
-        </div>
+        {/* NO dismiss button (round 21, Q5): the scrim tap, Escape and Android Back all already
+            dismiss, and the owner wanted the row back. The card is now title + summary + solve
+            list only. With zero focusable controls the modal contract's Tab trap keeps focus
+            pinned on this card (tabIndex={-1}, focused on open) rather than letting Tab walk out
+            to the screen under the scrim — see trapModalTab's degenerate branch. */}
       </div>
     </div>,
     document.getElementById('root')!,

@@ -25,7 +25,7 @@ import type { ProgressValues } from './progress.js'
 // itself (store/presets' `Preset.amnesic`, in the global registry). Three reasons, and the first is
 // the one that would have caused a data-loss bug:
 //   ★★ A ⚙ SETTING CAN BE WRITTEN BY applySettings. Reset Settings and Full Reset both push a whole
-//      15-value snapshot through it in one `set`. If amnesic were one of those values, either
+//      16-value snapshot through it in one `set`. If amnesic were one of those values, either
 //      button could flip it from ON to OFF with no rehydration and no screen remount — the five
 //      always-mounted mode screens would keep holding the session's numbers while the store was
 //      repointed at the parked permanent ones, and the next answered question would write the

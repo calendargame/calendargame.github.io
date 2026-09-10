@@ -60,7 +60,7 @@ import {
   pickerChosen,
   footerButton,
   fullResetState,
-  tapFooter,
+  fireResetSettings,
   toggleSwitch,
   switchState,
   yearInput,
@@ -418,7 +418,7 @@ describe('the settings panel — what a close applies (group 10)', () => {
     mountApp()
     expect(questionShape()).toBe('numeric YMD')
     openSettings()
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(pickerChosen('Date Format')).toEqual(['MDY'])
     // Deferred like every other settings change.
     expect(questionShape()).toBe('numeric YMD')
@@ -479,9 +479,18 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
   it('a press-drag release on any footer control acts without dismissing the panel', () => {
     const cases = [
       ['Save Defaults', () => `save popup ${queryModalCard('save') !== null}`, 'save popup true'],
-      // The settings were diverged before the mount, so this is a reset with something to undo.
-      ['Reset Settings', () => `leap ${pickerChosen('Leap Year Chance')}`, 'leap Random'],
-      ['Full Reset', () => `caption ${fullResetState().caption}`, 'caption Confirm?'],
+      // Reset Settings and Full Reset each open a confirmation popup on the drag-release (Q7 round
+      // 21) — the panel has to stay up behind them, which is the whole claim of this case.
+      [
+        'Reset Settings',
+        () => `reset settings popup ${queryModalCard('resetSettings') !== null}`,
+        'reset settings popup true',
+      ],
+      [
+        'Full Reset',
+        () => `full reset popup ${fullResetState().confirmOpen}`,
+        'full reset popup true',
+      ],
       ['View Saved Defaults', () => `manager ${queryModalCard('manage') !== null}`, 'manager true'],
       ['Changelog', () => `changelog ${queryModalCard('changelog') !== null}`, 'changelog true'],
     ]

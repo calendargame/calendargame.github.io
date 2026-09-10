@@ -12,7 +12,26 @@
 // MODE_LABELS deliberately did NOT come with them: it drives the bar's mode CustomSelect, which is
 // not part of the panel and stays in main.tsx.
 import type { FormatId } from '../lib/format.js'
-import type { InputStyle } from '../store/settings.js'
+import type { InputStyle, DefaultMode } from '../store/settings.js'
+
+// Default Mode — the page a preset OPENS ON (round-21 Q3). Seven choices = the seven entries of the
+// bar's mode CustomSelect (main.tsx MODE_LABELS), split across TWO stacked PillTrays reading and
+// writing the ONE `defaultMode` setting (the Date Format family pattern): the five practice modes
+// on the first row, Lookup + How to Play on the second. Whichever row does not hold the active
+// value simply shows no selected segment. The labels are duplicated from MODE_LABELS rather than
+// imported because MODE_LABELS deliberately stays in main.tsx (it drives a bar control, not a
+// panel picker) — tests/ pins the two together.
+export const DEFAULT_MODE_PRIMARY: { value: DefaultMode; label: string }[] = [
+  { value: 'classic', label: 'Classic' },
+  { value: 'aox', label: 'MoX' },
+  { value: 'deduction', label: 'Deduction' },
+  { value: 'flash', label: 'Flash' },
+  { value: 'blitz', label: 'Blitz' },
+]
+export const DEFAULT_MODE_SECONDARY: { value: DefaultMode; label: string }[] = [
+  { value: 'lookup', label: 'Lookup' },
+  { value: 'guide', label: 'How to Play' },
+]
 
 // Date Format — five ids across TWO trays but ONE setting and ONE radiogroup, so whichever half
 // doesn't hold the active id simply shows no selected segment. Sharing a group is also why 'MDY'
@@ -32,9 +51,9 @@ export const INPUT_STYLES: { value: InputStyle; label: string }[] = [
   { value: 'buttons', label: 'Buttons' },
   { value: 'dots', label: 'Dots' },
 ]
-// Dot Layout — Q3 (round 20): no longer a picker array. The setting is a boolean now
+// Rotate Dots CCW — Q3 (round 20): no longer a picker array. The setting is a boolean now
 // (store/settings' `rotateDots`), drawn as an On/Off switch like Amnesic/Save Stats rather than a
-// PillTray, so there is no options table to keep here — see components/SettingsPanel's Dot Layout
+// PillTray, so there is no options table to keep here — see components/SettingsPanel's Rotate Dots CCW
 // block for the control itself and lib/dotLayout's `dotOrientationFor` for the boolean → geometry
 // derivation every consumer shares.
 // Theme — two independent picks under Use System Settings, one pick ACROSS both rows when it's off

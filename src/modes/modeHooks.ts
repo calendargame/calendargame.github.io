@@ -52,14 +52,15 @@ export function engineFresh(s: GameState) {
   )
 }
 // Shared "hideable stats" chrome for the three non-timed modes (Classic, Flash, Deduction): the
-// show/hide toggles, the two-tap "Enable and Reset Stats?" arm (+ its click-outside / Save-Stats-off
-// / mode-leave disarms), and the 6-box stats array + armedSpan for <StatPanel>. Re-enabling timing
-// follows App's original rule: OFF→just hide; ON with no desync→regen the live date; ON with a
-// desync (stats moved while hidden)→two-tap confirm→full reset. Both toggles (`timingOff` +
-// `scoringOff`) are owned by the component and persisted in the mode-prefs store, so they're
-// passed in with their setters (timingOff also feeds useGameEngine). Flash is the only
-// mode with a live timer to tear down, so it passes afterTimingEnabled() (on re-enable) and onHide()
-// (on mode-leave); Classic/Deduction omit them.
+// show/hide toggles, the "Enable and Reset Stats?" desync case, and the 6-box stats array for
+// <StatPanel>. Re-enabling timing follows App's original rule: OFF→just hide; ON with no
+// desync→regen the live date; ON with a desync (stats moved while hidden)→confirm→full reset. That
+// last branch was a two-tap arm rendered INSIDE <StatPanel>; Q7 (round 21) made it the shared
+// ConfirmModal, opened from the mode component — this hook now just owns the open flag and the
+// confirm/cancel handlers. Both toggles (`timingOff` + `scoringOff`) are owned by the component and
+// persisted in the mode-prefs store, so they're passed in with their setters (timingOff also feeds
+// useGameEngine). Flash is the only mode with a live timer to tear down, so it passes
+// afterTimingEnabled() (on re-enable) and onHide() (on mode-leave); Classic/Deduction omit them.
 export function useStatsHideToggles({
   eng,
   saveStats,
@@ -82,21 +83,19 @@ export function useStatsHideToggles({
   onHide?: () => void
 }) {
   // timingOff + scoringOff are owned by the mode component (persisted in the mode-prefs store) and
-  // passed in, so the hook holds no toggle state of its own — it just orchestrates the desync arm
-  // and builds the stats strip from them.
+  // passed in, so the hook holds no toggle state of its own — it just decides when the desync
+  // confirm opens and builds the stats strip from them.
   const S = eng.state.stats
-  const [timingArmed, setTimingArmed] = useState(false)
-  const timingArmedRef = useRef(false)
-  const timingArmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const timingArmBtnRef = useRef<HTMLButtonElement | null>(null)
-  const disarmTimingArm = () => {
-    if (timingArmTimerRef.current) {
-      clearTimeout(timingArmTimerRef.current)
-      timingArmTimerRef.current = null
-    }
-    timingArmedRef.current = false
-    setTimingArmed(false)
-  }
+  // "Enable and Reset Stats?" — the ConfirmModal open flag. `closeEnableReset` is the cancel path;
+  // `confirmEnableReset` is the accept path.
+  const [enableResetOpen, setEnableResetOpen] = useState(false)
+  const closeEnableReset = () => setEnableResetOpen(false)
+  // Drop a pending confirm the moment the mode goes hidden OR Save Stats goes off — both make the
+  // popup meaningless, and it portals to #root so a hidden mode's would otherwise sit over the
+  // visible one. React's "adjust state when a prop changes" pattern — compare-and-set during
+  // render, NOT a setState-in-effect (which would be a cascading render and would leave the popup
+  // up for one extra commit after the mode hides). It converges: once false the guard is false.
+  if (enableResetOpen && (!visible || !saveStats)) setEnableResetOpen(false)
   const toggleScoringOff = () => {
     if (!saveStats) return
     setScoringOff(!scoringOff)
@@ -114,53 +113,25 @@ export function useStatsHideToggles({
       setTimingOff(false)
       return
     }
-    if (timingArmedRef.current) {
-      if (timingArmTimerRef.current) {
-        clearTimeout(timingArmTimerRef.current)
-        timingArmTimerRef.current = null
-      }
-      timingArmedRef.current = false
-      setTimingArmed(false)
-      eng.fullReset()
-      if (afterTimingEnabled) afterTimingEnabled()
-      setTimingOff(false)
-      return
-    }
-    timingArmedRef.current = true
-    setTimingArmed(true)
-    if (timingArmTimerRef.current) clearTimeout(timingArmTimerRef.current)
-    timingArmTimerRef.current = setTimeout(() => {
-      timingArmedRef.current = false
-      setTimingArmed(false)
-      timingArmTimerRef.current = null
-    }, 3000)
+    // The readouts and the recorded times disagree — turning timing back on cannot reconcile, so
+    // it has to reset this mode's stats. Ask first (the popup renders from the mode component).
+    setEnableResetOpen(true)
   }
+  // Accept: the full reset the reconcile needs, then flip timing on and run the mode's teardown —
+  // the exact body the old two-tap's confirming tap ran.
+  const confirmEnableReset = () => {
+    setEnableResetOpen(false)
+    eng.fullReset()
+    if (afterTimingEnabled) afterTimingEnabled()
+    setTimingOff(false)
+  }
+  // The mode's teardown (onHide — Flash's live-flash stopper) IS a real side effect, so it stays
+  // in an effect. [visible]-only: onHide is re-created each render and listing it would re-fire the
+  // teardown every render. (Dropping the pending confirm is handled above, during render.)
   useEffect(() => {
-    if (!timingArmed) return
-    const h = (e: MouseEvent) => {
-      if (timingArmBtnRef.current && timingArmBtnRef.current.contains(e.target as Node | null))
-        return
-      disarmTimingArm()
-    }
-    const t = setTimeout(() => document.addEventListener('click', h), 0)
-    return () => {
-      clearTimeout(t)
-      document.removeEventListener('click', h)
-    }
-  }, [timingArmed])
-  // Fire on visibility transitions only: when hidden, disarm + run the mode's teardown (onHide,
-  // the Flash flash-stopper). onHide/disarmTimingArm are re-created each render; listing them
-  // would re-fire the teardown every render. Intentional [visible]-only effect.
-  useEffect(() => {
-    if (!visible) {
-      if (timingArmedRef.current) disarmTimingArm()
-      if (onHide) onHide()
-    }
+    if (!visible && onHide) onHide()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
-  useEffect(() => {
-    if (!saveStats && timingArmedRef.current) disarmTimingArm()
-  }, [saveStats])
   const sLast = calcLast(S.times),
     sAvg = calcAvg(S.times),
     sMed = calcMed(S.times)
@@ -184,73 +155,35 @@ export function useStatsHideToggles({
     { label: 'Mean', value: fmtTime(sAvg), off: timingOff, fn: tFn },
     { label: 'Median', value: fmtTime(sMed), off: timingOff, fn: tFn },
   ]
-  const armedSpan =
-    timingArmed && saveStats
-      ? { startIdx: 3, endIdx: 5, label: 'Enable and Reset Stats?', onClick: toggleTimingOff }
-      : null
-  // armedBtnRef is returned separately (not nested in armedSpan) so StatPanel's plain
-  // armedSpan data stays ref-free — see the note in StatPanel.tsx.
-  return { timingArmed, statsArr, armedSpan, armedBtnRef: timingArmBtnRef }
+  return { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset }
 }
 
-// Two-tap "Reset Stats?" confirm for the casual modes (Classic / Flash / Deduction) — mirrors the
-// timing-arm above so the two destructive actions feel identical. A first tap ARMS (the button shows
-// "Reset Stats?" in the danger colour, 3s); a second tap within 3s runs `resetFn` (Classic/Deduction
-// = eng.resetStats; Flash passes its own reset that also tears the live flash down). Disarms on the
-// 3s timeout, a click outside the button, or leaving the mode. Gated on `hasData`: a fully-fresh mode
-// (engineFresh) has nothing to clear, so a tap is a harmless no-op (never arms). The `S` keyboard
-// shortcut routes through the same onClick via .click() (see the keyboard effect), so it arms +
-// confirms identically. (Q2.)
-export function useResetStatsArm(resetFn: () => void, hasData: boolean, visible: boolean) {
-  const [resetArmed, setResetArmed] = useState(false)
-  const armedRef = useRef(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const resetBtnRef = useRef<HTMLButtonElement | null>(null)
-  const disarm = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    armedRef.current = false
-    setResetArmed(false)
-  }
+// "Reset Stats" confirm for the casual modes (Classic / Flash / Deduction). Q7 (round 21) replaced
+// the two-tap in-place arm — button flips to "Reset Stats?" in rose, 3s window, click-outside
+// disarm — with the shared ConfirmModal, opened from the mode component. `onResetTap` opens the
+// popup; `confirmReset` runs `resetFn` (Classic/Deduction = eng.resetStats; Flash passes its own
+// reset that also tears the live flash down). Still gated on `hasData`: a fully-fresh mode
+// (engineFresh) has nothing to clear, so a tap is a harmless no-op and the popup never opens. The
+// `S` keyboard shortcut routes through the same onClick via .click() (see the keyboard effect), so
+// it opens the popup identically. Leaving the mode drops a pending confirm (the popup portals to
+// #root, so a hidden mode's would otherwise sit over the visible one). (Q2 / Q7.)
+export function useResetStatsConfirm(resetFn: () => void, hasData: boolean, visible: boolean) {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const closeConfirm = () => setConfirmOpen(false)
   const onResetTap = () => {
-    if (!hasData) {
-      disarm()
-      return
-    } // nothing to clear → no-op (don't arm)
-    if (armedRef.current) {
-      disarm()
-      resetFn()
-      return
-    } // second tap within 3s → confirm + reset
-    armedRef.current = true
-    setResetArmed(true) // first tap → arm
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null
-      armedRef.current = false
-      setResetArmed(false)
-    }, 3000)
+    if (!hasData) return // nothing to clear → no-op (don't open the popup)
+    setConfirmOpen(true)
   }
-  // Click anywhere but the button disarms (delayed one tick so the arming click itself doesn't disarm).
-  useEffect(() => {
-    if (!resetArmed) return
-    const h = (e: MouseEvent) => {
-      if (resetBtnRef.current && resetBtnRef.current.contains(e.target as Node | null)) return
-      disarm()
-    }
-    const t = setTimeout(() => document.addEventListener('click', h), 0)
-    return () => {
-      clearTimeout(t)
-      document.removeEventListener('click', h)
-    }
-  }, [resetArmed])
-  // Leaving the mode disarms (visible-only by design; disarm closes over only refs + stable setters).
-  useEffect(() => {
-    if (!visible && armedRef.current) disarm()
-  }, [visible])
-  return { resetArmed, onResetTap, resetBtnRef }
+  const confirmReset = () => {
+    setConfirmOpen(false)
+    resetFn()
+  }
+  // Leaving the mode drops a pending confirm — the popup portals to #root, so a hidden mode's
+  // would otherwise sit over the visible one. Compare-and-set during render (React's "adjust
+  // state when a prop changes"), NOT a setState-in-effect: the popup must be gone in the same
+  // commit the mode hides. Converges: once false the guard is false.
+  if (confirmOpen && !visible) setConfirmOpen(false)
+  return { confirmOpen, onResetTap, closeConfirm, confirmReset }
 }
 // Run fn() whenever any value in `deps` changes — skipping the initial mount. The generic
 // "react to a settings/toggle change" effect the modes use to regen an unanswered live date

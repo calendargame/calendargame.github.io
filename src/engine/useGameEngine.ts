@@ -18,7 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { useReducer, useRef, useEffect, useMemo } from 'react'
 import { gameReducer, initEngine, correctIndexOf, effectiveSaveStats } from './gameReducer.js'
-import type { Question, Stats } from './gameReducer.js'
+import type { GameState, Question, Stats } from './gameReducer.js'
 import { checkGameInvariants } from './invariants.js'
 import { captureError } from '../observability/sentry.js'
 
@@ -38,6 +38,13 @@ export interface UseGameEngineOptions {
   // lazy reducer init (where genDate is already read), so the store access stays out of render and
   // the engine never re-hydrates mid-session. Omitted ⇒ blank stats (timed modes; post-Full-Reset remount).
   getInitialStats?: () => Stats
+  // Round-21 Q11: seed the reducer with a PARKED round instead of a fresh question. A GETTER, read
+  // ONCE inside the lazy init — the timed modes (Blitz / MoX) pass one that returns their ended
+  // round's engine state from store/sessionRound, keyed by the ACTIVE preset, so the remount a
+  // preset switch causes lands the incoming preset's OWN ended round back on screen. Returns null
+  // (or is omitted) ⇒ a fresh question, exactly as before. When it returns a state, genDate is not
+  // called and getInitialStats is ignored — the parked state already carries its stats.
+  getInitialState?: () => GameState | null
 }
 
 export function useGameEngine({
@@ -49,9 +56,12 @@ export function useGameEngine({
   timingOff,
   label,
   getInitialStats,
+  getInitialState,
 }: UseGameEngineOptions) {
-  const [state, dispatch] = useReducer(gameReducer, undefined, () =>
-    initEngine(genDate(minY, maxY), getInitialStats?.()),
+  const [state, dispatch] = useReducer(
+    gameReducer,
+    undefined,
+    () => getInitialState?.() ?? initEngine(genDate(minY, maxY), getInitialStats?.()),
   )
 
   // The solve-timer starts when a NEW question is shown (advance / New / Reset bump

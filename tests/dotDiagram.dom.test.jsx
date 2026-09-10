@@ -7,7 +7,7 @@
 // These tests pin BOTH ends: the canonical physical layout in DOT_CELLS itself (so a data edit
 // can't silently pass a derivation-only check), and the rendered SVG/aria-label against that data.
 //
-// ★ AND SINCE THE LAYOUT TURNS (Settings → Display → Dot Layout) the same pair of claims is made
+// ★ AND SINCE THE LAYOUT TURNS (Settings → Display → Rotate Dots CCW) the same pair of claims is made
 // TWICE, once per orientation, with the rotated one's cells written out by hand here. That
 // hand-copy is the whole value of this file's half of the contract: lib/dotLayout BUILDS the
 // rotated array by mapping the upright one, so a test that re-derived it the same way would agree
@@ -150,7 +150,7 @@ describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
   // ⚠ UNLIKE THE TITLE-BAR MARK (tests/dotOrientation.dom), this diagram is NOT gated on
   // inputStyle — stated as its own case rather than left implicit, since Q3 added exactly that gate
   // to the OTHER consumer of this setting and a reader could otherwise wonder why this one lacks it.
-  // GuidePage's own header comment argues why: the diagram documents what turning Dot Layout on
+  // GuidePage's own header comment argues why: the diagram documents what turning Rotate Dots CCW on
   // WOULD look like, so a player who currently has Buttons selected can still see it — the same way
   // the diagram renders at all regardless of which Input they have chosen.
   it('reflects rotateDots regardless of inputStyle — Buttons included', () => {

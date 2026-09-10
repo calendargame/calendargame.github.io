@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 //
-// THE BEHAVIOUR NET, groups 7–9: RESET SETTINGS, FULL RESET, and THE DEFAULTS SNAPSHOT.
+// THE BEHAVIOUR NET, groups 7–9: RESET SETTINGS, FULL RESET (both through the shared ConfirmModal
+// since Q7 round 21), and THE DEFAULTS SNAPSHOT.
 //
 // WHY THIS FILE EXISTS. The ⚙ panel is about to be lifted out of App, and the gate on that move is
 // falsifiable and absolute: this net passes with ZERO edits. So every question below is asked the
@@ -22,7 +23,10 @@
 //        orderings DO bite, and both are outcomes: resetModePrefs() before applyModePrefs(defPrefs)
 //        (or every Full Reset silently loses the user's four saved personal prefs), and switchMode()
 //        before the guide's reading position is cleared (or How to Play restores its pre-reset
-//        place instead of opening at the top).
+//        place instead of opening at the top). The reach is fired through the shared ConfirmModal
+//        now (Q7 round 21 replaced the two-tap in-place arm) — the button opens the popup, the
+//        popup's own "Full Reset" button confirms; group 8b does the same for Reset Settings, which
+//        had no confirmation before this round.
 //
 //   G9 — THE SNAPSHOT. Two commits with deliberately DIFFERENT shapes that a rewrite is very likely
 //        to unify, because both call saveUserDefaults: the Save popup commits a snapshot frozen at
@@ -41,10 +45,10 @@
 //     keyboard or a programmatic press. Cases below whose subject is the popup therefore arrange a
 //     real offer first, via makeSaveable(). G6 owns asserting the three guards as a claim.
 //
-// ⚠ WHAT IS NOT HERE, deliberately: the footer row's no-resize under the "Confirm?" swap. The fit
-// is a no-op at width 0 (jsdom lays nothing out), so the only honest coverage is the mocked-
-// measurement wiring in tests/footerFit.dom plus a device check. This file asserts the CAPTIONS
-// either side of the arm and claims nothing about pixels.
+// ⚠ WHAT IS NOT HERE, deliberately: the footer row's caption auto-fit. The fit is a no-op at
+// width 0 (jsdom lays nothing out), so the only honest coverage is the mocked-measurement wiring
+// in tests/footerFit.dom plus a device check. This file asserts only that all three captions are
+// static text (Q7 froze the last one — no more "Confirm?" swap) and claims nothing about pixels.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
@@ -62,9 +66,12 @@ import {
   closeSettings,
   currentMode,
   focusModalEdge,
+  fireFullReset as fireFullResetHelper,
+  fireResetSettings,
   footerButton,
   footerCaptions,
   fullResetButton,
+  fullResetConfirmCard,
   fullResetState,
   isOffered,
   isSettingsOpen,
@@ -83,7 +90,6 @@ import {
   queryModalCard,
   makeSaveable,
   resetAppState,
-  switchState,
   tabInModal,
   tap,
   tapFooter,
@@ -180,13 +186,14 @@ const divergeNonCapturable = () =>
     p.setClassicScoringOff(true)
   })
 
-// All fifteen settings, each moved off its factory value — the round-trip subject in G9 and the
-// "one tap snaps everything back" subject in G7.
+// All sixteen settings, each moved off its factory value — the round-trip subject in G9 and the
+// "one tap snaps everything back" subject in G7. (`defaultMode` joined the store in round-21 Q3.)
 const PERSONAL_SETTINGS = {
   randomFormat: true,
   dateFormat: 'numeric-ymd',
   inputStyle: 'dots',
   rotateDots: true,
+  defaultMode: 'blitz',
   useJulian: false,
   minY: 1600,
   maxY: 1900,
@@ -235,7 +242,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     divergeCapturable()
     openSettings()
     expect(panelValues()).not.toEqual(atDefaults) // the fixture really diverged
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(panelValues()).toEqual(atDefaults)
     expect(yearValue('min')).toBe(String(SETTINGS_DEFAULTS.minY)) // the text mirrors, not just the store
     expect(yearValue('max')).toBe(String(SETTINGS_DEFAULTS.maxY))
@@ -260,7 +267,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     act(() => useModePrefs.getState().resetModePrefs())
     const factoryView = panelValues()
     expect(factoryView).not.toEqual(personalView)
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(panelValues()).toEqual(personalView) // the SAVED values, not the factory ones
     expect(yearValue('min')).toBe(String(PERSONAL_SETTINGS.minY))
     expect(yearValue('max')).toBe(String(PERSONAL_SETTINGS.maxY))
@@ -295,7 +302,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     closeModal('save', 'save') // a snapshot now exists
     const savedBefore = useUserDefaults.getState().saved
     act(() => useSettings.getState().setLeapChance('random')) // re-diverge so the tap is live
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(useUserDefaults.getState().saved).toBe(savedBefore) // the snapshot itself: untouched
     expect(useProgress.getState().stats.classic).toEqual(statsBefore) // lifetime stats
     expect(useProgress.getState().blitzBest).toEqual(bestsBefore) // all-time bests
@@ -310,7 +317,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     act(() => useSettings.getState().setLeapChance('75'))
     mountApp()
     openSettings()
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(isSettingsOpen()).toBe(true)
   })
 
@@ -320,7 +327,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     mountApp()
     openSettings()
     expect(offers()).toMatchObject({ gear: true, saveDefaults: true, resetSettings: true })
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(offers()).toMatchObject({ gear: false, saveDefaults: false, resetSettings: false })
   })
 
@@ -344,7 +351,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     const before = readDate()
     expect(before.y).toBe(1600)
     openSettings()
-    tapFooter('Reset Settings') // the range is now 1700 in the store…
+    fireResetSettings() // the range is now 1700 in the store…
     expect(yearValue('min')).toBe('1700') // …and the panel says so immediately…
     expect(readDate()).toEqual(before) // …while the live question has not moved at all
     // Hand-restore everything the reset changed, then close: the close-pass compares against what
@@ -367,7 +374,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     mountApp()
     openSettings()
     expect(documentTheme()).toBe('nebula')
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(isSettingsOpen()).toBe(true)
     // Use System comes back ON, and the test environment reports a LIGHT system, so the theme in
     // effect is the default light pick — a different look from the one on screen a moment ago.
@@ -375,7 +382,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
   })
 })
 
-describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 8)', () => {
+describe('⚙ Full Reset — reach, outcomes and the confirmation popup (net group 8)', () => {
   beforeEach(() => {
     resetAppState()
   })
@@ -385,11 +392,10 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
     document.getElementById('root')?.remove()
   })
 
-  // Two real taps on the button, under whichever caption it is wearing.
-  const fireFullReset = () => {
-    tap(fullResetButton())
-    tap(fullResetButton())
-  }
+  // Fire Full Reset end to end: the footer button opens the ConfirmModal, its own "Full Reset"
+  // button confirms. (Imported as `fireFullReset` from the panel helper; aliased here so the
+  // outcome cases below read the same as they did against the old two-tap arm.)
+  const fireFullReset = fireFullResetHelper
 
   it('two taps land the app on Classic, at the top of the page, with the panel closed', () => {
     act(() => useSettings.getState().setLeapChance('75')) // diverged → Full Reset is offered
@@ -574,107 +580,109 @@ describe('⚙ Full Reset — reach, outcomes and the two-tap machine (net group 
     expect(changelogDot()).toBe('true') // the update breadcrumb is not gameplay state
   })
 
-  it('the first tap asks "Confirm?" and rings the button; the second within the window fires it', () => {
+  it('the footer button opens a confirmation popup that names what Full Reset does — per-preset, and the shared Lookup history', () => {
     act(() => useSettings.getState().setLeapChance('75'))
     mountApp()
     openSettings()
-    expect(fullResetState()).toEqual({ caption: 'Full Reset', armed: false, offered: true })
+    expect(fullResetState()).toEqual({ caption: 'Full Reset', offered: true, confirmOpen: false })
+    // The caption is static now — no "Confirm?" swap — so the whole trio reads plain text.
+    expect(footerCaptions()).toEqual(['Save Defaults', 'Reset Settings', 'Full Reset'])
     tap(fullResetButton())
-    expect(fullResetState()).toEqual({ caption: 'Confirm?', armed: true, offered: true })
-    // Only the third caption changes — the row still reads the same two words either side of it.
-    // (Whether the ROW resizes is a pixel question jsdom cannot answer; see this file's header.)
-    expect(footerCaptions()).toEqual(['Save Defaults', 'Reset Settings', 'Confirm?'])
+    expect(fullResetState().confirmOpen).toBe(true)
+    const card = fullResetConfirmCard()
+    // The popup says what it does and that it is per-preset, and that the one shared thing — Lookup
+    // history — goes too. (The exact wording is Claude's to set; these are the load-bearing facts.)
+    const body = card.textContent
+    expect(body).toMatch(/launch defaults/i)
+    expect(body).toMatch(/no other preset/i)
+    expect(body).toMatch(/Lookup history/i)
+    // Nothing has fired yet — the panel is still up behind the scrim.
+    expect(isSettingsOpen()).toBe(true)
+    expect(useSettings.getState().leapChance).toBe('75')
+  })
+
+  it('Cancel closes the popup and changes nothing; the confirm button fires the reset and closes the panel', () => {
+    act(() => useSettings.getState().setLeapChance('75'))
+    mountApp()
+    openSettings()
     tap(fullResetButton())
-    expect(isSettingsOpen()).toBe(false) // it fired
+    tap(within(fullResetConfirmCard()).getByRole('button', { name: 'Cancel' }))
+    expect(fullResetState().confirmOpen).toBe(false)
+    expect(isSettingsOpen()).toBe(true)
+    expect(useSettings.getState().leapChance).toBe('75') // untouched
+    // Now for real.
+    fireFullReset()
+    expect(isSettingsOpen()).toBe(false)
     expect(useSettings.getState().leapChance).toBe(SETTINGS_DEFAULTS.leapChance)
   })
 
-  it('an arm left alone disarms itself after about three seconds', () => {
-    act(() => useSettings.getState().setLeapChance('75'))
-    mountApp()
-    openSettings()
-    vi.useFakeTimers()
-    tap(fullResetButton())
-    expect(fullResetState().caption).toBe('Confirm?')
-    act(() => vi.advanceTimersByTime(2500))
-    expect(fullResetState().caption).toBe('Confirm?') // still inside the window
-    act(() => vi.advanceTimersByTime(600))
-    expect(fullResetState()).toMatchObject({ caption: 'Full Reset', armed: false })
-    expect(useSettings.getState().leapChance).toBe('75') // and it did NOT fire on the way out
-  })
-
-  it('closing the panel disarms it, by every route, and it is not still armed on reopen', async () => {
+  it('closing the panel with the popup open dismisses the popup, and it is not still open on reopen', async () => {
     for (const via of ['gear', 'key', 'escape', 'outside', 'back']) {
       resetAppState()
       act(() => useSettings.getState().setLeapChance('75'))
       const view = mountApp()
       openSettings()
       tap(fullResetButton())
-      expect(fullResetState().caption).toBe('Confirm?')
+      expect(fullResetState().confirmOpen).toBe(true)
+      // Escape / Back hit the modal first (LIFO), so send it twice for those two routes — the
+      // first press dismisses the popup, the second closes the panel.
       await closeSettings(via)
+      if (isSettingsOpen()) await closeSettings(via)
       expect(isSettingsOpen()).toBe(false)
+      expect(anyModalOpen()).toBe(false)
       openSettings()
-      expect(fullResetState()).toMatchObject({ caption: 'Full Reset', armed: false })
+      expect(fullResetState().confirmOpen).toBe(false)
       expect(useSettings.getState().leapChance).toBe('75') // nothing fired on the way through
       view.unmount()
       document.getElementById('root').remove()
     }
   })
+})
 
-  it('a press anywhere else disarms it — and that press still does its own job on the same tap', () => {
-    act(() => {
-      const s = useSettings.getState()
-      s.setRandomFormat(false)
-      s.setDateFormat('numeric-ymd')
-      s.setMinY(1583)
-    })
-    mountApp()
-    openSettings()
-    const JULIAN = 'Julian Calendar (pre-Oct 15, 1582)'
-    // (a) another control inside the same panel
-    tap(fullResetButton())
-    expect(fullResetState().caption).toBe('Confirm?')
-    const before = switchState(JULIAN)
-    toggleSwitch(JULIAN)
-    expect(fullResetState().caption).toBe('Full Reset') // disarmed…
-    expect(switchState(JULIAN)).not.toBe(before) // …and the switch still flipped
-    toggleSwitch(JULIAN) // put it back
-    // (b) a game answer behind the panel. That press is OUTSIDE the card, so the panel's own
-    // click-outside rule closes it on the same gesture — the arm has to be gone when it reopens.
-    tap(fullResetButton())
-    expect(fullResetState().caption).toBe('Confirm?')
-    tap(screen.getByRole('button', { name: correctDayName(readDate()) }))
-    expect(statValue('Score')).toBe('1/1') // the answer still counted
-    expect(isSettingsOpen()).toBe(false)
-    openSettings()
-    expect(fullResetState()).toMatchObject({ caption: 'Full Reset', armed: false })
-    expect(useSettings.getState().minY).toBe(1583) // and nothing ever fired
+describe('⚙ Reset Settings — the confirmation popup (net group 8b)', () => {
+  beforeEach(() => {
+    resetAppState()
+  })
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
   })
 
-  // ★ ADDED IN ROUND 14's REVIEW PASS, and the only case in this file that is not pre-move
-  // behaviour pinned before the fact — because it turned out nothing pinned this at all. The panel
-  // carries a safety net for "the app becomes fully reset while Full Reset is armed", inherited
-  // with a comment calling it unreachable. It is not unreachable: the site-wide disarm listener
-  // watches mousedown/touchstart only, so ACTIVATING Reset Settings by keyboard leaves the arm
-  // standing, and if the rest of the app was already fresh then settings landing on default is the
-  // last of isFullyReset's thirteen terms (briefly twelve mid-round-20, when an earlier draft of
-  // Q1 dropped `displayLookupHistory.length===0` on the assumption Full Reset would stop reaching
-  // it — the owner's later call put the term back; see main.tsx's isFullyReset). The net had no
-  // case here, so when the safety net was
-  // rewritten (from a setState-in-effect to a during-render adjustment) 1113 green cases said
-  // nothing either way. This case is what says it: without the net it reads "Confirm?".
-  it('an arm does not outlive the app becoming fully reset, even with no press to disarm it', () => {
+  it('the button opens a popup that names what it restores, per-preset, without leaving the page — and Confirm applies it', () => {
+    act(() => useSettings.getState().setLeapChance('75')) // diverged → Reset Settings offered
+    mountApp()
+    openSettings()
+    expect(anyModalOpen()).toBe(false)
+    tapFooter('Reset Settings')
+    const card = modalCard('resetSettings')
+    expect(card).toBeInTheDocument()
+    expect(card.textContent).toMatch(/saved defaults/i)
+    expect(card.textContent).toMatch(/launch defaults/i)
+    // Nothing applied yet.
+    expect(useSettings.getState().leapChance).toBe('75')
+    tap(within(card).getByRole('button', { name: 'Reset Settings' }))
+    expect(queryModalCard('resetSettings')).toBeNull()
+    expect(isSettingsOpen()).toBe(true) // you are not moved off the page
+    expect(useSettings.getState().leapChance).toBe(SETTINGS_DEFAULTS.leapChance)
+  })
+
+  it('Cancel restores nothing', () => {
     act(() => useSettings.getState().setLeapChance('75'))
     mountApp()
     openSettings()
-    tap(fullResetButton())
-    expect(fullResetState()).toMatchObject({ caption: 'Confirm?', armed: true })
-    // click with NO mousedown — how a keyboard Enter (or any programmatic press) arrives, and the
-    // one route the disarm listener cannot see.
-    act(() => fireEvent.click(footerButton('Reset Settings')))
-    expect(useSettings.getState().leapChance).toBe(SETTINGS_DEFAULTS.leapChance)
-    // Full Reset is now a no-op and says so: not armed, and no longer offered.
-    expect(fullResetState()).toMatchObject({ caption: 'Full Reset', armed: false, offered: false })
+    tapFooter('Reset Settings')
+    tap(within(modalCard('resetSettings')).getByRole('button', { name: 'Cancel' }))
+    expect(queryModalCard('resetSettings')).toBeNull()
+    expect(useSettings.getState().leapChance).toBe('75')
+  })
+
+  it('a press on the not-offered Reset Settings never opens the popup', () => {
+    mountApp() // pristine → nothing diverges
+    openSettings()
+    expect(offers().resetSettings).toBe(false)
+    tapFooter('Reset Settings')
+    expect(queryModalCard('resetSettings')).toBeNull()
+    expect(isSettingsOpen()).toBe(true)
   })
 })
 
@@ -746,7 +754,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     // everything back to factory, then ask the defaults to restore it.
     applySettings(SETTINGS_DEFAULTS)
     expect(panelValues()).not.toEqual(personalView)
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(panelValues()).toEqual(personalView)
   })
 
@@ -791,7 +799,10 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     openSettings()
     saveSnapshot()
     openModal('manage')
-    expect(modalButtons('manage')).toContain('Close')
+    // Round 21: NO action button at rest — not Close, not Cancel, not Save. (The row readouts are
+    // still their own "Edit …" buttons; those are not the card's dismiss/commit controls.)
+    expect(modalButtons('manage')).not.toContain('Close')
+    expect(modalButtons('manage')).not.toContain('Cancel')
     expect(modalButtons('manage')).not.toContain('Save')
     expect(
       within(modalCard('manage')).getByText(
@@ -868,7 +879,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     expect(offers()).toMatchObject({ gear: false, saveDefaults: false, resetSettings: false })
     act(() => useSettings.getState().setJulianChance('50'))
     expect(offers().gear).toBe(true)
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(offers().gear).toBe(false) // the gear can still be cleared
   })
 
@@ -892,17 +903,26 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
       openModal(key)
       expect(document.activeElement).toBe(modalCard(key))
       const stops = modalTabStops(key)
-      expect(stops.length).toBeGreaterThan(0)
-      // Tab off the END wraps to the front, and the press is CONSUMED. Both halves are asserted:
-      // the Changelog popup holds a single Close button, so it is both ends at once and only
-      // `prevented` can tell a real wrap there from a press nothing handled.
-      focusModalEdge(key, 'last')
-      expect(tabInModal(key).prevented).toBe(true)
-      expect(document.activeElement).toBe(stops[0])
-      // …and Shift+Tab off the FRONT wraps back to the end.
-      focusModalEdge(key, 'first')
-      expect(tabInModal(key, { shift: true }).prevented).toBe(true)
-      expect(document.activeElement).toBe(stops[stops.length - 1])
+      if (stops.length === 0) {
+        // Since round 21 the Changelog popup carries no focusable control at all (its Close button
+        // was removed). The trap's degenerate branch consumes the Tab and pins focus on the dialog
+        // card rather than letting it walk out to the panel under the scrim.
+        expect(tabInModal(key).prevented).toBe(true)
+        expect(document.activeElement).toBe(modalCard(key))
+        expect(tabInModal(key, { shift: true }).prevented).toBe(true)
+        expect(document.activeElement).toBe(modalCard(key))
+      } else {
+        // Tab off the END wraps to the front, and the press is CONSUMED. Both halves are asserted,
+        // because a one-control modal is both ends at once and only `prevented` can tell a real wrap
+        // there from a press nothing handled.
+        focusModalEdge(key, 'last')
+        expect(tabInModal(key).prevented).toBe(true)
+        expect(document.activeElement).toBe(stops[0])
+        // …and Shift+Tab off the FRONT wraps back to the end.
+        focusModalEdge(key, 'first')
+        expect(tabInModal(key, { shift: true }).prevented).toBe(true)
+        expect(document.activeElement).toBe(stops[stops.length - 1])
+      }
       // Whatever it lands on is inside the popup and never behind it in the panel.
       expect(modalCard(key).contains(document.activeElement)).toBe(true)
       expect(panelEl().contains(document.activeElement)).toBe(false)

@@ -45,7 +45,24 @@ import { useProgress } from '../store/progress.js'
 import type { AoxBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
+import type { GameState } from '../engine/gameReducer.js'
+import { usePresets } from '../store/presets.js'
+import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import { useBackButton } from '../components/useBackButton.js'
+
+// Round-21 Q11 — the shape AoxMode parks in store/sessionRound for an ENDED run (done | failed). It
+// round-trips its own engine state plus the component fields the completed view (and a
+// post-completion Override) need; store/sessionRound never looks inside it. `currentRunId` +
+// `prevBestSnap` are what keep the done/failed Best-reconcile correct on a restored run — the
+// reconcile floor is `prevBestSnap.best` and it only applies while `prevBestSnap.runId ===
+// currentRunIdRef.current`, so both have to come back together.
+interface AoxRunSnapshot {
+  engine: GameState
+  runPhase: string
+  shown: boolean
+  currentRunId: number | null
+  prevBestSnap: { key: string; best: AoxBest; runId: number } | null
+}
 
 // ============================================================
 // AoxMode — the "average of N" run mode, FOLDED onto the shared useGameEngine (mode-untangle
@@ -87,8 +104,18 @@ function AoxMode({
     setOneByOne = useModePrefs((s) => s.setAoxOneByOne) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
     setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — dims the LIVE mid-run trio, but a completed run always shows its result
-  const [runPhase, setRunPhase] = useState('idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop)
-  const [shown, setShown] = useState(false) // One-by-One: is the current date revealed? (always true for non-One-by-One while running)
+  // Round-21 Q11 — the ended run this (preset, mode) parked before its last unmount, read EXACTLY
+  // ONCE at mount. On a preset switch the always-mounted screens remount (src/main.tsx
+  // remountScreens) and usePresets' activeId is ALREADY the INCOMING preset by then — switchPreset
+  // writes the registry before it rehydrates the stores, one synchronous turn (store/presetControl).
+  // So this is the incoming preset's OWN parked run and never the one just left; the preset-id key
+  // is the whole contamination guard. Factored into one read so the initializers below don't each
+  // hit sessionStorage.
+  const [parkedRun] = useState<AoxRunSnapshot | null>(() =>
+    readSessionRound<AoxRunSnapshot>(usePresets.getState().activeId, 'aox'),
+  )
+  const [runPhase, setRunPhase] = useState(parkedRun?.runPhase ?? 'idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop) — only done/failed are ever parked (round-21 Q11)
+  const [shown, setShown] = useState(parkedRun?.shown ?? false) // One-by-One: is the current date revealed? (always true for non-One-by-One while running; always true on a parked ended run)
   const [breakdownOpen, setBreakdownOpen] = useState(false) // the run breakdown popup (components/RunBreakdown) — ephemeral, dies with the run
   const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
   // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes,
@@ -109,6 +136,10 @@ function AoxMode({
     useJulian,
     saveStats: true,
     timingOff: false,
+    // Round-21 Q11 — seed the reducer from the parked ended run when there is one (a getter, read
+    // once in the lazy init). `parkedRun` was keyed to the ACTIVE preset at mount, so this only ever
+    // restores the incoming preset's own run.
+    getInitialState: () => parkedRun?.engine ?? null,
   })
   const { state, correct } = eng
   // Android Back closes AoX's Show-Codes panel (Q1) — see the same hook in the other modes.
@@ -139,8 +170,11 @@ function AoxMode({
   const bests = useProgress((s) => s.aoxBest),
     setBests = useProgress((s) => s.setAoxBest)
   const [bestNew, setBestNew] = useState<Record<string, { avg: boolean; med: boolean }>>({})
-  const nextRunIdRef = useRef(1)
-  const currentRunIdRef = useRef<number | null>(null)
+  // Restored from the parked run (round-21 Q11) so `snap.runId === currentRunIdRef.current` still
+  // holds after a remount and the done/failed reconcile keeps recognising THIS run; nextRunIdRef is
+  // pushed past the restored id so the next Begin cannot reuse it within this mount.
+  const nextRunIdRef = useRef(Math.max(1, (parkedRun?.currentRunId ?? 0) + 1))
+  const currentRunIdRef = useRef<number | null>(parkedRun?.currentRunId ?? null)
   // Pending auto-advance after a non-One-by-One Reveal (flash the answer for FLASH_MS, then advance).
   // Held in a ref so reset / leaving the mode / unmount can cancel it before it fires.
   const revealAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -152,7 +186,13 @@ function AoxMode({
   }
   // The PRE-run Best record {key,best,runId}, latched once when this run records (completion with
   // Save Stats on) — the floor every post-completion reconcile starts from (see the effect below).
-  const prevBestSnapRef = useRef<{ key: string; best: AoxBest; runId: number } | null>(null)
+  // Restored from the parked run (round-21 Q11): it is the floor every post-completion reconcile
+  // starts from, so after a remount it must be the real pre-run record and not null — otherwise the
+  // reconcile effect early-returns and an Override on the restored run cannot roll a fabricated Best
+  // back (or would rebuild one the run no longer earns).
+  const prevBestSnapRef = useRef<{ key: string; best: AoxBest; runId: number } | null>(
+    parkedRun?.prevBestSnap ?? null,
+  )
   const bestData = bests[bestKey] || emptyAoxBest()
 
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
@@ -220,6 +260,31 @@ function AoxMode({
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runPhase, doneCount, n, saveStats, S.good, S.times, setBests])
+
+  // Round-21 Q11 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the ACTIVE
+  // preset, exactly as the effect above mirrors the run's Best to store/progress. On the remount a
+  // preset switch causes, the mount-time reads restore whatever is parked for the now-active preset
+  // (see `parkedRun`). Only an ended run is parked; every other state DISCARDS the slot:
+  //   • running → discard, so a mid-run switch parks nothing and the remount starts fresh (owner's
+  //     rule), and any stale blob from a prior run goes;
+  //   • idle after Reset / Begin / an Override that resumed the run → discard, the park is stale.
+  // `state` is a dep so a post-completion Override (which edits the run's engine state and re-runs
+  // the reconcile effect above) re-parks the updated snapshot. This effect sits AFTER that
+  // reconcile effect on purpose: the reconcile latches prevBestSnapRef in the same commit the phase
+  // turns 'done', effects run top-to-bottom, so the write below always sees the latched floor.
+  // currentRunIdRef is written only by begin(), so it is stable whenever a phase is ended.
+  useEffect(() => {
+    const pid = usePresets.getState().activeId
+    if (runPhase === 'done' || runPhase === 'failed')
+      writeSessionRound(pid, 'aox', {
+        engine: state,
+        runPhase,
+        shown,
+        currentRunId: currentRunIdRef.current,
+        prevBestSnap: prevBestSnapRef.current,
+      })
+    else discardSessionRound(pid, 'aox')
+  }, [runPhase, shown, state])
 
   // Reset the run if the panel is hidden mid-run (also cancel any pending reveal auto-advance).
   useEffect(() => {
@@ -543,7 +608,7 @@ function AoxMode({
       <StatPanel
         dimmed={!saveStats}
         onActivate={breakdownAvail ? () => setBreakdownOpen(true) : null}
-        activateLabel="Show run breakdown"
+        activateLabel="Show mean breakdown"
         stats={[
           { label: 'Score', value: scoreDisplay, fn: null },
           { label: 'Accuracy', value: accuracyDisplay, fn: null },
@@ -719,7 +784,7 @@ function AoxMode({
           onClose={() => setBreakdownOpen(false)}
           data={buildRunBreakdown(state)}
           fmtDate={fmtDate}
-          title="Run breakdown"
+          title="Mean Breakdown"
         />
       )}
       <div className="mt-4 rounded-2xl panel p-4">

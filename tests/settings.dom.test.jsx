@@ -125,6 +125,12 @@ const isTraySegment = (b) =>
 // buttons until round-9; the housing meant nothing while that was true. Turning Use System OFF
 // swaps 'Dark theme' + 'Light theme' for the single 'Theme' group that spans both rows.
 const PICKERS = [
+  // The Global section's "Open in" and the Per-preset "Default Mode" joined the panel in round-21
+  // Q3, both as trays. "Open in" is dynamic (Last used + one segment per preset); with the default
+  // single preset it is two segments. "Default Mode" is two stacked trays, one radiogroup — the
+  // Date Format shape — so pills('Default Mode') spans both.
+  'Open in',
+  'Default Mode',
   'Date Format',
   'Dark theme',
   'Light theme',
@@ -395,10 +401,10 @@ describe('Settings — THE PICKER RULE', () => {
   })
 
   // Every on/off setting, by the label text its row is found through. Order is the panel's own,
-  // top to bottom — Dot Layout joined here in Q3 (round 20), a switch now rather than a picker.
+  // top to bottom — Rotate Dots CCW joined here in Q3 (round 20), a switch now rather than a picker.
   const SWITCHES = [
     'Random Format',
-    'Dot Layout',
+    'Rotate Dots CCW',
     'Use System Settings',
     'Julian Calendar (pre-Oct 15, 1582)',
     'Save Stats',
@@ -703,7 +709,7 @@ describe('Settings — the radiogroup keyboard contract', () => {
   // told assistive tech there were seven groups.
   it('every group is ONE tab stop, on the selected pill, in both Use-System states', () => {
     mountPanel()
-    // Every remaining PICKER is live at the panel's launch state — Dot Layout, the one member that
+    // Every remaining PICKER is live at the panel's launch state — Rotate Dots CCW, the one member that
     // used to need Input on Dots to be live, left this sweep in Q3 (round 20): it is a SWITCH now,
     // not a radiogroup, and its own lock/tab-stop contract is pinned in tests/dotOrientation.dom.
     PICKERS.forEach(expectOneTabStop)
@@ -1075,9 +1081,17 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expect(foot('Full Reset').className).toBe(ROSE)
     for (const label of ['Save Defaults', 'Reset Settings', 'Full Reset'])
       expect(foot(label).getAttribute('aria-disabled'), label).toBeNull()
-    // Armed adds the confirm ring and nothing else — the one footer state with two live modifiers.
+    // Q7 round 21: the two-tap arm is gone — pressing Full Reset opens a ConfirmModal and the
+    // footer button's own class string does not change (no more "Confirm?" caption, no armed ring).
+    // The popup's own confirm button carries the same accessible name, so scope past it to the
+    // footer button by the panel's published id.
     fireEvent.click(foot('Full Reset'))
-    expect(foot('Confirm?').className).toBe(ROSE + 'ring-2 ring-rose-200 ')
+    const footerFullReset = within(document.getElementById('settings-popover')).getByRole(
+      'button',
+      { name: 'Full Reset' },
+    )
+    expect(footerFullReset.className).toBe(ROSE)
+    expect(screen.getByRole('dialog', { name: 'Full Reset this preset?' })).toBeInTheDocument()
   })
 
   // ★ THE PANEL'S OWN LAYOUT CONTRACT, and it lives here for the reason the block header gives.

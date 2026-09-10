@@ -1,18 +1,24 @@
 // @vitest-environment jsdom
 //
 // Footer-button caption auto-fit (Round-2) — the ⚙ Save Defaults / Reset Settings / Full Reset
-// trio shares ONE font-size, measured against hidden static twins of the widest caption set so
-// the Full Reset → "Confirm?" swap can never jiggle the row.
+// trio shares ONE font-size so no caption overflows on a narrow phone.
+//
+// ★ Q7 (round 21) REMOVED THE HIDDEN STATIC TWINS. They existed only because Full Reset's caption
+// swapped to "Confirm?" while the two-tap arm was live, which would have shrunk a live measurement
+// mid-arm and jiggled the row. Q7 replaced that arm with a ConfirmModal, so every caption in the
+// trio is static text now — fitFooterBtns measures the live [data-fitlabel] spans directly, after
+// resetting each button's inline fontSize to '' so a re-run of the dep-less effect reads the true
+// natural width instead of compounding the previous pass's shrink (12·s, 12·s², … → the floor).
+// That is the exact feedback-loop guard StatPanel's fitAll uses.
 //
 // jsdom has no layout, so this pins the WIRING by feeding fitFooterBtns mock measurements:
-// prototype-level width getters (twins 100px natural, buttons btnWidth available) + a font-size
-// shim for the STATIC twins — the base-size source, which is what keeps the fit stable: reading
-// the live captions would feed the previous pass's inline fontSize back in and compound the
-// shrink every re-render (the StatPanel feedback loop). The shimmed base is 12px — the trio's
-// resting text-xs control tier (Round-3 font normalization). Two cases: scale 0.5 floors at the
-// 11px legibility minimum on all three captions identically; scale 0.95 lands above the floor and
-// must STAY there across re-renders driven through the panel's OWN controls (a compounding fit
-// would step 11.4 → 10.83 → the floor).
+//   • a scrollWidth getter — every [data-fitlabel] span reports a 100px natural caption;
+//   • a clientWidth getter — each trio button reports btnWidth of content width;
+//   • a getComputedStyle shim that MODELS INHERITANCE — a caption's computed fontSize is whatever
+//     inline size its button currently carries, or the resting 12px (text-xs, the trio's control
+//     tier) when the button carries none. That is exactly the channel the feedback loop travelled,
+//     so the stability case below is a real test of the reset-before-measure guard: without it,
+//     12 → 11.4 → 10.83 → the 11px legibility floor.
 // The pure math is locked in tests/statPanel.test.js; real geometry is on-device per the standing
 // lesson.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -35,16 +41,16 @@ let btnWidth = 50 // trio-button content width the mocks report; tests vary it t
 // needs. See the comment there for why a store poke will not do.
 const pill = (group, label) => within(picker(group)).getByRole('radio', { name: label })
 
-describe('footer-button auto-fit wiring (Round-2)', () => {
+describe('footer-button auto-fit wiring (Round-2, twin-free since Q7)', () => {
   beforeEach(() => {
     resetAppState()
     btnWidth = 50
-    // Twins report a 100px natural caption; the trio buttons report btnWidth of content width.
-    // Every other element keeps jsdom's 0 (→ scale 1 no-ops elsewhere, e.g. StatPanel's fit).
+    // Every [data-fitlabel] span reports a 100px natural caption; the trio buttons report btnWidth
+    // of content width. Every other element keeps jsdom's 0 (→ scale 1 no-ops elsewhere).
     Object.defineProperty(Element.prototype, 'scrollWidth', {
       configurable: true,
       get() {
-        return this.hasAttribute?.('data-fittwin') ? 100 : 0
+        return this.hasAttribute?.('data-fitlabel') ? 100 : 0
       },
     })
     Object.defineProperty(Element.prototype, 'clientWidth', {
@@ -53,12 +59,15 @@ describe('footer-button auto-fit wiring (Round-2)', () => {
         return this.matches?.('button') && this.querySelector('[data-fitlabel]') ? btnWidth : 0
       },
     })
-    // fitFooterBtns reads the base size off the first STATIC twin (never a live caption — that
-    // inline fontSize would compound); jsdom computes no real font-size, so shim exactly that
-    // read with the twins' true resting size, text-xs = 12px (buttons still get the original,
-    // for the padding read).
-    window.getComputedStyle = (el, pseudo) =>
-      el?.hasAttribute?.('data-fittwin') ? { fontSize: '12px' } : origGetComputedStyle(el, pseudo)
+    // Model inheritance: a caption's computed fontSize is its BUTTON's inline size, or 12px
+    // (text-xs) when the button carries none. fitFooterBtns resets the button to '' before reading
+    // the base off the caption, so this shim returns 12px on that read — which is the whole point:
+    // a version that skipped the reset would read the previous pass's shrink back in.
+    window.getComputedStyle = (el, pseudo) => {
+      if (el?.hasAttribute?.('data-fitlabel'))
+        return { fontSize: el.parentElement?.style.fontSize || '12px' }
+      return origGetComputedStyle(el, pseudo)
+    }
   })
   afterEach(() => {
     cleanup()
@@ -68,19 +77,22 @@ describe('footer-button auto-fit wiring (Round-2)', () => {
     window.getComputedStyle = origGetComputedStyle
   })
 
-  it('the measurement twins and the live buttons share the SAME text-size token (text-xs) — the shimmed base is truthful', () => {
+  it('the three trio buttons all wear the text-xs control tier — nothing text-sm, and no twins left', () => {
     mountApp()
     openSettings()
-    const twins = Array.from(document.querySelectorAll('[data-fittwin]'))
-    const btns = Array.from(document.querySelectorAll('[data-fitlabel]')).map(
-      (l) => l.parentElement,
-    )
-    expect(twins.length).toBe(3)
-    expect(btns.length).toBe(3)
-    for (const el of [...twins, ...btns]) {
+    const labels = Array.from(document.querySelectorAll('[data-fitlabel]'))
+    const btns = labels.map((l) => l.parentElement)
+    expect(labels.map((l) => l.textContent)).toEqual([
+      'Save Defaults',
+      'Reset Settings',
+      'Full Reset',
+    ])
+    for (const el of btns) {
       expect(el.className).toContain('text-xs')
       expect(el.className).not.toContain('text-sm')
     }
+    // The measurement twins are gone — Q7 froze every caption, so there is nothing to swap.
+    expect(document.querySelectorAll('[data-fittwin]')).toHaveLength(0)
   })
 
   it('applies ONE shared floored font-size to all three captions when the measurements demand a shrink', () => {
@@ -93,14 +105,6 @@ describe('footer-button auto-fit wiring (Round-2)', () => {
     // with the text and the label stays vertically centered; the span itself carries no inline size.
     expect(labels.map((l) => l.parentElement.style.fontSize)).toEqual(['11px', '11px', '11px'])
     expect(labels.map((l) => l.style.fontSize)).toEqual(['', '', ''])
-    // The measurement set is the static widest-caption twins, one per button, invisible to AT.
-    const twins = Array.from(document.querySelectorAll('[data-fittwin]'))
-    expect(twins.map((t) => t.textContent)).toEqual([
-      'Save Defaults',
-      'Reset Settings',
-      'Full Reset',
-    ])
-    twins.forEach((t) => expect(t).toHaveAttribute('aria-hidden', 'true'))
   })
 
   it('the fit is STABLE across re-renders — the shrink never compounds toward the floor', () => {
@@ -114,23 +118,15 @@ describe('footer-button auto-fit wiring (Round-2)', () => {
       expected,
       expected,
     ])
-    // Any settings interaction re-runs the dep-less fit effect. The base must come off the static
-    // twin, not the already-shrunk caption — a feedback loop would step 11.4 → 10.83 → 11 (the
-    // floor) here instead of holding.
+    // Any settings interaction re-runs the dep-less fit effect. The reset-before-measure step is
+    // what keeps this stable: the getComputedStyle shim models inheritance, so a version that read
+    // the base off a still-shrunk caption would step 11.4 → 10.83 → 11 (the floor) here.
     //
-    // ⚠ THE RE-RENDER IS DRIVEN THROUGH THE PANEL'S OWN CONTROLS, and that is the whole point of
-    // the case. This used to poke the store directly (setJanFebChance) and call the App re-render
-    // that followed proof enough. It is not: the effect under test lives with the footer, so what
-    // has to re-render is the FOOTER'S OWN component, and "a store write re-rendered App" stops
-    // implying that the moment the panel is a component of its own — a memoised one would not
-    // re-render at all and this case would pass while proving nothing. A tap on a pill inside the
-    // panel is a re-render the panel cannot fail to observe, by construction, wherever it lives.
-    // (It also moves the same setting to the same two values the store poke did, so what the app
-    // ends up in is unchanged.)
-    //
-    // …and each tap is CHECKED to have landed, because the assertion below is a stability claim
-    // and a stability claim passes trivially when nothing happened. Reading the pick back is what
-    // keeps this case falsifiable.
+    // ⚠ THE RE-RENDER IS DRIVEN THROUGH THE PANEL'S OWN CONTROLS. A tap on a pill inside the panel
+    // is a re-render the footer's component cannot fail to observe, by construction — where a store
+    // poke would only prove App re-rendered, which stops implying the footer did once the panel is
+    // a memoisable component of its own. Each tap is CHECKED to have landed, because a stability
+    // claim passes trivially when nothing happened.
     const chosen = () => pickerLockState('Jan/Feb Chance on Leap Years').chosen
     act(() => {
       fireEvent.click(pill('Jan/Feb Chance on Leap Years', '25%'))

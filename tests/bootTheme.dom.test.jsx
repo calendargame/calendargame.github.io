@@ -64,7 +64,7 @@ const seedSettings = (presetId, state) =>
 
 // The registry, at its own global key — deliberately NOT run through presetKey, because the
 // registry is the thing that says which preset you are on and is never namespaced.
-const seedRegistry = (activeId, presets) =>
+const seedRegistry = (activeId, presets, openInPreset = 'last') =>
   localStorage.setItem(
     'cg-presets-v1',
     JSON.stringify({
@@ -72,6 +72,7 @@ const seedRegistry = (activeId, presets) =>
         presets: (presets ?? [1, activeId]).map((id) => ({ id, name: `Preset ${id}` })),
         activeId,
         nextId: activeId + 1,
+        openInPreset,
       },
       version: 1,
     }),
@@ -146,6 +147,33 @@ describe('index.html boot theme script', () => {
   it('an explicit activeId of 1 reads the same key as no registry at all', () => {
     seedSettings(1, { useSystem: false, manualTheme: 'nebula' })
     seedRegistry(1, [1])
+    runBootScript()
+    expect(painted()).toBe('nebula')
+  })
+
+  // ★ THE "OPEN IN" PIN (round-21 Q3). The script resolves it the same way store/presets' hydrate
+  // `merge` does, so the first painted frame already wears the pinned preset's theme — otherwise
+  // it would paint the last-active preset's and App's hydrate would repaint a frame later.
+  it('paints the PINNED preset’s theme when openInPreset names a live preset', () => {
+    seedSettings(1, { useSystem: false, manualTheme: 'parchment' })
+    seedSettings(2, { useSystem: false, manualTheme: 'nebula' })
+    seedRegistry(1, [1, 2], 2) // active is 1, but the pin says open in 2
+    runBootScript()
+    expect(painted()).toBe('nebula')
+  })
+
+  it('ignores an openInPreset that names no preset and uses the persisted activeId', () => {
+    seedSettings(1, { useSystem: false, manualTheme: 'parchment' })
+    seedSettings(2, { useSystem: false, manualTheme: 'nebula' })
+    seedRegistry(2, [1, 2], 9) // pin is a dead id → fall back to activeId 2
+    runBootScript()
+    expect(painted()).toBe('nebula')
+  })
+
+  it('treats openInPreset "last" as no pin at all', () => {
+    seedSettings(1, { useSystem: false, manualTheme: 'parchment' })
+    seedSettings(2, { useSystem: false, manualTheme: 'nebula' })
+    seedRegistry(2, [1, 2], 'last')
     runBootScript()
     expect(painted()).toBe('nebula')
   })

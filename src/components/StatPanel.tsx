@@ -1,5 +1,5 @@
 import { useRef, useLayoutEffect, useEffect } from 'react'
-import type { ElementType, ReactNode, Ref } from 'react'
+import type { ElementType, ReactNode } from 'react'
 import { fitScale } from '../lib/statFit.js'
 
 // StatPanel — the horizontal stats strip (Score / Accuracy / Streak / Last /
@@ -85,9 +85,12 @@ import { fitScale } from '../lib/statFit.js'
 // replaced a tiered char-count shrink that only ran on fractional values and triggered on the longest
 // SIDE (so "123/456" didn't shrink but the narrower "1000/2" did), and never shrank the time boxes.
 //
-// `armedSpan` is the Bug-#4 affordance: when present it replaces stats[startIdx..endIdx] with one wide
-// "Enable and Reset Stats?" confirmation button, using two 1px phantom spacers so the surrounding flex
-// math (and the Streak-right divider position) stays pixel-identical.
+// ★ NO MORE `armedSpan` (Q7, round 21). This panel used to grow one wide "Enable and Reset Stats?"
+// button in place of the three time cells while a two-tap arm was live — with two 1px phantom
+// spacers to keep the surrounding flex math pixel-identical. That arm is the shared ConfirmModal
+// now (modes/modeHooks' useStatsHideToggles), so the strip is always just six cells and this file
+// no longer has a per-caller special case. Blitz/AoX never used it; Classic/Flash/Deduction now
+// render the popup themselves.
 //
 // Extracted from main.jsx in Stage C, Step 4b. ⚠ The label's className keeps a SPACE before `${s.off…}`
 // (`whitespace-nowrap ${`). It's required: Tailwind v4's source scanner silently drops any utility glued
@@ -114,22 +117,10 @@ export interface StatItem {
 //   • items/justify ... centre the value in the box on both axes — the alignment fix itself.
 const VALUE_CELL_CLASS =
   'mt-0.5 w-full h-[1lh] text-sm leading-tight flex items-center justify-center'
-export interface ArmedSpan {
-  startIdx: number
-  endIdx: number
-  label: ReactNode
-  onClick?: () => void
-}
 
-// The armed-button ref is passed SEPARATELY from `armedSpan` (not nested inside it). Bundling a ref into
-// a data object makes React's compiler treat every read of that object as a ref access during render, so
-// it's kept apart: `armedSpan` is plain data, `armedBtnRef` is the ref, forwarded straight to the
-// button's `ref=` (an allowed use).
 export default function StatPanel({
   stats,
   dimmed,
-  armedSpan,
-  armedBtnRef,
   onActivate,
   activateLabel,
 }: {
@@ -146,20 +137,11 @@ export default function StatPanel({
   // so a sixth mode cannot ship the bug — the enforcement lives in the type rather than in a guard
   // test that would have to remember to enumerate every call site.
   dimmed: boolean
-  armedSpan?: ArmedSpan | null
-  armedBtnRef?: Ref<HTMLButtonElement>
   // ★ THE WHOLE STRIP AS ONE BUTTON (sub-group 3C) — how the run breakdown opens on a finished
   // MoX run or Blitz round. When set, the strip's ROOT becomes the <button> and every cell renders
-  // as a plain div: the per-cell `fn` is IGNORED, not merged.
-  // The merged `armedSpan` warning button is ignored on the same terms and for the same reason.
-  // WHY IGNORED RATHER THAN DOCUMENTED-AS-DON'T: a <button> inside a <button> is invalid HTML with
-  // undefined behaviour, and a rule that lives only in a comment is a rule the sixth caller breaks.
-  // Ignoring makes it structurally impossible instead. It costs nothing real, because the two states
-  // are mutually exclusive by construction at every call site that exists: a mode hands the strip an
-  // opener exactly when its run has ENDED, and an ended run has already dropped its hide toggle (the
-  // toggle is for a run still going — see the notes in modes/BlitzMode and modes/AoxMode). So no
-  // caller is ever asking for both, and one that started to would lose the cell taps loudly rather
-  // than shipping nested buttons quietly.
+  // as a plain div: the per-cell `fn` is IGNORED, not merged — a <button> inside a <button> is
+  // invalid HTML with undefined behaviour. It costs nothing real: a mode hands the strip an opener
+  // exactly when its run has ENDED, and an ended run has already dropped its hide toggle.
   // ⚠ It is the ROOT and not a sixth cell on purpose: the owner's rule is "tap ANYWHERE on the
   // strip", and a strip of six tap targets with gaps between them is not anywhere. It also keeps the
   // dividers and the auto-fit measuring exactly the boxes they measured before.
@@ -259,50 +241,7 @@ export default function StatPanel({
       {dimmed && <span className="sr-only">Stats are not being saved</span>}
       {(() => {
         const items: ReactNode[] = []
-        // Ignored while the strip itself is the button — see the note on onActivate. Unreachable
-        // today (the arm belongs to the three modes that STOP their clock when you hide timing, and
-        // none of them has a finished run to break down), which is exactly why it is enforced here
-        // rather than left to whoever writes the next call site.
-        const arm = onActivate ? null : armedSpan
         for (let i = 0; i < stats.length; i++) {
-          if (arm && i === arm.startIdx) {
-            const span = arm.endIdx - arm.startIdx + 1
-            // Bug #4 aesthetic: no ring or rounded corners on the merged warning button. The text change
-            // ('Enable and Reset Stats?') is the sole visual cue. The standard vertical divider between
-            // Streak and this button is already present (it was the Streak|Last divider in unarmed state)
-            // — no element positions shift between armed and unarmed states.
-            //
-            // Phantom spacers: when the 3 time stat boxes merge into 1 warning button, 2 internal dividers
-            // (Last|Avg and Avg|Med) disappear from the flex row. Without compensation, those 2px get
-            // redistributed across the remaining flex items, shifting the Streak-right divider 1px right
-            // and stretching every box before it. Two 1px-wide transparent spacers — one before, one after
-            // the button — restore exact unarmed flex math: Streak-right divider is locked in place and the
-            // warning text sits exactly centered between that divider and the panel's right edge.
-            items.push(<div key="armed-spacer-l" className="w-px shrink-0" />)
-            items.push(
-              <button
-                key="armed-warning"
-                ref={armedBtnRef}
-                type="button"
-                onClick={arm.onClick}
-                style={{ flex: span }}
-                className="flex items-center justify-center py-2 text-xs font-medium"
-              >
-                {arm.label}
-              </button>,
-            )
-            items.push(<div key="armed-spacer-r" className="w-px shrink-0" />)
-            if (arm.endIdx < stats.length - 1) {
-              items.push(
-                <div
-                  key={`d-armed-${i}`}
-                  className="w-px h-8 self-center bg-(--bg-500-20) shrink-0"
-                />,
-              )
-            }
-            i = arm.endIdx
-            continue
-          }
           const s = stats[i]
           // `onActivate` wins outright — see the note on the prop. A cell button here would be a
           // <button> inside the root <button>.

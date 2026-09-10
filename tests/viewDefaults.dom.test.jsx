@@ -7,7 +7,7 @@
 // "Clear Saved Defaults" (round-20 Q5: also always mounted now — it dims and locks instead of
 // disappearing while nothing is saved, the same three-part convention the three buttons above it
 // withhold with). It opens the shared
-// card seeded from the EFFECTIVE defaults: read-only at rest (one full-width Close), the factory
+// card seeded from the EFFECTIVE defaults: read-only at rest (NO buttons since round 21), the factory
 // view when nothing is saved (adapted title and subline), and fully editable — a dirty row's
 // value goes btn-solid, the restricted-write note replaces the footnote, and Save writes ONLY the
 // four shown values (the ⚙ half stays byte-identical; from the factory view it CREATES the
@@ -98,8 +98,9 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(readout(dialog, 'Flash Speed').textContent).toBe('2.0s')
     expect(readout(dialog, 'Blitz Round Timer').textContent).toBe('1m 0s')
     expect(readout(dialog, 'Blitz Question Timer').textContent).toBe('10s')
-    // Read-only at rest: one full-width Close, no Cancel/Save, no dirty note.
-    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    // Read-only at rest (round 21): NO action button at all — not Close, not Cancel, not Save —
+    // and no dirty note. Dismissal is the scrim tap / Escape / Back.
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).toBeNull()
     expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
     expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()
     expect(screen.queryByText('Saving here updates only these values.')).toBeNull()
@@ -133,47 +134,37 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     ).toBeInTheDocument()
   })
 
-  it('lives in the pinned button block and places the pair on the row’s THIRDS — unconditionally now, both links always mounted (round-20 Q5)', () => {
+  it('lives in the pinned button block as two equal-width pill buttons filling the row (round-21 Q2)', () => {
     useModePrefs.getState().setAoxN('25') // something to save, so Save Defaults is offered
     mountApp()
     openSettings()
-    // ⚠ jsdom HAS NO LAYOUT ENGINE, so nothing here measures a position — this pins the PLACEMENT
-    // RULE the geometry follows from. The row is three equal columns with NO gap (a gap would push
-    // both centres off the thirds); View spans columns 1-2 and Clear columns 2-3, each centred in
-    // its own span. Centre of [0, 2/3] is 1/3, centre of [1/3, 1] is 2/3 — the two links land in
-    // the GAPS between the three flex-1 buttons above, whose centres are 1/6, 1/2 and 5/6. Whether
-    // that reads as interlocked or as crowded at a phone's width is the owner's device call.
+    // Round 21 (Q2) retired the three-thirds overlap grid: the pair is now two plain equal-width
+    // pill buttons on a simple flex row, matching the trio directly above (px-3 py-1.5 rounded-xl
+    // border, text-xs font-medium) on the neutral surface-toggle surface. jsdom cannot measure the
+    // widths; this pins the classes the layout follows from.
     const view = () => btn('View Saved Defaults')
     const clear = () => btn('Clear Saved Defaults')
     const row = view().parentElement
-    expect(row.className).toContain('grid-cols-3')
-    expect(row.className).not.toContain('gap-')
+    expect(row.className).toContain('flex')
+    expect(row.className).toContain('gap-2')
+    expect(row.className).not.toContain('grid-cols-3')
+    for (const b of [view(), clear()]) {
+      expect(b.className).toContain('flex-1') // equal width, filling the row
+      expect(b.className).toContain('rounded-xl') // a pill, not an underlined link
+      expect(b.className).toContain('surface-toggle')
+      expect(b.className).not.toContain('underline')
+    }
     // Its home is the PINNED BUTTON BLOCK — the same fenced block as Save Defaults / Reset Settings
-    // / Full Reset — and no longer the metadata block's first row, which is what moved the divider
-    // down to Contact.
+    // / Full Reset — directly under the three-button row.
     expect(row.parentElement).toBe(panelFooter())
     expect(panelFooter().contains(btn('Full Reset'))).toBe(true)
-    // Round-20 Q5 DELETED the conditional span-width branch: both links are PERMANENT equal
-    // siblings and sit on the thirds from the very first render, nothing saved or not — Clear just
-    // dims and locks instead of widening View to span the whole row.
+    // Both buttons are PERMANENT equal siblings, nothing saved or not — Clear just dims and locks.
     expect(clear()).toBeInTheDocument()
     expect(isOffered(clear())).toBe(false) // nothing saved yet
-    expect(view().className).toContain('col-start-1')
-    expect(view().className).toContain('col-end-3') // 1/3, unconditionally
-    expect(view().className).toContain('justify-self-center')
-    expect(clear().className).toContain('col-start-2')
-    expect(clear().className).toContain('col-end-4') // 2/3, unconditionally
-    expect(clear().className).toContain('justify-self-center')
-    // Both state row 1 explicitly. With only Clear's column placed, auto-placement would have found
-    // column 2 already behind the cursor (View having just taken columns 1-2) and dropped Clear
-    // onto a second line — a silent two-line footer.
-    expect(view().className).toContain('row-start-1')
-    expect(clear().className).toContain('row-start-1')
     // Saving flips Clear from dimmed-and-locked to offered — the layout itself never moves.
     saveSnapshot()
     expect(isOffered(clear())).toBe(true)
-    expect(view().className).toContain('col-end-3')
-    expect(clear().className).toContain('col-end-4')
+    expect(clear().className).toContain('flex-1')
   })
 
   it('a legacy snapshot missing a field forward-merges to factory — never undefined', () => {
@@ -194,7 +185,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(readout(dialog, 'MoX Run Length').textContent).toBe('25')
   })
 
-  it('editing turns the row btn-solid, swaps the footnote for the restricted-write note, and swaps Close for Cancel + Save', () => {
+  it('editing turns the row btn-solid, swaps the footnote for the restricted-write note, and brings up Cancel + Save', () => {
     act(() => useModePrefs.getState().setFlashMs(800))
     mountApp()
     openSettings()
@@ -224,7 +215,9 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     openManager()
     const dialog2 = managerDialog()
     expect(readout(dialog2, 'Flash Speed').textContent).toBe('0.8s')
-    expect(within(dialog2).getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    // Back at rest: NO action button (round 21) — the dirty Cancel/Save row is gone again.
+    expect(within(dialog2).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(within(dialog2).queryByRole('button', { name: 'Save' })).toBeNull()
   })
 
   it("the manager's Save writes ONLY the four shown values — the ⚙ half stays byte-identical, live prefs untouched", () => {
@@ -391,16 +384,13 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(useUserDefaults.getState().saved).not.toBeNull() // dismissal never clears
   })
 
-  it('Close, scrim mousedown/click and Escape dismiss the manager only — the settings panel survives', () => {
+  it('scrim mousedown/click and Escape dismiss the manager only — the settings panel survives', () => {
     act(() => useModePrefs.getState().setFlashMs(800))
     mountApp()
     openSettings()
     saveSnapshot()
     openManager()
-    act(() => fireEvent.click(btn('Close')))
-    expect(savedManager()).toBeNull()
-    expect(btn('Reset Settings')).toBeInTheDocument()
-    openManager()
+    // Round 21 removed the resting Close button — the scrim tap and Escape are the routes now.
     // The settings click-outside handler must treat the scrim as "inside" — the shared
     // [data-settings-modal] marker (the same guard as the Save popup)…
     const scrim = document.querySelector('[data-settings-modal]')
@@ -435,17 +425,24 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     saveSnapshot()
     openManager()
     const dialog = managerDialog()
-    const first = readout(dialog, 'MoX Run Length') // the card's first control
-    const close = btn('Close') // …and its last (the resting read-only state)
+    // At rest (round 21) the card has no Close button, but it is NOT control-free: the four row
+    // readouts are their own "Edit …" buttons and three rows also carry a range slider. First and
+    // last in DOM order are the MoX and Blitz-Question readouts.
+    const scrim = dialog.closest('[data-settings-modal]')
+    const stops = [...scrim.querySelectorAll('button,input')]
+    const first = stops[0]
+    const last = stops[stops.length - 1]
+    expect(first).toBe(readout(dialog, 'MoX Run Length'))
+    expect(last).toBe(readout(dialog, 'Blitz Question Timer'))
     // Tab from the LAST control wraps to the first instead of escaping to the panel under the
     // scrim; Shift+Tab from the FIRST wraps back to the last.
     act(() => {
-      close.focus()
-      fireEvent.keyDown(close, { key: 'Tab' })
+      last.focus()
+      fireEvent.keyDown(last, { key: 'Tab' })
     })
     expect(document.activeElement).toBe(first)
     act(() => fireEvent.keyDown(first, { key: 'Tab', shiftKey: true }))
-    expect(document.activeElement).toBe(close)
+    expect(document.activeElement).toBe(last)
     // The app-wide Tab shortcut bails while a settings modal is up (the [data-settings-modal]
     // guard) — the mode dropdown must not open behind the aria-modal dialog.
     act(() => fireEvent.keyDown(window, { key: 'Tab' }))

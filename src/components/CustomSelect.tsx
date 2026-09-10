@@ -1,4 +1,12 @@
-import { useState, useRef, useEffect, useId, type ReactNode, type RefObject } from 'react'
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useId,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { useBackButton } from './useBackButton.js'
 
@@ -84,7 +92,21 @@ export interface CustomSelectOption {
 interface PanelPos {
   right: number
   top: number
+  // The trigger wrapper's own rendered width at the moment the panel opened. Only consumed when
+  // dropdownWidth === 'match-trigger' (the preset switcher), where the panel is sized to the
+  // space-filling trigger instead of to its widest option; 'content' (the default, the mode
+  // selector) ignores it and the panel stays width:max-content exactly as before.
+  width: number
 }
+
+// The box metrics of ONE dropdown option row, shared by the real portaled rows and the hidden
+// width-mirror that triggerMatchesDropdown renders. The two MUST stay byte-identical here: the
+// mirror's only job is to report the panel's real rendered width back to the trigger, and it can
+// only do that honestly if its rows are padded, gapped and text-sized exactly like the live ones.
+// (Everything width-relevant lives in this string; the real row adds only the active/press visual
+// state, which changes no dimension.)
+const OPTION_ROW_BOX =
+  'w-full text-left rounded-xl pl-4 pr-4 py-3 text-[15px] flex items-center gap-2.5'
 export default function CustomSelect({
   value,
   onChange,
@@ -94,6 +116,8 @@ export default function CustomSelect({
   wrapperRef,
   showChevron = false,
   pressDrag = false,
+  dropdownWidth = 'content',
+  triggerMatchesDropdown = false,
 }: {
   value: string
   onChange: (value: string) => void
@@ -102,6 +126,22 @@ export default function CustomSelect({
   ariaLabel?: string
   wrapperRef?: RefObject<HTMLDivElement | null>
   showChevron?: boolean
+  // Q10: how the PORTALED PANEL is sized. 'content' (default) — width:max-content, the panel is as
+  // wide as its widest option; this is the mode selector, and it must stay this way (its dropdown's
+  // rendered width is not allowed to change). 'match-trigger' — the panel takes the trigger
+  // wrapper's live rendered width instead (measured on open, re-measured on resize / visualViewport
+  // / --bar-h, same as the panel position); this is the preset switcher, whose trigger already
+  // fills the row's leftover space (main.tsx: flex-1 min-w-0), so the menu now fills it too rather
+  // than shrink-wrapping to the widest preset name. maxWidth:90vw stays as a clamp for both.
+  dropdownWidth?: 'content' | 'match-trigger'
+  // Q10: widen the trigger BUTTON to exactly its own dropdown's outer width, WITHOUT changing the
+  // dropdown. The mode selector wants this: its dropdown rows use a bigger text tier and more
+  // padding than the trigger, so "both size to content" would never make them equal. A hidden
+  // mirror of the panel (rendered below, out of flow, aria-hidden) is measured and its width
+  // applied as the trigger's min-width — the same "compute the dropdown's natural width once and
+  // pin the trigger to it" the panel already does for its own position. The preset switcher does
+  // NOT set this: its trigger sizing (w-full, filling flex-1) is owned by main.tsx's row.
+  triggerMatchesDropdown?: boolean
   // Q5: enable press-drag-select (the mode selector). The trigger toggles on POINTERDOWN (so a press can
   // drag straight into the just-opened menu and release on an option to pick it — handled by the global
   // pointer controller, lib/pointerGestures: the data-select-trigger marker starts the gesture and the
@@ -152,6 +192,40 @@ export default function CustomSelect({
   // portal.
   const panelRef = useRef<HTMLDivElement>(null)
   const [panelPos, setPanelPos] = useState<PanelPos | null>(null)
+  // Q10 (triggerMatchesDropdown only): measureRef points at the hidden panel-mirror rendered below;
+  // triggerMinWidth is its measured outer width, applied as the trigger's min-width so the trigger
+  // ends up exactly as wide as the real dropdown. null until measured (and in jsdom, which reports
+  // 0 for everything — the trigger then just keeps its natural width, which is all a layout-free
+  // environment can mean by "match").
+  const measureRef = useRef<HTMLDivElement>(null)
+  const [triggerMinWidth, setTriggerMinWidth] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    // No reset in the `false` branch: triggerMinWidth is only ever written when this is true, and
+    // the style below is gated on `triggerMatchesDropdown` anyway — a stale value can't paint. (The
+    // prop is fixed per call site in this app, so the branch is theoretical either way.)
+    if (!triggerMatchesDropdown) return
+    const sync = () => {
+      const el = measureRef.current
+      if (!el) return
+      const w = el.getBoundingClientRect().width
+      // > 0 guard: jsdom reports 0 for every rect, and a 0 min-width would be a no-op anyway. Only
+      // a real layout engine ever gets past here.
+      setTriggerMinWidth((prev) => (w > 0 && w !== prev ? w : prev))
+    }
+    sync()
+    if (typeof ResizeObserver === 'undefined') return
+    // The mirror's own box changes size when the fluid root font-size does (index.css's clamp, on
+    // any viewport resize) or if the option set changes — both are exactly what a ResizeObserver on
+    // the mirror reports, so nothing else needs subscribing.
+    const ro = new ResizeObserver(sync)
+    if (measureRef.current) ro.observe(measureRef.current)
+    return () => ro.disconnect()
+    // options is a fresh array every render at the mode call site (MODE_LABELS is defined in App's
+    // body); depend on a stable signature of it, not its identity, so this doesn't re-subscribe on
+    // every render. The mirror re-renders with the new labels regardless, and the ResizeObserver
+    // above catches any width change that causes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerMatchesDropdown, options.map((o) => o.value).join(' ')])
   // measurePanel reads the trigger's current viewport rect and writes panelPos: right edge
   // aligned to the trigger, 6px below it. Called on open, on resize / visualViewport change, and
   // when --bar-h moves the bar the trigger sits in — and on NOTHING else, in particular never on
@@ -188,7 +262,7 @@ export default function CustomSelect({
     // 400 scrolled, −1494px at 1500) and needed a reposition per scroll event, while the fixed one
     // holds its exact 6px gap at every offset with ZERO reposition calls — and app mode is
     // pixel-identical either way, since scrollY was always 0 there.
-    setPanelPos({ right, top: rect.bottom + 6 })
+    setPanelPos({ right, top: rect.bottom + 6, width: rect.width })
   }
   // Toggle handler. On the way OPEN it measures where the panel goes — the one thing that can only
   // be decided at that instant. Measurement only happens on open (close is cheap).
@@ -371,6 +445,14 @@ export default function CustomSelect({
         onKeyDown={handleTriggerKeyDown}
         data-select-trigger={pressDrag || undefined}
         className={className}
+        // Q10: pin the trigger to its dropdown's measured outer width (triggerMatchesDropdown). Both
+        // this button and the mirror are border-box, so the mirror's rect width IS the min-width the
+        // trigger needs; its natural content is narrower, so it settles at exactly that.
+        style={
+          triggerMatchesDropdown && triggerMinWidth != null
+            ? { minWidth: `${triggerMinWidth}px` }
+            : undefined
+        }
         // Label + value (see the two ids above). With no `ariaLabel` there is nothing to compose,
         // so the trigger falls back to naming itself from its own content — the selected option —
         // which is the correct answer for a caller that never named the control.
@@ -397,6 +479,49 @@ export default function CustomSelect({
           ))}
         </span>
       </button>
+      {/* Q10: the hidden width-mirror (triggerMatchesDropdown only). A faithful, out-of-flow copy
+          of the portaled panel — same p-1, same OPTION_ROW_BOX rows, same width:max-content /
+          maxWidth:90vw — so its rendered outer width equals the real dropdown's. It carries no
+          role and is aria-hidden + visibility:hidden + pointer-events:none, so it is invisible to
+          the user, to assistive tech, and to the suite's role queries (closed === zero options
+          stays true). position:absolute keeps it out of the row's flex flow and off --bar-h. */}
+      {triggerMatchesDropdown && (
+        <div
+          ref={measureRef}
+          aria-hidden="true"
+          className="p-1"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            visibility: 'hidden',
+            pointerEvents: 'none',
+            zIndex: -1,
+            width: 'max-content',
+            maxWidth: '90vw',
+          }}
+        >
+          {options.map((opt) => (
+            <div
+              key={`w-${opt.value}`}
+              className={OPTION_ROW_BOX}
+              style={{ color: '#1a1a1a', whiteSpace: 'nowrap' }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '14px',
+                  color: '#1a1a1a',
+                  fontSize: '1em',
+                }}
+              >
+                ✓
+              </span>
+              <span className="min-w-0 flex-1">{opt.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {showChevron && (
         <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none text-[7px] text-(--tx-w90)">
           <span>▲</span>
@@ -432,7 +557,11 @@ export default function CustomSelect({
               WebkitBackdropFilter: 'blur(28px) saturate(120%)',
               backdropFilter: 'blur(28px) saturate(120%)',
               boxShadow: '0 6px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.05)',
-              width: 'max-content',
+              // Q10: 'content' (mode selector, default) keeps the historical max-content sizing
+              // untouched; 'match-trigger' (preset switcher) takes the trigger wrapper's live
+              // width measured in measurePanel, so the menu fills the same row space the trigger
+              // does. The 90vw clamp applies to both.
+              width: dropdownWidth === 'match-trigger' ? `${panelPos.width}px` : 'max-content',
               maxWidth: '90vw',
             }}
           >
@@ -450,7 +579,7 @@ export default function CustomSelect({
                   onChange(opt.value)
                   closeAndFocus()
                 }}
-                className={`w-full text-left rounded-xl pl-4 pr-4 py-3 text-[15px] flex items-center gap-2.5 ${i === activeIdx ? 'bg-black/10' : 'cs-option-press'}`}
+                className={`${OPTION_ROW_BOX} ${i === activeIdx ? 'bg-black/10' : 'cs-option-press'}`}
                 style={{ color: '#1a1a1a', whiteSpace: 'nowrap' }}
               >
                 <span

@@ -210,7 +210,7 @@ function UL({ children }: { children: ReactNode }) {
 // and the aria-label sentence reads the filled cells in row order — no hand-kept
 // copy of the layout exists here to drift. Drawn entirely in currentColor so it's
 // legible on every theme.
-// ★ IT SHOWS THE PLAYER'S OWN ORIENTATION (Settings → Display → Dot Layout), not a
+// ★ IT SHOWS THE PLAYER'S OWN ORIENTATION (Settings → Display → Rotate Dots CCW), not a
 // fixed picture of the upright one: the section's heading is "Which dot is which",
 // and there is exactly one honest answer to that — the layout currently on screen.
 // A second diagram of the other orientation was considered and rejected: it would
@@ -726,13 +726,14 @@ export default function GuidePage({
         </UL>
         <Subhead>Reset Stats (casual modes)</Subhead>
         <p>
-          Clears your stats and question history for the current mode (Deduction only resets the
-          current sub-type's stats). Details:
+          Clears your stats and all-time bests for the current mode (Deduction only resets the
+          current sub-type's), for the preset you are on. Details:
         </p>
         <UL>
           <li>
-            <b>Two taps to confirm</b> — the first arms it (it turns red and reads "Reset Stats?");
-            a second tap within 3 seconds confirms. Tapping anywhere else or waiting cancels.
+            <b>Asks first, in a popup</b> that names what it does and that it is per-preset. Cancel
+            leaves everything; the rose button confirms. (The button no longer changes colour or
+            text on its own — the popup is the whole confirmation.)
           </li>
           <li>
             Generates a new date when timing stats are visible, or when you've burned the current
@@ -879,7 +880,10 @@ export default function GuidePage({
         <UL>
           <li>stats and all-time bests;</li>
           <li>per-mode setup — timers, run length, the Deduction sub-type, the stat toggles;</li>
-          <li>every ⚙ setting, theme included;</li>
+          <li>
+            every setting in the <b>Per-preset</b> half of the ⚙ menu, theme and <b>Default Mode</b>{' '}
+            (the page it opens on) included;
+          </li>
           <li>saved defaults;</li>
           <li>
             its <b>Amnesic</b> switch — a preset is amnesic or not in its own right, whichever one
@@ -887,11 +891,14 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          <b>Only the preset you are on is ever touched.</b> Every setting in the ⚙ menu, every
-          default you save, <b>Reset Settings</b>, <b>Full Reset</b>, and each mode&apos;s{' '}
-          <b>Reset Stats</b> apply to that preset and to no other. Nothing above is shared between
-          presets, and nothing is merged: switching swaps all of it at once, and the preset you left
-          is exactly where you left it when you come back.
+          <b>Only the preset you are on is ever touched.</b> Every setting in the <b>Per-preset</b>{' '}
+          half of the ⚙ menu, every default you save, <b>Reset Settings</b>, <b>Full Reset</b>, and
+          each mode&apos;s <b>Reset Stats</b> apply to that preset and to no other. The ⚙
+          menu&apos;s <b>Global</b> section (the <b>Open in</b> setting — which preset the app opens
+          into) sits outside all of that: it is one app-wide choice, in no preset. Nothing
+          per-preset is shared or merged: switching swaps all of it at once, and the preset you left
+          is exactly where you left it when you come back — including, for the rest of the visit,
+          the page you were on.
         </p>
         <p>
           <b>Lookup history is the one thing that is NOT in that list.</b> It is shared by every
@@ -1066,9 +1073,9 @@ export default function GuidePage({
           and paused until you tap one; Flash starts with them shown. When you turn timing back on,
           the current date is regenerated if still unanswered; if you've already answered wrong,
           revealed, or shown codes, the date stays until you advance. If any questions were answered
-          while timing was hidden, a desync would arise on re-enable, so the three timing boxes
-          merge into a single "Enable and Reset Stats?" confirmation — tap again within 3 seconds to
-          confirm (turn on and full reset), or tap anywhere else to cancel.
+          while timing was hidden, a desync would arise on re-enable, so turning timing back on
+          opens an "Enable and Reset Stats?" popup — confirm to turn it on and reset this mode's
+          stats, or Cancel to leave timing hidden.
         </p>
         <p>
           When Save Stats is off, the whole stats strip dims site-wide (every mode, including MoX)
@@ -1406,15 +1413,16 @@ export default function GuidePage({
         <UL>
           <li>
             Every picker in the ⚙ menu is one named group of choices, not a row of loose buttons,
-            and it&apos;s named for the setting you&apos;re changing — Date Format, Input, Theme,
-            Leap Year Chance, Jan/Feb Chance on Leap Years, Julian Chance. Landing on an option is
-            choosing it; the keys that move within a group are under Keyboard Input above.
+            and it&apos;s named for the setting you&apos;re changing — Open in, Default Mode, Date
+            Format, Input, Theme, Leap Year Chance, Jan/Feb Chance on Leap Years, Julian Chance.
+            Landing on an option is choosing it; the keys that move within a group are under
+            Keyboard Input above.
           </li>
           <li>
-            The six On/Off switches carry their setting&apos;s name — Random Format, Dot Layout, Use
-            System Settings, Julian Calendar, Save Stats, Amnesic — rather than reading as six
-            identical buttons called &quot;On&quot;. Both Year Range boxes name themselves Earliest
-            Year and Latest Year.
+            The six On/Off switches carry their setting&apos;s name — Random Format, Rotate Dots
+            CCW, Use System Settings, Julian Calendar, Save Stats, Amnesic — rather than reading as
+            six identical buttons called &quot;On&quot;. Both Year Range boxes name themselves
+            Earliest Year and Latest Year.
           </li>
           <li>
             The ⚙ button says what&apos;s behind it: that a setting has been changed, and that an
@@ -1457,7 +1465,9 @@ export default function GuidePage({
             clearing them, the Changelog, and Manage Presets — are proper dialogs. Opening one puts
             the keyboard inside it, <Kbd>Tab</Kbd> and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> cycle that
             popup&apos;s own controls and wrap around at the ends rather than wandering into the
-            menu beneath, and <Kbd>Esc</Kbd> closes it.
+            menu beneath, and <Kbd>Esc</Kbd> closes it. The Changelog has no controls to cycle — it
+            and the resting saved-defaults list are read-only, closed by tapping outside,{' '}
+            <Kbd>Esc</Kbd>, or Back — and there the keyboard simply stays on the dialog.
           </li>
           <li>
             Manage Presets asks its delete question <i>in place</i>: the list is replaced by the
@@ -1540,18 +1550,28 @@ export default function GuidePage({
         durationMs={motionMs}
       >
         <Lead>
-          The ⚙ menu opens on the preset you are in, groups every setting into three categories, and
-          keeps the Save Defaults and Reset buttons at the bottom.
+          The ⚙ menu opens on the preset you are in. A <b>Global</b> section at the top holds the
+          two settings that apply to the whole app; a <b>Per-preset</b> label marks everything below
+          it as belonging to the preset you are on, grouped into three categories; the Save Defaults
+          and Reset buttons stay at the bottom.
         </Lead>
         <UL>
           <li>
-            <b>Presets</b> — first, and not a setting: it names the preset you are on, says that
-            everything below it belongs to that preset alone, and opens <b>Manage Presets</b> (see{' '}
-            <b>Presets</b> in the first section).
+            <b>Global</b> — first, and app-wide, not per-preset: <b>Open in</b> (which preset a
+            fresh open of the app lands in — &quot;Last used&quot;, or a preset you pin), and the
+            door to <b>Manage Presets</b> (see <b>Presets</b> in the first section). Neither is part
+            of any preset, and neither is touched by the Reset buttons or Save Defaults.
+          </li>
+          <li>
+            <b>Per-preset</b> — the label over everything that is saved for the current preset and
+            captured by <b>Save Defaults</b>. Directly under it: <b>Default Mode</b> — the page this
+            preset opens on (any of the six modes, or How to Play). Whatever page you were last on
+            in a preset comes back if you switch away and return during the same visit; a fresh
+            start of the app uses Default Mode instead.
           </li>
           <li>
             <b>Display</b> — how dates are shown and how you answer: Date Format (incl. Random
-            Format), Input (Buttons / Dots), Dot Layout, and Theme.
+            Format), Input (Buttons / Dots), Rotate Dots CCW, and Theme.
           </li>
           <li>
             <b>Dates</b> — which dates get generated: Year Range, Leap Year Chance, Jan/Feb Chance
@@ -1649,14 +1669,14 @@ export default function GuidePage({
       </GuideSection>
       <GuideSection
         id="input"
-        title="Display — Input & Dot Layout"
+        title="Display — Input & Rotate Dots CCW"
         openId={open}
         onToggle={toggle}
         durationMs={motionMs}
       >
         <Lead>
           Answer with labelled weekday buttons, or with the seven-dot logo layout — and turn that
-          layout a quarter turn if you like.
+          layout 90° if you like.
         </Lead>
         <Subhead>Input</Subhead>
         <UL>
@@ -1680,36 +1700,36 @@ export default function GuidePage({
         <p className="text-(--tx-300-70) text-[12px] text-center">
           Sunday sits in the centre. The dots are deliberately unlabelled — their positions follow
           the day-of-week practice movement, so choosing one is the same motion you trace when
-          calculating. The diagram above always shows your current Dot Layout.
+          calculating. The diagram above always matches your Rotate Dots CCW setting.
         </p>
-        <Subhead>Dot Layout</Subhead>
+        <Subhead>Rotate Dots CCW</Subhead>
         <p>
           <b>Off</b> (default) — the two runs of three weekdays go down the sides: Sat, Fri, Thu
           down the left and Wed, Tue, Mon down the right.
         </p>
         <p>
-          <b>On</b> — the same seven dots turned a quarter turn anticlockwise, so those two runs lie
+          <b>On</b> — the same seven dots turned 90° counterclockwise (CCW), so those two runs lie
           along the top and bottom instead: Wed, Tue, Mon across the top and Sat, Fri, Thu across
           the bottom.
         </p>
         <p>
           Sunday stays in the centre either way, and the dots keep their tap-and-slide behaviour and
-          their keyboard numbers unchanged — only where each one sits on screen moves. Dot Layout is
-          locked whenever there are no dots to turn: in Deduction, alongside Input and for the same
-          reason, and in every mode while Input is set to Buttons. It keeps whatever you last chose
-          — and so does the logo below.
+          their keyboard numbers unchanged — only where each one sits on screen moves. Rotate Dots
+          CCW is locked whenever there are no dots to turn: in Deduction, alongside Input and for
+          the same reason, and in every mode while Input is set to Buttons. It keeps whatever you
+          last chose — and so does the logo below.
         </p>
         <p>
           <b>The logo turns with it — but only while Dots is your Input.</b> The mark at the top
-          left of every screen <i>is</i> this seven-dot layout, so turning Dot Layout on turns that
-          mark too, whenever Input is set to Dots. The rest of the time — in Deduction, or in any
-          mode while Input is set to Buttons — the mark stays upright, for the same reason Dot
-          Layout itself locks there: with no dots anywhere on screen, there is nothing for a turned
-          mark to correspond to. What can't follow even when Dots is your Input are the pictures
-          your device saved earlier: the home-screen icon, the launch screen and the link preview
-          image are fixed image files, so those keep the upright logo whatever you choose here. The
-          full-screen launch screen and the <b>Rotate back to portrait</b> screen keep the upright
-          mark to match them.
+          left of every screen <i>is</i> this seven-dot layout, so turning Rotate Dots CCW on turns
+          that mark too, whenever Input is set to Dots. The rest of the time — in Deduction, or in
+          any mode while Input is set to Buttons — the mark stays upright, for the same reason
+          Rotate Dots itself locks there: with no dots anywhere on screen, there is nothing for a
+          turned mark to correspond to. What can't follow even when Dots is your Input are the
+          pictures your device saved earlier: the home-screen icon, the launch screen and the link
+          preview image are fixed image files, so those keep the upright logo whatever you choose
+          here. The full-screen launch screen and the <b>Rotate back to portrait</b> screen keep the
+          upright mark to match them.
         </p>
       </GuideSection>
       <GuideSection
@@ -2078,8 +2098,9 @@ export default function GuidePage({
         </p>
         <UL>
           <li>
-            <b>⚙ Settings</b> — date format, answer input (Buttons / Dots), dot layout, calendar
-            system, year range, the leap / Jan-Feb / Julian chances, Save Stats, and theme.
+            <b>⚙ Settings</b> — date format, answer input (Buttons / Dots), Rotate Dots CCW,
+            calendar system, year range, the leap / Jan-Feb / Julian chances, Save Stats, theme, and
+            this preset&apos;s Default Mode (the page it opens on).
           </li>
           <li>
             <b>Your saved defaults</b> — the Save Defaults snapshot (next section), which even
@@ -2109,14 +2130,22 @@ export default function GuidePage({
           above for why, and <b>Stats &mdash; Amnesic</b> for the one thing that changes what it
           does while a preset is amnesic.
         </p>
-        <Subhead>Not saved (resets each visit)</Subhead>
+        <Subhead>Kept for the visit only (cleared when you fully close the app)</Subhead>
         <UL>
           <li>
-            Any timed round or run on screen — whether still in progress OR ended but not yet Reset
-            — and the current question. The round/run itself is discarded; only a Best it already
+            <b>Which page each preset is on.</b> Change page, switch preset, come back &mdash; the
+            preset is on the page you left it on. This lasts as long as the app stays open (a reload
+            keeps it); a full close clears it, and the next open of each preset uses that
+            preset&apos;s <b>Default Mode</b> (⚙ &rarr; Per-preset). Which preset the app opens{' '}
+            <i>into</i> is the <b>Open in</b> setting (⚙ &rarr; Global).
+          </li>
+          <li>
+            Any timed round or run on screen &mdash; whether still in progress OR ended but not yet
+            Reset. An <i>ended</i> run is kept as you switch presets and return, the same as the
+            page above; only a fresh close of the app, or a manual Reset, clears it. A run still{' '}
+            <i>in progress</i> is discarded on a preset switch. Either way, only a Best it already
             recorded persists.
           </li>
-          <li>The current tab — the app always opens to Classic.</li>
         </UL>
         <p>
           There is one exception, and it applies to a whole preset at a time. With <b>Amnesic</b> on
@@ -2150,7 +2179,17 @@ export default function GuidePage({
           All three, and the saved defaults they read and write, belong to{' '}
           <b>the preset you are on</b> and reach no other one. A second preset has its own defaults,
           its own settings and its own stats, and none of these buttons can touch them — see{' '}
-          <b>Presets</b>.
+          <b>Presets</b>. They act only on the <b>Per-preset</b> half of the ⚙ menu; the{' '}
+          <b>Global</b> section at the top (the <b>Open in</b> setting) is outside every one of them
+          — it is not captured by Save Defaults and not moved by either Reset.
+        </p>
+        <p>
+          Every reset-style action in the app now asks the same way: a <b>popup</b> that spells out
+          what it does and whether it is <b>per-preset</b> or app-wide. That covers{' '}
+          <b>Reset Settings</b>, <b>Full Reset</b>, <b>Clear Saved Defaults</b>, each casual mode's{' '}
+          <b>Reset Stats</b> (see <b>Playing — Reset Stats</b>), and the "Enable and Reset Stats?"
+          case when you un-hide timing after a desync. The one exception is <b>deleting a preset</b>
+          , which asks in place inside <b>Manage Presets</b> rather than in a separate popup.
         </p>
         <Subhead>Save Defaults (left)</Subhead>
         <p>
@@ -2159,8 +2198,9 @@ export default function GuidePage({
         </p>
         <UL>
           <li>
-            Every setting in the ⚙ menu (all of Display — Input and Dot Layout included — Dates, and
-            Stats).
+            Every setting in the <b>Per-preset</b> half of the ⚙ menu: <b>Default Mode</b>, and all
+            of Display (Input and Rotate Dots CCW included), Dates, and Stats. (The <b>Global</b>{' '}
+            section — <b>Open in</b> — is not part of it.)
           </li>
           <li>
             Four values from the mode screens: MoX run length, Flash speed, and both Blitz timers
@@ -2205,12 +2245,13 @@ export default function GuidePage({
             buttons), opens a popup with the same four rows as the Save Defaults popup, showing your
             saved mode-screen values (every menu setting is also part of the snapshot, captured as
             it was when you saved). The link is always there: before you've saved any defaults it
-            shows the factory values instead, labelled as such.
+            shows the factory values instead, labelled as such. At rest the popup carries no buttons
+            — tap outside it, press <Kbd>Esc</Kbd>, or use your device's Back to close it.
           </li>
           <li>
             That popup is also where you edit your defaults directly. Adjust any row — here the run
             length is a tap-to-type readout too, like the timer readouts — and the changed value
-            highlights in violet, the Close button becomes Cancel and Save, and a note appears:
+            highlights in violet, <b>Cancel</b> and <b>Save</b> buttons appear, and a note shows:
             saving there updates only those four values, while every menu setting in the snapshot
             stays exactly as it was. Saving from the factory view creates your saved defaults, with
             the menu settings captured at their launch values.
@@ -2227,12 +2268,14 @@ export default function GuidePage({
         </UL>
         <Subhead>Reset Settings (middle)</Subhead>
         <p>
-          Restores everything the snapshot covers to your saved defaults — or, if you haven't saved
-          any, to the launch defaults. That is the whole ⚙ menu:
+          Asks first, in a popup that names what it restores and that it is per-preset. Confirm and
+          it restores everything the snapshot covers to your saved defaults — or, if you haven't
+          saved any, to the launch defaults. That is the whole ⚙ menu:
         </p>
         <UL>
           <li>Random Format off, Written MDY</li>
           <li>Input on Buttons</li>
+          <li>Default Mode back to Classic</li>
           <li>Julian on, Julian Chance Random</li>
           <li>Year range 1–10000</li>
           <li>Leap Year Chance Random, Jan/Feb Chance Random</li>
@@ -2241,6 +2284,10 @@ export default function GuidePage({
             Theme back to Use System Settings, with Dusk on the Dark row and Light on the Light row
           </li>
         </UL>
+        <p className="text-(--tx-300-70) text-[12px]">
+          Default Mode is restored like any other value, but it only decides where a preset{' '}
+          <i>opens</i> — pressing Reset Settings does not move you off the page you are on now.
+        </p>
         <p>
           …plus the same four mode-screen values Save Defaults captures: the MoX run length, the
           Flash speed, and both Blitz timers. That makes Reset Settings the exact mirror of Save
@@ -2268,9 +2315,10 @@ export default function GuidePage({
           the menu, exactly as an ordinary ⚙ panel change does — but an <b>Amnesic</b> flip is not a
           menu value reconciling on close, it is a preset property changing outright, so it (and the
           run or round it can take with it) lands immediately on the tap itself, before the menu is
-          ever closed. No confirmation prompt either way — tap to apply. When everything the
-          snapshot covers is already at your defaults, the button dims and locks, since tapping it
-          would have no effect.
+          ever closed. The popup confirms the restore itself; an <b>Amnesic</b> flip it carries out
+          still lands on the tap, before the menu closes. When everything the snapshot covers is
+          already at your defaults, the button dims and locks, since tapping it would have no
+          effect.
         </p>
         <Subhead>Full Reset (right)</Subhead>
         <p>Restores the preset you are on to its launch state:</p>
@@ -2298,18 +2346,20 @@ export default function GuidePage({
             time it happens, whichever way Amnesic ends up afterward.
           </li>
           <li>
-            Closes any open overlay (⚙ menu, codes, method breakdown) and switches to Classic. How
-            to Play goes back to the top with every section closed, so nothing is left open behind
-            you.
+            Closes any open overlay (⚙ menu, codes, method breakdown) and switches to Classic —
+            regardless of this preset&apos;s <b>Default Mode</b>, which Full Reset restores along
+            with the rest of the menu but does not act on now. How to Play goes back to the top with
+            every section closed, so nothing is left open behind you.
           </li>
         </UL>
         <p>
-          Requires two taps to confirm: tap once and the button changes to "Confirm?"; tap again to
-          fire. Auto-cancels after a few seconds, when you close ⚙, or if you tap any other control.
-          When every setting, toggle, stat, best, history entry, and live state in the preset you
-          are on is already where Full Reset would put it, the button dims and locks since tapping
-          it would have no effect. It never counts anything in another preset, and it never clears
-          one — the way to remove a whole preset is <b>Delete</b>, in ⚙ &rarr; Presets.
+          Asks first, in a popup: it names what it wipes and what it keeps (your saved defaults),
+          and that it is per-preset — plus that the one shared thing, your Lookup history, goes too.
+          Cancel backs out; the rose button fires it. When every setting, toggle, stat, best,
+          history entry, and live state in the preset you are on is already where Full Reset would
+          put it, the button dims and locks since tapping it would have no effect. It never counts
+          anything in another preset, and it never clears one — the way to remove a whole preset is{' '}
+          <b>Delete</b>, in ⚙ &rarr; Presets.
         </p>
       </GuideSection>
       <Divider label="Modes" />
@@ -2401,14 +2451,16 @@ export default function GuidePage({
           Random Format on its own bucket), Leap Year Chance, Jan/Feb Chance on Leap Years, Julian
           Chance, year range, and Calendar System (Julian on/off). Changing any of these creates a
           separate bucket — your previous bests remain stored and reappear when you switch back to
-          that exact config.
+          that exact config. Everything else leaves your bests where they are: the mode&apos;s name
+          (so the AoX &rarr; MoX rename kept everyone&apos;s), your answer input style, Rotate Dots
+          CCW, and the theme.
         </p>
         <p>
           The small <b>Q#</b> label at the top-right of the date card appears not only while
           back-browsing but also at run end (done/failed), so you can identify which question of the
           run you're viewing in the summary.
         </p>
-        <Subhead>Run breakdown</Subhead>
+        <Subhead>Mean Breakdown</Subhead>
         <p>
           Once a run is finished, tapping anywhere on the stats strip opens the run solve by solve —
           the numbers behind the mean, with the fastest and slowest marked and any solve that didn't
@@ -2597,7 +2649,8 @@ export default function GuidePage({
             Round/Per Question, Date Format (or Random Format as its own bucket), Leap Year Chance,
             Jan/Feb Chance on Leap Years, Julian Chance, year range, and Calendar System (Julian
             on/off). Changing any of these creates a separate bucket — your previous bests remain
-            stored and reappear when you switch back.
+            stored and reappear when you switch back. Everything else leaves your bests untouched:
+            the mode&apos;s name, your answer input style, Rotate Dots CCW, and the theme.
           </li>
           <li>
             Best score and best streak are tracked independently in Per Round and in Per Question

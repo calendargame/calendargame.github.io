@@ -219,12 +219,10 @@ function ReorderHandleIcon() {
 const ROW_BTN_CLASS =
   'shrink-0 px-2 py-1.5 rounded-xl text-xs border surface-toggle text-(--tx-100-80)'
 
-export default function PresetManager({
-  onClose,
-}: {
-  /** Dismiss the whole card. The caller owns the open flag, as it does for the other four. */
-  onClose: () => void
-}) {
+// No props: since round 21 (Q5) removed the standalone Close button, nothing in this card
+// dismisses itself. The caller (components/SettingsPanel) owns the open flag and wires the scrim
+// tap, capture-phase Escape and Android Back — the same three routes as the other four modals.
+export default function PresetManager() {
   // Two narrow subscriptions, the same pair components/PresetSwitcher takes and for the same
   // reason: `presets` is replaced wholesale by applyRegistry (so reference equality is a correct
   // change signal) and `activeId` is the one scalar this card renders a mark for. Everything this
@@ -755,25 +753,18 @@ export default function PresetManager({
           empty it.
         </div>
       )}
-      <div className="px-4 pt-1 flex gap-2">
+      <div className="px-4 pt-1">
         {/* NEW PRESET is the constructive act, so it wears btn-solid — the same violet fill Save
             Defaults and every Begin button wear, and the same reason rose is left to the two
-            destructive controls. It sits LEFT of Close, matching the app's left-to-right reading of
-            a button row as act-then-leave (the ⚙ footer's Save Defaults → Reset Settings → Full
-            Reset row is the same escalation). */}
+            destructive controls. It fills the row: round 21 (Q5) removed the standalone Close
+            beside it — the scrim tap, Escape and Android Back already dismiss the whole card, and
+            the owner wanted the real estate back. */}
         <button
           type="button"
           onClick={addPreset}
-          className="flex-1 px-3 py-2 rounded-xl btn-solid border border-transparent text-sm font-medium"
+          className="w-full px-3 py-2 rounded-xl btn-solid border border-transparent text-sm font-medium"
         >
           New Preset
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 px-3 py-2 rounded-xl text-sm font-medium border surface-toggle text-(--tx-100-80)"
-        >
-          Close
         </button>
       </div>
     </div>

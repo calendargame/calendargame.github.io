@@ -39,9 +39,11 @@ import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpd
 import { usePresets } from './store/presets.js'
 import { activeDataId, selectAmnesic, discardParkedStats } from './store/amnesic.js'
 import { setPresetAmnesic } from './store/presetControl.js'
-import { useSettings } from './store/settings.js'
+import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/settings.js'
+import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
+import { discardSessionRounds } from './store/sessionRound.js'
 import { useModePrefs } from './store/modePrefs.js'
-import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
+import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, storedAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
 import { useProgress } from './store/progress.js'
 import { useLookupHistory, useLookupSession, addLookupEntry, moveEntryToTop, mergeForDisplay } from './store/lookupHistory.js'
 import type { LookupEntry } from './store/lookupHistory.js'
@@ -93,9 +95,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // _m1582 (monthOnly1582) — informational snapshots of per-mode toggles at spawn.
     // ─────────────────────────────────────────────────────────────────────────
     // Shared control className tokens + buttonStateClass -> src/components/controlClasses.ts. App
-    // no longer imports it: its last four tokens (RESET_BTN_CLASS, FOOTER_RESET_BTN_CLASS, the
-    // footer link-row class — since split into FOOTER_META_ROW_CLASS + FOOTER_DEFAULTS_ROW_CLASS —
-    // and NUM_INPUT_CLASS) left with the ⚙ card. Consumed now by
+    // no longer imports it: its last tokens (RESET_BTN_CLASS, FOOTER_RESET_BTN_CLASS,
+    // FOOTER_META_ROW_CLASS and NUM_INPUT_CLASS) left with the ⚙ card. Consumed now by
     // components/SettingsPanel + DefaultsCard + WeekdayAnswer and all five mode screens.
     // DOT_CELLS — the logo's 7-position layout for the Dots input, in both orientations →
     // src/lib/dotLayout.ts. NOT imported here: App renders no answer input. Its readers are
@@ -236,6 +237,21 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // the normal splash dismissal AND the auto-update Updating handoff — gate on it, so neither can
     // ever reveal an unstyled frame.
     const appCssApplied=()=>window.__cssReady===true||!document.querySelector('link[rel="preload"][as="style"]');
+
+    // Q8 (round 21): a #rgb / #rrggbb theme colour composited OVER the modal scrim's 40% black —
+    // i.e. each channel × 0.6. Runtime-derived from the `--tc` string the theme effect already
+    // reads, so it adds NO third copy of the per-theme values: index.html's pre-React boot map
+    // (`var c={dusk:'#0d1117',…}`, ~line 110) and index.css's `--tc` are the two that exist, and
+    // index.html's own comment says to keep them in sync — a third would be a third thing to forget.
+    // Anything that is not 3- or 6-digit hex (the empty string `--tc` resolves to before the
+    // stylesheet applies, or an already-computed value) is returned untouched.
+    const scrimTheme=(tc: string): string=>{
+      const m=/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec((tc||"").trim());
+      if(!m)return tc;
+      let h=m[1];if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+      const n=parseInt(h,16),d=(x: number)=>Math.round(x*0.6).toString(16).padStart(2,"0");
+      return"#"+d((n>>16)&255)+d((n>>8)&255)+d(n&255);
+    };
 
     // ★★ DO NOT HOIST THE `import('./sw.js')` IN App'S SERVICE-WORKER EFFECT TO MODULE SCOPE.
     // It is tempting, and it looks like a pure win: babel-plugin-react-compiler cannot lower a
@@ -389,14 +405,25 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // shared engine, AoxMode).
     // ============================================================
     function App(){
-      const [mode,setMode]=useState("classic");   // the app always opens to Classic (the current tab is not persisted)
+      // Q3 (round 21): "classic" is only the FIRST-PAINT value now. A one-shot boot effect below
+      // immediately moves it to the active preset's session page (survived a reload) or its
+      // `defaultMode` ⚙ setting (a true cold open); a preset switch moves it to the incoming
+      // preset's session-or-default page. switchMode is still the one door and now also persists
+      // the page per preset (store/sessionMode). Nothing here reads a "last mode" from localStorage
+      // — the page is session-lived, gone on a full close, exactly like Amnesic's session stats.
+      const [mode,setMode]=useState("classic");
       // Tracks the most recent non-guide mode so the H key bind can toggle out of
       // guide back to where the user was. Updated whenever mode changes (excluding
       // changes INTO guide). Initial value 'classic' covers the never-left-classic case.
       // Distinct from the unrelated prevModeRef declared further down which tracks
       // mode changes for codes-freeze logic.
       const prevNonGuideModeRef=useRef('classic');
-      useEffect(()=>{if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
+      // modeRef mirrors the committed `mode` for switchMode, which has [] deps and so cannot read
+      // `mode` from render — it needs the current value to resolve a functional updater (the H key
+      // passes `m=>m==='guide'?…`). Updated in the same effect as prevNonGuideModeRef; switchMode is
+      // only ever called from events/effects (after a commit), so this is never stale for it.
+      const modeRef=useRef(mode);
+      useEffect(()=>{modeRef.current=mode;if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
       const modeSelectRef=useRef<HTMLDivElement | null>(null);
       // The preset switcher's wrapper, and it exists for exactly one reason: the ⚙ click-outside
       // handler below has to treat a press on that trigger as "inside", the same way it treats the
@@ -408,17 +435,17 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const [systemIsDark,setSystemIsDark]=useState(()=>typeof window!=="undefined"?window.matchMedia("(prefers-color-scheme: dark)").matches:true);
       // ⚙ Settings store (Stage C, Step 5a). ★ THE COUNT, AND WHICH SET IT COUNTS — three different
       // numbers live in this area and conflating them is how the old comments went wrong:
-      //   15 = the settings the ⚙ store HOLDS AND PERSISTS (store/settings SETTINGS_DEFAULTS, and
-      //        therefore PERSISTED_KEYS). App binds all 15 as values below: it needs every one for
-      //        settingsAtDefaults, and several again for date generation, the mode props and the
-      //        title-bar mark.
+      //   16 = the settings the ⚙ store HOLDS AND PERSISTS (store/settings SETTINGS_DEFAULTS, and
+      //        therefore PERSISTED_KEYS; round-21 Q3 added `defaultMode`). App binds all 16 as
+      //        values below: it needs every one for settingsAtDefaults, and several again for date
+      //        generation, the mode props and the title-bar mark.
       //    3 = the store FUNCTIONS App binds — setMinY, setMaxY (they feed the year-range mirrors
-      //        below) and applySettings (Reset Settings / Full Reset write all 15 in one shot). The
-      //        other twelve per-value setters are NOT bound here: the only writer of a settings
+      //        below) and applySettings (Reset Settings / Full Reset write all 16 in one shot). The
+      //        other thirteen per-value setters are NOT bound here: the only writer of a settings
       //        value is the panel, and components/SettingsPanel selects its own.
-      //   19 = a different set entirely, and NOT what any of this judges — the Save Defaults
-      //        SNAPSHOT (those 15 + the 4 capturable mode prefs). It is counted at resetSettings
-      //        below, alongside how many of the 19 the gear actually compares.
+      //   20 = a different set entirely, and NOT what any of this judges — the Save Defaults
+      //        SNAPSHOT (those 16 + the 4 capturable mode prefs). It is counted at resetSettings
+      //        below, alongside how many of the 20 the gear actually compares.
       // The Year Range boxes' two TEXT MIRRORS are in none of those counts: they stay App state, in
       // components/useYearRangeMirrors (called below) — they are not settings, they are what the
       // user is currently typing, and they deliberately disagree with the store until it commits.
@@ -436,6 +463,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const randomFormat=useSettings(s=>s.randomFormat);
       const inputStyle=useSettings(s=>s.inputStyle);
       const rotateDots=useSettings(s=>s.rotateDots);
+      // defaultMode (round-21 Q3) — bound only for settingsAtDefaults below (a changed opening page
+      // must light the gear and un-dim Save Defaults, since it is captured). The panel selects its
+      // own setDefaultMode; nothing else in App reads this — the page itself is applied by the
+      // boot effect / preset-switch subscription via readStoredDefaultMode, not this binding.
+      const defaultMode=useSettings(s=>s.defaultMode);
       // The raw derivation — passed to the four weekday mode screens (and, through them, to
       // WeekdayAnswer), which only ever consult it while inputStyle is already 'dots' (they render
       // no other branch that reads it), so no additional gate belongs here. The top bar's mark needs
@@ -461,17 +493,44 @@ import BlitzMode from './modes/BlitzMode.jsx'
 
       const activeTheme=useSystem?(systemIsDark?darkTheme:lightTheme):manualTheme;
       useEffect(()=>{const mq=window.matchMedia("(prefers-color-scheme: dark)");const h=(e: MediaQueryListEvent)=>setSystemIsDark(e.matches);mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);},[]);
+      // Q8 (round 21): iOS tints the status bar from <meta name="theme-color">. When a modal opens,
+      // its scrim (`fixed inset-0 z-[60] bg-black/40`) covers the whole viewport EXCEPT the status
+      // bar, which iOS keeps tinting from the undimmed --tc — a bright strip above 40%-darker
+      // content. So the theme effect below hands iOS the SCRIMMED colour while a modal is up.
+      // ★ THE SIGNAL is the [data-settings-modal] marker every modal scrim carries — SettingsPanel's
+      // five popups AND RunBreakdown, and all six mount the SAME way: `createPortal(<scrim …>,
+      // document.getElementById('root'))`, so each scrim is a DIRECT CHILD of #root. A
+      // MutationObserver on #root with childList (no subtree) therefore sees every open and close
+      // while firing only when #root's own child list changes — modal/dropdown/mode-screen churn,
+      // not per-frame gameplay mutations. ⚠ IF A FUTURE MODAL PORTALS ELSEWHERE OR WRAPS ITS SCRIM,
+      // widen this to subtree:true (or move it to document.body). Falls back to document.body when
+      // #root is somehow absent (it is in index.html and the test harness, so this is belt-and-braces).
+      const [anyModalOpen,setAnyModalOpen]=useState(false);
+      useEffect(()=>{
+        const host=document.getElementById('root')||document.body;
+        const read=()=>setAnyModalOpen(!!document.querySelector('[data-settings-modal]'));
+        read();
+        const mo=new MutationObserver(read);
+        mo.observe(host,{childList:true,subtree:host===document.body});
+        return()=>mo.disconnect();
+      },[]);
       useEffect(()=>{
         document.documentElement.setAttribute("data-theme",activeTheme);
         const tc=getComputedStyle(document.documentElement).getPropertyValue("--tc").trim();
         const meta=document.querySelector("meta[name='theme-color']");
-        if(meta&&tc)(meta as HTMLMetaElement).content=tc;
+        // While any modal is up, feed iOS the scrimmed colour so the status-bar strip matches the
+        // dimmed content underneath the scrim; plain --tc otherwise. scrimTheme returns its input
+        // unchanged when tc is '' (pre-stylesheet), so the `meta&&tc` guard still does the right thing.
+        if(meta&&tc)(meta as HTMLMetaElement).content=anyModalOpen?scrimTheme(tc):tc;
         // Keep <html>'s background in step too: index.html's boot script stamped the saved theme's
         // color on it so no pre-stylesheet frame ever paints white — without a re-stamp a runtime
         // theme switch would leave the document canvas (what iOS shows on overscroll) at the stale
         // boot color. tc is '' before the stylesheet applies (tests/dev first pass) → keep the stamp.
+        // ⚠ THIS STAYS ON PLAIN --tc always — only the <meta> theme-color follows the modal. The
+        // overscroll canvas sits behind the scrim, which already darkens it; dimming it here too
+        // would double up. The status bar is the reported seam; this is deliberately not over-reached.
         if(tc)document.documentElement.style.background=tc;
-      },[activeTheme]);
+      },[activeTheme,anyModalOpen]);
       // Q11 portrait lock, the non-Android half: the manifest's orientation:'portrait'
       // (vite.config.js webManifest) hard-locks installs only on Android, so on every platform
       // that ignores it (iOS foremost) App covers a sideways screen with RotateOverlay. Gate =
@@ -671,9 +730,19 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // [] deps because it needs nothing from render: a ref call and a stable setter. The stable
       // identity that falls out of that is what keeps the keydown effect from re-subscribing on
       // every render — a nicety, not a requirement (that effect only swaps one window listener).
+      // ⚠ Q3 (round 21): switchMode also PERSISTS the page per preset now (store/sessionMode,
+      // sessionStorage — survives a reload, gone on a full close). It resolves a functional updater
+      // against modeRef (it has [] deps and cannot read `mode`), records the resolved page under the
+      // ACTIVE preset's id, then commits. Every path still routes through here — the bar's mode
+      // CustomSelect, the K/F/B/A/D/L mode keys, H, the Back button, fullReset — so the per-preset
+      // page is captured wherever the change came from. isDefaultMode keeps a garbage value (only
+      // reachable from a tampered sessionStorage the boot effect feeds back in) out of the store.
       const switchMode=useCallback((next: SetStateAction<string>)=>{
         saveReadingPosRef.current?.();
-        setMode(next);
+        const resolved=typeof next==='function'?(next as (m:string)=>string)(modeRef.current):next;
+        modeRef.current=resolved;
+        if(isDefaultMode(resolved))writeSessionMode(usePresets.getState().activeId,resolved);
+        setMode(resolved);
       },[]);
       // Scroll ownership on a mode change — ONE effect, no second opinion. Every scroll position
       // the app sets when you switch screens is set here, on the one container every screen
@@ -812,17 +881,18 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //     for the guide, top for everything else), and fullReset owns it on a reset (it zeroes
       //     the scroller inline, and clears the guide's saved position with it).
       //   • THIS effect owns the load-time invariant, and since round 13 that is TWO writes, not
-      //     one write plus belt-and-braces. The app mounts in Classic (the current tab is never
-      //     persisted, so a cold start or refresh ALWAYS lands there) and html/body/#root are
-      //     clamped in every mode now, so a non-zero ROOT scrollTop would permanently offset the
-      //     fixed layout — the original concern, unchanged.
+      //     one write plus belt-and-braces. `mode` starts "classic" for the first paint (a cold
+      //     open then moves to the preset's Default Mode, a reload to its session page — round-21
+      //     Q3), and html/body/#root are clamped in every mode now, so a non-zero ROOT scrollTop
+      //     would permanently offset the fixed layout — the original concern, unchanged.
       //     ⚠ `appScrollRef.current.scrollTop=0` IS NOW LOAD-BEARING — do not trim it as the
       //     defence-in-depth it used to be. History scroll restoration on a reload replays the
       //     offsets the last session left, and the surface a reader could actually have scrolled is
       //     no longer the document (which can no longer move at all): it is this container. A
       //     reload from a scrolled How to Play hands its offset straight back, into a fresh
-      //     instance that is showing CLASSIC from the top — i.e. a game screen scrolled to a
-      //     position that belongs to a page it is not showing. Zeroing it here is the whole of
+      //     instance that is painting from the top (Classic first, then whichever page Q3 restores,
+      //     whose own scroll ref is a fresh 0) — i.e. a screen scrolled to a position that belongs
+      //     to a page it is not showing at that instant. Zeroing it here is the whole of
       //     "a fresh load starts at the top".
       //     rAF + setTimeout because iOS Safari applies that restoration AFTER the event fires.
       //     window/documentElement/body are still reset alongside (body has overflow:hidden so it
@@ -1302,8 +1372,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
         if(MODE_KEYS[dataKey]){e.preventDefault();switchMode(MODE_KEYS[dataKey]);setSettingsOpen(false);return;}
         // Category 3b: H — toggle to/from guide, preserving previous non-guide mode
         if(dataKey==='H'){e.preventDefault();switchMode(m=>m==='guide'?(prevNonGuideModeRef.current||'classic'):'guide');setSettingsOpen(false);return;}
-        // Category 3c: G — toggle settings popover
-        if(dataKey==='G'){e.preventDefault();toggleSettings();return;}
+        // Category 3c: G — toggle settings popover. ⚠ Unlike the mode letters and H, which REPLACE
+        // the screen and take any mode-screen modal with it (that mode's own `confirmOpen && !visible`
+        // render guard drops it), G opening the panel while a non-panel modal is up — Q7's per-mode
+        // Reset-Stats / "Enable and Reset Stats?" ConfirmModals, or the run breakdown — would slide
+        // the panel in UNDER that modal's z-60 scrim, visible and reachable only by the controls
+        // beneath the finger. So G no-ops while a [data-settings-modal] is up AND the panel is not
+        // what owns it: settingsOpen false ⇒ the modal belongs to a mode screen or the breakdown.
+        // When the panel IS open its own four popups are children of it, and G still closes both
+        // together (tests/settingsPanel.defaults) — that path is untouched.
+        if(dataKey==='G'){if(modalUp()&&!settingsOpen)return;e.preventDefault();toggleSettings();return;}
         // Category 2: data-key DOM walk for game-loop letters and arrows — GATED for the same
         // reason as Category 1, and it is the one that shipped the bug (Override, through a scrim).
         if(modalUp())return;
@@ -1316,7 +1394,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           btn.click();
           return;
         }
-      };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[switchMode,toggleSettings]);
+      };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[switchMode,toggleSettings,settingsOpen]);
       // Q4: install the global press-drag-release input controller (slide-off-to-cancel on every button
       // + answer-grid drag-to-select). One set of document pointer listeners; cleanup on unmount.
       useEffect(()=>installPointerGestures(),[]);
@@ -1442,9 +1520,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // whichever screen was missed.
       // ⚠ WHAT IT DELIBERATELY DOES **NOT** TOUCH: the settings/progress/modePrefs stores (Full
       // Reset resets those separately and BEFORE calling here, so the modes re-hydrate from the
-      // emptied store; a switch must not, or it would wipe the preset it just opened), and the
-      // current mode. Which mode you are on is App state belonging to no preset — no store has ever
-      // held a "last mode" — so a switch leaves the player where they were, on a fresh screen.
+      // emptied store; a switch must not, or it would wipe the preset it just opened).
+      // ⚠ THE CURRENT PAGE IS NO LONGER LEFT ALONE ON A PRESET SWITCH (round-21 Q3). It used to be —
+      // "no store has ever held a last mode" — but the page is now a per-preset, session-lived fact
+      // (store/sessionMode). remountScreens itself still does not set it; the registry subscription
+      // just below does, right after calling this, so the switch's remount and its page change land
+      // in the same commit. A Full Reset (the other caller) sets the page separately, to "classic".
       // useCallback with an empty dep list: every setter it closes over is a useState setter or a
       // ref, all stable for the life of the mount, so the registry subscription below can hold this
       // identity without re-subscribing on every render.
@@ -1488,7 +1569,76 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚠ It still ignores everything ELSE in the registry: renaming or creating a preset, or
       // flipping some OTHER preset's amnesic flag, all rewrite the registry value and none of them
       // may throw away a run in progress.
-      useEffect(()=>usePresets.subscribe((s,prev)=>{if(activeDataId(s)!==activeDataId(prev))remountScreens();}),[remountScreens]);
+      // ⚠ Q3 (round 21): the same subscription now also moves the current PAGE — but only when the
+      // ACTIVE PRESET actually changed (s.activeId !== prev.activeId), never on a bare Amnesic
+      // toggle of the preset you are already on (which changes activeDataId but not which preset's
+      // page you want). The incoming preset shows its session page if it has one this session, else
+      // its `defaultMode` — read via readStoredDefaultMode straight off that preset's own settings
+      // key, because switchPreset fires this subscription BEFORE it rehydrates useSettings, so the
+      // live store still holds the OUTGOING preset's defaultMode at this instant. switchMode then
+      // records the resolved page under the now-active preset's id. There is no data-contamination
+      // risk in setting the page — it is a screen selector, not stats — so doing it here in the
+      // synchronous subscription (one commit, no flash of the old page) is safe.
+      // ⚠ A1 (round 21): switchMode runs BEFORE remountScreens, and an explicit scroller reset runs
+      // after — the same order fullReset uses (switchMode … remountScreens … scrollTop=0), for the
+      // same reason. On the way out of the guide switchMode runs saveReadingPosRef, which copies the
+      // OUTGOING preset's live guide offset into guideScrollYRef; remountScreens then zeroes it, so
+      // whichever runs last wins — with remountScreens first, a later in-preset return to How to Play
+      // opened where the preset you LEFT was scrolled. The scrollTop=0 covers the one case
+      // remountScreens cannot: both presets resolving to the guide, where `mode` never changes and
+      // the scroll-ownership layout effect never re-runs to seat the incoming reader at the top. Both
+      // extra lines are gated on a real active-preset change, so a bare Amnesic toggle of the preset
+      // you are already on is untouched.
+      useEffect(()=>usePresets.subscribe((s,prev)=>{
+        if(activeDataId(s)===activeDataId(prev))return;
+        if(s.activeId!==prev.activeId)switchMode(readSessionMode(s.activeId)??readStoredDefaultMode(s.activeId));
+        remountScreens();
+        if(s.activeId!==prev.activeId&&appScrollRef.current)appScrollRef.current.scrollTop=0;
+      }),[remountScreens,switchMode]);
+      // ★ COLD-OPEN AMNESIC RESEED (round-21 Q1). An Amnesic flag is a SESSION toggle: guest mode is
+      // temporary by construction, so on every full app open EVERY preset's Amnesic flag is reset to
+      // that preset's own saved default (store/userDefaults' effectiveAmnesicDefault — false when
+      // nothing is saved, which is the owner-confirmed revert for a preset set Amnesic with no saved
+      // defaults). Session toggles still stick within the session; this only re-seeds on the next
+      // cold open — the empty dep list makes it a one-shot boot effect, so a mid-session toggle is
+      // never fought.
+      // ⚠ DESIGN: reseed ALL presets here, not just the active one, by reading each preset's OWN
+      // namespaced userDefaults key straight off disk (storedAmnesicDefault) — userDefaults is
+      // per-preset-scoped, so `savedDefaults` bound above is only the ACTIVE preset's. Doing every
+      // preset in one boot pass (rather than piggybacking a per-preset reseed onto switchPreset)
+      // keeps this a single self-contained effect with no session-lifetime tracking state and no
+      // coupling into the switch path. A realistic registry is two or three presets; the reads are
+      // one localStorage.getItem each, once.
+      // ⚠ setPresetAmnesic NO-OPS when the flag already equals the default (its own guard returns
+      // before any registry write), so a preset already at its default causes no applyRegistry, no
+      // discardSessionStats and no remount. When it DOES flip the active preset, the subscription
+      // registered just above catches the activeDataId change and remounts the six screens — which
+      // is why this effect sits AFTER that subscription in source order.
+      // ⚠ `[]` DEPS FIRE ON EVERY MOUNT, an in-place reload included, not only a true cold open — and
+      // that is fine, precisely because of the no-op guard above. On a plain reload every preset's
+      // live flag already equals its stored default, so the whole loop is guards-only. The single
+      // preset it can act on is one whose live Amnesic diverged from its stored default this session
+      // — i.e. a guest turned Amnesic on for a preset with no saved default — and reseeding that one
+      // to false, discarding its session stats, IS the owner-confirmed "guest mode reverts on every
+      // reopen". A reload counts as a reopen here by the same reasoning sessionStorage does.
+      useEffect(()=>{
+        for(const p of usePresets.getState().presets)setPresetAmnesic(p.id,storedAmnesicDefault(p.id));
+      },[]);
+      // ★ COLD-OPEN PAGE (round-21 Q3). `mode` starts "classic" only for the first paint; this
+      // one-shot boot effect immediately moves it to the ACTIVE preset's session page — set if a
+      // reload preserved it this session — else its `defaultMode` ⚙ setting (a true cold open, where
+      // sessionStorage was cleared by the full close). The app-global "open in" pin has ALREADY
+      // been applied by store/presets' hydrate `merge`, so `usePresets.getState().activeId` is the
+      // right preset here with no switchPreset needed. switchMode('classic') on the common factory
+      // path is a same-value setMode → React bails, no re-render. Empty deps: a boot effect, so a
+      // mid-session switchMode is never fought (the subscription above owns switches).
+      // ⚠ AFTER the amnesic reseed above: if that reseed flips the active preset's Amnesic flag it
+      // fires the subscription, but that guards on activeId (unchanged here) so it does not touch
+      // the page — this effect is the one that sets the opening page, once.
+      useEffect(()=>{
+        const pid=usePresets.getState().activeId;
+        switchMode(readSessionMode(pid)??readStoredDefaultMode(pid));
+      },[switchMode]);
       // The two inner scroll regions the panel owns (its own list and the changelog popup's),
       // their useScrollEdgeState hooks, and the footer-button caption auto-fit with its dep-less
       // layout effect and its ResizeObserver -> components/SettingsPanel. Every one of them reads
@@ -1567,23 +1717,26 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // The gear-dot retirement USED to live here, as an effect watching [settingsOpen,gearDot]. It
       // moved up to toggleSettings (declared beside gearDot) — see the reasoning there. Nothing
       // else retires it, so this is the only pointer you need.
-      // Restores the settings the ⚙ panel owns — the 15 menu values + the 2 year-range text mirrors —
+      // Restores the settings the ⚙ panel owns — the 16 menu values + the 2 year-range text mirrors —
       // AND the four capturable mode-screen prefs (Flash speed, both Blitz timers, the AoX run length)
       // to their EFFECTIVE defaults: the user's saved personal defaults when they exist (Q7,
       // store/userDefaults), the factory launch values otherwise. This is the exact MIRROR of Save
-      // Defaults, which copies the same 19-value unit the other way — live → the snapshot.
-      // ★ 19 IS THE SNAPSHOT'S SIZE, NOT THE GEAR'S. Keep the two apart:
-      //   19 RESTORED / SAVED = the 15 store settings + the 4 capturable prefs. (This restore also
-      //      rewrites the 2 year-range text mirrors, which are stored nowhere and so have nothing to
-      //      copy back — hence 21 written here, 19 in the snapshot.)
-      //   20 or 19 COMPARED by the gear's "modified" bar: 12 plain settings + the 4 prefs + the
+      // Defaults, which copies the same 20-value unit the other way — live → the snapshot.
+      // ★ 20 IS THE SNAPSHOT'S SIZE, NOT THE GEAR'S. Keep the two apart:
+      //   20 RESTORED / SAVED = the 16 store settings (round-21 Q3 added `defaultMode`) + the 4
+      //      capturable prefs. (This restore also rewrites the 2 year-range text mirrors, which are
+      //      stored nowhere and so have nothing to copy back — hence 22 written here, 20 in the
+      //      snapshot.) `defaultMode` restores like any other value; it only takes visible effect on
+      //      the next cold open / preset switch (main.tsx's boot effect), so pressing Reset Settings
+      //      does NOT move the page you are currently on.
+      //   21 or 20 COMPARED by the gear's "modified" bar: 13 plain settings + the 4 prefs + the
       //      theme trio judged BY WHAT IS IN EFFECT (2 of the three with Use System On —
       //      darkTheme/lightTheme; 1 with it Off — manualTheme) + the 2 year-range TEXT MIRRORS.
       //      The dormant theme value(s) — one with Use System On, TWO with it Off — are never
       //      compared; settingsAtDefaults below says why at length.
-      // ⚠ SO IT IS NO LONGER A SUBSET OF THE 19, and round 15 is what changed that: the 2 mirrors
+      // ⚠ SO IT IS NO LONGER A SUBSET OF THE 20, and round 15 is what changed that: the 2 mirrors
       // are compared but not saved. Nothing breaks, because this restore WRITES them (the resetTo
-      // line below) even though the snapshot has nothing to write back — the 21-written / 19-saved
+      // line below) even though the snapshot has nothing to write back — the 22-written / 20-saved
       // asymmetry above is exactly what keeps "one tap clears a lit gear" true for the two terms
       // that are compared and not stored.
       // One tap therefore still always clears a lit gear
@@ -1597,7 +1750,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // timer/run-length too). Triggers the unified popover-settings effect, which regenerates the
       // current date as appropriate (Random Format / Date Format / Leap Chance are always-regen).
       const resetSettings=()=>{
-        // The 15 store-held settings in one shot (store/settings applySettings), then the 2 transient
+        // The 16 store-held settings in one shot (store/settings applySettings), then the 2 transient
         // text mirrors that live locally, then the 4 capturable mode-screen prefs (store/modePrefs
         // applyPrefs — the same call Full Reset makes; the other mode-prefs keep their live values).
         applySettingsStore(defSettings);
@@ -1631,7 +1784,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // by construction none of them reads those. Pinned by the Full Reset dormant-theme case in
       // tests/settingsPanel.defaults.dom.
       // ⚠ THE GUARD IS NOW THE ONLY THING MAKING THE DIMMED BUTTON INERT, the same shape as
-      // armFullReset's in the panel. Round 14 wrote it as defense in depth behind a
+      // openFullResetConfirm's in the panel. Round 14 wrote it as defense in depth behind a
       // pointer-events-none className that stopped taps while CSS could not stop a keyboard; B7
       // (round 15) removed that className so the not-allowed cursor could paint at all — a
       // pointer-events:none element is never hit-tested — leaving this line to refuse the pointer,
@@ -1667,7 +1820,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         setSettingsOpen(false);
         setAppAtBottom(true);
         setAppScrolledFromTop(false);
-        // Settings popover → EFFECTIVE defaults (15 store values incl. theme + the 2 transient
+        // Settings popover → EFFECTIVE defaults (16 store values incl. theme + the 2 transient
         // input mirrors — the user's saved personal defaults when present). Since round-6 Q7 this
         // ALSO applies the 4 capturable mode prefs; the resetModePrefs()+applyModePrefs(defPrefs) pair
         // below re-establishes them over the factory modePrefs reset, so that write is subsumed here
@@ -1718,6 +1871,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // the guide, so this clears it AFTER the capture rather than instead of it). ★ THE SAME CALL
         // A PRESET SWITCH MAKES; see remountScreens, which is shared precisely so the two can never
         // drift apart.
+        // …and this preset's PARKED ended round/run (round-21 Q11, store/sessionRound). Full Reset is
+        // a manual reset — the owner's rule is "only a manual Reset or a full app close clears an
+        // ended round" — so it must clear the park BEFORE the remount below, or the timed screens'
+        // getInitialState would re-read the still-parked blob and restore the very round this button
+        // just erased. Scoped to the active preset, like every other line here (a switch's own
+        // discard covers the preset you leave); an amnesic preset parks in the same sessionStorage
+        // keyed by id, so this one call covers that case too — no amnesic branch needed. The per-mode
+        // Reset button never reaches here: it drives the mode's own idle transition, whose mirror
+        // effect discards the park itself.
+        discardSessionRounds(usePresets.getState().activeId);
         // How to Play is in the six for its ONE piece of state, the open panel: it used to be
         // conditionally rendered, so leaving it dropped that for free — now that it stays mounted
         // (Q6, round 9), a reset that left a panel hanging open would not be the launch state.
@@ -1741,7 +1904,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚠ NOT "every store value": at
       // least one of the theme trio is ALWAYS excluded (BOTH darkTheme and lightTheme while Use
       // System is Off), which is the whole point of themeAtDefaults just below —
-      // 14 of the 15 settings are compared with Use System On, 13 with it Off. Say it that way; an
+      // 15 of the 16 settings are compared with Use System On, 14 with it Off. Say it that way; an
       // "every value" phrasing here is the over-claim this comment used to make.
       // ★ AND IT IS THE PANEL, NOT THE STORE: the last two terms are the two year-range TEXT
       // MIRRORS (components/useYearRangeMirrors), so a year that has been TYPED but not yet
@@ -1774,7 +1937,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // both offered, permanently. Comparing only the live pair is both the honest definition and
       // the fix, and it retires the whole class of dormant-value false positives.
       const themeAtDefaults=useSystem?(darkTheme===defSettings.darkTheme&&lightTheme===defSettings.lightTheme):(manualTheme===defSettings.manualTheme);
-      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&rotateDots===defSettings.rotateDots&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
+      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&rotateDots===defSettings.rotateDots&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
       // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator (Q8), the Save
       // Defaults dim AND the Reset Settings dim. True when live state diverges from the effective
       // defaults in EITHER store — any menu setting, either year BOX, or any of the four capturable
@@ -1800,11 +1963,6 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // call — checking only the permanent list would leave the button lit while an amnesic session's
       // entries sat on screen with nothing left for the press to actually remove.
       const isFullyReset=mode==='classic'&&settingsAtDefaults&&displayLookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&aoxIsFresh&&classicIsFresh&&flashIsFresh&&blitzIsFresh&&deductionIsFresh;
-      // The "disarm if state flips to fully-reset while armed" safety net went into the panel with
-      // the rest of the two-tap machine. It used to have to sit exactly HERE, after the declaration
-      // above, because its dependency array read isFullyReset and an earlier position was a real
-      // TDZ crash; as a PROP on the other side of the boundary that hazard no longer exists, so
-      // nothing constrains where these two declarations sit any more.
       return(
         <>
           {/* Both overlays are fixed z-100 covers; the Updating screen renders LATER in the DOM
@@ -1829,52 +1987,59 @@ import BlitzMode from './modes/BlitzMode.jsx'
             the screen edge against a 15.59px gutter on the left. That asymmetry WAS the visible
             symptom, and it is why "just add a fourth control" was never an option.
 
-            WHAT THIS ROW COSTS NOW (Q6, round 20) — THERE IS NO SLACK LEFT TO MEASURE, BY
-            CONSTRUCTION, and that is the invariant that replaced "22.70px of slack sits in the
-            gap between two groups": the row is ONE flat flex container, three controls are
-            `shrink-0` (fixed, content-sized) and the FOURTH — the preset switcher — is
-            `flex-1 min-w-0`, so it consumes whatever the other three and their gaps do not, always,
-            with nothing left over for `justify-between` to distribute any more (that utility is
-            gone from the row for exactly this reason). scrollWidth == clientWidth at every width
-            below, which is now a STRUCTURAL fact rather than a coincidence of an arithmetic sum
-            landing under the ceiling — a flex-1 min-w-0 child cannot overflow its container by
-            growing; it can only be squeezed toward its own MINIMUM (PRESET_NAME_COL,
-            components/PresetSwitcher) if the other three ever grew too large to fit alongside it.
-            FIXED (what the other three + three gaps cost, measured 360×800, root 15.6px):
-                logo 24.00 + gap 5.84 + mode 107.30 + gap 5.84 + ⚙ 40.25 + gap 5.84  = 189.08
-            FLOATS: the preset switcher gets whatever is left of the row's own content box —
-            328.81 − 189.08 = 139.73px at 360×800 (up from the OLD fixed 117.03px it shipped Q4-5
-            with; the reclaimed slack is exactly where it went). The ⚙'s right edge still lands at
-            344.41 — 15.59px from the screen edge, matching the left gutter to the pixel, which is
-            the same fact as "it fits" stated so a human can see it.
+            WHAT THIS ROW COSTS NOW (Q10, round 21) — the row structure is unchanged from Q6 (ONE
+            flat flex container; three controls `shrink-0`, content-sized; the FOURTH — the preset
+            switcher — `flex-1 min-w-0`, consuming whatever the other three and their gaps do not).
+            What Q10 changed is ONE fixed cost: the mode selector's trigger is now pinned to its
+            OWN dropdown's outer width (triggerMatchesDropdown, components/CustomSelect) — the
+            owner wanted the closed button as wide as the open menu, and since the menu's rows use
+            a bigger text tier and more padding than the trigger, "both size to content" could
+            never have made them equal. So the mode trigger grew from 107.30px to 142.02px
+            (+34.72), which is the measured outer width of its `width:max-content` dropdown
+            ("How to Play" at the row's `text-[15px]` + `pl-4 pr-4` + ✓-column + `gap-2.5`, inside
+            the panel's `p-1`). THE DROPDOWN ITSELF DID NOT MOVE — measured 142.02px both before
+            and after Q10 (the `dropdownWidth` default stays `'content'` for the mode selector).
+            FIXED (the three shrink-0 controls + three gaps, measured 360×800, root 15.6px):
+                logo 24.00 + gap 5.84 + mode 142.02 + gap 5.84 + ⚙ 40.25 + gap 5.84  = 223.79
+                                        └─ was 107.30 pre-Q10 (fixed sum was 189.08)
+            FLOATS: the preset switcher gets whatever is left of the row's 328.81px content box —
+            328.81 − 223.79 = 105.02px at 360×800 (down from 139.73px pre-Q10; the mode selector's
+            +34.72 came straight out of here). The ⚙'s right edge still lands at 344.40 — 15.59px
+            from the screen edge, matching the left gutter, i.e. the row still fits with no
+            horizontal overflow (scrollWidth == clientWidth, measured, at both sizes below).
 
-            THE THREE THINGS THAT PAID FOR THE FOURTH CONTROL IN THE FIRST PLACE (Q4-5, unchanged
-            by Q6 — the fixed sum above is the same 189.08 either way, just regrouped): the
-            wordmark's removal (−135.05px, the owner's call — the a11y cost is handled at the <h1>
-            below), the mode selector's pr-9 → pr-6 (−11.70px), and gap-2 → gap-1.5 on all three
-            gaps (−5.85px). Q6 spent nothing further and freed nothing further — it only changed
-            WHO gets to spend whatever is left over turn by turn, from "nobody, it sits as a gap"
-            to "the preset switcher, unconditionally".
+            THE PRESET SWITCHER STILL CANNOT FORCE AN OVERFLOW, and that is still structural: its
+            wrapper is `flex-1 min-w-0`, so it can be squeezed all the way to 0 — the 4.5em floor
+            (PRESET_NAME_COL) lives on the NAME CELL *inside* the trigger, under two `overflow:hidden`
+            ancestors, so it clips rather than pushes. A growing fixed sum costs the switcher
+            display room, never the row its fit.
 
-            ⚠ THE FIXED SUM ABOVE IS THE THING TO WATCH NOW, not a slack number — the switcher's
-            own MINIMUM (PRESET_NAME_COL) is what actually stops fitting first if the fixed sum
-            ever grows. At 360×900 (root font 16.64px, the ceiling for any 360-wide device — the
-            `0.95rem + 0.4vw` term caps there and `1.95vh` overtakes it at ~853px of height), the
-            row's content box shrinks to 326.75 and the switcher still gets 126.95px of it —
-            comfortably clear of the 6em (≈104px at that root) floor. tests/topBar.dom guards the
-            structural half (which children carry `shrink-0` vs `flex-1 min-w-0`) as class reads,
-            which is the most a jsdom suite can do about geometry no jsdom suite can compute.
+            Q10's COST TO THE NAME CELL WAS PAID IN GROUP C, not carried forward as a flag. The
+            mode trigger's +34.72px came straight out of the switcher's flex-1 share (its trigger is
+            ~105px at 360×800 now, not ~140px), which left the OLD 6em name-cell floor (~82px at
+            text-sm) wider than the trigger's usable inner width once `px-2.5` + `pr-6` (the chevron
+            lane) come out — so a near-floor name clipped UNDER the ▲▼ on the tightest 360-wide
+            layout, and the live pixel cap (lib/presetNameWidth, which measures that cell's rect)
+            read the inflated floor and let over-wide names through. Group C dropped PRESET_NAME_COL
+            to 4.5em (~61px at text-sm), which sits inside the tightest usable width with margin —
+            re-verified in the layout engine at 360×900, where the cell clears the chevron by 19px.
+            The floor's full derivation now lives beside the constant in components/PresetSwitcher;
+            nothing about it is left open. tests/topBar.dom guards the structural half (which
+            children carry `shrink-0` vs `flex-1 min-w-0`) as class reads, which is the most a jsdom
+            suite can do about geometry no jsdom suite can compute.
             ⚠ AND CHROMIUM IS NOT AN IPHONE. Glyph advances differ, the system UI stack differs, and
             ONLY THE OWNER'S DEVICE can confirm the real thing. What is claimed here is that the
             arithmetic is no longer guesswork, not that the phone has agreed. (All of the numbers
-            in this block, Q6's included, are a REAL headless-Chromium measurement of the dev
-            build — not the paper arithmetic components/PresetSwitcher's own history warns against
-            trusting on its own.)
+            in this block, Q6's and Q10's included, are a REAL headless-Chromium measurement of the
+            dev build — not the paper arithmetic components/PresetSwitcher's own history warns
+            against trusting on its own.)
 
-            ⚠ --bar-h IS UNCHANGED BY ALL OF THIS, and that was checked rather than assumed: the
-            resting bar measures 56.594px before and after, byte-identical, because the row's height
-            has always been set by the pill controls (py-2 + text-sm + 1px borders = 37.09px) and
-            never by the 19.5px wordmark that sat beside them. So index.css's hand-written
+            ⚠ --bar-h IS UNCHANGED BY ALL OF THIS, and that was checked rather than assumed — Q10
+            re-measured it at 56.594px, byte-identical to pre-Q10, because Q10 only sets a
+            `min-width` on the mode trigger (its height is untouched) and the width-mirror it adds
+            is `position:absolute`, out of flow. The row's height has always been set by the pill
+            controls (py-2 + text-sm + 1px borders = 37.09px) and never by the 19.5px wordmark that
+            sat beside them. So index.css's hand-written
             placeholder `:root{--bar-h:57px}` is still right and MUST NOT be touched. If a later
             edit changes the bar's resting height AT ALL, that placeholder has to move with it or
             every cold start jumps by the difference before the ResizeObserver catches up — that
@@ -1941,7 +2106,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                 is that one control. `flex-1 min-w-0` sits on the switcher's OWN wrapper below;
                 every other child keeps `shrink-0`, unchanged from before. */}
             <div className="flex items-center gap-1.5">
-              {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Dot Layout) — BUT ONLY
+              {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Rotate Dots CCW) — BUT ONLY
                   WHILE Input IS Dots (Q3, round 20). The app icon IS that 7-dot grid, coordinate
                   for coordinate, so turning the input and leaving the mark upright would break the
                   very claim How-to-Play makes about them — while turning the mark when there are
@@ -2012,7 +2177,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   preset switcher beside it already wears, so the two now match by construction
                   instead of by coincidence. */}
               <div className="shrink-0">
-                <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{switchMode(v);setSettingsOpen(false);}} options={MODE_LABELS} ariaLabel="Mode" showChevron pressDrag className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left"/>
+                <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{switchMode(v);setSettingsOpen(false);}} options={MODE_LABELS} ariaLabel="Mode" showChevron pressDrag triggerMatchesDropdown className="panel rounded-xl px-2.5 py-2 pr-6 text-sm focus:outline-hidden focus-ring text-left"/>
               </div>
               {/* THE ⚙ AT THE FAR EDGE. The gear moved from the INSIDE of the old right-hand pair
                   to the OUTSIDE of it (owner's layout: gear far right); flattening the row to four
@@ -2051,7 +2216,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   • CONDITIONALLY RENDERED. A closed panel must have NO DOM — the suite's role
                     queries are unscoped by design, so an always-mounted-and-hidden panel would
                     double every radio in the document. It is also what makes unmount the discard
-                    for the five modals and the Full Reset arm.
+                    for the settings modals (the Full Reset / Reset Settings / Clear confirms
+                    among them since round 21).
                   • THIS POSITION. It is a sibling of the title/gear row inside the bar's `relative`
                     inner wrapper, and the card is `absolute top-full left-4 right-4` against that
                     wrapper. Anywhere else, or inside a wrapper of its own, and the panel silently

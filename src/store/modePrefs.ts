@@ -22,7 +22,8 @@ import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './pre
 // there is no arm/reset and hiding can never desync. `allowMistakes` is likewise namespaced
 // (blitz*/aox*).
 //
-// NOT here (intentionally): the current tab — the app always opens to Classic; and any
+// NOT here (intentionally): the current page — a preset's opening page is the `defaultMode` ⚙
+// setting in store/settings, and its live session page is store/sessionMode (round-21 Q3); and any
 // mid-game state — a half-finished timed run can't fairly resume.
 //
 // Same pattern as settings.ts: Zustand `persist` (localStorage 'cg-modeprefs-v1',

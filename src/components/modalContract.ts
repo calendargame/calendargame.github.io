@@ -4,13 +4,16 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 // ─────────────────────────────────────────────────────────────────────────
 // components/modalContract — what it takes to be a MODAL in this app, in one place.
 //
-// The app has one modal idiom and now five users of it: the four ⚙ Settings popups (Save Defaults,
-// the defaults manager, the Clear confirm, the Changelog) and the run breakdown that the MoX/Blitz
-// stat strip opens on a finished run. Every one of them owes the same five things, and until this
-// module existed four of them owed it four times over — four near-identical Escape effects sitting
-// in a row in SettingsPanel, and a Tab trap that only the popups declared inside that one component
-// could reach. The fifth user is what made the copies indefensible: a modal living in a MODE screen
-// could not import any of it, so it would either have grown a fifth copy or quietly skipped a term.
+// The app has one modal idiom and its users are: the ⚙ Settings popups (Save Defaults, the defaults
+// manager, the Changelog), the run breakdown that the MoX/Blitz stat strip opens on a finished run,
+// and — since round 21 — the shared components/ConfirmModal, one component that every reset-style
+// confirmation reuses (Full Reset, Reset Settings, Clear Saved Defaults, each casual mode's Reset
+// Stats, and the "Enable and Reset Stats?" desync case). Every one owes the same five things, and
+// before this module the settings popups owed it four times over — near-identical Escape effects
+// sitting in a row in SettingsPanel, and a Tab trap only the popups declared inside that one
+// component could reach. The run breakdown is what made the copies indefensible: a modal living in
+// a MODE screen could not import any of it, so it would grow its own copy or quietly skip a term.
+// ConfirmModal now owns all five terms internally, so a caller owes only the copy.
 //
 // THE CONTRACT, all five terms:
 //   1. FOCUS ON OPEN — the card is tabIndex={-1} role="dialog" aria-modal="true" and takes focus, so
@@ -83,15 +86,27 @@ export function useModalEscape(open: boolean, close: () => void, guardTextEntry:
 
 // Term 4 — the focus trap. Goes on the SCRIM's onKeyDown, so it sees every Tab inside the modal.
 // Plain Tab / Shift+Tab traverse natively in the middle and WRAP at the ends; focus never escapes to
-// the page under the scrim. A one-control modal is the degenerate case and works: first === last, so
-// Tab wraps in place. stopPropagation keeps the press from the app-wide Tab shortcut (which would
-// open the mode selector behind the modal); that shortcut's own handler also bails while a
-// [data-settings-modal] is mounted, for presses that start outside this tree.
+// the page under the scrim. Two degenerate cases, both handled:
+//   • ONE control — first === last, so Tab wraps in place.
+//   • ZERO controls — the run breakdown and the Changelog popup since round 21 dropped their Close
+//     buttons, leaving a card whose only content is text. There is nothing to cycle, so the press
+//     is consumed and focus is pinned on the dialog card itself (it is tabIndex={-1} and was
+//     focused on open) rather than allowed to walk out to the page under the scrim.
+// stopPropagation keeps the press from the app-wide Tab shortcut (which would open the mode selector
+// behind the modal); that shortcut's own handler also bails while a [data-settings-modal] is
+// mounted, for presses that start outside this tree.
 export const trapModalTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
   if (e.key !== 'Tab') return
   e.stopPropagation()
   const f = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button,input'))
-  if (f.length === 0) return
+  if (f.length === 0) {
+    const card = e.currentTarget.querySelector<HTMLElement>('[role="dialog"]')
+    if (card) {
+      e.preventDefault()
+      card.focus()
+    }
+    return
+  }
   const first = f[0],
     last = f[f.length - 1],
     ae = document.activeElement

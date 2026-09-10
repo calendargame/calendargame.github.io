@@ -13,7 +13,7 @@
 // performance.now in lockstep, so the C3a expiry tests fast-forward the per-question clock
 // deliberately with vi.advanceTimersByTime (qSec=1 via the modePrefs store).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react'
+import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
@@ -60,6 +60,18 @@ const tick = (ms) =>
   })
 const dayBtn = (name) => screen.getByRole('button', { name })
 const ctrl = (name) => screen.getByRole('button', { name })
+// Q7 round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
+const fireResetSettings = () => {
+  act(() => fireEvent.click(ctrl('Reset Settings')))
+  act(() =>
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Reset Settings for this preset?' })).getByRole(
+        'button',
+        { name: 'Reset Settings' },
+      ),
+    ),
+  )
+}
 // Not offered = the app is withholding the control. How that is SPELLED lives in one place
 // (tests/helpers/offered) so this file never names a class string.
 const isDisabled = (btn) => !isOffered(btn)
@@ -98,13 +110,15 @@ function requireStatCell(label) {
 function statValue(label) {
   return requireStatCell(label).querySelector('[data-statval]').textContent.trim()
 }
-// Close the round breakdown (the popup an ended strip's tap now opens — sub-group 3C). Used by the
-// Q8 tests, whose subject is the hide toggle: they still tap the strip, and this puts the screen
-// back so the assertions after the tap are about the strip and not about the popup over it.
+// Close the run/round breakdown (the popup an ended strip's tap now opens — sub-group 3C). Used by
+// the Q8 tests, whose subject is the hide toggle: they still tap the strip, and this puts the
+// screen back so the assertions after the tap are about the strip and not about the popup over it.
+// Round 21 removed the popup's Close button (and its title is now "Round Breakdown" per round /
+// "Run Breakdown" per question), so this dismisses it the way a player now does — Escape.
 const closeBreakdown = () => {
-  const dialog = screen.getByRole('dialog', { name: 'Round breakdown' })
+  screen.getByRole('dialog') // it is up…
   act(() => {
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    fireEvent.keyDown(document, { key: 'Escape' }) // …and Escape is how it closes now
   })
 }
 // Tap a stat cell (Q8: a timing-trio cell is a button that toggles the visual-only hide). It fires
@@ -753,7 +767,7 @@ describe('Blitz — Q7 round-6 (Reset Settings restoring the round timer reconci
     begin()
     expect(ctrl('Reset')).toBeInTheDocument() // active → Reset shown
     toggleSettings() // open ⚙ → snapshot (blitzSec 120)
-    act(() => fireEvent.click(ctrl('Reset Settings'))) // restores blitzSec → 60 (the panel is already factory)
+    fireResetSettings() // restores blitzSec → 60 (the panel is already factory)
     expect(ctrl('Reset')).toBeInTheDocument() // still active while open (deferred to close)
     toggleSettings() // close → the blitzSec dep changed → resetRound
     expect(ctrl('Begin')).toBeInTheDocument() // round reset to idle
@@ -768,7 +782,7 @@ describe('Blitz — Q7 round-6 (Reset Settings restoring the round timer reconci
     clickText('Reveal') // ends the round → timerDone
     expect(ctrl('Reset')).toBeInTheDocument()
     toggleSettings()
-    act(() => fireEvent.click(ctrl('Reset Settings')))
+    fireResetSettings()
     toggleSettings()
     expect(ctrl('Begin')).toBeInTheDocument() // ended round reset on close
     expect(useModePrefs.getState().blitzSec).toBe(60)
@@ -1335,7 +1349,7 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
     expect(statValue('Score')).toBe('1/1')
     expect(ctrl('Reset')).toBeInTheDocument() // running
     toggleSettings()
-    act(() => fireEvent.click(ctrl('Reset Settings')))
+    fireResetSettings()
     expect(useSettings.getState().inputStyle).toBe('buttons') // the reset really fired…
     expect(ctrl('Reset')).toBeInTheDocument() // …and the round is untouched while the panel is up
     expect(statValue('Score')).toBe('1/1')

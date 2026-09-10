@@ -26,6 +26,7 @@ import {
   movePreset,
   switchPreset,
   deletePreset,
+  setOpenInPreset,
   activePreset,
 } from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
@@ -232,6 +233,82 @@ describe('the registry', () => {
     renamePreset(1, 'y'.repeat(80))
     expect(activePreset().name).toHaveLength(MAX_PRESET_NAME)
     expect(renamePreset(99, 'nobody')).toBe(false)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// THE "OPEN IN" PIN (round-21 Q3) — an app-global registry field: which preset a fresh app open
+// lands in. 'last' (the default, and every pre-Q3 build's behaviour) = the persisted activeId as-is;
+// a preset id = that preset, whatever was active last time. Applied by usePresets' hydrate `merge`.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('the "open in" pin', () => {
+  beforeEach(resetAll)
+
+  it('defaults to "last" and normalizes a garbage or dangling value back to it', () => {
+    expect(makePresetRegistryDefaults().openInPreset).toBe('last')
+    // An id that names no preset, a string, the absent key of a pre-Q3 payload — all collapse to 'last'.
+    expect(normalizeRegistry({ presets: [{ id: 1, name: 'A' }], activeId: 1 }).openInPreset).toBe(
+      'last',
+    )
+    expect(
+      normalizeRegistry({ presets: [{ id: 1, name: 'A' }], activeId: 1, openInPreset: 9 })
+        .openInPreset,
+    ).toBe('last')
+    expect(
+      normalizeRegistry({ presets: [{ id: 1, name: 'A' }], activeId: 1, openInPreset: 'nope' })
+        .openInPreset,
+    ).toBe('last')
+    // A pin that still names a live preset survives.
+    expect(
+      normalizeRegistry({
+        presets: [
+          { id: 1, name: 'A' },
+          { id: 2, name: 'B' },
+        ],
+        activeId: 1,
+        openInPreset: 2,
+      }).openInPreset,
+    ).toBe(2)
+  })
+
+  it('setOpenInPreset writes the registry and refuses an id that names no preset', async () => {
+    createPreset('Timed') // preset 2
+    expect(setOpenInPreset(2)).toBe(true)
+    expect(usePresets.getState().openInPreset).toBe(2)
+    expect(setOpenInPreset(2)).toBe(false) // already set — nothing to do
+    expect(setOpenInPreset(99)).toBe(false) // no such preset
+    expect(usePresets.getState().openInPreset).toBe(2)
+    expect(setOpenInPreset('last')).toBe(true)
+    expect(usePresets.getState().openInPreset).toBe('last')
+  })
+
+  it('a live pin becomes the active preset on the next cold start; "last" keeps the persisted activeId', async () => {
+    createPreset('Timed') // preset 2
+    switchPreset(2) // activeId on disk is now 2
+    switchPreset(1) // …and now 1
+    setOpenInPreset(2) // but the pin says open in 2
+    let fresh = await reopenApp()
+    expect(fresh.usePresets.getState().activeId).toBe(2)
+    expect(fresh.usePresets.getState().openInPreset).toBe(2)
+
+    // Clear the pin — a cold start then honours whatever was active last (the pre-Q3 behaviour).
+    fresh.control.setOpenInPreset('last')
+    fresh.control.switchPreset(1)
+    fresh = await reopenApp()
+    expect(fresh.usePresets.getState().activeId).toBe(1)
+    expect(fresh.usePresets.getState().openInPreset).toBe('last')
+  })
+
+  it('deleting the pinned preset drops the pin back to "last"', async () => {
+    createPreset('A') // 2
+    createPreset('B') // 3
+    setOpenInPreset(3)
+    expect(usePresets.getState().openInPreset).toBe(3)
+    deletePreset(3)
+    expect(usePresets.getState().openInPreset).toBe('last')
+    // A cold start after that opens on whatever is active, not a namespace nothing owns.
+    const fresh = await reopenApp()
+    expect(fresh.usePresets.getState().presets.map((p) => p.id)).toEqual([1, 2])
   })
 })
 

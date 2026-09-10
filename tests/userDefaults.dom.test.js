@@ -121,7 +121,7 @@ describe('userDefaults store — a v1 saved-snapshot with the old dotOrientation
   })
 
   // The end-to-end payoff, not just the store-level shape: a stale pre-Q3 saved snapshot must no
-  // longer make Reset Settings / Full Reset silently revert Dot Layout — the exact symptom the
+  // longer make Reset Settings / Full Reset silently revert Rotate Dots CCW — the exact symptom the
   // ship-blocker finding described. effectiveSettingsDefaults is the one function both call.
   it('effectiveSettingsDefaults reads the migrated rotateDots, not the stale factory false', async () => {
     const { rotateDots: _drop, ...oldShape } = SETTINGS_DEFAULTS

@@ -8,7 +8,7 @@
 // buttons stay in DOM order Sun..Sat (the keyboard 0–9 path reads children[idx]); each
 // entry is the 1-indexed CSS grid cell (row r, column c) the dot is placed in.
 //
-// ★ THE LAYOUT NOW HAS TWO ORIENTATIONS (Settings → Display → Dot Layout), and this
+// ★ THE LAYOUT NOW HAS TWO ORIENTATIONS (Settings → Display → Rotate Dots CCW), and this
 // file is where the second one is BUILT rather than typed out. The upright one below
 // matches the app icon / W5Logo coordinate for coordinate: Sun centre, Mon
 // bottom-right, Tue mid-right, Wed top-right, Thu bottom-left, Fri mid-left, Sat
@@ -52,7 +52,7 @@ const COLUMNS: ReadonlyArray<DotCell> = [
   { r: 1, c: 1 }, // 6 Saturday  — top-left
 ]
 
-// A quarter turn COUNTERCLOCKWISE in a 1-indexed 3×3: (r,c) → (4−c, r). Read it off the
+// A 90° quarter-turn COUNTERCLOCKWISE in a 1-indexed 3×3: (r,c) → (4−c, r). Read it off the
 // corners — top-left (1,1) lands bottom-left (3,1), top-right (1,3) lands top-left
 // (1,1) — and the centre (2,2) is its own image, which is why Sunday never moves.
 // ★ COMPUTED, NOT TYPED OUT, and that is the point: a hand-written second array is a

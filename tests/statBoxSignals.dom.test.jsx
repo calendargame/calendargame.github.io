@@ -40,7 +40,7 @@
 // real <App/> through Classic, because the bug was in the shared hook's derivation and only a real
 // screen with a real Save Stats switch can prove the two flags no longer collapse into one.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import StatPanel from '../src/components/StatPanel.jsx'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
@@ -411,5 +411,45 @@ describe('Classic — your toggle and Save Stats are two separate signals (C1, t
     expect(isDimmed(strip())).toBe(false)
     tapStat('Score')
     expect(valueOf('Score')).toBe('1/1') // and it is still the same tap that brings it back
+  })
+
+  // ── "Enable and Reset Stats?" — the timing-desync confirm (Q7 round 21) ──────────────────────
+  // When timing is hidden the clock STOPS (Classic feeds useGameEngine timingOff:true), so a
+  // question answered while hidden bumps `good` but records no time. Un-hiding then cannot
+  // reconcile — so it opens the shared ConfirmModal, and confirming runs eng.fullReset(). Was an
+  // inline two-tap arm rendered INSIDE the stats strip before this round.
+  const enableResetDialog = () => screen.getByRole('dialog', { name: 'Enable and Reset Stats?' })
+
+  it('un-hiding timing after the stats drifted opens the confirm popup, not an inline arm', () => {
+    mountApp() // Classic ships with timing hidden
+    expect(valueOf('Last')).toBe('') // hidden
+    answerCorrect() // good → 1, but no time recorded (clock stopped while hidden)
+    expect(valueOf('Score')).toBe('1/1')
+    tapStat('Last') // try to un-hide → desync → the popup
+    expect(enableResetDialog()).toBeInTheDocument()
+    // The strip is still six plain cells — no merged warning button smuggled back in.
+    expect(cells()).toHaveLength(6)
+    // Cancel leaves everything: still hidden, stats intact.
+    act(() => {
+      fireEvent.click(within(enableResetDialog()).getByRole('button', { name: 'Cancel' }))
+    })
+    expect(screen.queryByRole('dialog', { name: 'Enable and Reset Stats?' })).toBeNull()
+    expect(valueOf('Score')).toBe('1/1')
+    expect(valueOf('Last')).toBe('') // still hidden
+  })
+
+  it('confirming Enable and Reset Stats turns timing on and wipes this mode back to fresh', () => {
+    mountApp()
+    answerCorrect()
+    expect(valueOf('Score')).toBe('1/1')
+    tapStat('Last')
+    act(() => {
+      fireEvent.click(
+        within(enableResetDialog()).getByRole('button', { name: 'Enable and Reset Stats' }),
+      )
+    })
+    expect(screen.queryByRole('dialog', { name: 'Enable and Reset Stats?' })).toBeNull()
+    expect(valueOf('Score')).toBe('0/0') // the full reset fired
+    expect(valueOf('Last')).toBe('—') // timing is ON now (a real readout, not blank) with no data yet
   })
 })

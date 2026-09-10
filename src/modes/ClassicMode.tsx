@@ -3,11 +3,17 @@
 // behaviour changes by living here.
 import { useEffect } from 'react'
 import type { ModeProps, GenDate, FmtDate } from './modeTypes.js'
-import { useButtonFlash, useStatsHideToggles, engineFresh, useResetStatsArm } from './modeHooks.js'
+import {
+  useButtonFlash,
+  useStatsHideToggles,
+  engineFresh,
+  useResetStatsConfirm,
+} from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
-import { RESET_STATS_ARMED_CLASS, RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
+import { RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
@@ -69,9 +75,9 @@ function ClassicMode({
     setModeStats('classic', state.stats)
   }, [state.stats, setModeStats])
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
-  // Hideable stats chrome (show/hide toggles + two-tap "Enable and Reset Stats?" arm + the 6-box
-  // stats strip), shared with Flash/Deduction via useStatsHideToggles.
-  const { timingArmed, statsArr, armedSpan, armedBtnRef } = useStatsHideToggles({
+  // Hideable stats chrome (show/hide toggles + the "Enable and Reset Stats?" desync confirm + the
+  // 6-box stats strip), shared with Flash/Deduction via useStatsHideToggles.
+  const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
     eng,
     saveStats,
     visible,
@@ -110,13 +116,15 @@ function ClassicMode({
     engineFresh(state) &&
     timingOff === true &&
     scoringOff === false &&
-    timingArmed === false &&
+    enableResetOpen === false &&
     flash === null
-  const { resetArmed, onResetTap, resetBtnRef } = useResetStatsArm(
-    eng.resetStats,
-    !engineFresh(state),
-    visible,
-  ) // Q2 two-tap confirm
+  // Q2 / Q7 — the Reset Stats confirmation popup.
+  const {
+    confirmOpen: resetStatsOpen,
+    onResetTap,
+    closeConfirm: closeResetStats,
+    confirmReset: confirmResetStats,
+  } = useResetStatsConfirm(eng.resetStats, !engineFresh(state), visible)
   useEffect(() => {
     onFreshChange?.(classicIsFresh)
   }, [classicIsFresh, onFreshChange])
@@ -126,23 +134,33 @@ function ClassicMode({
       {/* dimmed = Save Stats off = nothing is being recorded: the whole strip dims and every value
           reads '—'. A group you turned off yourself renders BLANK instead, from `off` inside
           statsArr — two facts, two flags. See the three-signal note in components/StatPanel. */}
-      <StatPanel
-        stats={statsArr}
-        dimmed={!saveStats}
-        armedSpan={armedSpan}
-        armedBtnRef={armedBtnRef}
-      />
+      <StatPanel stats={statsArr} dimmed={!saveStats} />
       <div className="mt-3">
-        <button
-          type="button"
-          data-key="S"
-          ref={resetBtnRef}
-          className={resetArmed ? RESET_STATS_ARMED_CLASS : RESET_STATS_BTN_CLASS}
-          onClick={onResetTap}
-        >
-          {resetArmed ? 'Reset Stats?' : 'Reset Stats'}
+        {/* Reset Stats — a static caption now; the confirmation is the shared ConfirmModal below
+            (Q7 round 21 replaced the two-tap in-place arm). The `S` shortcut routes through this
+            same onClick, so it opens the popup too. */}
+        <button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={onResetTap}>
+          Reset Stats
         </button>
       </div>
+      <ConfirmModal
+        open={resetStatsOpen}
+        onCancel={closeResetStats}
+        onConfirm={confirmResetStats}
+        title="Reset Stats?"
+        body="Clears this mode's stats and all-time bests for the current preset. Per-preset — the other modes keep theirs."
+        confirmLabel="Reset Stats"
+        backButtonId="reset-stats-classic"
+      />
+      <ConfirmModal
+        open={enableResetOpen}
+        onCancel={closeEnableReset}
+        onConfirm={confirmEnableReset}
+        title="Enable and Reset Stats?"
+        body="The timer readouts were hidden while this mode's stats changed, so turning them back on has to reset this mode's stats for the current preset."
+        confirmLabel="Enable and Reset Stats"
+        backButtonId="enable-reset-stats-classic"
+      />
       <div className="mt-5">
         <div className="mt-4 rounded-2xl panel p-4">
           <div className="text-center relative">

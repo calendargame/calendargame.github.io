@@ -37,7 +37,7 @@
 // is the identical shape of proof this file gives the four stores below, just for a store that is
 // not one of them any more.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { cleanup, screen, act } from '@testing-library/react'
+import { cleanup, screen, within, act } from '@testing-library/react'
 import {
   LIVE_STORES,
   storageKeys,
@@ -53,8 +53,8 @@ import {
   mountApp,
   openSettings,
   closeSettings,
-  footerButton,
-  fullResetButton,
+  fireFullReset,
+  fireResetSettings,
   panelValues,
   tap,
 } from './helpers/settingsPanel.jsx'
@@ -309,7 +309,7 @@ describe('the three resets clear exactly what they clear', () => {
       s.setSaveStats(false)
     })
     expect(panelValues()).not.toEqual(launchValues)
-    tap(footerButton('Reset Settings'))
+    fireResetSettings()
     expect(panelValues()).toEqual(launchValues)
     // The play is untouched — on screen…
     closeSettings()
@@ -326,7 +326,7 @@ describe('the three resets clear exactly what they clear', () => {
     modePrefs.getState().setBlitzSec(45) // …and one that IS
     mountApp()
     openSettings()
-    tap(footerButton('Reset Settings'))
+    fireResetSettings()
     const fresh = await reopenApp()
     expect(fresh.modePrefs.getState().blitzPerQ).toBe(true)
     expect(fresh.modePrefs.getState().dedType).toBe('year')
@@ -344,8 +344,7 @@ describe('the three resets clear exactly what they clear', () => {
       settings.getState().setLeapChance('75')
     })
     expect(panelValues()).not.toEqual(launchValues)
-    tap(fullResetButton()) // first tap arms
-    tap(fullResetButton()) // second confirms
+    fireFullReset()
     openSettings() // Full Reset closes the panel; come back to read it
     expect(panelValues()).toEqual(launchValues)
     closeSettings()
@@ -366,8 +365,12 @@ describe('the three resets clear exactly what they clear', () => {
     seedAPlayedDevice()
     mountApp()
     expect(statValue('Score')).toBe('3/5')
-    tap(screen.getByRole('button', { name: 'Reset Stats' })) // first tap arms
-    tap(screen.getByRole('button', { name: 'Reset Stats?' })) // second confirms
+    tap(screen.getByRole('button', { name: 'Reset Stats' })) // opens the confirm popup
+    tap(
+      within(screen.getByRole('dialog', { name: 'Reset Stats?' })).getByRole('button', {
+        name: 'Reset Stats',
+      }),
+    ) // confirm
     expect(statValue('Score')).toBe('0/0')
     const fresh = await reopenApp()
     const back = fresh.progress.getState()
@@ -398,8 +401,7 @@ describe('saved personal defaults outlive a Full Reset', () => {
     })
     mountApp()
     openSettings()
-    tap(fullResetButton())
-    tap(fullResetButton())
+    fireFullReset()
     // Landed on the SAVED values, not the factory ones…
     expect(settings.getState().minY).toBe(1600)
     expect(settings.getState().leapChance).toBe('75')

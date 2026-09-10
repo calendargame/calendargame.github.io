@@ -25,6 +25,7 @@ import { PillTray } from './PillTray.jsx'
 import { PillGroup } from './PillGroup.jsx'
 import { UpdateDot } from './UpdateDot.jsx'
 import DefaultsCard from './DefaultsCard.jsx'
+import ConfirmModal from './ConfirmModal.jsx'
 import PresetManager from './PresetManager.jsx'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { useBackButton } from './useBackButton.js'
@@ -43,13 +44,13 @@ import {
   LIGHT_THEMES,
   CHANCE_OPTIONS,
   LEAP_CHANCE_OPTIONS,
+  DEFAULT_MODE_PRIMARY,
+  DEFAULT_MODE_SECONDARY,
 } from './settingsOptions.js'
 import {
-  RESET_BTN_CLASS,
   FOOTER_RESET_BTN_CLASS,
   NOT_OFFERED_BTN_CLASS,
   FOOTER_META_ROW_CLASS,
-  FOOTER_DEFAULTS_ROW_CLASS,
   NUM_INPUT_CLASS,
 } from './controlClasses.js'
 import { DEPLOY_TS } from '../deployStamp.js'
@@ -62,11 +63,13 @@ import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/
 import type { PrefDefaults } from '../store/userDefaults.js'
 import { usePresets } from '../store/presets.js'
 import { selectAmnesic } from '../store/amnesic.js'
-import { setPresetAmnesic } from '../store/presetControl.js'
+import { setPresetAmnesic, setOpenInPreset } from '../store/presetControl.js'
 import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 
 // ============================================================
-// SettingsPanel — the ⚙ popover card and its five modals.
+// SettingsPanel — the ⚙ popover card and its modals: Save Defaults, the defaults manager, the
+// Changelog and the preset manager, plus three shared ConfirmModals (Full Reset, Reset Settings,
+// Clear Saved Defaults) since round 21 (Q7).
 //
 // ★ IT IS RENDERED ONLY WHILE THE PANEL IS OPEN: App renders `{settingsOpen && <SettingsPanel …/>}`.
 // That is a HARD constraint, not a style choice. A closed panel must have no DOM at all — the test
@@ -102,7 +105,7 @@ import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 // panel is closed, resetSettings/fullReset (which reach App's whole world), and the Year Range text
 // mirrors (whose lifetime must outlive this component's — see useYearRangeMirrors).
 //
-// WHAT IT READS STRAIGHT FROM THE STORES: the fifteen settings values and their setters, and the
+// WHAT IT READS STRAIGHT FROM THE STORES: the sixteen settings values and their setters, and the
 // saved-defaults snapshot. Individually selected, never as one object selector, so the panel
 // re-renders only for the value that changed.
 // ============================================================
@@ -189,6 +192,12 @@ export function SettingsPanel({
   const setInputStyle = useSettings((s) => s.setInputStyle)
   const rotateDots = useSettings((s) => s.rotateDots)
   const setRotateDots = useSettings((s) => s.setRotateDots)
+  // defaultMode (round-21 Q3) — the per-preset "Default Mode" picker under the Per-preset label. A
+  // ⚙ setting like every other in this store: captured by Save Defaults, restored by Reset Settings
+  // (App's settingsAtDefaults includes it, so a change lights the gear and un-dims Save Defaults).
+  // It only takes visible effect on a cold open or a preset switch — main.tsx consumes it there.
+  const defaultMode = useSettings((s) => s.defaultMode)
+  const setDefaultMode = useSettings((s) => s.setDefaultMode)
   const leapChance = useSettings((s) => s.leapChance)
   const setLeapChance = useSettings((s) => s.setLeapChance)
   const janFebChance = useSettings((s) => s.janFebChance)
@@ -224,6 +233,20 @@ export function SettingsPanel({
   // applyRegistry and its own next line — store/presets' normalizeRegistry guarantees activeId names
   // a listed preset on every load, so it is a type obligation rather than a state the app reaches.
   const activePresetName = usePresets((s) => s.presets.find((p) => p.id === s.activeId)?.name ?? '')
+  // ── GLOBAL: the "Open in" pin (round-21 Q3) ─────────────────────────────────────────────────
+  // App-global, not per-preset — it lives on the registry (store/presets' openInPreset), read here
+  // and written through store/presetControl like the amnesic flag above. NOT captured by Save
+  // Defaults (no registry field is in any snapshot). The picker offers "Last used" plus one entry
+  // per preset; a fresh app open then lands in the pinned preset, or in whatever was active last
+  // time when it is 'last'. Options rebuild when the preset list changes (rename / add / delete).
+  const presetList = usePresets((s) => s.presets)
+  const openInPreset = usePresets((s) => s.openInPreset)
+  const openInOptions = [
+    { value: 'last', label: 'Last used' },
+    ...presetList.map((p) => ({ value: String(p.id), label: p.name })),
+  ]
+  const openInValue = openInPreset === 'last' ? 'last' : String(openInPreset)
+  const changeOpenIn = (v: string) => setOpenInPreset(v === 'last' ? 'last' : Number(v))
   // ⚠ NO CONFIRMATION DIALOG, deliberately, and the owner cut one that had been drafted ("I say
   // neither, just leave it for htp"). A dialog would exist to stop somebody forgetting the state
   // they were in — and people build a whole preset around being amnesic or not, so that is not the
@@ -237,16 +260,14 @@ export function SettingsPanel({
   const saveUserDefaults = useUserDefaults((s) => s.saveDefaults)
   const clearUserDefaults = useUserDefaults((s) => s.clearDefaults)
 
-  // Full Reset state: armed=true means the user tapped once and the next tap fires.
-  // Auto-disarms after a short timer, when the panel closes (which now UNMOUNTS this component, so
-  // the state and its timer go with it — see the unmount cleanup below), or when the user taps any
-  // other interactive control. Implemented as a per-tap state machine rather than a dialog so the
-  // destructive nature is communicated by the in-place label and color change without a modal
-  // interruption.
-  const [fullResetArmed, setFullResetArmed] = useState(false)
-  const fullResetBtnRef = useRef<HTMLButtonElement | null>(null)
-  const fullResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Save Defaults (Q7) confirmation popup state. pendSettings snapshots the full 15-value panel at
+  // Full Reset (Q7 round 21) and Reset Settings (Q7 round 21) confirmation popups. Both are the
+  // shared ConfirmModal now — the owner's rule that EVERY reset-style action asks with a popup that
+  // names what it does and whether it is per-preset or app-wide. Full Reset was a two-tap in-place
+  // arm (state + refs + a 3s timer + a site-wide capture-phase disarm listener + a during-render
+  // safety net) and Reset Settings had no confirmation at all; both are one boolean now.
+  const [fullResetConfirmOpen, setFullResetConfirmOpen] = useState(false)
+  const [resetSettingsConfirmOpen, setResetSettingsConfirmOpen] = useState(false)
+  // Save Defaults (Q7) confirmation popup state. pendSettings snapshots the full 16-value panel at
   // OPEN (the popup doesn't edit panel values); pendPrefs seeds the four editable mode-screen rows
   // from the live modePrefs store at open, and pendSeed keeps that seed for the shared card's
   // dirty-row comparison (Q5 round-6). Edits touch ONLY this pending snapshot — Cancel/scrim/Back
@@ -266,17 +287,16 @@ export function SettingsPanel({
   const [manageDefaultsOpen, setManageDefaultsOpen] = useState(false)
   const manageDefaultsCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
   const [managePrefs, setManagePrefs] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
-  // Clear-saved-defaults confirm popup (Q5 round-6): the footer's Clear link asks before it forgets
-  // the snapshot — a small modal in the established recipe (Cancel + a red-tier Clear), full
-  // scrim/focus/Escape/Back parity with the other settings modals.
+  // Clear-saved-defaults confirm popup (Q5 round-6; folded onto the shared ConfirmModal in Q7 round
+  // 21): the footer's Clear button asks before it forgets the snapshot. Just a boolean now — the
+  // portal, the scrim, focus-on-open, capture Escape and Android Back all live in ConfirmModal.
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
-  const clearConfirmCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
   // Changelog popup (Q6) — the plain-words what-changed list (src/changelog), opened from the
   // footer's Changelog link. Its two dot flags live up in App with the build-stamp detection that
   // lights them; this popup only READS the link's and asks App to retire it.
   const [changelogOpen, setChangelogOpen] = useState(false)
   const changelogCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
-  // The preset manager (sub-group 4C) — the FIFTH user of the modal contract, opened from the
+  // The preset manager (sub-group 4C) — another user of the modal contract, opened from the
   // Presets section at the head of the panel. Its state is one boolean here and everything else is
   // components/PresetManager's: the card holds its own pending rename and its own delete
   // confirmation, because both die with the modal and neither is anything the panel can answer.
@@ -322,23 +342,32 @@ export function SettingsPanel({
   // Footer-button caption auto-fit (Round-2) — the StatPanel value-fit pattern applied to the
   // Save Defaults / Reset Settings / Full Reset trio: on a narrow phone the three flex-1 buttons
   // can get too tight for their captions, so ONE shared font-size (never per-button — unequal
-  // caption sizes across a matched row read as a glitch) shrinks all three together. Naturals come
-  // from hidden STATIC twins of the widest caption set ("Save Defaults" / "Reset Settings" /
-  // "Full Reset"), never the live captions — the Full Reset → "Confirm?" swap would otherwise
-  // shrink the measurement and jiggle the whole row's size while arming. The math is lib/statFit's
-  // sharedFitScale (min ratio, capped at 1) off the trio's resting text-xs — the popover's control
-  // tier (Round-3 font normalization), so the fit CEILINGS there and shrinks below 12px only when a
-  // narrow screen forces it; an 11px floor keeps the captions legible over cosmetic fit, and
-  // overflow-hidden on the buttons (below) contains the extreme remainder. In jsdom every width is
-  // 0 → scale 1 → no-op (the statFit convention).
+  // caption sizes across a matched row read as a glitch) shrinks all three together. The math is
+  // lib/statFit's sharedFitScale (min ratio, capped at 1) off the trio's resting text-xs — the
+  // popover's control tier (Round-3 font normalization), so the fit CEILINGS there and shrinks
+  // below 12px only when a narrow screen forces it; an 11px floor keeps the captions legible over
+  // cosmetic fit, and overflow-hidden on the buttons (below) contains the extreme remainder. In
+  // jsdom every width is 0 → scale 1 → no-op (the statFit convention).
+  //
+  // ★ MEASURED OFF THE LIVE CAPTIONS DIRECTLY (Q7 round 21). Until every reset button's caption was
+  // frozen, this measured hidden STATIC twins of the widest caption set — because the Full Reset →
+  // "Confirm?" swap would otherwise shrink the measurement mid-arm and jiggle the whole row. Q7
+  // replaced the two-tap arm with a ConfirmModal, so all three captions are now static text and
+  // there is nothing to swap. The twins are gone; instead this resets each caption's inline
+  // fontSize to '' BEFORE reading its scrollWidth — the exact feedback-loop guard StatPanel's
+  // fitAll uses, so a re-run of this dep-less effect reads the true natural width every time
+  // instead of compounding the previous pass's shrink (12·s, 12·s², … → pinned at the floor).
   const footerFitRef = useRef<HTMLDivElement | null>(null)
   const fitFooterBtns = () => {
     const row = footerFitRef.current
     if (!row) return
     const labels = Array.from(row.querySelectorAll<HTMLElement>('[data-fitlabel]'))
-    const twins = Array.from(row.querySelectorAll<HTMLElement>('[data-fittwin]'))
-    if (labels.length === 0 || twins.length === 0) return
-    const naturals = twins.map((t) => t.scrollWidth)
+    if (labels.length === 0) return
+    // Reset every button to the base size before measuring — see the feedback-loop note above.
+    labels.forEach((l) => {
+      const b = l.parentElement
+      if (b) b.style.fontSize = ''
+    })
     // ⚠ These two stay integer-valued measures on purpose — round 10's sub-pixel sweep (--bar-h,
     // GuidePage's panel heights) deliberately skipped them. scrollWidth is the only platform read
     // of a clamped span's NATURAL width; a rect would report the clamped width, a different number
@@ -346,6 +375,7 @@ export function SettingsPanel({
     // includes both, so swapping it would change which box is being fitted — a semantic change,
     // not a precision one. Both feed a font-size ratio, where a rounded pixel is imperceptible
     // anyway.
+    const naturals = labels.map((l) => l.scrollWidth)
     const avails = labels.map((l) => {
       const btn = l.parentElement
       if (!btn) return 0
@@ -355,12 +385,9 @@ export function SettingsPanel({
       )
     })
     const scale = sharedFitScale(naturals, avails)
-    // Base font off a STATIC twin, never a live caption: the captions carry the inline fontSize the
-    // PREVIOUS pass set, so reading them would compound the shrink on every re-run of the dep-less
-    // effect (12·s, 12·s², … → pinned at the floor). Same feedback loop StatPanel guards against by
-    // resetting before measuring (StatPanel.tsx fitAll); here the twin — same text classes, never
-    // inline-sized — is the clean base.
-    const base = parseFloat(getComputedStyle(twins[0]).fontSize) || 0
+    // Base font off a caption that has just been reset to '' above, so getComputedStyle reads the
+    // resting text-xs and not a stale inline size.
+    const base = parseFloat(getComputedStyle(labels[0]).fontSize) || 0
     const px = scale < 1 && base > 0 ? Math.max(11, base * scale) + 'px' : ''
     // Apply the fitted size to the BUTTON, not the caption span: the caption inherits it, so the
     // button's line-box strut shrinks WITH the text and the label stays vertically centered.
@@ -413,11 +440,10 @@ export function SettingsPanel({
     if (manageDefaultsOpen) manageDefaultsCardRef.current?.focus()
   }, [manageDefaultsOpen]) // same contract for the defaults manager (Q12/Q5)
   useEffect(() => {
-    if (clearConfirmOpen) clearConfirmCardRef.current?.focus()
-  }, [clearConfirmOpen]) // and the Clear confirm (Q5)
-  useEffect(() => {
     if (changelogOpen) changelogCardRef.current?.focus()
   }, [changelogOpen]) // and the Changelog popup (Q6)
+  // The Clear confirm, Full Reset and Reset Settings popups own this term themselves — they are the
+  // shared ConfirmModal (Q7 round 21), which focuses its own card on open.
   // ⚠ THE PRESET MANAGER IS THE ONE MODAL WITH NO focus-on-open EFFECT HERE, AND IT IS NOT SKIPPING
   // THE TERM — it OWNS it. That card has two views (the list, and the delete confirmation), each
   // rendering its own dialog element, so "focus the card when it opens" is really "focus the card
@@ -460,6 +486,8 @@ export function SettingsPanel({
   }
   const closeManageDefaults = useCallback(() => setManageDefaultsOpen(false), [])
   const closeClearConfirm = useCallback(() => setClearConfirmOpen(false), [])
+  const closeFullResetConfirm = useCallback(() => setFullResetConfirmOpen(false), [])
+  const closeResetSettingsConfirm = useCallback(() => setResetSettingsConfirmOpen(false), [])
   const closeChangelog = useCallback(() => setChangelogOpen(false), [])
   const closePresets = useCallback(() => setPresetsOpen(false), [])
   // Opening the changelog retires the link's dot — the breadcrumb's last stop. First tap only in
@@ -473,7 +501,7 @@ export function SettingsPanel({
   // here on Reset Settings / Full Reset / the gear indicator mean THESE values by "default".
   // ⚠ amnesic RIDES ALONG, READ LIVE AT COMMIT (round-20 Q4) — NOT frozen into a ref at open like
   // pendSettingsRef. The popup has no UI for it (it is not shown or editable here — see the note at
-  // toggleAmnesic), so unlike the 15 settings values there is nothing a user could edit out from
+  // toggleAmnesic), so unlike the 16 settings values there is nothing a user could edit out from
   // under a captured-at-open snapshot; reading the bound `amnesic` (line ~219, a live store
   // subscription) at the moment of commit is equivalent to capturing it at open and one line
   // simpler. The owner's confirmed decision — flagged as a real tradeoff and reaffirmed — is that
@@ -487,7 +515,7 @@ export function SettingsPanel({
       })
     setSaveDefaultsOpen(false)
   }
-  // The manager's Save (Q5 round-6) writes ONLY the four shown values into the snapshot: the 15
+  // The manager's Save (Q5 round-6) writes ONLY the four shown values into the snapshot: the 16
   // ⚙-panel values pass through AS-SAVED, byte-identical (never re-captured from the live store —
   // the owner's rule: this popup edits exactly what it shows). With nothing saved yet it CREATES
   // the snapshot — the factory ⚙ values plus these edits, the natural flow from the factory view
@@ -511,110 +539,38 @@ export function SettingsPanel({
     clearUserDefaults()
     setClearConfirmOpen(false)
   }
-  // Two-tap-to-confirm wrapper around App's fullReset. Tap 1 arms (label flips to "Confirm?",
-  // button gets a ring). Tap 2 within the arm window fires the reset and disarms. Auto-disarm via
-  // timer (3s), the any-other-press listener below, and — since the panel became a component that
-  // unmounts on close — simply by this state ceasing to exist when the panel closes.
-  const armFullReset = () => {
-    // ⚠ THIS SHORT-CIRCUIT IS NOW THE ONLY THING MAKING THE DIMMED BUTTON INERT — for a mouse tap,
-    // a keyboard press and an assistive-technology activation alike. It was written in round 14 as
-    // defense in depth behind a pointer-events-none className, and B7 (round 15) removed that
-    // className: a pointer-events:none element is never hit-tested, so the not-allowed cursor could
-    // not paint through it (controlClasses' NOT_OFFERED_BTN_CLASS tells the other half of the
-    // story). Nothing replaced it as a tap blocker, deliberately — the announcement (aria-disabled)
-    // and the drawing (the dim + cursor) are what the user is TOLD, and this line is what is TRUE.
-    // Do not delete it as redundant; there is no longer anything for it to be redundant with.
+  // Full Reset (Q7 round 21): open the ConfirmModal. The dimmed-button short-circuit stays here for
+  // the same reason openSaveDefaults carries its own — the class draws the button unavailable and
+  // aria-disabled announces it, but this line is the one that makes it INERT for a keyboard press
+  // or an assistive-technology activation. It replaced the two-tap arm's `if (isFullyReset) return`
+  // first line and does exactly the same job.
+  const openFullResetConfirm = () => {
     if (isFullyReset) return
-    if (fullResetArmed) {
-      if (fullResetTimerRef.current) {
-        clearTimeout(fullResetTimerRef.current)
-        fullResetTimerRef.current = null
-      }
-      setFullResetArmed(false)
-      onFullReset()
-      return
-    }
-    setFullResetArmed(true)
-    if (fullResetTimerRef.current) clearTimeout(fullResetTimerRef.current)
-    fullResetTimerRef.current = setTimeout(() => {
-      setFullResetArmed(false)
-      fullResetTimerRef.current = null
-    }, 3000)
+    setFullResetConfirmOpen(true)
   }
-  const disarmFullReset = () => {
-    if (fullResetTimerRef.current) {
-      clearTimeout(fullResetTimerRef.current)
-      fullResetTimerRef.current = null
-    }
-    setFullResetArmed(false)
+  const confirmFullReset = () => {
+    setFullResetConfirmOpen(false)
+    onFullReset()
   }
-  // Site-wide disarm listener (capture phase) — disarms when the user mousedowns/touches any
-  // element outside the Full Reset button itself. Capture phase fires before the target's own
-  // onClick, so the user's intent (e.g., toggling Random Format, switching modes, tapping a date
-  // answer) still proceeds normally; we just consume the pending arm. Scope is the entire document
-  // (not just the panel) so taps anywhere outside the button reliably disarm. Both ends of
-  // fullResetBtnRef — the binding in the footer and this reader — live in this file, and must.
-  useEffect(() => {
-    if (!fullResetArmed) return
-    const h = (e: MouseEvent | TouchEvent) => {
-      if (fullResetBtnRef.current && fullResetBtnRef.current.contains(e.target as Node | null))
-        return
-      disarmFullReset()
-    }
-    document.addEventListener('mousedown', h, true)
-    document.addEventListener('touchstart', h, true)
-    return () => {
-      document.removeEventListener('mousedown', h, true)
-      document.removeEventListener('touchstart', h, true)
-    }
-  }, [fullResetArmed])
-  // Cleanup the Full Reset arm timer on unmount — which is now also every panel close, so this is
-  // what replaces the old "disarm when settings closes" effect: the armed flag cannot survive a
-  // close because it ceases to exist, and this stops its timer from outliving it.
-  useEffect(
-    () => () => {
-      if (fullResetTimerRef.current) clearTimeout(fullResetTimerRef.current)
-    },
-    [],
-  )
-  // Safety net: if the app flips to fully-reset while the Full Reset button is ARMED, drop the arm.
-  // It is reachable, despite the note this inherited calling it defensive: arm the button by tap,
-  // then reach Reset Settings by KEYBOARD and press Enter. The site-wide disarm listener above only
-  // watches mousedown/touchstart, so no press ever cancels the arm, and if the rest of the app was
-  // already fresh then settings returning to default is one of isFullyReset's thirteen terms
-  // falling into place — Q1/round 20 moved Lookup history out of the progress store, but the
-  // owner's own mid-flight correction kept Full Reset clearing it (see main.tsx's isFullyReset),
-  // so that term survives too, merely renamed to displayLookupHistory.length===0.
-  // What it prevents is cosmetic but real: the button would sit at "Confirm?" on a control that is
-  // simultaneously dimmed, announced unavailable and refused by armFullReset's own first line (B7
-  // took its pointer-events-none away in round 15, so that guard is now the whole of its inertness)
-  // — a promise the UI is in no position to keep.
-  //
-  // ★ WHY IT ADJUSTS STATE DURING RENDER RATHER THAN IN AN EFFECT. The moved-in version was a
-  // useEffect calling disarmFullReset(). That is a setState synchronously inside an effect body —
-  // react-hooks/set-state-in-effect, a real error, and it was invisible for as long as this file
-  // pulled its hooks off a `React` namespace binding (that form defeats the rule's detection; see
-  // the import at the top of this file). Named imports made the file analyzable and the error
-  // surfaced on code that had merely MOVED, which is the extraction doing its job. The fix is
-  // React's documented replacement for "adjust some state when a prop changes": compare against the
-  // previous prop during render and update immediately. React discards the in-progress render
-  // instead of committing it, so the committed DOM is the same minus one wasted frame.
-  //
-  // The 3s arm timer is deliberately NOT cleared here (clearTimeout during render would be an
-  // impure side effect, and the compiler is right to reject that shape). It is inert: its callback
-  // sets armed false, which it already is, and pressFullReset clears any pending timer before
-  // arming again — so it can neither disarm a later arm nor null out a later timer's handle.
-  const [seenFullyReset, setSeenFullyReset] = useState(isFullyReset)
-  if (seenFullyReset !== isFullyReset) {
-    setSeenFullyReset(isFullyReset)
-    if (isFullyReset && fullResetArmed) setFullResetArmed(false)
+  // Reset Settings (Q7 round 21) — it had NO confirmation at all before this round. Same
+  // dimmed-button short-circuit as Save Defaults and Full Reset: `settingsModified` is what makes
+  // pressing the greyed button do nothing (onResetSettings is App's guarded presser, so calling it
+  // when nothing diverges is already a safe no-op — this just keeps the popup from opening empty).
+  const openResetSettingsConfirm = () => {
+    if (!settingsModified) return
+    setResetSettingsConfirmOpen(true)
+  }
+  const confirmResetSettings = () => {
+    setResetSettingsConfirmOpen(false)
+    onResetSettings()
   }
   // Android hardware Back closes these overlays instead of quitting the app (Q1). App registers
   // 'settings' itself, BEFORE this component exists; the stack is chronological, and a modal cannot
   // open before the panel that hosts its link, so Back still closes the modal first (LIFO).
+  // The Clear confirm, Full Reset and Reset Settings popups register their own Back entry from
+  // inside ConfirmModal (ids 'clear-defaults' / 'full-reset' / 'reset-settings-confirm').
   useBackButton(saveDefaultsOpen, closeSaveDefaults, 'save-defaults')
   useBackButton(manageDefaultsOpen, closeManageDefaults, 'manage-defaults') // the defaults manager (Q12/Q5)
-  useBackButton(clearConfirmOpen, closeClearConfirm, 'clear-defaults') // and the Clear confirm (Q5)
   useBackButton(changelogOpen, closeChangelog, 'changelog') // and the Changelog popup (Q6)
   // …and the preset manager (4C). ⚠ ONE Back ENTRY FOR BOTH OF ITS VIEWS, deliberately: Back
   // dismisses the whole card, delete confirmation and all. The alternative — a second entry for the
@@ -624,10 +580,11 @@ export function SettingsPanel({
   useBackButton(presetsOpen, closePresets, 'presets')
   // …and Escape, the contract's other dismiss. The two popups that CONTAIN a text box guard against
   // it (the N field and the tap-to-type readouts own their own Escape — it discards the edit, and a
-  // second press, with nothing focused, reaches the modal); the two that are buttons-only do not.
+  // second press, with nothing focused, reaches the modal); the changelog, being buttons-only, does
+  // not. (The Clear confirm, Full Reset and Reset Settings popups own their Escape from inside
+  // ConfirmModal — buttons-only, so no text-entry guard.)
   useModalEscape(saveDefaultsOpen, closeSaveDefaults, true)
   useModalEscape(manageDefaultsOpen, closeManageDefaults, true)
-  useModalEscape(clearConfirmOpen, closeClearConfirm, false)
   useModalEscape(changelogOpen, closeChangelog, false)
   // The preset manager CONTAINS text boxes (one per row, each the rename field), so it takes the
   // guard: the first Escape belongs to the field that has the keyboard — it discards that rename —
@@ -636,17 +593,17 @@ export function SettingsPanel({
   useModalEscape(presetsOpen, closePresets, true)
 
   // Modal a11y contract, part 2 of 2 (part 1 = the focus-on-open effects above) is trapModalTab,
-  // imported from the shared contract and put on each scrim's onKeyDown below. It is shared by all
-  // FIVE modals in the app now — these four and the run breakdown — which is why it no longer lives
-  // in this component; see components/modalContract for what it does and why.
+  // imported from the shared contract and put on each scrim's onKeyDown below. Every modal in the
+  // app shares it now — these four, the run breakdown, and the shared ConfirmModal — which is why
+  // it no longer lives in this component; see components/modalContract for what it does and why.
 
   // Save Defaults confirmation popup (Q7). PORTALED to #root — deliberately OUTSIDE the popover
   // card (the ⚙ trigger's aria-controls menu), so its DOM is invisible to the press-drag controller
   // (a drag-release on popup content can never drag-dismiss the panel) and it escapes the card's
   // overflow/max-height context (a true centered modal — scrim + the popover's own card/shadow
   // language). data-settings-modal marks the whole tree (scrim included) "inside" for App's
-  // settings click-outside handler (the same marker as the manager, Clear confirm, and Changelog
-  // popups below — one guard covers all five modals); the scrim itself cancels the POPUP only
+  // settings click-outside handler (the same marker as the manager and Changelog popups below, and
+  // the three ConfirmModals — one guard covers every modal); the scrim itself cancels the POPUP only
   // (target===currentTarget, so card clicks never do), and Escape + Android Back + any settings
   // close also cancel (the effects above, plus this whole component unmounting). The card itself is
   // the shared DefaultsCard (Q5 round-6 — the one place the four rows, their recipes, and the
@@ -734,83 +691,36 @@ export function SettingsPanel({
       </div>,
       document.getElementById('root')!,
     )
-  // Clear-saved-defaults confirm popup (Q5 round-6): the same portal / scrim / card recipes and the
-  // same modal contract (focus-on-open, capture Escape, close with settings, Android Back, the
-  // shared trapModalTab + data-settings-modal marker). Two buttons — Cancel in the shared dismiss
-  // recipe, Clear in the danger tier (RESET_BTN_CLASS, the rose fill every destructive control
-  // wears) — a real confirm modal because a link that flips its own text to confirm reads strangely
-  // (the owner's call over a two-tap arm).
-  const clearConfirmJsx =
-    clearConfirmOpen &&
-    createPortal(
-      <div
-        data-settings-modal
-        role="presentation"
-        className={MODAL_SCRIM_CLASS}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setClearConfirmOpen(false)
-        }}
-        onKeyDown={trapModalTab}
-      >
-        <div
-          ref={clearConfirmCardRef}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="clear-defaults-title"
-          style={MODAL_CARD_SHADOW}
-          className="card rounded-2xl p-4 w-full max-w-[20rem] space-y-3 focus:outline-hidden"
-        >
-          <div id="clear-defaults-title" className="text-sm font-semibold text-(--tx-50)">
-            Clear your saved defaults?
-          </div>
-          <div className="text-xs text-(--tx-200-80)">
-            This only forgets the snapshot — your current settings stay as they are, and the launch
-            defaults take over.
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={closeClearConfirm}
-              className="flex-1 px-3 py-2 rounded-xl text-sm font-medium border surface-toggle text-(--tx-100-80)"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmClearDefaults}
-              className={`flex-1 ${RESET_BTN_CLASS}`}
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.getElementById('root')!,
-    )
+  // The Clear confirm, Full Reset and Reset Settings popups render at the foot of this component's
+  // fragment as <ConfirmModal>s (Q7 round 21) — see there for the copy. The portal, the scrim, the
+  // whole modal contract and the Cancel + rose-tier confirm markup all live in that component now;
+  // this file keeps only the open booleans and the confirm/cancel callbacks.
+
   // Changelog popup (Q6): the plain-words what-changed list (src/changelog, newest day first),
   // opened from the footer's Changelog link — the same portal / scrim / card recipes and the same
   // modal contract as the popups above (focus-on-open, capture Escape, close with settings, Android
-  // Back, the shared trapModalTab + data-settings-modal marker; the one control is a full-width
-  // Close, input-free like the Clear confirm). CHANGELOG renders AS-IS: round-8 Q8 dropped the
+  // Back, the shared trapModalTab + data-settings-modal marker). It carries NO dismiss control at
+  // all as of round 21 (Q5): the scrim tap, Escape and Android Back already dismiss it, and the
+  // owner wanted the row back. CHANGELOG renders AS-IS: round-8 Q8 dropped the
   // render-time slice and moved the ten-day cap to the data itself (see the charter in
   // src/changelog), so what the module holds is exactly what a visitor downloads and exactly what
   // draws here — no entry ships only to be refused. The list sits inside its own scroll region on
   // the shared settings recipe (Q5 round-7, components/scrollRegion): the card owns py-4 only while
-  // the title, scroll region, and Close row each carry px-4, so the scroller's 1rem right padding
+  // the title and scroll region each carry px-4, so the scroller's 1rem right padding
   // is the text-free lane the iOS scrollbar paints in; SCROLL_REGION_CLASS + scrollFadeClass (fed
   // by the changelogScrollRef edge listener up with the popover's) add the edge fades, and max-h
   // keeps a long history scrolling within the card without growing it off-screen. Entry dates
   // render through the footer's Last-Updated recipe (fmt + numericFormatOf) so they follow the
   // user's Date Format setting; the bullet list is the guide's UL idiom (list-disc + the
-  // --mut-color marker). The card is heading row → list → Close and NOTHING else — the heading row
+  // --mut-color marker). The card is heading row → list and NOTHING else — the heading row
   // gained the app's version on its right on 2026-08-10 (the note at the row explains the markup and
   // why the id moved onto a span), and it is still one row: round-8 Q8 added a
-  // one-line "Shows the last ten days with updates." notice between the scroller and Close, and the
+  // one-line "Shows the last ten days with updates." notice below the scroller, and the
   // owner removed it (round-9) on the rule that this popup answers WHAT CHANGED, while how the app
   // keeps its history is documentation — so the ten-day cap is explained in How to Play (the
-  // Updates section) and nowhere else. Don't re-add it here. The one-control card is also what
-  // keeps the single-button Tab trap above valid, with Close as first===last.
+  // Updates section) and nowhere else. Don't re-add it here. With zero focusable controls the
+  // shared trapModalTab pins focus on the dialog card (its degenerate branch) rather than letting
+  // Tab walk out to the panel beneath.
   const changelogJsx =
     changelogOpen &&
     createPortal(
@@ -889,15 +799,6 @@ export function SettingsPanel({
               )
             })}
           </div>
-          <div className="px-4 pt-1">
-            <button
-              type="button"
-              onClick={closeChangelog}
-              className="w-full px-3 py-2 rounded-xl text-sm font-medium border surface-toggle text-(--tx-100-80)"
-            >
-              Close
-            </button>
-          </div>
         </div>
       </div>,
       document.getElementById('root')!,
@@ -921,7 +822,7 @@ export function SettingsPanel({
         }}
         onKeyDown={trapModalTab}
       >
-        <PresetManager onClose={closePresets} />
+        <PresetManager />
       </div>,
       document.getElementById('root')!,
     )
@@ -959,10 +860,10 @@ export function SettingsPanel({
           included. data-drag-dismiss opts it into close-on-drag-pick (App's drag-dismiss listener →
           the apply-on-close pass); the data-drag-stay regions (BOTH footer rows — the theme block
           was the third until round-8 dropped it, so a drag-pick on a theme pill now dismisses like
-          the date-format pills) opt back out: Full Reset needs its Confirm? tap, Reset Settings
-          should show controls snapping to defaults, and Save Defaults opens its confirmation popup
-          (which portals OUT of this card, so a drag-release on popup content can never drag-dismiss
-          the panel). The Year Range inputs are data-drag-focus (release = focus for typing, panel
+          the date-format pills) opt back out: Save Defaults, Reset Settings and Full Reset each
+          open a confirmation popup (all of which portal OUT of this card, so a drag-release on
+          popup content can never drag-dismiss the panel), and the panel has to stay up behind
+          them; the View / Clear Saved Defaults links are the same. The Year Range inputs are data-drag-focus (release = focus for typing, panel
           stays open). The inner scroll wrapper is data-drag-scroll — the controller's auto-scroll
           target + edge-band geometry.
           Scroll recipe (Q5 round-7): the wrapper wears SCROLL_REGION_CLASS + scrollFadeClass
@@ -986,37 +887,42 @@ export function SettingsPanel({
               header; the former per-setting headings are now muted sub-labels (the Leap-Year
               header+sub-label pattern). Every control + its behaviour is unchanged — purely a
               regroup. */}
-          {/* ── PRESETS — THE PANEL'S FIRST SECTION, AND FIRST IS THE ARGUMENT ─────────────────
-              A preset is not a setting; it is the CONTAINER every setting below belongs to. Put it
-              at the head of the panel and the rest of the card reads as "these are <name>'s" —
-              which is the owner's one-line rule ("only the current preset, ALL settings apply to
-              that preset only including defaults and all that") expressed as layout rather than as
-              a sentence somebody has to find. Put it anywhere else and the panel opens on fifteen
-              settings with nothing saying whose they are.
-              ⚠ IT IS WHY Display NOW WEARS `pt-3 border-t` — that section was the panel's first and
-              so was the one section with no divider above it; the rule is that the divider separates
-              sections, not that Display never has one.
-              ⚠ IT COSTS THE PANEL ~70px OF SCROLL, which is the honest trade and not an oversight:
-              this section is read once and acted on rarely, and it pushes the Date Format tray
-              further down a card that already scrolls. Nothing cheaper was available — a footer
-              link (beside View Saved Defaults) would have been ~0px, and it would have filed "which
-              copy of the app am I in" under the same heading as the app's contact email.
+          {/* ── GLOBAL — THE PANEL'S FIRST SECTION, AND FIRST IS THE ARGUMENT ─────────────────
+              This section holds what belongs to the WHOLE APP rather than to one preset: which
+              preset a fresh open lands in ("Open in"), and the door to Manage Presets (inherently
+              cross-preset). Everything BELOW the "Per-preset" label is the current preset's alone.
+              That split is the owner's one-line rule ("only the current preset, ALL settings apply
+              to that preset only including defaults and all that") drawn as layout rather than
+              buried in a sentence — and round-21 Q3 made it explicit by giving the global items
+              their own header instead of filing them under "Presets" with the rest.
+              ⚠ IT IS WHY Display WEARS `pt-3 border-t` — the divider separates sections; Display is
+              no longer the panel's first, so it is no longer the exception.
               ⚠ THE LINE OF PROSE IS NOT DUPLICATION OF THE GUIDE. How to Play explains what a
-              preset IS; this says which one you are in and what the three buttons at the foot of
-              THIS card will reach — a question asked by someone whose finger is already over Full
-              Reset. The guide is where they would find out afterwards.
-              THE BUTTON is a full-width `surface-toggle` — the Cancel/Close recipe at the panel's
-              own control tier (text-xs, py-1.5), not btn-solid: opening a manager is neither
-              constructive nor destructive, and violet in this panel means "this saves something"
-              (Save Defaults). It is deliberately NOT drawn as a switch row — THE PICKER RULE below
-              reserves label-left/one-button-right for on/off settings, and a modal opener wearing
-              that shape would read as a setting that is currently "Manage Presets". */}
+              preset IS and what Save Defaults captures; this says which preset you are in, that the
+              three buttons at the foot of THIS card act on it, and that "Open in" does not — a
+              question asked by someone whose finger is already over Full Reset.
+              THE MANAGE PRESETS BUTTON is a full-width `surface-toggle` — the Cancel/Close recipe at
+              the panel's own control tier (text-xs, py-1.5), not btn-solid: opening a manager is
+              neither constructive nor destructive, and violet in this panel means "this saves
+              something" (Save Defaults). It is deliberately NOT drawn as a switch row — THE PICKER
+              RULE below reserves label-left/one-button-right for on/off settings. */}
           <div className="space-y-2">
-            <SectionLabel>Presets</SectionLabel>
+            <SectionLabel>Global</SectionLabel>
             <div className="text-xs text-(--tx-200-80)">
-              You are on <b>{activePresetName}</b>. Everything in this menu, and both Reset buttons
-              at the foot of it, belong to that preset alone — no other preset is touched.
+              You are on <b>{activePresetName}</b>. The three buttons at the foot of this card, and
+              your saved defaults, belong to that preset alone. The two settings here apply to the
+              whole app.
             </div>
+            {/* OPEN IN (round-21 Q3) — where a fresh app open lands. "Last used" is today's
+                behaviour (the preset that was active when the app last closed); pick a preset to
+                pin it instead. A PillTray of "Last used" + one segment per preset, following THE
+                PICKER RULE below; the segment list rebuilds when presets are renamed / added /
+                removed. NOT captured by Save Defaults (it is global — see store/presetControl's
+                setOpenInPreset). */}
+            <div className="text-xs text-(--tx-200-80) pt-1">Open in</div>
+            <PillGroup label="Open in">
+              <PillTray value={openInValue} onChange={changeOpenIn} options={openInOptions} />
+            </PillGroup>
             {/* ⚠⚠ data-drag-stay, AND IT IS NOT DECORATION — IT IS WHAT MAKES THIS BUTTON WORK AT
                 ALL FROM THE GESTURE THE OWNER USES MOST. The ⚙ card is data-drag-dismiss, so a
                 press-drag that starts on the gear and releases on a control inside it clicks the
@@ -1027,11 +933,7 @@ export function SettingsPanel({
                 modal it just opened goes with it, so the gesture would look like a button that does
                 nothing. The ⚙ footer already carries this attribute for exactly this reason (its
                 Save Defaults, View/Clear Saved Defaults and Changelog links all open modals); this
-                is the first modal opener OUTSIDE that footer, so it has to say it for itself.
-                ⚠ ON THE BUTTON, NOT ON THE SECTION. `closest` walks up from the release target, so
-                either would work — but the section's other two children are a heading and a line of
-                prose, neither of which is a gesture target, so marking them would be claiming an
-                opt-out for elements that can never use one. */}
+                is the first modal opener OUTSIDE that footer, so it has to say it for itself. */}
             <button
               type="button"
               data-drag-stay
@@ -1040,6 +942,34 @@ export function SettingsPanel({
             >
               Manage Presets
             </button>
+          </div>
+          {/* ── PER-PRESET — the header the owner asked for over everything that is saved per
+              preset (round-21 Q3). Display / Dates / Stats and the footer's Save Defaults / Reset
+              Settings all act on the ACTIVE preset; this label makes that visible instead of
+              leaving it to How to Play. Default Mode — the page this preset opens on — is the first
+              such setting and lives right under the label; it IS captured by Save Defaults, which
+              the caption states so the reader does not have to cross-reference the guide. */}
+          <div className="space-y-2 pt-3 border-t border-(--bd-500-20)">
+            <SectionLabel>Per-preset</SectionLabel>
+            <div className="text-[11px] text-(--tx-300-60)">
+              Saved for this preset. Save Defaults captures these; the two Reset buttons restore
+              them.
+            </div>
+            <div className="text-xs text-(--tx-200-80) pt-1">Default Mode</div>
+            {/* Two stacked trays, one setting — the Date Format family pattern. The row that does
+                not hold the active value shows no selected segment. */}
+            <PillGroup label="Default Mode" className="space-y-1.5">
+              <PillTray
+                value={defaultMode}
+                onChange={setDefaultMode}
+                options={DEFAULT_MODE_PRIMARY}
+              />
+              <PillTray
+                value={defaultMode}
+                onChange={setDefaultMode}
+                options={DEFAULT_MODE_SECONDARY}
+              />
+            </PillGroup>
           </div>
           <div className="space-y-2 pt-3 border-t border-(--bd-500-20)">
             <SectionLabel>Display</SectionLabel>
@@ -1118,7 +1048,7 @@ export function SettingsPanel({
             <PillGroup label="Input" disabled={mode === 'deduction'}>
               <PillTray value={inputStyle} onChange={setInputStyle} options={INPUT_STYLES} />
             </PillGroup>
-            {/* Dot Layout — which way the 7-dot layout is TURNED (lib/dotLayout, the one array both
+            {/* Rotate Dots CCW — which way the 7-dot layout is TURNED (lib/dotLayout, the one array both
                 the real input and How-to-Play's diagram derive from). Q3 (round 20): this used to be
                 a two-option PillTray (Columns / Rows) and is a SWITCH now, on THE PICKER RULE's own
                 logic — a choice between exactly two named alternatives IS an on/off shape, and this
@@ -1129,11 +1059,13 @@ export function SettingsPanel({
                 actually makes it inert; cursor-not-allowed is folded into the button's className
                 string; no pointer-events-none, so a keyboard user reaches the button and is told why
                 it does nothing rather than meeting a silent one.
-                ⚠ NOT LABELLED "ROTATE", for the same reason the old picker's two pill labels never
-                said it either: this app already uses that word for "turn your device" (the
-                portrait-lock screen, components/RotateOverlay), one screen away from this one — a
-                second meaning here is confusion worth avoiding rather than a word worth reusing. "Dot
-                Layout" names the same setting it always has.
+                ⚠ LABELLED "Rotate Dots CCW" SINCE Q9 (round 21), the owner's call, reversing this
+                block's former "not labelled Rotate" argument: "Dot Layout" gave no hint what the
+                switch did, where "Rotate Dots CCW" plus its own On/Off state says it outright. The
+                "turn your device" meaning the word also carries (components/RotateOverlay's
+                portrait-lock screen) is a full-screen prompt one navigation away, not a peer
+                control, so the two do not read as one setting — the plain-language win is worth
+                more than the reused word was worth avoiding. The internal field stays `rotateDots`.
                 ★ IT LOCKS WHENEVER THERE ARE NO DOTS ON SCREEN TO TURN, which is two conditions and
                 not one — UNCHANGED from the picker: Deduction (whose answers are not weekdays at all
                 — the same `mode === 'deduction'` the Input picker above uses, shared on purpose,
@@ -1155,10 +1087,10 @@ export function SettingsPanel({
             <div
               className={`flex items-center justify-between ${mode === 'deduction' || inputStyle !== 'dots' ? 'opacity-60' : ''}`}
             >
-              <span className="text-xs text-(--tx-200-80)">Dot Layout</span>
+              <span className="text-xs text-(--tx-200-80)">Rotate Dots CCW</span>
               <button
                 type="button"
-                aria-label="Dot Layout"
+                aria-label="Rotate Dots CCW"
                 aria-disabled={mode === 'deduction' || inputStyle !== 'dots' || undefined}
                 onClick={() => {
                   if (mode !== 'deduction' && inputStyle === 'dots') setRotateDots((v) => !v)
@@ -1463,30 +1395,11 @@ export function SettingsPanel({
           className="popover-sticky-footer elev-shadow-up pt-4 px-4 border-t border-(--bd-500-20)"
         >
           <div ref={footerFitRef} className="flex gap-2">
-            {/* The invisible STATIC caption twins the auto-fit measures (fitFooterBtns above) — the
-                full resting set, so the live Full Reset → "Confirm?" swap never changes the fit.
-                absolute keeps them out of the flex row; same text classes as the buttons. */}
-            <span
-              data-fittwin
-              aria-hidden="true"
-              className="absolute invisible whitespace-nowrap text-xs font-medium"
-            >
-              Save Defaults
-            </span>
-            <span
-              data-fittwin
-              aria-hidden="true"
-              className="absolute invisible whitespace-nowrap text-xs font-medium"
-            >
-              Reset Settings
-            </span>
-            <span
-              data-fittwin
-              aria-hidden="true"
-              className="absolute invisible whitespace-nowrap text-xs font-medium"
-            >
-              Full Reset
-            </span>
+            {/* No hidden caption twins any more (Q7 round 21): every caption in this trio is static
+                text now that the Full Reset two-tap arm — the one caption that swapped ("Full
+                Reset" → "Confirm?") — is a ConfirmModal. fitFooterBtns measures the live
+                data-fitlabel spans directly, resetting each to its base size first so the shrink
+                cannot compound. */}
             {/* ★ HOW THESE THREE SAY "NOT RIGHT NOW" — one convention, stated three ways, and B7
                 (round 15) is the round that finished it. Each is
                   (a) DRAWN unavailable — NOT_OFFERED_BTN_CLASS (controlClasses);
@@ -1534,9 +1447,13 @@ export function SettingsPanel({
                 Save Defaults
               </span>
             </button>
+            {/* Reset Settings and Full Reset both open a ConfirmModal now (Q7 round 21). Reset
+                Settings had no confirmation before; Full Reset was a two-tap in-place arm whose
+                caption swapped to "Confirm?" and whose button wore an armed ring — all of that is
+                gone, the caption is static, and the popup carries the warning instead. */}
             <button
               type="button"
-              onClick={onResetSettings}
+              onClick={openResetSettingsConfirm}
               aria-disabled={!settingsModified || undefined}
               className={`flex-1 ${FOOTER_RESET_BTN_CLASS} overflow-hidden ${!settingsModified ? NOT_OFFERED_BTN_CLASS : ''}`}
             >
@@ -1544,108 +1461,63 @@ export function SettingsPanel({
                 Reset Settings
               </span>
             </button>
-            {/* Full Reset additionally carries the ARMED ring and is the element App's document-level
-                capture-phase disarm listener resolves through fullResetBtnRef. aria-disabled changes
-                neither: it is an ATTRIBUTE, so the ref still points at the same node, the node is
-                still focusable, and no focus moves when it flips. A real `disabled` would have moved
-                focus out from under that listener the moment a reset completed. */}
             <button
-              ref={fullResetBtnRef}
               type="button"
-              onClick={armFullReset}
+              onClick={openFullResetConfirm}
               aria-disabled={isFullyReset || undefined}
-              className={`flex-1 ${FOOTER_RESET_BTN_CLASS} overflow-hidden ${fullResetArmed ? 'ring-2 ring-rose-200 ' : ''}${isFullyReset ? NOT_OFFERED_BTN_CLASS : ''}`}
+              className={`flex-1 ${FOOTER_RESET_BTN_CLASS} overflow-hidden ${isFullyReset ? NOT_OFFERED_BTN_CLASS : ''}`}
             >
               <span data-fitlabel className="whitespace-nowrap">
-                {fullResetArmed ? 'Confirm?' : 'Full Reset'}
+                Full Reset
               </span>
             </button>
           </div>
-          {/* Every footer text link — the four buttons (View / Clear Saved Defaults, Check for
-              updates, Changelog) and the Contact address below — carries rounded-md px-1 -mx-1: the
-              padding gives the press-drag ring breathing room around the text and the radius rounds
-              its corners (vs a square outline hugging the glyphs); the negative margin cancels the
-              padding so the text keeps its exact flow position. The recipe spans BOTH footer blocks
-              now, which is why it is stated here, at the first link, rather than inside one of
-              them. */}
+          {/* Every footer TEXT LINK — Check for updates, Changelog, and the Contact address below —
+              carries rounded-md px-1 -mx-1: the padding gives the press-drag ring breathing room
+              around the text and the radius rounds its corners (vs a square outline hugging the
+              glyphs); the negative margin cancels the padding so the text keeps its exact flow
+              position. It is stated here, at the top of the footer, because it applies to the
+              metadata row below and to Contact — the saved-defaults pair is no longer part of it
+              (round 21, Q2 — see the row directly below). */}
           {/* ── THE SAVED-DEFAULTS PAIR — the pinned block's SECOND ROW (Q7 + Q12 + Q5 round-6;
-              moved up here this round, owner's call). It sat below the divider as the metadata
-              block's first row from Round-2 until now, and the DIVIDER MOVED DOWN WITH IT: this
-              block reads [three buttons + two links] and the next one starts at Contact. The two
-              links are otherwise untouched — same order (View LEFT of Clear, matching the button
-              trio's left→right escalation), same modals, and they still inherit a data-drag-stay,
-              from the pinned footer now instead of the metadata block, so a drag-release on either
-              still acts with the panel staying open (each opens its modal over it).
-              BOTH LINKS ARE NOW ALWAYS MOUNTED (round-20 Q5 — they used to be a conditional pair:
-              View spanning the whole row alone, Clear mounting only once a snapshot existed). View
-              Saved Defaults opens the defaults manager on its clearly-labelled FACTORY view when
-              nothing is saved (there is always something to see, and to edit, now that the popup is
-              the editable manager — manageDefaultsJsx, declared above) — unchanged by this round.
-              Clear Saved Defaults is the ONLY way back to factory semantics (the Save Defaults
-              popup's duplicate link was removed in Round-4: one action, one home); it opens a small
-              CONFIRM modal (Cancel + a red-tier Clear, above) rather than firing immediately — but
-              with nothing saved there is nothing FOR it to clear, so it DIMS AND LOCKS instead of
-              disappearing, the identical three-part convention the three buttons above it withhold
-              with (see the Reset Settings button's own comment, above): NOT_OFFERED_BTN_CLASS draws
-              it unavailable, aria-disabled announces it, and the onClick guard is what actually
-              makes it inert. The row is always reachable, unlike the button directly above it: Save
-              Defaults dims and locks exactly when live == saved, and these never hide behind that.
-              Below them the footer decays into contact info and metadata, which is why the divider
-              now falls where it does.
-
-              ★ WHY THE TWO CENTRES ARE THIRDS AND NOT HALVES. The three buttons above are flex-1
-              siblings, so their centres sit at 1/6, 1/2 and 5/6 of the row. The midpoint of the
-              first pair is 1/3 and of the second pair is 2/3 — so a link at each of those lands
-              exactly in a GAP between two buttons, and the two rows interlock like a brick course.
-              A generic space-around would have put them at 1/4 and 3/4, under the buttons rather
-              than between them; that is the thing this deliberately is not, so the thirds are
-              implemented as thirds and not approximated by a distribution keyword.
-              HOW: three equal columns and NO gap (a gap would push both centres off the thirds —
-              see FOOTER_DEFAULTS_ROW_CLASS), View placed across columns 1-2 and Clear across 2-3,
-              each centred within its own span. The centre of [0, 2/3] is 1/3 and the centre of
-              [1/3, 1] is 2/3. The two spans therefore OVERLAP in the middle column, and that is
-              what the rule costs rather than a slip to be tidied away: two boxes cannot both be
-              centred on the thirds AND tile the row. It also buys the better failure — each link
-              may grow to 2/3 of the row before the grid wraps it, where non-overlapping 1/3-wide
-              tracks would wrap both of these captions on any phone. The -mx-1 above is symmetric,
-              so centring the margin box centres the visible text with it.
-              Both links carry row-start-1 so they share the one row: with only Clear's column
-              stated explicitly, auto-placement would have found column 2 already behind the cursor
-              (View having just taken columns 1-2) and dropped Clear onto a second line.
-              ⚠ ROUND-20 Q5 DELETED THE THIRD BRANCH THIS PARAGRAPH USED TO ARGUE — "when only View
-              is present it spans all three columns instead". Both links are unconditional now (see
-              above), so the layout is ALWAYS the two-column split described here; there is no wider
-              case left to special-case, which is what makes this the simpler shape and not a
-              regression of the one it replaced.
-              ⚠ THE THIRDS ARE TIGHT ON A NARROW PHONE and jsdom cannot say how tight. Centre to
-              centre is exactly one third of the row; at the panel's width on a 390pt iPhone that is
-              ~97px, against two captions whose half-widths already sum to about the same — so the
-              labels come near to touching, and the press-drag rings (4px past each caption) can
-              overlap while the text still does not. No implementation of "centres on the thirds"
-              avoids that: it is a property of the rule, not of this code. Only the owner's device
-              settles whether it reads as interlocked or as crowded. */}
-          <div className={`${FOOTER_DEFAULTS_ROW_CLASS} pt-3`}>
+              moved up here round 20; restyled round 21, Q2). It is now two plain EQUAL-WIDTH PILL
+              BUTTONS filling the row directly under the three-button trio — the RESET_BTN_CLASS pill
+              geometry (px-3 py-1.5 rounded-xl border, text-xs font-medium, the border-transparent
+              rendered-height rule) on the neutral `surface-toggle` surface, NOT the rose fill: View
+              only navigates and Clear only OPENS a confirm, so neither is a destructive act in its
+              own right (the same reasoning that keeps PresetManager's ✕ off the rose fill). They
+              replaced the retired three-thirds overlap grid — two links centred on the row's 1/3
+              and 2/3 so they interlocked with the trio's gaps — which round 20 had already reduced
+              to an unconditional two-column split and which was tight to the point of the rings
+              overlapping on a narrow phone. Plain flex-1 siblings with a small gap have none of
+              that cost and read as one control tier with the trio above.
+              Order is unchanged: View LEFT of Clear, matching the trio's left→right escalation.
+              Both are ALWAYS MOUNTED (round-20 Q5). View Saved Defaults opens the defaults manager
+              on its clearly-labelled FACTORY view when nothing is saved. Clear Saved Defaults opens
+              a small CONFIRM modal (Cancel + a red-tier Clear, above) rather than firing
+              immediately — and with nothing saved there is nothing FOR it to clear, so it DIMS AND
+              LOCKS instead of disappearing: the identical three-part convention the three buttons
+              above it withhold with (see the Reset Settings button's own comment) —
+              NOT_OFFERED_BTN_CLASS draws it unavailable, aria-disabled announces it, and the
+              onClick guard is what actually makes it inert. The row is always reachable, unlike
+              Save Defaults directly above it, which dims and locks whenever live == saved.
+              data-drag-stay is inherited from the pinned footer container, so a drag-release on
+              either still opens its modal with the panel staying up. */}
+          <div className="flex gap-2 pt-3">
             <button
               type="button"
               onClick={openManageDefaults}
-              className="underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-1 col-end-3 justify-self-center"
+              className="flex-1 px-3 py-1.5 rounded-xl text-xs font-medium border surface-toggle text-(--tx-100-80)"
             >
               View Saved Defaults
             </button>
-            {/* Round-20 Q5: permanent, never unmounted. With nothing saved there is nothing to
-                clear, so it withholds the identical way the three buttons above it do — see the
-                Reset Settings button's own comment for the three-part convention this reuses
-                (NOT_OFFERED_BTN_CLASS draws it, aria-disabled announces it, the guard makes it
-                inert) — rather than the `disabled` attribute, which this codebase avoids on
-                every footer control for the documented reasons at NOT_OFFERED_BTN_CLASS: it would
-                drop the link from the tab order instead of leaving it reachable-but-inert. */}
             <button
               type="button"
               onClick={() => {
                 if (savedDefaults !== null) setClearConfirmOpen(true)
               }}
               aria-disabled={savedDefaults === null || undefined}
-              className={`underline select-none rounded-md px-1 -mx-1 row-start-1 col-start-2 col-end-4 justify-self-center ${savedDefaults === null ? NOT_OFFERED_BTN_CLASS : ''}`}
+              className={`flex-1 px-3 py-1.5 rounded-xl text-xs font-medium border surface-toggle text-(--tx-100-80) ${savedDefaults === null ? NOT_OFFERED_BTN_CLASS : ''}`}
             >
               Clear Saved Defaults
             </button>
@@ -1783,9 +1655,42 @@ export function SettingsPanel({
       </div>
       {saveDefaultsJsx}
       {manageDefaultsJsx}
-      {clearConfirmJsx}
       {changelogJsx}
       {presetsJsx}
+      {/* The three reset-style confirmations (Q7 round 21) — one shape, one component. Every popup
+          names what the action does and whether it is per-preset or app-wide; the owner delegated
+          the wording to Claude, matched to the Clear popup's and How to Play's voice. */}
+      <ConfirmModal
+        open={fullResetConfirmOpen}
+        onCancel={closeFullResetConfirm}
+        onConfirm={confirmFullReset}
+        title="Full Reset this preset?"
+        body="Wipes this preset's stats, all-time bests, every ⚙ setting and each mode's setup back to launch defaults — your saved defaults are kept, and no other preset is touched. Your shared Lookup history is cleared too."
+        confirmLabel="Full Reset"
+        backButtonId="full-reset"
+      />
+      <ConfirmModal
+        open={resetSettingsConfirmOpen}
+        onCancel={closeResetSettingsConfirm}
+        onConfirm={confirmResetSettings}
+        title="Reset Settings for this preset?"
+        body="Restores every ⚙ setting for this preset — Display, Dates, Stats, each mode's setup and Default Mode — to your saved defaults, or the launch defaults if you've saved none. Your stats and all-time bests are untouched, and you stay on the page you're on."
+        confirmLabel="Reset Settings"
+        backButtonId="reset-settings-confirm"
+      />
+      {/* Confirm labels above deliberately REPEAT the action verb ("Full Reset" / "Reset
+          Settings"), so screen-reader users hear the same words on the trigger and on the
+          confirm. The footer buttons those triggers are portal OUT of this component's card, so
+          a name query scoped to the ⚙ panel never sees the popup's button and vice versa. */}
+      <ConfirmModal
+        open={clearConfirmOpen}
+        onCancel={closeClearConfirm}
+        onConfirm={confirmClearDefaults}
+        title="Clear your saved defaults?"
+        body="This only forgets the snapshot — your current settings stay as they are, and the launch defaults take over. Saved defaults are per-preset, so no other preset is affected."
+        confirmLabel="Clear"
+        backButtonId="clear-defaults"
+      />
     </>
   )
 }

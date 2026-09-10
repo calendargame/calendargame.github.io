@@ -20,7 +20,7 @@ import { DOT_MARK_ROTATION, type DotOrientation } from '../lib/dotLayout.js'
 // put a name on a drawing that does not say one — and it would say it at BOTH call sites, the bar
 // and the rotate-back overlay, where that frame already announces its own caption.
 //
-// ★ IT TURNS WITH THE DOT LAYOUT (Settings → Display → Dot Layout), and that is not decoration
+// ★ IT TURNS WITH THE DOT LAYOUT (Settings → Display → Rotate Dots CCW), and that is not decoration
 // for its own sake: the seven board dots below sit on the SAME seven cells the Dots answer input
 // uses (x 202/256/310 = columns 1/2/3, y 196/256/316 = rows 1/2/3 — check them against
 // lib/dotLayout's array and they match one for one). How-to-Play tells the player the dots are the

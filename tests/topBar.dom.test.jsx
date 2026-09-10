@@ -216,4 +216,31 @@ describe('the width cuts that paid for the fourth control', () => {
     expect(switcherClasses).toContain('min-w-0')
     expect(switcherClasses).not.toContain('shrink-0')
   })
+
+  // Q10 (round 21): the mode trigger is pinned to its OWN dropdown's width, the preset dropdown to
+  // ITS OWN trigger's — opposite directions, one shared CustomSelect. jsdom can't measure either
+  // result; what it CAN pin is that each call site asked for the right behaviour, via the style
+  // the prop produces. The pixel equality is verified in a real browser (main.tsx budget block).
+  it('gives the mode selector a content-width dropdown and a width-mirror on its trigger', () => {
+    mountApp()
+    const [, , modeWrap] = [...row().children]
+    // The hidden width-mirror (triggerMatchesDropdown): an out-of-flow, aria-hidden div the mode
+    // trigger is measured against. Absence of it means the prop was dropped.
+    const mirror = modeWrap.querySelector('div[aria-hidden="true"][style*="visibility: hidden"]')
+    expect(mirror).not.toBeNull()
+    tap(modeTrigger())
+    // The mode dropdown is NOT resized by Q10 — it stays width:max-content (dropdownWidth 'content').
+    expect(screen.getByRole('listbox', { name: 'Mode' }).style.width).toBe('max-content')
+  })
+
+  it("sizes the preset dropdown to the trigger (dropdownWidth='match-trigger'), not to its content", () => {
+    mountApp()
+    tap(presetTrigger())
+    // 'match-trigger' writes a px width from the trigger wrapper's measured rect; jsdom's rect is
+    // 0, so the concrete value is '0px' here — the POINT is that it is a px string, never
+    // 'max-content'. A real browser turns the same code path into the trigger's true width.
+    const w = screen.getByRole('listbox', { name: 'Preset' }).style.width
+    expect(w).toMatch(/px$/)
+    expect(w).not.toBe('max-content')
+  })
 })

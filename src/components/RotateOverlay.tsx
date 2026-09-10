@@ -11,7 +11,7 @@ import W5Logo from './W5Logo.jsx'
 // fixed z-100 cover also blocks every interaction with the sideways app beneath it; rotating
 // back unmounts it, no dismiss affordance by design.
 // ⚠ IT DELIBERATELY DOES NOT PASS `dotOrientation`, so the mark here stays upright even when the
-// player has turned the Dots layout (Settings → Display → Dot Layout) and the TITLE BAR's mark has
+// player has turned the Dots layout (Settings → Display → Rotate Dots CCW) and the TITLE BAR's mark has
 // turned with it. That is the whole reason W5Logo's prop defaults to upright: this frame is the
 // splash's glyph at the splash's size, and the splash is pinned to the static iOS launch PNGs
 // (public/apple-splash-*) that are pre-renders of index.html's #boot and can follow nothing. Turn

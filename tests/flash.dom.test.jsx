@@ -10,7 +10,7 @@
 // Flash is still rendered inline by App (not yet migrated), so we drive the real <App/>,
 // switch to Flash via the keyboard shortcut, and assert on what shows.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
@@ -75,6 +75,18 @@ const correctName = ({ y, m, d }) => DAY[wday(y, m, d)]
 const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
 const dayBtn = (name) => screen.getByRole('button', { name })
 const ctrl = (name) => screen.getByRole('button', { name })
+// Q7 round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
+const fireResetSettings = () => {
+  act(() => fireEvent.click(ctrl('Reset Settings')))
+  act(() =>
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Reset Settings for this preset?' })).getByRole(
+        'button',
+        { name: 'Reset Settings' },
+      ),
+    ),
+  )
+}
 // Not offered = the app is withholding the control. How that is SPELLED lives in one place
 // (tests/helpers/offered) so this file never names a class string.
 const isDisabled = (btn) => !isOffered(btn)
@@ -466,7 +478,7 @@ describe('Flash — Q7 round-6 (Reset Settings restoring the Flash speed re-sync
     switchToFlash()
     expect(flashCountdownText()).toBe('0.8s') // seeded from the live 800ms speed
     toggleSettings()
-    act(() => fireEvent.click(ctrl('Reset Settings'))) // restores flashMs → 2000 (factory), no slider event
+    fireResetSettings() // restores flashMs → 2000 (factory), no slider event
     toggleSettings()
     expect(useModePrefs.getState().flashMs).toBe(2000)
     expect(flashCountdownText()).toBe('2.0s') // the idle label re-synced to the restored speed

@@ -57,6 +57,7 @@ import {
   drawnUnavailable,
   isOffered,
   tap,
+  fireFullReset,
 } from './helpers/settingsPanel.jsx'
 import { statValue, readDate, correctDayName } from './helpers/modeScreen.jsx'
 
@@ -236,7 +237,10 @@ describe('an amnesic preset never writes its stats down', () => {
 
     expect(liveProgress()).toEqual(makeProgressDefaults())
     expect(parked()).toBe(before)
-    // Still amnesic on the way back in — the switch is not something a close resets.
+    // The flag itself is untouched HERE because relaunch() rehydrates the progress store — the
+    // store-level stand-in for a RELOAD, which keeps the session (see the next case). A real cold
+    // open is a full <App/> remount, and round-21 Q1 makes that reseed every preset's Amnesic flag
+    // from its saved default; that path has its own coverage in the 'cold-open reseed' block below.
     expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
   })
 
@@ -441,8 +445,7 @@ describe('turning Amnesic on with the app running', () => {
     pressNew()
     playCorrect(2)
     openSettings('key')
-    tap(screen.getByRole('button', { name: /Full Reset/i }))
-    tap(screen.getByRole('button', { name: /Confirm/i }))
+    fireFullReset()
 
     // The session is blank, as on any preset...
     expect(statValue('Score')).toBe('0/0')
@@ -457,8 +460,7 @@ describe('turning Amnesic on with the app running', () => {
     pressNew()
     playCorrect(3)
     openSettings('key')
-    tap(screen.getByRole('button', { name: /Full Reset/i }))
-    tap(screen.getByRole('button', { name: /Confirm/i }))
+    fireFullReset()
     expect(statValue('Score')).toBe('0/0')
   })
 })
@@ -530,6 +532,91 @@ describe('the Amnesic switch in the ⚙ panel', () => {
     ).not.toMatch(/modified/)
     act(() => useSettings.getState().resetToFactory())
     expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// COLD-OPEN RESEED (round-21 Q1). An Amnesic flag is a SESSION toggle: every full app open resets
+// EVERY preset's Amnesic flag to that preset's own saved default (store/userDefaults'
+// effectiveAmnesicDefault — false when nothing is saved). A mid-session toggle still sticks until
+// the next cold open. src/main.tsx does this in a one-shot boot effect that walks the registry and
+// reads each preset's namespaced userDefaults key through storedAmnesicDefault.
+//
+// ⚠ THE SIMULATION. relaunch() elsewhere in this file is a store rehydrate — a RELOAD, which keeps
+// the session. A cold open is a full <App/> remount, so coldOpen() below unmounts and mounts again:
+// the store singletons and localStorage carry over (a real browser reloads them from disk to the
+// same values), and it is the boot effect on the fresh mount that does the reseed.
+describe('cold-open reseed of Amnesic (round-21 Q1)', () => {
+  beforeEach(() => resetAppState())
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  const coldOpen = () => {
+    cleanup()
+    document.getElementById('root')?.remove()
+    mountApp()
+  }
+  // Save this preset's personal defaults with a chosen Amnesic value — the real ⚙ footer path,
+  // written to whichever preset's namespaced userDefaults key the store is currently pointed at.
+  const saveAmnesicDefault = (amnesic) =>
+    act(() =>
+      useUserDefaults.getState().saveDefaults({
+        settings: { ...useSettings.getState() },
+        prefs: { flashMs: 800, blitzSec: 60, blitzQSec: 20, aoxN: '10' },
+        amnesic,
+      }),
+    )
+
+  it('a preset left Amnesic, with a not-Amnesic saved default, comes back not-Amnesic', () => {
+    mountApp()
+    saveAmnesicDefault(false)
+    setAmnesic(true) // the guest flips it on mid-session
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
+
+    coldOpen()
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(false)
+  })
+
+  it('a preset with an Amnesic saved default comes back Amnesic', () => {
+    mountApp()
+    saveAmnesicDefault(true)
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(false) // not amnesic right now
+
+    coldOpen()
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(true) // …reseeded to the saved default
+  })
+
+  it('a preset set Amnesic with NO saved defaults reverts to off (guest mode is temporary)', () => {
+    mountApp()
+    setAmnesic(true)
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
+
+    coldOpen()
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(false)
+  })
+
+  it('toggling Amnesic mid-session and NOT reopening leaves it on', () => {
+    mountApp()
+    saveAmnesicDefault(false)
+    setAmnesic(true)
+    // No coldOpen(): the boot effect ran once at mount and does not re-fire within a session.
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
+  })
+
+  it('a preset you are NOT on is reseeded too, from its own namespaced saved default', () => {
+    mountApp()
+    const p2 = createPreset()
+    act(() => switchPreset(p2.id))
+    saveAmnesicDefault(false) // written to preset 2's own userDefaults key
+    setAmnesic(true, p2.id)
+    act(() => switchPreset(1)) // back on preset 1; p2 is the one we are not on
+    expect(isAmnesic(usePresets.getState(), p2.id)).toBe(true)
+
+    coldOpen()
+    expect(isAmnesic(usePresets.getState(), p2.id)).toBe(false)
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(false) // preset 1 untouched, still off
   })
 })
 

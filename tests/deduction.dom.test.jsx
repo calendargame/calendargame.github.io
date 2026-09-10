@@ -15,7 +15,7 @@
 // numbers; Month options are doomsday-code boxes whose labels (e.g. "Jan/Oct") name the months
 // they group, so the correct box is the one holding a month whose weekday matches.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { DAY } from '../src/lib/format.js'
@@ -51,6 +51,19 @@ function switchToDeduction() {
 function clickCtrl(name) {
   act(() => {
     fireEvent.click(ctrl(name))
+  })
+}
+// Q7 round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm — the
+// confirm button is resolved WITHIN the dialog so it never collides with the always-present mode
+// button of the same name.
+function fireResetStats() {
+  clickCtrl('Reset Stats')
+  act(() => {
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Reset Stats?' })).getByRole('button', {
+        name: 'Reset Stats',
+      }),
+    )
   })
 }
 function clickEl(el) {
@@ -397,8 +410,7 @@ describe('Deduction — characterization (batch 4: Day Show Codes, streaks, Rese
     switchToDeduction()
     answerCorrect() // 1/1, history has one entry
     expect(isDisabled(ctrl('<'))).toBe(false)
-    clickCtrl('Reset Stats') // Q2: first tap arms
-    clickCtrl('Reset Stats?') // second tap confirms + clears
+    fireResetStats() // opens the confirm popup, then confirms
     expect(statValue('Score')).toBe('0/0')
     expect(statValue('Streak')).toBe('0/0')
     expect(isDisabled(ctrl('<'))).toBe(true) // history cleared

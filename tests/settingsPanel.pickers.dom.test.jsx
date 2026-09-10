@@ -172,7 +172,7 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   // input, which Deduction does not have — so both are walked through every mode HERE rather than
   // one being spot-checked elsewhere. The pair is the point: they were written to lock together, and
   // the failure worth catching is one of them drifting off the condition while the other still
-  // satisfies every case that names it. Q3 (round 20) made Dot Layout a SWITCH rather than a
+  // satisfies every case that names it. Q3 (round 20) made Rotate Dots CCW a SWITCH rather than a
   // picker, so it is read through isOffered here rather than expectLock — a different assertion for
   // the same claim, and the reason this walk cannot simply loop a shared name list any more.
   // ⚠ DOT LAYOUT CARRIES A SECOND LOCK — Input on Buttons, where there are no dots to turn; its
@@ -180,12 +180,12 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   // with the rest of that setting's story, rather than copied here. This walk therefore chooses
   // DOTS first: without that the switch is locked in all seven modes and the case would pass while
   // saying nothing about the MODE lock at all.
-  it('Input and Dot Layout are live in every mode except Deduction', () => {
+  it('Input and Rotate Dots CCW are live in every mode except Deduction', () => {
     standUp()
     pickPill('Input', 'Dots')
     const both = (locked) => {
       expectLock('Input', locked)
-      expect(isOffered(settingSwitch('Dot Layout'))).toBe(!locked)
+      expect(isOffered(settingSwitch('Rotate Dots CCW'))).toBe(!locked)
     }
     both(false) // classic, where the app opens
     for (const mode of ['flash', 'blitz', 'aox', 'lookup']) {

@@ -14,6 +14,21 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 
 ## Retired entries
 
+### 2026-07-26
+
+- The Lookup page no longer scrolls as a whole — only the history list moves, and it now uses whatever room your screen has instead of stopping at a fixed height.
+- The answer line in Lookup always keeps its space, so nothing on the page shifts as answers come and go. Before your first lookup, or after Clear, it simply invites you to enter a date.
+- Lookup works out every answer and every history row afresh, so changing your Date Format or the Julian Calendar setting updates the answer line and the whole list together.
+- The five themes are now buttons in two labelled rows, Dark and Light, instead of hiding inside drop-down menus — and both rows always show, so the settings menu no longer changes height.
+- Turning Use System Settings off now keeps whichever theme is already on screen.
+- The app keeps your place when you switch away and come back, instead of jumping to the top — in How to Play and in the game screens alike. And a How to Play section you open now comes to rest just clear of the bar at the top, with its title fully readable.
+- Tapping a value to type it — a timer, or the AoX Run Length — no longer nudges the row around it, and a longer number is no longer cut off as you type.
+- In Deduction, the month answer buttons are now the same size as the year and day ones.
+- The small light-blue dot now sits just after the word Changelog instead of on top of it, and the changelog itself keeps the ten most recent days that had an update.
+- Fixed: in AoX, the codes panel no longer swaps what it shows while it is sliding shut.
+- The Show Codes button now stands exactly as tall as the buttons beside it.
+- The settings controls and the Show Codes button now describe themselves properly to screen readers.
+
 ### 2026-07-21
 
 - The small links at the bottom of the settings menu now share consistent spacing.

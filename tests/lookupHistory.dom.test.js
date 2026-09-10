@@ -42,9 +42,8 @@ import {
   resetAppState,
   mountApp,
   pressKey,
-  tap,
   openSettings,
-  fullResetButton,
+  fireFullReset,
 } from './helpers/settingsPanel.jsx'
 
 const LOOKUP_KEY = 'cg-lookup-v1'
@@ -246,8 +245,7 @@ describe('Full Reset clears it too', () => {
     expect(historyRowCount()).toBe(1)
     pressKey('K')
     openSettings()
-    tap(fullResetButton()) // arm
-    tap(fullResetButton()) // confirm
+    fireFullReset()
     expect(useLookupHistory.getState().history).toEqual([])
     pressKey('L')
     expect(historyRowCount()).toBe(0)
@@ -260,8 +258,7 @@ describe('Full Reset clears it too', () => {
     expect(historyRowCount()).toBe(1)
     pressKey('K')
     openSettings()
-    tap(fullResetButton())
-    tap(fullResetButton())
+    fireFullReset()
     // The entry never reached the permanent list (it is amnesic — see the next describe block), and
     // clearLookupHistory() empties BOTH buckets regardless of which one actually held anything, so
     // the session overflow is wiped right alongside the (already-empty) permanent list.

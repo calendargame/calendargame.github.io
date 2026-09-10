@@ -58,6 +58,7 @@ import {
   pickerLockState,
   toggleSwitch,
   tapFooter,
+  fireResetSettings,
   fullResetState,
   footerOfferState,
   yearInput,
@@ -441,7 +442,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     commitYear('max', 'blur')
     focusYear('min')
     typeYear('min', '1800')
-    tapFooter('Reset Settings')
+    fireResetSettings()
     expect(yearValue('min')).toBe('1')
     expect(yearValue('max')).toBe('10000')
     expect(settings().minY).toBe(1)
@@ -722,8 +723,8 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     openPanel()
     expect(fullResetState().offered).toBe(false)
     tapFooter('Full Reset')
-    // It does not even arm: the caption stays put and no confirm ring appears.
-    expect(fullResetState()).toEqual({ caption: 'Full Reset', armed: false, offered: false })
+    // The dimmed-button short-circuit holds: the confirmation popup never opens.
+    expect(fullResetState()).toEqual({ caption: 'Full Reset', offered: false, confirmOpen: false })
     expect(isSettingsOpen()).toBe(true)
   })
 

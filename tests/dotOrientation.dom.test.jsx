@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Dot Layout (Settings → Display → Dot Layout) — the 7-dot layout's SECOND orientation, the ⚙
+// Rotate Dots CCW (Settings → Display → Rotate Dots CCW) — the 7-dot layout's SECOND orientation, the ⚙
 // switch that picks it, and the app mark that turns with it.
 //
 // ⚠ WHAT jsdom CANNOT SAY, stated first so nothing below is read as saying it: there is no layout
@@ -16,7 +16,7 @@
 // the geometry's own 'columns' | 'rows' type, and every consumer derives through it. Two things
 // changed shape, not just name:
 //   1. THE PANEL CONTROL. What used to be a two-option PillTray (Columns / Rows) is now an On/Off
-//      switch, on the same footing as Amnesic and Save Stats — see 'Settings → Dot Layout switch'.
+//      switch, on the same footing as Amnesic and Save Stats — see 'Settings → Rotate Dots CCW switch'.
 //   2. THE MARK'S GATE. main.tsx's W5Logo used to read `dotOrientation` UNCONDITIONALLY, so a
 //      player on Buttons could leave the setting on and the title-bar mark sat turned forever with
 //      no dots anywhere on screen it corresponded to. It now also requires `inputStyle==='dots'` —
@@ -68,7 +68,7 @@ afterEach(() => {
   document.getElementById('root')?.remove()
 })
 
-describe('Dot Layout — the input turns as DATA, not as paint', () => {
+describe('Rotate Dots CCW — the input turns as DATA, not as paint', () => {
   beforeEach(() => {
     resetAppState()
     useSettings.getState().setInputStyle('dots')
@@ -164,13 +164,13 @@ describe('settings store — v1 dotOrientation payload rehydrates through the mi
   })
 })
 
-describe('Settings → Dot Layout switch', () => {
+describe('Settings → Rotate Dots CCW switch', () => {
   beforeEach(() => {
     resetAppState()
   })
 
   // Every case below wants the switch LIVE, and the panel's launch state is not: Input starts on
-  // Buttons, where Dot Layout is locked because there is nothing on screen it could turn (see the
+  // Buttons, where Rotate Dots CCW is locked because there is nothing on screen it could turn (see the
   // Buttons case at the foot of this describe). Chosen through the panel rather than written into
   // the store, so the setup is the gesture a player makes.
   const chooseDots = () => pickPill('Input', 'Dots')
@@ -180,20 +180,20 @@ describe('Settings → Dot Layout switch', () => {
     openSettings('key')
     chooseDots()
     expect(useSettings.getState().rotateDots).toBe(false)
-    expect(switchState('Dot Layout')).toBe('Off')
-    toggleSwitch('Dot Layout')
+    expect(switchState('Rotate Dots CCW')).toBe('Off')
+    toggleSwitch('Rotate Dots CCW')
     expect(useSettings.getState().rotateDots).toBe(true)
-    expect(switchState('Dot Layout')).toBe('On')
-    toggleSwitch('Dot Layout')
+    expect(switchState('Rotate Dots CCW')).toBe('On')
+    toggleSwitch('Rotate Dots CCW')
     expect(useSettings.getState().rotateDots).toBe(false)
-    expect(switchState('Dot Layout')).toBe('Off')
-    expect(isOffered(settingSwitch('Dot Layout'))).toBe(true)
+    expect(switchState('Rotate Dots CCW')).toBe('Off')
+    expect(isOffered(settingSwitch('Rotate Dots CCW'))).toBe(true)
   })
 
   // It shares Input's mode lock because it shares Input's subject — the weekday dot input, which
   // Deduction does not have. Asserted as a PAIR: the two moving apart is the failure this case
   // exists to catch, and neither control's own state would show it.
-  // ⚠ THE PAIR IS ABOUT THIS CONDITION ONLY, and the two are NOT interchangeable: Dot Layout has a
+  // ⚠ THE PAIR IS ABOUT THIS CONDITION ONLY, and the two are NOT interchangeable: Rotate Dots CCW has a
   // second lock Input does not (Buttons — the case below), because Input chooses whether there are
   // dots at all and cannot lock itself out.
   it('is locked (dimmed, value preserved) in Deduction, exactly with Input', () => {
@@ -201,16 +201,16 @@ describe('Settings → Dot Layout switch', () => {
     openSettings('key')
     chooseDots() // …so the lock this case reads is the MODE's, not the Buttons one
     expectLock('Input', false)
-    expect(isOffered(settingSwitch('Dot Layout'))).toBe(true)
+    expect(isOffered(settingSwitch('Rotate Dots CCW'))).toBe(true)
     act(() => {
       fireEvent.keyDown(window, { key: 'D' }) // switch to Deduction
     })
     openSettings('key')
     expectLock('Input', true)
-    expect(isOffered(settingSwitch('Dot Layout'))).toBe(false)
-    expect(drawnUnavailable(settingSwitch('Dot Layout'))).toBe(true)
+    expect(isOffered(settingSwitch('Rotate Dots CCW'))).toBe(false)
+    expect(drawnUnavailable(settingSwitch('Rotate Dots CCW'))).toBe(true)
     // The onClick guard behind the switch keeps the value even if a press is dispatched at it.
-    toggleSwitch('Dot Layout')
+    toggleSwitch('Rotate Dots CCW')
     expect(useSettings.getState().rotateDots).toBe(false)
   })
 
@@ -222,23 +222,23 @@ describe('Settings → Dot Layout switch', () => {
   it('is locked while the answer input is Buttons, and unlocks the moment Dots is chosen', () => {
     mountApp() // Classic, Input at its factory Buttons
     openSettings('key')
-    expect(isOffered(settingSwitch('Dot Layout'))).toBe(false)
+    expect(isOffered(settingSwitch('Rotate Dots CCW'))).toBe(false)
     expectLock('Input', false) // …and Input itself stays live, or there would be no way out
     // The guard behind the lock holds: a press dispatched at the switch changes nothing.
-    toggleSwitch('Dot Layout')
+    toggleSwitch('Rotate Dots CCW')
     expect(useSettings.getState().rotateDots).toBe(false)
     chooseDots()
-    expect(isOffered(settingSwitch('Dot Layout'))).toBe(true)
-    toggleSwitch('Dot Layout')
+    expect(isOffered(settingSwitch('Rotate Dots CCW'))).toBe(true)
+    toggleSwitch('Rotate Dots CCW')
     expect(useSettings.getState().rotateDots).toBe(true)
     // …and going back to Buttons re-locks it with the pick intact, rather than resetting it.
     pickPill('Input', 'Buttons')
-    expect(isOffered(settingSwitch('Dot Layout'))).toBe(false)
-    expect(switchState('Dot Layout')).toBe('On')
+    expect(isOffered(settingSwitch('Rotate Dots CCW'))).toBe(false)
+    expect(switchState('Rotate Dots CCW')).toBe('On')
     expect(useSettings.getState().rotateDots).toBe(true)
   })
 
-  // Dot Layout is a SWITCH like Amnesic and Save Stats, not a picker — asserted here rather than
+  // Rotate Dots CCW is a SWITCH like Amnesic and Save Stats, not a picker — asserted here rather than
   // assumed, because the setting used to be drawn as a two-option tray and a rewrite that left a
   // PillGroup/PillTray behind would pass every value-level test above while getting the CONTROL
   // KIND wrong. Same contract, checked the same way tests/amnesic.dom checks Amnesic's: the lock
@@ -246,16 +246,18 @@ describe('Settings → Dot Layout switch', () => {
   // than the button itself (opacity would otherwise multiply through two layers), and nothing here
   // uses pointer-events-none — a keyboard user reaches the button and is told why it does nothing.
   it('matches the Amnesic switch contract exactly: aria-disabled, an ancestor dim, no pointer-events-none', () => {
-    mountApp() // Input starts on Buttons — Dot Layout starts locked
+    mountApp() // Input starts on Buttons — Rotate Dots CCW starts locked
     openSettings('key')
-    expect(settingSwitch('Dot Layout').getAttribute('aria-disabled')).toBe('true')
-    expect(isDimmed(settingSwitch('Dot Layout'))).toBe(false) // not on the button itself
-    expect(settingSwitch('Dot Layout').className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/)
-    expect(settingSwitch('Dot Layout').className).toMatch(/(^|\s)cursor-not-allowed(\s|$)/)
-    expect(drawnUnavailable(settingSwitch('Dot Layout'))).toBe(true) // an ancestor carries the dim
+    expect(settingSwitch('Rotate Dots CCW').getAttribute('aria-disabled')).toBe('true')
+    expect(isDimmed(settingSwitch('Rotate Dots CCW'))).toBe(false) // not on the button itself
+    expect(settingSwitch('Rotate Dots CCW').className).not.toMatch(
+      /(^|\s)pointer-events-none(\s|$)/,
+    )
+    expect(settingSwitch('Rotate Dots CCW').className).toMatch(/(^|\s)cursor-not-allowed(\s|$)/)
+    expect(drawnUnavailable(settingSwitch('Rotate Dots CCW'))).toBe(true) // an ancestor carries the dim
     chooseDots()
-    expect(settingSwitch('Dot Layout').getAttribute('aria-disabled')).toBeNull()
-    expect(drawnUnavailable(settingSwitch('Dot Layout'))).toBe(false)
+    expect(settingSwitch('Rotate Dots CCW').getAttribute('aria-disabled')).toBeNull()
+    expect(drawnUnavailable(settingSwitch('Rotate Dots CCW'))).toBe(false)
   })
 })
 
@@ -267,15 +269,15 @@ describe('The title-bar mark only turns while Input is Dots — and the fixed fr
 
   // ★ THE BUG THIS ROUND FIXES, stated as its own case rather than folded into the pair below: the
   // mark used to read `rotateDots` (then `dotOrientation`) unconditionally, so a player on Buttons
-  // could leave Dot Layout on and the mark sat turned forever with no dots anywhere on screen it
+  // could leave Rotate Dots CCW on and the mark sat turned forever with no dots anywhere on screen it
   // corresponded to.
-  it('stays upright with Dot Layout on, while Input is Buttons', () => {
+  it('stays upright with Rotate Dots CCW on, while Input is Buttons', () => {
     const { container } = mountApp() // Classic, Input at its factory Buttons
     act(() => useSettings.getState().setRotateDots(true))
     expect(MARKS(container)[0].style.transform).toBe('none')
   })
 
-  it('turns the moment Input becomes Dots, with Dot Layout already on', () => {
+  it('turns the moment Input becomes Dots, with Rotate Dots CCW already on', () => {
     const { container } = mountApp()
     act(() => useSettings.getState().setRotateDots(true))
     act(() => useSettings.getState().setInputStyle('dots'))
@@ -295,7 +297,7 @@ describe('The title-bar mark only turns while Input is Dots — and the fixed fr
     expect(DOT_MARK_ROTATION.rows).toBe('rotate(-90deg)')
   })
 
-  it('snaps back upright the moment Input returns to Buttons, even though Dot Layout stays on', () => {
+  it('snaps back upright the moment Input returns to Buttons, even though Rotate Dots CCW stays on', () => {
     const { container } = mountApp()
     act(() => useSettings.getState().setInputStyle('dots'))
     act(() => useSettings.getState().setRotateDots(true))
@@ -309,7 +311,7 @@ describe('The title-bar mark only turns while Input is Dots — and the fixed fr
   // it. It carries no accessible name in any state — the <h1> beside it is the name — so nothing
   // about the rotation reaches the accessibility tree, which is the licence the CSS transform is
   // used under in the first place.
-  it('stays aria-hidden and unfocusable in every combination of Dot Layout and Input', () => {
+  it('stays aria-hidden and unfocusable in every combination of Rotate Dots CCW and Input', () => {
     const { container } = mountApp()
     for (const rotate of [false, true]) {
       for (const style of ['buttons', 'dots']) {
@@ -335,7 +337,7 @@ describe('The title-bar mark only turns while Input is Dots — and the fixed fr
   // mark even while the title bar's has turned. If this case ever fails, read the comment in
   // components/RotateOverlay before "fixing" it: the failure is the intended behaviour being
   // removed, not a bug being found.
-  it('the rotate-back overlay keeps the upright mark even with Dot Layout on and Input on Dots', () => {
+  it('the rotate-back overlay keeps the upright mark even with Rotate Dots CCW on and Input on Dots', () => {
     useSettings.getState().setRotateDots(true)
     useSettings.getState().setInputStyle('dots')
     const { container } = render(<RotateOverlay />)

@@ -86,13 +86,18 @@
 
        ★★ WHICH SETTINGS PAYLOAD, THOUGH — the settings store is PER-PRESET (the owner was explicit
        that not even the theme stays global), so this script has to resolve the ACTIVE PRESET before
-       it can know where the theme is. It reads the global registry 'cg-presets-v1' for activeId and
-       composes the key exactly as src/store/presets.ts's `presetKey` does — base key for preset 1,
-       base+'~p'+id for every other. Preset 1's key really is the bare base key, so a device that has
-       never created a second preset (and therefore has no registry entry at all) takes the SAME path
-       it always did, byte for byte. Duplicating that one expression is unavoidable — this script
-       runs before any module can load — so tests/bootTheme.dom pins it against the real `presetKey`
-       and fails if either side drifts.
+       it can know where the theme is. It reads the global registry 'cg-presets-v1' and resolves the
+       active preset the SAME way store/presets' hydrate `merge` does: the "open in" pin
+       (openInPreset — round-21 Q3) when it names a preset that still exists, else the persisted
+       activeId. Doing it here as well is what keeps the first painted frame's theme right when a
+       pin points at a preset whose theme differs from whatever was active last time — otherwise the
+       boot frame would wear the old theme and App's hydrate would repaint it a frame later. It then
+       composes the settings key exactly as `presetKey` does — base key for preset 1, base+'~p'+id
+       for every other. Preset 1's key really is the bare base key, so a device that has never
+       created a second preset (and therefore has no registry entry at all) takes the SAME path it
+       always did, byte for byte. Duplicating these two expressions is unavoidable — this script
+       runs before any module can load — so tests/bootTheme.dom pins them against the real
+       `presetKey` / `resolveOpenInActiveId` and fails if either side drifts.
        ⚠ A registry that is missing, unparseable or naming a preset with no saved settings falls
        through to the OS default, which is the same graceful landing this script has always had for
        a missing payload; store/presets' normalizeRegistry repairs the registry itself moments later,
@@ -101,7 +106,7 @@
   <script>(function(){
     var d=window.matchMedia('(prefers-color-scheme: dark)').matches,t;
     try{
-      var p=1;try{p=JSON.parse(localStorage.getItem('cg-presets-v1')).state.activeId||1;}catch(e){}
+      var p=1;try{var R=JSON.parse(localStorage.getItem('cg-presets-v1')).state,q=R.openInPreset;p=(q!=null&&q!=='last'&&(R.presets||[]).some(function(x){return x&&x.id===q;}))?q:(R.activeId||1);}catch(e){}
       var s=JSON.parse(localStorage.getItem('cg-settings-v1'+(p===1?'':'~p'+p))).state;
       t=s.useSystem?(d?s.darkTheme:s.lightTheme):s.manualTheme;
     }catch(e){}

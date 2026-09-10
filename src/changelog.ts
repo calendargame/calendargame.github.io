@@ -85,6 +85,22 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-10',
+    items: [
+      'Each preset can now choose which page it opens on — any mode, Lookup, or How to Play — in ⚙ Settings → Default Mode. And a new Open in setting, at the top of the Settings menu, chooses which preset the app opens into when you launch it: the one you used last, or one you pin.',
+      'Within a single visit each preset also remembers the page you were last on, so leaving a preset and coming back returns you to it. Fully closing the app sends each preset back to its Default Mode.',
+      'Every reset now asks first, with a popup that says exactly what it will clear and whether it affects only this preset or the whole app — Full Reset, Reset Settings, each mode’s Reset Stats, and Clear Saved Defaults. The old “tap again to confirm” buttons are gone.',
+      'A finished Blitz round or MoX run now stays on its results page when you switch presets and come back. Only pressing Reset, or fully closing the app, clears it — the way it worked before presets.',
+      'The Changelog, the saved-defaults popup and the run breakdown no longer carry a Close button: tap outside the box, press Esc, or use Back. The confirmation popups keep their Cancel and Save.',
+      'The Dot Layout switch, in Settings → Display, is now called Rotate Dots CCW, so its name says what it does.',
+      'The run breakdown is now titled for the mode it belongs to — Mean Breakdown in MoX, and Round Breakdown or Run Breakdown in Blitz.',
+      'The mode picker at the top of the screen is now exactly as wide as the menu it opens, and the preset picker beside it fills the space that leaves.',
+      'View Saved Defaults and Clear Saved Defaults, at the foot of the Settings menu, are now buttons matching the three above them rather than underlined links.',
+      'The status bar along the very top of the screen now dims to match the page behind a popup, instead of staying bright.',
+      'Amnesic now returns to whatever your saved defaults say each time you reopen the app, instead of staying where it was left.',
+    ],
+  },
+  {
     date: '2026-09-09',
     items: [
       'Presets can now be reordered by dragging them — grab the handle beside a preset in ⚙ Settings → Manage Presets and drop it where you want it. With a handle selected by keyboard, the arrow keys do the same thing.',
@@ -120,9 +136,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Nothing you can see changed this time — just work underneath to keep things running smoothly.',
     ],
   },
-  // ★ THE CAP HAS NOW BITTEN THREE TIMES. 2026-09-05 retired 2026-07-17; 2026-09-08 retired
-  // 2026-07-19; adding 2026-09-09 above retired 2026-07-21 in the same change. The array is AT ten
-  // — the next new day retires 2026-07-26 (see the ten-entry rule in the charter above).
+  // ★ THE CAP HAS NOW BITTEN FOUR TIMES. 2026-09-05 retired 2026-07-17; 2026-09-08 retired
+  // 2026-07-19; adding 2026-09-09 retired 2026-07-21 in the same change; adding 2026-09-10 above
+  // retired 2026-07-26. The array is AT ten — the next new day retires 2026-07-28 (see the
+  // ten-entry rule in the charter above).
   {
     date: '2026-08-10',
     items: [
@@ -196,23 +213,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       'In AoX, the run length box now stands exactly as tall as the Allow Mistakes and One-by-One buttons beside it.',
       'With a keyboard: click one option of a setting and the arrow keys then move along that setting, choosing each option as you land on it — without stepping the date behind the menu.',
       'The changelog popup is back to just the list and Close; the small grey note under it is gone, since How to Play already explains how far back the list goes.',
-    ],
-  },
-  {
-    date: '2026-07-26',
-    items: [
-      'The Lookup page no longer scrolls as a whole — only the history list moves, and it now uses whatever room your screen has instead of stopping at a fixed height.',
-      'The answer line in Lookup always keeps its space, so nothing on the page shifts as answers come and go. Before your first lookup, or after Clear, it simply invites you to enter a date.',
-      'Lookup works out every answer and every history row afresh, so changing your Date Format or the Julian Calendar setting updates the answer line and the whole list together.',
-      'The five themes are now buttons in two labelled rows, Dark and Light, instead of hiding inside drop-down menus — and both rows always show, so the settings menu no longer changes height.',
-      'Turning Use System Settings off now keeps whichever theme is already on screen.',
-      'The app keeps your place when you switch away and come back, instead of jumping to the top — in How to Play and in the game screens alike. And a How to Play section you open now comes to rest just clear of the bar at the top, with its title fully readable.',
-      'Tapping a value to type it — a timer, or the AoX Run Length — no longer nudges the row around it, and a longer number is no longer cut off as you type.',
-      'In Deduction, the month answer buttons are now the same size as the year and day ones.',
-      'The small light-blue dot now sits just after the word Changelog instead of on top of it, and the changelog itself keeps the ten most recent days that had an update.',
-      'Fixed: in AoX, the codes panel no longer swaps what it shows while it is sliding shut.',
-      'The Show Codes button now stands exactly as tall as the buttons beside it.',
-      'The settings controls and the Show Codes button now describe themselves properly to screen readers.',
     ],
   },
 ]

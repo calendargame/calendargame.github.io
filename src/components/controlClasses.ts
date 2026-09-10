@@ -54,58 +54,35 @@ export const FOOTER_RESET_BTN_CLASS = RESET_BTN_CLASS.replace('text-sm', 'text-x
 // so the strings genuinely differ. Converging them means deciding whether Show Codes should also
 // become hittable-but-inert, which is its own change with its own gate.
 export const NOT_OFFERED_BTN_CLASS = 'opacity-60 cursor-not-allowed'
-// Compact Reset Stats button variant (smaller py + col-span fit for stats panel).
+// Compact Reset Stats button variant (smaller py + col-span fit for stats panel). Q7 (round 21)
+// removed the ARMED variant — the two-tap confirm became the shared ConfirmModal, so this caption
+// never changes colour or text now.
 export const RESET_STATS_BTN_CLASS =
   'w-full px-3 py-1.5 rounded-xl btn-solid border border-transparent text-sm font-medium'
-// Reset Stats when ARMED (first tap of the two-tap confirm, Q2): rose/danger fill — the same danger
-// colour as RESET_BTN_CLASS — so "tap again to confirm" reads as a warning, not a normal button.
-export const RESET_STATS_ARMED_CLASS =
-  'w-full px-3 py-1.5 rounded-xl bg-rose-600/90 text-white border border-transparent text-sm font-medium'
-// ── THE ⚙ FOOTER'S TWO LINK ROWS — one class from round 7 until this round, now two ──────────
-// Round-7 Q2 hoisted a single FOOTER_LINK_ROW_CLASS over both of them on one argument: the
-// View/Clear saved-defaults row and the Last Updated / Check for updates / Changelog row were "the
-// same kind of row" — a wrapping line of muted footer text links, left-packed, one gap. Neither
-// half of that is true of either row any more, so the token could not stay honest as one string:
-//   • The saved-defaults pair MOVED INTO THE PINNED BUTTON BLOCK and stopped being left-packed at
-//     all — its two links are now centred on the row's THIRDS so they interlock with the three
-//     buttons above them. The geometry argument lives at the row itself, in SettingsPanel.
-//   • The metadata row stayed where it was and SPREAD: the stamp anchors left, Changelog anchors
-//     right as a whole element, and Check for updates sits exactly halfway between the two.
-// What a "common base" would have contained after that is the word `items-center` and nothing
-// else. A shared token that carries no shared decision is worse than two named ones — the point of
-// hoisting was to state a rule in one place, and there is no longer a rule in common — so this is
-// a SPLIT, not a rename. Both still live here beside FOOTER_RESET_BTN_CLASS because what makes a
-// footer token belong in this file is that it carries an argument, not that it has two callers.
+// ── THE ⚙ FOOTER'S METADATA ROW ─────────────────────────────────────────────────────────────
+// Round-7 Q2 once hoisted a single FOOTER_LINK_ROW_CLASS over this row AND the View/Clear
+// saved-defaults row, on the argument that they were "the same kind of row". That stopped being
+// true — the saved-defaults pair moved into the pinned button block — and round 21 (Q2) finished
+// the divergence: those two are now plain equal-width PILL BUTTONS (the RESET_BTN_CLASS family,
+// see SettingsPanel), a simple `flex gap-2` row that needs no named token at all. So only this
+// one is left here, and it is a named token because it still carries an argument.
 //
-// ⚠ THE ~4px RING-CLEARANCE RULE SURVIVED THE SPLIT, but only the metadata row can still state it
-// as a gap. Every footer text link wears `rounded-md px-1 -mx-1`: the padding gives the press-drag
-// ring 4px of breathing room around the glyphs, and the equal negative margin cancels it so the
-// TEXT keeps its exact flow position. So a row's margin boxes ARE its text boxes, and a 12px gap
-// between them leaves 12 − 4 − 4 = 4px between the rings the padding draws. gap-3 is that 12px.
-// The saved-defaults row cannot express the rule at all: a grid gap would move its two centres off
-// the exact thirds, so what clearance it has is whatever the thirds leave it — see the warning at
-// that row about how little that is on a narrow phone.
+// ⚠ THE ~4px RING-CLEARANCE RULE: every footer text link wears `rounded-md px-1 -mx-1` — the
+// padding gives the press-drag ring 4px of breathing room around the glyphs, and the equal
+// negative margin cancels it so the TEXT keeps its exact flow position. So a row's margin boxes
+// ARE its text boxes, and a 12px gap between them leaves 12 − 4 − 4 = 4px between the rings the
+// padding draws. gap-3 is that 12px.
 //
-// The metadata row: justify-between is what puts the stamp hard left and Changelog hard right, and
-// because the three margin boxes are the three text boxes it also splits the slack into two EQUAL
-// text-to-text gaps — which is precisely "Check for updates sits halfway between the facing edges
-// of its neighbours" (owner's call, this round). gap-3 becomes the MINIMUM those two gaps can
-// reach, so the ring clearance above is a floor the free space only ever widens. items-center keeps
-// the Last Updated caption vertically aligned with its two button links; flex-wrap is the
-// narrow-viewport fallback — at normal widths the row stays one line, and on a line that DOES wrap
-// justify-between spreads whatever landed on it, which is the honest consequence of anchoring the
-// ends rather than a second rule.
+// justify-between is what puts the stamp hard left and Changelog hard right, and because the three
+// margin boxes are the three text boxes it also splits the slack into two EQUAL text-to-text gaps
+// — which is precisely "Check for updates sits halfway between the facing edges of its neighbours"
+// (owner's call). gap-3 becomes the MINIMUM those two gaps can reach, so the ring clearance above
+// is a floor the free space only ever widens. items-center keeps the Last Updated caption
+// vertically aligned with its two button links; flex-wrap is the narrow-viewport fallback — at
+// normal widths the row stays one line, and on a line that DOES wrap justify-between spreads
+// whatever landed on it, which is the honest consequence of anchoring the ends rather than a
+// second rule.
 export const FOOTER_META_ROW_CLASS = 'flex items-center flex-wrap justify-between gap-3'
-// The saved-defaults pair, now the SECOND row of the pinned button block (SettingsPanel's
-// .popover-sticky-footer). Three equal columns and deliberately NO gap, so the column edges fall on
-// the exact thirds; each link is then placed across TWO adjacent columns and centred inside that
-// span, which lands one centre at 1/3 and the other at 2/3. (Why the spans overlap in the middle
-// column, and why that is the point rather than a bug, is argued at the row.)
-// It carries its own text tier because it no longer inherits one: it left the metadata block, whose
-// text-[11px] text-(--tx-300-60) used to reach it by inheritance, and the pinned block it moved
-// into declares no text styling at all.
-export const FOOTER_DEFAULTS_ROW_CLASS =
-  'grid grid-cols-3 items-center text-[11px] text-(--tx-300-60)'
 // Boxed numeric-input shared className (Q18; split base + surface Q7 round-7) — the app's
 // second shared input idiom beside SliderValueEditor: a bordered box with centered tabular
 // digits at the text-xs control tier. Used by the AoX run-length field (mode screen + the

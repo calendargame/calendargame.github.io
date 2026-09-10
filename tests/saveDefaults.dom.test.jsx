@@ -36,6 +36,23 @@ import {
 // The three footer offers are asked of the panel helper — "is the app OFFERING this?" — never of
 // a class string, so what "dimmed" is spelled as stops being this file's business.
 const btn = (name) => screen.getByRole('button', { name })
+// Q7 round 21: Reset Settings and Full Reset confirm through the shared ConfirmModal now. Fire each
+// end to end — the footer button opens the popup, the popup's own button (resolved WITHIN the
+// dialog, so it never collides with the footer button of the same name) applies.
+const fireResetSettings = () => {
+  act(() => fireEvent.click(btn('Reset Settings')))
+  act(() =>
+    fireEvent.click(
+      within(modalCard('resetSettings')).getByRole('button', { name: 'Reset Settings' }),
+    ),
+  )
+}
+const fireFullReset = () => {
+  act(() => fireEvent.click(btn('Full Reset')))
+  act(() =>
+    fireEvent.click(within(modalCard('fullReset')).getByRole('button', { name: 'Full Reset' })),
+  )
+}
 const openPopup = () => act(() => fireEvent.click(footerButton('Save Defaults')))
 const popupTitle = () => screen.queryByText('Save current settings as your defaults?')
 const nField = () => screen.getByRole('textbox', { name: 'MoX Run Length' })
@@ -62,7 +79,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
       useSettings.getState().setLeapChance('random')
       useSettings.getState().setMinY(1583)
     })
-    act(() => fireEvent.click(btn('Reset Settings')))
+    fireResetSettings()
     expect(useSettings.getState().leapChance).toBe('75')
     expect(useSettings.getState().minY).toBe(1600)
     expect(yearInput('min').value).toBe('1600') // the min-year text mirror
@@ -86,7 +103,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     mountApp()
     openSettings()
     expect(isOffered(footerButton('Reset Settings'))).toBe(true) // a mode-screen pref diverges → the button is offered
-    act(() => fireEvent.click(btn('Reset Settings')))
+    fireResetSettings()
     const r = useModePrefs.getState()
     expect(r.flashMs).toBe(2000)
     expect(r.blitzSec).toBe(60)
@@ -114,7 +131,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
       q.setBlitzQSec(10)
       q.setAoxN('10')
     })
-    act(() => fireEvent.click(btn('Reset Settings')))
+    fireResetSettings()
     const r = useModePrefs.getState()
     expect(r.flashMs).toBe(800)
     expect(r.blitzSec).toBe(120)
@@ -133,7 +150,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     act(() => useModePrefs.getState().setFlashMs(2000))
     expect(gearIndicator().name).toBe('Settings (modified)')
     expect(isOffered(footerButton('Reset Settings'))).toBe(true) // OFFERED even though the panel sits at defaults
-    act(() => fireEvent.click(btn('Reset Settings')))
+    fireResetSettings()
     expect(useModePrefs.getState().flashMs).toBe(800) // restored to the SAVED default, not factory
     expect(gearIndicator().name).toBe('Settings') // the violet bar goes out
     expect(isOffered(footerButton('Reset Settings'))).toBe(false) // nothing is left to reset
@@ -156,8 +173,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
       useModePrefs.getState().setFlashMs(1500)
       useModePrefs.getState().setAoxN('50')
     })
-    act(() => fireEvent.click(btn('Full Reset')))
-    act(() => fireEvent.click(btn('Confirm?')))
+    fireFullReset()
     const r = useModePrefs.getState()
     expect(r.flashMs).toBe(800)
     expect(r.blitzSec).toBe(90)
@@ -197,8 +213,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(useModePrefs.getState().blitzTimingOff).toBe(true)
     expect(useModePrefs.getState().aoxTimingOff).toBe(true)
     // …and Full Reset returns both to their factory (shown) launch value.
-    act(() => fireEvent.click(btn('Full Reset')))
-    act(() => fireEvent.click(btn('Confirm?')))
+    fireFullReset()
     expect(useModePrefs.getState().blitzTimingOff).toBe(false)
     expect(useModePrefs.getState().aoxTimingOff).toBe(false)
   })
@@ -217,8 +232,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     // Diverge → it comes live; Full Reset (two-tap) restores the PERSONAL default and re-dims.
     act(() => useModePrefs.getState().setFlashMs(1500))
     expect(isOffered(footerButton('Full Reset'))).toBe(true)
-    act(() => fireEvent.click(btn('Full Reset')))
-    act(() => fireEvent.click(btn('Confirm?'))) // fires; the panel closes
+    fireFullReset()
     expect(useModePrefs.getState().flashMs).toBe(800)
     openSettings()
     expect(isOffered(footerButton('Full Reset'))).toBe(false)
@@ -281,7 +295,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     act(() => fireEvent.click(btn('Save'))) // saved.amnesic = true
     toggleSwitch('Amnesic') // live diverges to Off — Reset Settings must put it back
     act(() => useSettings.getState().setLeapChance('75')) // something else, so the tap is live
-    act(() => fireEvent.click(btn('Reset Settings')))
+    fireResetSettings()
     expect(switchState('Amnesic')).toBe('On')
     expect(selectAmnesic(usePresets.getState())).toBe(true)
   })
@@ -291,7 +305,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     openSettings()
     toggleSwitch('Amnesic') // live On, nothing ever saved
     act(() => useSettings.getState().setLeapChance('75')) // something capturable diverges too
-    act(() => fireEvent.click(btn('Reset Settings')))
+    fireResetSettings()
     expect(switchState('Amnesic')).toBe('Off')
     expect(selectAmnesic(usePresets.getState())).toBe(false)
   })
@@ -309,8 +323,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     act(() => fireEvent.click(btn('Save'))) // saved.amnesic = true
     toggleSwitch('Amnesic') // live diverges to Off
     act(() => useSettings.getState().setLeapChance('75')) // something else, so Full Reset has work
-    act(() => fireEvent.click(btn('Full Reset')))
-    act(() => fireEvent.click(btn('Confirm?'))) // fires; the panel closes
+    fireFullReset()
     expect(selectAmnesic(usePresets.getState())).toBe(true)
   })
 

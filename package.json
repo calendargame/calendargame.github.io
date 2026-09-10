@@ -2,7 +2,7 @@
   "name": "claude",
   "private": true,
   "//version": "THE APP'S SEMANTIC VERSION, AND THE ONLY COPY OF IT — vite.config.js reads this field and injects it as __APP_VERSION__, which src/appVersion.ts exports and the changelog panel renders. Read the scheme in src/appVersion.ts BEFORE changing this: MAJOR is reserved (3.0.0 = the App Store release), MINOR = a deploy a player would notice, PATCH = fixes only or nothing visible, and every deploy bumps exactly one of the three — never zero, because two builds sharing a version defeats the whole point of having one. Claude assigns it each deploy. ⚠ SINCE 2026-08-10 THIS IS ENFORCED, NOT TRUSTED: the deploy refuses to publish unless this number is HIGHER than every version the target site has already shipped — see scripts/versionLedger.mjs. Raising it is now a required step of every deploy, not a remembered one.",
-  "version": "2.24.0",
+  "version": "2.25.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

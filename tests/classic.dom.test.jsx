@@ -14,7 +14,7 @@
 // click accordingly. We pin a Gregorian-only year range (>=1583) and a fixed numeric-ymd
 // format so the displayed date is unambiguous and trivially parseable.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { wday } from '../src/lib/calendar.js'
@@ -51,6 +51,14 @@ const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
 
 const dayBtn = (name) => screen.getByRole('button', { name })
 const ctrl = (name) => screen.getByRole('button', { name })
+// Q7 round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm — the
+// confirm button is resolved WITHIN the dialog so it never collides with the always-present mode
+// button of the same name.
+const resetStatsDialog = () => screen.getByRole('dialog', { name: 'Reset Stats?' })
+const fireResetStats = () => {
+  fireEvent.click(ctrl('Reset Stats'))
+  fireEvent.click(within(resetStatsDialog()).getByRole('button', { name: 'Reset Stats' }))
+}
 // Not offered = the app is withholding the control. How that is SPELLED lives in one place
 // (tests/helpers/offered) so this file never names a class string.
 const isDisabled = (btn) => !isOffered(btn)
@@ -320,8 +328,7 @@ describe('Classic — characterization (batch 4: Show Codes, streaks, Reset Stat
     const d = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(d))) // 1/1, history now has one entry
     expect(isDisabled(ctrl('<'))).toBe(false)
-    fireEvent.click(ctrl('Reset Stats')) // Q2: first tap arms
-    fireEvent.click(ctrl('Reset Stats?')) // second tap confirms + clears
+    fireResetStats() // opens the confirm popup, then confirms
     expect(statValue('Score')).toBe('0/0')
     expect(statValue('Streak')).toBe('0/0')
     expect(isDisabled(ctrl('<'))).toBe(true) // history cleared
@@ -739,12 +746,12 @@ describe('Classic — Q2 (settings regen deferred to popover close)', () => {
   })
 })
 
-// ── Q2: Reset Stats two-tap confirm ───────────────────────────────────────────
-// The Reset Stats button now arms on the first tap ("Reset Stats?", danger tint) and only clears on a
-// second tap within 3s — preventing an accidental wipe of lifetime stats (it's also the `S` shortcut).
-// The two-tap + has-data gate live in the shared useResetStatsArm hook, used identically by Flash +
-// Deduction, so pinning it on Classic covers all three.
-describe('Classic — Reset Stats two-tap confirm (Q2)', () => {
+// ── Q2 / Q7: Reset Stats confirmation popup ───────────────────────────────────
+// The Reset Stats button opens a ConfirmModal (Q7 round 21 replaced the two-tap in-place arm) and
+// only clears on the popup's Confirm — preventing an accidental wipe of lifetime stats (it's also
+// the `S` shortcut). The popup + has-data gate live in the shared useResetStatsConfirm hook, used
+// identically by Flash + Deduction, so pinning it on Classic covers all three.
+describe('Classic — Reset Stats confirmation popup (Q2 / Q7)', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
@@ -759,27 +766,56 @@ describe('Classic — Reset Stats two-tap confirm (Q2)', () => {
   })
   const answerCorrect = () => fireEvent.click(dayBtn(correctName(readDate())))
 
-  it('first tap arms without clearing; second tap clears', () => {
+  it('the button opens a popup without clearing; Confirm clears, Cancel does not', () => {
     mountApp()
     pressNewAndRead()
     answerCorrect()
     expect(statValue('Score')).toBe('1/1')
-    fireEvent.click(ctrl('Reset Stats')) // first tap → arm
-    expect(screen.getByRole('button', { name: 'Reset Stats?' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Reset Stats' })).toBeNull()
-    expect(statValue('Score')).toBe('1/1') // NOT cleared yet
-    fireEvent.click(ctrl('Reset Stats?')) // second tap → confirm
+    // Cancel first — the popup opens, nothing clears.
+    fireEvent.click(ctrl('Reset Stats'))
+    expect(resetStatsDialog()).toBeInTheDocument()
+    expect(statValue('Score')).toBe('1/1')
+    fireEvent.click(within(resetStatsDialog()).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Reset Stats?' })).toBeNull()
+    expect(statValue('Score')).toBe('1/1') // NOT cleared
+    // Now Confirm.
+    fireResetStats()
     expect(statValue('Score')).toBe('0/0') // cleared
-    expect(screen.getByRole('button', { name: 'Reset Stats' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Reset Stats?' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Reset Stats?' })).toBeNull()
   })
 
-  it('on a fresh mode (nothing to lose), tapping Reset Stats is a no-op — it never arms', () => {
+  // (The `S` shortcut routes through this same button's onClick — App's [data-key] DOM walk
+  // .click()s it — so it opens the identical popup. Not asserted here: the walk skips any element
+  // whose offsetParent is null, which is every element in jsdom's layout-free DOM, so no dom test
+  // in this suite has ever driven a game-loop letter. It is a device check.)
+
+  // A2 (round 21): the popup now carries a real z-60 scrim, so G — which would open the ⚙ panel
+  // UNDER it — is gated to a no-op while a non-panel modal is up. A mode letter is NOT gated: it
+  // switches the screen and the leaving mode's own `confirmOpen && !visible` guard drops the popup.
+  it('G is inert while the popup is up, but a mode letter still switches away and closes it', () => {
+    mountApp()
+    pressNewAndRead()
+    answerCorrect()
+    fireEvent.click(ctrl('Reset Stats'))
+    expect(resetStatsDialog()).toBeInTheDocument()
+
+    act(() => fireEvent.keyDown(window, { key: 'G' }))
+    expect(document.getElementById('settings-popover')).toBeNull() // the panel never opened
+    expect(resetStatsDialog()).toBeInTheDocument() // …and the popup is untouched
+
+    act(() => fireEvent.keyDown(window, { key: 'F' })) // → Flash: the popup leaves with Classic
+    expect(screen.queryByRole('dialog', { name: 'Reset Stats?' })).toBeNull()
+
+    // Back on a clean screen G opens the panel exactly as before.
+    act(() => fireEvent.keyDown(window, { key: 'G' }))
+    expect(document.getElementById('settings-popover')).not.toBeNull()
+  })
+
+  it('on a fresh mode (nothing to lose), tapping Reset Stats is a no-op — it never opens the popup', () => {
     mountApp()
     pressNewAndRead()
     expect(statValue('Score')).toBe('0/0')
     fireEvent.click(ctrl('Reset Stats'))
-    expect(screen.getByRole('button', { name: 'Reset Stats' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Reset Stats?' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Reset Stats?' })).toBeNull()
   })
 })

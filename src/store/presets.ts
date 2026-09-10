@@ -102,6 +102,19 @@ export type Preset = {
   amnesic: boolean
 }
 
+// The app-GLOBAL "open in" pin (round-21 Q3): which preset a fresh app open lands in.
+//   'last'      → the preset that was active when the app last closed (today's behaviour — the
+//                 persisted `activeId` is used as-is).
+//   <preset id> → always open in THAT preset, whatever was active last time.
+// It lives HERE, on the registry, and not in useSettings, because useSettings is per-preset — a
+// "which preset" preference cannot live inside a preset. It is NOT captured by Save Defaults
+// (SavedDefaults carries settings/prefs/amnesic only — no registry field is in any of those), by
+// construction rather than by an exclusion. The `merge` step below is what turns a pin into the
+// hydrated `activeId`, so index.html's boot script and every per-preset store agree on the active
+// preset from the first frame with no switch and no theme flash — index.html duplicates that one
+// resolution (it runs before any module) and tests/bootTheme.dom pins the two together.
+export type OpenInPreset = number | 'last'
+
 export type PresetRegistryValues = {
   // ★ ORDER IS THE ARRAY ORDER. A separate `order` field was rejected on sight: it would be a
   // second source of truth for one fact, and the failure it invites (two presets claiming order 2)
@@ -111,6 +124,8 @@ export type PresetRegistryValues = {
   // The next id to hand out. Monotonic, never decremented, never reused — the delete-preset-1 case
   // depends on it (see presetControl's deletePreset).
   nextId: number
+  // The "open in" pin — see OpenInPreset above. Default 'last'.
+  openInPreset: OpenInPreset
 }
 
 // ★★ HOW LONG A PRESET NAME MAY BE — round 20 Q6 CHANGED WHAT THIS NUMBER IS FOR, and that is
@@ -164,6 +179,8 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
   presets: [{ id: FIRST_PRESET_ID, name: defaultPresetName(FIRST_PRESET_ID), amnesic: false }],
   activeId: FIRST_PRESET_ID,
   nextId: FIRST_PRESET_ID + 1,
+  // 'last' is the behaviour every build before round-21 Q3 had: use the persisted activeId as-is.
+  openInPreset: 'last',
 })
 
 // A player-typed name, made safe to store and to render: trimmed, length-capped, and never empty.
@@ -199,14 +216,35 @@ export function normalizeRegistry(
   // back at the un-namespaced keys where the player's original data still is.
   if (!presets.length) return makePresetRegistryDefaults()
   const activeId = presets.some((p) => p.id === raw?.activeId) ? raw!.activeId! : presets[0].id
+  // The "open in" pin, screened the same way everything else here is: 'last' passes; a preset id
+  // passes only while that preset still exists; anything else (a deleted id, a string, a tampered
+  // value, or the absent key of a pre-Q3 payload) collapses to 'last'. So a pin whose preset was
+  // deleted since it was set self-heals to 'last' on the next hydrate — the mid-session deletePreset
+  // also clears it eagerly, but this is the backstop that does not depend on that path running.
+  const rawPin = raw?.openInPreset
+  const openInPreset: OpenInPreset =
+    rawPin === 'last'
+      ? 'last'
+      : Number.isInteger(rawPin) && presets.some((p) => p.id === rawPin)
+        ? (rawPin as number)
+        : 'last'
   // ⚠ nextId is forced ABOVE every id in the list, whatever the payload claimed. This is the line
   // that makes "ids are never reused" true even after tampering or a truncated write — and the
   // delete-preset-1 case rests on it: once slot 1 is vacated its un-namespaced keys must never be
   // handed to a different preset.
   const maxId = presets.reduce((m, p) => (p.id > m ? p.id : m), FIRST_PRESET_ID)
   const claimed = Number.isInteger(raw?.nextId) ? (raw!.nextId as number) : 0
-  return { presets, activeId, nextId: Math.max(claimed, maxId + 1) }
+  return { presets, activeId, nextId: Math.max(claimed, maxId + 1), openInPreset }
 }
+
+// Resolve a normalized registry's ACTIVE preset against its "open in" pin — the whole of what the
+// pin does. 'last' (or a pin that normalizeRegistry already collapsed to 'last') keeps the
+// persisted `activeId`; a live pin overrides it. Pure and total, so index.html's boot script can
+// mirror it in three lines and the store's `merge` can apply it once at hydrate.
+export const resolveOpenInActiveId = (reg: PresetRegistryValues): number =>
+  reg.openInPreset !== 'last' && reg.presets.some((p) => p.id === reg.openInPreset)
+    ? reg.openInPreset
+    : reg.activeId
 
 /**
  * The registry AS IT IS ON DISK at this instant — normalized, or null when there is nothing
@@ -275,13 +313,21 @@ export const usePresets = create<PresetRegistryState>()(
           PERSISTED_KEYS.map((k) => [k, state[k]]),
         ) as Partial<PresetRegistryState>,
       // No `migrate` yet — v1 is the first shape there has ever been, so there is no older payload
-      // in existence to rewrite. The version field is here so that a future shape change HAS a
-      // gate to hang off; the unconditional screen below is what guards the go-forward path, and it
-      // is the one that runs on every load at every version.
-      merge: (persisted, current) => ({
-        ...current,
-        ...normalizeRegistry(persisted as Partial<PresetRegistryValues> | undefined),
-      }),
+      // in existence to rewrite. `openInPreset` (round-21 Q3) is additive: normalizeRegistry turns
+      // its absent key into 'last', which is the pre-Q3 behaviour, so no migrate step is owed. The
+      // version field is here so that a future shape change HAS a gate to hang off; the
+      // unconditional screen below is what guards the go-forward path, and it is the one that runs
+      // on every load at every version.
+      // ★ THE "OPEN IN" PIN IS APPLIED HERE, once, at hydrate: `activeId` becomes the pinned preset
+      // when one is set and still exists, else the persisted `activeId` (= 'last'). Doing it in
+      // `merge` rather than in an App effect is what keeps index.html's boot script — which paints
+      // the active preset's theme before any module loads and resolves the pin the same way — and
+      // every per-preset store's own hydration agreeing on the active preset from the first frame,
+      // with no post-mount switchPreset and no theme flash.
+      merge: (persisted, current) => {
+        const norm = normalizeRegistry(persisted as Partial<PresetRegistryValues> | undefined)
+        return { ...current, ...norm, activeId: resolveOpenInActiveId(norm) }
+      },
     },
   ),
 )

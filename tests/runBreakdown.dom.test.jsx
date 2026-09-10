@@ -10,8 +10,9 @@
 //   • WHAT IT SAYS. One row per card played, in order, and a summary whose Mean is the SAME STRING
 //     the stat strip prints. That is the reconciliation claim as a player would check it: two
 //     numbers on one screen that have to agree.
-//   • THAT IT IS A REAL MODAL. Focus lands inside it, Escape closes it, the scrim closes it, Close
-//     closes it — the app's five-term modal contract (components/modalContract).
+//   • THAT IT IS A REAL MODAL. Focus lands inside it, Escape closes it, the scrim closes it — the
+//     app's five-term modal contract (components/modalContract). Since round 21 it carries NO
+//     dismiss button, so with zero focusable controls the Tab trap pins focus on the card.
 //
 // Determinism: the same recipe as the other mode-screen suites — a pinned Gregorian range in
 // numeric-ymd, the shown date read back and its weekday computed with the tested wday(), and fake
@@ -136,19 +137,19 @@ describe('the run breakdown — MoX', () => {
   it('is not offered while a run is idle or still going', () => {
     mountApp()
     switchTo('A')
-    expect(opener('Show run breakdown')).toBeNull()
+    expect(opener('Show mean breakdown')).toBeNull()
     click('Begin')
     tick(1000)
-    expect(opener('Show run breakdown')).toBeNull()
+    expect(opener('Show mean breakdown')).toBeNull()
   })
 
   it('opens on a tap ANYWHERE on a finished run’s strip, and its Mean is the strip’s Mean', () => {
     finishedMo2()
-    expect(opener('Show run breakdown')).not.toBeNull()
+    expect(opener('Show mean breakdown')).not.toBeNull()
     const stripMean = statValue('Mean')
     expect(stripMean).toMatch(/^\d+\.\d{2}s$/)
     tapStat('Score') //  a SCORING cell — the gesture is the whole strip, not the time boxes
-    const dlg = dialog('Run breakdown')
+    const dlg = dialog('Mean Breakdown')
     expect(figure(dlg, 'Mean')).toBe(stripMean)
     expect(figure(dlg, 'Solves')).toBe('2/2')
     expect(figure(dlg, 'Fastest')).toBe('2.00s')
@@ -159,7 +160,7 @@ describe('the run breakdown — MoX', () => {
   it('lists one row per card, in order, each with its own date and time', () => {
     finishedMo2()
     tapStat('Median')
-    const r = rows(dialog('Run breakdown'))
+    const r = rows(dialog('Mean Breakdown'))
     expect(r).toHaveLength(2)
     expect(r.map((li) => li.textContent)).toEqual([
       expect.stringContaining('2.00s'),
@@ -190,7 +191,7 @@ describe('the run breakdown — MoX', () => {
     tick(4000)
     answerCorrect() //   card 3: the second, which completes the Mo2 run
     tapStat('Score')
-    const dlg = dialog('Run breakdown')
+    const dlg = dialog('Mean Breakdown')
     const r = rows(dlg)
     expect(r).toHaveLength(3)
     expect(r[0].textContent).toContain('missed')
@@ -202,44 +203,46 @@ describe('the run breakdown — MoX', () => {
     expect(figure(dlg, 'Mean')).toBe(statValue('Mean'))
   })
 
-  it('is a real modal: focus lands inside it, and Escape, the scrim and Close all dismiss it', () => {
+  it('is a real modal: focus lands inside it, and Escape and the scrim dismiss it; with no controls the Tab trap pins focus on the card', () => {
     finishedMo2()
     tapStat('Score')
-    const dlg = dialog('Run breakdown')
+    const dlg = dialog('Mean Breakdown')
     expect(document.activeElement).toBe(dlg)
+    // Round 21 removed the Close button — the card carries no focusable control at all, so a Tab
+    // is consumed and focus stays on the dialog rather than walking out to the strip beneath.
+    act(() => {
+      fireEvent.keyDown(screen.getByRole('presentation'), { key: 'Tab' })
+    })
+    expect(document.activeElement).toBe(dlg)
+    expect(within(dlg).queryAllByRole('button')).toHaveLength(0)
+
     act(() => {
       fireEvent.keyDown(document, { key: 'Escape' })
     })
-    expect(screen.queryByRole('dialog', { name: 'Run breakdown' })).toBeNull()
-
-    tapStat('Score')
-    act(() => {
-      fireEvent.click(within(dialog('Run breakdown')).getByRole('button', { name: 'Close' }))
-    })
-    expect(screen.queryByRole('dialog', { name: 'Run breakdown' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
 
     tapStat('Score')
     act(() => {
       fireEvent.click(screen.getByRole('presentation'))
     })
-    expect(screen.queryByRole('dialog', { name: 'Run breakdown' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
   })
 
   it('leaving the mode takes the popup with it — it portals outside this screen', () => {
     finishedMo2()
     tapStat('Score')
-    expect(screen.queryByRole('dialog', { name: 'Run breakdown' })).not.toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).not.toBeNull()
     // The mode shortcuts still fire while the panel is up, and the panel is portaled to #root — so
     // without the visibility gate this card would be left floating over Classic.
     switchTo('K')
-    expect(screen.queryByRole('dialog', { name: 'Run breakdown' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
   })
 
   it('Reset takes it away with the run', () => {
     finishedMo2()
-    expect(opener('Show run breakdown')).not.toBeNull()
+    expect(opener('Show mean breakdown')).not.toBeNull()
     click('Reset')
-    expect(opener('Show run breakdown')).toBeNull()
+    expect(opener('Show mean breakdown')).toBeNull()
   })
 
   it('a FAILED run offers no breakdown and keeps its hide toggle', () => {
@@ -249,7 +252,7 @@ describe('the run breakdown — MoX', () => {
     tick(1000)
     answerWrong()
     expect(ctrl('Reset')).toBeInTheDocument()
-    expect(opener('Show run breakdown')).toBeNull()
+    expect(opener('Show mean breakdown')).toBeNull()
     // The toggle is still the strip's gesture here — which is exactly why the opener is gated on
     // 'done' and not on "the run is over".
     expect(isOffered(statCell('Mean'))).toBe(true)
@@ -260,7 +263,7 @@ describe('the run breakdown — MoX', () => {
     finishedMo2()
     act(() => useSettings.getState().setSaveStats(false))
     expect(statValue('Mean')).toBe('—')
-    expect(opener('Show run breakdown')).toBeNull()
+    expect(opener('Show mean breakdown')).toBeNull()
   })
 })
 
@@ -288,9 +291,28 @@ describe('the round breakdown — Blitz', () => {
     expect(ctrl('Reset')).toBeInTheDocument()
     const stripMean = statValue('Mean')
     tapStat('Accuracy')
-    const dlg = dialog('Round breakdown')
+    const dlg = dialog('Round Breakdown')
     expect(figure(dlg, 'Mean')).toBe(stripMean)
     expect(rows(dlg)).toHaveLength(1)
+  })
+
+  it('Per Question names the card "Run Breakdown" — the mode picks the title from its perQ state', () => {
+    mountApp()
+    switchTo('B')
+    act(() => {
+      useModePrefs.getState().setBlitzPerQ(true)
+      useModePrefs.getState().setBlitzQSec(1) //  fastest question clock (slider minimum)
+    })
+    click('Begin')
+    tick(500)
+    answerCorrect() //  one 0.50s solve…
+    tick(1100) //       …then that question's clock dies and the round ends
+    expect(ctrl('Reset')).toBeInTheDocument()
+    tapStat('Accuracy')
+    // Blitz per round → "Round Breakdown"; Blitz per question → "Run Breakdown" (the run is
+    // open-ended). MoX → "Mean Breakdown", asserted above.
+    expect(screen.queryByRole('dialog', { name: 'Run Breakdown' })).not.toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).toBeNull()
   })
 
   // ★★ THE PAGE UNDERNEATH IS INERT, AND THIS CARD IS WHY IT HAD TO BECOME TRUE. App's keyboard
@@ -319,15 +341,54 @@ describe('the round breakdown — Blitz', () => {
     const score = statValue('Score')
 
     tapStat('Score')
-    expect(screen.queryByRole('dialog', { name: 'Round breakdown' })).not.toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).not.toBeNull()
     act(() => {
       fireEvent.keyDown(window, { key: 'O' })
     })
     // Nothing moved: the card is still up, the round is still over, and the wrong answer was not
     // credited behind it.
-    expect(screen.queryByRole('dialog', { name: 'Round breakdown' })).not.toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).not.toBeNull()
     expect(ctrl('Reset')).toBeInTheDocument()
     expect(isOffered(ctrl('Override'))).toBe(true)
     expect(statValue('Score')).toBe(score)
+  })
+
+  // ★★ A2 (round 21). G is Category 3 — it does not reach into the page, it REPLACES the screen, so
+  // it was left live while a modal is up. That was harmless until Q7 gave the per-mode Reset arms
+  // and this breakdown a real z-60 scrim: opening the panel now slides it in UNDERNEATH that scrim,
+  // dimmed and reachable only by the controls the finger cannot get to. So G alone bails while a
+  // NON-panel [data-settings-modal] is present (the mode letters still switch away, taking the popup
+  // with them — proved above). This is also the C1 case the owner leaned toward closing this way.
+  it('G does not slide the settings panel in under the breakdown’s scrim', () => {
+    mountApp()
+    switchTo('B')
+    act(() => {
+      useModePrefs.getState().setBlitzSec(10)
+      useModePrefs.getState().setBlitzAllowMistakes(false) // one wrong answer ends the round
+    })
+    click('Begin')
+    tick(2000)
+    answerWrong()
+    expect(ctrl('Reset')).toBeInTheDocument()
+    tapStat('Score')
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).not.toBeNull()
+
+    act(() => {
+      fireEvent.keyDown(window, { key: 'G' })
+    })
+    // The panel never mounted (it is conditionally rendered, so absent === not open), and the
+    // breakdown sits untouched on top.
+    expect(document.getElementById('settings-popover')).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).not.toBeNull()
+
+    // …and the moment the breakdown is dismissed, G opens the panel normally again.
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' }) // modalContract listens on document, capture phase
+    })
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).toBeNull()
+    act(() => {
+      fireEvent.keyDown(window, { key: 'G' })
+    })
+    expect(document.getElementById('settings-popover')).not.toBeNull()
   })
 })

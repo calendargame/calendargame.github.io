@@ -3,17 +3,19 @@
 // behaviour changes by living here.
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ModeProps, GenDate, FmtDate } from './modeTypes.js'
-import { useButtonFlash, useStatsHideToggles, engineFresh, useResetStatsArm } from './modeHooks.js'
-import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import {
-  RESET_BTN_CLASS,
-  RESET_STATS_ARMED_CLASS,
-  RESET_STATS_BTN_CLASS,
-} from '../components/controlClasses.js'
+  useButtonFlash,
+  useStatsHideToggles,
+  engineFresh,
+  useResetStatsConfirm,
+} from './modeHooks.js'
+import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
+import { RESET_BTN_CLASS, RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
 import { fmtFlashT, SLIDER_READOUT_WIDEST } from '../lib/modeFormat.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
@@ -279,7 +281,7 @@ function FlashMode({
   // Hideable stats chrome shared with Classic/Deduction. Flash supplies its flash-timer teardown:
   // afterTimingEnabled (re-enabling timing while a flash is live stops it + hides its date) and
   // onHide (leaving the mode stops a live flash). Classic/Deduction pass neither (no timer).
-  const { timingArmed, statsArr, armedSpan, armedBtnRef } = useStatsHideToggles({
+  const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
     eng,
     saveStats,
     visible,
@@ -317,7 +319,7 @@ function FlashMode({
     engineFresh(state) &&
     timingOff === false &&
     scoringOff === false &&
-    timingArmed === false &&
+    enableResetOpen === false &&
     flash === null &&
     active === false &&
     flashPhase === 'dash' &&
@@ -355,11 +357,13 @@ function FlashMode({
     }
     setShowTimerDate(false)
   }
-  const { resetArmed, onResetTap, resetBtnRef } = useResetStatsArm(
-    onResetStats,
-    !engineFresh(state),
-    visible,
-  ) // Q2 two-tap confirm (Flash reset also tears the live flash down)
+  // Q2 / Q7 — the Reset Stats confirmation popup (Flash's reset also tears the live flash down).
+  const {
+    confirmOpen: resetStatsOpen,
+    onResetTap,
+    closeConfirm: closeResetStats,
+    confirmReset: confirmResetStats,
+  } = useResetStatsConfirm(onResetStats, !engineFresh(state), visible)
   const date = state.date
   const dateText =
     shouldShowTimerDate || inBack
@@ -371,23 +375,32 @@ function FlashMode({
     <div style={{ display: visible ? 'block' : 'none' }}>
       {/* dimmed = Save Stats off = nothing is being recorded (whole strip, every value '—'); a group
           you turned off yourself renders BLANK, from `off` inside statsArr. See StatPanel. */}
-      <StatPanel
-        stats={statsArr}
-        dimmed={!saveStats}
-        armedSpan={armedSpan}
-        armedBtnRef={armedBtnRef}
-      />
+      <StatPanel stats={statsArr} dimmed={!saveStats} />
       <div className="mt-3">
-        <button
-          type="button"
-          data-key="S"
-          ref={resetBtnRef}
-          className={resetArmed ? RESET_STATS_ARMED_CLASS : RESET_STATS_BTN_CLASS}
-          onClick={onResetTap}
-        >
-          {resetArmed ? 'Reset Stats?' : 'Reset Stats'}
+        {/* Reset Stats — static caption; the confirmation is the shared ConfirmModal below (Q7
+            round 21). The `S` shortcut routes through this same onClick. */}
+        <button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={onResetTap}>
+          Reset Stats
         </button>
       </div>
+      <ConfirmModal
+        open={resetStatsOpen}
+        onCancel={closeResetStats}
+        onConfirm={confirmResetStats}
+        title="Reset Stats?"
+        body="Clears this mode's stats and all-time bests for the current preset. Per-preset — the other modes keep theirs."
+        confirmLabel="Reset Stats"
+        backButtonId="reset-stats-flash"
+      />
+      <ConfirmModal
+        open={enableResetOpen}
+        onCancel={closeEnableReset}
+        onConfirm={confirmEnableReset}
+        title="Enable and Reset Stats?"
+        body="The timer readouts were hidden while this mode's stats changed, so turning them back on has to reset this mode's stats for the current preset."
+        confirmLabel="Enable and Reset Stats"
+        backButtonId="enable-reset-stats-flash"
+      />
       {/* Slider readout width (six of the SEVEN SliderValueEditor sites — 3 mode-screen + 3
               timer rows in the Save Defaults popup; the seventh, that popup's AoX run-length row,
               struts its own "1000"): each editor mounts the shared SLIDER_READOUT_WIDEST string as

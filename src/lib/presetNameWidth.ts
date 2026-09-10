@@ -58,7 +58,7 @@ const FALLBACK_ROOT_PX = 15.6 // index.css's fluid clamp at its narrowest common
 // Parsed FROM PRESET_NAME_COL rather than re-typed as a literal, so this can never silently drift
 // from the floor it is standing in for if that constant is ever tuned.
 const FALLBACK_EM = parseFloat(PRESET_NAME_COL)
-const FALLBACK_BUDGET_PX = FALLBACK_EM * 0.875 * FALLBACK_ROOT_PX // 6em at text-sm (0.875rem) ≈ 82px
+const FALLBACK_BUDGET_PX = FALLBACK_EM * 0.875 * FALLBACK_ROOT_PX // PRESET_NAME_COL (4.5em) at text-sm (0.875rem) ≈ 61px — see PresetSwitcher for why 4.5, not 6
 const FALLBACK_FONT = `${(0.875 * FALLBACK_ROOT_PX).toFixed(2)}px ui-sans-serif, system-ui, sans-serif`
 
 export interface SwitcherBudget {

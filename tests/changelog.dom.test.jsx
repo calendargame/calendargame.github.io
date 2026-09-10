@@ -390,7 +390,7 @@ describe('the two-stage breadcrumb (stamp → dots → cleared)', () => {
     openChangelog() // the first tap: opens the popup AND retires the link's dot
     expect(changelogTitle()).toBeInTheDocument()
     expect(localStorage.getItem(CHANGELOG_DOT_KEY)).toBeNull()
-    act(() => fireEvent.click(within(changelogDialog()).getByRole('button', { name: 'Close' })))
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) //  round 21 removed the Close button
     expect(linkMark()).toHaveAttribute('data-lit', 'false')
     expect(screen.getByRole('button', { name: 'Changelog' })).toBe(changelogLink())
   })
@@ -462,18 +462,19 @@ describe('the Changelog popup (modal parity + content)', () => {
         .getAllByRole('listitem')
         .map((li) => li.textContent),
     ).toEqual(CHANGELOG[1].items)
-    // Input-free by construction: the one control is Close.
+    // Control-free by construction (round 21 removed the Close button): heading row → list, nothing
+    // else. Dismissal is the scrim tap / Escape / Back only.
     expect(within(dialog).queryAllByRole('textbox')).toHaveLength(0)
-    expect(within(dialog).getAllByRole('button')).toHaveLength(1)
+    expect(within(dialog).queryAllByRole('button')).toHaveLength(0)
   })
 
-  it('wears the settings scroll recipe: py-4 card, the px-4 lane inside the scroll region, px-4 title and Close rows (round-7 Q5)', () => {
+  it('wears the settings scroll recipe: py-4 card, the px-4 lane inside the scroll region, px-4 title row (round-7 Q5)', () => {
     mountApp()
     openPopup()
     const dialog = changelogDialog()
     const scrollRegion = dialog.querySelector('.overflow-y-auto')
     // The card owns vertical padding only; the horizontal 1rem lives INSIDE the scroller (the
-    // scrollbar's text-free lane) and on the title and Close rows — components/scrollRegion.
+    // scrollbar's text-free lane) and on the title row — components/scrollRegion.
     expect(dialog.className).toContain('py-4')
     expect(dialog.className.split(/\s+/)).not.toContain('p-4')
     expect(scrollRegion.className).toContain('px-4')
@@ -485,8 +486,6 @@ describe('the Changelog popup (modal parity + content)', () => {
     const titleRow = dialog.querySelector('#changelog-title').parentElement
     expect(titleRow.className).toContain('px-4')
     expect(dialog.querySelector('#changelog-title').className.split(/\s+/)).not.toContain('px-4')
-    const closeRow = within(dialog).getByRole('button', { name: 'Close' }).parentElement
-    expect(closeRow.className).toContain('px-4')
   })
 
   it('shows the app version on the heading row, right of the title (2026-08-10)', () => {
@@ -553,13 +552,10 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(region.className).not.toContain('fade-scroll-both')
   })
 
-  it('Close, scrim mousedown/click, and Escape dismiss the popup only — the settings panel survives', () => {
+  it('the scrim mousedown/click and Escape dismiss the popup only — the settings panel survives', () => {
     mountApp()
     openPopup()
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Close' })))
-    expect(changelogTitle()).toBeNull()
-    expect(screen.getByRole('button', { name: 'Reset Settings' })).toBeInTheDocument()
-    openChangelog()
+    // Round 21 removed the Close button: the scrim tap and Escape are the routes now.
     // The settings click-outside handler must treat the scrim as "inside" (the shared
     // [data-settings-modal] marker)…
     const scrim = document.querySelector('[data-settings-modal]')
@@ -584,17 +580,19 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(screen.queryByRole('button', { name: 'Reset Settings' })).toBeNull()
   })
 
-  it('the single-button Tab trap wraps in place on Close; the mode dropdown stays suppressed', () => {
+  it('the control-free Tab trap pins focus on the dialog card; the mode dropdown stays suppressed', () => {
     mountApp()
     openPopup()
-    const close = screen.getByRole('button', { name: 'Close' })
-    act(() => {
-      close.focus()
-      fireEvent.keyDown(close, { key: 'Tab' })
-    })
-    expect(document.activeElement).toBe(close)
-    act(() => fireEvent.keyDown(close, { key: 'Tab', shiftKey: true }))
-    expect(document.activeElement).toBe(close)
+    // Round 21 removed the Close button — the card has NO focusable control. The trap's degenerate
+    // branch consumes the Tab and holds focus on the dialog itself rather than letting it walk out.
+    const dialog = changelogDialog()
+    expect(within(dialog).queryAllByRole('button')).toHaveLength(0)
+    expect(document.activeElement).toBe(dialog)
+    const scrim = dialog.closest('[data-settings-modal]')
+    act(() => fireEvent.keyDown(scrim, { key: 'Tab' }))
+    expect(document.activeElement).toBe(dialog)
+    act(() => fireEvent.keyDown(scrim, { key: 'Tab', shiftKey: true }))
+    expect(document.activeElement).toBe(dialog)
     // The app-wide Tab shortcut bails while a settings modal is up (the [data-settings-modal]
     // guard) — the mode dropdown must not open behind the aria-modal dialog.
     act(() => fireEvent.keyDown(window, { key: 'Tab' }))
@@ -651,11 +649,11 @@ describe('the Changelog popup (modal parity + content)', () => {
     openSettings()
     // ⚠ THIS CASE REPLACES "both settings-footer link rows share one row class" (round-7 Q2). That
     // one asserted the two classNames were EQUAL, on the argument that the View/Clear row and this
-    // one were the same kind of row. They are not any more: the saved-defaults pair moved into the
-    // pinned button block and centres on the row's thirds, while this row spreads edge-to-edge, so
-    // the hoisted token split in two (FOOTER_META_ROW_CLASS / FOOTER_DEFAULTS_ROW_CLASS). Keeping
-    // the equality assertion would have meant a test that can only pass by re-uniting rows that
-    // must differ, so what is pinned now is what each row separately promises.
+    // one were the same kind of row. They are not any more: the saved-defaults pair became two
+    // plain pill buttons on a `flex gap-2` row (round 21, Q2), while this row spreads edge-to-edge
+    // as FOOTER_META_ROW_CLASS. Keeping the equality assertion would have meant a test that can
+    // only pass by re-uniting rows that must differ, so what is pinned now is what each row
+    // separately promises.
     const metaRow = screen.getByRole('button', { name: 'Check for updates' }).parentElement
     // justify-between is the whole anchoring rule in one token: the stamp hard left, Changelog hard
     // right, and — because every footer link's px-1 is cancelled by an equal -mx-1, so the flex

@@ -33,6 +33,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { usePresets, makePresetRegistryDefaults } from '../src/store/presets.js'
+import { createPreset, switchPreset } from '../src/store/presetControl.js'
 import { installGuideScroller } from './helpers/guideScroller.jsx'
 import { installResizeObserver } from './helpers/scrollGeometry.js'
 
@@ -235,6 +237,50 @@ describe('the guide remembers where you were reading', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
+// A PRESET SWITCH IS A FRESH CONTEXT — the incoming preset's How to Play opens at its own top, and
+// the outgoing preset's live reading offset must not leak across (round-21 A1). The switch
+// subscription in main.tsx runs switchMode + remountScreens + a scroller reset in the same order
+// fullReset uses; get that order wrong and switchMode's saveReadingPosRef read (taken on the way
+// out of the guide) lands AFTER remountScreens has zeroed the saved offset.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('a preset switch opens the incoming guide at the top', () => {
+  beforeEach(() => {
+    usePresets.setState(makePresetRegistryDefaults())
+  })
+  const open = (id) => act(() => switchPreset(id))
+
+  it('both presets resolve to the guide — the switch does not carry preset 1’s scroll across', () => {
+    // Here `mode` never changes across the switch (guide → guide), so the scroll-ownership layout
+    // effect never re-runs: only remountScreens' zero + the subscription's explicit scroller reset
+    // put the incoming reader at the top.
+    const { container } = mountApp()
+    act(() => createPreset('Two'))
+    open(2)
+    pressKey('H') // preset 2's session page is now the guide
+    open(1)
+    pressKey('H') // preset 1's too
+    const g = installGuide(container)
+    g.setContent(3000)
+    g.scrollTo(600)
+    expect(g.pos()).toBe(600)
+    open(2) // → preset 2, which also resolves to the guide
+    expect(g.pos()).toBe(0)
+  })
+
+  it('does not leak preset 1’s offset into a later in-preset return to the guide', () => {
+    const { container } = mountApp()
+    act(() => createPreset('Two'))
+    pressKey('H') // preset 1 → guide, session page recorded
+    const g = installGuide(container)
+    g.setContent(3000)
+    g.scrollTo(600)
+    open(2) // → preset 2, first visit → Classic (the guide is left behind)
+    pressKey('H') // first time INTO preset 2's guide this session
+    expect(g.pos()).toBe(0) // its own top, not preset 1's 600
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
 // FULL RESET. "A new launch starts at the top with every panel closed" has to hold for the reset
 // that MEANS a new launch, from inside the guide and from outside it.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -245,8 +291,17 @@ describe('Full Reset returns the guide to a launch state', () => {
   const fullReset = (container) => {
     const bar = container.querySelector('.htp-sticky-bar')
     act(() => fireEvent.click(within(bar).getByRole('button', { name: /^Settings/ })))
+    // Q7 round 21: the footer button opens a ConfirmModal; its own "Full Reset" button confirms
+    // (resolved within the dialog so it never collides with the footer button of the same name).
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Full Reset' })))
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Confirm?' })))
+    act(() =>
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: 'Full Reset this preset?' })).getByRole(
+          'button',
+          { name: 'Full Reset' },
+        ),
+      ),
+    )
   }
 
   it('sends the reader back to the top when it fires from inside the guide', () => {

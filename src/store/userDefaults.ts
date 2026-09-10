@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
+import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import { SETTINGS_DEFAULTS, migrateDotOrientation } from './settings.js'
 import type { SettingsValues } from './settings.js'
 import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
@@ -8,7 +8,7 @@ import type { DotOrientation } from '../lib/dotLayout.js'
 
 // userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, Q7 "Save Defaults").
 //
-// The ⚙ footer's Save Defaults button snapshots the full 15-value settings panel PLUS the four
+// The ⚙ footer's Save Defaults button snapshots the full 16-value settings panel PLUS the four
 // capturable mode-screen prefs (Flash reveal speed, both Blitz timer lengths, the AoX run length —
 // deliberately NOT Blitz Per-Round/Per-Question, Deduction sub-type, Allow Mistakes, One-by-One,
 // or the show/hide stat toggles) PLUS, since round-20 Q4, whether the active preset was Amnesic
@@ -85,6 +85,40 @@ export const effectivePrefDefaults = (saved: SavedDefaults | null): PrefDefaults
 export const effectiveAmnesicDefault = (saved: SavedDefaults | null): boolean =>
   saved ? (saved.amnesic ?? false) : false
 
+// ★ THE AMNESIC DEFAULT FOR ANY PRESET, read straight off ITS namespaced userDefaults key rather
+// than through the live store (which is only ever the ACTIVE preset's — persist scopes it via
+// store/presets' presetScopedStorage). src/main.tsx's cold-open reseed (round-21 Q1) is the one
+// caller: on every full app open it walks EVERY preset and resets its Amnesic flag to this value,
+// because an Amnesic flag is a SESSION toggle — guest mode is temporary by construction, so a
+// preset left Amnesic must be back to normal the next time the app opens. Session toggles still
+// stick within a session; they are re-seeded on the next cold open.
+//
+// Reads the persist envelope directly — the same `{ state: {...} }` shape store/presets'
+// readStoredRegistry parses, and for the same reason: a store pointed at one preset cannot answer
+// for another. Only `saved.amnesic` is consulted, which the v1→v2 dotOrientation→rotateDots
+// migration never touches, so no migration step is reproduced here. An absent, unreadable or
+// malformed payload is treated as "nothing saved" → effectiveAmnesicDefault(null) → false, which
+// is the intended fallback: a preset manually set Amnesic with NO saved defaults reverts to off on
+// every reopen (owner-confirmed — guest mode is temporary by default).
+// ⚠ The ACTIVE preset's key is the un-namespaced base key (presetKey's identity), so this one path
+// covers it too — no special case, and no divergence from effectiveAmnesicDefault(saved) for it.
+export const storedAmnesicDefault = (presetId: number): boolean => {
+  try {
+    const raw = window.localStorage.getItem(presetKey(PRESET_STORE_KEYS.userDefaults, presetId))
+    if (raw === null) return effectiveAmnesicDefault(null)
+    const envelope: unknown = JSON.parse(raw)
+    const state =
+      envelope && typeof envelope === 'object' ? (envelope as { state?: unknown }).state : null
+    const saved =
+      state && typeof state === 'object'
+        ? ((state as { saved?: SavedDefaults | null }).saved ?? null)
+        : null
+    return effectiveAmnesicDefault(saved)
+  } catch {
+    return effectiveAmnesicDefault(null)
+  }
+}
+
 // The AoX run-length clamp — the rule's ONE home (Q18): the AoX run-length box's blur/Enter/Escape
 // commits (modes/AoxMode), the Save Defaults and manage-defaults N fields (components/SettingsPanel)
 // and the defaults card's own N field (components/DefaultsCard) all call it — plus prefsMatchDefaults
@@ -140,7 +174,7 @@ export const useUserDefaults = create<UserDefaultsState>()(
       // byte-for-byte on every hydrate, `effectiveSettingsDefaults`' spread never finds a
       // `rotateDots` key to override the factory `false` with, and Reset Settings / Full Reset
       // (which both write `effectiveSettingsDefaults(saved)` straight into the live store) silently
-      // revert the player's saved Dot Layout choice back to upright — forever, since
+      // revert the player's saved Rotate Dots CCW choice back to upright — forever, since
       // `commitManageDefaults` (components/SettingsPanel) then carries the same stale shape forward
       // on every subsequent Manage-Defaults edit-and-save.
       version: 2,

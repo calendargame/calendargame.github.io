@@ -9,6 +9,8 @@ import {
 } from './presets.js'
 import type { Preset } from './presets.js'
 import { isAmnesic, discardSessionStats } from './amnesic.js'
+import { discardSessionMode } from './sessionMode.js'
+import { discardSessionRounds } from './sessionRound.js'
 import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults } from './progress.js'
@@ -111,6 +113,14 @@ const clearPresetStorage = (presetId: number) => {
   // the flag — the preset is being removed from the registry in the same breath, so there would be
   // nothing left to ask.
   discardSessionStats(presetId)
+  // …and the THIRD place a preset can have written this session: its current-page entry
+  // (round-21 Q3), in sessionStorage keyed by this id. Ids are never reused so a leftover entry is
+  // harmless, but "remove exactly its keys" is the house rule.
+  discardSessionMode(presetId)
+  // …and the FOURTH: its parked ended round/run (round-21 Q11), one sessionStorage entry per mode
+  // keyed by this id. discardSessionRounds clears every mode for the preset in one call — same house
+  // rule, same "harmless leftover but remove it anyway" reasoning as the page entry above.
+  discardSessionRounds(presetId)
 }
 
 // Is any of this preset's saved data already on disk? Used only when allocating an id — see
@@ -180,8 +190,33 @@ export function createPreset(name?: string): Preset {
     presets: [...reg.presets, preset],
     activeId: reg.activeId,
     nextId: id + 1,
+    // applyRegistry REPLACES the whole value, so every field it does not name is dropped — carry
+    // the "open in" pin through unchanged (creating a preset is not a decision about which one to
+    // open on).
+    openInPreset: reg.openInPreset,
   })
   return preset
+}
+
+/**
+ * Set the app-GLOBAL "open in" pin (round-21 Q3) — 'last' (open in whatever preset was active last
+ * time) or a specific preset id. Returns false when there is nothing to do (the value is already
+ * what was asked for, or a numeric id that names no preset).
+ *
+ * ★ A REGISTRY EDIT AND NOTHING ELSE, like renamePreset and movePreset — it moves no bytes, changes
+ * no `activeId` and rehydrates nothing, so it does NOT remount the screens (store/amnesic's
+ * activeDataId is unaffected; src/main.tsx's subscription there is what would have). It still lives
+ * here rather than as an action on the store because `applyRegistry` is deliberately the registry's
+ * ONE low-level door and this file is the only room it opens into.
+ * ⚠ NOT captured by Save Defaults — SavedDefaults carries settings/prefs/amnesic only, none of which
+ * is a registry field, so this is outside every snapshot by construction.
+ */
+export function setOpenInPreset(value: number | 'last'): boolean {
+  const reg = usePresets.getState()
+  if (value === reg.openInPreset) return false
+  if (value !== 'last' && !reg.presets.some((p) => p.id === value)) return false
+  usePresets.getState().applyRegistry({ ...reg, openInPreset: value })
+  return true
 }
 
 /** Rename a preset. An empty or whitespace-only name falls back to the default one. */
@@ -380,7 +415,11 @@ export function deletePreset(id: number): boolean {
   // The one after it, or the one before when it was last — the neighbour a player's eye is already
   // on, rather than an arbitrary "first".
   const activeId = wasActive ? (reg.presets[index + 1] ?? reg.presets[index - 1]).id : reg.activeId
-  usePresets.getState().applyRegistry({ presets, activeId, nextId: reg.nextId })
+  // If the "open in" pin named the preset being deleted, drop it back to 'last' — the next cold
+  // open would land nowhere otherwise (store/presets' resolveOpenInActiveId falls back to activeId,
+  // but clearing it here keeps the stored value honest rather than dangling).
+  const openInPreset = reg.openInPreset === id ? 'last' : reg.openInPreset
+  usePresets.getState().applyRegistry({ presets, activeId, nextId: reg.nextId, openInPreset })
   clearPresetStorage(id)
   if (wasActive) reloadPresetStores()
   return true

@@ -30,7 +30,35 @@ import { useProgress } from '../store/progress.js'
 import type { BlitzBest, SuddenBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
+import type { GameState } from '../engine/gameReducer.js'
+import { usePresets } from '../store/presets.js'
+import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import { useBackButton } from '../components/useBackButton.js'
+
+// The Best records that stood BEFORE the current round (snapshotted at Begin) — the reconcile
+// floor and the Override-resume revert target. Named so the ref below and the round snapshot
+// (round-21 Q11) share one shape.
+interface PrevRoundBest {
+  blitzBk: string
+  suddenBk: string
+  blitz?: BlitzBest
+  sudden?: SuddenBest
+  suddenAm?: BlitzBest
+}
+
+// Round-21 Q11 — the shape BlitzMode parks in store/sessionRound for an ENDED round. It round-trips
+// its own engine state plus the component fields the completed view (and a post-round Override)
+// need; store/sessionRound never looks inside it. `currentRoundId` + `prevRoundBest` are what keep
+// the Best-reconcile / Override-rollback correct on a restored round — without them a later Override
+// that drops the round's score could leave a fabricated Best standing, or wipe a legitimate one.
+interface BlitzRoundSnapshot {
+  engine: GameState
+  timerDone: boolean
+  showTimerDate: boolean
+  active: boolean
+  currentRoundId: number | null
+  prevRoundBest: PrevRoundBest
+}
 
 // ============================================================
 // BlitzMode — the Blitz game mode on the shared engine (mode-untangle Step 3).
@@ -69,10 +97,23 @@ function BlitzMode({
     setAllowMistakes = useModePrefs((s) => s.setBlitzAllowMistakes) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.blitzTimingOff),
     setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the timing trio, the engine clock never stops (no arm/reset)
-  const [active, setActive] = useState(false)
-  const [timerDone, setTimerDone] = useState(false)
+  // Round-21 Q11 — the ended round this (preset, mode) parked before its last unmount, read EXACTLY
+  // ONCE at mount. On a preset switch the always-mounted screens remount (src/main.tsx
+  // remountScreens) and usePresets' activeId is ALREADY the INCOMING preset by the time this runs —
+  // switchPreset writes the registry before it rehydrates the stores, one synchronous turn
+  // (store/presetControl). So this is the incoming preset's OWN parked round and never the one just
+  // left; the preset-id key is the whole contamination guard (a blob keyed to preset 1 is
+  // unreachable while preset 2 is up). Factored into one read so the six initializers below don't
+  // each call sessionStorage.
+  const [parkedRound] = useState<BlitzRoundSnapshot | null>(() =>
+    readSessionRound<BlitzRoundSnapshot>(usePresets.getState().activeId, 'blitz'),
+  )
+  // Only ENDED rounds are ever parked, so a restored round always has active === false; it is read
+  // from the blob for symmetry rather than assumed.
+  const [active, setActive] = useState(parkedRound?.active ?? false)
+  const [timerDone, setTimerDone] = useState(parkedRound?.timerDone ?? false)
   const [breakdownOpen, setBreakdownOpen] = useState(false) // the round breakdown popup (components/RunBreakdown) — ephemeral, dies with the round
-  const [showTimerDate, setShowTimerDate] = useState(false)
+  const [showTimerDate, setShowTimerDate] = useState(parkedRound?.showTimerDate ?? false)
   const blitzSec = useModePrefs((s) => s.blitzSec),
     setBlitzSec = useModePrefs((s) => s.setBlitzSec) // persisted (mode-prefs store)
   const qSec = useModePrefs((s) => s.blitzQSec),
@@ -106,8 +147,12 @@ function BlitzMode({
   const [suddenAmBestNew, setSuddenAmBestNew] = useState<
     Record<string, { score: boolean; streak: boolean }>
   >({})
-  const currentRoundIdRef = useRef<number | null>(null),
-    nextRoundIdRef = useRef(1)
+  // Restored from the parked round (round-21 Q11) so the Best-reconcile effect's same-round rollback
+  // still recognises THIS round after a remount — a null id there makes `cur.scoreRoundId === roundId`
+  // false, so a post-restore Override that drops the score would fail to roll a fabricated Best back.
+  // nextRoundIdRef is pushed past the restored id so the next Begin cannot reuse it within this mount.
+  const currentRoundIdRef = useRef<number | null>(parkedRound?.currentRoundId ?? null),
+    nextRoundIdRef = useRef(Math.max(1, (parkedRound?.currentRoundId ?? 0) + 1))
   // The FULL Best records that stood BEFORE the current round (snapshotted at Begin), serving two
   // jobs from one snapshot: (a) the reconcile's cross-round rollback FLOOR — a later Override that
   // drops THIS round's score must not pull Best below the earlier round it overwrote (mirrors
@@ -115,13 +160,13 @@ function BlitzMode({
   // Override credits a misclick and RESUMES the round, the Best the interrupted round provisionally
   // saved is rolled back wholesale to these records (it re-saves only when the round genuinely
   // ends). (C2 Q2-A.)
-  const prevRoundBestRef = useRef<{
-    blitzBk: string
-    suddenBk: string
-    blitz?: BlitzBest
-    sudden?: SuddenBest
-    suddenAm?: BlitzBest
-  }>({ blitzBk: '', suddenBk: '' })
+  // Restored from the parked round (round-21 Q11): a resume via Override reverts the interrupted
+  // round's provisional Best to THESE records, so after a remount they have to be the real pre-round
+  // records and not the `{blitzBk:'',…}` fresh-mount stub — otherwise resumeRound would `delete`
+  // the wrong (empty) key and leave a legitimate Best in place, or drop one that should stand.
+  const prevRoundBestRef = useRef<PrevRoundBest>(
+    parkedRound?.prevRoundBest ?? { blitzBk: '', suddenBk: '' },
+  )
   // saveStats:true ALWAYS (like AoX): the round tracks internally regardless of the global Save
   // Stats toggle, which now gates only the DISPLAY (a dimmed strip of "—"), whether a Best is recorded,
   // and whether Override shows while off. Always-tracking keeps the misclick-rescue credit
@@ -135,6 +180,10 @@ function BlitzMode({
     useJulian,
     saveStats: true,
     timingOff: false,
+    // Round-21 Q11 — seed the reducer from the parked ended round when there is one (a getter, read
+    // once in the lazy init). `parkedRound` was keyed to the ACTIVE preset at mount, so this only
+    // ever restores the incoming preset's own round and cannot pull in the one just left.
+    getInitialState: () => parkedRound?.engine ?? null,
   }) // Blitz: timing always tracked
   const { state, correct, overrideAvail: engOverrideAvail } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
@@ -590,6 +639,32 @@ function BlitzMode({
     setSuddenAmBest,
   ])
 
+  // Round-21 Q11 — mirror an ENDED round to sessionStorage, keyed by the ACTIVE preset, exactly as
+  // the effect above mirrors the round's Best to store/progress. On the remount a preset switch
+  // causes, the mount-time reads restore whatever is parked for the now-active preset (see
+  // `parkedRound`). Only an ENDED round is parked; every other state DISCARDS the slot:
+  //   • in-progress (active, !timerDone) → discard, so a mid-round switch parks nothing and the
+  //     remount starts fresh — the owner's requirement — and any stale blob from a prior round goes;
+  //   • idle after a manual Reset / Begin / an Override that resumed the round → discard, the park
+  //     is no longer the truth.
+  // `state` is a dep so a post-round Override (which edits the ended round's engine state and
+  // re-runs the Best-reconcile effect above) re-parks the updated snapshot. currentRoundIdRef and
+  // prevRoundBestRef are written only by begin(), which also flips active/timerDone, so they are
+  // already stable whenever timerDone is true and need no dep of their own.
+  useEffect(() => {
+    const pid = usePresets.getState().activeId
+    if (timerDone)
+      writeSessionRound(pid, 'blitz', {
+        engine: state,
+        timerDone,
+        showTimerDate,
+        active,
+        currentRoundId: currentRoundIdRef.current,
+        prevRoundBest: prevRoundBestRef.current,
+      })
+    else discardSessionRound(pid, 'blitz')
+  }, [timerDone, active, showTimerDate, state])
+
   // Both toggles are bare idle-gated flips — fully independent since C3a (the old auto-off
   // coupling died with the sudden-death-only per-Q). The idle lock (also mirrored by the
   // pointer-events dim on the buttons) is what makes the live-prefs branching above safe.
@@ -738,7 +813,7 @@ function BlitzMode({
         stats={statsArr}
         dimmed={!saveStats}
         onActivate={breakdownAvail ? () => setBreakdownOpen(true) : null}
-        activateLabel="Show round breakdown"
+        activateLabel={perQ ? 'Show run breakdown' : 'Show round breakdown'}
       />
       {/* Mounted only while up — see the component header, and the twin site in modes/AoxMode. */}
       {breakdownShown && (
@@ -746,7 +821,7 @@ function BlitzMode({
           onClose={() => setBreakdownOpen(false)}
           data={buildRunBreakdown(state)}
           fmtDate={fmtDate}
-          title="Round breakdown"
+          title={perQ ? 'Run Breakdown' : 'Round Breakdown'}
         />
       )}
       {!perQ && <BlitzBestRow rec={bScore} newFlags={blitzBestNew[blitzBk]} />}

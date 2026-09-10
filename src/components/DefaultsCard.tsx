@@ -49,8 +49,8 @@
 //     no box (min/max/snap 2–1000/1 mirror the normalizeAoxN clamp; junk/empty reverts,
 //     the editor's contract, rather than the box's junk→10 fallback);
 //   • buttons: the Save card is an action card — Cancel + Save always; the manager rests
-//     read-only (one full-width Close in the Cancel recipe) and swaps to Cancel + Save only
-//     once something is dirty;
+//     read-only with NO button row at all (round 21, Q5 — the scrim tap, Escape and Android
+//     Back are its dismiss routes) and shows Cancel + Save only once something is dirty;
 //   • the footnote slot: the manager shows `note` while clean and the restricted-write
 //     warning ("Saving here updates only these values.") while dirty — the manager's Save
 //     writes ONLY these four values, so the swap appears exactly when it becomes relevant;
@@ -335,7 +335,7 @@ function DefaultsCard({
           ) : note ? (
             <div className="text-[11px] text-(--tx-300-60)">{note}</div>
           ) : null)}
-        {!manage || dirty ? (
+        {(!manage || dirty) && (
           <div className="flex gap-2 pt-1">
             <button
               type="button"
@@ -350,16 +350,6 @@ function DefaultsCard({
               className="flex-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium"
             >
               Save
-            </button>
-          </div>
-        ) : (
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full px-3 py-2 rounded-xl text-sm font-medium border surface-toggle text-(--tx-100-80)"
-            >
-              Close
             </button>
           </div>
         )}

@@ -397,10 +397,11 @@ const CLOSE_ROUTES = {
     openModeMenu()
     tap(screen.getByRole('option', { name: mode }))
   },
-  // Full Reset's two taps, which close the panel as one of their many outcomes.
+  // Full Reset — the footer button then its confirmation popup, which closes the panel as one of
+  // its many outcomes.
   fullReset: () => {
     tap(fullResetButton())
-    tap(fullResetButton())
+    tap(within(fullResetConfirmCard()).getByRole('button', { name: 'Full Reset' }))
   },
   // A press-drag release on a member of the panel — the gesture that both activates the control
   // and dismisses the menu. `on` resolves the release target once the panel is up; it defaults to
@@ -558,12 +559,13 @@ export const changelogDot = () => updateDot(changelogLink())
 // (store/presets' `Preset.amnesic`) and is written through store/presetControl, so it is absent
 // from the Save Defaults snapshot and never lights the gear. It is listed here because this list is
 // "every On/Off switch in the panel", which is a question about the panel, not about the store.
-// ⚠ 'Dot Layout' joined in Q3 (round 20) — it was a two-option PillTray before and is a switch now
-// (store/settings' `rotateDots`), on THE PICKER RULE's own logic: a choice between exactly two
-// named alternatives IS an on/off shape.
+// ⚠ 'Rotate Dots CCW' joined in Q3 (round 20) as 'Dot Layout' — it was a two-option PillTray before
+// and is a switch now (store/settings' `rotateDots`), on THE PICKER RULE's own logic: a choice
+// between exactly two named alternatives IS an on/off shape. Renamed to 'Rotate Dots CCW' in Q9
+// (round 21).
 export const SWITCH_LABELS = [
   'Random Format',
-  'Dot Layout',
+  'Rotate Dots CCW',
   'Use System Settings',
   'Julian Calendar (pre-Oct 15, 1582)',
   'Save Stats',
@@ -780,9 +782,44 @@ export function arrowPicker(name, key) {
 // 'Confirm?' once armed, and Check for updates has four labels because the label is its state.
 export const footerButton = (name) => panel().getByRole('button', { name })
 
-// Full Reset under EITHER caption. Its label is the state machine's only readout, so a helper that
-// could only find it at rest would go blind exactly when the machine is running.
-export const fullResetButton = () => footerButton(/^(Full Reset|Confirm\?)$/)
+// The Full Reset FOOTER BUTTON. Its caption is static now (Q7 round 21 replaced the two-tap arm —
+// which swapped it to "Confirm?" — with a ConfirmModal), so a plain name match is enough. The
+// popup's own confirm button is reached through confirmFullReset() / fullResetConfirmCard() below,
+// not through this.
+export const fullResetButton = () => footerButton('Full Reset')
+
+// THE FULL RESET CONFIRMATION POPUP (Q7 round 21) — the shared ConfirmModal the footer button now
+// opens. Resolved by its published accessible name, like every other modal in the suite.
+export const FULL_RESET_CONFIRM_TITLE = 'Full Reset this preset?'
+export const fullResetConfirmCard = () =>
+  screen.getByRole('dialog', { name: FULL_RESET_CONFIRM_TITLE })
+export const queryFullResetConfirmCard = () =>
+  screen.queryByRole('dialog', { name: FULL_RESET_CONFIRM_TITLE })
+
+// FIRE FULL RESET END TO END — the footer button opens the ConfirmModal, the modal's own "Full
+// Reset" button confirms. Two real taps, like the old two-tap arm, but now they land on two
+// different controls: this is the user's whole gesture. The confirm button is resolved WITHIN the
+// dialog, so it never collides with the footer button of the same name.
+export function fireFullReset() {
+  tap(fullResetButton())
+  tap(within(fullResetConfirmCard()).getByRole('button', { name: 'Full Reset' }))
+}
+
+// THE RESET SETTINGS CONFIRMATION POPUP (Q7 round 21) — Reset Settings had no confirmation before
+// this round; it is the shared ConfirmModal now, opened by the footer button.
+export const RESET_SETTINGS_CONFIRM_TITLE = 'Reset Settings for this preset?'
+export const resetSettingsConfirmCard = () =>
+  screen.getByRole('dialog', { name: RESET_SETTINGS_CONFIRM_TITLE })
+export const queryResetSettingsConfirmCard = () =>
+  screen.queryByRole('dialog', { name: RESET_SETTINGS_CONFIRM_TITLE })
+
+// FIRE RESET SETTINGS END TO END — the footer button opens the ConfirmModal, its own "Reset
+// Settings" button applies. Mirrors fireFullReset; use it wherever a test used to expect the
+// footer tap to apply immediately.
+export function fireResetSettings() {
+  tap(footerButton('Reset Settings'))
+  tap(within(resetSettingsConfirmCard()).getByRole('button', { name: 'Reset Settings' }))
+}
 
 // The Changelog link, under EITHER of its two names. Same shape as fullResetButton and the same
 // reason: its accessible name grows to 'Changelog, update' while its dot is lit (see updateDot
@@ -838,22 +875,22 @@ export function footerOfferState(name) {
   }
 }
 
-// The three footer captions in left-to-right order — what the row READS, which is how the Full
-// Reset arm announces itself ('Full Reset' → 'Confirm?').
+// The three footer captions in left-to-right order — what the row READS. All three are static text
+// now (Q7 round 21 froze the last one — "Full Reset" no longer swaps to "Confirm?").
 export const footerCaptions = () => [
   footerButton('Save Defaults').textContent.trim(),
   footerButton('Reset Settings').textContent.trim(),
   fullResetButton().textContent.trim(),
 ]
 
-// FULL RESET'S TWO-TAP MACHINE, as the user meets it: what the button says, whether it wears the
-// armed ring, and whether it is being offered at all.
+// FULL RESET, as the user meets it (Q7 round 21): the button's caption (static now), whether it is
+// being offered, and whether its confirmation popup is currently up.
 export function fullResetState() {
   const el = fullResetButton()
   return {
     caption: el.textContent.trim(),
-    armed: el.className.includes('ring-2'),
     offered: isOffered(el),
+    confirmOpen: queryFullResetConfirmCard() !== null,
   }
 }
 
@@ -1031,9 +1068,14 @@ export function panelValues() {
     randomFormat: switchState('Random Format'),
     dateFormat: pickerChosen('Date Format'),
     input: pickerChosen('Input'),
-    // Dot Layout is a SWITCH now (Q3, round 20), not a picker — read through switchState like every
-    // other On/Off setting in this snapshot, rather than pickerChosen.
-    dotLayout: switchState('Dot Layout'),
+    // Rotate Dots CCW is a SWITCH (Q3, round 20; renamed from 'Dot Layout' in Q9, round 21), not a
+    // picker — read through switchState like every other On/Off setting in this snapshot, rather
+    // than pickerChosen.
+    rotateDots: switchState('Rotate Dots CCW'),
+    // Default Mode (round-21 Q3) — a two-tray PillGroup like Date Format; pickerChosen reads the lit
+    // pill across both trays. Reported here so the "Reset Settings returns every value the panel
+    // shows" round-trip covers it too.
+    defaultMode: pickerChosen('Default Mode'),
     useSystem: switchState('Use System Settings'),
     minYear: yearValue('min'),
     maxYear: yearValue('max'),
@@ -1101,12 +1143,12 @@ export function checkUpdatesState() {
   }
 }
 
-// ── The five modals ───────────────────────────────────────────────────────────────────────────
+// ── The settings modals ───────────────────────────────────────────────────────────────────────
 
-// THE FIVE SETTINGS MODALS, by short key, with the title each one publishes as its accessible
-// name. The manager carries two titles because it retitles itself for the FACTORY view (nothing
-// saved yet), and both are the same modal — so the key resolves either, while a caller that means
-// one specific view still passes that exact title.
+// THE SETTINGS MODALS, by short key, with the title each one publishes as its accessible name. The
+// manager carries two titles because it retitles itself for the FACTORY view (nothing saved yet),
+// and both are the same modal — so the key resolves either, while a caller that means one specific
+// view still passes that exact title.
 //
 // ⚠ `presets` NAMES THE PRESET MANAGER'S **LIST** VIEW ONLY. That card has a second view — its
 // delete confirmation, "Delete this preset?" — which replaces the list inside the SAME dialog
@@ -1114,10 +1156,18 @@ export function checkUpdatesState() {
 // table's job here is unchanged: it names the view every modal OPENS on, which is the view every
 // `openModal` loop below is about. A case that means the confirmation asks for that title by name,
 // and tests/presetManager.dom is where those live.
+//
+// ⚠ `fullReset` and `resetSettings` (Q7 round 21) are the shared ConfirmModal, opened by their
+// footer buttons. Like `save`, they open only while `settingsModified` — so any sweep over
+// MODAL_KEYS that already arranges a divergence for `save` (every one does, via makeSaveable())
+// reaches them too. Their `openModal` only OPENS the popup; the reset itself needs the modal's own
+// confirm button (fireFullReset / the dedicated cases in settingsPanel.defaults).
 export const MODAL_TITLES = {
   save: 'Save current settings as your defaults?',
   manage: /^(Your saved defaults|Default settings)$/,
   clear: 'Clear your saved defaults?',
+  fullReset: 'Full Reset this preset?',
+  resetSettings: 'Reset Settings for this preset?',
   changelog: "What's new",
   presets: 'Presets',
 }
@@ -1167,6 +1217,8 @@ const MODAL_OPENERS = {
   save: () => footerButton('Save Defaults'),
   manage: () => footerButton('View Saved Defaults'),
   clear: () => footerButton('Clear Saved Defaults'),
+  fullReset: () => fullResetButton(),
+  resetSettings: () => footerButton('Reset Settings'),
   changelog: changelogLink,
   presets: managePresetsButton,
 }
@@ -1204,9 +1256,10 @@ export const makeSaveable = () =>
 
 // EVERY WAY A MODAL GOES AWAY, and the group asserts they are not interchangeable: four of them
 // DISCARD pending edits and one of them (`save`) commits.
-//   dismiss — the modal's own dismiss control, under whichever caption it currently wears. The
-//             manager rests with a single 'Close' and swaps it for 'Cancel' the moment a row is
-//             edited, so naming one caption would go blind in the state that matters.
+//   dismiss — the modal's own dismiss control, under whichever caption it currently wears, or
+//             Escape when it has none. Since round 21 the Changelog popup and the RESTING defaults
+//             manager carry no dismiss button at all; a dirty manager and every confirm still show
+//             'Cancel', so naming one caption would go blind in the state that matters.
 //   save    — the commit control. Only the two DefaultsCard modals have one.
 //   scrim   — a FINGER TAP on the backdrop. Cancels the POPUP only; the panel stays up behind it.
 //             ⚠ IT IS `tap`, NOT `click`, AND THAT IS THE WHOLE PAIRING. The modal's own dismiss
@@ -1221,7 +1274,16 @@ export const makeSaveable = () =>
 //             ⚠ ASYNC — `await closeModal(key, 'back')`; see pressBack for why.
 //   panel   — closing the SETTINGS panel, which closes the modal as a child flow.
 const MODAL_CLOSE_ROUTES = {
-  dismiss: (key) => tap(within(modalCard(key)).getByRole('button', { name: /^(Cancel|Close)$/ })),
+  dismiss: (key) => {
+    // The modal's own dismiss control, under whichever caption it currently wears. Round 21 (Q5)
+    // removed the standalone Close from the Changelog popup and the RESTING defaults manager — those
+    // carry no dismiss button at all now — so when there is none, fall back to Escape, which is one
+    // of their real dismiss routes. A dirty manager still shows Cancel, and every confirm still
+    // shows Cancel, so those are still taken by the button.
+    const btn = within(modalCard(key)).queryByRole('button', { name: /^(Cancel|Close)$/ })
+    if (btn) return tap(btn)
+    return act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
+  },
   save: (key) => tap(within(modalCard(key)).getByRole('button', { name: 'Save' })),
   scrim: (key) => tap(modalScrim(key)),
   escape: () => act(() => fireEvent.keyDown(document.body, { key: 'Escape' })),
@@ -1239,17 +1301,19 @@ export function closeModal(key, via = 'dismiss') {
 }
 
 // A modal's own controls, by accessible name in DOM order — which IS the read-only/dirty state the
-// two DefaultsCard modals publish: one 'Close' at rest, 'Cancel' + 'Save' once a row is edited.
+// two DefaultsCard modals publish: NO buttons at rest (since round 21), 'Cancel' + 'Save' once a
+// row is edited. (The Save Defaults card, being an action card, always shows 'Cancel' + 'Save'.)
 export const modalButtons = (key) =>
   within(modalCard(key))
-    .getAllByRole('button')
+    .queryAllByRole('button') // queryAll, not getAll: a resting DefaultsCard / the Changelog have none
     .map((b) => (b.getAttribute('aria-label') ?? b.textContent).trim())
 
 // A Tab inside a modal, which its scrim's trap owns. Sent from wherever the keyboard currently is
 // (the card itself the moment the modal opens), so the wrap at each end is a real traversal rather
 // than a press aimed at a chosen element. Returns `prevented` — the trap's only other observable,
-// and the one that still discriminates on a modal holding a SINGLE control (the Changelog's lone
-// Close button is both ends of the cycle, so "it landed on the first" is true either way there).
+// and the one that still discriminates on a modal with ZERO controls (the Changelog since round 21)
+// or a SINGLE one: there the trap consumes the press and pins focus on the dialog card, so
+// `prevented` is what tells a real trap from a press nothing handled.
 export function tabInModal(key, { shift = false } = {}) {
   const scrim = modalScrim(key)
   const from = scrim.contains(document.activeElement) ? document.activeElement : modalCard(key)

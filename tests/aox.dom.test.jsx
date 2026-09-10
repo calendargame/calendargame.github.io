@@ -12,7 +12,7 @@
 // compute the correct weekday with the already-tested wday(), on a pinned Gregorian range +
 // numeric-ymd format. Short runs (Ao2) make "complete the run" reachable in two clicks.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
@@ -34,6 +34,18 @@ function isHidden(el) {
   return false
 }
 const ctrl = (name) => screen.getByRole('button', { name })
+// Q7 round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
+const fireResetSettings = () => {
+  act(() => fireEvent.click(ctrl('Reset Settings')))
+  act(() =>
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Reset Settings for this preset?' })).getByRole(
+        'button',
+        { name: 'Reset Settings' },
+      ),
+    ),
+  )
+}
 const dayBtn = (name) => screen.getByRole('button', { name })
 // Not offered = the app is withholding the control. How that is SPELLED lives in one place
 // (tests/helpers/offered) so this file never names a class string.
@@ -1115,7 +1127,7 @@ describe('AoX — Q7 round-6 (Reset Settings restoring the run length reconciles
     click('Begin')
     expect(ctrl('Reset')).toBeInTheDocument() // running → Reset shown
     toggleSettings() // open ⚙ → snapshot (aoxN '25')
-    act(() => fireEvent.click(ctrl('Reset Settings'))) // restores aoxN → '10' (the panel is already factory)
+    fireResetSettings() // restores aoxN → '10' (the panel is already factory)
     expect(ctrl('Reset')).toBeInTheDocument() // still running while open (deferred to close)
     toggleSettings() // close → the aoxN dep changed → reset()
     expect(ctrl('Begin')).toBeInTheDocument() // run reset to idle
@@ -1488,7 +1500,7 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     const score = statValue('Score')
     expect(ctrl('Reset')).toBeInTheDocument() // running
     toggleSettings()
-    act(() => fireEvent.click(ctrl('Reset Settings')))
+    fireResetSettings()
     expect(useSettings.getState().inputStyle).toBe('buttons') // the reset really fired…
     expect(ctrl('Reset')).toBeInTheDocument() // …and the run is untouched while the panel is up
     expect(statValue('Score')).toBe(score)

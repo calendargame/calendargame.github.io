@@ -8,14 +8,13 @@ import {
   useStatsHideToggles,
   useChangeEffect,
   engineFresh,
-  useResetStatsArm,
+  useResetStatsConfirm,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import {
   ANSWER_GRID_GAP,
   BASE_BTN,
   buttonStateClass,
-  RESET_STATS_ARMED_CLASS,
   RESET_STATS_BTN_CLASS,
 } from '../components/controlClasses.js'
 import { YEAR_OPTION_DEFAULT, yearGridLayout, makeDedPuzzle } from '../lib/dedPuzzle.js'
@@ -26,6 +25,7 @@ import type { FormatId, DatePart } from '../lib/format.js'
 import { rollFormat, isTouch } from '../lib/modeFormat.js'
 import type { DedPuzzle } from '../engine/gameReducer.js'
 import StatPanel from '../components/StatPanel.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
@@ -157,7 +157,7 @@ function DeductionMode({
   // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
   const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
   // Hideable stats chrome shared with Classic/Flash — operates on the ACTIVE sub-mode's engine.
-  const { timingArmed, statsArr, armedSpan, armedBtnRef } = useStatsHideToggles({
+  const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
     eng,
     saveStats,
     visible,
@@ -284,13 +284,15 @@ function DeductionMode({
     monthOnly1582 === false &&
     timingOff === true &&
     scoringOff === false &&
-    timingArmed === false &&
+    enableResetOpen === false &&
     flash === null
-  const { resetArmed, onResetTap, resetBtnRef } = useResetStatsArm(
-    eng.resetStats,
-    !engineFresh(state),
-    visible,
-  ) // Q2 two-tap confirm (resets the ACTIVE sub-type's silo)
+  // Q2 / Q7 — the Reset Stats confirmation popup (resets the ACTIVE sub-type's silo).
+  const {
+    confirmOpen: resetStatsOpen,
+    onResetTap,
+    closeConfirm: closeResetStats,
+    confirmReset: confirmResetStats,
+  } = useResetStatsConfirm(eng.resetStats, !engineFresh(state), visible)
   useEffect(() => {
     onFreshChange?.(deductionIsFresh)
   }, [deductionIsFresh, onFreshChange])
@@ -349,23 +351,32 @@ function DeductionMode({
     <div style={{ display: visible ? 'block' : 'none' }}>
       {/* dimmed = Save Stats off = nothing is being recorded (whole strip, every value '—'); a group
           you turned off yourself renders BLANK, from `off` inside statsArr. See StatPanel. */}
-      <StatPanel
-        stats={statsArr}
-        dimmed={!saveStats}
-        armedSpan={armedSpan}
-        armedBtnRef={armedBtnRef}
-      />
+      <StatPanel stats={statsArr} dimmed={!saveStats} />
       <div className="mt-3">
-        <button
-          type="button"
-          data-key="S"
-          ref={resetBtnRef}
-          className={resetArmed ? RESET_STATS_ARMED_CLASS : RESET_STATS_BTN_CLASS}
-          onClick={onResetTap}
-        >
-          {resetArmed ? 'Reset Stats?' : 'Reset Stats'}
+        {/* Reset Stats — static caption; the confirmation is the shared ConfirmModal below (Q7
+            round 21). The `S` shortcut routes through this same onClick. */}
+        <button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={onResetTap}>
+          Reset Stats
         </button>
       </div>
+      <ConfirmModal
+        open={resetStatsOpen}
+        onCancel={closeResetStats}
+        onConfirm={confirmResetStats}
+        title="Reset Stats?"
+        body="Clears this sub-type's stats and all-time bests for the current preset. Per-preset — the other modes and sub-types keep theirs."
+        confirmLabel="Reset Stats"
+        backButtonId="reset-stats-deduction"
+      />
+      <ConfirmModal
+        open={enableResetOpen}
+        onCancel={closeEnableReset}
+        onConfirm={confirmEnableReset}
+        title="Enable and Reset Stats?"
+        body="The timer readouts were hidden while this sub-type's stats changed, so turning them back on has to reset this sub-type's stats for the current preset."
+        confirmLabel="Enable and Reset Stats"
+        backButtonId="enable-reset-stats-deduction"
+      />
       <div className="mt-5">
         {/* Day/Month/Year trio pinned to exact page center (Q10): minmax(0,1fr) side tracks.
                 Bare 1fr means minmax(auto,1fr) — on narrow screens an occupied side's min-w-20

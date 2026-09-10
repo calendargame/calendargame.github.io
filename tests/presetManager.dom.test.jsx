@@ -170,7 +170,7 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
       fireEvent.change(box, { target: { value: 'Mornings' } })
       fireEvent.keyDown(box, { key: 'Enter' })
     })
-    tap(within(card()).getByRole('button', { name: 'Close' }))
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // round 21 removed the Close button
     // The section's own text, read off the block the button lives in — the name sits inside a <b>,
     // so it is only whole at the section level.
     expect(managePresetsButton().parentElement.textContent).toContain('You are on Mornings.')
@@ -180,9 +180,13 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
     act(() => {
       createPreset('Timed')
       createPreset('Guest')
-      setPresetAmnesic(3, true) // Guest — a preset you are NOT on, which only the registry can answer for
     })
     openManager()
+    // Guest (id 3) — a preset you are NOT on, which only the registry can answer for. Set AFTER
+    // mountApp(): round-21 Q1 reseeds every preset's Amnesic flag from its saved default on a cold
+    // open, and Guest has no saved defaults, so a flag set before the mount would be cleared by
+    // that boot pass. The manager re-renders off the registry subscription, so the marker appears.
+    act(() => setPresetAmnesic(3, true))
     expect(listedNames()).toEqual(['Preset 1', 'Timed', 'Guest'])
     // The two quiet markers are asked for by their sr-only WORDS, never by their glyphs: a bare ✓
     // or A is a picture, and the word is the whole reason each marker is accessible at all.

@@ -18,7 +18,7 @@
 // the screen and compute the correct weekday with the same already-tested calendar function the app
 // uses, on a pinned numeric-ymd format and a Gregorian-only year range.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { useProgress } from '../src/store/progress.js'
@@ -43,6 +43,17 @@ const click = (name) =>
   act(() => {
     fireEvent.click(ctrl(name))
   })
+// Q7 round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm.
+const fireResetStats = () => {
+  click('Reset Stats')
+  act(() => {
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Reset Stats?' })).getByRole('button', {
+        name: 'Reset Stats',
+      }),
+    )
+  })
+}
 const clickEl = (el) =>
   act(() => {
     fireEvent.click(el)
@@ -164,8 +175,7 @@ describe('Q# badge — Classic counts the player’s lifetime cards', () => {
     mountApp()
     click('New')
     missOneCardAndAdvance()
-    click('Reset Stats') // two-tap confirm
-    click('Reset Stats?')
+    fireResetStats() // opens the confirm popup, then confirms
     expect(statValue('Score')).toBe('0/0')
     missOneCardAndAdvance()
     click('<')
