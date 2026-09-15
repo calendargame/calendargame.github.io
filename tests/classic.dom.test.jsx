@@ -766,16 +766,19 @@ describe('Classic — Reset Stats confirmation popup (Q2 / Q7)', () => {
   })
   const answerCorrect = () => fireEvent.click(dayBtn(correctName(readDate())))
 
-  it('the button opens a popup without clearing; Confirm clears, Cancel does not', () => {
+  it('the button opens a popup without clearing; Confirm clears, dismissing does not', () => {
     mountApp()
     pressNewAndRead()
     answerCorrect()
     expect(statValue('Score')).toBe('1/1')
-    // Cancel first — the popup opens, nothing clears.
+    // Dismiss first — the popup opens, nothing clears. Q2 removed the Cancel button from every
+    // ConfirmModal in the app (the owner: a dismiss already says it), so the route that stands in
+    // for it is Escape — one of the three the component owns, and the one a keyboard reaches.
     fireEvent.click(ctrl('Reset Stats'))
     expect(resetStatsDialog()).toBeInTheDocument()
+    expect(within(resetStatsDialog()).getAllByRole('button')).toHaveLength(1) // the confirm, alone
     expect(statValue('Score')).toBe('1/1')
-    fireEvent.click(within(resetStatsDialog()).getByRole('button', { name: 'Cancel' }))
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
     expect(screen.queryByRole('dialog', { name: 'Reset Stats?' })).toBeNull()
     expect(statValue('Score')).toBe('1/1') // NOT cleared
     // Now Confirm.

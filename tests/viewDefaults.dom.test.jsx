@@ -13,7 +13,8 @@
 // four shown values (the ⚙ half stays byte-identical; from the factory view it CREATES the
 // snapshot). The manager's AoX row is the ONE deliberate difference from the Save card: a
 // tap-to-type SliderValueEditor readout (strut "1000"), no visible box. Clear runs through its
-// own confirm modal (Cancel + a red-tier Clear) with full modal parity. Modal parity for the
+// own confirm modal — one red-tier Clear button since Q2 took every Cancel in the app away, backing
+// out being a dismiss now — with full modal parity. Modal parity for the
 // manager itself (focus-on-open, capture Escape, close-with-settings, Android Back, the shared
 // Tab trap, the [data-settings-modal] marker) is locked here too. Visual polish (one-line fit,
 // themes, drag-release) is on-device per the standing lesson.
@@ -185,7 +186,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(readout(dialog, 'MoX Run Length').textContent).toBe('25')
   })
 
-  it('editing turns the row btn-solid, swaps the footnote for the restricted-write note, and brings up Cancel + Save', () => {
+  it('editing turns the row btn-solid, swaps the footnote for the restricted-write note, and brings up Save', () => {
     act(() => useModePrefs.getState().setFlashMs(800))
     mountApp()
     openSettings()
@@ -207,16 +208,17 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
       ),
     ).toBeNull() // the note REPLACES the footnote while dirty
     expect(within(dialog).queryByRole('button', { name: 'Close' })).toBeNull()
-    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    // Q2: a dirty row grows SAVE ALONE — the Cancel it used to arrive beside is gone app-wide.
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeInTheDocument()
-    // Cancel discards: reopening seeds fresh from the saved defaults, back at rest.
-    act(() => fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' })))
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    // Dismissing discards: reopening seeds fresh from the saved defaults, back at rest. (The scrim
+    // tap, one of the three routes that carry what Cancel used to.)
+    act(() => fireEvent.click(dialog.closest('[data-settings-modal]')))
     expect(savedManager()).toBeNull()
     openManager()
     const dialog2 = managerDialog()
     expect(readout(dialog2, 'Flash Speed').textContent).toBe('0.8s')
-    // Back at rest: NO action button (round 21) — the dirty Cancel/Save row is gone again.
-    expect(within(dialog2).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    // Back at rest: NO action button (round 21) — the dirty Save row is gone again.
     expect(within(dialog2).queryByRole('button', { name: 'Save' })).toBeNull()
   })
 
@@ -319,7 +321,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     readout(saveDialog, 'Blitz Round Timer')
     readout(saveDialog, 'Blitz Question Timer')
     expect(within(saveDialog).queryByRole('button', { name: 'Edit MoX Run Length' })).toBeNull()
-    act(() => fireEvent.click(within(saveDialog).getByRole('button', { name: 'Cancel' })))
+    act(() => fireEvent.click(saveDialog.closest('[data-settings-modal]'))) // dismissed; Q2 left no Cancel
     // …and the manager: identical structure, except the AoX readout replaces the box.
     openManager()
     const manageDialog = managerDialog('Default settings')
@@ -336,7 +338,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     readout(manageDialog, 'Blitz Question Timer')
   })
 
-  it('the CLEAR CONFIRM popup: Cancel keeps the snapshot, Clear forgets it (View stays, Clear link dims and locks)', () => {
+  it('the CLEAR CONFIRM popup: dismissing keeps the snapshot, Clear forgets it (View stays, Clear link dims and locks)', () => {
     act(() => useModePrefs.getState().setFlashMs(800))
     mountApp()
     openSettings()
@@ -345,9 +347,11 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     const dialog = managerDialog('Clear your saved defaults?')
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(document.activeElement).toBe(dialog) // focus landed IN the dialog on open
-    act(() => fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' })))
+    // Q2: the confirm is the card's ONLY button, so backing out is a dismiss — the scrim tap here.
+    expect(within(dialog).getAllByRole('button')).toHaveLength(1)
+    act(() => fireEvent.click(dialog.closest('[data-settings-modal]')))
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()
-    expect(useUserDefaults.getState().saved).not.toBeNull() // Cancel keeps it
+    expect(useUserDefaults.getState().saved).not.toBeNull() // dismissing keeps it
     expect(btn('Reset Settings')).toBeInTheDocument() // the settings panel survived
     act(() => fireEvent.click(btn('Clear Saved Defaults')))
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' })))

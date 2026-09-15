@@ -429,9 +429,12 @@ describe('Classic — your toggle and Save Stats are two separate signals (C1, t
     expect(enableResetDialog()).toBeInTheDocument()
     // The strip is still six plain cells — no merged warning button smuggled back in.
     expect(cells()).toHaveLength(6)
-    // Cancel leaves everything: still hidden, stats intact.
+    // Dismissing leaves everything: still hidden, stats intact. Q2 took the Cancel button off every
+    // ConfirmModal, so the stand-in is one of the three routes the component owns — here the scrim
+    // tap, since this popup is reached by tapping a stat box and a finger is the likeliest way out.
+    expect(within(enableResetDialog()).getAllByRole('button')).toHaveLength(1) // the confirm, alone
     act(() => {
-      fireEvent.click(within(enableResetDialog()).getByRole('button', { name: 'Cancel' }))
+      fireEvent.click(enableResetDialog().closest('[data-settings-modal]'))
     })
     expect(screen.queryByRole('dialog', { name: 'Enable and Reset Stats?' })).toBeNull()
     expect(valueOf('Score')).toBe('1/1')

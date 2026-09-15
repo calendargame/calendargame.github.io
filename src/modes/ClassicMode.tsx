@@ -148,7 +148,7 @@ function ClassicMode({
         onCancel={closeResetStats}
         onConfirm={confirmResetStats}
         title="Reset Stats?"
-        body="Clears this mode's stats and all-time bests for the current preset. Per-preset — the other modes keep theirs."
+        body="Clears this mode's stats and all-time bests for the preset you are on. The other modes keep theirs, and no other preset is touched."
         confirmLabel="Reset Stats"
         backButtonId="reset-stats-classic"
       />

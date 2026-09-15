@@ -36,7 +36,9 @@ import {
   modalCard,
   queryModalCard,
   managePresetsButton,
+  modalScrim,
   picker,
+  pressBack,
   pressDragFromGear,
   isSettingsOpen,
   tap,
@@ -671,7 +673,7 @@ describe('deleting', () => {
       .map((base) => presetKey(base, id))
       .filter((k) => localStorage.getItem(k) !== null)
 
-  it('asks first, IN THE SAME DIALOG, and Cancel goes back to the list changing nothing', () => {
+  it('asks first, IN THE SAME DIALOG, with ONE button and no Cancel (Q2)', () => {
     act(() => {
       createPreset('Timed')
     })
@@ -687,10 +689,84 @@ describe('deleting', () => {
     // …and the card that is up has taken the keyboard, which is the term that would silently break
     // if focus had been left to the caller's open-only effect.
     expect(document.activeElement).toBe(confirmCard())
-    tap(within(confirmCard()).getByRole('button', { name: 'Cancel' }))
+    // Q2: the question's only control is the destructive one. Asserted as a COUNT, because the claim
+    // that replaced Cancel is "every dismiss route comes back here" (the three ladder cases below),
+    // and that claim is only honest if there is no second button quietly doing it instead.
+    const buttons = within(confirmCard()).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent.trim())).toEqual(['Delete'])
+    expect(within(confirmCard()).queryByRole('button', { name: 'Cancel' })).toBeNull()
+  })
+
+  // ── ⚠⚠ THE DISMISSAL LADDER (Q2) — the three cases the Cancel button's removal RESTS on ────────
+  //
+  // Cancel was the one in the app that was not merely a third spelling of a dismiss: it returned to
+  // the LIST, where a dismiss closed the whole card. So Q2 could not just delete it — every dismiss
+  // route had to learn the step it used to buy, or there would be no way out of the question but
+  // destroying the card and re-opening it. Each route is asserted separately and each is asserted
+  // TWICE OVER (the step back, then the close), because a ladder that only ever took the first step
+  // would look identical to a working one in a case that pressed once.
+  //
+  // The ⚙ panel surviving is part of every one of them: the card is a modal INSIDE the panel, and
+  // "the second press closes the card" is a different claim from "the second press closes everything".
+  const confirmScrim = () => confirmCard().closest('[data-settings-modal]')
+  const openTheQuestion = () => {
+    act(() => {
+      createPreset('Timed')
+    })
+    openManager()
+    tap(rowButton('Timed', 'delete'))
+    expect(confirmCard()).toBeTruthy()
+  }
+
+  it('ESCAPE steps back to the list (deleting nothing), and a second Escape closes the card', () => {
+    openTheQuestion()
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
     expect(queryConfirmCard()).toBeNull()
-    expect(listedNames()).toEqual(['Preset 1', 'Timed'])
+    expect(queryModalCard('presets')).not.toBeNull() // back on the LIST, card still up
+    expect(listedNames()).toEqual(['Preset 1', 'Timed']) // nothing deleted
+    expect(registry().presets).toHaveLength(2)
+    // Focus follows the view, which is the card's own term (it focuses whichever view it just drew).
     expect(document.activeElement).toBe(card())
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
+    expect(queryModalCard('presets')).toBeNull() // …and now the card
+    expect(isSettingsOpen()).toBe(true) // the panel behind it is untouched
+  })
+
+  it('a SCRIM TAP steps back to the list, and a second tap closes the card', () => {
+    openTheQuestion()
+    tap(confirmScrim())
+    expect(queryConfirmCard()).toBeNull()
+    expect(queryModalCard('presets')).not.toBeNull()
+    expect(listedNames()).toEqual(['Preset 1', 'Timed'])
+    tap(modalScrim('presets'))
+    expect(queryModalCard('presets')).toBeNull()
+    expect(isSettingsOpen()).toBe(true)
+  })
+
+  // ⚠ ANDROID BACK IS THE ROUTE THAT NEEDED MORE THAN THE SHARED HANDLER, and this is the case that
+  // proves it: a real Back press POPS its overlay entry before calling the close (components/
+  // useBackButton's popstate listener), so a single 'presets' entry whose close merely stepped back
+  // would leave the card open with nothing registered — and the SECOND press would find 'settings' on
+  // top and take the whole ⚙ panel down with the card. The confirmation therefore registers its own
+  // entry ('presets-delete'), and the last two assertions here are what would fail without it.
+  it('ANDROID BACK ladders too — the question first, then the card, and the panel survives', async () => {
+    openTheQuestion()
+    await pressBack()
+    expect(queryConfirmCard()).toBeNull()
+    expect(queryModalCard('presets')).not.toBeNull()
+    expect(listedNames()).toEqual(['Preset 1', 'Timed'])
+    await pressBack()
+    expect(queryModalCard('presets')).toBeNull()
+    expect(isSettingsOpen()).toBe(true)
+  })
+
+  it('re-opening the manager after a step back shows the LIST, never the question again', () => {
+    openTheQuestion()
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // back to the list
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // card closed
+    openModal('presets')
+    expect(queryConfirmCard()).toBeNull()
+    expect(queryModalCard('presets')).not.toBeNull()
   })
 
   it('Delete removes the preset AND its saved copy, and touches no neighbour', () => {

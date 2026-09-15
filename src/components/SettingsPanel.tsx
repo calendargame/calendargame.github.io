@@ -270,8 +270,10 @@ export function SettingsPanel({
   // Save Defaults (Q7) confirmation popup state. pendSettings snapshots the full 16-value panel at
   // OPEN (the popup doesn't edit panel values); pendPrefs seeds the four editable mode-screen rows
   // from the live modePrefs store at open, and pendSeed keeps that seed for the shared card's
-  // dirty-row comparison (Q5 round-6). Edits touch ONLY this pending snapshot — Cancel/scrim/Back
-  // discard it; Save commits it (aoxN normalized). Closing the panel discards it by unmounting.
+  // dirty-row comparison (Q5 round-6). Edits touch ONLY this pending snapshot — every dismiss route
+  // (scrim tap, Escape, Android Back) discards it; Save commits it (aoxN normalized). Closing the
+  // panel discards it by unmounting. (Q2 removed the popup's Cancel button, which was a fourth
+  // spelling of that same discard — see components/DefaultsCard.)
   const [saveDefaultsOpen, setSaveDefaultsOpen] = useState(false)
   const saveDefaultsCardRef = useRef<HTMLDivElement | null>(null) // the dialog card — focused on open (the modal a11y contract below)
   // A ref, and it is safe to re-create it per panel open: it is written by openSaveDefaults and
@@ -283,7 +285,7 @@ export function SettingsPanel({
   // saved (or, with nothing saved, factory) defaults, on the SAME shared card as the Save popup.
   // managePrefs is its pending snapshot, seeded from the EFFECTIVE defaults (defPrefs) at open; the
   // seed itself needs no copy — defPrefs cannot change while the modal is up (this modal owns the
-  // only editor). Cancel/scrim/Back discard edits.
+  // only editor). Any dismiss — scrim tap, Escape, Android Back — discards the edits.
   const [manageDefaultsOpen, setManageDefaultsOpen] = useState(false)
   const manageDefaultsCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
   const [managePrefs, setManagePrefs] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
@@ -297,15 +299,31 @@ export function SettingsPanel({
   const [changelogOpen, setChangelogOpen] = useState(false)
   const changelogCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
   // The preset manager (sub-group 4C) — another user of the modal contract, opened from the
-  // Presets section at the head of the panel. Its state is one boolean here and everything else is
-  // components/PresetManager's: the card holds its own pending rename and its own delete
-  // confirmation, because both die with the modal and neither is anything the panel can answer.
+  // Presets section at the head of the panel. The card holds its own pending RENAME, which never
+  // leaves it; what lives here is the open flag and — since Q2 — which preset the delete
+  // confirmation is asking about.
   // ⚠ IT CARRIES NO PENDING SNAPSHOT, unlike the two DefaultsCard modals, and that is the design
   // rather than an omission: every act inside it — create, rename, reorder, delete — is committed
-  // to the registry the moment it happens, so there is nothing for Cancel to discard and the card's
-  // one dismiss control is a plain Close. Deleting is the only irreversible one, and it is the one
-  // with a confirmation.
+  // to the registry the moment it happens, so nothing in it is a pending edit a dismiss has to
+  // discard. Deleting is the only irreversible one, and it is the one with a confirmation.
   const [presetsOpen, setPresetsOpen] = useState(false)
+  // ★★ WHY THE DELETE CONFIRMATION'S SUBJECT LIVES UP HERE AND NOT IN THE CARD (Q2). It used to be
+  // components/PresetManager's own `useState`, which was right while the card had a Cancel button:
+  // the question was posed and answered entirely inside it. Q2 removed every Cancel in the app on
+  // the owner's rule that a dismiss says the same thing — and for THIS card that was not true, so
+  // it had to be MADE true. Dismissing the manager while the question is up now means "back to the
+  // list", and a second dismiss closes the card: the dismissal LADDER (dismissPresets below), the
+  // same shape the rename field has always had (the first Escape belongs to the name, the second to
+  // the card).
+  // A ladder is a decision about a dismiss, and ALL THREE dismiss routes are this component's — the
+  // scrim's onClick, useModalEscape and useBackButton are all declared here, as they are for the
+  // other four modals. So this is the fact the dismisser needs, held where the dismisser is, rather
+  // than a callback reaching down into the card to ask. The card takes it as a prop and stays the
+  // owner of everything that is genuinely about drawing the two views.
+  // ⚠ AN ID, NOT THE PRESET OBJECT, for the reason the card's own version was an id: the registry
+  // can be rewritten under an open card (a rename, a reorder), and a captured object goes stale
+  // where an id resolves fresh on every render.
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
 
   // Scroll-state tracking for the two inner scroll regions this component owns — the popover's
   // scroll wrapper and the changelog popup's list — both on the shared useScrollEdgeState
@@ -447,10 +465,13 @@ export function SettingsPanel({
   // ⚠ THE PRESET MANAGER IS THE ONE MODAL WITH NO focus-on-open EFFECT HERE, AND IT IS NOT SKIPPING
   // THE TERM — it OWNS it. That card has two views (the list, and the delete confirmation), each
   // rendering its own dialog element, so "focus the card when it opens" is really "focus the card
-  // whenever the card is replaced", and the second half is a fact only the card knows. Splitting it
-  // — the open here, the swap there — would leave a term with two owners and one of them blind to
-  // the case that matters. So components/PresetManager holds its own ref and focuses itself, which
-  // is also why it takes no cardRef prop where the other four do.
+  // whenever the card is replaced", and the element replaced is the card's own, on the card's own
+  // ref. Splitting it — the open here, the swap there — would leave a term with two owners and one of
+  // them blind to the case that matters. So components/PresetManager holds its own ref and focuses
+  // itself, which is also why it takes no cardRef prop where the other four do. (Q2 gave this
+  // component the FLAG that picks the view, for the dismissal ladder above — so the swap is no longer
+  // a fact only the card knows. The ref still is, and hoisting the effect to sit beside the flag
+  // would buy a cardRef prop threaded back down for nothing.)
 
   // Save Defaults (Q7): open the confirmation popup, seeding the pending snapshot from the LIVE
   // stores (panel captured whole; the four mode-screen prefs become editable rows). The seed is
@@ -489,7 +510,30 @@ export function SettingsPanel({
   const closeFullResetConfirm = useCallback(() => setFullResetConfirmOpen(false), [])
   const closeResetSettingsConfirm = useCallback(() => setResetSettingsConfirmOpen(false), [])
   const closeChangelog = useCallback(() => setChangelogOpen(false), [])
-  const closePresets = useCallback(() => setPresetsOpen(false), [])
+  // Closing the preset manager clears any pending delete WITH it, as one act: the pair IS the
+  // invariant "a closed card has no question pending", so re-opening the manager can never land on
+  // a confirmation nobody asked for. Reaching it with one pending is not possible through the ladder
+  // below — that is the whole point of the ladder — but the invariant costs one line and does not
+  // depend on that argument staying true.
+  const closePresets = useCallback(() => {
+    setPresetsOpen(false)
+    setPendingDeleteId(null)
+  }, [])
+  const clearPendingDelete = useCallback(() => setPendingDeleteId(null), [])
+  // ★★ THE DISMISSAL LADDER (Q2), and it is ONE handler rather than a second modal. While the delete
+  // confirmation is up, a dismiss steps back to the LIST; a second dismiss closes the card. That is
+  // what makes "tap outside / Escape / Back all mean cancel" true for this card too, which is the
+  // premise Q2 removed every Cancel button on — and the delete confirmation's Cancel was the ONE in
+  // the app that was not merely a third spelling of a dismiss (it went back to the list, where every
+  // dismiss route closed the whole card), so removing it without this would have left a question
+  // with no way out but destroying the card and re-opening it.
+  // ⚠ NOT memoized, deliberately: it reads `pendingDeleteId` on every call, and both hooks below
+  // hold their close through a post-commit ref (see components/useBackButton and modalContract), so
+  // a fresh identity per render re-attaches nothing.
+  const dismissPresets = () => {
+    if (pendingDeleteId !== null) clearPendingDelete()
+    else closePresets()
+  }
   // Opening the changelog retires the link's dot — the breadcrumb's last stop. First tap only in
   // effect: once the flag is cleared the guard never re-fires (nothing re-marks it until the next
   // build change). The flag itself is App's, so the retire is a callback up.
@@ -572,12 +616,28 @@ export function SettingsPanel({
   useBackButton(saveDefaultsOpen, closeSaveDefaults, 'save-defaults')
   useBackButton(manageDefaultsOpen, closeManageDefaults, 'manage-defaults') // the defaults manager (Q12/Q5)
   useBackButton(changelogOpen, closeChangelog, 'changelog') // and the Changelog popup (Q6)
-  // …and the preset manager (4C). ⚠ ONE Back ENTRY FOR BOTH OF ITS VIEWS, deliberately: Back
-  // dismisses the whole card, delete confirmation and all. The alternative — a second entry for the
-  // confirmation, so Back stepped back to the list — is the nested-modal machinery
-  // components/PresetManager exists to avoid, and it would buy a step backwards out of a question
-  // whose Cancel button is already on screen.
-  useBackButton(presetsOpen, closePresets, 'presets')
+  // …and the preset manager (4C), which since Q2 takes TWO entries — one per view, and this is the
+  // one place the ladder needs more than the single dismissPresets handler above.
+  // ⚠⚠ THE ARGUMENT THAT USED TO STAND HERE IS GONE WITH THE BUTTON IT RESTED ON. It said one entry
+  // for both views was right because a second "would buy a step backwards out of a question whose
+  // Cancel button is already on screen". Q2 took that button away, so the step backwards is now the
+  // ONLY way out of the question, and Back has to buy it like every other dismiss route.
+  // ⚠ AND IT CANNOT BE BOUGHT WITH THE HANDLER ALONE, which is the mechanical reason this route
+  // differs from the other two. A real Back press POPS the top entry before calling its close (see
+  // the popstate listener in components/useBackButton) — so a single 'presets' entry whose close only
+  // stepped back to the list would leave the card open with NO entry registered: useBackButton's
+  // effect does not re-push while `presetsOpen` is unchanged, and the next press would find 'settings'
+  // on top and take the whole ⚙ panel down with the card. A dedicated entry for the confirmation is
+  // the honest fix and it is NOT the nested-modal machinery components/PresetManager refuses: that
+  // refusal is about two simultaneous document-level Escape listeners and two scrims fighting over
+  // one press, where this registry is a LIFO stack built to hold exactly one entry per open thing and
+  // unwind them newest-first.
+  // ⚠ 'presets' STILL GETS THE LADDERED HANDLER even though LIFO means the delete entry above it is
+  // always popped first, so its first branch is unreachable BY THIS ROUTE: one dismiss function for
+  // all three routes is what keeps them provably identical, and a version that hard-coded the close
+  // here would quietly lose the ladder if this pair of entries ever collapsed back into one.
+  useBackButton(presetsOpen, dismissPresets, 'presets')
+  useBackButton(pendingDeleteId !== null, clearPendingDelete, 'presets-delete')
   // …and Escape, the contract's other dismiss. The two popups that CONTAIN a text box guard against
   // it (the N field and the tap-to-type readouts own their own Escape — it discards the edit, and a
   // second press, with nothing focused, reaches the modal); the changelog, being buttons-only, does
@@ -588,9 +648,10 @@ export function SettingsPanel({
   useModalEscape(changelogOpen, closeChangelog, false)
   // The preset manager CONTAINS text boxes (one per row, each the rename field), so it takes the
   // guard: the first Escape belongs to the field that has the keyboard — it discards that rename —
-  // and a second, with nothing focused, reaches here and dismisses the card. Exactly the ladder the
-  // two DefaultsCard modals above already use.
-  useModalEscape(presetsOpen, closePresets, true)
+  // and a second, with nothing focused, reaches here. Exactly the ladder the two DefaultsCard modals
+  // above already use — and since Q2 that press reaches a ladder of its own (dismissPresets): the
+  // delete confirmation steps back to the list, and only a card with no question up closes.
+  useModalEscape(presetsOpen, dismissPresets, true)
 
   // Modal a11y contract, part 2 of 2 (part 1 = the focus-on-open effects above) is trapModalTab,
   // imported from the shared contract and put on each scrim's onKeyDown below. Every modal in the
@@ -616,9 +677,10 @@ export function SettingsPanel({
   // (Q18 — one idiom, one clamp): digits only while typing (the pending snapshot never holds junk),
   // and blur and Enter normalize-commit with the shared normalizeAoxN clamp (2–1000, fallback 10).
   // ESCAPE DISCARDS THE FIELD'S EDIT (round 15, B6 — both this field and the AoX screen's own moved
-  // off normalize-commit together, so Escape means one thing app-wide). Cancel is still the discard
-  // for the WHOLE popup; Escape on the field is the smaller undo, and a second Escape — with the
-  // field no longer focused — reaches the popup's capture-phase handler and cancels it.
+  // off normalize-commit together, so Escape means one thing app-wide). Escape on the field is the
+  // smaller undo; the discard for the WHOLE popup is any dismiss route — a second Escape, with the
+  // field no longer focused, reaching the popup's capture-phase handler, a scrim tap, or Android
+  // Back. (Q2: the popup's Cancel button, which used to be a fourth way to say that, is gone.)
   const saveDefaultsJsx =
     saveDefaultsOpen &&
     createPortal(
@@ -639,7 +701,6 @@ export function SettingsPanel({
           prefs={pendPrefs}
           seed={pendSeed}
           setPrefs={setPendPrefs}
-          onClose={closeSaveDefaults}
           onSave={commitSaveDefaults}
         />
       </div>,
@@ -650,9 +711,10 @@ export function SettingsPanel({
   // (focus-on-open, capture Escape with the text-entry guard, close with settings, Android Back,
   // the shared trapModalTab + data-settings-modal marker), rendering the SAME shared DefaultsCard
   // in manage mode. It seeds from the EFFECTIVE defaults (defPrefs — forward-merged, so a legacy
-  // snapshot missing a field shows factory, never undefined) and rests read-only (one full-width
-  // Close); edit any row and it goes dirty — Cancel + Save, the restricted-write note, the
-  // accent-tier value highlights (see DefaultsCard). Title, subline, and footnote adapt to whether
+  // snapshot missing a field shows factory, never undefined) and rests read-only with NO button row
+  // at all (round 21, Q5); edit any row and it goes dirty — a full-width Save, the restricted-write
+  // note, the accent-tier value highlights (see DefaultsCard, which argues why that row lost its
+  // Cancel in Q2). Title, subline, and footnote adapt to whether
   // a snapshot exists: with none saved the card is the clearly-labelled FACTORY view, and Save from
   // there CREATES the snapshot.
   const manageDefaultsJsx =
@@ -685,7 +747,6 @@ export function SettingsPanel({
           prefs={managePrefs}
           seed={defPrefs}
           setPrefs={setManagePrefs}
-          onClose={closeManageDefaults}
           onSave={commitManageDefaults}
         />
       </div>,
@@ -693,8 +754,10 @@ export function SettingsPanel({
     )
   // The Clear confirm, Full Reset and Reset Settings popups render at the foot of this component's
   // fragment as <ConfirmModal>s (Q7 round 21) — see there for the copy. The portal, the scrim, the
-  // whole modal contract and the Cancel + rose-tier confirm markup all live in that component now;
-  // this file keeps only the open booleans and the confirm/cancel callbacks.
+  // whole modal contract and the single rose-tier confirm button all live in that component now;
+  // this file keeps only the open booleans and the confirm/cancel callbacks. (The cancel callbacks
+  // outlived the Cancel BUTTON, which Q2 removed: they are what the scrim tap, Escape and Android
+  // Back call.)
 
   // Changelog popup (Q6): the plain-words what-changed list (src/changelog, newest day first),
   // opened from the footer's Changelog link — the same portal / scrim / card recipes and the same
@@ -808,8 +871,11 @@ export function SettingsPanel({
   // four above (focus-on-open — owned by the card itself, see the note beside the other four —
   // capture Escape with the text-entry guard, close with settings, Android Back, the shared
   // trapModalTab + data-settings-modal marker). The card is components/PresetManager, which holds
-  // the whole surface: the list, the rename fields, the reorder pair, and the delete confirmation
+  // the whole surface: the list, the rename fields, the reorder handles, and the delete confirmation
   // it swaps itself into rather than stacking a second dialog on top of.
+  // ⚠ THE SCRIM TAP GOES THROUGH dismissPresets, NOT STRAIGHT TO THE CLOSE (Q2) — the third of the
+  // three routes that share this card's dismissal ladder, so a tap outside while the delete question
+  // is up returns to the list exactly as Escape and Back do.
   const presetsJsx =
     presetsOpen &&
     createPortal(
@@ -818,11 +884,11 @@ export function SettingsPanel({
         role="presentation"
         className={MODAL_SCRIM_CLASS}
         onClick={(e) => {
-          if (e.target === e.currentTarget) setPresetsOpen(false)
+          if (e.target === e.currentTarget) dismissPresets()
         }}
         onKeyDown={trapModalTab}
       >
-        <PresetManager />
+        <PresetManager pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} />
       </div>,
       document.getElementById('root')!,
     )
@@ -901,8 +967,10 @@ export function SettingsPanel({
               preset IS and what Save Defaults captures; this says which preset you are in, that the
               three buttons at the foot of THIS card act on it, and that "Open in" does not — a
               question asked by someone whose finger is already over Full Reset.
-              THE MANAGE PRESETS BUTTON is a full-width `surface-toggle` — the Cancel/Close recipe at
-              the panel's own control tier (text-xs, py-1.5), not btn-solid: opening a manager is
+              THE MANAGE PRESETS BUTTON is a full-width `surface-toggle` — the app's no-fill
+              interactive recipe (shared with View/Clear Saved Defaults below and with the manager's
+              own row controls) at the panel's control tier (text-xs, py-1.5), not btn-solid: opening
+              a manager is
               neither constructive nor destructive, and violet in this panel means "this saves
               something" (Save Defaults). It is deliberately NOT drawn as a switch row — THE PICKER
               RULE below reserves label-left/one-button-right for on/off settings. */}
@@ -1494,7 +1562,7 @@ export function SettingsPanel({
               Order is unchanged: View LEFT of Clear, matching the trio's left→right escalation.
               Both are ALWAYS MOUNTED (round-20 Q5). View Saved Defaults opens the defaults manager
               on its clearly-labelled FACTORY view when nothing is saved. Clear Saved Defaults opens
-              a small CONFIRM modal (Cancel + a red-tier Clear, above) rather than firing
+              a small CONFIRM modal (one red-tier Clear button, above) rather than firing
               immediately — and with nothing saved there is nothing FOR it to clear, so it DIMS AND
               LOCKS instead of disappearing: the identical three-part convention the three buttons
               above it withhold with (see the Reset Settings button's own comment) —

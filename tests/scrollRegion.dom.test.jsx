@@ -264,7 +264,6 @@ const defaultsCard = (props) => (
     prefs={CARD_PREFS}
     seed={CARD_PREFS}
     setPrefs={noop}
-    onClose={noop}
     onSave={noop}
     {...props}
   />
@@ -321,14 +320,15 @@ describe('the shared defaults card caps itself against a short viewport (round 1
   })
 
   it('the chrome the bug put off-screen is OUTSIDE the scroller and holds its size', () => {
-    // The whole point of the cap: Cancel/Save went past the fold with no way to reach them, so
-    // they may never become scroll-to-reach either. Same for the title that names the dialog.
+    // The whole point of the cap: the button row went past the fold with no way to reach it, so it
+    // may never become scroll-to-reach either. Same for the title that names the dialog. (That row
+    // was Cancel + Save when the bug was measured; Q2 removed every Cancel in the app, so Save is
+    // the whole row now — the claim is about WHERE the row lives, which is unchanged.)
     const { container } = render(defaultsCard())
     const scroller = scrollerOf(container)
     const title = container.querySelector('#defaults-title')
     expect(scroller.contains(title)).toBe(false)
-    for (const name of ['Cancel', 'Save'])
-      expect(scroller.contains(screen.getByRole('button', { name }))).toBe(false)
+    expect(scroller.contains(screen.getByRole('button', { name: 'Save' }))).toBe(false)
     for (const el of [scroller.previousElementSibling, scroller.nextElementSibling]) {
       expect(el.className).toContain('shrink-0')
       expect(el.className).toContain('px-4')

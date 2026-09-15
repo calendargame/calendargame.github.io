@@ -327,14 +327,17 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(selectAmnesic(usePresets.getState())).toBe(true)
   })
 
-  it('popup Cancel discards edits; Save persists the EDITED values; live stores stay untouched', () => {
+  // Q2 removed the popup's Cancel button app-wide (the owner: a dismiss already says it), so the
+  // discard is now made by dismissing — Escape here, the route a keyboard reaches. What is asserted
+  // is unchanged: leaving without Save persists nothing and never touches the live stores.
+  it('dismissing the popup discards edits; Save persists the EDITED values; live stores stay untouched', () => {
     mountApp()
     openSettings()
     makeSaveable() // round 14 (D7): a dimmed Save Defaults no longer opens its popup — see the helper
     openPopup()
     act(() => fireEvent.change(flashSlider(), { target: { value: '1200' } }))
     act(() => fireEvent.change(nField(), { target: { value: '25' } }))
-    act(() => fireEvent.click(btn('Cancel')))
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
     expect(useUserDefaults.getState().saved).toBeNull() // nothing saved
     expect(useModePrefs.getState().flashMs).toBe(2000) // live store never touched (factory default)
     openPopup() // re-seeded fresh from the live stores — the cancelled edits are gone
@@ -481,15 +484,16 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // dims and locks again
   })
 
-  it('the shared card in the Save popup: an edited row goes btn-solid; Cancel + Save always; no restricted-write note', () => {
+  it('the shared card in the Save popup: an edited row goes btn-solid; Save always; no restricted-write note', () => {
     mountApp()
     openSettings()
     makeSaveable() // round 14 (D7): a dimmed Save Defaults no longer opens its popup — see the helper
     openPopup()
     const dialog = modalCard('Save current settings as your defaults?')
-    // An action card even while clean — never the manager's resting Close.
-    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    // An action card even while clean — the manager at rest has no button row at all. Since Q2 that
+    // row is Save ALONE: no Cancel anywhere in the app, and never the pre-round-21 Close either.
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()
     expect(within(dialog).queryByRole('button', { name: 'Close' })).toBeNull()
     expect(nField().className).not.toContain('btn-solid')
     expect(nField().className).toContain('border surface-tray') // clean = the shared interactive surface (Q7 round-7)

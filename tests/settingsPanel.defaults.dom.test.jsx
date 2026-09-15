@@ -77,6 +77,7 @@ import {
   isSettingsOpen,
   modalButtons,
   modalCard,
+  modalScrim,
   modalTabStops,
   modeMenuOpen,
   mountApp,
@@ -119,8 +120,9 @@ const modalReadout = (key, label) =>
 const saveCardAoxBox = () =>
   within(modalCard('save')).getByRole('textbox', { name: 'MoX Run Length' })
 // The card's DIRTY-ROW accent — the visible "you changed this one" treatment, which is the only
-// readout the Save card's clean/edited state has (the manager also republishes it as Close →
-// Cancel + Save). Same category as isDimmed: a paint the user meets, named in one place.
+// readout the Save card's clean/edited state has (the manager also republishes it by growing its
+// Save button, the one control either card has since Q2). Same category as isDimmed: a paint the
+// user meets, named in one place.
 const rowMarkedEdited = (el) => el.className.includes('btn-solid')
 // Drag a card's slider to a value — a `change`, which is what a controlled range input sees.
 const dragSlider = (key, label, value) =>
@@ -601,12 +603,16 @@ describe('⚙ Full Reset — reach, outcomes and the confirmation popup (net gro
     expect(useSettings.getState().leapChance).toBe('75')
   })
 
-  it('Cancel closes the popup and changes nothing; the confirm button fires the reset and closes the panel', () => {
+  // Q2 removed the Cancel button from every ConfirmModal — the confirm is the card's only control
+  // now — so "back out of it" is a dismiss route. The scrim tap is used here because it is the one
+  // route that also asserts the panel behind the popup survives a finger landing outside the card.
+  it('a scrim tap closes the popup and changes nothing; the confirm button fires the reset and closes the panel', () => {
     act(() => useSettings.getState().setLeapChance('75'))
     mountApp()
     openSettings()
     tap(fullResetButton())
-    tap(within(fullResetConfirmCard()).getByRole('button', { name: 'Cancel' }))
+    expect(within(fullResetConfirmCard()).getAllByRole('button')).toHaveLength(1)
+    tap(modalScrim('fullReset'))
     expect(fullResetState().confirmOpen).toBe(false)
     expect(isSettingsOpen()).toBe(true)
     expect(useSettings.getState().leapChance).toBe('75') // untouched
@@ -666,12 +672,15 @@ describe('⚙ Reset Settings — the confirmation popup (net group 8b)', () => {
     expect(useSettings.getState().leapChance).toBe(SETTINGS_DEFAULTS.leapChance)
   })
 
-  it('Cancel restores nothing', () => {
+  // The popup's ONLY button is the confirm (Q2), so backing out is a dismiss — Escape here, the
+  // keyboard's route, where the Full Reset case above takes the scrim.
+  it('dismissing it restores nothing, and the card carries no second button to do it with', () => {
     act(() => useSettings.getState().setLeapChance('75'))
     mountApp()
     openSettings()
     tapFooter('Reset Settings')
-    tap(within(modalCard('resetSettings')).getByRole('button', { name: 'Cancel' }))
+    expect(modalButtons('resetSettings')).toEqual(['Reset Settings'])
+    closeModal('resetSettings', 'escape')
     expect(queryModalCard('resetSettings')).toBeNull()
     expect(useSettings.getState().leapChance).toBe('75')
   })
@@ -810,7 +819,10 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
       ),
     ).toBeInTheDocument()
     dragSlider('manage', 'Flash Speed', 1200)
-    expect(modalButtons('manage')).toEqual(expect.arrayContaining(['Cancel', 'Save']))
+    // Q2: what a dirty row grows is SAVE ALONE — the Cancel that used to come with it is gone
+    // app-wide, so this asserts the pair did not merely shrink by one caption but became one button.
+    expect(modalButtons('manage')).toContain('Save')
+    expect(modalButtons('manage')).not.toContain('Cancel')
     expect(modalButtons('manage')).not.toContain('Close')
     expect(
       within(modalCard('manage')).getByText('Saving here updates only these values.'),

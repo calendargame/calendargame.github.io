@@ -1256,10 +1256,13 @@ export const makeSaveable = () =>
 
 // EVERY WAY A MODAL GOES AWAY, and the group asserts they are not interchangeable: four of them
 // DISCARD pending edits and one of them (`save`) commits.
-//   dismiss — the modal's own dismiss control, under whichever caption it currently wears, or
-//             Escape when it has none. Since round 21 the Changelog popup and the RESTING defaults
-//             manager carry no dismiss button at all; a dirty manager and every confirm still show
-//             'Cancel', so naming one caption would go blind in the state that matters.
+//   dismiss — Escape, which since Q2 is what "the modal's own dismiss" MEANS: no modal in the app
+//             carries a dismiss BUTTON any more. Round 21 took the standalone Close off the
+//             Changelog and the resting defaults manager; Q2 took Cancel off the confirms and off a
+//             dirty manager, on the owner's rule that tapping outside or pressing Escape already
+//             says it. The route is kept as its own name rather than folded into `escape` because
+//             the cases that travel it mean "the user dismissed this", and a modal that ever grows
+//             a dismiss control again has one place to teach.
 //   save    — the commit control. Only the two DefaultsCard modals have one.
 //   scrim   — a FINGER TAP on the backdrop. Cancels the POPUP only; the panel stays up behind it.
 //             ⚠ IT IS `tap`, NOT `click`, AND THAT IS THE WHOLE PAIRING. The modal's own dismiss
@@ -1275,13 +1278,16 @@ export const makeSaveable = () =>
 //   panel   — closing the SETTINGS panel, which closes the modal as a child flow.
 const MODAL_CLOSE_ROUTES = {
   dismiss: (key) => {
-    // The modal's own dismiss control, under whichever caption it currently wears. Round 21 (Q5)
-    // removed the standalone Close from the Changelog popup and the RESTING defaults manager — those
-    // carry no dismiss button at all now — so when there is none, fall back to Escape, which is one
-    // of their real dismiss routes. A dirty manager still shows Cancel, and every confirm still
-    // shows Cancel, so those are still taken by the button.
+    // ⚠ NO MODAL HAS A DISMISS BUTTON ANY MORE, so this is Escape — and the assertion that it stays
+    // that way lives right here rather than in a case somewhere: a Cancel or Close reappearing on
+    // any modal fails this route loudly instead of being silently preferred by it.
     const btn = within(modalCard(key)).queryByRole('button', { name: /^(Cancel|Close)$/ })
-    if (btn) return tap(btn)
+    if (btn)
+      throw new Error(
+        `closeModal(${key}, 'dismiss'): this modal has grown a "${btn.textContent.trim()}" button. ` +
+          'Round 21 removed every standalone Close and Q2 every Cancel — a dismiss is the scrim ' +
+          'tap, Escape or Back. If the button is intended, teach this route about it.',
+      )
     return act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
   },
   save: (key) => tap(within(modalCard(key)).getByRole('button', { name: 'Save' })),
@@ -1301,8 +1307,9 @@ export function closeModal(key, via = 'dismiss') {
 }
 
 // A modal's own controls, by accessible name in DOM order — which IS the read-only/dirty state the
-// two DefaultsCard modals publish: NO buttons at rest (since round 21), 'Cancel' + 'Save' once a
-// row is edited. (The Save Defaults card, being an action card, always shows 'Cancel' + 'Save'.)
+// two DefaultsCard modals publish: NO buttons at rest (since round 21), 'Save' alone once a row is
+// edited (Q2 removed the 'Cancel' that used to come with it). The Save Defaults card, being an
+// action card, always shows that lone 'Save'; a ConfirmModal always shows its lone confirm.
 export const modalButtons = (key) =>
   within(modalCard(key))
     .queryAllByRole('button') // queryAll, not getAll: a resting DefaultsCard / the Changelog have none

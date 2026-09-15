@@ -10,7 +10,10 @@
 // rem in here shrinks with the viewport. But that clamp bottoms out: 1.95vh reaches the 0.75rem
 // floor at a viewport height of ~615px, and BELOW THAT THE CARD CANNOT GET ANY SMALLER. Measured
 // in Chromium: the tallest configuration (the manager with an edit pending — the restricted-write
-// note plus the Cancel/Save row) is pinned at 269.5px for every viewport shorter than that.
+// note plus the Save row) is pinned at 269.5px for every viewport shorter than that. (That figure
+// was measured while the row also held a Cancel BESIDE Save; Q2 removed it, and the row's HEIGHT is
+// untouched by that — two `flex-1` buttons and one `w-full` button are the same single line of the
+// same control tier — so the cap and every measurement below stand exactly as taken.)
 // The scrim is `fixed inset-0 flex items-center`, inside `#root{overflow:hidden}`, so there is no
 // scrollbar and no scroll position — scrollIntoView is a no-op. Past the cap the card simply
 // hangs off both ends and the parts outside are gone. At 480×236 CSS px — Chrome at 400% zoom on
@@ -27,7 +30,7 @@
 //   • the four editable ROWS are what gives — a real scroll region on the shared tokens, so it
 //     arrives with the px-4 scrollbar lane inside the scroller and the fade-scroll-* edge masks.
 //   • the TITLE block and the NOTE + BUTTON row stay outside it, held by shrink-0. The bug was
-//     Cancel/Save going off-screen; putting them in the scroller would only have made them
+//     Save going off-screen; putting it in the scroller would only have made it
 //     scroll-to-reach. They are also the two boundary surfaces the edge hook shades: a fixed
 //     header above content that scrolls takes elev-shadow-down and a fixed footer below it
 //     elev-shadow-up (the directional scroll-boundary language, never the card's own even
@@ -48,9 +51,19 @@
 //     plain tap-to-type SliderValueEditor value with its own widest-string strut "1000",
 //     no box (min/max/snap 2–1000/1 mirror the normalizeAoxN clamp; junk/empty reverts,
 //     the editor's contract, rather than the box's junk→10 fallback);
-//   • buttons: the Save card is an action card — Cancel + Save always; the manager rests
+//   • buttons: the Save card is an action card — a full-width Save, always; the manager rests
 //     read-only with NO button row at all (round 21, Q5 — the scrim tap, Escape and Android
-//     Back are its dismiss routes) and shows Cancel + Save only once something is dirty;
+//     Back are its dismiss routes) and grows that same Save only once something is dirty.
+//     ★★ NEITHER CARD HAS A CANCEL ANY MORE, AS OF Q2 — the owner's call, app-wide: "you can just
+//     tap outside or press esc so it's just a noise button." It was a bare `onClick={onClose}`,
+//     i.e. the third spelling of a dismiss the scrim tap, Escape and Android Back already spell
+//     (all three registered by the callers in components/SettingsPanel), so it bought nothing and
+//     spent half the widest row on the card. There is nothing to "discard" that leaving does not
+//     discard: this card edits only the caller's pending snapshot, which dies with the popup on
+//     EVERY dismiss route, and the seed is re-read from the live/saved values on the next open.
+//     ⚠ WHICH IS WHY THIS COMPONENT NO LONGER TAKES AN onClose PROP AT ALL. It was that button's
+//     only reader; the callers' close callbacks are still very much alive, just wired straight to
+//     the three dismiss routes instead of down through here;
 //   • the footnote slot: the manager shows `note` while clean and the restricted-write
 //     warning ("Saving here updates only these values.") while dirty — the manager's Save
 //     writes ONLY these four values, so the swap appears exactly when it becomes relevant;
@@ -82,7 +95,6 @@ function DefaultsCard({
   prefs,
   seed,
   setPrefs,
-  onClose,
   onSave,
 }: {
   cardRef: React.RefObject<HTMLDivElement | null>
@@ -94,7 +106,6 @@ function DefaultsCard({
   prefs: PrefDefaults
   seed: PrefDefaults
   setPrefs: React.Dispatch<React.SetStateAction<PrefDefaults>>
-  onClose: () => void
   onSave: () => void
 }) {
   const dirtyAox = normalizeAoxN(prefs.aoxN) !== normalizeAoxN(seed.aoxN)
@@ -150,7 +161,9 @@ function DefaultsCard({
                 now means one thing in every box you can type a NUMBER into — Enter keeps the edit
                 and lets go, Escape throws it away and lets go, and the container is left for a
                 second Escape (here, the popup's own capture-phase handler once the field is empty
-                of focus). Cancel is still the way to discard the WHOLE popup; this is the field.
+                of focus). DISMISSING the popup — that second Escape, a tap on the scrim, Android
+                Back — is what discards the WHOLE popup now that Q2 has taken the Cancel button
+                away; this is the field.
                 ★ AND SINCE ROUND 17 IT IS APP-WIDE: the Lookup date box (components/LookupCard)
                 was the one text field outside the contract, and it is on it now — so neither this
                 note nor the guide's Keyboard Input bullet names an exception any more.
@@ -336,18 +349,11 @@ function DefaultsCard({
             <div className="text-[11px] text-(--tx-300-60)">{note}</div>
           ) : null)}
         {(!manage || dirty) && (
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-3 py-2 rounded-xl text-sm font-medium border surface-toggle text-(--tx-100-80)"
-            >
-              Cancel
-            </button>
+          <div className="pt-1">
             <button
               type="button"
               onClick={onSave}
-              className="flex-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium"
+              className="w-full px-3 py-2 rounded-xl btn-solid text-sm font-medium"
             >
               Save
             </button>

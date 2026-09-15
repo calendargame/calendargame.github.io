@@ -364,7 +364,7 @@ function DeductionMode({
         onCancel={closeResetStats}
         onConfirm={confirmResetStats}
         title="Reset Stats?"
-        body="Clears this sub-type's stats and all-time bests for the current preset. Per-preset — the other modes and sub-types keep theirs."
+        body="Clears this sub-type's stats and all-time bests for the preset you are on. The other modes and sub-types keep theirs, and no other preset is touched."
         confirmLabel="Reset Stats"
         backButtonId="reset-stats-deduction"
       />

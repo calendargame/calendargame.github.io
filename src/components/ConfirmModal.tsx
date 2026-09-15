@@ -21,19 +21,33 @@ import { RESET_BTN_CLASS } from './controlClasses.js'
 // stack two simultaneous modals; components/PresetManager argues that at length.)
 //
 // It is the Clear-Saved-Defaults popup generalised: that popup was the template (createPortal to
-// #root, the [data-settings-modal] scrim, the a11y contract, Cancel + a rose-tier confirm), and
-// pulling it into one component is what keeps all five call sites byte-identical in DOM and
-// behaviour and puts the contract in one place instead of five.
+// #root, the [data-settings-modal] scrim, the a11y contract, a rose-tier confirm), and pulling it
+// into one component is what keeps all five call sites byte-identical in DOM and behaviour and puts
+// the contract in one place instead of five.
+//
+// ★★ THERE IS NO CANCEL BUTTON, AS OF Q2 — ONE BUTTON ON THE CARD, AND IT IS THE DESTRUCTIVE ONE.
+// The owner's words: "you can just tap outside or press esc so it's just a noise button." Round 21
+// had already taken the standalone Close off every purely-informational popup (the Changelog, the
+// resting defaults manager, the run breakdown) on exactly that argument; this finishes it for the
+// confirm-style popups, where Cancel was doing nothing the scrim tap, Escape and Android Back do not
+// already do — three dismiss routes this component OWNS and a fourth (the hardware Back stack) it
+// registers. So a button that duplicated all four was spending the widest, most reachable control on
+// the card to say "never mind".
+// ⚠ `onCancel` IS NOT GOING ANYWHERE, and the prop name is still the honest one: it is what those
+// three routes call, and dismissing this card HAS a meaning — the destructive act does not happen.
+// Only the visible button went.
 //
 // THE FIVE MODAL-CONTRACT TERMS (see components/modalContract) — this component owns every one so a
 // caller owes nothing but the copy:
 //   1. FOCUS ON OPEN — the card is tabIndex={-1} role="dialog" aria-modal, focused by the effect
 //      below, so a screen reader announces a modal and the keyboard starts inside it.
 //   2. ESCAPE, CAPTURE PHASE — useModalEscape(open, onCancel, false). guardTextEntry is false: a
-//      ConfirmModal has no text box, only two buttons.
+//      ConfirmModal has no text box, only the one button.
 //   3. ANDROID BACK — useBackButton(open, onCancel, backButtonId). The id must be unique per
 //      INSTANCE across the whole app (it keys the open-overlay registry).
-//   4. THE TAB TRAP — trapModalTab on the scrim's onKeyDown; Tab cycles Cancel ⇄ confirm and wraps.
+//   4. THE TAB TRAP — trapModalTab on the scrim's onKeyDown. With one button the card lands on that
+//      helper's ONE-CONTROL branch (first === last), so Tab wraps in place and the press is consumed
+//      rather than walking out to the page under the scrim.
 //   5. [data-settings-modal] ON THE SCRIM — the marker main.tsx reads to know a modal is up (the
 //      status-bar scrim, the click-outside carve-out, the app-wide Tab shortcut's bail).
 //
@@ -47,7 +61,10 @@ import { RESET_BTN_CLASS } from './controlClasses.js'
 // MODAL_CARD_SHADOW. `body` is a ReactNode so a caller can pass a plain string or marked-up prose;
 // it renders in the --tx-200-80 text tier the Clear popup used. The confirm button wears
 // RESET_BTN_CLASS — the rose fill every destructive control in the app wears — and `confirmLabel`
-// defaults to "Reset"; both buttons are `flex-1`.
+// defaults to "Reset". It is `w-full` in a plain `pt-1` row, NOT a `flex-1` child of a flex row: the
+// flex wrapper and the gap existed to divide the row between two buttons, and a one-child flex row
+// is machinery that renders the same thing. The pt-1 stays — it is the extra breath between the
+// prose and the action, on top of the card's own space-y-3, and it is unrelated to the pairing.
 // ─────────────────────────────────────────────────────────────────────────
 export default function ConfirmModal({
   open,
@@ -97,15 +114,8 @@ export default function ConfirmModal({
           {title}
         </div>
         <div className="text-xs text-(--tx-200-80)">{body}</div>
-        <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex-1 px-3 py-2 rounded-xl text-sm font-medium border surface-toggle text-(--tx-100-80)"
-          >
-            Cancel
-          </button>
-          <button type="button" onClick={onConfirm} className={`flex-1 ${RESET_BTN_CLASS}`}>
+        <div className="pt-1">
+          <button type="button" onClick={onConfirm} className={`w-full ${RESET_BTN_CLASS}`}>
             {confirmLabel}
           </button>
         </div>

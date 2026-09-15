@@ -7,6 +7,11 @@
 // standing up a whole settings panel. The terms as they play out INSIDE the app (every close route,
 // the LIFO Back stack, the status-bar scrim) are covered by the settings + mode suites, which
 // reach this component through their real call sites.
+//
+// ★ SINCE Q2 THE CARD HAS EXACTLY ONE BUTTON — the confirm. The Cancel button went app-wide on the
+// owner's rule that tapping outside or pressing Escape already says the same thing, so what used to
+// be "Cancel does the cancelling" is now three claims: the count is one, the scrim tap and Escape
+// still reach onCancel, and the Tab trap's one-control branch is what this markup actually hits.
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import ConfirmModal from '../src/components/ConfirmModal.jsx'
@@ -59,13 +64,25 @@ describe('ConfirmModal', () => {
     expect(document.activeElement).toBe(screen.getByRole('dialog'))
   })
 
-  it('Cancel calls onCancel and not onConfirm; the confirm button is the reverse', () => {
+  // ★ Q2: ONE BUTTON ON THE CARD. The Cancel button is gone app-wide (the owner: "you can just tap
+  // outside or press esc so it's just a noise button") — so this asserts the COUNT, not merely the
+  // absence of a caption. A card that grew any second control would fail here, which is the claim
+  // the trap case below then rests on (trapModalTab's one-control branch).
+  it('carries exactly ONE button — the confirm — and no Cancel (Q2)', () => {
+    const { onConfirm } = mount({ confirmLabel: 'Reset' })
+    const dialog = screen.getByRole('dialog')
+    const buttons = within(dialog).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent.trim())).toEqual(['Reset'])
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    fireEvent.click(buttons[0])
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+  })
+
+  it('the confirm button fires only onConfirm; a click on the card itself fires neither', () => {
     const { onCancel, onConfirm } = mount({ confirmLabel: 'Reset' })
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(onCancel).toHaveBeenCalledTimes(1)
-    expect(onConfirm).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
     expect(onConfirm).toHaveBeenCalledTimes(1)
+    expect(onCancel).not.toHaveBeenCalled()
   })
 
   it('confirmLabel defaults to "Reset" and is overridable', () => {
@@ -100,19 +117,33 @@ describe('ConfirmModal', () => {
     expect(bubbled).not.toHaveBeenCalled() // the capture handler consumed it
   })
 
-  it('the scrim traps Tab — off the last control it wraps to the first, and the press is consumed', () => {
+  // ⚠ VERIFIED AGAINST THE REAL MARKUP, NOT ASSUMED FROM THE HELPER'S CLAIM. modalContract says a
+  // one-control card lands on its first === last branch (tests/modalContract proves that branch
+  // against fabricated DOM); what is asserted here is that THIS card's markup actually reaches it —
+  // the only button is the one `querySelectorAll('button,input')` finds, so Tab in either direction
+  // is consumed and focus stays put instead of walking out to the page under the scrim.
+  it('the scrim traps Tab on the single control — the press is consumed and focus stays on it', () => {
     mount({ confirmLabel: 'Reset' })
     const scrim = document.querySelector('[data-settings-modal]')
-    const cancel = screen.getByRole('button', { name: 'Cancel' })
     const confirm = screen.getByRole('button', { name: 'Reset' })
     act(() => confirm.focus())
     const delivered = fireEvent.keyDown(scrim, { key: 'Tab' })
     expect(delivered).toBe(false) // preventDefault was called
-    expect(document.activeElement).toBe(cancel)
-    // …and Shift+Tab off the first wraps back to the last.
-    act(() => cancel.focus())
-    fireEvent.keyDown(scrim, { key: 'Tab', shiftKey: true })
     expect(document.activeElement).toBe(confirm)
+    const deliveredBack = fireEvent.keyDown(scrim, { key: 'Tab', shiftKey: true })
+    expect(deliveredBack).toBe(false)
+    expect(document.activeElement).toBe(confirm)
+  })
+
+  // The two dismiss routes that replaced the Cancel button are asserted above (the scrim tap and
+  // capture-phase Escape); this pins that they still land on onCancel with the button gone, i.e. that
+  // removing it did not quietly take the cancel semantics with it.
+  it('Escape and a scrim tap both still cancel with no Cancel button on the card', () => {
+    const { onCancel, onConfirm } = mount()
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
+    fireEvent.click(document.querySelector('[data-settings-modal]'))
+    expect(onCancel).toHaveBeenCalledTimes(2)
+    expect(onConfirm).not.toHaveBeenCalled()
   })
 
   it('does not fire either callback just by opening or closing', () => {

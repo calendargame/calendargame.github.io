@@ -9,10 +9,17 @@ import type { ButtonState } from '../engine/answerButtons.js'
 // Settings / Full Reset pair uses the derived FOOTER_RESET_BTN_CLASS below.)
 // border border-transparent completes the RENDERED height (Q4 round-8, the round-4 lesson):
 // a solid fill carries no visible border, but every control it is measured against does — the
-// grid neighbours Reveal / Override / ‹ › wear `border surface-button`, and the Save-Defaults
-// Cancel beside Clear wears `border surface-toggle`. A border counts toward rendered height,
-// so without it this button's own height sat 2px under its row's (masked so far only because
-// every host stretches its items).
+// grid neighbours Reveal / Override / ‹ › wear `border surface-button`, and the ⚙ footer's
+// View/Clear Saved Defaults pair wears `border surface-toggle`. A border counts toward rendered
+// height, so without it this button's own height sat 2px under its row's (masked so far only
+// because every host stretches its items).
+// ⚠ THE NEIGHBOUR NAMED HERE USED TO BE "the Save-Defaults Cancel beside Clear", and Q2 removed
+// every Cancel button in the app — so the EXAMPLE moved to a surviving `surface-toggle` pair while
+// the RULE did not move at all. It is still measured against real neighbours: the ⚙ footer's trio
+// (Save Defaults / Reset Settings / Full Reset share one row), and the mode screens' reset buttons
+// beside their bordered grid controls. The two places this class now stands ALONE in its row — a
+// ConfirmModal's confirm and the preset manager's Delete, both `w-full` since Q2 — keep the border
+// for the same reason every variant does: the token is one height tier, not a per-row measurement.
 export const RESET_BTN_CLASS =
   'px-3 py-2 rounded-xl bg-rose-600/90 text-white border border-transparent text-sm font-medium'
 // Settings-footer variant (Round-3 font normalization, Round-4 one-height tier): the ⚙

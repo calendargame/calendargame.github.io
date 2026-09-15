@@ -727,13 +727,16 @@ export default function GuidePage({
         <Subhead>Reset Stats (casual modes)</Subhead>
         <p>
           Clears your stats and all-time bests for the current mode (Deduction only resets the
-          current sub-type's), for the preset you are on. Details:
+          current sub-type's), for the preset you are on. The other modes keep theirs, and no other
+          preset is touched. Details:
         </p>
         <UL>
           <li>
-            <b>Asks first, in a popup</b> that names what it does and that it is per-preset. Cancel
-            leaves everything; the rose button confirms. (The button no longer changes colour or
-            text on its own — the popup is the whole confirmation.)
+            <b>Asks first, in a popup</b> that names what it does, that the other modes keep theirs,
+            and that no other preset is touched. The rose button confirms; tapping outside the
+            popup, pressing <Kbd>Esc</Kbd>, or using your device&apos;s Back leaves everything as it
+            was. (The button no longer changes colour or text on its own — the popup is the whole
+            confirmation.)
           </li>
           <li>
             Generates a new date when timing stats are visible, or when you've burned the current
@@ -952,8 +955,8 @@ export default function GuidePage({
             list shows them in, and nothing else: moving a preset changes no stats and no settings.
           </li>
           <li>
-            <b>Delete</b> — the ✕ asks first, in the same popup, and names what is about to go. See
-            below.
+            <b>Delete</b> — the ✕ asks first, in the same popup, and names what is about to go. Back
+            out of the question and you are on the list again, with the popup still open. See below.
           </li>
           <li>
             A <b>✓</b> marks the preset you are on, and the same <b>A</b> marks the amnesic ones.
@@ -961,6 +964,11 @@ export default function GuidePage({
         </UL>
         <Subhead>Deleting is permanent</Subhead>
         <UL>
+          <li>
+            The question has one button, the rose <b>Delete</b>. Tapping outside the popup, pressing{' '}
+            <Kbd>Esc</Kbd>, or using your device&apos;s Back takes you back to the list without
+            deleting anything, and doing it again from there closes the popup.
+          </li>
           <li>
             Deleting a preset removes <i>everything</i> it holds — its stats and all-time bests, its
             per-mode setup, every ⚙ setting it was on, and its saved defaults. It cannot be undone,
@@ -1075,7 +1083,8 @@ export default function GuidePage({
           revealed, or shown codes, the date stays until you advance. If any questions were answered
           while timing was hidden, a desync would arise on re-enable, so turning timing back on
           opens an "Enable and Reset Stats?" popup — confirm to turn it on and reset this mode's
-          stats, or Cancel to leave timing hidden.
+          stats, or dismiss the popup (tap outside it, <Kbd>Esc</Kbd>, or Back) to leave timing
+          hidden.
         </p>
         <p>
           When Save Stats is off, the whole stats strip dims site-wide (every mode, including MoX)
@@ -1473,9 +1482,10 @@ export default function GuidePage({
             Manage Presets asks its delete question <i>in place</i>: the list is replaced by the
             confirmation inside the same popup, rather than a second popup opening on top of the
             first. The keyboard moves to the question when it appears and back to the list when you
-            cancel, and <Kbd>Esc</Kbd> and your device&apos;s Back close the whole popup from either
-            view. As in every other box in the app, the first <Kbd>Esc</Kbd> belongs to a name you
-            are typing in.
+            back out of it. From the question, one dismiss — an outside tap, <Kbd>Esc</Kbd>, or your
+            device&apos;s Back — returns to the list, and a second closes the popup; from the list,
+            a dismiss closes it straight away. As in every other box in the app, the first{' '}
+            <Kbd>Esc</Kbd> belongs to a name you are typing in.
           </li>
           <li>
             The ⚙ menu itself is not a dialog — it&apos;s a menu hanging off its button, and it
@@ -2223,8 +2233,9 @@ export default function GuidePage({
             edited before saving — so you can make, say, a different Flash speed your default
             without changing the live one. As on the mode screens, tap the time readout beside any
             of the popup's three sliders to type an exact value; a value you've changed highlights
-            in violet. The menu settings are captured exactly as they are. Cancel discards any
-            edits.
+            in violet. The menu settings are captured exactly as they are. <b>Save</b> is the only
+            button on it: leaving the popup any other way — tapping outside it, <Kbd>Esc</Kbd>, or
+            your device&apos;s Back — discards the edits and saves nothing.
           </li>
           <li>
             While anything the snapshot covers differs from your defaults, the closed gear (⚙) shows
@@ -2251,10 +2262,11 @@ export default function GuidePage({
           <li>
             That popup is also where you edit your defaults directly. Adjust any row — here the run
             length is a tap-to-type readout too, like the timer readouts — and the changed value
-            highlights in violet, <b>Cancel</b> and <b>Save</b> buttons appear, and a note shows:
-            saving there updates only those four values, while every menu setting in the snapshot
-            stays exactly as it was. Saving from the factory view creates your saved defaults, with
-            the menu settings captured at their launch values.
+            highlights in violet, a <b>Save</b> button appears, and a note shows: saving there
+            updates only those four values, while every menu setting in the snapshot stays exactly
+            as it was. Leaving the popup instead — outside tap, <Kbd>Esc</Kbd>, or Back — throws the
+            edits away. Saving from the factory view creates your saved defaults, with the menu
+            settings captured at their launch values.
           </li>
           <li>
             <b>Clear Saved Defaults</b>, to the right of View Saved Defaults, is the way back to the
@@ -2355,11 +2367,11 @@ export default function GuidePage({
         <p>
           Asks first, in a popup: it names what it wipes and what it keeps (your saved defaults),
           and that it is per-preset — plus that the one shared thing, your Lookup history, goes too.
-          Cancel backs out; the rose button fires it. When every setting, toggle, stat, best,
-          history entry, and live state in the preset you are on is already where Full Reset would
-          put it, the button dims and locks since tapping it would have no effect. It never counts
-          anything in another preset, and it never clears one — the way to remove a whole preset is{' '}
-          <b>Delete</b>, in ⚙ &rarr; Presets.
+          The rose button fires it; dismissing the popup — tapping outside it, <Kbd>Esc</Kbd>, or
+          Back — backs out. When every setting, toggle, stat, best, history entry, and live state in
+          the preset you are on is already where Full Reset would put it, the button dims and locks
+          since tapping it would have no effect. It never counts anything in another preset, and it
+          never clears one — the way to remove a whole preset is <b>Delete</b>, in ⚙ &rarr; Presets.
         </p>
       </GuideSection>
       <Divider label="Modes" />
