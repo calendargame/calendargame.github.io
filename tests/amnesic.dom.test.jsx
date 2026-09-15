@@ -56,6 +56,7 @@ import {
   toggleSwitch,
   drawnUnavailable,
   isOffered,
+  offers,
   tap,
   fireFullReset,
 } from './helpers/settingsPanel.jsx'
@@ -521,15 +522,55 @@ describe('the Amnesic switch in the ⚙ panel', () => {
     expect(switchState('Amnesic')).toBe('On')
   })
 
-  // It is a property of the PRESET, not one of the ⚙ settings — so it is absent from the Save
-  // Defaults snapshot and never lights the gear's "modified" line. Stated as a test because the
-  // row's placement in the panel is exactly what would make a reader assume otherwise.
-  it('never lights the gear, and Reset Settings cannot flip it', () => {
+  // ★★ IT LIGHTS THE GEAR, AND THIS CASE IS THE DELIBERATE REVERSAL OF THE ONE THAT STOOD HERE.
+  // The old case asserted the opposite — "never lights the gear" — from the true premise that the
+  // flag is a property of the PRESET rather than a ⚙ setting. The conclusion was a BUG (round-22
+  // Q5): the gear's bar, Reset Settings' dim and Save Defaults' dim are ONE expression (main.tsx's
+  // settingsAtDefaults), so leaving Amnesic out of it left Save Defaults dimmed and INERT whenever
+  // Amnesic was the only thing a player had changed — making "Amnesic: on" impossible to save as a
+  // default at all, even though the popup's commit had captured it since round-20 Q4. Every offer
+  // that lights here really acts on the flag: Reset Settings and Full Reset both restore it (see
+  // the Full Reset cases above, and tests/saveDefaults for the capture).
+  // ⚠ THE OLD COMMENT ALSO SAID AMNESIC WAS "absent from the Save Defaults snapshot", which
+  // round-20 Q4 had already made false — it is captured. That half was simply stale.
+  it('lights the gear ON ITS OWN, and offers all three footer buttons with it', () => {
+    openPanel()
+    // Nothing has been changed yet: no bar, and all three footer buttons withheld.
+    expect(offers()).toEqual({
+      gear: false,
+      saveDefaults: false,
+      resetSettings: false,
+      fullReset: false,
+    })
+    toggleSwitch('Amnesic')
+    // One tap on a switch that is not a setting, and all four offers move together — which is the
+    // whole point of them being one expression.
+    expect(offers()).toEqual({
+      gear: true,
+      saveDefaults: true,
+      resetSettings: true,
+      fullReset: true,
+    })
+    // …and back off again clears every one of them, so the term is a comparison against the
+    // preset's default rather than a latch.
+    toggleSwitch('Amnesic')
+    expect(offers()).toEqual({
+      gear: false,
+      saveDefaults: false,
+      resetSettings: false,
+      fullReset: false,
+    })
+  })
+
+  // ⚠ STILL TRUE, AND IT IS THE HALF OF THE OLD CASE THAT WAS NEVER WRONG: the flag does not ride
+  // the settings store's own write path. resetToFactory() rewrites all 16 ⚙ values in one `set`
+  // with no rehydration and no screen remount — which is precisely the failure mode store/amnesic
+  // refuses to expose this flag to — so it cannot reach Amnesic. (The ⚙ PANEL's Reset Settings is a
+  // different function, App's own, and it restores Amnesic deliberately; the Full Reset cases above
+  // cover that path.)
+  it('the settings store’s own factory reset cannot flip it', () => {
     openPanel()
     toggleSwitch('Amnesic')
-    expect(
-      screen.getByRole('button', { name: /^Settings/ }).getAttribute('aria-label'),
-    ).not.toMatch(/modified/)
     act(() => useSettings.getState().resetToFactory())
     expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
   })

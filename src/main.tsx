@@ -483,6 +483,15 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // and the gear's "modified" indicator; the mode components read their own slices for their
       // freshness checks. Survives Full Reset by design (see store/userDefaults).
       const savedDefaults=useUserDefaults(s=>s.saved);
+      // ★ THE ACTIVE PRESET'S AMNESIC FLAG, BOUND HERE FOR settingsAtDefaults BELOW (round-22 Q5).
+      // It is NOT a ⚙ setting — it lives on the registry (store/presets' `Preset.amnesic`) for the
+      // reasons store/amnesic argues at length — but Save Defaults CAPTURES it and Reset Settings /
+      // Full Reset RESTORE it, so it is one of the values "back to my defaults" is talking about and
+      // therefore one of the values the gear's modified bar has to watch. A zustand SELECTOR
+      // subscription rather than the getState() reads elsewhere in this file: a boolean selector
+      // re-renders App only when the answer actually flips, and this one has to move the four offers
+      // the instant the switch is tapped.
+      const amnesic=usePresets(selectAmnesic);
       const defSettings=useMemo(()=>effectiveSettingsDefaults(savedDefaults),[savedDefaults]);
       const defPrefs=useMemo(()=>effectivePrefDefaults(savedDefaults),[savedDefaults]);
       // prefsAtDefaults: do the four capturable mode-screen prefs match their effective defaults?
@@ -1729,16 +1738,20 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //      snapshot.) `defaultMode` restores like any other value; it only takes visible effect on
       //      the next cold open / preset switch (main.tsx's boot effect), so pressing Reset Settings
       //      does NOT move the page you are currently on.
-      //   21 or 20 COMPARED by the gear's "modified" bar: 13 plain settings + the 4 prefs + the
+      //   22 or 21 COMPARED by the gear's "modified" bar: 13 plain settings + the 4 prefs + the
       //      theme trio judged BY WHAT IS IN EFFECT (2 of the three with Use System On —
-      //      darkTheme/lightTheme; 1 with it Off — manualTheme) + the 2 year-range TEXT MIRRORS.
+      //      darkTheme/lightTheme; 1 with it Off — manualTheme) + the 2 year-range TEXT MIRRORS +
+      //      the preset's AMNESIC flag (round-22 Q5 — it was the one captured-and-restored value
+      //      the comparison had never included, which made Save Defaults unreachable for an
+      //      amnesic-only change; settingsAtDefaults below argues it).
       //      The dormant theme value(s) — one with Use System On, TWO with it Off — are never
       //      compared; settingsAtDefaults below says why at length.
-      // ⚠ SO IT IS NO LONGER A SUBSET OF THE 20, and round 15 is what changed that: the 2 mirrors
-      // are compared but not saved. Nothing breaks, because this restore WRITES them (the resetTo
-      // line below) even though the snapshot has nothing to write back — the 22-written / 20-saved
-      // asymmetry above is exactly what keeps "one tap clears a lit gear" true for the two terms
-      // that are compared and not stored.
+      // ⚠ SO IT IS NOT A SUBSET OF THE 20 IN EITHER DIRECTION, and two rounds put it that way. The
+      // 2 mirrors are compared but not saved (round 15). AMNESIC is the reverse — saved and
+      // restored but, until round-22 Q5, not compared — and it IS restored by the line at the foot
+      // of this function, so "one tap clears a lit gear" holds for it as it does for the mirrors;
+      // the mirrors are the ones this restore has to write explicitly (the resetTo line below)
+      // because the snapshot has nothing to write back for them.
       // One tap therefore still always clears a lit gear
       // whatever diverged (round-6 extension: it used to touch the panel alone, stranding a gear lit
       // only by a mode-screen pref). Still leaves the NON-capturable
@@ -1906,9 +1919,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // System is Off), which is the whole point of themeAtDefaults just below —
       // 15 of the 16 settings are compared with Use System On, 14 with it Off. Say it that way; an
       // "every value" phrasing here is the over-claim this comment used to make.
-      // ★ AND IT IS THE PANEL, NOT THE STORE: the last two terms are the two year-range TEXT
-      // MIRRORS (components/useYearRangeMirrors), so a year that has been TYPED but not yet
-      // committed reads as diverged. That is round 15's change and the OWNER'S REVERSAL of the call
+      // ★ AND IT IS THE PANEL, NOT THE STORE — in BOTH directions, which is why it has two terms
+      // that are not store settings at all. The last two are the two year-range TEXT MIRRORS
+      // (components/useYearRangeMirrors), so a year that has been TYPED but not yet
+      // committed reads as diverged; and since round-22 Q5 there is also the preset's AMNESIC flag,
+      // which lives on the REGISTRY rather than in any settings store and is compared here because
+      // Save Defaults captures it and both reset buttons restore it (argued at the term itself
+      // below). That is round 15's change and the OWNER'S REVERSAL of the call
       // he made in round 14 — "I want the reset settings and the full reset buttons not to wait
       // anymore for you to leave the year range boxes, and also apply that behavior to the settings
       // gear button bottom line thing", and, asked explicitly, "yeah include save defaults too".
@@ -1937,7 +1954,32 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // both offered, permanently. Comparing only the live pair is both the honest definition and
       // the fix, and it retires the whole class of dormant-value false positives.
       const themeAtDefaults=useSystem?(darkTheme===defSettings.darkTheme&&lightTheme===defSettings.lightTheme):(manualTheme===defSettings.manualTheme);
-      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&rotateDots===defSettings.rotateDots&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
+      // ★★ AMNESIC IS THE LAST TERM, AND ADDING IT WAS A BUG FIX RATHER THAN A WIDENING (round-22
+      // Q5). Save Defaults CAPTURES the flag (components/SettingsPanel's commitSaveDefaults writes
+      // the live value into the snapshot) and both reset buttons RESTORE it (resetSettings above),
+      // so it was always one of the values "your defaults" covers — but it was the one value this
+      // expression did not compare. The consequence was not cosmetic: `settingsModified` is this
+      // line's complement, and openSaveDefaults early-returns on it, so turning Amnesic on and
+      // changing nothing else left Save Defaults DIMMED and INERT — "Amnesic: on" could never be
+      // saved as a default at all unless the player happened to move some other setting in the same
+      // visit. The fix belongs HERE, in the one shared expression, and not in a second narrower
+      // boolean for that one button: the note above spells out why three offers reading one line is
+      // the whole design, and a private "…or amnesic differs" for Save Defaults would recreate
+      // round 13's three-buttons-two-meanings hazard exactly.
+      // ⚠ IT GENUINELY CHANGES TWO OTHER OFFERS, and both are TRUTHFUL, which is the test a folded
+      // term has to pass. An amnesic-only divergence now lights the gear's bar and un-dims Reset
+      // Settings — and Reset Settings really does act on it (resetSettings' last line calls
+      // setPresetAmnesic with effectiveAmnesicDefault(savedDefaults)), as does Full Reset, which
+      // delegates its entire settings restore to that same function. So every newly-lit offer has
+      // something to do. isFullyReset reads this expression too, so Full Reset's dim follows for
+      // free and for the same reason.
+      // ⚠ THE COMPARISON IS AGAINST effectiveAmnesicDefault, NOT `false`. "Default" here means the
+      // player's SAVED default when a snapshot exists — a preset saved while Amnesic was on is at
+      // its defaults while Amnesic is on — and factory (false) only when none does. A literal
+      // `false` would leave such a player's gear permanently lit with a Reset Settings that undid
+      // nothing, which is the dormant-theme false positive one store over.
+      const amnesicAtDefault=amnesic===effectiveAmnesicDefault(savedDefaults);
+      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&rotateDots===defSettings.rotateDots&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&amnesicAtDefault&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
       // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator (Q8), the Save
       // Defaults dim AND the Reset Settings dim. True when live state diverges from the effective
       // defaults in EITHER store — any menu setting, either year BOX, or any of the four capturable

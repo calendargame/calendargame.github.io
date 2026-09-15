@@ -27,8 +27,12 @@ import {
   switchPreset,
   deletePreset,
   setOpenInPreset,
+  setPresetAmnesic,
   activePreset,
+  isPresetFactory,
 } from '../src/store/presetControl.js'
+import { writeSessionMode } from '../src/store/sessionMode.js'
+import { writeSessionRound } from '../src/store/sessionRound.js'
 import { useSettings } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress } from '../src/store/progress.js'
@@ -634,5 +638,217 @@ describe('deleting a preset', () => {
     expect(localStorage.getItem(presetKey(PRESET_STORE_KEYS.progress, 2))).not.toBeNull()
     // …and no future preset is ever written into the vacated namespace.
     expect(createPreset().id).toBe(3)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ★★ IS A PRESET FACTORY-FRESH? (round 22, Q1) — the question components/PresetManager's ✕ asks
+// before deciding whether to show its confirmation at all.
+//
+// ⚠⚠ THE ASYMMETRY IS THE WHOLE SUBJECT, so it is what this block is organised around rather than
+// "one case per store". A FALSE NEGATIVE costs a confirmation nobody needed. A FALSE POSITIVE
+// deletes a player's data with no question asked and no way back. So the cases below are in two
+// halves — the things that MUST read as factory (or the feature does nothing), and the longer list
+// of things that MUST NOT (or the feature destroys something) — and that second half deliberately
+// includes the places a preset can hide data that are NOT one of its four obvious keys: the parked
+// permanent stats behind an amnesic session, the amnesic session itself, and a parked ended round.
+describe('is a preset factory-fresh', () => {
+  beforeEach(() => {
+    resetAll()
+    // isPresetFactory reads sessionStorage too (the amnesic session copy, the parked rounds), and
+    // resetAll deliberately does not touch it — see the note in tests/helpers/settingsPanel. Here it
+    // is part of the subject, so it goes back with everything else.
+    sessionStorage.clear()
+  })
+
+  const other = (name) => createPreset(name).id
+  const envelope = (state, version = 1) => JSON.stringify({ state, version })
+
+  // ── Must read as FACTORY ────────────────────────────────────────────────────────────────────
+
+  it('a preset that has just been created is factory — it has no keys at all', () => {
+    expect(isPresetFactory(other('Scratch'))).toBe(true)
+  })
+
+  it('so is the ACTIVE preset on a device nothing has ever been done on', () => {
+    expect(isPresetFactory(usePresets.getState().activeId)).toBe(true)
+  })
+
+  // ★ THE CASE presetStorageInUse WOULD GET WRONG, and the reason this is a per-store VALUE
+  // comparison rather than a "does any key exist" check. A store writes its key the first time
+  // anything calls a setter, and plenty of those writes land back on the factory value — a toggle
+  // flipped and flipped back, a mode screen mirroring blank stats on mount. Those presets have keys
+  // and no data.
+  it('keys that exist but hold the factory values are still factory', () => {
+    const id = other('Visited')
+    for (const base of Object.values(PRESET_STORE_KEYS))
+      localStorage.setItem(presetKey(base, id), envelope({}))
+    expect(isPresetFactory(id)).toBe(true)
+    // …and the same with a settings payload that SPELLS EVERY VALUE OUT rather than omitting them,
+    // which is what a real preset's key holds once anything has been saved into it. Taken from the
+    // freshly-reset live store rather than from SETTINGS_DEFAULTS, so the case is not comparing the
+    // check's own constant against itself; JSON.stringify drops the store's action functions, which
+    // is exactly the shape `partialize` persists.
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, id),
+      envelope(useSettings.getState()),
+    )
+    expect(isPresetFactory(id)).toBe(true)
+  })
+
+  // ⚠ THE OWNER'S DECIDED CALL: Amnesic is a statement about where stats WOULD go, and a preset
+  // with none has lost nothing by being deleted. (It is a registry field, so it is outside
+  // everything isPresetFactory reads — this case is what fails if that ever stops being true.)
+  it('Amnesic on its own does not make a preset non-factory', () => {
+    const id = other('Guest')
+    setPresetAmnesic(id, true)
+    expect(isPresetFactory(id)).toBe(true)
+  })
+
+  // ⚠ THE ONE ENTRY OF clearPresetStorage THAT IS DELIBERATELY NOT COUNTED. Every visit to a preset
+  // writes its session page, and a full app close throws it away by itself — counting it would mean
+  // any preset you had so much as looked at could never be deleted without a question, for a value
+  // no player can miss.
+  it('a session PAGE does not count — a preset you merely visited is still factory', () => {
+    const id = other('Looked at')
+    writeSessionMode(id, 'lookup')
+    expect(isPresetFactory(id)).toBe(true)
+  })
+
+  // ⚠ NOR DOES A NAME, OR A POSITION, on the owner's own yardstick — "as if you pressed clear saved
+  // defaults then full reset" leaves both exactly where they are, so a preset renamed and never
+  // played in IS the state that recipe produces. The confirmation being skipped never mentioned a
+  // name either, so nothing it would have warned about is withheld.
+  it('renaming a preset, or moving it, does not make it non-factory', () => {
+    const id = other('Scratch')
+    renamePreset(id, 'Weekend')
+    movePreset(id, -1)
+    expect(isPresetFactory(id)).toBe(true)
+  })
+
+  // ── Must NOT read as factory ────────────────────────────────────────────────────────────────
+
+  it('one ⚙ setting off its default is enough', () => {
+    const id = other('Timed')
+    localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, id), envelope({ saveStats: false }))
+    expect(isPresetFactory(id)).toBe(false)
+  })
+
+  it('so is one mode-screen pref', () => {
+    const id = other('Timed')
+    localStorage.setItem(presetKey(PRESET_STORE_KEYS.modePrefs, id), envelope({ blitzSec: 45 }))
+    expect(isPresetFactory(id)).toBe(false)
+  })
+
+  it('so are stats, and so is a single all-time best', () => {
+    const withStats = other('Played')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.progress, withStats),
+      envelope({ stats: { classic: PLAYED } }, 4),
+    )
+    expect(isPresetFactory(withStats)).toBe(false)
+    const withBest = other('Raced')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.progress, withBest),
+      envelope({ aoxBest: { [AOX_KEY]: AOX_REC } }, 4),
+    )
+    expect(isPresetFactory(withBest)).toBe(false)
+  })
+
+  it('so is a saved-defaults snapshot, even one that saved the factory values', () => {
+    const id = other('Tuned')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.userDefaults, id),
+      envelope({ saved: { settings: {}, prefs: {}, amnesic: false } }, 2),
+    )
+    expect(isPresetFactory(id)).toBe(false)
+  })
+
+  // ★★ THE SHARPEST FALSE POSITIVE THE CHECK HAS TO CLOSE. While a preset is amnesic its live stats
+  // are a zeroed sessionStorage copy and its REAL ones are parked in localStorage, untouched — so a
+  // check that trusted "what this preset is showing" would call a preset holding 500 cards factory
+  // and destroy both copies without a word (deleting clears the parked copy too).
+  it('an AMNESIC preset with parked permanent stats is not factory', () => {
+    const id = other('Guest')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.progress, id),
+      envelope({ stats: { classic: PLAYED } }, 4),
+    )
+    setPresetAmnesic(id, true)
+    expect(isPresetFactory(id)).toBe(false)
+  })
+
+  // …and the other direction: the session copy is real data too, and deleting takes it.
+  it('an amnesic SESSION copy of the stats is not factory either', () => {
+    const id = other('Guest')
+    setPresetAmnesic(id, true)
+    sessionStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.progress, id),
+      envelope({ stats: { classic: PLAYED } }, 4),
+    )
+    expect(isPresetFactory(id)).toBe(false)
+  })
+
+  // A finished Blitz round or MoX run waiting on a preset's screen is a RESULT the player can still
+  // see, and it is the one piece of per-preset data that lives in neither a store nor a namespaced
+  // key (store/sessionRound).
+  it('a parked ended round is not factory', () => {
+    const id = other('Raced')
+    writeSessionRound(id, 'blitz', { score: 12 })
+    expect(isPresetFactory(id)).toBe(false)
+    // …and the prefix scan is per preset: a neighbour's parked round says nothing about this one.
+    expect(isPresetFactory(other('Clean'))).toBe(true)
+  })
+
+  // ⚠ A PAYLOAD THIS BUILD CANNOT READ IN TODAY'S SHAPE ASKS FIRST, which is how the check stays
+  // safe across versions with no version test in it at all: an older build's field survives the
+  // merge as a key the defaults do not have. The corrupt cases are the same rule — nothing that
+  // cannot be understood is allowed to mean "empty".
+  it('an old-shape or unreadable payload is never called factory', () => {
+    const old = other('Old build')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, old),
+      envelope({ dotOrientation: 'rows' }),
+    )
+    expect(isPresetFactory(old)).toBe(false)
+    const truncated = other('Truncated')
+    localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, truncated), '{"state":{"save')
+    expect(isPresetFactory(truncated)).toBe(false)
+    const shapeless = other('Shapeless')
+    localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, shapeless), '"a string"')
+    expect(isPresetFactory(shapeless)).toBe(false)
+  })
+
+  // ── The ACTIVE preset is judged on the LIVE stores as well ──────────────────────────────────
+  //
+  // ★★ THE CASE THAT PROVES THE SECOND SOURCE IS REALLY READ, isolated by removing the key the
+  // write just made: storage then says "nothing here", and only the live store knows otherwise.
+  // That is not a contrivance — it is exactly the state of a browser that refuses localStorage (iOS
+  // "Block All Cookies"), where NOTHING is ever written and a storage-only check would call a preset
+  // that has been played in all session factory-fresh.
+  it('the ACTIVE presets live stores count, even with its keys gone', () => {
+    const id = usePresets.getState().activeId
+    useSettings.getState().setSaveStats(false)
+    localStorage.removeItem(presetKey(PRESET_STORE_KEYS.settings, id))
+    expect(isPresetFactory(id)).toBe(false)
+    useSettings.getState().setSaveStats(true)
+    useProgress.getState().setModeStats('classic', PLAYED)
+    for (const base of Object.values(PRESET_STORE_KEYS))
+      localStorage.removeItem(presetKey(base, id))
+    expect(isPresetFactory(id)).toBe(false)
+  })
+
+  // …and the live stores are the ACTIVE preset's alone, so they must not be consulted for anyone
+  // else. Without this, playing in preset 1 would make every other preset look non-factory.
+  it('the live stores say nothing about a preset you are not on', () => {
+    const id = other('Clean')
+    useSettings.getState().setSaveStats(false)
+    useProgress.getState().setModeStats('classic', PLAYED)
+    expect(isPresetFactory(id)).toBe(true)
+    expect(isPresetFactory(usePresets.getState().activeId)).toBe(false)
+  })
+
+  it('an unknown id is factory — there is nothing anywhere under it', () => {
+    expect(isPresetFactory(99)).toBe(true)
   })
 })

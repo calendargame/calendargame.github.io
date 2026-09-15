@@ -863,7 +863,9 @@ export default function GuidePage({
           manager = components/PresetManager (every button's accessible name, the delete
           confirmation's two views, the withheld ✕ on a last preset); what a switch actually swaps =
           store/presetControl's PER_PRESET_STORES, all four of them; what a delete actually removes =
-          its clearPresetStorage, which is derived from store/presets' PRESET_STORE_KEYS; the screen
+          its clearPresetStorage, which is derived from store/presets' PRESET_STORE_KEYS; which
+          presets skip the confirmation entirely (Q1) = that file's isPresetFactory, whose comment
+          also argues the one entry of clearPresetStorage it deliberately does not count; the screen
           clear = main.tsx's registry subscription calling remountScreens; the live typing cap that
           replaced the old fixed character count (Q6, round 20) = lib/presetNameWidth, measured
           against components/PresetSwitcher's own rendered cell; store/presets' MAX_PRESET_NAME is
@@ -956,7 +958,8 @@ export default function GuidePage({
           </li>
           <li>
             <b>Delete</b> — the ✕ asks first, in the same popup, and names what is about to go. Back
-            out of the question and you are on the list again, with the popup still open. See below.
+            out of the question and you are on the list again, with the popup still open. A preset
+            that is still completely untouched goes straight away, with nothing to ask. See below.
           </li>
           <li>
             A <b>✓</b> marks the preset you are on, and the same <b>A</b> marks the amnesic ones.
@@ -968,6 +971,16 @@ export default function GuidePage({
             The question has one button, the rose <b>Delete</b>. Tapping outside the popup, pressing{' '}
             <Kbd>Esc</Kbd>, or using your device&apos;s Back takes you back to the list without
             deleting anything, and doing it again from there closes the popup.
+          </li>
+          <li>
+            <b>An untouched preset is not worth a question, so it does not get one.</b> If a preset
+            still holds nothing at all — every ⚙ setting at its launch value, no stats and no
+            all-time bests, no saved defaults of its own, and no finished round or run waiting on
+            its screen — the ✕ deletes it on the spot. That is the state a brand-new preset is in,
+            and the state <b>Clear Saved Defaults</b> followed by <b>Full Reset</b> would put one
+            back into. Anything else at all and the question appears as described here. Having{' '}
+            <b>Amnesic</b> switched on does not count as holding something: there is nothing being
+            kept for it to be about.
           </li>
           <li>
             Deleting a preset removes <i>everything</i> it holds — its stats and all-time bests, its
@@ -1479,13 +1492,14 @@ export default function GuidePage({
             <Kbd>Esc</Kbd>, or Back — and there the keyboard simply stays on the dialog.
           </li>
           <li>
-            Manage Presets asks its delete question <i>in place</i>: the list is replaced by the
-            confirmation inside the same popup, rather than a second popup opening on top of the
-            first. The keyboard moves to the question when it appears and back to the list when you
-            back out of it. From the question, one dismiss — an outside tap, <Kbd>Esc</Kbd>, or your
-            device&apos;s Back — returns to the list, and a second closes the popup; from the list,
-            a dismiss closes it straight away. As in every other box in the app, the first{' '}
-            <Kbd>Esc</Kbd> belongs to a name you are typing in.
+            Manage Presets asks its delete question — when there is one to ask; an untouched preset
+            is deleted outright — <i>in place</i>: the list is replaced by the confirmation inside
+            the same popup, rather than a second popup opening on top of the first. The keyboard
+            moves to the question when it appears and back to the list when you back out of it. From
+            the question, one dismiss — an outside tap, <Kbd>Esc</Kbd>, or your device&apos;s Back —
+            returns to the list, and a second closes the popup; from the list, a dismiss closes it
+            straight away. As in every other box in the app, the first <Kbd>Esc</Kbd> belongs to a
+            name you are typing in.
           </li>
           <li>
             The ⚙ menu itself is not a dialog — it&apos;s a menu hanging off its button, and it
@@ -1560,10 +1574,13 @@ export default function GuidePage({
         durationMs={motionMs}
       >
         <Lead>
-          The ⚙ menu opens on the preset you are in. A <b>Global</b> section at the top holds the
-          two settings that apply to the whole app; a <b>Per-preset</b> label marks everything below
-          it as belonging to the preset you are on, grouped into three categories; the Save Defaults
-          and Reset buttons stay at the bottom.
+          The ⚙ menu opens on the preset you are in, and it is in two halves. A <b>Global</b>{' '}
+          section at the top holds the two settings that apply to the whole app; a heavier line
+          across the menu, with <b>Per-preset</b> centred under it, marks everything below as
+          belonging to the preset you are on, grouped into three categories. Those two centred
+          headings are the only ones of their kind — <b>Display</b>, <b>Dates</b> and <b>Stats</b>{' '}
+          sit inside the second half rather than beside it. The Save Defaults and Reset buttons stay
+          at the bottom.
         </Lead>
         <UL>
           <li>
@@ -2063,11 +2080,13 @@ export default function GuidePage({
             turn Save Stats on.
           </li>
           <li>
-            <b>It is not a menu setting.</b> It belongs to the preset, the way its name does, so it
-            never lights the ⚙ button&apos;s &quot;modified&quot; line the way a setting would. Save
-            Defaults does capture it, silently, alongside the snapshot, and both Reset Settings and
-            Full Reset restore it along with everything else they cover — see{' '}
-            <b>Save Defaults, Reset Settings, and Full Reset</b> below.
+            <b>It is not a menu setting.</b> It belongs to the preset, the way its name does — but
+            it is saved and restored exactly like one, so it counts like one too. Save Defaults
+            captures it, silently, alongside the snapshot; both Reset Settings and Full Reset
+            restore it along with everything else they cover; and switching it away from what your
+            defaults hold lights the ⚙ button&apos;s small violet &quot;modified&quot; line, just as
+            changing a menu setting does. See <b>Save Defaults, Reset Settings, and Full Reset</b>{' '}
+            below.
           </li>
         </UL>
         <Subhead>What &quot;closed&quot; honestly means</Subhead>
@@ -2199,7 +2218,9 @@ export default function GuidePage({
           <b>Reset Settings</b>, <b>Full Reset</b>, <b>Clear Saved Defaults</b>, each casual mode's{' '}
           <b>Reset Stats</b> (see <b>Playing — Reset Stats</b>), and the "Enable and Reset Stats?"
           case when you un-hide timing after a desync. The one exception is <b>deleting a preset</b>
-          , which asks in place inside <b>Manage Presets</b> rather than in a separate popup.
+          , which asks in place inside <b>Manage Presets</b> rather than in a separate popup — and
+          does not ask at all when the preset is still completely untouched, since there would be
+          nothing to warn you about.
         </p>
         <Subhead>Save Defaults (left)</Subhead>
         <p>
@@ -2241,14 +2262,17 @@ export default function GuidePage({
             While anything the snapshot covers differs from your defaults, the closed gear (⚙) shows
             a small violet bar along its bottom edge, and the Save Defaults button is active; once
             everything already matches your defaults, the bar disappears and the button dims —
-            nothing new to save. A year you have typed but not yet left also lights the bar, even
-            though there is nothing to save for it yet — pressing Save Defaults then saves
-            everything else and leaves the bar lit until the year is finished or dropped. Finishing
-            it does not clear the bar either, unless the year you finished on is the one your
-            defaults already hold: a stored range that differs from your defaults lights the bar in
-            its own right. <Kbd>Esc</Kbd> is what puts a year you never meant to type back. The bar
-            is separate from the light-blue update dot at the gear&apos;s top-right corner (see
-            Updates in the first section), and the two can show at once.
+            nothing new to save. <b>Amnesic</b> counts here like any other value the snapshot
+            covers: switch it away from what your defaults hold and the bar lights and Save Defaults
+            comes alive, so &quot;Amnesic: on&quot; can be saved as a default on its own. A year you
+            have typed but not yet left also lights the bar, even though there is nothing to save
+            for it yet — pressing Save Defaults then saves everything else and leaves the bar lit
+            until the year is finished or dropped. Finishing it does not clear the bar either,
+            unless the year you finished on is the one your defaults already hold: a stored range
+            that differs from your defaults lights the bar in its own right. <Kbd>Esc</Kbd> is what
+            puts a year you never meant to type back. The bar is separate from the light-blue update
+            dot at the gear&apos;s top-right corner (see Updates in the first section), and the two
+            can show at once.
           </li>
           <li>
             Your saved defaults survive Full Reset — that's the point: Full Reset restores{' '}

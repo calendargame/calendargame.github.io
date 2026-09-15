@@ -20,7 +20,7 @@ import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
 import { sharedFitScale } from '../lib/statFit.js'
 import { UPDATE_CHECK_LABEL } from '../lib/updateCheck.js'
 import type { UpdateCheckState } from '../lib/updateCheck.js'
-import { SectionLabel } from './primitives.jsx'
+import { GroupLabel, SectionLabel } from './primitives.jsx'
 import { PillTray } from './PillTray.jsx'
 import { PillGroup } from './PillGroup.jsx'
 import { UpdateDot } from './UpdateDot.jsx'
@@ -221,9 +221,17 @@ export function SettingsPanel({
   // which pairs the write with the storage work it implies. The reasons are argued in full at the
   // top of store/amnesic; the one that matters here is that a settings value can be overwritten
   // wholesale by Reset Settings, with no rehydration and no screen remount, and this flag decides
-  // WHICH STORAGE AREA the stats are read from. Two consequences to know when reading the panel:
-  // it is not in the Save Defaults snapshot, and it never lights the gear's "modified" bar — a
-  // preset's amnesia is not one of the values "reset to my defaults" is talking about.
+  // WHICH STORAGE AREA the stats are read from.
+  // ⚠⚠ WHERE IT LIVES IS NOT WHETHER IT COUNTS, AND THIS COMMENT USED TO CONFLATE THE TWO. It said
+  // two things followed from the flag being a preset property: that it is not in the Save Defaults
+  // snapshot, and that it never lights the gear's "modified" bar. BOTH WERE WRONG, in two separate
+  // rounds. Round-20 Q4 put it IN the snapshot (commitSaveDefaults below writes it, and Reset
+  // Settings / Full Reset restore it), and round-22 Q5 put it into the comparison that lights the
+  // bar (main.tsx's settingsAtDefaults) — because leaving it out of ONE shared expression that also
+  // dims Save Defaults meant an amnesic-only change could never be saved as a default at all. So
+  // the honest statement is the plain one: Amnesic is captured and restored exactly like a setting,
+  // and it is judged exactly like one; only its STORAGE is different, and that difference is what
+  // the paragraph above is about.
   const activePresetId = usePresets((s) => s.activeId)
   const amnesic = usePresets(selectAmnesic)
   // The active preset's NAME, for the Presets section's one line of prose at the head of the panel.
@@ -252,6 +260,10 @@ export function SettingsPanel({
   // they were in — and people build a whole preset around being amnesic or not, so that is not the
   // problem they have. The How-to-Play section carries the explanation instead.
   // The teardown, the zero start and the discard all belong to setPresetAmnesic; this is a tap.
+  // ⚠ IT ALSO MOVES THE FOUR OFFERS AS OF ROUND-22 Q5 — the gear's bar, and the Save Defaults /
+  // Reset Settings / Full Reset dims — because App compares this flag against the preset's saved
+  // default now. Nothing here does that; `settingsModified` arrives as a prop and this tap simply
+  // changes one of the values it is computed from, exactly as flipping Save Stats above does.
   const toggleAmnesic = () => setPresetAmnesic(activePresetId, !amnesic)
   // The saved-defaults snapshot. A store value, so it is read here directly — but the EFFECTIVE
   // defaults derived from it (defPrefs) arrive as a prop, because their memo identity is load
@@ -305,7 +317,9 @@ export function SettingsPanel({
   // ⚠ IT CARRIES NO PENDING SNAPSHOT, unlike the two DefaultsCard modals, and that is the design
   // rather than an omission: every act inside it — create, rename, reorder, delete — is committed
   // to the registry the moment it happens, so nothing in it is a pending edit a dismiss has to
-  // discard. Deleting is the only irreversible one, and it is the one with a confirmation.
+  // discard. Deleting is the only irreversible one, and it is the one with a confirmation — except
+  // on a preset that holds nothing a player could miss, where Q1 skips straight to the delete
+  // (components/PresetManager's pressDelete). This flag is simply never set on that route.
   const [presetsOpen, setPresetsOpen] = useState(false)
   // ★★ WHY THE DELETE CONFIRMATION'S SUBJECT LIVES UP HERE AND NOT IN THE CARD (Q2). It used to be
   // components/PresetManager's own `useState`, which was right while the card had a Cancel button:
@@ -546,10 +560,17 @@ export function SettingsPanel({
   // ⚠ amnesic RIDES ALONG, READ LIVE AT COMMIT (round-20 Q4) — NOT frozen into a ref at open like
   // pendSettingsRef. The popup has no UI for it (it is not shown or editable here — see the note at
   // toggleAmnesic), so unlike the 16 settings values there is nothing a user could edit out from
-  // under a captured-at-open snapshot; reading the bound `amnesic` (line ~219, a live store
-  // subscription) at the moment of commit is equivalent to capturing it at open and one line
-  // simpler. The owner's confirmed decision — flagged as a real tradeoff and reaffirmed — is that
-  // this value is real ARCHITECTURE from here on: Reset Settings and Full Reset both restore it.
+  // under a captured-at-open snapshot; reading the bound `amnesic` (a live store subscription
+  // declared with the panel's other values above) at the moment of commit is equivalent to
+  // capturing it at open and one line simpler. The owner's confirmed decision — flagged as a real
+  // tradeoff and reaffirmed — is that this value is real ARCHITECTURE from here on: Reset Settings
+  // and Full Reset both restore it.
+  // ⚠⚠ AND IT IS ONLY REACHABLE AT ALL BECAUSE OF ROUND-22 Q5. openSaveDefaults above refuses to
+  // open while `settingsModified` is false, and until Q5 that boolean was blind to this exact
+  // value — so an Amnesic-only change dimmed the button, the popup never opened, and this line
+  // never ran. The capture was written; the door to it was shut. Folding amnesic into App's
+  // settingsAtDefaults is what opened it, and it is why that fix had to go in the shared expression
+  // rather than in a Save-Defaults-only test.
   const commitSaveDefaults = () => {
     if (pendSettingsRef.current)
       saveUserDefaults({
@@ -961,6 +982,15 @@ export function SettingsPanel({
               to that preset only including defaults and all that") drawn as layout rather than
               buried in a sentence — and round-21 Q3 made it explicit by giving the global items
               their own header instead of filing them under "Presets" with the rest.
+              ★★ AND ROUND-22 Q4 GAVE THAT SPLIT ITS OWN VISUAL TIER, because until then it had
+              none: "Global" and "Per-preset" were drawn as plain left-aligned SectionLabels, the
+              SAME rank as the Display / Dates / Stats headers nested underneath them, above an
+              identical section divider. The panel therefore LOOKED like five peer sections when it
+              is really two groups with three categories inside the second. Both headings are
+              GroupLabels now — centered, larger, semibold, brighter — and the divider above
+              "Per-preset" is the panel's only heavy one. The three-tier rule, and why tier 1 and
+              tier 3 may both be centered without colliding, is written out in components/
+              primitives beside the two class strings that draw it.
               ⚠ IT IS WHY Display WEARS `pt-3 border-t` — the divider separates sections; Display is
               no longer the panel's first, so it is no longer the exception.
               ⚠ THE LINE OF PROSE IS NOT DUPLICATION OF THE GUIDE. How to Play explains what a
@@ -975,7 +1005,7 @@ export function SettingsPanel({
               something" (Save Defaults). It is deliberately NOT drawn as a switch row — THE PICKER
               RULE below reserves label-left/one-button-right for on/off settings. */}
           <div className="space-y-2">
-            <SectionLabel>Global</SectionLabel>
+            <GroupLabel>Global</GroupLabel>
             <div className="text-xs text-(--tx-200-80)">
               You are on <b>{activePresetName}</b>. The three buttons at the foot of this card, and
               your saved defaults, belong to that preset alone. The two settings here apply to the
@@ -1016,9 +1046,26 @@ export function SettingsPanel({
               Settings all act on the ACTIVE preset; this label makes that visible instead of
               leaving it to How to Play. Default Mode — the page this preset opens on — is the first
               such setting and lives right under the label; it IS captured by Save Defaults, which
-              the caption states so the reader does not have to cross-reference the guide. */}
-          <div className="space-y-2 pt-3 border-t border-(--bd-500-20)">
-            <SectionLabel>Per-preset</SectionLabel>
+              the caption states so the reader does not have to cross-reference the guide.
+              ★★ THE PANEL'S ONE HEAVY DIVIDER (Q4), and it is the ONLY place `border-t-2` and the
+              --bd-500-40 tone appear in this card: every section divider below is `border-t` on
+              --bd-500-20, so this rule is twice the weight and twice the contrast of any of them,
+              with pt-4 rather than pt-3 under it. That is the whole difference between "another
+              section starts here" and "the panel's second half starts here", and it is why the
+              treatment is written inline rather than lifted into a shared constant — a constant
+              would invite a second user, and a second heavy rule is exactly what would stop this
+              one reading as THE split.
+              ⚠ IT SPANS THE SCROLL REGION'S CONTENT COLUMN, NOT THE CARD'S FULL WIDTH, and the
+              obvious way to get the latter was tried and rejected rather than overlooked: the
+              scroller carries the px-4 lane (components/scrollRegion — the card owns py-4 only), so
+              reaching the card's edges means `-mx-4` on this div. A scroll container clips overflow
+              past its INLINE-START edge and cannot scroll to it, so the rule's left 1rem would
+              simply disappear while its right 1rem survived into the padding — a rule that looks
+              deliberately off-centre. Every other divider in the panel, and the footer's, sits in
+              this same column, so edge-to-edge here would also have been the only line in the card
+              that did not line up with the rest. */}
+          <div className="space-y-2 pt-4 border-t-2 border-(--bd-500-40)">
+            <GroupLabel>Per-preset</GroupLabel>
             <div className="text-[11px] text-(--tx-300-60)">
               Saved for this preset. Save Defaults captures these; the two Reset buttons restore
               them.
@@ -1078,7 +1125,8 @@ export function SettingsPanel({
                 three chance rows) — so the panel is now trays and switches, nothing else.
                 Caption hierarchy (already correct, don't disturb it): the setting NAME is a
                 left-aligned sentence-case sub-label; FAMILY captions are centred uppercase
-                SectionLabels. Name → optional family captions → tray(s).
+                SectionLabels — tier 3 of the panel's three-tier heading rule, stated in
+                components/primitives. Name → optional family captions → tray(s).
                 Date Format is the family case: five ids in two trays, both reading and writing the
                 SAME setting, so the half that doesn't hold the active id shows no selected segment.
                 The two trays share ONE ROW (round-10 revert of round-9's stack). Theme stacks out
@@ -1199,9 +1247,17 @@ export function SettingsPanel({
                     each row reads and writes its own store value.
                   • Use System OFF — ONE pick across BOTH rows: both rows read manualTheme, so the
                     row that doesn't hold it shows no selected segment.
-                Captions stay CENTERED in both states (left-aligned SectionLabels are reserved for
-                the DISPLAY / DATES / STATS headers and would out-rank the "Theme" sub-label above),
-                and neither row is marked "in use" — the OS owns that, and a marker would imply the
+                Captions stay CENTERED in both states — they are TIER 3 of the panel's three-tier
+                heading rule (components/primitives states it in full beside the classes that draw
+                it): a centered SectionLabel is a sub-label naming one FAMILY inside a single
+                setting, and the left-aligned spelling is reserved for the DISPLAY / DATES / STATS
+                category headers a tier above, which a left-aligned caption here would out-rank.
+                ⚠ ROUND-22 Q4 ADDED A TIER ABOVE BOTH — the centered, larger, semibold GroupLabels
+                on "Global" and "Per-preset" — and it did NOT relax this rule: the whole reason that
+                tier is its own component with its own class string is that tier 1 and tier 3 share
+                an ALIGNMENT and must never share anything else, so a caption that grew weight or
+                size would be the collision this note exists to prevent.
+                Neither row is marked "in use" — the OS owns that, and a marker would imply the
                 app does. NEITHER ROW IS EVER DIMMED, in either state: none of these three
                 PillGroups ever takes `disabled`. This is a SHAPE change, not a lock, and dimming or
                 hiding the inactive row is a change the owner explicitly rejected.

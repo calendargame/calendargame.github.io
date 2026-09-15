@@ -8,9 +8,9 @@ import {
   FIRST_PRESET_ID,
 } from './presets.js'
 import type { Preset } from './presets.js'
-import { isAmnesic, discardSessionStats } from './amnesic.js'
+import { isAmnesic, discardSessionStats, readSessionStats } from './amnesic.js'
 import { discardSessionMode } from './sessionMode.js'
-import { discardSessionRounds } from './sessionRound.js'
+import { discardSessionRounds, hasSessionRound } from './sessionRound.js'
 import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults } from './progress.js'
@@ -38,6 +38,14 @@ import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 //
 // ⚠ THIS FILE IS THE PROGRAMMATIC API THE UI GROUP DRIVES. There is deliberately no UI, no top bar
 // and no settings-panel wiring here — `switchPreset(id)` is the whole call a CustomSelect needs.
+//
+// ★ AND ONE QUESTION, NOT A SEVENTH OPERATION: `isPresetFactory(id)` (round 22, Q1) asks whether a
+// preset holds anything a player could miss, so the delete flow can skip its confirmation for one
+// that holds nothing. It reads the same four stores and the same key machinery the six operations
+// write through — which is precisely why it belongs here and not in the component that asks it: an
+// answer derived from a second, parallel idea of what a preset IS could disagree with what
+// deletePreset actually removes, and the direction that disagreement destroys data is the one a
+// component could not see.
 
 // ⚠⚠ THE TWO WAYS A STORE CAN BE POINTED AT A NEW PRESET, and BOTH are needed — see
 // reloadPresetStores below, where the second one's absence was a silent isolation failure. A store
@@ -49,14 +57,33 @@ type PresetStore<T> = {
   // Optional BY NECESSITY rather than by taste: zustand's type says `persist` is always there, and
   // in a browser that refuses localStorage it is genuinely undefined (argued below).
   persist?: { rehydrate: () => void | Promise<void> }
+  getState: () => T
   setState: (partial: Partial<T>) => void
 }
-const reloader =
-  <T>(store: PresetStore<T>, makeDefaults: () => Partial<T>) =>
-  () => {
+
+// ★ ONE ENTRY PER PER-PRESET STORE, HOLDING EVERY FACT THIS FILE NEEDS ABOUT IT — where its saved
+// copy lives, how to point it at a different preset, what it holds when it has no saved copy, and
+// what it is holding right now. TWO WALKERS read this list (reloadPresetStores just below and
+// isPresetFactory further down), and they read the SAME list on purpose: a fifth per-preset store
+// added later is reloaded AND judged by the act of being listed here, where two parallel lists would
+// let it become reloadable but un-checkable — a preset holding real data that the delete flow would
+// then destroy without asking.
+// ⚠ `makeDefaults` and `readLive` are ERASED to plain records. isPresetFactory compares JSON values
+// and has no use for any store's own type; keeping the generic only as far as this factory function
+// is what lets four differently-typed stores sit in one array without a cast at each of them.
+const presetStore = <T extends object>(
+  key: string,
+  store: PresetStore<T>,
+  makeDefaults: () => Partial<T>,
+) => ({
+  key,
+  reload: () => {
     if (store.persist) store.persist.rehydrate()
     else store.setState(makeDefaults())
-  }
+  },
+  makeDefaults: () => makeDefaults() as Record<string, unknown>,
+  readLive: () => store.getState() as Record<string, unknown>,
+})
 
 // ★ ORDERED, AND THE ORDER IS A REQUIREMENT, NOT A LIST. store/progress' `migrate` reads
 // `useSettings.getState().julianChance` to complete a pre-v2 AoX best's key. So settings must
@@ -65,10 +92,10 @@ const reloader =
 // the player can reach. `Object.values(...)` over a record would have gotten this right by luck
 // and lost it the first time someone reordered the record.
 const PER_PRESET_STORES = [
-  reloader(useSettings, () => ({ ...SETTINGS_DEFAULTS })),
-  reloader(useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
-  reloader(useProgress, makeProgressDefaults),
-  reloader(useUserDefaults, makeUserDefaultsDefaults),
+  presetStore(PRESET_STORE_KEYS.settings, useSettings, () => ({ ...SETTINGS_DEFAULTS })),
+  presetStore(PRESET_STORE_KEYS.modePrefs, useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
+  presetStore(PRESET_STORE_KEYS.progress, useProgress, makeProgressDefaults),
+  presetStore(PRESET_STORE_KEYS.userDefaults, useUserDefaults, makeUserDefaultsDefaults),
 ]
 
 // Reload all four from the active preset's keys, in one synchronous turn.
@@ -93,7 +120,7 @@ const PER_PRESET_STORES = [
 // keys, and reloading one that has does not rewrite them. The defaults branch writes nothing
 // either — there is no storage for it to write to.
 const reloadPresetStores = () => {
-  for (const reload of PER_PRESET_STORES) reload()
+  for (const { reload } of PER_PRESET_STORES) reload()
 }
 
 // Remove one preset's saved copy — its four keys and nothing else. Derived from the key record
@@ -123,16 +150,173 @@ const clearPresetStorage = (presetId: number) => {
   discardSessionRounds(presetId)
 }
 
+// One preset's saved copy of ONE store, as the raw stored text — or null when there is none (never
+// written, or a browser that refuses localStorage, which is the same answer: nothing is there).
+// The single place this file composes a namespaced key for a READ, so presetStorageInUse and
+// isPresetFactory below cannot come to disagree about which key a preset's data is under.
+const readPresetPayload = (baseKey: string, presetId: number): string | null => {
+  try {
+    return window.localStorage.getItem(presetKey(baseKey, presetId))
+  } catch {
+    return null
+  }
+}
+
 // Is any of this preset's saved data already on disk? Used only when allocating an id — see
 // createPreset, which is where the reason it can ever be true is argued.
-const presetStorageInUse = (presetId: number): boolean => {
-  try {
-    return Object.values(PRESET_STORE_KEYS).some(
-      (baseKey) => window.localStorage.getItem(presetKey(baseKey, presetId)) !== null,
+const presetStorageInUse = (presetId: number): boolean =>
+  Object.values(PRESET_STORE_KEYS).some((baseKey) => readPresetPayload(baseKey, presetId) !== null)
+
+// ── IS A PRESET FACTORY-FRESH? ────────────────────────────────────────────────────────────────
+//
+// ★★ THE QUESTION, IN THE OWNER'S WORDS: "if it's completely factory with no stats or anything,
+// like as if you pressed clear saved defaults then full reset, then we don't need a confirmation
+// when deleting that preset." So this answers "does this preset hold ANYTHING a player could miss",
+// and components/PresetManager's ✕ skips its confirmation when the answer is no.
+//
+// ⚠⚠ THE ASYMMETRY THAT DECIDES EVERY JUDGEMENT CALL BELOW. A FALSE NEGATIVE — saying "not factory"
+// about a preset that is — costs one confirmation nobody needed, and the player presses Delete. A
+// FALSE POSITIVE destroys data with no question asked and no way back. So every branch here that
+// cannot be certain answers FALSE, and every "should this count as data" call is resolved toward
+// asking. The four places that is load-bearing are marked ⚠ where they occur.
+//
+// ★ WHY IT IS NOT presetStorageInUse ABOVE. "Has any key at all" is very nearly the right question
+// — store/presets' mergeOverDefaults turns "no saved copy" into the factory values, so a preset with
+// no keys is factory BY CONSTRUCTION — but it is not sufficient, and the gap is routine rather than
+// exotic: a store writes its key the first time anything sets a value, and several of those writes
+// land back on the factory value (a toggle flipped and flipped back, a mode screen mirroring blank
+// stats on mount). Those presets hold KEYS and no DATA. So the test is per store, and it is
+// ABSENT **or** EQUAL TO THAT STORE'S OWN DEFAULTS.
+
+// Deep value equality over JSON. Not a shallow compare, and not JSON.stringify either: store/
+// progress' defaults NEST (five Stats objects, each carrying a `times` array, beside four empty
+// best-records), so `===` would call every fresh preset non-factory, and stringify would make the
+// answer depend on key ORDER, which nothing guarantees across a persist round trip.
+// ⚠ NaN COMPARES FALSE here (`a === b` fails and neither branch below rescues it) — which is the
+// safe direction: a number that cannot be a stored value means "ask".
+const sameJson = (a: unknown, b: unknown): boolean => {
+  if (a === b) return true
+  if (Array.isArray(a) || Array.isArray(b))
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((v, i) => sameJson(v, b[i]))
     )
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  const keys = Object.keys(left)
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((k) => k in right && sameJson(left[k], right[k]))
+  )
+}
+
+// Does one SAVED payload hold nothing but that store's factory values?
+//
+// ★ IT MIRRORS mergeOverDefaults, WHICH IS WHAT MAKES IT THE RIGHT COMPARISON: hydration is
+// `{...defaults, ...persisted}`, so that composition IS what this preset would open holding, and
+// comparing it to the defaults asks exactly "would opening this preset show anything but a fresh
+// one". An absent key therefore means the factory value, for free, with no key list to maintain.
+// ⚠ AND AN **EXTRA** KEY IS A DIVERGENCE, which is the second reason the merge shape was chosen
+// over a per-key loop, and it is the line that makes this safe across VERSIONS with no version
+// check at all. A payload written by an older build carries fields this shape no longer has — a
+// pre-Q3 `dotOrientation` (store/settings' v1→v2), an old `lookupHistory` on a progress payload
+// (store/progress' v4) — and each of them survives the spread as a key the defaults do not have, so
+// the counts differ and the answer is "not factory". That is a FALSE NEGATIVE by construction:
+// every payload this file cannot read in today's shape asks first. Re-deriving each store's
+// `migrate` here to judge such a payload precisely would be a second copy of the one thing that
+// must never have two versions.
+// ⚠ AN UNPARSEABLE OR MIS-SHAPED ENVELOPE IS ALSO "NOT FACTORY". A truncated or tampered payload
+// cannot be trusted to say the preset is empty, and store/amnesic's seedFromParked already treats
+// the same corruption the same way.
+const payloadIsFactory = <T extends object>(raw: string | null, defaults: T): boolean => {
+  if (raw === null) return true
+  try {
+    const envelope: unknown = JSON.parse(raw)
+    const state =
+      envelope && typeof envelope === 'object' ? (envelope as { state?: unknown }).state : null
+    if (!state || typeof state !== 'object') return false
+    return sameJson({ ...defaults, ...(state as Record<string, unknown>) }, defaults)
   } catch {
     return false
   }
+}
+
+// Is one store, RIGHT NOW, holding nothing but its factory values?
+// ⚠ IT PICKS THE DEFAULTS' OWN KEYS RATHER THAN SPREADING THE WHOLE STATE, which is the opposite of
+// payloadIsFactory above and is the same faithfulness: a live store also holds its ACTIONS, and
+// each store's `partialize` strips exactly these keys back out to persist them. So this compares
+// what would be SAVED, where that one compares what was.
+const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
+  const defaults = entry.makeDefaults()
+  const live = entry.readLive()
+  const saved: Record<string, unknown> = {}
+  for (const key of Object.keys(defaults)) saved[key] = live[key]
+  return sameJson(saved, defaults)
+}
+
+/**
+ * Does this preset hold NOTHING a player could miss — every ⚙ setting at its factory value, the
+ * per-mode setup at its, no stats or all-time bests, no saved personal defaults, and no parked
+ * round? Bit-identical to a preset that has just been created, in other words, which is why
+ * components/PresetManager may delete one without asking.
+ *
+ * ★★ THE TWO SOURCES, AND WHY BOTH ARE READ. A preset you are NOT on exists only in storage — its
+ * values are not in any live store, because the live stores are always the ACTIVE preset's (store/
+ * presets' presetScopedStorage). The active preset's truth is the live stores. So:
+ *   • EVERY preset is judged on its SAVED copy, active or not.
+ *   • The ACTIVE preset is judged on the LIVE stores AS WELL, and both must say factory.
+ * Reading both rather than branching is not belt-and-braces, it closes a real false positive: in a
+ * browser that refuses localStorage (iOS "Block All Cookies") NOTHING is ever written, so the
+ * storage half answers "factory" for a preset that has been played in all session — and the live
+ * half is the only thing that knows. For a NON-active preset that same browser genuinely holds
+ * nothing (store/presetControl's own no-storage branch resets such a store to the factory values),
+ * so "absent means factory" is correct there rather than merely safe.
+ *
+ * ⚠⚠ THE PROGRESS STORE HAS TWO STORAGE AREAS AND BOTH ARE READ, which is the sharpest false
+ * positive this function has to close. While a preset is AMNESIC its stats live in sessionStorage
+ * and its real, permanent ones are PARKED in localStorage untouched (store/amnesic) — so the live
+ * store shows a zeroed session while the device still holds the player's record. Deleting removes
+ * BOTH (clearPresetStorage calls discardSessionStats beside the four key removals), so both have to
+ * count: the loop reads the parked copy off localStorage, and the session copy is read after it.
+ *
+ * ⚠ AMNESIC ITSELF IS NOT CONSULTED, and that is the owner's decided call, not an omission: a
+ * preset that is otherwise untouched but has Amnesic switched on still counts as factory, because
+ * nothing is lost by deleting it — the flag is a statement about where stats WOULD go, and there
+ * are none. (It is a registry field anyway — store/presets' `Preset.amnesic` — so it is outside
+ * everything this function reads by construction.)
+ *
+ * ⚠ NEITHER IS THE PRESET'S NAME, OR ITS POSITION IN THE LIST, and the owner's own yardstick is
+ * what settles it: "as if you pressed clear saved defaults then full reset". Neither of those
+ * buttons touches the name or the order, so a preset renamed to "Weekend" and never played in is
+ * exactly the state that recipe produces and is factory by his definition. The confirmation this
+ * skips says nothing about a name either — it names the stats, the bests, the Lookup history, the
+ * per-mode setup, the ⚙ settings and the saved defaults — so skipping it cannot withhold a warning
+ * that was ever there. (Both are registry fields anyway, like amnesic, so they are outside what
+ * this function reads.)
+ *
+ * ⚠ THE SESSION PAGE IS DELIBERATELY NOT COUNTED, and it is the one entry in clearPresetStorage
+ * that this function skips, so the difference is stated rather than left to be noticed.
+ * store/sessionMode records which of the seven pages a preset was last showing THIS session — which
+ * every visit writes, and which a full app close throws away on its own. Counting it would mean any
+ * preset you had so much as looked at could never be deleted without a question, for a value no
+ * player can miss. Every other entry in that function IS counted.
+ */
+export function isPresetFactory(presetId: number): boolean {
+  const isActive = usePresets.getState().activeId === presetId
+  for (const entry of PER_PRESET_STORES) {
+    if (!payloadIsFactory(readPresetPayload(entry.key, presetId), entry.makeDefaults()))
+      return false
+    if (isActive && !liveIsFactory(entry)) return false
+  }
+  // …the amnesic session copy of the stats, the second of the progress store's two areas (above).
+  if (!payloadIsFactory(readSessionStats(presetId), makeProgressDefaults())) return false
+  // …and a parked ended Blitz round or MoX run (store/sessionRound), which is a RESULT still on
+  // screen rather than a stored setting — the one piece of per-preset data that lives in neither a
+  // store nor a namespaced key.
+  return !hasSessionRound(presetId)
 }
 
 /** The preset the app is currently reading and writing. */

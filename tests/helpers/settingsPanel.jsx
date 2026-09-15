@@ -556,9 +556,12 @@ export const changelogDot = () => updateDot(changelogLink())
 // and a caller writes. Exported as data so "change each of them individually" is a sweep rather
 // than four hand-written tests. Order is the panel's own, top to bottom.
 // ⚠ 'Amnesic' is the one entry that is NOT a ⚙ setting: the value belongs to the PRESET
-// (store/presets' `Preset.amnesic`) and is written through store/presetControl, so it is absent
-// from the Save Defaults snapshot and never lights the gear. It is listed here because this list is
-// "every On/Off switch in the panel", which is a question about the panel, not about the store.
+// (store/presets' `Preset.amnesic`) and is written through store/presetControl rather than through
+// useSettings. That is a fact about STORAGE only — it IS captured by the Save Defaults snapshot
+// (round-20 Q4) and it DOES light the gear (round-22 Q5, which fixed the bug that omission caused:
+// Save Defaults was dimmed and inert for an Amnesic-only change, so the capture was unreachable).
+// It is listed here because this list is "every On/Off switch in the panel", which is a question
+// about the panel, not about the store.
 // ⚠ 'Rotate Dots CCW' joined in Q3 (round 20) as 'Dot Layout' — it was a two-option PillTray before
 // and is a switch now (store/settings' `rotateDots`), on THE PICKER RULE's own logic: a choice
 // between exactly two named alternatives IS an on/off shape. Renamed to 'Rotate Dots CCW' in Q9

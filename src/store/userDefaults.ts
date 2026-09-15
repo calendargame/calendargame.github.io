@@ -18,8 +18,14 @@ import type { DotOrientation } from '../lib/dotLayout.js'
 // Full Reset does the same (it delegates its ENTIRE settings restore to resetSettings, Amnesic
 // included — see main.tsx's resetSettings) and additionally wipes stats/history and returns every
 // non-capturable mode pref to factory, and the gear's "modified" bar lights when live state
-// diverges from the panel + prefs — NEVER for Amnesic, which is a property of the preset rather
-// than a settings value the gear is judging (see components/SettingsPanel's toggleAmnesic).
+// diverges from the panel + prefs — AMNESIC INCLUDED as of round-22 Q5.
+// ⚠ THAT LAST CLAUSE USED TO READ "NEVER for Amnesic", on the reasoning that the flag is a property
+// of the preset rather than a settings value. The premise was right and the conclusion was a BUG:
+// the gear's bar, Reset Settings' dim and Save Defaults' dim are one expression (main.tsx's
+// settingsAtDefaults), so excluding Amnesic from it left Save Defaults dimmed and INERT whenever
+// Amnesic was the only thing a player had changed — making "Amnesic: on" impossible to capture into
+// the very snapshot this file says captures it. It is compared there now, against
+// effectiveAmnesicDefault below, and every offer that lights as a result genuinely acts on it.
 //
 // A THIRD store (not a settings-store v2) because the capture spans two stores — it belongs to
 // neither — and because surviving Full Reset must be an explicit property: Full Reset deliberately

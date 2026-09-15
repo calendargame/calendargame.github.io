@@ -155,6 +155,30 @@ export function discardSessionStats(presetId: number): void {
 }
 
 /**
+ * One preset's SESSION copy of its stats, as the raw stored text — or null when it has none (it is
+ * not amnesic, it is and has written nothing yet, or the browser refuses sessionStorage).
+ *
+ * ★ IT LIVES HERE RATHER THAN AT ITS CALLER for the reason every other function in this section
+ * does: the stats key's spelling and the guarded sessionStorage open are this file's, and a second
+ * copy of either somewhere else is how the two areas come to disagree about where a preset's
+ * session stats are. store/presetControl's isPresetFactory is the one caller — it has to ask
+ * whether a preset about to be deleted holds anything, and for an amnesic preset the session copy
+ * is one of the two places that can answer yes.
+ * ⚠ RAW TEXT, NOT A PARSED PAYLOAD, deliberately: this is the same envelope the adapter's getItem
+ * hands zustand, and the caller compares it against store/progress' factory value with exactly the
+ * machinery it already uses for the permanent copy. Parsing it here would be a second reader of a
+ * shape this file has no other reason to know.
+ */
+export function readSessionStats(presetId: number): string | null {
+  try {
+    return openSessionStorage()?.getItem(statsKey(presetId)) ?? null
+  } catch {
+    /* storage refused — the session copy only ever lived in memory */
+    return null
+  }
+}
+
+/**
  * Throw away one preset's PARKED (permanent) copy of its stats. The counterpart to
  * discardSessionStats above, and it exists for exactly one caller: Full Reset.
  *

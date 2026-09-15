@@ -664,19 +664,40 @@ describe('reordering', () => {
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('deleting', () => {
+  // ⚠⚠ THE SETTINGS PAYLOAD IS DELIBERATELY NOT `{}` ANY MORE (Q1), AND EVERY CASE IN THIS BLOCK
+  // DEPENDS ON THAT. An empty state merges to exactly the factory values (store/presets'
+  // mergeOverDefaults), so four empty payloads describe a preset that is still FACTORY-FRESH — and
+  // its ✕ now deletes on the spot with no question to assert anything about. One ⚙ setting off its
+  // default is the smallest honest "this preset holds something", and it is what playing in a
+  // preset would genuinely leave behind. The other three keys stay empty: this seed's OTHER job is
+  // "all four keys exist, and a delete removes all four", which an empty payload still serves.
   const seedSavedCopy = (id) => {
     for (const base of Object.values(PRESET_STORE_KEYS))
-      localStorage.setItem(presetKey(base, id), '{"state":{},"version":1}')
+      localStorage.setItem(
+        presetKey(base, id),
+        base === PRESET_STORE_KEYS.settings
+          ? '{"state":{"saveStats":false},"version":1}'
+          : '{"state":{},"version":1}',
+      )
   }
   const savedCopyKeys = (id) =>
     Object.values(PRESET_STORE_KEYS)
       .map((base) => presetKey(base, id))
       .filter((k) => localStorage.getItem(k) !== null)
 
-  it('asks first, IN THE SAME DIALOG, with ONE button and no Cancel (Q2)', () => {
+  // A second preset that has something to lose — the fixture almost every case below wants, since
+  // the confirmation is the subject and a preset holding nothing never shows one.
+  const createUsedPreset = (name) => {
+    let id
     act(() => {
-      createPreset('Timed')
+      id = createPreset(name).id
     })
+    seedSavedCopy(id)
+    return id
+  }
+
+  it('asks first, IN THE SAME DIALOG, with ONE button and no Cancel (Q2)', () => {
+    createUsedPreset('Timed')
     openManager()
     tap(rowButton('Timed', 'delete'))
     // ★ ONE DIALOG, NOT TWO STACKED. The card swaps its own view (components/PresetManager argues
@@ -710,9 +731,7 @@ describe('deleting', () => {
   // "the second press closes the card" is a different claim from "the second press closes everything".
   const confirmScrim = () => confirmCard().closest('[data-settings-modal]')
   const openTheQuestion = () => {
-    act(() => {
-      createPreset('Timed')
-    })
+    createUsedPreset('Timed')
     openManager()
     tap(rowButton('Timed', 'delete'))
     expect(confirmCard()).toBeTruthy()
@@ -770,12 +789,8 @@ describe('deleting', () => {
   })
 
   it('Delete removes the preset AND its saved copy, and touches no neighbour', () => {
-    act(() => {
-      createPreset('Timed')
-      createPreset('Guest')
-    })
-    seedSavedCopy(2)
-    seedSavedCopy(3)
+    createUsedPreset('Timed')
+    createUsedPreset('Guest')
     openManager()
     tap(rowButton('Timed', 'delete'))
     tap(within(confirmCard()).getByRole('button', { name: 'Delete' }))
@@ -791,6 +806,13 @@ describe('deleting', () => {
     act(() => {
       createPreset('Timed')
     })
+    // The ACTIVE preset is dirtied through the LIVE store rather than by seeding a key, because
+    // that is what the ✕ consults for the preset you are standing in (store/presetControl's
+    // isPresetFactory reads the live stores for it and storage for every other) — and because it is
+    // what a player changing a setting actually does.
+    act(() => {
+      useSettings.getState().setSaveStats(false)
+    })
     openManager()
     tap(rowButton('Preset 1', 'delete'))
     // The extra sentence appears only for the preset you are standing in, and it NAMES the
@@ -805,12 +827,88 @@ describe('deleting', () => {
   })
 
   it('deleting a preset you are NOT on says nothing about being moved', () => {
-    act(() => {
-      createPreset('Timed')
-    })
+    createUsedPreset('Timed')
     openManager()
     tap(rowButton('Timed', 'delete'))
     expect(within(confirmCard()).queryByText(/You are on this preset/)).toBeNull()
+  })
+
+  // ── Q1: THE QUESTION IS SKIPPED FOR A PRESET THAT HOLDS NOTHING ─────────────────────────────
+  //
+  // ★ WHAT MAKES THIS GROUP WORTH HAVING RATHER THAN LEAVING IT TO THE STORE'S OWN UNIT CASES
+  // (tests/presets.dom, which owns isPresetFactory's judgement in every shape): these say the ✕
+  // ROUTES on that judgement — that a skip really deletes, really leaves the card on the list, and
+  // really cannot happen for a preset with something in it. The store test says what the answer is;
+  // these say the button asked the question and obeyed it.
+  it('a factory-fresh preset is deleted on the spot, with no confirmation at all', () => {
+    act(() => {
+      createPreset('Scratch')
+    })
+    openManager()
+    tap(rowButton('Scratch', 'delete'))
+    // Gone, with the question never drawn…
+    expect(queryConfirmCard()).toBeNull()
+    expect(listedNames()).toEqual(['Preset 1'])
+    expect(registry().presets).toHaveLength(1)
+    // …and the card left standing on its LIST, which is where the confirm route lands too — the
+    // skip is the same act with the question removed, not a different one.
+    expect(queryModalCard('presets')).not.toBeNull()
+    expect(isSettingsOpen()).toBe(true)
+  })
+
+  // ⚠ THE OWNER'S EXPLICIT CALL, and the one place "holds nothing" is not the same as "untouched":
+  // Amnesic is a statement about where stats WOULD be kept, and a preset with none has lost nothing
+  // by being deleted. It also lives on the registry rather than in any of the four stores, so this
+  // case is what would fail if a later change started consulting it.
+  it('Amnesic on its own does not count as holding something — still no question', () => {
+    let id
+    act(() => {
+      id = createPreset('Guest').id
+    })
+    openManager()
+    // ⚠ AFTER THE MOUNT, NOT BEFORE IT. main.tsx's cold-open reseed (round-21 Q1) walks every preset
+    // on app open and puts its Amnesic flag back to that preset's saved default — so a flag set
+    // before mountApp would be switched off again before the first render, and this case would
+    // silently be testing an ordinary fresh preset instead.
+    act(() => {
+      setPresetAmnesic(id, true)
+    })
+    expect(within(rowOf('Guest')).getByText('Amnesic')).toBeTruthy() // the A marker is really up
+    tap(rowButton('Guest', 'delete'))
+    expect(queryConfirmCard()).toBeNull()
+    expect(listedNames()).toEqual(['Preset 1'])
+  })
+
+  // The negative control for the group above, driven through the UI rather than through storage: a
+  // preset you actually played in asks. Without this, a check that answered "factory" for
+  // EVERYTHING would pass every case above.
+  it('a preset with stats in it still asks — the skip is not a blanket', () => {
+    const id = createUsedPreset('Timed')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.progress, id),
+      JSON.stringify({
+        state: { stats: { classic: { played: 4, good: 3, streak: 1, best: 2, times: [900] } } },
+        version: 4,
+      }),
+    )
+    openManager()
+    tap(rowButton('Timed', 'delete'))
+    expect(confirmCard()).toBeTruthy()
+    // Read from the registry, not from the list: the question REPLACES the list view, so there are
+    // no rows on screen to count while it is up.
+    expect(registry().presets).toHaveLength(2)
+  })
+
+  // ⚠ A LAST PRESET IS NEVER DELETED, FACTORY OR NOT — the withholding guard runs BEFORE the
+  // factory test, so the skip cannot become a back door into the one delete the store refuses. The
+  // case above it asserts the dim; this asserts the skip route specifically, on a preset that IS
+  // factory-fresh and would otherwise have gone without a word.
+  it('the skip never reaches the LAST preset, which is factory-fresh on a new device', () => {
+    openManager()
+    tap(within(card()).getByRole('button', { name: 'Delete Preset 1' }))
+    expect(queryConfirmCard()).toBeNull()
+    expect(registry().presets).toHaveLength(1)
+    expect(listedNames()).toEqual(['Preset 1'])
   })
 
   it('the LAST preset cannot be deleted — withheld three ways, with the reason on screen', () => {

@@ -242,9 +242,14 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
   // ── Round-20 Q4: Amnesic joins the Save Defaults / Reset Settings / Full Reset contract ────────
   // Owner's explicit, confirmed decision (flagged as a real tradeoff, reaffirmed anyway): Save
   // Defaults captures whether the active preset is Amnesic at the moment of saving; Reset Settings
-  // and Full Reset both restore it. Amnesic itself never lights the gear's "modified" bar (that is
-  // pinned elsewhere, in tests/amnesic.dom), so every case below arranges a SEPARATE divergence to
-  // make the button it presses actually offered.
+  // and Full Reset both restore it.
+  // ⚠ ROUND-22 Q5 CHANGED WHAT THIS BLOCK CAN ASSUME. Amnesic used to be invisible to the gear's
+  // "modified" bar, so every case here had to arrange a SEPARATE divergence (makeSaveable) to get
+  // the button it presses offered at all — and that workaround was quietly standing on the bug: the
+  // capture below was UNREACHABLE for an Amnesic-only change, because Save Defaults was dimmed and
+  // its own opener early-returns while it is. Amnesic is compared now (main.tsx's
+  // settingsAtDefaults), so it lights the button by itself; the case directly below is the one that
+  // says so, and the rest keep makeSaveable only where the case is about something else.
   it('the Save Defaults popup captures the LIVE Amnesic value at commit — both Off and On', () => {
     mountApp()
     openSettings()
@@ -253,14 +258,35 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     openPopup()
     act(() => fireEvent.click(btn('Save')))
     expect(useUserDefaults.getState().saved.amnesic).toBe(false)
-    // Flip Amnesic On — it does not light Save Defaults on its own, so a fresh divergence is what
-    // reopens the popup, not the toggle.
+    // Flip Amnesic On — which is now a divergence in its own right, so the popup is reachable from
+    // the toggle alone.
     toggleSwitch('Amnesic')
-    expect(isOffered(footerButton('Save Defaults'))).toBe(false)
-    makeSaveable()
     openPopup()
     act(() => fireEvent.click(btn('Save')))
     expect(useUserDefaults.getState().saved.amnesic).toBe(true)
+  })
+
+  // ★★ THE Q5 BUG, AS THE USER MET IT: turn Amnesic on, change NOTHING else, and Save Defaults sat
+  // dimmed and did nothing — so "Amnesic: on" could never become part of your defaults unless you
+  // happened to move some other setting in the same visit. Both halves are asserted, because the
+  // dim and the inertness were two separate consequences of one missing comparison: the button is
+  // offered, AND pressing it actually opens the popup (openSaveDefaults early-returns on the same
+  // boolean that dims it, so a fix to only one of them would leave the feature just as unreachable).
+  it('an Amnesic-only change can be saved as a default, with nothing else touched (Q5)', () => {
+    mountApp()
+    openSettings()
+    expect(isOffered(footerButton('Save Defaults'))).toBe(false)
+    toggleSwitch('Amnesic')
+    expect(isOffered(footerButton('Save Defaults'))).toBe(true)
+    openPopup()
+    act(() => fireEvent.click(btn('Save')))
+    expect(useUserDefaults.getState().saved.amnesic).toBe(true)
+    // …and once saved, the live state matches the saved default again, so the offer withdraws —
+    // the flag is compared against the SAVED default, not against factory.
+    expect(isOffered(footerButton('Save Defaults'))).toBe(false)
+    // Turning it back off now diverges from the saved default in the other direction.
+    toggleSwitch('Amnesic')
+    expect(isOffered(footerButton('Save Defaults'))).toBe(true)
   })
 
   it("the manager's Save passes the PREVIOUSLY SAVED Amnesic value through unchanged, never the live one", () => {

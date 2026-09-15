@@ -996,6 +996,55 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     }
   })
 
+  // ★★ THE PANEL'S HEADING HIERARCHY IS THREE TIERS, AND THEY MUST BE MUTUALLY UNMISTAKABLE (Q4,
+  // round 22). Before Q4 there were two: "Global" and "Per-preset" were drawn as plain left-aligned
+  // SectionLabels — the SAME rank as the Display / Dates / Stats headers nested inside them — above
+  // an identical section divider, so the panel read as five peer sections when it is really two
+  // groups with three categories in the second.
+  // ⚠ IT BELONGS IN THE PIXEL GATES RATHER THAN IN THE BEHAVIOUR NET, because a hierarchy IS its
+  // paint: there is no accessible name, offer, role or mask that distinguishes a tier from the one
+  // under it, and jsdom lays nothing out — so the only honest way to hold the line is to freeze the
+  // three strings. The strings are written out here rather than imported from components/primitives
+  // for the reason every gate in this block is: a test that read the constant back would agree with
+  // it no matter what it said. Changing any of them is a deliberate re-blessing of the panel's look
+  // — change it, look at it on a device, and update this case in the same commit.
+  // ⚠ TIER 1 AND TIER 3 SHARE `text-center`, which is exactly the collision the three-tier rule is
+  // written to survive, so the last assertion is the one that matters most: all three strings are
+  // DIFFERENT, and tier 1 differs from tier 3 by more than its alignment.
+  it('Global / Per-preset out-rank the category headers, which out-rank the family captions', () => {
+    mountPanel()
+    const GROUP =
+      'text-center text-[11px] uppercase font-semibold tracking-[0.18em] text-(--tx-100-80)'
+    const SECTION = 'text-[10px] uppercase tracking-widest text-(--tx-300-60)'
+    const CAPTION = SECTION + ' text-center'
+    for (const label of ['Global', 'Per-preset'])
+      expect(panel().getByText(label).className).toBe(GROUP)
+    for (const label of ['Display', 'Dates', 'Stats'])
+      expect(panel().getByText(label).className).toBe(SECTION)
+    for (const label of ['Written', 'Numeric', 'Dark', 'Light'])
+      expect(rowEl(label).children[0].className).toBe(CAPTION)
+    expect(new Set([GROUP, SECTION, CAPTION]).size).toBe(3)
+  })
+
+  // …and the divider that goes with tier 1. THE PANEL HAS EXACTLY ONE HEAVY RULE, because there is
+  // exactly one split: every section divider is `border-t` on --bd-500-20, and this one is twice the
+  // weight on twice the contrast. A second `border-t-2` anywhere in the card is what would stop this
+  // one reading as THE split, which is why the assertion is a count and not a lookup.
+  it('exactly one heavy divider, and it is the one above Per-preset', () => {
+    mountPanel()
+    const heavy = [...panelEl().querySelectorAll('*')].filter((el) =>
+      String(el.className).split(' ').includes('border-t-2'),
+    )
+    expect(heavy).toHaveLength(1)
+    expect(heavy[0].className).toBe('space-y-2 pt-4 border-t-2 border-(--bd-500-40)')
+    expect(heavy[0].contains(panel().getByText('Per-preset'))).toBe(true)
+    // The category dividers stay light — asserted on the one directly below it, so "heavier" is a
+    // comparison this case actually makes rather than a claim about a token in isolation.
+    expect(panel().getByText('Display').parentElement.className).toBe(
+      'space-y-2 pt-3 border-t border-(--bd-500-20)',
+    )
+  })
+
   // ★ THE OWNER'S GATE ON THE ROUND-9 KEYBOARD PASS: zero visual change. tabindex and key handlers
   // carry no pixels, so every class string in the panel's pickers must be byte-for-byte what
   // round-8 and the tray conversion shipped. Written out in full rather than read back from the

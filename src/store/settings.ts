@@ -146,13 +146,15 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
 // The set of keys we persist — exactly the data values (not the setters). DERIVED from
 // SETTINGS_DEFAULTS rather than listed, so the "16" every comment in this file quotes cannot drift
 // from the code: add a setting to SETTINGS_DEFAULTS and it is persisted by construction. ⚠ 16 here
-// counts the STORE's settings only. The Save Defaults snapshot is 20 (these 16 + 4 mode prefs) and
-// the gear's "modified" comparison is 21 or 20 — both counted in main.tsx, at resetSettings and
-// settingsAtDefaults respectively. Do not carry this number over to them.
-// ⚠ THE COMPARISON IS NOT A SUBSET OF THE SNAPSHOT, and round 15 is what changed that: it is 19 or
-// 18 of the snapshot's 20 (a dormant theme value is always excluded) PLUS the ⚙ panel's two Year
+// counts the STORE's settings only. The Save Defaults snapshot is 21 (these 16 + 4 mode prefs + the
+// preset's amnesic flag) and the gear's "modified" comparison is 22 or 21 — both counted in
+// main.tsx, at resetSettings and settingsAtDefaults respectively. Do not carry this number over.
+// ⚠ THE COMPARISON IS NOT A SUBSET OF THE SNAPSHOT, and round 15 is what changed that: it is 20 or
+// 19 of the snapshot's 21 (a dormant theme value is always excluded) PLUS the ⚙ panel's two Year
 // Range TEXT BOXES, which live in components/useYearRangeMirrors and are stored nowhere. So a year
 // that has been TYPED but not committed counts as "modified" while there is nothing to save for it.
+// (Round-22 Q5 closed the gap the other way — amnesic was in the snapshot and NOT in the
+// comparison, which left Save Defaults unreachable for an amnesic-only change.)
 const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
 
 // v1 → v2: the picker's old `dotOrientation` ('columns' | 'rows') collapses to the boolean it was

@@ -6,7 +6,13 @@ import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
 import { usePresets, MAX_PRESET_NAME } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
-import { createPreset, deletePreset, movePreset, renamePreset } from '../store/presetControl.js'
+import {
+  createPreset,
+  deletePreset,
+  isPresetFactory,
+  movePreset,
+  renamePreset,
+} from '../store/presetControl.js'
 import { capCandidateToSwitcherWidth } from '../lib/presetNameWidth.js'
 import {
   targetIndexForCenter,
@@ -53,8 +59,9 @@ import {
 // modal as it does for the other four) — so the flag they branch on is held there, beside them, and
 // handed down. Everything about DRAWING the two views is still this component's, focus included.
 //
-// Deleting asks first, and the ask REPLACES this card's body rather than opening a second dialog
-// over it. That is a deliberate refusal to invent nested modals, and the reason is mechanical:
+// Deleting a preset that holds anything asks first (Q1 skips the question entirely for one that
+// does not — see the ★ further down), and the ask REPLACES this card's body rather than opening a
+// second dialog over it. That is a deliberate refusal to invent nested modals, and the reason is mechanical:
 // modalContract's Escape term is a DOCUMENT-level capture listener registered per open modal, and
 // `stopPropagation` does not stop a second listener on the SAME node — so with two of them mounted
 // one Escape would close both, the inner dismiss taking the outer with it. Android Back (LIFO) and
@@ -148,8 +155,15 @@ import {
 // path (and the old buttons before it) already made one at a time. See movePreset's own comment for
 // why that single primitive is enough for both.
 //
-// ★ DELETING IS PERMANENT AND THE CARD SAYS SO IN THOSE WORDS. Two cases are real and both are
-// handled out loud rather than hidden:
+// ★ DELETING IS PERMANENT AND THE CARD SAYS SO IN THOSE WORDS — WHEN THERE IS SOMETHING TO SAY IT
+// ABOUT. Since Q1 the question is SKIPPED for a preset that is still bit-identical to a new one:
+// every ⚙ setting at its factory value, no stats or bests, no saved defaults, no parked round.
+// Nothing is permanent about deleting a preset that holds nothing, so the confirmation would be a
+// tap spent on a non-decision. The test is store/presetControl's isPresetFactory — deliberately
+// written so that it can only ever be WRONG in the direction of asking — and it is read at the
+// press, never rendered from (see pressDelete below for why the ✕ looks identical either way).
+// For every preset that does hold something, everything below is unchanged. Two cases are real and
+// both are handled out loud rather than hidden:
 //   • THE ACTIVE PRESET. deletePreset opens the neighbour, which IS a switch — so the screens are
 //     cleared by src/main.tsx's registry subscription, a round or run in progress included. The
 //     confirmation says that in advance, because it is the one consequence a player would otherwise
@@ -375,9 +389,39 @@ export default function PresetManager({
   // one fact, which is the app's convention (controlClasses' NOT_OFFERED_BTN_CLASS argues why all
   // three are needed and why it is aria-disabled rather than `disabled`).
   const canDelete = presets.length > 1
-  const confirmDelete = () => {
-    if (pendingDelete) deletePreset(pendingDelete.id)
+  // ★ THE DELETE ITSELF, WITH EXACTLY TWO WAYS IN — the confirmation's Delete button, and the ✕ on a
+  // preset that holds nothing (Q1, below). Both land here, so "the skip does everything the
+  // confirmation did" is true by construction rather than by a reader comparing two handlers.
+  // Clearing the pending id is a provable no-op on the skip route (the ✕ exists only in the LIST
+  // view, which only renders while nothing is pending) — it is here because deleting and leaving no
+  // question standing are one act, not because that route can reach it.
+  const removePreset = (id: number) => {
+    deletePreset(id)
     setPendingDeleteId(null)
+  }
+  const confirmDelete = () => {
+    if (pendingDelete) removePreset(pendingDelete.id)
+    else setPendingDeleteId(null)
+  }
+  // ★★ THE ✕: ASK, UNLESS THERE IS NOTHING TO ASK ABOUT (Q1, the owner's words — "if it's completely
+  // factory with no stats or anything, like as if you pressed clear saved defaults then full reset,
+  // then we don't need a confirmation when deleting that preset"). A preset whose four stores are
+  // all still at their factory values, with no parked round and no amnesic session behind it, holds
+  // nothing a player could miss, so the question would be a tap spent on a non-decision — the same
+  // reasoning that dims Reset Settings when nothing diverges, applied to a confirmation.
+  // ⚠ THE JUDGEMENT IS store/presetControl's, NOT THIS COMPONENT'S, and it has to be: "what does a
+  // preset hold" must be answered by the same file that knows what deleting one REMOVES, or the two
+  // could disagree — and the direction that disagreement goes wrong is a silent, unasked delete.
+  // isPresetFactory's own comment argues why it cannot say "factory" about a preset that is not.
+  // ⚠ READ AT THE PRESS, never rendered from — nothing about the ✕ changes appearance, because the
+  // control's PROMISE is unchanged ("delete this preset") and a row that advertised which of two
+  // routes it would take would be asking the player to care about a distinction that exists to save
+  // them a tap. It also could not be honest as a render: the answer moves with storage this card
+  // does not subscribe to.
+  const pressDelete = (id: number) => {
+    if (!canDelete) return
+    if (isPresetFactory(id)) removePreset(id)
+    else setPendingDeleteId(id)
   }
 
   // ── Reordering (drag + keyboard) ────────────────────────────────────────────────────────────
@@ -758,9 +802,7 @@ export default function PresetManager({
                 type="button"
                 aria-label={`Delete ${p.name}`}
                 aria-disabled={!canDelete || undefined}
-                onClick={() => {
-                  if (canDelete) setPendingDeleteId(p.id)
-                }}
+                onClick={() => pressDelete(p.id)}
                 className={`${ROW_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
               >
                 {DELETE_GLYPH}

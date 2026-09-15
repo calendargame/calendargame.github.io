@@ -85,6 +85,18 @@ export const discardSessionRound = (presetId: number, mode: RoundMode): void => 
   write(store)
 }
 
+/**
+ * Does this preset have ANY parked ended round this session? The read-only twin of
+ * discardSessionRounds below, sharing its prefix scan rather than re-deriving one — which is what
+ * keeps "which slots belong to this preset" a fact this file states once. (The `:` in the prefix is
+ * load-bearing: without it preset 1 would claim preset 11's slots.)
+ *
+ * store/presetControl's isPresetFactory is the caller: a parked ended round is a RESULT the player
+ * can still see, so a preset holding one is not factory-fresh and its delete still asks first.
+ */
+export const hasSessionRound = (presetId: number): boolean =>
+  Object.keys(read()).some((k) => k.startsWith(`${presetId}:`))
+
 /** Forget every parked round for one preset — called when the preset is deleted. */
 export const discardSessionRounds = (presetId: number): void => {
   const store = read()
