@@ -40,6 +40,7 @@ import {
   picker,
   pressBack,
   pressDragFromGear,
+  pressKey,
   isSettingsOpen,
   tap,
   isOffered,
@@ -48,6 +49,7 @@ import {
 import { usePresets, PRESET_STORE_KEYS, presetKey, MAX_PRESET_NAME } from '../src/store/presets.js'
 import { createPreset, setPresetAmnesic, switchPreset } from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
+import { hasSessionRound } from '../src/store/sessionRound.js'
 
 // The mock: onChange's ONE call into lib/presetNameWidth, controllable per test. Defaults to
 // "everything fits, unchanged" (the shape every case that is not ABOUT the cap wants), so cases
@@ -897,6 +899,98 @@ describe('deleting', () => {
     // Read from the registry, not from the list: the question REPLACES the list view, so there are
     // no rows on screen to count while it is up.
     expect(registry().presets).toHaveLength(2)
+  })
+
+  // ── ⚠⚠ THE PRESET YOU ARE ON: WHAT IS ON ITS SCREENS COUNTS (round 22's fixer, a BLOCKER) ─────
+  //
+  // A Blitz round or MoX run IN PROGRESS is written nowhere — no store, no key, and store/
+  // sessionRound parks only ENDED ones — so a check built from storage alone called such a preset
+  // factory and the ✕ deleted it, run and all, without the very question that warns about "a Blitz
+  // round or MoX run in progress". Each case below leaves every store at its factory values (neither
+  // screen saves per-question stats, and nothing here touches a setting), so the SCREEN is the only
+  // thing that can make the ✕ ask — which is exactly what these prove.
+  const activeFactoryWithNeighbour = () => {
+    act(() => {
+      createPreset('Spare')
+    })
+    mountApp()
+  }
+  const pressDeleteOnActive = () => {
+    openSettings()
+    openModal('presets')
+    tap(rowButton('Preset 1', 'delete'))
+  }
+  const beginIn = (modeKey) => {
+    pressKey(modeKey)
+    tap(screen.getByRole('button', { name: 'Begin' }))
+  }
+
+  it('a MoX run in progress on the active preset asks first', () => {
+    activeFactoryWithNeighbour()
+    beginIn('A')
+    pressDeleteOnActive()
+    expect(confirmCard()).toBeTruthy()
+    expect(registry().presets).toHaveLength(2)
+  })
+
+  it('a Blitz round in progress — its clock still running under the card — asks first', () => {
+    activeFactoryWithNeighbour()
+    beginIn('B')
+    // An answer, whichever it is: Blitz launches with Allow Mistakes on, so the round keeps going.
+    tap(screen.getByRole('button', { name: 'Monday' }))
+    pressDeleteOnActive()
+    expect(confirmCard()).toBeTruthy()
+    expect(registry().presets).toHaveLength(2)
+  })
+
+  // ⚠ THE ENDED ROUND THAT COULD NOT BE PARKED. With sessionStorage refusing writes, store/
+  // sessionRound's hasSessionRound has nothing to find — but the result is still on screen, and
+  // deleting the active preset would remount it away. The screen's own report is what catches it.
+  it('an ended MoX run still on screen asks — even when sessionStorage refused to park it', () => {
+    const realSetItem = Storage.prototype.setItem
+    const refuse = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (k, v) {
+      if (this === window.sessionStorage) throw new Error('refused')
+      return realSetItem.call(this, k, v)
+    })
+    try {
+      activeFactoryWithNeighbour()
+      beginIn('A')
+      tap(screen.getByRole('button', { name: 'Reveal' })) // Allow Mistakes off → the run fails
+      expect(hasSessionRound(registry().activeId)).toBe(false) // nothing parked…
+      pressDeleteOnActive()
+      expect(confirmCard()).toBeTruthy() // …and it asks all the same
+    } finally {
+      refuse.mockRestore()
+    }
+  })
+
+  // The negative control: without it, a check that answered "not factory" for every active preset
+  // would pass the three cases above. And ★ F2 — FOCUS: the skip removes the row whose ✕ had the
+  // keyboard, and a removed element drops focus to <body>, behind the scrim and outside the Tab
+  // trap. It lands on the card instead — exactly where the confirm route's Delete leaves it.
+  it('a truly fresh ACTIVE preset still deletes on the spot, and the keyboard lands on the card', () => {
+    activeFactoryWithNeighbour()
+    openSettings()
+    openModal('presets')
+    const cross = rowButton('Preset 1', 'delete')
+    act(() => cross.focus())
+    tap(cross)
+    expect(queryConfirmCard()).toBeNull()
+    expect(listedNames()).toEqual(['Spare'])
+    expect(registry().activeId).not.toBe(1)
+    expect(document.activeElement).toBe(card())
+  })
+
+  it('a skipped delete of a preset you are NOT on also leaves the keyboard on the card', () => {
+    act(() => {
+      createPreset('Scratch')
+    })
+    openManager()
+    const cross = rowButton('Scratch', 'delete')
+    act(() => cross.focus())
+    tap(cross)
+    expect(listedNames()).toEqual(['Preset 1'])
+    expect(document.activeElement).toBe(card())
   })
 
   // ⚠ A LAST PRESET IS NEVER DELETED, FACTORY OR NOT — the withholding guard runs BEFORE the

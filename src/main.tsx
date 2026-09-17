@@ -2052,7 +2052,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // overflow (store/lookupHistory's mergeForDisplay), and Full Reset clears BOTH buckets in one
       // call — checking only the permanent list would leave the button lit while an amnesic session's
       // entries sat on screen with nothing left for the press to actually remove.
-      const isFullyReset=mode==='classic'&&settingsAtDefaults&&displayLookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&aoxIsFresh&&classicIsFresh&&flashIsFresh&&blitzIsFresh&&deductionIsFresh;
+      // ★ THE FIVE SCREEN REPORTS, NAMED ONCE (round 22's fixer), because they now answer TWO
+      // questions and must answer both identically: "would Full Reset do anything" (below) and
+      // "is there anything on the active preset's screens a delete would throw away" — a Blitz round
+      // or MoX run in progress is stored nowhere, so this is the only thing that knows it exists
+      // (store/presetControl's isPresetFactory argues it; components/PresetManager's ✕ passes it).
+      const screensFresh=aoxIsFresh&&classicIsFresh&&flashIsFresh&&blitzIsFresh&&deductionIsFresh;
+      const isFullyReset=mode==='classic'&&settingsAtDefaults&&displayLookupHistory.length===0&&lookupInput===""&&lookupOutput===""&&lookupCalcDate===null&&lookupSelectedHistoryId===null&&lookupCalcOpen===false&&screensFresh;
       return(
         <>
           {/* Both overlays are fixed z-100 covers; the Updating screen renders LATER in the DOM
@@ -2321,6 +2327,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               cardRef={settingsPopoverRef}
               settingsModified={settingsModified}
               isFullyReset={isFullyReset}
+              screensFresh={screensFresh}
               onResetSettings={pressResetSettings}
               onFullReset={fullReset}
               mode={mode}

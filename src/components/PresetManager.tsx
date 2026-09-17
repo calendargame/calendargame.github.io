@@ -162,6 +162,8 @@ import {
 // tap spent on a non-decision. The test is store/presetControl's isPresetFactory — deliberately
 // written so that it can only ever be WRONG in the direction of asking — and it is read at the
 // press, never rendered from (see pressDelete below for why the ✕ looks identical either way).
+// For the preset you are ON it also takes the screens into account (`screensFresh`): a round or run
+// in progress, or an ended one still showing, is something to lose even though no store holds it.
 // For every preset that does hold something, everything below is unchanged. Two cases are real and
 // both are handled out loud rather than hidden:
 //   • THE ACTIVE PRESET. deletePreset opens the neighbour, which IS a switch — so the screens are
@@ -257,19 +259,23 @@ function ReorderHandleIcon() {
 const ROW_BTN_CLASS =
   'shrink-0 px-2 py-1.5 rounded-xl text-xs border surface-toggle text-(--tx-100-80)'
 
-// TWO PROPS, AND THEY ARE THE SAME ONE FACT: which preset the delete confirmation is asking about,
-// or null while the list is showing. Nothing in this card dismisses itself — round 21 (Q5) removed
+// THREE PROPS. The first two are the same one fact: which preset the delete confirmation is asking
+// about, or null while the list is showing. Nothing in this card dismisses itself — round 21 (Q5) removed
 // the standalone Close, and Q2 the confirmation's Cancel — so the caller (components/SettingsPanel)
 // owns the open flag and wires the scrim tap, capture-phase Escape and Android Back, exactly as it
 // does for the other four modals. Since Q2 those three routes LADDER through this value (the header
 // comment argues why it therefore lives with them and not here), so the card both reads it to pick
 // its view and writes it when the ✕ poses the question or the Delete button answers it.
+// The third, `screensFresh`, is src/main.tsx's aggregate of the five mode screens' freshness reports,
+// passed straight through to isPresetFactory at the ✕ (pressDelete below says why it is needed).
 export default function PresetManager({
   pendingDeleteId,
   setPendingDeleteId,
+  screensFresh,
 }: {
   pendingDeleteId: number | null
   setPendingDeleteId: (id: number | null) => void
+  screensFresh: boolean
 }) {
   // Two narrow subscriptions, the same pair components/PresetSwitcher takes and for the same
   // reason: `presets` is replaced wholesale by applyRegistry (so reference equality is a correct
@@ -313,6 +319,9 @@ export default function PresetManager({
   // silent: press ✕, and the keyboard is on <body> behind a scrim with a destructive button on it.
   // The dependency is the VIEW, not the mount, so it covers both directions — into the confirmation
   // and back out of it.
+  // ⚠ IT DOES NOT COVER THE SKIPPED DELETE (Q1), because nothing it watches changes there — the view
+  // stays the list from start to finish. That route removes the very row whose ✕ has the keyboard,
+  // so pressDelete refocuses the card itself; see the note there.
   const cardRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     cardRef.current?.focus()
@@ -406,7 +415,8 @@ export default function PresetManager({
   // ★★ THE ✕: ASK, UNLESS THERE IS NOTHING TO ASK ABOUT (Q1, the owner's words — "if it's completely
   // factory with no stats or anything, like as if you pressed clear saved defaults then full reset,
   // then we don't need a confirmation when deleting that preset"). A preset whose four stores are
-  // all still at their factory values, with no parked round and no amnesic session behind it, holds
+  // all still at their factory values, with no parked round and no amnesic session behind it — and,
+  // for the preset you are on, with every mode screen still at its launch state — holds
   // nothing a player could miss, so the question would be a tap spent on a non-decision — the same
   // reasoning that dims Reset Settings when nothing diverges, applied to a confirmation.
   // ⚠ THE JUDGEMENT IS store/presetControl's, NOT THIS COMPONENT'S, and it has to be: "what does a
@@ -418,10 +428,26 @@ export default function PresetManager({
   // routes it would take would be asking the player to care about a distinction that exists to save
   // them a tap. It also could not be honest as a render: the answer moves with storage this card
   // does not subscribe to.
+  // ⚠⚠ `screensFresh` IS NOT OPTIONAL INFORMATION. A MoX run seven questions in, or a Blitz round
+  // with the clock running under this card (opening ⚙ does not stop or end a round), exists on the
+  // active preset's screen and nowhere else — and deleting the active preset remounts that screen.
+  // The storage half of the judgement cannot see it; the screens' own reports can.
+  // ⚠ AND THE SKIP REFOCUSES THE CARD, because the ✕ that had the keyboard goes with its row and a
+  // removed element leaves focus on <body> — behind the scrim, outside the Tab trap. The CARD rather
+  // than a neighbouring row's ✕, for two reasons: it is exactly where the confirm route leaves the
+  // keyboard (the effect above focuses the list's card when the question closes), so the skip stays
+  // "the same act with the question removed" for a keyboard or screen-reader user too; and a ✕ that
+  // inherited focus would turn a held Enter — which repeats a button's click — into a run of deletes
+  // the player never aimed at. Focusing it now, before the delete commits, is safe: the list view's
+  // card element survives the re-render (only a row leaves), so the ref still names it.
   const pressDelete = (id: number) => {
     if (!canDelete) return
-    if (isPresetFactory(id)) removePreset(id)
-    else setPendingDeleteId(id)
+    if (!isPresetFactory(id, screensFresh)) {
+      setPendingDeleteId(id)
+      return
+    }
+    cardRef.current?.focus()
+    removePreset(id)
   }
 
   // ── Reordering (drag + keyboard) ────────────────────────────────────────────────────────────
@@ -601,8 +627,8 @@ export default function PresetManager({
         </div>
         <div className="text-xs text-(--tx-200-80)">
           <b>{pendingDelete.name}</b> and everything in it go for good: its stats, its all-time
-          bests, its Lookup history, its per-mode setup, every ⚙ setting it holds, and its saved
-          defaults. No other preset is touched, and this cannot be undone.
+          bests, its per-mode setup, every ⚙ setting it holds, and its saved defaults. No other
+          preset is touched, and this cannot be undone.
         </div>
         {pendingDelete.id === activeId && (
           <div className="text-xs text-(--tx-200-80)">

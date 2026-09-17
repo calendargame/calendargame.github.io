@@ -994,13 +994,16 @@ export default function GuidePage({
           </li>
           <li>
             <b>An untouched preset is not worth a question, so it does not get one.</b> If a preset
-            still holds nothing at all — every ⚙ setting at its launch value, no stats and no
-            all-time bests, no saved defaults of its own, and no finished round or run waiting on
-            its screen — the ✕ deletes it on the spot. That is the state a brand-new preset is in,
-            and the state <b>Clear Saved Defaults</b> followed by <b>Full Reset</b> would put one
-            back into. Anything else at all and the question appears as described here. Having{' '}
-            <b>Amnesic</b> switched on does not count as holding something: there is nothing being
-            kept for it to be about.
+            still holds nothing at all — every ⚙ setting at its launch value; each mode&apos;s setup
+            at its launch value too (Flash speed, both Blitz timers, the MoX run length, Allow
+            Mistakes, One-by-One, the Deduction type, and which stats are shown or hidden); no stats
+            and no all-time bests; no saved defaults of its own; and nothing on its screens, whether
+            a round or run still going or a finished one waiting — the ✕ deletes it on the spot.
+            That is the state a brand-new preset is in, and the state <b>Clear Saved Defaults</b>{' '}
+            followed by <b>Full Reset</b> would put one back into. Anything else at all — even a
+            Blitz round or MoX run you have only just begun — and the question appears as described
+            here. Having <b>Amnesic</b> switched on does not count as holding something: there is
+            nothing being kept for it to be about.
           </li>
           <li>
             Deleting a preset removes <i>everything</i> it holds — its stats and all-time bests, its

@@ -667,11 +667,11 @@ describe('is a preset factory-fresh', () => {
   // ── Must read as FACTORY ────────────────────────────────────────────────────────────────────
 
   it('a preset that has just been created is factory — it has no keys at all', () => {
-    expect(isPresetFactory(other('Scratch'))).toBe(true)
+    expect(isPresetFactory(other('Scratch'), true)).toBe(true)
   })
 
   it('so is the ACTIVE preset on a device nothing has ever been done on', () => {
-    expect(isPresetFactory(usePresets.getState().activeId)).toBe(true)
+    expect(isPresetFactory(usePresets.getState().activeId, true)).toBe(true)
   })
 
   // ★ THE CASE presetStorageInUse WOULD GET WRONG, and the reason this is a per-store VALUE
@@ -683,7 +683,7 @@ describe('is a preset factory-fresh', () => {
     const id = other('Visited')
     for (const base of Object.values(PRESET_STORE_KEYS))
       localStorage.setItem(presetKey(base, id), envelope({}))
-    expect(isPresetFactory(id)).toBe(true)
+    expect(isPresetFactory(id, true)).toBe(true)
     // …and the same with a settings payload that SPELLS EVERY VALUE OUT rather than omitting them,
     // which is what a real preset's key holds once anything has been saved into it. Taken from the
     // freshly-reset live store rather than from SETTINGS_DEFAULTS, so the case is not comparing the
@@ -693,7 +693,7 @@ describe('is a preset factory-fresh', () => {
       presetKey(PRESET_STORE_KEYS.settings, id),
       envelope(useSettings.getState()),
     )
-    expect(isPresetFactory(id)).toBe(true)
+    expect(isPresetFactory(id, true)).toBe(true)
   })
 
   // ⚠ THE OWNER'S DECIDED CALL: Amnesic is a statement about where stats WOULD go, and a preset
@@ -702,7 +702,7 @@ describe('is a preset factory-fresh', () => {
   it('Amnesic on its own does not make a preset non-factory', () => {
     const id = other('Guest')
     setPresetAmnesic(id, true)
-    expect(isPresetFactory(id)).toBe(true)
+    expect(isPresetFactory(id, true)).toBe(true)
   })
 
   // ⚠ THE ONE ENTRY OF clearPresetStorage THAT IS DELIBERATELY NOT COUNTED. Every visit to a preset
@@ -712,7 +712,7 @@ describe('is a preset factory-fresh', () => {
   it('a session PAGE does not count — a preset you merely visited is still factory', () => {
     const id = other('Looked at')
     writeSessionMode(id, 'lookup')
-    expect(isPresetFactory(id)).toBe(true)
+    expect(isPresetFactory(id, true)).toBe(true)
   })
 
   // ⚠ NOR DOES A NAME, OR A POSITION, on the owner's own yardstick — "as if you pressed clear saved
@@ -723,7 +723,7 @@ describe('is a preset factory-fresh', () => {
     const id = other('Scratch')
     renamePreset(id, 'Weekend')
     movePreset(id, -1)
-    expect(isPresetFactory(id)).toBe(true)
+    expect(isPresetFactory(id, true)).toBe(true)
   })
 
   // ── Must NOT read as factory ────────────────────────────────────────────────────────────────
@@ -731,13 +731,13 @@ describe('is a preset factory-fresh', () => {
   it('one ⚙ setting off its default is enough', () => {
     const id = other('Timed')
     localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, id), envelope({ saveStats: false }))
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
   })
 
   it('so is one mode-screen pref', () => {
     const id = other('Timed')
     localStorage.setItem(presetKey(PRESET_STORE_KEYS.modePrefs, id), envelope({ blitzSec: 45 }))
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
   })
 
   it('so are stats, and so is a single all-time best', () => {
@@ -746,13 +746,13 @@ describe('is a preset factory-fresh', () => {
       presetKey(PRESET_STORE_KEYS.progress, withStats),
       envelope({ stats: { classic: PLAYED } }, 4),
     )
-    expect(isPresetFactory(withStats)).toBe(false)
+    expect(isPresetFactory(withStats, true)).toBe(false)
     const withBest = other('Raced')
     localStorage.setItem(
       presetKey(PRESET_STORE_KEYS.progress, withBest),
       envelope({ aoxBest: { [AOX_KEY]: AOX_REC } }, 4),
     )
-    expect(isPresetFactory(withBest)).toBe(false)
+    expect(isPresetFactory(withBest, true)).toBe(false)
   })
 
   it('so is a saved-defaults snapshot, even one that saved the factory values', () => {
@@ -761,7 +761,7 @@ describe('is a preset factory-fresh', () => {
       presetKey(PRESET_STORE_KEYS.userDefaults, id),
       envelope({ saved: { settings: {}, prefs: {}, amnesic: false } }, 2),
     )
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
   })
 
   // ★★ THE SHARPEST FALSE POSITIVE THE CHECK HAS TO CLOSE. While a preset is amnesic its live stats
@@ -775,7 +775,7 @@ describe('is a preset factory-fresh', () => {
       envelope({ stats: { classic: PLAYED } }, 4),
     )
     setPresetAmnesic(id, true)
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
   })
 
   // …and the other direction: the session copy is real data too, and deleting takes it.
@@ -786,7 +786,7 @@ describe('is a preset factory-fresh', () => {
       presetKey(PRESET_STORE_KEYS.progress, id),
       envelope({ stats: { classic: PLAYED } }, 4),
     )
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
   })
 
   // A finished Blitz round or MoX run waiting on a preset's screen is a RESULT the player can still
@@ -795,9 +795,9 @@ describe('is a preset factory-fresh', () => {
   it('a parked ended round is not factory', () => {
     const id = other('Raced')
     writeSessionRound(id, 'blitz', { score: 12 })
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
     // …and the prefix scan is per preset: a neighbour's parked round says nothing about this one.
-    expect(isPresetFactory(other('Clean'))).toBe(true)
+    expect(isPresetFactory(other('Clean'), true)).toBe(true)
   })
 
   // ⚠ A PAYLOAD THIS BUILD CANNOT READ IN TODAY'S SHAPE ASKS FIRST, which is how the check stays
@@ -810,13 +810,13 @@ describe('is a preset factory-fresh', () => {
       presetKey(PRESET_STORE_KEYS.settings, old),
       envelope({ dotOrientation: 'rows' }),
     )
-    expect(isPresetFactory(old)).toBe(false)
+    expect(isPresetFactory(old, true)).toBe(false)
     const truncated = other('Truncated')
     localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, truncated), '{"state":{"save')
-    expect(isPresetFactory(truncated)).toBe(false)
+    expect(isPresetFactory(truncated, true)).toBe(false)
     const shapeless = other('Shapeless')
     localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, shapeless), '"a string"')
-    expect(isPresetFactory(shapeless)).toBe(false)
+    expect(isPresetFactory(shapeless, true)).toBe(false)
   })
 
   // ── The ACTIVE preset is judged on the LIVE stores as well ──────────────────────────────────
@@ -830,12 +830,12 @@ describe('is a preset factory-fresh', () => {
     const id = usePresets.getState().activeId
     useSettings.getState().setSaveStats(false)
     localStorage.removeItem(presetKey(PRESET_STORE_KEYS.settings, id))
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
     useSettings.getState().setSaveStats(true)
     useProgress.getState().setModeStats('classic', PLAYED)
     for (const base of Object.values(PRESET_STORE_KEYS))
       localStorage.removeItem(presetKey(base, id))
-    expect(isPresetFactory(id)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(false)
   })
 
   // …and the live stores are the ACTIVE preset's alone, so they must not be consulted for anyone
@@ -844,11 +844,27 @@ describe('is a preset factory-fresh', () => {
     const id = other('Clean')
     useSettings.getState().setSaveStats(false)
     useProgress.getState().setModeStats('classic', PLAYED)
-    expect(isPresetFactory(id)).toBe(true)
-    expect(isPresetFactory(usePresets.getState().activeId)).toBe(false)
+    expect(isPresetFactory(id, true)).toBe(true)
+    expect(isPresetFactory(usePresets.getState().activeId, true)).toBe(false)
+  })
+
+  // ★★ THE ONE THING NO STORE HOLDS: WHAT IS ON THE ACTIVE PRESET'S SCREENS (round 22's fixer). A
+  // Blitz round or MoX run in progress is written nowhere — sessionStorage parks only ENDED ones — so
+  // without this argument a preset with a live run on screen, and everything in storage at factory,
+  // read as factory and was deleted run and all. The caller hands in src/main.tsx's aggregate of the
+  // five screens' freshness reports; the UI cases in tests/presetManager.dom drive the real screens.
+  it('the ACTIVE preset is not factory while any of its screens is not fresh', () => {
+    const active = usePresets.getState().activeId
+    expect(isPresetFactory(active, false)).toBe(false)
+    expect(isPresetFactory(active, true)).toBe(true)
+  })
+
+  // …and the screens are the ACTIVE preset's alone, so they say nothing about any other.
+  it('the screens say nothing about a preset you are not on', () => {
+    expect(isPresetFactory(other('Clean'), false)).toBe(true)
   })
 
   it('an unknown id is factory — there is nothing anywhere under it', () => {
-    expect(isPresetFactory(99)).toBe(true)
+    expect(isPresetFactory(99, true)).toBe(true)
   })
 })

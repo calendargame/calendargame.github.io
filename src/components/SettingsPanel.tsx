@@ -121,6 +121,11 @@ export type SettingsPanelProps = {
   /** The whole app is at launch state. Thirteen terms, six of which App owns and five of which are
    *  reported UP from the mode screens — the panel gets the answer, never the inputs. */
   isFullyReset: boolean
+  /** All five mode screens are at their launch state — the aggregate isFullyReset is built on. Not
+   *  used by the panel itself: it is handed to components/PresetManager, whose ✕ may skip its
+   *  confirmation only when the active preset's screens hold nothing a delete would throw away (a
+   *  round or run in progress is stored nowhere else — store/presetControl's isPresetFactory). */
+  screensFresh: boolean
   /** pressResetSettings — the GUARDED presser, not App's total resetSettings (which is also Full
    *  Reset's delegate and must stay unconditional). */
   onResetSettings: () => void
@@ -154,6 +159,7 @@ export function SettingsPanel({
   cardRef,
   settingsModified,
   isFullyReset,
+  screensFresh,
   onResetSettings,
   onFullReset,
   mode,
@@ -909,7 +915,11 @@ export function SettingsPanel({
         }}
         onKeyDown={trapModalTab}
       >
-        <PresetManager pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} />
+        <PresetManager
+          pendingDeleteId={pendingDeleteId}
+          setPendingDeleteId={setPendingDeleteId}
+          screensFresh={screensFresh}
+        />
       </div>,
       document.getElementById('root')!,
     )

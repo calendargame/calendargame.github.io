@@ -39,7 +39,7 @@ import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 // ⚠ THIS FILE IS THE PROGRAMMATIC API THE UI GROUP DRIVES. There is deliberately no UI, no top bar
 // and no settings-panel wiring here — `switchPreset(id)` is the whole call a CustomSelect needs.
 //
-// ★ AND ONE QUESTION, NOT A SEVENTH OPERATION: `isPresetFactory(id)` (round 22, Q1) asks whether a
+// ★ AND ONE QUESTION, NOT A SEVENTH OPERATION: `isPresetFactory(id, …)` (round 22, Q1) asks whether a
 // preset holds anything a player could miss, so the delete flow can skip its confirmation for one
 // that holds nothing. It reads the same four stores and the same key machinery the six operations
 // write through — which is precisely why it belongs here and not in the component that asks it: an
@@ -259,8 +259,8 @@ const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
 
 /**
  * Does this preset hold NOTHING a player could miss — every ⚙ setting at its factory value, the
- * per-mode setup at its, no stats or all-time bests, no saved personal defaults, and no parked
- * round? Bit-identical to a preset that has just been created, in other words, which is why
+ * per-mode setup at its, no stats or all-time bests, no saved personal defaults, no parked round,
+ * and (for the preset you are on) nothing going on its screens? Bit-identical to a preset that has just been created, in other words, which is why
  * components/PresetManager may delete one without asking.
  *
  * ★★ THE TWO SOURCES, AND WHY BOTH ARE READ. A preset you are NOT on exists only in storage — its
@@ -292,7 +292,7 @@ const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
  * what settles it: "as if you pressed clear saved defaults then full reset". Neither of those
  * buttons touches the name or the order, so a preset renamed to "Weekend" and never played in is
  * exactly the state that recipe produces and is factory by his definition. The confirmation this
- * skips says nothing about a name either — it names the stats, the bests, the Lookup history, the
+ * skips says nothing about a name either — it names the stats, the bests, the
  * per-mode setup, the ⚙ settings and the saved defaults — so skipping it cannot withhold a warning
  * that was ever there. (Both are registry fields anyway, like amnesic, so they are outside what
  * this function reads.)
@@ -303,9 +303,28 @@ const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
  * every visit writes, and which a full app close throws away on its own. Counting it would mean any
  * preset you had so much as looked at could never be deleted without a question, for a value no
  * player can miss. Every other entry in that function IS counted.
+ *
+ * ★★ `screensFresh` — THE ONE THING NO STORE AND NO KEY HOLDS: WHAT IS ON THE ACTIVE PRESET'S
+ * SCREENS RIGHT NOW. A Blitz round or MoX run IN PROGRESS is written nowhere at all (store/
+ * sessionRound parks only ENDED ones, and only when sessionStorage will take them), yet deleting the
+ * active preset remounts every screen and throws it away — so a check built from storage alone
+ * called a preset with a 7-of-10 MoX run on screen "factory" and deleted it, run and all, without
+ * the question that exists to warn about exactly that. The answer is src/main.tsx's aggregate of the
+ * five mode screens' own freshness reports (each one's `onFreshChange` — config, stats, history, a
+ * live or ended round, its UI toggles), the SAME signal Full Reset's dim reads, handed in by the
+ * caller because it is React state this file cannot see. It is REQUIRED rather than defaulted: a
+ * default of `true` is precisely the false positive above, waiting for a caller that forgot.
+ *   • It is consulted for the ACTIVE preset only. The screens only ever hold the active preset —
+ *     every other preset is judged, correctly, on what it left in storage.
+ *   • It also covers an ended round on screen that could NOT be parked (sessionStorage refused):
+ *     `hasSessionRound` below cannot see that one, and the screen's own report can.
+ *   • ⚠ It can only add "not factory", never remove it — the same asymmetry as every term above.
+ *     A screen reads un-fresh for a few things no player would call data (a Show Codes panel left
+ *     open, say), and each of those costs one unneeded question.
  */
-export function isPresetFactory(presetId: number): boolean {
+export function isPresetFactory(presetId: number, screensFresh: boolean): boolean {
   const isActive = usePresets.getState().activeId === presetId
+  if (isActive && !screensFresh) return false
   for (const entry of PER_PRESET_STORES) {
     if (!payloadIsFactory(readPresetPayload(entry.key, presetId), entry.makeDefaults()))
       return false
