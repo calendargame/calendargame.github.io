@@ -137,8 +137,8 @@ export default function StatPanel({
   // so a sixth mode cannot ship the bug — the enforcement lives in the type rather than in a guard
   // test that would have to remember to enumerate every call site.
   dimmed: boolean
-  // ★ THE WHOLE STRIP AS ONE BUTTON (sub-group 3C) — how the run breakdown opens on a finished
-  // MoX run or Blitz round. When set, the strip's ROOT becomes the <button> and every cell renders
+  // ★ THE WHOLE STRIP AS ONE BUTTON (sub-group 3C) — how the run breakdown opens on an ended MoX
+  // run (completed or failed) or Blitz round. When set, the strip's ROOT becomes the <button> and every cell renders
   // as a plain div: the per-cell `fn` is IGNORED, not merged — a <button> inside a <button> is
   // invalid HTML with undefined behaviour. It costs nothing real: a mode hands the strip an opener
   // exactly when its run has ENDED, and an ended run has already dropped its hide toggle.

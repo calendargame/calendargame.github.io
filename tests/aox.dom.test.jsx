@@ -1139,8 +1139,8 @@ describe('AoX — Q7 round-6 (Reset Settings restoring the run length reconciles
 // AoX gained a per-mode timing-trio hide toggle that is VISUAL ONLY: it blanks the display but the
 // engine keeps timing (AoX feeds the engine timingOff:false always). So there is NO "Enable and
 // Reset Stats?" arm — hiding can never desync — and the scoring trio stays untoggleable. Hiding
-// suppresses only the LIVE mid-run trio: a COMPLETED run always shows its result (the average is
-// the point of the run). The pref (aoxTimingOff) is excluded from the defaults system (verified in
+// suppresses only the trio of a run still going: an ENDED run — completed, or (since round 22)
+// failed — always shows its times, and its strip's one gesture is the breakdown. The pref (aoxTimingOff) is excluded from the defaults system (verified in
 // tests/saveDefaults.dom.test.jsx).
 //
 // ⚠ RE-BLESSED for C1 (round 16, the stat-box redesign — approved by the owner as a settled design).
@@ -1218,6 +1218,42 @@ describe('AoX — Q8 visual-only timing hide', () => {
     expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Last')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
+  })
+
+  // ★ Round 22 — the failed-run half of the case above, and the reason it had to change at all. A
+  // failed run now opens its breakdown, and StatPanel ignores per-cell taps once the strip is the
+  // opener; had the trio stayed hidden here, a player who hid it would face three blank boxes on a
+  // result screen with no tap left that could bring them back. So a failed run masks the pref exactly
+  // as a completed run (and an ended Blitz round) does — MASKS, never writes: an Override that credits
+  // the failing wrong resumes the run, and the hide the player chose is back.
+  it('a FAILED run shows its times through the hide too, takes no toggle tap, and the hide returns on resume', () => {
+    act(() => useModePrefs.getState().setAoxTimingOff(true)) // hidden before the run
+    mountApp()
+    switchToAox()
+    setN(3)
+    click('Begin') //  Allow Mistakes off (the default)
+    tick(1000)
+    answerCorrect() // 1/1 → running, trio suppressed
+    expect(statValue('Mean')).toBe('')
+    answerWrong() //   → the run FAILS
+    expect(ctrl('Reset')).toBeInTheDocument()
+    expect(statValue('Last')).toBe('1.00s')
+    expect(statValue('Mean')).toBe('1.00s')
+    expect(statValue('Median')).toBe('1.00s')
+    // A tap on a time box opens the breakdown rather than hiding anything…
+    clickStat('Mean')
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).not.toBeNull()
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' })
+    })
+    expect(statValue('Mean')).toBe('1.00s')
+    // …and the pref was never written.
+    expect(useModePrefs.getState().aoxTimingOff).toBe(true)
+    // Override credits the failing wrong, which RESUMES the run — and the player's hide is back.
+    click('Override')
+    expect(statValue('Score')).toBe('2/2') //  the wrong is credited; the Mo3 run goes on
+    expect(statValue('Mean')).toBe('')
+    expect(screen.queryByRole('button', { name: 'Show mean breakdown' })).toBeNull() // no longer ended
   })
 })
 

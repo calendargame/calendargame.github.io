@@ -3,13 +3,15 @@
 // The run/round breakdown popup (sub-group 3C) — the screen half of engine/runBreakdown, which
 // owns the arithmetic and is tested next door. What this file pins is everything a player can do:
 //
-//   • WHERE IT COMES FROM. The strip is a plain readout until a run FINISHES; then the whole strip
-//     is one button and a tap anywhere on it opens the panel. A run that FAILED is not a finished
-//     run — it keeps its hide toggle and offers no breakdown — and neither is a strip with Save
-//     Stats off, which is showing dashes and must not be a door to the numbers behind them.
+//   • WHERE IT COMES FROM. The strip is a plain readout until a run ENDS; then the whole strip is
+//     one button and a tap anywhere on it opens the panel. A run that FAILED has ended too (round
+//     22): it opens its breakdown and, like a completed run, shows its times and drops its hide
+//     toggle. A strip with Save Stats off offers nothing — it is showing dashes and must not be a
+//     door to the numbers behind them.
 //   • WHAT IT SAYS. One row per card played, in order, and a summary whose Mean is the SAME STRING
 //     the stat strip prints. That is the reconciliation claim as a player would check it: two
-//     numbers on one screen that have to agree.
+//     numbers on one screen that have to agree. Each row reads number, weekday letter, date, words,
+//     time — the letter carrying its full day name for a screen reader, the time always last.
 //   • THAT IT IS A REAL MODAL. Focus lands inside it, Escape closes it, the scrim closes it — the
 //     app's five-term modal contract (components/modalContract). Since round 21 it carries NO
 //     dismiss button, so with zero focusable controls the Tab trap pins focus on the card.
@@ -23,7 +25,7 @@ import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { wday } from '../src/lib/calendar.js'
-import { DAY } from '../src/lib/format.js'
+import { DAY, DAY_LETTER } from '../src/lib/format.js'
 import { isOffered } from './helpers/offered.js'
 
 function mountApp() {
@@ -245,18 +247,67 @@ describe('the run breakdown — MoX', () => {
     expect(opener('Show mean breakdown')).toBeNull()
   })
 
-  it('a FAILED run offers no breakdown and keeps its hide toggle', () => {
+  // ★ Round 22. A failed run is an ENDED run: it opens its breakdown exactly as a completed one does,
+  // and it does so the same way Blitz already did for a sudden-death loss. The hide toggle goes with
+  // it — StatPanel ignores per-cell taps once the strip is the opener — which is the coherent state
+  // rather than a casualty: the strip is a result readout (tests/aox.dom pins its times showing
+  // through a hide the player set).
+  it('a FAILED run opens its breakdown: every card up to the failure, the strip’s mean, no hide toggle', () => {
     mountApp()
     switchTo('A')
     click('Begin') //  Allow Mistakes off (the default) → one wrong ends the run
-    tick(1000)
-    answerWrong()
+    tick(2000)
+    const solved = readDate()
+    answerCorrect() //  a 2s solve
+    tick(3000)
+    const failed = readDate()
+    answerWrong() //    …and the run fails on the second card
     expect(ctrl('Reset')).toBeInTheDocument()
-    expect(opener('Show mean breakdown')).toBeNull()
-    // The toggle is still the strip's gesture here — which is exactly why the opener is gated on
-    // 'done' and not on "the run is over".
-    expect(isOffered(statCell('Mean'))).toBe(true)
-    expect(statCell('Mean').tagName).toBe('BUTTON')
+    expect(opener('Show mean breakdown')).not.toBeNull()
+    // The timing trio is no longer a toggle of its own — the whole strip is the opener now.
+    expect(statCell('Mean').tagName).not.toBe('BUTTON')
+    const stripMean = statValue('Mean')
+    expect(stripMean).toBe('2.00s')
+
+    tapStat('Mean')
+    const dlg = dialog('Mean Breakdown')
+    const r = rows(dlg)
+    expect(r).toHaveLength(2) //  the solved card and the card that failed the run
+    expect(r[0].textContent).toContain('2.00s')
+    expect(r[1].textContent).toContain('missed')
+    expect(r[1].textContent).toContain('—') //  untimed: it contributed nothing to the mean
+    // The rows are those two cards, in order — read by their weekdays, the one thing a row says that
+    // the test can compute independently of the panel.
+    expect(r.map((li) => li.querySelector('.sr-only').textContent)).toEqual([
+      correctName(solved),
+      correctName(failed),
+    ])
+    expect(figure(dlg, 'Solves')).toBe('1/2')
+    expect(figure(dlg, 'Mean')).toBe(stripMean)
+  })
+
+  it('each row reads number, weekday letter, date, word, time — and the letter speaks its full name', () => {
+    finishedMo2()
+    tapStat('Score')
+    const r = rows(dialog('Mean Breakdown'))
+    for (const li of r) {
+      const parts = Array.from(li.children)
+      const [num, day, date] = parts
+      const time = parts[parts.length - 1]
+      expect(num.textContent).toBe(`${li.dataset.solveRow}.`)
+      // The letter is aria-hidden and the sr-only sibling names the SAME day, index for index.
+      const glyph = day.querySelector('[aria-hidden="true"]')
+      const name = day.querySelector('.sr-only').textContent
+      expect(DAY_LETTER[DAY.indexOf(name)]).toBe(glyph.textContent)
+      expect(date.textContent).toMatch(/^-?\d+-\d+-\d+$/)
+      // …and it is the weekday of THIS row's date, not merely a letter that matches its own label.
+      const [y, m, d] = date.textContent.split('-').map(Number)
+      expect(name).toBe(correctName({ y, m, d }))
+      // The time is the LAST thing on the row, and the accent word (Mo2's two rows are the fastest and
+      // the slowest) sits immediately before it.
+      expect(time.textContent).toMatch(/^\d+\.\d{2}s$/)
+      expect(parts[parts.length - 2].textContent).toBe(li.dataset.solveAccent)
+    }
   })
 
   it('with Save Stats off a finished run offers nothing — the strip is showing dashes', () => {

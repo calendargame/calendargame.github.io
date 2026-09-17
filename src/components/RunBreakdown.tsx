@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { FmtDate } from '../modes/modeTypes.js'
+import { DAY, DAY_LETTER } from '../lib/format.js'
 import type { RunBreakdown as RunBreakdownData, SolveMark } from '../engine/runBreakdown.js'
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
@@ -14,14 +15,23 @@ import {
 } from './modalContract.js'
 
 // ─────────────────────────────────────────────────────────────────────────
-// components/RunBreakdown — a finished run or round, solve by solve.
+// components/RunBreakdown — an ended run or round, solve by solve.
 //
-// Opened by TAPPING ANYWHERE ON THE STAT STRIP once a MoX run is done or a Blitz round has ended
-// (StatPanel's onActivate). That gesture is free: on a finished run every stat box is already inert
-// — MoX drops its timing toggle on `runComplete` and Blitz on `timerDone`, both because an ended
-// strip is a result readout rather than a control — so the strip had a tap going spare and no
-// competing meaning. It is also the right place for it: the thing you tap to see the solves is the
-// thing showing you the number they add up to.
+// Opened by TAPPING ANYWHERE ON THE STAT STRIP once a MoX run has ENDED — completed or failed — or a
+// Blitz round has ended (StatPanel's onActivate). That gesture is free: on an ended run every stat
+// box is already inert — MoX drops its timing toggle on `isLocked` and Blitz on `timerDone`, both
+// because an ended strip is a result readout rather than a control — so the strip had a tap going
+// spare and no competing meaning. It is also the right place for it: the thing you tap to see the
+// solves is the thing showing you the number they add up to.
+//
+// ★ THE ROW, left to right (round 22):   12.  R  2024-1-4      fastest   2.00s
+//   • the card's NUMBER — fixed width, so the letters line up behind it;
+//   • the WEEKDAY LETTER (lib/format's DAY_LETTER — U M T W R F S) that date fell on, under the
+//     card's own calendar snapshot (engine/runBreakdown computes it). Fixed width too, so the dates
+//     line up behind it. A screen reader hears the full day name instead (see the row);
+//   • the DATE, in the card's own `_fmt`, taking whatever width is left;
+//   • the WORDS — fastest/slowest, and missed/shown/overridden — each LEFT of the time it labels;
+//   • the TIME, last, right-aligned in a minimum-width column, so every row's time ends on one edge.
 //
 // ★ IT LIVES AND DIES WITH THE SCREEN. No persistence, no new saved data, no migration (the owner's
 // call): it is built fresh from the engine state every time it opens, and it is gone the moment
@@ -156,28 +166,54 @@ export default function RunBreakdown({
             >
               {/* The card's own number — the same figure the Q# badge shows on this run, so a row
                   and the card it names can be matched by eye. Fixed width + tabular-nums so three
-                  digits do not shove the dates out of column. */}
+                  digits do not shove the letters and dates out of column. */}
               <span className="w-8 shrink-0 tabular-nums text-(--mut-color)">{r.n}.</span>
+              {/* THE WEEKDAY, as one letter (lib/format's DAY_LETTER — How to Play's breakdown notes
+                  carry the key). Beside the date and BEFORE it, the way a written date leads with its
+                  day ("Thu, 4 Jan"), and in a fixed-width, centred box: the letters are not equally
+                  wide (W against R), and a content-sized box would stagger every date after it.
+                  The box is PresetManager's ✓ column, class for class, for the same reason.
+                  ⚠ THE LETTER IS aria-hidden AND THE FULL NAME IS sr-only — the idiom every quiet
+                  marker in this app uses (that ✓, the switcher's amnesic "A", the footer's Changelog
+                  dot). "R" read aloud names nothing; "Thursday" is what the letter says. */}
+              <span className="w-3 shrink-0 text-center text-(--mut-color)">
+                <span aria-hidden="true">{DAY_LETTER[r.wday]}</span>
+                <span className="sr-only">{DAY[r.wday]}</span>
+              </span>
               <span className="flex-1 min-w-0 text-(--tx-100-80)">
                 {fmtDate(r.question.y, r.question.m, r.question.d, r.question._fmt)}
               </span>
-              {/* ⚠ whitespace-nowrap, for the reason every other time readout in the app carries it:
-                  since the em-dash ceiling came off the formatters a long solve reads "1m 2.34s",
-                  and that space is a line-break opportunity that would split one number across two
-                  lines in this narrow column. A dash here means the card contributed no time — a
-                  miss, or a correct answer that came after a wrong one. */}
-              <span className="shrink-0 tabular-nums whitespace-nowrap text-(--tx-200-80)">
-                {truncTime(r.time)}
-              </span>
-              {/* THE QUIET ACCENT on the fastest and the slowest solve — the honest stand-in for
+              {/* THE WORDS SIT LEFT OF THE TIME, because each one LABELS the number after it — the
+                  owner's call, and it reads the way a stat line does ("fastest 2.00s").
+                  THE QUIET ACCENT on the fastest and the slowest solve is the honest stand-in for
                   "trimmed" in an app that does not trim: it points at the two solves a trimmed
                   average would have thrown away, and then keeps them in the mean, which is exactly
                   what this mode does. A WORD, not a colour: a colour alone says nothing to a screen
                   reader and nothing to a colour-blind player, and this panel's whole job is to be
-                  checkable. Neither is drawn when every time is identical — see runBreakdown. */}
+                  checkable. Neither is drawn when every time is identical — see runBreakdown.
+                  ★ THE MARK (missed/shown/overridden) GOES ON THE SAME SIDE, and for the same reason
+                  rather than for symmetry: it labels the value after it too — almost always the dash,
+                  where it answers "why is there no time here?". Leaving it trailing would also have
+                  made it the one thing on the row's right edge that is not the time, which is exactly
+                  the edge the time column is aligned on; with every word on the left, that edge
+                  belongs to the times alone, whichever words a row carries. */}
               {i === fastestIdx && <span className="shrink-0 text-(--mut-color)">fastest</span>}
               {i === slowestIdx && <span className="shrink-0 text-(--mut-color)">slowest</span>}
               {r.mark && <span className="shrink-0 text-(--mut-color)">{MARK_WORDS[r.mark]}</span>}
+              {/* THE TIME, LAST AND RIGHT-ALIGNED, so the times form one column down the list: the
+                  date before them is flex-1, which pins every time's right edge to the row's.
+                  min-w-[6ch] gives the short values — a dash, a sub-ten-second "2.00s" — the width of
+                  a two-digit-second time, so the WORDS beside them line up as well instead of
+                  sliding right towards a narrow dash; only a time of a minute or more outgrows it.
+                  (`ch` is the width of a "0", and tabular-nums sets every digit to that width.)
+                  ⚠ whitespace-nowrap, for the reason every other time readout in the app carries it:
+                  since the em-dash ceiling came off the formatters a long solve reads "1m 2.34s",
+                  and that space is a line-break opportunity that would split one number across two
+                  lines in this narrow column. A dash here means the card contributed no time — a
+                  miss, or a correct answer that came after a wrong one. */}
+              <span className="shrink-0 min-w-[6ch] text-right tabular-nums whitespace-nowrap text-(--tx-200-80)">
+                {truncTime(r.time)}
+              </span>
             </li>
           ))}
         </ul>

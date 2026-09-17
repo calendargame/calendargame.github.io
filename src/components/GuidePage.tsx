@@ -9,7 +9,7 @@ import {
 } from 'react'
 import Expander from './Expander.jsx'
 import { Kbd, SectionLabel, SECTION_LABEL_CLASS } from './primitives.jsx'
-import { DAY } from '../lib/format.js'
+import { DAY, DAY_LETTER } from '../lib/format.js'
 import { DOT_CELLS, dotOrientationFor } from '../lib/dotLayout.js'
 import { selectionSuppressesToggle } from '../lib/selectionGuard.js'
 import { useSettings } from '../store/settings.js'
@@ -1113,32 +1113,55 @@ export default function GuidePage({
         </p>
         <Subhead>The breakdown (Blitz, MoX)</Subhead>
         <p>
-          When a MoX run finishes or a Blitz round ends, tap <i>anywhere</i> on the stats strip to
-          see that run or round solve by solve. A summary sits at the top — solves, accuracy, mean,
-          median, fastest, slowest, and the spread between the fastest and the slowest — over a
-          scrolling list of every date you were asked, in order, with its number and its time.
+          When a MoX run ends — whether you completed it or it failed — or a Blitz round ends, tap{' '}
+          <i>anywhere</i> on the stats strip to see that run or round solve by solve. A failed run
+          shows every date up to and including the one that ended it, and its mean is the mean of
+          the solves you did make. A summary sits at the top — solves, accuracy, mean, median,
+          fastest, slowest, and the spread between the fastest and the slowest — over a scrolling
+          list of every date you were asked, in order. Each row reads, left to right: its number,
+          the day of the week that date fell on (as one letter — the key is below), the date, any
+          note about it, and its time, with the times lined up in a column on the right.
         </p>
         <UL>
           <li>
-            <b>The fastest and the slowest are marked.</b> Those are the two a <i>trimmed</i>{' '}
-            average would throw away. This app does not trim — every solve counts toward the mean —
-            so they are pointed out and then counted like any other.
+            <b>The day letters.</b> Each weekday gets a single letter, chosen so no two days share
+            one — Thursday is R and Sunday is U, keeping them apart from Tuesday&apos;s T and
+            Saturday&apos;s S. It is the day under the calendar that date was asked in, so a Julian
+            date shows its Julian weekday.
+            {/* THE KEY, rendered FROM lib/format's DAY_LETTER + DAY rather than typed out, so it
+                cannot disagree with the letters the rows print. A <dl> because it IS a list of
+                term → meaning pairs, which is also how a screen reader announces it; each pair
+                wraps as a unit on a narrow phone. */}
+            <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+              {DAY_LETTER.map((letter, i) => (
+                <div key={letter} className="whitespace-nowrap">
+                  <dt className="inline font-semibold">{letter}</dt>{' '}
+                  <dd className="inline">{DAY[i]}</dd>
+                </div>
+              ))}
+            </dl>
           </li>
           <li>
-            <b>A solve that didn't count is marked too</b> — <i>missed</i> if you picked a wrong
-            day, <i>shown</i> if the answer was put on screen for you (Reveal, Show Codes, or a
-            Blitz clock running out), or <i>overridden</i> if you took a credit back. A date with a
-            dash instead of a time contributed nothing to the mean: a miss, or a correct answer that
-            came after a wrong one.
+            <b>The fastest and the slowest are marked</b>, with the word just before the time it
+            describes. Those are the two a <i>trimmed</i> average would throw away. This app does
+            not trim — every solve counts toward the mean — so they are pointed out and then counted
+            like any other.
+          </li>
+          <li>
+            <b>A solve that didn't count is marked too</b>, in the same place — <i>missed</i> if you
+            picked a wrong day, <i>shown</i> if the answer was put on screen for you (Reveal, Show
+            Codes, or a Blitz clock running out), or <i>overridden</i> if you took a credit back. A
+            date with a dash instead of a time contributed nothing to the mean: a miss, or a correct
+            answer that came after a wrong one.
           </li>
           <li>
             <b>The list always adds up to the mean above it.</b> The summary is worked out from the
             rows themselves, not from a second running total, so the two cannot drift apart — and an
-            Override on a finished run moves the rows and the mean together.
+            Override on an ended run moves the rows and the mean together.
           </li>
           <li>
-            <b>It isn't saved.</b> The breakdown exists for as long as the finished run or round is
-            on screen; Reset clears it along with everything else, and nothing about it persists
+            <b>It isn't saved.</b> The breakdown exists for as long as the ended run or round is on
+            screen; Reset clears it along with everything else, and nothing about it persists
             between visits.
           </li>
         </UL>
@@ -1150,12 +1173,12 @@ export default function GuidePage({
           numbers reappear. There is no pause and no "Enable and Reset Stats?" step, since hiding
           can never cause a desync. Score and Accuracy always stay visible, along with Streak
           wherever the mode shows it — the score is the whole point of these modes. In both modes
-          hiding quiets the trio only while play is going: a finished MoX run and an ended Blitz
-          round always show their times, and there the three boxes stop toggling — what you are
-          looking at is the result, not a control. A tap on the finished strip does something else
-          instead: it opens the breakdown of that run or round, solve by solve (see below). Your
-          hide setting is not forgotten, only set aside; it applies again the moment the next round
-          or run starts.
+          hiding quiets the trio only while play is going: a MoX run that has ended — completed or
+          failed — and an ended Blitz round always show their times, and there the three boxes stop
+          toggling — what you are looking at is the result, not a control. A tap on the ended strip
+          does something else instead: it opens the breakdown of that run or round, solve by solve
+          (see above). Your hide setting is not forgotten, only set aside; it applies again the
+          moment the next round or run starts.
         </p>
       </GuideSection>
       <GuideSection
@@ -2440,8 +2463,8 @@ export default function GuidePage({
           </li>
           <li>
             <b>Last / Mean / Med</b> — tap any of these to show or hide all three time stats. Hiding
-            is visual only: your times keep recording, the clock never stops, and a finished run
-            always shows its result.
+            is visual only: your times keep recording, the clock never stops, and a run that has
+            ended — completed or failed — always shows its times.
           </li>
         </UL>
         <Subhead>Back / Forward and Override</Subhead>
@@ -2498,11 +2521,13 @@ export default function GuidePage({
         </p>
         <Subhead>Mean Breakdown</Subhead>
         <p>
-          Once a run is finished, tapping anywhere on the stats strip opens the run solve by solve —
-          the numbers behind the mean, with the fastest and slowest marked and any solve that didn't
-          count called out. It's described in full under Stats. It's available while the finished
-          run is on screen, and only when Save Stats is on: with Save Stats off the strip is showing
-          dashes, and it won't hand over numbers it is declining to display.
+          Once a run has ended — completed, or failed on a mistake — tapping anywhere on the stats
+          strip opens the run solve by solve: the numbers behind the mean, each date with its day of
+          the week, the fastest and slowest marked, and any solve that didn't count called out. A
+          failed run lists every date up to the one that ended it. It's described in full under
+          Stats. It's available while the ended run is on screen, and only when Save Stats is on:
+          with Save Stats off the strip is showing dashes, and it won't hand over numbers it is
+          declining to display.
         </p>
       </GuideSection>
       <GuideSection

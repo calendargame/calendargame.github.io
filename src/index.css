@@ -191,14 +191,19 @@
         (round 13 — the reversal is argued at `switchMode` in main.tsx).
      3. Inner scrollables (settings popover inner, Lookup history, the Save Defaults
         card): also use overscroll-contain for the same reason.
-   Why the bar is position:fixed (not sticky or a flex item): iOS PWA samples
-   the status bar color from the topmost fixed/sticky element with its own
-   background. The bar being explicitly position:fixed with bg-[var(--bg1)]
-   (a theme-aware CSS variable) means iOS re-samples the bar's bg whenever the
-   theme changes, so the status bar / URL bar tinting updates live. A plain
-   flex child without explicit positioning does NOT give iOS this cue, so it
-   falls back to the theme-color meta tag, which iOS PWA reads only at launch
-   and never updates on JS changes. */
+   Why the bar is position:fixed (not sticky or a flex item): the structure
+   above needs it. #appScroll fills the whole of #root (inset:0) and pads its
+   own content down by --bar-h, so the bar has to be out of flow to lie over
+   that padding; and being outside the scroller keeps it out of the bounce
+   (2 above) — a sticky bar would live inside the box that rubber-bands.
+   ⚠ WHAT THIS NOTE NO LONGER CLAIMS (round 22). It used to add that iOS home-
+   screen apps take the status bar's colour from the topmost fixed element's
+   background and read <meta name="theme-color"> only at launch — while
+   main.tsx asserted the opposite (that iOS tints from theme-color live). Neither
+   was sourced, and they could not both be true. How the status bar is actually
+   coloured, what is researched (with the WebKit bug numbers), and what is still
+   unverified on a real device now live in ONE place: the ★★ status-bar note
+   above App's theme effect in src/main.tsx. Do not restate it here. */
 /* Initial default for --bar-h (the fixed top bar's height) so the FIRST paint already reserves
    the bar's space. Without it, padding-top:var(--bar-h) resolves to 0 on first paint and the
    content jumps down ~57px the moment the JS ResizeObserver measures the bar and writes --bar-h

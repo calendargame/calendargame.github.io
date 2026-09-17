@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 // format.js — date display: month/day names + the date-string formatters
 //
-// The presentation layer for dates: the MONTH / DAY name tables and the
+// The presentation layer for dates: the MONTH / DAY / DAY_LETTER name tables and the
 // helpers that turn a (year, month, day) triple into the visible string in
 // each supported format. Pure string work — no calendar math (that lives in
 // calendar.js) and no app state.
@@ -25,6 +25,18 @@ export const MONTH = [
   'December',
 ]
 export const DAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+// The ONE-LETTER weekday, index-aligned with DAY (0 = Sunday), for places too narrow for a name —
+// today the run breakdown's rows (components/RunBreakdown). U M T W R F S: the M-T-W-R-F school
+// timetable convention, which spends R on Thursday so it never collides with Tuesday's T, and U on
+// Sunday so it never collides with Saturday's S. Every letter is therefore distinct, which is the
+// whole requirement — a lone letter that could mean two days is no label at all. Defined once here,
+// beside the names it abbreviates, because the owner's parked Mini-mode idea (PROJECT.md's Super
+// Backlog) is on record with exactly this array for its seven answer buttons, and a second copy
+// would be a second place to disagree. How to Play's key (the Stats section's breakdown notes) is
+// rendered FROM this array and DAY, so it cannot drift — though its prose names R and U by hand.
+// ⚠ A letter is never the accessible form: whoever renders one also renders DAY[i] for a screen
+// reader, because "R" read aloud means nothing.
+export const DAY_LETTER = ['U', 'M', 'T', 'W', 'R', 'F', 'S']
 // The five reachable date-format IDs, and the three date pieces a Deduction puzzle can hide.
 // Shared across the app (date objects stamp a _fmt: FormatId; settings store the active one).
 export type FormatId = 'written-mdy' | 'written-dmy' | 'numeric-mdy' | 'numeric-dmy' | 'numeric-ymd'

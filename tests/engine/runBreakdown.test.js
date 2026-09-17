@@ -7,8 +7,12 @@
 // including all five Override paths, because Override is where this app's hardest bugs live and it
 // is the only thing that can move a time from one card to another (or take one away).
 //
-// CLAIM 2: the rows are the run, in order, and each one says what it is — its number, its date, its
-// time, and a mark when it earned nothing.
+// CLAIM 2: the rows are the run, in order, and each one says what it is — its number, its date, the
+// weekday that date fell on (under the card's OWN calendar snapshot), its time, and a mark when it
+// earned nothing.
+//
+// CLAIM 3 (round 22): a FAILED MoX run is a run like any other — every way a run can fail leaves the
+// failing card as its last row, marked and untimed, with the rows still reconciling to the mean.
 //
 // The engine-level tripwire for claim 1 lives in checkGameInvariants ('times ledger'), which the
 // fuzz survey drives across millions of generated games; these are the named, readable cases.
@@ -17,7 +21,7 @@ import { gameReducer, initEngine } from '../../src/engine/gameReducer.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { buildRunBreakdown } from '../../src/engine/runBreakdown.js'
 import { calcAvg, calcMed } from '../../src/engine/stats.js'
-import { wday } from '../../src/lib/calendar.js'
+import { wday, wdayJulian } from '../../src/lib/calendar.js'
 
 const D1 = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
 const D2 = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
@@ -54,7 +58,7 @@ const forward = (s) => gameReducer(s, { type: 'FORWARD', useJulian: false })
 const sorted = (a) => [...a].sort((x, y) => x - y)
 function expectReconciles(state) {
   expect(checkGameInvariants(state, false)).toEqual([])
-  const b = buildRunBreakdown(state)
+  const b = buildRunBreakdown(state, false) //  every fixture date is stamped, so the fallback is moot
   const rowTimes = b.rows.map((r) => r.time).filter((t) => t != null)
   expect(sorted(rowTimes)).toEqual(sorted(state.stats.times))
   expect(b.summary.mean).toBe(calcAvg(state.stats.times))
@@ -75,6 +79,7 @@ describe('runBreakdown — a clean run', () => {
     expect(b.rows.map((r) => r.n)).toEqual([1, 2, 3])
     expect(b.rows.map((r) => r.time)).toEqual([2, 4, 6])
     expect(b.rows.map((r) => r.question.d)).toEqual([D1.d, D2.d, D3.d])
+    expect(b.rows.map((r) => r.wday)).toEqual([cor(D1), cor(D2), cor(D3)])
     expect(b.rows.every((r) => r.credited && r.mark === null)).toBe(true)
     expect(b.summary).toMatchObject({
       solves: 3,
@@ -238,5 +243,108 @@ describe('runBreakdown — cards that were never played are never rows', () => {
     const b = expectReconciles(s)
     expect(b.rows).toHaveLength(1)
     expect(b.rows[0]).toMatchObject({ credited: false, mark: 'shown', time: null })
+  })
+})
+
+describe('runBreakdown — the weekday on each row', () => {
+  // ★ October 14, 1066 (Hastings) is the historical case the snapshot exists for: a Saturday on the
+  // Julian calendar it was fought under, and a different day entirely on the proleptic Gregorian one.
+  // The two are asserted to DIFFER first, so the case cannot pass by the two calendars agreeing.
+  const HASTINGS = { y: 1066, m: 10, d: 14, _fmt: 'numeric-ymd' }
+  it('a pre-1582 date reads under the calendar it was ASKED in — its own _jul, not the setting', () => {
+    expect(wdayJulian(1066, 10, 14)).toBe(6) //                         Saturday, as history has it
+    expect(wday(1066, 10, 14)).not.toBe(6) //                            …and proleptic Gregorian disagrees
+    const jul = { ...HASTINGS, _jul: true }
+    const greg = { ...HASTINGS, _jul: false }
+    // Julian card: its weekday is the Julian one EVEN WITH THE FALLBACK SAYING GREGORIAN.
+    let s = answer(initEngine(jul), wdayJulian(1066, 10, 14), 2, D2, { useJulian: true })
+    expect(buildRunBreakdown(s, false).rows[0].wday).toBe(6)
+    // Gregorian card: the Gregorian weekday EVEN WITH THE FALLBACK SAYING JULIAN.
+    s = answer(initEngine(greg), wday(1066, 10, 14), 2, D2)
+    expect(buildRunBreakdown(s, true).rows[0].wday).toBe(wday(1066, 10, 14))
+  })
+
+  it('one run can hold both systems, and each row keeps its own', () => {
+    let s = answer(
+      initEngine({ ...HASTINGS, _jul: true }),
+      6,
+      2,
+      { ...HASTINGS, _jul: false },
+      {
+        useJulian: true,
+      },
+    )
+    s = answer(s, wday(1066, 10, 14), 3, D2)
+    const b = buildRunBreakdown(s, false)
+    expect(b.rows.map((r) => r.wday)).toEqual([6, wday(1066, 10, 14)])
+  })
+
+  it('a card generated WITHOUT a stamp falls back to the mode’s live setting', () => {
+    // A mode mounted on its bare randomDate default generates {y,m,d} with no _jul; the caller's
+    // setting is then the only answer there is — the same `_jul ?? useJulian` the codes panels use.
+    const s = answer(initEngine(HASTINGS), wdayJulian(1066, 10, 14), 2, D2, { useJulian: true })
+    expect(buildRunBreakdown(s, true).rows[0].wday).toBe(6)
+    expect(buildRunBreakdown(s, false).rows[0].wday).toBe(wday(1066, 10, 14))
+  })
+
+  it('a post-1582 date reads the same under either system — Julian has no say there', () => {
+    const s = answer(initEngine({ ...D1, _jul: true }), cor(D1), 2, D2)
+    expect(buildRunBreakdown(s, false).rows[0].wday).toBe(wday(D1.y, D1.m, D1.d))
+  })
+})
+
+// ★ CLAIM 3. MoX with Allow Mistakes OFF fails a run four ways (modes/AoxMode): a wrong answer (the
+// mode then dispatches LOCK_REVEAL to show the answer), a Reveal, a Show Codes, and an Override that
+// takes back the run's completing solve. The engine sequences below are the ones those handlers
+// dispatch. In every one the failing card is the LAST row, untimed and marked for how it failed, and
+// the mean is the mean of the solves that came before it — the breakdown the owner asked a failed run
+// to open.
+describe('runBreakdown — a FAILED MoX run', () => {
+  it('failed on a wrong answer: the wrong card is the last row, marked missed', () => {
+    let s = answer(initEngine(D1), cor(D1), 2, D2)
+    s = answer(s, cor(D2), 4, D3)
+    s = answer(s, wrong(D3), 6, D4) //                     the run fails here…
+    s = gameReducer(s, { type: 'LOCK_REVEAL', useJulian: false }) //  …and the answer is shown
+    const b = expectReconciles(s)
+    expect(b.rows.map((r) => r.time)).toEqual([2, 4, null])
+    expect(b.rows[2]).toMatchObject({ n: 3, credited: false, mark: 'wrong' })
+    expect(b.summary).toMatchObject({ solves: 2, cards: 3, mean: 3 })
+  })
+
+  it('failed on a Reveal: the revealed card is the last row, marked shown', () => {
+    let s = answer(initEngine(D1), cor(D1), 2, D2)
+    s = reveal(s, 5)
+    const b = expectReconciles(s)
+    expect(b.rows).toHaveLength(2)
+    expect(b.rows[1]).toMatchObject({ credited: false, mark: 'shown', time: null })
+    expect(b.summary.mean).toBe(2)
+  })
+
+  it('failed on a Show Codes: the card is the last row, marked shown', () => {
+    let s = answer(initEngine(D1), cor(D1), 2, D2)
+    s = showCodes(s, 5)
+    const b = expectReconciles(s)
+    expect(b.rows).toHaveLength(2)
+    expect(b.rows[1]).toMatchObject({ credited: false, mark: 'shown', time: null })
+  })
+
+  it('failed on an Override of the completing solve: that card is the last row, marked overridden', () => {
+    let s = answer(initEngine(D1), cor(D1), 2, D2)
+    s = answer(s, cor(D2), 8, D3, { complete: true })
+    s = override(s, D3, { noAdvance: true }) //  AoxMode's failNow path: reverse the held Nth, stay put
+    const b = expectReconciles(s)
+    expect(b.rows.map((r) => r.time)).toEqual([2, null])
+    expect(b.rows[1]).toMatchObject({ credited: false, mark: 'override' })
+    expect(b.summary).toMatchObject({ solves: 1, cards: 2, mean: 2 })
+  })
+
+  it('a run that fails on its FIRST card is one row with no mean — still a breakdown, not an error', () => {
+    let s = answer(initEngine(D1), wrong(D1), 3, D2)
+    s = gameReducer(s, { type: 'LOCK_REVEAL', useJulian: false })
+    const b = expectReconciles(s)
+    expect(b.rows).toHaveLength(1)
+    expect(b.rows[0]).toMatchObject({ mark: 'wrong', time: null })
+    expect(b.summary).toMatchObject({ solves: 0, cards: 1, mean: null, spread: null })
+    expect([b.fastestIdx, b.slowestIdx]).toEqual([null, null])
   })
 })

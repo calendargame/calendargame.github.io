@@ -86,8 +86,14 @@ const rootChainClasses = [
 
 // The JS half. Rather than enumerate banned property names (which dates the moment CSS adds
 // another containing-block trigger), pin the WHOLE SET of inline style properties the app ever
-// writes to <html> / <body>: two, both harmless. Anything new has to come here and be justified.
-const ALLOWED_INLINE_PROPS = ['background', '--bar-h']
+// writes to <html> / <body>: three, all harmless. Anything new has to come here and be justified.
+//   • background      — <html>'s theme stamp (index.html's boot script, App's theme effect).
+//   • --bar-h         — the top bar's measured height, a custom property on <html>.
+//   • backgroundColor — <body>'s scrimmed colour while a modal is up (round 22 Q7, the iOS 26
+//                       status-bar lever argued at App's theme effect). A colour cannot create a
+//                       containing block; it is listed rather than waved through so the set stays
+//                       closed.
+const ALLOWED_INLINE_PROPS = ['background', '--bar-h', 'backgroundColor']
 const srcFiles = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory()
@@ -160,7 +166,7 @@ describe('containing-block guard (Q8) — nothing may make html/body/#root the f
     ).toEqual([])
   })
 
-  it('JS writes only background and --bar-h inline on html/body — never a containing-block property', () => {
+  it('JS writes only background, --bar-h and backgroundColor inline on html/body — never a containing-block property', () => {
     expect(inlineWrites).toEqual([])
   })
 

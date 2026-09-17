@@ -103,7 +103,7 @@ function AoxMode({
   const oneByOne = useModePrefs((s) => s.aoxOneByOne),
     setOneByOne = useModePrefs((s) => s.setAoxOneByOne) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
-    setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — dims the LIVE mid-run trio, but a completed run always shows its result
+    setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
   // Round-21 Q11 — the ended run this (preset, mode) parked before its last unmount, read EXACTLY
   // ONCE at mount. On a preset switch the always-mounted screens remount (src/main.tsx
   // remountScreens) and usePresets' activeId is ALREADY the INCOMING preset by then — switchPreset
@@ -373,32 +373,49 @@ function AoxMode({
   const date = state.date
   // The timing trio (Last/Mean/Median) carries a VISUAL-ONLY hide toggle (Q8): tap any of the
   // three to blank them all. There is NO engine timingOff and NO reset arm — AoX always tracks
-  // (saveStats:true above), so hiding can never desync. Hiding suppresses only the LIVE mid-run
-  // trio; a COMPLETED run (runPhase "done") always shows its result regardless (the average is the
-  // point of the run) — there the trio is a plain result readout, not a toggle. Save Stats off
-  // drops the toggle, like the scoring trio. (Persisted as aoxTimingOff — excluded from the
-  // defaults system.)
+  // (saveStats:true above), so hiding can never desync. Hiding suppresses only the trio of a run
+  // that is STILL GOING; an ENDED run (`isLocked` — done OR failed) always shows its times regardless
+  // — there the trio is a plain result readout, not a toggle. Save Stats off drops the toggle, like
+  // the scoring trio. (Persisted as aoxTimingOff — excluded from the defaults system.)
   //
   // ★ `timeHidden` is the USER'S hide toggle and nothing else (C1, round 16), so it is what feeds
   // `off` below; the scoring trio (untoggleable in AoX) carries no `off` at all. The Save-Stats fact
   // is `dimmed` on the panel: one flag, whole strip. See the three-signal note in StatPanel.
-  const runComplete = runPhase === 'done'
-  const timeHidden = timingOff && !runComplete
-  const tFn = saveStats && !runComplete ? () => setTimingOff((v) => !v) : null
+  //
+  // ★★ A FAILED RUN IS AN ENDED RUN (round 22 — the owner: a failed run should still open its
+  // breakdown). Until then this line keyed on 'done' alone and a failed run kept its live hide
+  // toggle, which is exactly what stood in the breakdown's way: StatPanel IGNORES every per-cell `fn`
+  // once it is given an `onActivate` (a button inside a button is invalid HTML), so wiring the opener
+  // to a failed run while `tFn` stayed live would have silently deleted the toggle AND left a player
+  // who had hidden the trio looking at three blank boxes on a result screen, with no tap left that
+  // could reveal them. The one coherent end state is the one Blitz already had for a lost round —
+  // Blitz's `timerDone` covers a sudden-death loss, and its note argues the masking at length: the
+  // ended strip shows its times, takes no per-cell tap, and its one gesture opens the breakdown. So
+  // the two sibling modes now agree about a run that ended badly exactly as they agree about one
+  // that ended well. The pref is only MASKED here, never written: an Override that credits the
+  // failing wrong resumes the run (`runPhase` back to 'running') and the hide the player chose is
+  // back, untouched.
+  // `isLocked` is the flag, used directly rather than through a second name: it is defined as
+  // done || failed, which is precisely "this run has ended", and a separate `runEnded` would be the
+  // same boolean spelled twice.
+  const timeHidden = timingOff && !isLocked
+  const tFn = saveStats && !isLocked ? () => setTimingOff((v) => !v) : null
   // ── THE RUN BREAKDOWN (sub-group 3C) ────────────────────────────────────────────────────────
-  // Tapping ANYWHERE on the stat strip of a COMPLETED run opens the solve-by-solve breakdown.
+  // Tapping ANYWHERE on the stat strip of an ENDED run — completed or failed — opens the
+  // solve-by-solve breakdown.
   //
-  // ★ WHY THE GESTURE IS FREE, verified rather than assumed: on a completed run every one of the
-  // six boxes is already inert — the scoring trio never had an `fn`, and the timing trio's `tFn`
-  // goes null on `runComplete` one line above (an ended strip is a result readout, not a control).
-  // So the strip had a tap going spare and no competing meaning to displace. StatPanel enforces the
-  // exclusivity structurally: given an `onActivate` it ignores every per-cell `fn`, so this can
-  // never become a button inside a button even if that line above changes.
+  // ★ WHY THE GESTURE IS FREE, verified rather than assumed: on an ended run every one of the six
+  // boxes is already inert — the scoring trio never had an `fn`, and the timing trio's `tFn` goes
+  // null on `isLocked` just above (an ended strip is a result readout, not a control). So the strip
+  // has a tap going spare and no competing meaning to displace. StatPanel enforces the exclusivity
+  // structurally: given an `onActivate` it ignores every per-cell `fn`, so this can never become a
+  // button inside a button even if that line above changes.
   //
-  // ⚠ 'done' AND NOT 'failed', which is `runComplete` and not `isLocked`. A FAILED run keeps its
-  // hide toggle (`tFn` is live there — see `timeHidden` above), so wiring the opener to it would
-  // silently take the toggle away, and it has no completed mean to break down. `isLocked` is the
-  // wrong flag here even though it reads like the right one.
+  // ★ A FAILED RUN'S BREAKDOWN IS THE RUN UP TO THE FAILURE, and nothing had to be built for it:
+  // engine/runBreakdown is a pure walk of the engine state, and the card that failed the run took
+  // its `played` increment at the action that failed it — so it is the last row, marked (missed,
+  // shown, or overridden) and untimed, and the summary's mean is the mean of what WAS solved, the
+  // same number the strip prints. (tests/engine/runBreakdown pins each way a run can fail.)
   //
   // ⚠ AND IT IS GATED ON saveStats. With Save Stats off the strip is dimmed and every value reads
   // '—' — the app saying "nothing is being recorded". A door on that strip leading to the real
@@ -410,7 +427,7 @@ function AoxMode({
   // run left finished on screen and then a keyboard mode-switch (the shortcut keys still fire while
   // the panel is up) would leave this card floating over a different mode. Gating availability on
   // `visible` unmounts it with the screen it belongs to, which also pops its overlay registration.
-  const breakdownAvail = runComplete && saveStats && visible
+  const breakdownAvail = isLocked && saveStats && visible
   const breakdownShown = breakdownOpen && breakdownAvail
 
   // Handlers.
@@ -505,9 +522,9 @@ function AoxMode({
       // reversing the completing solve resumes it too. Both used to call this identical setter
       // separately; merging them changes no behaviour.
       setRunPhase('running')
-      // ⚠ THE BREAKDOWN BELONGS TO THE RUN THAT FINISHED, and this is the one door that puts a
-      // FINISHED run back on the clock (Blitz's resumeRound is the same door in that mode, with the
-      // same line). `breakdownShown` ANDs the flag with availability, so the popup is already gone
+      // ⚠ THE BREAKDOWN BELONGS TO THE RUN THAT ENDED, and this is the one door that puts an ENDED
+      // run — a failed one via its credited wrong, or a completed one via its reversed final solve —
+      // back on the clock (Blitz's resumeRound is the same door in that mode, with the same line). `breakdownShown` ANDs the flag with availability, so the popup is already gone
       // from the screen the instant the run is live again — but the FLAG would survive, and the
       // next time this run completed the breakdown would spring open with nobody having asked for
       // it. Belt and braces: the only route into this state with the popup up was App's keyboard
@@ -773,8 +790,8 @@ function AoxMode({
       </div>
       {/* THE RUN BREAKDOWN, mounted only while it is up (the component has no `open` prop — see its
           header), so the walk over the run's history costs nothing on any other render. `data` is
-          rebuilt on each render while it IS up, which is what keeps it live: an Override on a
-          finished run moves the mean, and the rows move with it because they ARE the mean's parts.
+          rebuilt on each render while it IS up, which is what keeps it live: an Override on an
+          ended run moves the mean, and the rows move with it because they ARE the mean's parts.
           ⚠ `breakdownShown` and not `breakdownOpen`: the flag is ANDed with availability so the
           panel cannot outlive the state that justified it. Nothing behind a full-screen scrim is
           reachable, so in practice the run cannot change underneath it — this is the guard for the
@@ -782,7 +799,7 @@ function AoxMode({
       {breakdownShown && (
         <RunBreakdown
           onClose={() => setBreakdownOpen(false)}
-          data={buildRunBreakdown(state)}
+          data={buildRunBreakdown(state, useJulian)}
           fmtDate={fmtDate}
           title="Mean Breakdown"
         />

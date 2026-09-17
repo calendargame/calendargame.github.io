@@ -1,10 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────
-// engine/runBreakdown.ts — a finished run/round, solve by solve.
+// engine/runBreakdown.ts — an ended run/round, solve by solve.
 //
-// Pure: (GameState) => the ordered list of cards that were PLAYED, each with the date it asked, the
-// second it is contributing to the mean, and whether it earned its point — plus the summary line
-// the popup prints above them (components/RunBreakdown). No React, no app state, no formatting;
-// the caller owns every string.
+// Pure: (GameState, the calendar-system fallback) => the ordered list of cards that were PLAYED,
+// each with the date it asked, the weekday that date fell on, the second it is contributing to the
+// mean, and whether it earned its point — plus the summary line the popup prints above them
+// (components/RunBreakdown). No React, no app state, no formatting; the caller owns every string.
+//
+// ★ A FAILED MoX RUN IS A RUN LIKE ANY OTHER HERE (round 22). Nothing in this file ever asked how the
+// run ended: the walk below reads the stacks and the live card, and a run that failed on a wrong
+// answer, a Reveal, a Show Codes or a failing Override leaves those in exactly the shape the ledger
+// arguments describe — the failing card took its `played` increment at the action that failed it,
+// so it is a row, marked, and untimed. tests/engine/runBreakdown pins each failure path.
 //
 // ★ THE SUMMARY IS COMPUTED FROM THE ROWS, and that is the whole design, not an implementation
 // detail. The obvious alternative — print `calcAvg(state.stats.times)` at the top and list the rows
@@ -36,7 +42,7 @@
 // it is a per-question `missKind` set at REVEAL / SHOW_CODES / TIMEOUT_MISS and carried by advance()
 // exactly the way `solveTime` is — the ledger built here is the pattern to copy.
 // ─────────────────────────────────────────────────────────────────────────
-import { earnedCredit } from './gameReducer.js'
+import { activeWday, earnedCredit } from './gameReducer.js'
 import type { GameState, Question, StackEntry } from './gameReducer.js'
 import type { Btns } from './answerButtons.js'
 import { calcAvg, calcMed } from './stats.js'
@@ -50,6 +56,7 @@ export type SolveMark = 'wrong' | 'shown' | 'override' | null
 export interface BreakdownRow {
   n: number //             1-based position in the run — the card's own number, matching the Q# badge
   question: Question //    the date (or Deduction puzzle) this card asked, with its _fmt/_jul snapshot
+  wday: number //          0 = Sunday … 6 = Saturday: the weekday that date fell on, under ITS OWN _jul
   time: number | null //   the second this card contributes to the mean; null = it contributes none
   credited: boolean
   mark: SolveMark
@@ -144,7 +151,16 @@ const markOf = (btns: Btns): SolveMark => {
   return 'shown'
 }
 
-export function buildRunBreakdown(state: GameState): RunBreakdown {
+// ★ THE WEEKDAY IS READ UNDER THE CARD'S OWN CALENDAR SYSTEM — the `_jul` it was generated with —
+// and not under today's setting, for the same reason its date is printed in its own `_fmt`: a row
+// describes the question as it was ASKED. A pre-1582 date's Julian and proleptic-Gregorian weekdays
+// differ, so reading a Julian-era card under a since-flipped toggle would print a day that was never
+// the answer. (MoX and Blitz reset a run when Julian changes, so in practice every row of one run
+// shares a snapshot; the per-row read is what makes that an irrelevance rather than a dependency.)
+// `fallbackJulian` answers only for a card generated WITHOUT a stamp — App's genDate always stamps,
+// but a mode mounted on its bare `randomDate` default does not — and it is the mode's live setting,
+// the same `_jul ?? useJulian` fallback every mode's codes panel applies to a browsed-back card.
+export function buildRunBreakdown(state: GameState, fallbackJulian: boolean): RunBreakdown {
   // The run in order: the cards behind the one on screen, the one on screen, then the cards ahead of
   // it. forwardStack is stored nearest-LAST (BACK appends), so reversing it walks forward in time.
   const ordered: CardView[] = [
@@ -158,9 +174,11 @@ export function buildRunBreakdown(state: GameState): RunBreakdown {
   const rows: BreakdownRow[] = []
   for (const c of ordered) {
     if (!c.counted) continue //  a card nothing was recorded for was never played — not a row
+    const q = c.question
     rows.push({
       n: rows.length + 1,
-      question: c.question,
+      question: q,
+      wday: activeWday(q.y, q.m, q.d, q._jul ?? fallbackJulian),
       time: c.time,
       credited: c.credited,
       mark: c.credited ? null : markOf(c.btns),

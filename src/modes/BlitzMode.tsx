@@ -751,10 +751,11 @@ function BlitzMode({
   // single question's Per Question clock hitting 0, a wrong answer with Allow Mistakes off, Reveal,
   // Show Codes, opening ⚙ mid-round, and an override-to-wrong with Allow Mistakes off. So there is
   // no per-sub-mode branch to write here: one flag already means "this round is over" everywhere.
-  // It is also the flag the Best-reconcile effect gates on, which is what makes it AoX's 'done'
-  // rather than AoX's 'failed' — a Blitz round that ends on a wrong in sudden death still RECORDS
-  // its result, so it is a finished round, not an abandoned one. (AoX's 'failed' records nothing
-  // and is correctly still hideable there.)
+  // It is also the flag the Best-reconcile effect gates on — a Blitz round that ends on a wrong in
+  // sudden death still RECORDS its result, so it is a finished round, not an abandoned one. AoX
+  // makes the same call from the other direction: its failed run records no Best, and since round
+  // 22 its strip is STILL a result readout (its `isLocked` is done OR failed), because what an ended
+  // strip owes the player is the times it ran up, not a verdict on how it ended. The two modes agree.
   //
   // ⚠ BOTH HALVES MOVE TOGETHER — dropping `fn` while leaving `off: timingOff` would be a trap, not
   // half a fix. Tapping a time box is the ONLY writer of blitzTimingOff in the whole app (it is
@@ -777,11 +778,11 @@ function BlitzMode({
   // for the price of these three lines because Blitz's Begin is a full engine RESET — so the round's
   // history IS the whole engine history, and the times ledger's carried-in count is 0, which is what
   // makes the rows add up to the strip's Mean exactly.
-  // ⚠ `timerDone` is the right flag and it is NOT AoX's 'failed': every way a Blitz round can end
-  // routes through endRound(), and a round that ends on a wrong answer in sudden death still RECORDS
-  // its result. It is a finished round, not an abandoned one. (The long argument is in the timing
-  // note directly above.) Gated on `saveStats` for the reason MoX is: a dimmed strip reading '—'
-  // must not be a door to the numbers it is declining to show.
+  // ⚠ `timerDone` is the right flag: every way a Blitz round can end routes through endRound(),
+  // sudden-death losses included, so a lost round opens its breakdown exactly like one the clock
+  // ended — the rule AoX adopted for its failed runs in round 22 (its `isLocked`). (The long
+  // argument is in the timing note directly above.) Gated on `saveStats` for the reason MoX is: a
+  // dimmed strip reading '—' must not be a door to the numbers it is declining to show.
   //
   // ⚠ AND ON `visible`, which is not paranoia — it is the one guard the mode's own display:none
   // cannot supply. The popup PORTALS to #root, so it sits outside this screen's hidden wrapper: a
@@ -819,7 +820,7 @@ function BlitzMode({
       {breakdownShown && (
         <RunBreakdown
           onClose={() => setBreakdownOpen(false)}
-          data={buildRunBreakdown(state)}
+          data={buildRunBreakdown(state, useJulian)}
           fmtDate={fmtDate}
           title={perQ ? 'Run Breakdown' : 'Round Breakdown'}
         />
