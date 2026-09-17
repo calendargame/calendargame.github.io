@@ -1390,3 +1390,260 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
     expect(Object.keys(useProgress.getState().blitzBest)).toHaveLength(1)
   })
 })
+
+// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
+// Where Override used to go inert after use it reads Undo, and Undo puts back exactly what the
+// Override changed — in Blitz that includes the ROUND: an Override can resume an ended round or end
+// a running one, and its Undo reverses that too. The clock rule is "as if the Override never
+// happened": a round that was RUNNING kept its clock running through the gap (no free pause, no
+// refill), a round that had ENDED gets its stopped clock back exactly (toggling never drains it).
+describe('Blitz — Override ⇄ Undo', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs()
+    useProgress.getState().resetProgress()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+    useModePrefs.getState().setBlitzSec(30)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  // The visible countdown readout — the label sitting directly above the visible timer bar.
+  const clockText = () => {
+    const bar = Array.from(document.querySelectorAll('.bar')).find((b) => !isHidden(b))
+    return bar.previousElementSibling.textContent.trim()
+  }
+  const roundLive = () => !isDisabled(dayBtn('Sunday')) // the grid only answers while a round runs
+  const bestScore = () => screen.getByText(/Best Score:/).textContent
+
+  it('the label toggles Override → Undo → Override, Undo is live, and three cycles never drift', () => {
+    mountApp()
+    switchToBlitz()
+    begin()
+    const d = readDate()
+    click(wrongName(d)) // 0/1 — Allow Mistakes on, the round keeps going
+    for (let i = 0; i < 3; i++) {
+      clickText('Override') // Path 3: credit + advance
+      expect(statValue('Score')).toBe('1/1')
+      expect(screen.queryByRole('button', { name: 'Override' })).toBeNull()
+      expect(isDisabled(ctrl('Undo'))).toBe(false)
+      clickText('Undo')
+      expect(statValue('Score')).toBe('0/1')
+      expect(readDate()).toEqual(d) // back on the burned question
+      expect(roundLive()).toBe(true)
+      expect(isDisabled(ctrl('Override'))).toBe(false)
+    }
+  })
+
+  it('undoing a RESUMING Override re-ends the round; the next Override resumes with the SAME time left', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off → a wrong ends the round
+    begin()
+    click(correctName(readDate())) // 1/1
+    tick(4500) // 25.5 s left
+    click(wrongName(readDate())) // the misclick ends the round at 1/2
+    expect(roundLive()).toBe(false)
+    expect(clockText()).toBe('26s')
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
+    for (let i = 0; i < 3; i++) {
+      clickText('Override') // credit + RESUME
+      expect(statValue('Score')).toBe('2/2')
+      expect(roundLive()).toBe(true)
+      expect(clockText()).toBe('26s') // resumes where the round stopped…
+      expect(bestScore()).toMatch(/Best Score: —/) // …with the provisional Best reverted
+      tick(10000) // the resumed round runs for a while
+      expect(clockText()).toBe('16s')
+      clickText('Undo')
+      expect(statValue('Score')).toBe('1/2')
+      expect(roundLive()).toBe(false) // ended again…
+      expect(clockText()).toBe('26s') // …with the clock it had, not the drained one
+      expect(bestScore()).toMatch(/Best Score: 1\b/) // …and its Best re-saved
+    }
+  })
+
+  it('undoing an Override that ENDED a running round resumes it — and its clock kept running', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    begin()
+    click(correctName(readDate())) // 1/1
+    tick(2500) // 27.5 s left
+    clickText('Override') // retro-flip the correct to wrong → the round ends (no mistakes allowed)
+    expect(statValue('Score')).toBe('0/1')
+    expect(roundLive()).toBe(false)
+    const live = readDate() // the live question is still on screen while the round sits ended…
+    tick(5000) // …so staring at it is not free time
+    expect(readDate()).toEqual(live)
+    clickText('Undo')
+    expect(statValue('Score')).toBe('1/1')
+    expect(roundLive()).toBe(true)
+    expect(clockText()).toBe('23s') // 27.5 − 5 → 22.5, not 27.5
+    expect(bestScore()).toMatch(/Best Score: —/) // the ending's provisional Best went with it
+  })
+
+  it('Per Question: undoing an advancing Override gives the question back its OWN draining clock (no refill)', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Per Round') // → Per Question (Allow Mistakes stays on)
+    act(() => useModePrefs.getState().setBlitzQSec(5))
+    begin()
+    tick(3000) // 2 s left on this question
+    const d = readDate()
+    click(wrongName(d)) // burned, clock still draining
+    clickText('Override') // Path 3: credit + advance with a FRESH 5 s clock
+    tick(1000)
+    clickText('Undo') // back on the burned question: 2 − 1 = 1 s left, not a fresh 5
+    expect(readDate()).toEqual(d)
+    expect(roundLive()).toBe(true)
+    tick(1100) // past the burned question's own deadline
+    expect(roundLive()).toBe(false) // the clock ran out on it — a refilled clock would still be live
+    // The timeout is an engine action: it ended the undo window, and the burned-question timeout is
+    // itself a resumable end, so the button offers Override again.
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(isDisabled(ctrl('Override'))).toBe(false)
+  })
+
+  it('answering after a resuming Override ends the undo window', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    begin()
+    click(wrongName(readDate())) // ends 0/1
+    clickText('Override') // resume, 1/1
+    expect(ctrl('Undo')).toBeInTheDocument()
+    click(correctName(readDate())) // play on
+    expect(statValue('Score')).toBe('2/2')
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(ctrl('Override')).toBeInTheDocument()
+  })
+
+  it('a post-round Override that raises a Best and its Undo that lowers it land the Best correctly across three cycles', () => {
+    mountApp()
+    switchToBlitz()
+    begin() // Allow Mistakes on: wrong-then-right leaves a burned card in history
+    let d = readDate()
+    click(wrongName(d))
+    click(correctName(d)) // Q1 burned, advanced
+    d = readDate()
+    click(wrongName(d))
+    click(correctName(d)) // Q2 burned, advanced
+    click(correctName(readDate())) // Q3 credited — 1/3
+    clickText('Reveal') // end the round 1/4 → Best 1
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
+    act(() => fireEvent.click(ctrl('<'))) // Q3
+    act(() => fireEvent.click(ctrl('<'))) // Q2 (burned)
+    clickText('Override') // credit Q2 → 2
+    expect(bestScore()).toMatch(/Best Score: 2\b/)
+    for (let i = 0; i < 3; i++) {
+      clickText('Undo')
+      expect(statValue('Score')).toBe('1/4')
+      expect(bestScore()).toMatch(/Best Score: 1\b/)
+      clickText('Override')
+      expect(statValue('Score')).toBe('2/4')
+      expect(bestScore()).toMatch(/Best Score: 2\b/)
+    }
+  })
+})
+
+// ── The ★ on a rolled-back Best (fixed alongside Override ⇄ Undo) ─────────────────────────────────
+// The "new best" ★ is keyed by CONFIG, not by round. It used to be OR-folded on an improving write and
+// never cleared on a lowering one, so Override (new Best, ★) then Undo (Best rolled back) left the ★ on
+// a record that was no longer new. Clearing it on any lowering write would be wrong the other way — it
+// would wipe a ★ an EARLIER round earned under the same config. The ★ is restored the way the record
+// is: from the pre-round snapshot.
+describe('Blitz — the ★ follows a rolled-back Best without clearing an earlier round', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs()
+    useProgress.getState().resetProgress()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const bestScore = () => screen.getByText(/Best Score:/).textContent
+  // A round of two burned cards, a Reveal on the third: ends 0/3 with two creditable misses behind it.
+  const twoBurnsThenReveal = () => {
+    begin()
+    for (let i = 0; i < 2; i++) {
+      const d = readDate()
+      click(wrongName(d))
+      click(correctName(d))
+    }
+    clickText('Reveal')
+  }
+  const creditBothBurns = () => {
+    act(() => fireEvent.click(ctrl('<'))) // Q2
+    clickText('Override') // 1
+    act(() => fireEvent.click(ctrl('<'))) // Q1
+    clickText('Override') // 2
+  }
+
+  it('a Best raised by an Override and lowered by its Undo takes its ★ with it (no stale ★)', () => {
+    // A Best of 1 from an earlier SESSION — recorded, but carrying no ★ in this one.
+    mountApp()
+    switchToBlitz()
+    begin()
+    click(correctName(readDate()))
+    clickText('Reveal') // 1/2 → Best 1
+    cleanup()
+    document.getElementById('root')?.remove()
+    mountApp() // a fresh mount: the record stands, the ★ is gone
+    switchToBlitz()
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
+    expect(bestScore()).not.toContain('★')
+    clickText('Reset') // the ended round came back from its session park — clear it
+    twoBurnsThenReveal()
+    creditBothBurns()
+    expect(bestScore()).toMatch(/Best Score: 2\b/)
+    expect(bestScore()).toContain('★') // a new Best
+    clickText('Undo')
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
+    expect(bestScore()).not.toContain('★') // rolled back — and so is its ★
+  })
+
+  it("an earlier round's ★ survives the rollback, the Undo toggle, and a resume", () => {
+    mountApp()
+    switchToBlitz()
+    begin()
+    click(correctName(readDate()))
+    clickText('Reveal') // round A: 1/2 → Best 1 ★ (earned this session)
+    expect(bestScore()).toContain('★')
+    clickText('Reset')
+    twoBurnsThenReveal() // round B ends 0/3
+    expect(bestScore()).toContain('★') // A's ★
+    creditBothBurns() // B reaches 2 → Best 2 ★
+    for (let i = 0; i < 3; i++) {
+      clickText('Undo') // B back to 1 — the Best rolls back to A's 1…
+      expect(bestScore()).toMatch(/Best Score: 1\b/)
+      expect(bestScore()).toContain('★') // …and A's ★ is NOT collaterally cleared
+      clickText('Override')
+      expect(bestScore()).toMatch(/Best Score: 2\b/)
+      expect(bestScore()).toContain('★')
+    }
+    // A resume reverts the round's provisional Best to the pre-round record — and its ★ with it.
+    clickText('Reset')
+    begin()
+    clickText('Reveal') // round C ends 0/1: nothing new, B's 2 ★ still lit
+    clickText('Override') // credit + resume
+    expect(bestScore()).toMatch(/Best Score: 2\b/)
+    expect(bestScore()).toContain('★') // the old resume deleted it
+  })
+})

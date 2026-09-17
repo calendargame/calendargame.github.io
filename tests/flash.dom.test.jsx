@@ -484,3 +484,81 @@ describe('Flash — Q7 round-6 (Reset Settings restoring the Flash speed re-sync
     expect(flashCountdownText()).toBe('2.0s') // the idle label re-synced to the restored speed
   })
 })
+
+// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
+// An Override during a live flash ENDS the flash. Its Undo hands the flash back — and the flash's
+// clock is treated as having kept running through the gap (a clock that stood still would be a free
+// pause), so the Undo lands in whatever phase that clock now reads: still showing, or hidden ("…").
+describe('Flash — Override ⇄ Undo', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs() // flashMs → the 2000 ms factory window
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const press = (name) => act(() => fireEvent.click(ctrl(name)))
+  const wait = (ms) => act(() => vi.advanceTimersByTime(ms))
+
+  it('undoing inside the reveal window hands the flash back still showing; three cycles never drift', () => {
+    mountApp()
+    switchToFlash()
+    press('Begin')
+    const date = readDate()
+    act(() => fireEvent.click(dayBtn(wrongName(date)))) // 0/1, the flash keeps going
+    for (let i = 0; i < 3; i++) {
+      press('Override')
+      expect(statValue('Score')).toBe('1/1')
+      expect(ctrl('Begin')).toBeInTheDocument() // the Override ended the flash
+      expect(isDisabled(ctrl('Undo'))).toBe(false)
+      press('Undo')
+      expect(statValue('Score')).toBe('0/1')
+      expect(ctrl('Reset')).toBeInTheDocument() // the flash is live again…
+      expect(dateDisplayText()).toBe(`${date.y}-${date.m}-${date.d}`) // …on the same date, still showing
+      expect(isDisabled(ctrl('Override'))).toBe(false)
+    }
+    wait(2500) // the rest of the window runs out on its own
+    expect(dateDisplayText()).toBe('…')
+    act(() => fireEvent.click(dayBtn(correctName(date)))) // still answerable: a late correct
+    expect(statValue('Score')).toBe('0/1')
+    expect(ctrl('Begin')).toBeInTheDocument()
+  })
+
+  it("the flash's clock keeps running between Override and Undo — no free pause", () => {
+    mountApp()
+    switchToFlash()
+    press('Begin')
+    const date = readDate()
+    act(() => fireEvent.click(dayBtn(wrongName(date))))
+    press('Override')
+    wait(3000) // longer than the whole 2000 ms window
+    press('Undo')
+    expect(statValue('Score')).toBe('0/1')
+    expect(ctrl('Reset')).toBeInTheDocument() // live…
+    expect(dateDisplayText()).toBe('…') // …but the window is gone — the date does not come back
+    expect(flashCountdownText()).toBe('0.0s')
+  })
+
+  it('an Override with no live flash is undone on the score alone (the flash stays idle)', () => {
+    mountApp()
+    switchToFlash()
+    press('Begin')
+    const date = readDate()
+    act(() => fireEvent.click(dayBtn(correctName(date)))) // 1/1, flash over
+    press('Override') // Path 5 on the idle screen
+    expect(statValue('Score')).toBe('0/1')
+    press('Undo')
+    expect(statValue('Score')).toBe('1/1')
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(dateDisplayText()).toBe('—')
+  })
+})

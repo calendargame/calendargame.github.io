@@ -13,7 +13,7 @@
 // the correct weekday with the SAME already-tested calendar functions the app uses, then
 // click accordingly. We pin a Gregorian-only year range (>=1583) and a fixed numeric-ymd
 // format so the displayed date is unambiguous and trivially parseable.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, onTestFinished } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
@@ -204,8 +204,9 @@ describe('Classic — characterization (batch 2: live Override paths)', () => {
     fireEvent.click(ctrl('Override'))
     expect(statValue('Score')).toBe('0/1')
     expect(statValue('Streak')).toBe('0/0')
-    // Override is single-shot per state — disabled immediately after firing.
-    expect(isDisabled(ctrl('Override'))).toBe(true)
+    // Where Override used to go inert, the same button now reads Undo (round 23 Q6).
+    expect(screen.queryByRole('button', { name: 'Override' })).toBeNull()
+    expect(isDisabled(ctrl('Undo'))).toBe(false)
   })
 
   it('Path 3 (wrong → Override): retroactively credits the wrong answer and advances (0/1 → 1/1)', () => {
@@ -218,7 +219,7 @@ describe('Classic — characterization (batch 2: live Override paths)', () => {
     expect(statValue('Streak')).toBe('1/1')
     // Path 3 advances to a fresh question (history now has the credited entry).
     expect(isDisabled(ctrl('<'))).toBe(false)
-    expect(isDisabled(ctrl('Override'))).toBe(true)
+    expect(isDisabled(ctrl('Undo'))).toBe(false)
   })
 })
 
@@ -278,7 +279,112 @@ describe('Classic — characterization (batch 3: Back/Forward + history Override
     expect(statValue('Streak')).toBe('1/1')
     // With timing hidden (Classic default), Path 4 does NOT advance the live question.
     expect(readDate()).toEqual(q2)
-    expect(isDisabled(ctrl('Override'))).toBe(true)
+    expect(isDisabled(ctrl('Undo'))).toBe(false)
+  })
+})
+
+// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
+// "Undo will only show when pressing the override button would otherwise be locked, then you can
+// always override/undo anything continuously forever." One button: after an Override it reads Undo
+// and puts back exactly what the Override changed; then it reads Override again.
+describe('Classic — Override ⇄ Undo', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const snapshot = () => ({
+    score: statValue('Score'),
+    streak: statValue('Streak'),
+    date: readDate(),
+  })
+
+  it('Path 3: the label toggles Override → Undo → Override, Undo is live, and three cycles never drift', () => {
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(wrongName(q1))) // 0/1, burned
+    const before = snapshot()
+    fireEvent.click(ctrl('Override')) // Path 3: credit + advance
+    const after = snapshot()
+    expect(after.score).toBe('1/1')
+    expect(after.date).not.toEqual(q1) // advanced
+    for (let i = 0; i < 3; i++) {
+      expect(isDisabled(ctrl('Undo'))).toBe(false)
+      fireEvent.click(ctrl('Undo'))
+      expect(snapshot()).toEqual(before) // back on the burned question, 0/1
+      expect(dayState(wrongName(q1))).toBe('wrong-latest')
+      expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+      expect(isDisabled(ctrl('Override'))).toBe(false)
+      fireEvent.click(ctrl('Override'))
+      expect(snapshot().score).toBe(after.score) // the date re-draws; the score never drifts
+      expect(snapshot().streak).toBe(after.streak)
+    }
+  })
+
+  it('Path 5 toggles on the history entry and leaves the live question alone', () => {
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(correctName(q1))) // 1/1
+    const live = readDate()
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(ctrl('Override'))
+      expect(statValue('Score')).toBe('0/1')
+      expect(readDate()).toEqual(live)
+      fireEvent.click(ctrl('Undo'))
+      expect(statValue('Score')).toBe('1/1')
+      expect(statValue('Streak')).toBe('1/1')
+      expect(readDate()).toEqual(live)
+    }
+  })
+
+  // App's [data-key] walk skips elements whose offsetParent is null — every element in jsdom's
+  // layout-free DOM (see the S-shortcut note in batch 4). So for this one test, offsetParent is
+  // given the one rule the walk relies on: null inside a display:none ancestor (the hidden mode
+  // screens), otherwise a parent. That lets the real keyboard handler find the visible O button.
+  it('the O key follows the label', () => {
+    const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetParent')
+    Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+      configurable: true,
+      get() {
+        for (let e = this; e; e = e.parentElement) if (e.style?.display === 'none') return null
+        return this.parentElement
+      },
+    })
+    onTestFinished(() => Object.defineProperty(HTMLElement.prototype, 'offsetParent', desc))
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(correctName(q1)))
+    act(() => fireEvent.keyDown(window, { key: 'o' }))
+    expect(statValue('Score')).toBe('0/1')
+    expect(ctrl('Undo')).toBeInTheDocument()
+    act(() => fireEvent.keyDown(window, { key: 'o' }))
+    expect(statValue('Score')).toBe('1/1')
+    expect(ctrl('Override')).toBeInTheDocument()
+  })
+
+  it('Undo lasts only until your next action — anything else puts the button back to its old meaning', () => {
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(correctName(q1))) // 1/1
+    fireEvent.click(ctrl('Override')) // Path 5: 0/1, Undo offered
+    const q2 = readDate()
+    fireEvent.click(dayBtn(correctName(q2))) // play on — the window closes
+    expect(statValue('Score')).toBe('1/2')
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(ctrl('Override')).toBeInTheDocument()
+    // …and a Back/Forward round trip does not bring it back either.
+    fireEvent.click(ctrl('Override')) // Path 5 on q2: 0/2
+    fireEvent.click(ctrl('<'))
+    fireEvent.click(ctrl('>'))
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(statValue('Score')).toBe('0/2')
   })
 })
 
@@ -789,8 +895,9 @@ describe('Classic — Reset Stats confirmation popup (Q2 / Q7)', () => {
 
   // (The `S` shortcut routes through this same button's onClick — App's [data-key] DOM walk
   // .click()s it — so it opens the identical popup. Not asserted here: the walk skips any element
-  // whose offsetParent is null, which is every element in jsdom's layout-free DOM, so no dom test
-  // in this suite has ever driven a game-loop letter. It is a device check.)
+  // whose offsetParent is null, which is every element in jsdom's layout-free DOM. The one dom test
+  // that drives a game-loop letter — O, in "Classic — Override ⇄ Undo" — stubs offsetParent to do
+  // it; S rides the identical walk and stays a device check.)
 
   // A2 (round 21): the popup now carries a real z-60 scrim, so G — which would open the ⚙ panel
   // UNDER it — is gated to a no-op while a non-panel modal is up. A mode letter is NOT gated: it

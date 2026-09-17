@@ -1579,3 +1579,169 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     expect(bestVal('Mean')).not.toBe('—')
   })
 })
+
+// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
+// Where Override used to go inert after use it reads Undo, and Undo puts back exactly what the
+// Override changed — in MoX that includes the RUN'S PHASE (an Override can fail a run, resume a
+// failed one, or complete one), and a reveal auto-advance the Override cancelled.
+describe('MoX — Override ⇄ Undo', () => {
+  let fakeNow = 0
+  beforeEach(() => {
+    vi.useFakeTimers()
+    pin()
+    useProgress.getState().resetProgress()
+    fakeNow = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => fakeNow)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const solveIn = (ms) => {
+    fakeNow += ms
+    answerCorrect()
+  }
+  // The "Best Mean:" line, ★ included.
+  const bestMeanLine = () => {
+    const els = Array.from(document.querySelectorAll('div')).filter(
+      (e) => !isHidden(e) && e.textContent.trim().startsWith('Best Mean:'),
+    )
+    els.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length)
+    return els[0].textContent
+  }
+  const gridLive = () => !isDisabled(dayBtn('Sunday'))
+
+  it('the label toggles Override → Undo → Override, Undo is live, and three cycles never drift', () => {
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes') // on
+    setN(3)
+    click('Begin')
+    const d = readDate()
+    answerWrong() // 0/1, still running
+    for (let i = 0; i < 3; i++) {
+      click('Override') // Path 3: credit + advance
+      expect(statValue('Score')).toBe('1/1')
+      expect(screen.queryByRole('button', { name: 'Override' })).toBeNull()
+      expect(isDisabled(ctrl('Undo'))).toBe(false)
+      click('Undo')
+      expect(statValue('Score')).toBe('0/1')
+      expect(readDate()).toEqual(d)
+      expect(isDisabled(ctrl('Override'))).toBe(false)
+    }
+  })
+
+  it('undoing the reversal of a completing solve restores the DONE run and its Best Mean; three cycles leave it unchanged', () => {
+    mountApp()
+    switchToAox()
+    setN(2) // Allow Mistakes off
+    click('Begin')
+    solveIn(1000)
+    solveIn(1000) // done, Best Mean 1.00s ★
+    expect(bestVal('Mean')).toBe('1.00s')
+    expect(bestMeanLine()).toContain('★')
+    for (let i = 0; i < 3; i++) {
+      click('Override') // reverse the completing solve → the run FAILS in place
+      expect(statValue('Score')).toBe('1/2')
+      expect(bestVal('Mean')).toBe('—')
+      expect(bestMeanLine()).not.toContain('★')
+      click('Undo')
+      expect(statValue('Score')).toBe('2/2')
+      expect(ctrl('Reset')).toBeInTheDocument()
+      expect(isDisabled(ctrl('Reveal'))).toBe(true) // done, not running
+      expect(gridLive()).toBe(false)
+      expect(bestVal('Mean')).toBe('1.00s') // the Best is back…
+      expect(bestMeanLine()).toContain('★') // …with its ★
+    }
+    expect(bestVal('Median')).toBe('1.00s')
+  })
+
+  it('undoing a Path-3 Override that COMPLETED a failed run returns it to FAILED', () => {
+    mountApp()
+    switchToAox()
+    setN(2) // Allow Mistakes off
+    click('Begin')
+    solveIn(1000) // 1/1
+    fakeNow += 1000
+    answerWrong() // the run fails at 1/2
+    expect(gridLive()).toBe(false)
+    expect(bestVal('Mean')).toBe('—')
+    for (let i = 0; i < 3; i++) {
+      click('Override') // credit the failing wrong → good 2 = N → completes on Q2
+      expect(statValue('Score')).toBe('2/2')
+      expect(bestVal('Mean')).toMatch(/^\d+\.\d{2}s$/)
+      expect(screen.getByText('Q2')).toBeInTheDocument()
+      click('Undo')
+      expect(statValue('Score')).toBe('1/2')
+      expect(bestVal('Mean')).toBe('—') // a failed run records nothing
+      expect(ctrl('Reset')).toBeInTheDocument()
+      expect(gridLive()).toBe(false) // failed, locked
+      expect(isDisabled(ctrl('Override'))).toBe(false) // and still rescuable
+    }
+  })
+
+  // (Unlike Blitz, a MoX ★ never outlives its run: Reset clears the ★ map before the next run can
+  // begin. So the earlier run's record comes back without a ★, and the Undo brings run 2's back.)
+  it("a later run's rolled-back Best returns the earlier record, and its ★ toggles with the Undo", () => {
+    mountApp()
+    switchToAox()
+    setN(2)
+    click('Begin')
+    solveIn(2000)
+    solveIn(2000) // run 1 → Best Mean 2.00s ★
+    click('Reset')
+    click('Begin')
+    solveIn(500)
+    solveIn(500) // run 2 → 0.50s ★
+    click('<')
+    for (let i = 0; i < 3; i++) {
+      click('Override') // retract a run-2 solve → run 1's record returns…
+      expect(bestVal('Mean')).toBe('2.00s')
+      expect(bestMeanLine()).not.toContain('★') // …not new this run (Reset cleared run 1's ★)
+      click('Undo')
+      expect(bestVal('Mean')).toBe('0.50s')
+      expect(bestMeanLine()).toContain('★')
+    }
+  })
+
+  it('reveal flash, final question: Reveal → Override → Undo → Override still completes on Q2 with no overshoot', () => {
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes')
+    setN(2)
+    click('Begin')
+    answerCorrect() // good 1, Q2
+    click('Reveal') // arms the auto-advance
+    click('Override') // completes on Q2
+    click('Undo') // back on the revealed Q2 — the auto-advance is re-armed…
+    click('Override') // …and cancelled again by the re-Override
+    expect(statValue('Score')).toBe('2/2')
+    act(() => vi.advanceTimersByTime(700))
+    expect(statValue('Score')).toBe('2/2')
+    expect(screen.getByText('Q2')).toBeInTheDocument()
+    expect(screen.queryByText('Q3')).toBeNull()
+  })
+
+  it('reveal flash: undoing an Override made inside the flash re-arms the auto-advance, which fires once', () => {
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes')
+    setN(3)
+    click('Begin')
+    const q1 = readDate()
+    click('Reveal') // Q1 revealed miss, auto-advance armed
+    click('Override') // credit + advance; the auto-advance is cancelled
+    click('Undo') // back on the revealed Q1 — which must not be left stranded with no way on
+    expect(readDate()).toEqual(q1)
+    expect(statValue('Score')).toBe('0/1')
+    act(() => vi.advanceTimersByTime(700))
+    const next = readDate()
+    expect(next).not.toEqual(q1) // moved on, exactly once
+    expect(statValue('Score')).toBe('0/1')
+    act(() => vi.advanceTimersByTime(700))
+    expect(readDate()).toEqual(next)
+  })
+})

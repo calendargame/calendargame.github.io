@@ -76,6 +76,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
     () => {
       const cov = runFuzzProfile('override-heavy')
       expect(cov.override).toBeGreaterThan(0)
+      expect(cov.undo).toBeGreaterThan(0) // actually spent undo capsules between the overrides
       expect(cov.overrideBrowsing).toBeGreaterThan(0) // reached back-browse Override (Path 1)
       expect(cov.back).toBeGreaterThan(0)
     },
@@ -88,6 +89,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
     () => {
       const cov = runFuzzProfile('aox-complete-heavy')
       expect(cov.complete).toBeGreaterThan(0) // actually fired ANSWER.complete
+      expect(cov.undo).toBeGreaterThan(0) // actually undid overrides on the completion surface
       expect(cov.noAdvance).toBeGreaterThan(0) // actually fired OVERRIDE.noAdvance
       expect(cov.override).toBeGreaterThan(0)
     },
@@ -157,6 +159,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
       expect(cov.overrideHeldComplete).toBeGreaterThan(0) // reached the OVERRIDE completing-hold specifically (not just ANSWER-complete)
       expect(cov.browsedHeld).toBeGreaterThan(0) // actually back-browsed AWAY from a held credit
       expect(cov.override).toBeGreaterThan(0)
+      expect(cov.undo).toBeGreaterThan(0) // actually undid overrides of held solves under the oracle
     },
     T,
   )
@@ -170,6 +173,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
       const cov = runFuzzProfile('timed-strong')
       expect(cov.timedTimeout).toBeGreaterThan(0) // actually fired a gated LOCK_REVEAL / TIMEOUT_MISS
       expect(cov.override).toBeGreaterThan(0)
+      expect(cov.undo).toBeGreaterThan(0) // actually undid overrides alongside the timeouts
       expect(cov.overrideBrowsing).toBeGreaterThan(0)
       expect(cov.good).toBeGreaterThan(0)
     },
@@ -193,6 +197,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
       expect(cov.deduction).toBeGreaterThan(0)
       expect(cov.good).toBeGreaterThan(0)
       expect(cov.hydrated).toBeGreaterThan(0) // the model matched the reducer on hydrated-start sequences too
+      expect(cov.undo).toBeGreaterThan(0) // the model's own inverse matched the reducer's restore
     },
     T,
   )
@@ -206,6 +211,28 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
       expect(cov.timedTimeout).toBeGreaterThan(0) // actually fired the timeout actions
       expect(cov.override).toBeGreaterThan(0)
       expect(cov.hydrated).toBeGreaterThan(0) // held-complete + timeout surface verified on hydrated starts too
+      expect(cov.undo).toBeGreaterThan(0)
+    },
+    T,
+  )
+
+  // ── Override ⇄ Undo (round 23 Q6) ──
+  // Override and Undo dominate the stream, under the exact oracle AND the reference model — whose
+  // Undo is a hand-written inverse of each path in its own vocabulary rather than a restore, so the
+  // reducer's verbatim capsule restore is checked against an independent route to the same place.
+  // The harness also asserts, every step, that a pending Undo and an available Override never
+  // coexist (the one button can only mean one thing).
+  it(
+    'undo-churn — Override ⇄ Undo toggling matches the reference model under the EXACT oracle',
+    () => {
+      const cov = runFuzzProfile('undo-churn')
+      expect(cov.refChecks).toBeGreaterThan(0)
+      expect(cov.undo).toBeGreaterThan(0)
+      expect(cov.undoAdvanced).toBeGreaterThan(0) // undid ADVANCING overrides (questionId stepped back)
+      expect(cov.undoToggles).toBeGreaterThan(0) // re-overrode straight after an undo — the toggle
+      expect(cov.overrideBrowsing).toBeGreaterThan(0) // Path 1 in the mix
+      expect(cov.heldComplete).toBeGreaterThan(0) // Path 2 / the Path 3 hold in the mix
+      expect(cov.hydrated).toBeGreaterThan(0)
     },
     T,
   )

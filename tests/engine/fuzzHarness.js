@@ -147,6 +147,7 @@ export const PROFILES = {
     weights: {
       ANSWER: 5,
       OVERRIDE: 5,
+      UNDO: 3,
       BACK: 3,
       FORWARD: 2,
       NEW: 2,
@@ -176,6 +177,7 @@ export const PROFILES = {
     weights: {
       ANSWER: 6,
       OVERRIDE: 4,
+      UNDO: 2,
       NEW: 2,
       BACK: 2,
       FORWARD: 1,
@@ -327,6 +329,7 @@ export const PROFILES = {
     weights: {
       ANSWER: 6,
       OVERRIDE: 4,
+      UNDO: 2,
       BACK: 3,
       FORWARD: 2,
       NEW: 2,
@@ -363,6 +366,7 @@ export const PROFILES = {
     weights: {
       ANSWER: 5,
       OVERRIDE: 3,
+      UNDO: 2,
       LOCK_REVEAL: 3,
       TIMEOUT_MISS: 3,
       NEW: 3,
@@ -400,6 +404,7 @@ export const PROFILES = {
     weights: {
       ANSWER: 5,
       OVERRIDE: 4,
+      UNDO: 2,
       BACK: 3,
       FORWARD: 2,
       NEW: 3,
@@ -430,6 +435,7 @@ export const PROFILES = {
     weights: {
       ANSWER: 5,
       OVERRIDE: 4,
+      UNDO: 2,
       BACK: 3,
       FORWARD: 2,
       NEW: 2,
@@ -447,6 +453,43 @@ export const PROFILES = {
     pTimingOff: 0.4,
     pSolveTime: 0.6,
     pAnswerCorrect: 0.65,
+    pComplete: 0.35,
+    pNoAdvance: 0.35,
+  },
+  // ── Override ⇄ Undo churn (round 23 Q6) ──
+  // Override and Undo dominate, with just enough ANSWER / NEW / BACK / FORWARD between them to arm
+  // every Override path (a held solve, a burn, a pending retro credit, a browse) and to END undo
+  // windows mid-flight. Under the strong oracle AND the independent reference model — the model
+  // reaches the same position by running its own hand-written inverse of each path, so a restore
+  // that lands anywhere else disagrees here. Timeouts ride along (LOCK_REVEAL / TIMEOUT_MISS are how
+  // a Blitz clock ends an undo window in the app). RESET_ROUND stays out for the reason every
+  // oracle profile excludes it.
+  'undo-churn': {
+    name: 'undo-churn',
+    seedBase: 11_000_000,
+    seqs: 4000,
+    steps: 300,
+    strongOracle: true,
+    pHydrate: 0.5,
+    referenceModel: true,
+    weights: {
+      OVERRIDE: 6,
+      UNDO: 6,
+      ANSWER: 3,
+      BACK: 2,
+      FORWARD: 2,
+      NEW: 2,
+      REVEAL: 1,
+      SHOW_CODES_OPEN: 1,
+      LOCK_REVEAL: 1,
+      TIMEOUT_MISS: 1,
+    },
+    pJulian: 0.3,
+    pSaveStats: 0.85,
+    pTracking: 0.6,
+    pTimingOff: 0.4,
+    pSolveTime: 0.6,
+    pAnswerCorrect: 0.6,
     pComplete: 0.35,
     pNoAdvance: 0.35,
   },
@@ -553,6 +596,9 @@ export function freshCov() {
     browsedHeld: 0, //  back-browsed AWAY from a held live credit (the oracle's isLive-fold corner)
     timedTimeout: 0, // fired a LOCK_REVEAL / TIMEOUT_MISS on the active live edge (timed surface)
     refChecks: 0, //   reference-model comparisons performed (referenceModel profiles)
+    undo: 0, //        UNDO dispatched (a pending capsule was spent)
+    undoAdvanced: 0, // an UNDO that stepped back across an ADVANCING Override (questionId went back)
+    undoToggles: 0, // an OVERRIDE filed straight after an UNDO — the Override ⇄ Undo toggle itself
     hydrated: 0, //    sequences seeded with a prior-session baseline (the hydration net)
   }
 }
@@ -594,6 +640,7 @@ export function runSequence(seed, steps, cov, profile) {
     ? createRefModel(!!state.date.type, priorHistory, priorTimes)
     : null
   const recent = []
+  let lastKind = null // the previous DISPATCHED action's type (coverage of the Undo → Override toggle)
 
   for (let i = 0; i < steps; i++) {
     const saveStats = chance(rnd, profile.pSaveStats)
@@ -678,6 +725,13 @@ export function runSequence(seed, steps, cov, profile) {
       case 'RESET_ROUND':
         action = { type: 'RESET_ROUND' }
         break
+      case 'UNDO':
+        // The app only offers Undo while a capsule is pending (the button reads Undo exactly then).
+        if (state.undoCapsule != null) {
+          action = { type: 'UNDO' }
+          cov.undo++
+        }
+        break
     }
 
     if (!action) continue
@@ -725,6 +779,9 @@ export function runSequence(seed, steps, cov, profile) {
       cov.overrideHeldComplete++
     if (kind === 'BACK' && prev.backDepth === 0 && prev.locked && prev.canOverrideCorrect)
       cov.browsedHeld++
+    if (action.type === 'UNDO' && state.questionId < prev.questionId) cov.undoAdvanced++
+    if (action.type === 'OVERRIDE' && lastKind === 'UNDO') cov.undoToggles++
+    lastKind = action.type
     const S = state.stats
     recent.push(
       `${i}:${kind}${saveStats ? '+' : '-'} p${S.played}g${S.good}s${S.streak}b${S.best} bd${state.backDepth} stk${state.stack.length} cw${state.countedWrong ? 1 : 0} coc${state.canOverrideCorrect ? 1 : 0}`,
@@ -732,6 +789,13 @@ export function runSequence(seed, steps, cov, profile) {
     if (recent.length > 20) recent.shift()
 
     const violations = checkGameInvariants(state, useJulian)
+    // "Undo shows exactly where Override would otherwise be locked": the one Override button can only
+    // ever mean one thing, so a pending capsule and an available Override must never coexist. Checked
+    // here rather than argued — it is true by three different mechanisms across the five paths. The
+    // Save-Stats term is neutralised (a null freeze + setting on) so this checks the UNGATED
+    // availability MoX and Blitz use, which is the stricter of the two forms.
+    if (state.undoCapsule != null && overrideAvail({ ...state, saveStatsThisQ: null }, true))
+      violations.push('Override is available while an Undo is pending')
     if (profile.strongOracle) violations.push(...checkStrongScoreOracle(state, priorHistory))
     if (model) violations.push(...compareRefModel(model, state))
     if (violations.length) {

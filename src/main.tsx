@@ -987,7 +987,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // 2. Letters (case-insensitive) and ArrowLeft/Right walk the DOM for a button
       //    with matching data-key attribute and click the first one that's both
       //    visible (offsetParent != null) and not locked (no pointer-events-none class).
-      //    Game-loop binds: N (New/Begin/Reset), R (Reveal), O (Override), C (Show/Hide
+      //    Game-loop binds: N (New/Begin/Reset), R (Reveal), O (Override / Undo), C (Show/Hide
       //    Codes), S (Reset Stats), ← Back, → Forward.
       // 3. Special direct-action keys, no DOM button needed:
       //    - Mode switching: K Classic, F Flash, B Blitz, A AoX, D Deduction, L Lookup

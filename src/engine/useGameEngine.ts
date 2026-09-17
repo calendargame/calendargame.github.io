@@ -8,7 +8,7 @@
 //   • solve times — `performance.now()` deltas from a per-question start stamp.
 //
 // It returns the engine state, the derived `correct` weekday + `overrideAvail`
-// (mirroring App's gating), and the action callbacks the UI wires to buttons.
+// (mirroring App's gating) + `undoAvail`, and the action callbacks the UI wires to buttons.
 //
 // Mode-untangle (Stage C, Step 6, sub-step 1c). Classic is the first consumer;
 // Flash/Blitz/Deduction pass their own config when they move onto the engine.
@@ -43,7 +43,8 @@ export interface UseGameEngineOptions {
   // round's engine state from store/sessionRound, keyed by the ACTIVE preset, so the remount a
   // preset switch causes lands the incoming preset's OWN ended round back on screen. Returns null
   // (or is omitted) ⇒ a fresh question, exactly as before. When it returns a state, genDate is not
-  // called and getInitialStats is ignored — the parked state already carries its stats.
+  // called and getInitialStats is ignored — the parked state already carries its stats. A parked
+  // state never comes back with an Undo pending — see the lazy init below.
   getInitialState?: () => GameState | null
 }
 
@@ -58,18 +59,37 @@ export function useGameEngine({
   getInitialStats,
   getInitialState,
 }: UseGameEngineOptions) {
-  const [state, dispatch] = useReducer(
-    gameReducer,
-    undefined,
-    () => getInitialState?.() ?? initEngine(genDate(minY, maxY), getInitialStats?.()),
-  )
+  const [state, dispatch] = useReducer(gameReducer, undefined, () => {
+    const parked = getInitialState?.()
+    // ⚠ A RESTORED STATE ARRIVES WITH NO UNDO. An Undo reverses the engine half AND the component
+    // half of an Override (a resumed or ended Blitz round, a MoX run phase, a Flash countdown) and
+    // the component half lives in refs and state that are never parked — so an Undo filed before the
+    // remount could only put back half of what it took. Stripping it here, at the one door every
+    // parked state comes through, also normalises a blob parked by a build that predates the field
+    // (it has no `undoCapsule` key at all, which is not the same as null).
+    if (parked) return { ...parked, undoCapsule: null }
+    return initEngine(genDate(minY, maxY), getInitialStats?.())
+  })
 
   // The solve-timer starts when a NEW question is shown (advance / New / Reset bump
   // questionId). Back/Forward change `date` to a browsed entry but leave questionId
   // untouched, so the timer is NOT reset while browsing — matching App's tStartRef.
+  //
+  // ⚠ UNDO IS THE ONE TRANSITION THAT MOVES questionId BACKWARDS, and "the id changed, so a new
+  // question is on screen" is false for it. An Override that ADVANCED (Paths 2/3/4) bumped the id and
+  // restarted the clock for the question it moved to; its Undo steps the id back to a question the
+  // player has been looking at all along. Restarting the clock there would hand out free solve time:
+  // after a Path-4 Override (the previous wrong credited, play moved on) the question it moved past is
+  // FRESH, so think → Override → Undo → answer would record only the seconds since the Undo. So
+  // `override()` notes the clock it is about to leave, and `undo()` hands exactly that clock back
+  // through `timerRestoreRef`, which this effect consumes instead of stamping "now". (An Override that
+  // did not advance leaves the id alone, the effect does not run, and the clock was never touched.)
   const tStartRef = useRef<number | null>(null)
+  const tStartBeforeOverrideRef = useRef<number | null>(null)
+  const timerRestoreRef = useRef<number | null>(null)
   useEffect(() => {
-    tStartRef.current = performance.now()
+    tStartRef.current = timerRestoreRef.current ?? performance.now()
+    timerRestoreRef.current = null
   }, [state.questionId])
   const elapsed = (): number | null =>
     tStartRef.current != null ? (performance.now() - tStartRef.current) / 1000 : null
@@ -134,6 +154,11 @@ export function useGameEngine({
       (state.pendingWrongOverride != null && !last?.overrideUsed) ||
       retroOverrideEligible) &&
     !state.overrideUsedThisQ
+  // Undo availability — the capsule's presence, and nothing else (see GameState.undoCapsule). It is
+  // true exactly where `overrideAvail` is false: every state an Override leaves has overrideUsedThisQ
+  // set, a history entry marked overrideUsed, or its pendingWrongOverride spent (the fuzz asserts the
+  // two never coexist), so the ONE button can read Undo there with no change to the gate above.
+  const undoAvail = state.undoCapsule != null
 
   // Actions are recreated each render (they close over the latest settings, which is what we
   // want); they read the timer from a ref, so there's no stale-closure hazard.
@@ -157,7 +182,8 @@ export function useGameEngine({
   const doNew = () => dispatch({ type: 'NEW', useJulian, saveStats, nextDate: newDate() })
   // `opts.noAdvance` (AoX): when an override reverses the run's completing solve and fails the run
   // (Allow Mistakes off), don't advance — stay on the question. Other modes call override().
-  const override = (opts?: { noAdvance?: boolean }) =>
+  const override = (opts?: { noAdvance?: boolean }) => {
+    tStartBeforeOverrideRef.current = tStartRef.current // the clock Undo hands back (see the timer effect)
     dispatch({
       type: 'OVERRIDE',
       useJulian,
@@ -166,6 +192,15 @@ export function useGameEngine({
       nextDate: newDate(),
       noAdvance: opts?.noAdvance,
     })
+  }
+  // Reverse the most recent Override (only offered while `undoAvail`). If that Override advanced, the
+  // question Undo returns to gets its own solve clock back rather than a fresh one.
+  const undo = () => {
+    const cap = state.undoCapsule
+    if (cap && cap.questionId !== state.questionId)
+      timerRestoreRef.current = tStartBeforeOverrideRef.current
+    dispatch({ type: 'UNDO' })
+  }
   const back = () => dispatch({ type: 'BACK' })
   const forward = () => dispatch({ type: 'FORWARD', useJulian })
   const resetStats = () => dispatch({ type: 'RESET', timingOff, nextDate: newDate() })
@@ -184,12 +219,14 @@ export function useGameEngine({
     state,
     correct,
     overrideAvail,
+    undoAvail,
     retroOverrideEligible,
     answer,
     reveal,
     showCodes,
     doNew,
     override,
+    undo,
     back,
     forward,
     resetStats,

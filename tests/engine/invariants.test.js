@@ -147,3 +147,66 @@ describe('checkGameInvariants — the card-number ledger', () => {
     )
   })
 })
+
+// ── The undo capsule (round 23 Q6) ─────────────────────────────────────────────────────────────
+// A pending Undo is a state one tap away (UNDO installs it verbatim), so it must be healthy itself,
+// and it must still be the state from just before the Override on top of it.
+describe('checkGameInvariants — the undo capsule', () => {
+  const wrongThenOverride = () => {
+    let s = gameReducer(initEngine(DATE), {
+      type: 'ANSWER',
+      idx: (C + 1) % 7,
+      useJulian: false,
+      elapsed: 0.5,
+      tracking: true,
+      saveStats: true,
+      nextDate: NEXT,
+    })
+    s = gameReducer(s, {
+      type: 'OVERRIDE',
+      useJulian: false,
+      tracking: true,
+      timingOff: false,
+      nextDate: NEXT,
+    })
+    return s
+  }
+
+  it('a real Override leaves a healthy state carrying a healthy capsule', () => {
+    const s = wrongThenOverride()
+    expect(s.undoCapsule).not.toBe(null)
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+
+  it("reports a corrupt capsule's own violations, prefixed `undo:`", () => {
+    const s = wrongThenOverride()
+    const bad = {
+      ...s,
+      undoCapsule: { ...s.undoCapsule, stats: { ...s.undoCapsule.stats, good: 9 } },
+    }
+    const out = join(checkGameInvariants(bad, false))
+    expect(out).toContain('undo: stats: good(9) > played(1)')
+    // …and ONLY the capsule is blamed — the live state is untouched.
+    expect(checkGameInvariants(bad, false).every((x) => x.startsWith('undo'))).toBe(true)
+  })
+
+  it('reports a stale capsule: a historyBase that no Override moves has moved', () => {
+    const s = wrongThenOverride()
+    const stale = { ...s, undoCapsule: { ...s.undoCapsule, historyBase: 7 } }
+    expect(join(checkGameInvariants(stale, false))).toContain(
+      'undo capsule is stale: historyBase 7 → 0',
+    )
+  })
+
+  it('reports a stale capsule: the grids were remounted (gridEpoch) since it was filed', () => {
+    const s = wrongThenOverride()
+    const stale = { ...s, gridEpoch: s.gridEpoch + 1 }
+    expect(join(checkGameInvariants(stale, false))).toContain('undo capsule is stale: gridEpoch')
+  })
+
+  it('reports a stale capsule: questionId moved by more than one advance', () => {
+    const s = wrongThenOverride()
+    const stale = { ...s, questionId: s.undoCapsule.questionId + 2 }
+    expect(join(checkGameInvariants(stale, false))).toContain('undo capsule is stale: questionId')
+  })
+})

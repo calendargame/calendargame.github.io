@@ -8,6 +8,7 @@ import {
   useStatsHideToggles,
   engineFresh,
   useResetStatsConfirm,
+  usePlayClock,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS, RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
@@ -17,6 +18,7 @@ import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import CardNumber from '../components/CardNumber.jsx'
+import OverrideButton from '../components/OverrideButton.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
@@ -82,7 +84,7 @@ function FlashMode({
     timingOff,
     getInitialStats: () => useProgress.getState().stats.flash,
   })
-  const { state, correct, overrideAvail } = eng
+  const { state, correct, overrideAvail, undoAvail } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
@@ -99,12 +101,14 @@ function FlashMode({
       flashBarRef.current.style.transform = 'scaleX(1)'
     }
   }
-  const startFlashBar = (ms: number) => {
+  // Sweep the bar to empty over `ms`, starting from `from` (1 = full). Begin sweeps a whole flash from
+  // full; an Undo that hands a live flash back sweeps what was left of it from where it stood.
+  const startFlashBar = (ms: number, from = 1) => {
     requestAnimationFrame(() => {
       if (!flashBarRef.current) return
       const s = flashBarRef.current
       s.style.transition = 'none'
-      s.style.transform = 'scaleX(1)'
+      s.style.transform = `scaleX(${from})`
       s.getBoundingClientRect()
       s.style.transition = `transform ${ms}ms linear`
       s.style.transform = 'scaleX(0)'
@@ -262,13 +266,60 @@ function FlashMode({
     if (open && active) freezeFlash()
     eng.showCodes(open)
   }
+  // ── Override ⇄ Undo (round 23 Q6) ──
+  // An Override during a live flash ENDS the flash (below). Its Undo must hand the flash back, or
+  // "Undo" would leave the player on their question with the date blanked and the grid dead — an
+  // Undo of the score that is not an undo of the screen. The rule is the timed modes' rule: as if the
+  // Override never happened, which means the flash's clock KEPT RUNNING through the gap (a clock that
+  // stood still would be a free pause — Override, stare, Undo). So the Override notes the phase, what
+  // was left of the reveal window, and the play clock (usePlayClock — rotate-overlay time excluded);
+  // the Undo puts the flash back in whatever phase that clock now says it would be in: still showing
+  // with the rest of its window, or already hidden ("…"). Null = the Override touched no flash (it was
+  // not live), so its Undo is the engine's alone. Only one Override can be pending, so one slot.
+  const playNow = usePlayClock(clockPaused)
+  const flashUndoRef = useRef<{ phase: string; leftMs: number; at: number } | null>(null)
   const onOverride = () => {
     const wasActive = active
+    flashUndoRef.current = wasActive
+      ? {
+          phase: flashPhase,
+          leftMs:
+            flashDeadlineRef.current != null
+              ? Math.max(0, flashDeadlineRef.current - performance.now())
+              : 0,
+          at: playNow(),
+        }
+      : null
     if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override()
     if (wasActive) {
       setActive(false)
       stopFlash()
+    }
+  }
+  const onUndo = () => {
+    eng.undo()
+    const snap = flashUndoRef.current
+    flashUndoRef.current = null
+    if (!snap) return
+    const left = snap.phase === 'show' ? snap.leftMs - (playNow() - snap.at) : 0
+    setActive(true)
+    setShowTimerDate(false)
+    if (left > 0) {
+      // Still inside the reveal window: re-arm exactly what begin() arms, for what is left of it.
+      setFlashPhase('show')
+      flashDeadlineRef.current = performance.now() + left
+      setFlashRemainMs(left)
+      clearTimeout(flashTimerRef.current ?? undefined)
+      flashTimerRef.current = setTimeout(endFlashPhase, Math.max(50, left)) // begin()'s ≥50ms floor
+      startFlashBar(left, Math.min(1, left / flashMs))
+    } else {
+      // The window has closed (or had already): the date is hidden and the question is answerable.
+      endFlashPhase()
+      if (flashBarRef.current) {
+        flashBarRef.current.style.transition = 'none'
+        flashBarRef.current.style.transform = 'scaleX(0)'
+      }
     }
   }
   const resetRound = () => {
@@ -528,14 +579,12 @@ function FlashMode({
             >
               Reveal
             </button>
-            <button
-              type="button"
-              data-key="O"
-              className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail ? 'opacity-60 pointer-events-none' : ''}`}
-              onClick={onOverride}
-            >
-              Override
-            </button>
+            <OverrideButton
+              overrideAvail={overrideAvail}
+              undoAvail={undoAvail}
+              onOverride={onOverride}
+              onUndo={onUndo}
+            />
           </div>
           <MethodBreakdownSection
             date={shouldShowTimerDate || inBack ? date : null}

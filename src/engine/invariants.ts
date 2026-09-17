@@ -36,6 +36,9 @@
 //     ledger's times are a sub-multiset of the pool (no card names a second the mean does not
 //     contain), and the counts add up (no second in the mean goes unnamed). In a run mode, where
 //     timesBase is 0 by construction, the pair forces exact equality.
+//   • The UNDO CAPSULE: a pending Undo is a state one tap away, so it must itself be healthy, and it
+//     must still be the state from just before the Override on top of it (fields no Override moves
+//     must match) — a mismatch means it outlived a boundary that should have discarded it.
 //   • Date/calendar sanity: month 1-12, day 1-31, integer year; a weekday question resolves
 //     to an index in 0-6, and a Deduction puzzle's correct answer is actually among its
 //     options (correctIndexOf returns -1 if a generator ever produced a puzzle whose answer
@@ -175,6 +178,29 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
       v.push(
         `times ledger: timesBase(${state.timesBase}) + named(${named.length}) != times.length(${state.stats.times.length})`,
       )
+  }
+  // ── The undo capsule (Override ⇄ Undo) ──
+  // Undo installs the capsule VERBATIM, so a capsule is a state the player can be standing on one
+  // tap from now — it owes every invariant above exactly as much as the live state does. Two checks:
+  //   (1) the capsule itself is a healthy state: checked by the same function, once (a capsule has
+  //       no capsule of its own — UndoCapsule omits the field — so this recursion is one level deep),
+  //       with each report prefixed `undo: ` so it names which state broke. ⚠ This doubles the cost
+  //       of a check whenever an Undo is pending; the window is one action long (any other action
+  //       discards the capsule), so it is at most one doubled check per Override.
+  //   (2) STALENESS tripwires: the capsule must still describe the moment just before the Override
+  //       that sits on top of it. No Override path moves historyBase, timesBase, gridEpoch, bestFloor
+  //       or streakCarry, and an advancing path bumps questionId by exactly one — so any other gap
+  //       means the capsule survived a transition (a RESET, a RESET_ROUND, a regen…) that should have
+  //       discarded it, and an Undo would rewind the player across it.
+  const cap = state.undoCapsule
+  if (cap) {
+    for (const x of checkGameInvariants({ ...cap, undoCapsule: null }, useJulian))
+      v.push(`undo: ${x}`)
+    for (const k of ['historyBase', 'timesBase', 'gridEpoch', 'bestFloor', 'streakCarry'] as const)
+      if (cap[k] !== state[k]) v.push(`undo capsule is stale: ${k} ${cap[k]} → ${state[k]}`)
+    const dq = state.questionId - cap.questionId
+    if (dq !== 0 && dq !== 1)
+      v.push(`undo capsule is stale: questionId ${cap.questionId} → ${state.questionId}`)
   }
   return v
 }

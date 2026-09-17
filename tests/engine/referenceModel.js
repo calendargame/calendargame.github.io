@@ -40,19 +40,29 @@
 //     or un-score it. One played per question, ever.
 //   • It is CREDITED only by a clean first-try correct answer (never revealed/burned first), or by
 //     an Override flip TO credited; an Override flip away removes the credit. One override per
-//     question, ever (the driver's availability gate enforces reachability; the model asserts it).
+//     question at a time — an Undo gives it back, and nothing else ever does (the driver's
+//     availability gate enforces reachability; the model asserts it).
 //   • Its TIME contribution exists only while credited: a first-try correct contributes its solve
 //     time (when timing is tracked); an override-credit contributes the time of the original wrong
 //     answer (when tracked); un-crediting removes the contribution.
 //   • Only SCORED questions enter history on advance (an unscored question vanishes — it was never
 //     played); LOCK_REVEAL resolves a question without scoring it.
 //   • Advancing past a scored BURNED non-puzzle question arms the retroactive credit (Path 4).
+//   • UNDO (round 23 Q6) reverses the most recent Override, and only while nothing else has happened
+//     since: every other action forfeits it. The model does NOT snapshot itself to get there — a
+//     snapshot/restore here would be the reducer's own mechanism written twice, and two copies of one
+//     idea cannot disagree. Instead each Override path journals only the few facts its effect
+//     DESTROYS (a credited time it removed, whether the burned question was also revealed/locked, the
+//     armed retro credit, the live slot an advance replaced) and UNDO runs a hand-written INVERSE of
+//     that path in the model's own vocabulary (un-flip the entry, pop the pushed question back into
+//     the live slot, …). The reducer restores a capsule; the model re-derives the same position by
+//     undoing its own moves. If the two ever land in different places, the ref profiles say so.
 //
 // OVERRIDE target selection mirrors the UI contract's priority (browse target → the held completing
 // solve → the live burned question → the armed previous wrong → the most recent history entry); the
 // EFFECTS are computed purely from the model's own ledger. Flip direction = the target's CURRENT
 // credited state — equivalent to the reducer's snapshot.wasWrong on the reachable surface because a
-// question can be overridden at most once.
+// question carries at most one un-undone override.
 // ─────────────────────────────────────────────────────────────────────────
 
 const freshLive = (ded) => ({
@@ -88,6 +98,10 @@ export function createRefModel(initialDed, priorHistory = [], priorTimes = []) {
     // Cleared by RESET (the engine re-inits blank). Empty for a blank/timed start (identical to before).
     priorHistory: priorHistory.slice(),
     priorTimes: priorTimes.slice(),
+    // The pending Undo: the journal of the most recent Override (see the OVERRIDE case), or null.
+    // Forfeited by every other action (the top of applyRefModel) — the model's own statement of the
+    // "only while it is still the last thing you did" contract, compared against the reducer's.
+    undo: null,
   }
 }
 
@@ -134,11 +148,37 @@ const flip = (m, entry, tracking) => {
   entry.overridden = true
 }
 
+// The inverse of flip(): the credit goes back the way it was, and so does its time — a credit the
+// flip took away gets back the time it had (journaled, because the flip destroyed it); a credit the
+// flip granted leaves with its time. The entry's one override is unspent again (flip refuses an
+// entry that was already overridden, so it cannot have been spent before).
+const unflip = (entry, timeBefore) => {
+  entry.credited = !entry.credited
+  entry.time = entry.credited ? timeBefore : null
+  entry.overridden = false
+}
+
+// The inverse of advance(): the question it pushed (only a SCORED one was pushed) comes back off
+// history into the live slot it left, as the very object advance() replaced.
+const unadvance = (m, liveBefore) => {
+  if (liveBefore.ssFrozen === true) {
+    const popped = m.history.pop()
+    if (!popped || popped.ded !== liveBefore.ded)
+      m.violations.push('MODEL: undo could not find the question the Override advanced past')
+  }
+  m.live = liveBefore
+  m.cursor = 0
+}
+
 // Apply one driver action to the model. `ctx` carries the exogenous display facts:
 //   isCorrect — ANSWER only: the clicked option matches the on-screen question.
 //   nextDed   — advancing actions: whether the INCOMING question is a Deduction puzzle.
 export function applyRefModel(m, kind, action, ctx) {
   const live = m.live
+  // Anything that is not an Override or its Undo forfeits the pending Undo — including an action the
+  // model treats as a no-op (a locked ANSWER, a BACK with nothing behind): the contract is about what
+  // the player DID, not about whether it changed anything.
+  if (kind !== 'OVERRIDE' && kind !== 'UNDO') m.undo = null
   switch (kind) {
     case 'ANSWER': {
       if (m.cursor > 0 || live.locked) return // browsing locks the view; a locked question is resolved
@@ -249,16 +289,23 @@ export function applyRefModel(m, kind, action, ctx) {
     }
     case 'OVERRIDE': {
       const tracking = action.tracking
-      // Priority mirrors the UI contract; effects are the model's own.
+      // One Undo at a time: the button reads Undo whenever one is pending, so an Override on top of
+      // one is a driver/contract break.
+      if (m.undo) m.violations.push('MODEL: OVERRIDE dispatched while an Undo is pending')
+      // Priority mirrors the UI contract; effects are the model's own. Each path journals into
+      // m.undo only what its effect destroys — the inverse lives in the UNDO case.
       if (m.cursor > 0) {
         // Path 1 — flip the browsed entry.
-        flip(m, m.history[m.history.length - m.cursor], tracking)
+        const entry = m.history[m.history.length - m.cursor]
+        m.undo = { path: 1, entry, time: entry.time }
+        flip(m, entry, tracking)
         return
       }
       if (live.held) {
         // Path 2 — reverse the held completing solve: the credit (and its time) is retracted and
         // the question becomes a burned wrong. It stays on screen when the run fails (noAdvance)
         // or when timing is off; otherwise play moves on.
+        m.undo = { path: 2, live, time: live.time, pendingWrong: m.pendingWrong, advanced: false }
         live.credited = false
         live.time = null
         live.burned = true
@@ -269,11 +316,20 @@ export function applyRefModel(m, kind, action, ctx) {
           live.revealed = false
         } else {
           advance(m, ctx.nextDed, true)
+          m.undo.advanced = true
         }
         return
       }
       if (live.burned) {
         // Path 3 — credit the live wrong (with the wrong answer's time when tracked).
+        m.undo = {
+          path: 3,
+          live,
+          revealed: live.revealed,
+          locked: live.locked,
+          pendingWrong: m.pendingWrong,
+          advanced: false,
+        }
         live.credited = true
         live.time = tracking && live.wrongTime != null ? live.wrongTime : null
         live.burned = false
@@ -289,12 +345,14 @@ export function applyRefModel(m, kind, action, ctx) {
           return
         }
         advance(m, ctx.nextDed, true)
+        m.undo.advanced = true
         return
       }
       const last = m.history[m.history.length - 1]
       if (m.pendingWrong && last && !last.overridden) {
         // Path 4 — retroactively credit the previous wrong; with timing on, play also moves on
         // (the fresh live question advances — unscored, so it vanishes).
+        m.undo = { path: 4, entry: last, live, advanced: !action.timingOff }
         flip(m, last, tracking)
         m.pendingWrong = false
         if (!action.timingOff) advance(m, ctx.nextDed, false)
@@ -303,10 +361,54 @@ export function applyRefModel(m, kind, action, ctx) {
       if (last && !last.overridden) {
         // Path 5 — retro-flip the most recent history entry. The LIVE question is untouched: the
         // flip targets the previous question, so the live one keeps its own (unspent) override.
+        m.undo = { path: 5, entry: last, time: last.time }
         flip(m, last, tracking)
         return
       }
       m.violations.push('MODEL: OVERRIDE dispatched but no model path matched')
+      return
+    }
+    case 'UNDO': {
+      // The hand-written inverse of whichever path the journaled Override took (see the header).
+      const u = m.undo
+      m.undo = null
+      if (!u) {
+        m.violations.push('MODEL: UNDO dispatched with no Override to undo')
+        return
+      }
+      if (u.path === 1 || u.path === 5) {
+        unflip(u.entry, u.time)
+      } else if (u.path === 2) {
+        // Back onto the held completing solve: credited again with the time it had, locked, not
+        // revealed (a held solve is never revealed — Reveal and Show Codes are read-only on it).
+        if (u.advanced) unadvance(m, u.live)
+        const l = u.live
+        l.credited = true
+        l.time = u.time
+        l.burned = false
+        l.held = true
+        l.overridden = false
+        l.locked = true
+        l.revealed = false
+        m.pendingWrong = u.pendingWrong
+      } else if (u.path === 3) {
+        // Back onto the burned question, uncredited — revealed/locked exactly as the burn left it.
+        if (u.advanced) unadvance(m, u.live)
+        const l = u.live
+        l.credited = false
+        l.time = null
+        l.burned = true
+        l.held = false
+        l.revealed = u.revealed
+        l.locked = u.locked
+        m.pendingWrong = u.pendingWrong
+      } else {
+        // Path 4 — the previous wrong loses its retro credit and the retro credit is armed again; if
+        // play had moved on, the live question it moved past comes back (unscored, never pushed).
+        unflip(u.entry, null)
+        m.pendingWrong = true
+        if (u.advanced) unadvance(m, u.live)
+      }
       return
     }
     default:
@@ -343,6 +445,11 @@ export function compareRefModel(m, state) {
   for (let i = seq.length - 1; i >= 0 && seq[i]; i--) trailing++
 
   const s = state.stats
+  // Undo availability, derived by the model from its own forfeit rule, against the reducer's capsule.
+  if (!!m.undo !== (state.undoCapsule != null))
+    v.push(
+      `REF undo: model ${m.undo ? 'pending' : 'none'}, reducer ${state.undoCapsule ? 'pending' : 'none'}`,
+    )
   if (s.played !== played) v.push(`REF played: model ${played}, reducer ${s.played}`)
   if (s.good !== good) v.push(`REF good: model ${good}, reducer ${s.good}`)
   if (s.best !== best) v.push(`REF best: model ${best}, reducer ${s.best}`)

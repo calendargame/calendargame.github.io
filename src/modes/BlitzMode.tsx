@@ -4,7 +4,7 @@
 // props, so nothing about its behaviour changes by living here.
 import { useEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
-import { useButtonFlash } from './modeHooks.js'
+import { useButtonFlash, usePlayClock } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS } from '../components/controlClasses.js'
 import {
@@ -18,6 +18,7 @@ import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
 import RunBreakdown from '../components/RunBreakdown.jsx'
 import CardNumber from '../components/CardNumber.jsx'
+import OverrideButton from '../components/OverrideButton.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import BlitzBestRow from '../components/BlitzBestRow.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
@@ -44,6 +45,40 @@ interface PrevRoundBest {
   blitz?: BlitzBest
   sudden?: SuddenBest
   suddenAm?: BlitzBest
+}
+
+// The "new best ★" markers that stood BEFORE the current round, for the same config keys — the ★
+// half of PrevRoundBest (see prevRoundStarsRef for why it is a separate snapshot).
+interface PrevRoundStars {
+  blitz?: { score: boolean; streak: boolean }
+  sudden?: boolean
+  suddenAm?: { score: boolean; streak: boolean }
+}
+
+// Set (or, with nothing lit, drop) one config's ★ markers — returning the SAME map when nothing
+// changes, so a reconcile that lands where it already was is not a re-render.
+function setStars<T>(map: Record<string, T>, key: string, stars: T | null): Record<string, T> {
+  if (stars === null) {
+    if (!(key in map)) return map
+    const nx = { ...map }
+    delete nx[key]
+    return nx
+  }
+  if (JSON.stringify(map[key]) === JSON.stringify(stars)) return map
+  return { ...map, [key]: stars }
+}
+
+// A score+streak record's ★ markers after a reconcile: each lit if it was lit before the round, or if
+// the round's record now beats the pre-round record — nothing else can have raised it, because the
+// config (the key) is locked while a round exists. null = neither lit (the key is dropped).
+function roundStars(
+  before: { score: boolean; streak: boolean } | undefined,
+  next: BlitzBest,
+  floor: BlitzBest | undefined,
+): { score: boolean; streak: boolean } | null {
+  const score = !!before?.score || next.score > (floor?.score ?? 0)
+  const streak = !!before?.streak || next.streak > (floor?.streak ?? 0)
+  return score || streak ? { score, streak } : null
 }
 
 // Round-21 Q11 — the shape BlitzMode parks in store/sessionRound for an ENDED round. It round-trips
@@ -120,10 +155,13 @@ function BlitzMode({
     setQSec = useModePrefs((s) => s.setBlitzQSec) // persisted (mode-prefs store)
   const [, setBlitzRemain] = useState(60)
   const [, setQRemain] = useState(5)
+  // `clockRemainRef` — the running sub-mode's remaining seconds as last drawn (the countdown writes it
+  // every frame) or as STAMPED when the round ended. One ref serves both sub-modes because Per Round /
+  // Per Question is idle-locked: it cannot change while there is a round for the value to belong to.
   const blitzStartRef = useRef<number | null>(null),
     blitzPausedAtRef = useRef<number | null>(null),
     blitzPausedAccRef = useRef(0),
-    blitzRemainRef = useRef(60)
+    clockRemainRef = useRef(60)
   const blitzBarRef = useRef<HTMLSpanElement | null>(null),
     blitzTimeRef = useRef<HTMLSpanElement | null>(null)
   const qDeadlineRef = useRef<number | null>(null),
@@ -167,6 +205,14 @@ function BlitzMode({
   const prevRoundBestRef = useRef<PrevRoundBest>(
     parkedRound?.prevRoundBest ?? { blitzBk: '', suddenBk: '' },
   )
+  // …and the ★ markers that stood with those records, snapshotted at the same Begin. A ★ is keyed by
+  // CONFIG, not by round, so it cannot simply be cleared when a round's record rolls back — that would
+  // wipe a ★ an EARLIER round legitimately earned under the same config. It is restored the way the
+  // record is: a round's ★ is exactly "the pre-round ★, or this round beat the pre-round record".
+  // Kept OUT of PrevRoundBest (which store/sessionRound parks) on purpose: the ★ markers themselves
+  // are per-mount state that a remount wipes, so a parked copy would resurrect stars the remount had
+  // already cleared. A restored round starts with no ★ floor, exactly matching its empty ★ maps.
+  const prevRoundStarsRef = useRef<PrevRoundStars>({})
   // saveStats:true ALWAYS (like AoX): the round tracks internally regardless of the global Save
   // Stats toggle, which now gates only the DISPLAY (a dimmed strip of "—"), whether a Best is recorded,
   // and whether Override shows while off. Always-tracking keeps the misclick-rescue credit
@@ -185,7 +231,7 @@ function BlitzMode({
     // ever restores the incoming preset's own round and cannot pull in the one just left.
     getInitialState: () => parkedRound?.engine ?? null,
   }) // Blitz: timing always tracked
-  const { state, correct, overrideAvail: engOverrideAvail } = eng
+  const { state, correct, overrideAvail: engOverrideAvail, undoAvail } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
@@ -232,53 +278,69 @@ function BlitzMode({
     qPausedAtRef.current = null
     qPausedAccRef.current = 0
   }
-  const endRound = () => {
-    // Stamp the EXACT remaining time at this instant into blitzRemainRef BEFORE stopRound() nulls
-    // blitzStartRef, so a later Override-resume continues from the true remaining rather than the
-    // last rAF frame's value (up to a frame stale, always in the player's favor). Per-Round only —
-    // the per-Question resume starts a fresh qSec, so it carries nothing. On a clock-expiry end the
-    // remaining is already ~0, so this is a no-op there. (F: Blitz resume sub-frame timer drift.)
-    if (!perQ && blitzStartRef.current != null) {
-      const t = (performance.now() - blitzStartRef.current - blitzPausedAccRef.current) / 1000
-      blitzRemainRef.current = Math.max(0, blitzSec - t)
+  // The running sub-mode's remaining seconds at `now`, from the clock refs (pause accumulators
+  // included), or null when no clock is armed. The ONE copy of each countdown formula: the frame
+  // loop draws from it, endRound stamps from it, and an Override notes it for its Undo.
+  const clockRemainAt = (now: number): number | null => {
+    if (!perQ)
+      return blitzStartRef.current == null
+        ? null
+        : Math.max(0, blitzSec - (now - blitzStartRef.current - blitzPausedAccRef.current) / 1000)
+    return qDeadlineRef.current == null
+      ? null
+      : Math.max(0, (qDeadlineRef.current + qPausedAccRef.current - now) / 1000)
+  }
+  // Draw `r` remaining seconds on the running sub-mode's bar + readout (and keep clockRemainRef in
+  // step). Direct DOM writes, like every frame of the countdown — a React render per frame would be
+  // the expensive way to move one bar.
+  const paintClock = (r: number) => {
+    clockRemainRef.current = r
+    if (!perQ) {
+      const sx = Math.max(0, Math.min(1, r / blitzSec))
+      if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(' + sx + ')'
+      if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(r)
+      setBlitzRemain(r)
+    } else {
+      const sx = qSec > 0 ? Math.max(0, Math.min(1, r / qSec)) : 1
+      if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(' + sx + ')'
+      if (suddenTimeRef.current) suddenTimeRef.current.textContent = Math.ceil(r) + 's'
+      setQRemain(r)
     }
+  }
+  // The round-over state with the clock stopped — the ONE writer of `timerDone = true`. endRound is
+  // how play reaches it; the only other caller is an Undo putting back a round an Override resumed,
+  // which must NOT restamp the remaining from the resumed clock (it restores the stamp it noted).
+  const settleEnded = () => {
     setActive(false)
     setShowTimerDate(true)
     setTimerDone(true)
     stopRound()
   }
+  const endRound = () => {
+    // Stamp the EXACT remaining time at this instant into clockRemainRef BEFORE settleEnded() nulls
+    // the clock refs, so a later Override-resume (Per Round) continues from the true remaining rather
+    // than the last rAF frame's value (up to a frame stale, always in the player's favor), and an Undo
+    // that re-ends a resumed round can put back the readout this ending left. On a clock-expiry end
+    // the remaining is already ~0. (F: Blitz resume sub-frame timer drift.)
+    const r = clockRemainAt(performance.now())
+    if (r != null) clockRemainRef.current = r
+    settleEnded()
+  }
 
-  // Countdown loop (Per Round drains blitzRemain; Per Question drains qRemain). On 0 the
-  // round ends — per-round timeout shows the answer with no stat (lockReveal); per-Q
-  // timeout counts a miss (timeoutMiss). Gated off while the rotate-back overlay pauses the
-  // clock (Q11) so the round can't drain — or expire — behind the overlay.
+  // Countdown loop (Per Round drains the round clock; Per Question drains the question clock). On 0
+  // the round ends — per-round timeout shows the answer with no stat (lockReveal); per-Q timeout
+  // counts a miss (timeoutMiss). Gated off while the rotate-back overlay pauses the clock (Q11) so
+  // the round can't drain — or expire — behind the overlay.
   useEffect(() => {
     if (!active || clockPaused) return
     let raf = 0
     const loop = () => {
-      const now = performance.now()
-      if (!perQ && blitzStartRef.current != null) {
-        const t = (now - blitzStartRef.current - blitzPausedAccRef.current) / 1000
-        const r = Math.max(0, blitzSec - t)
-        blitzRemainRef.current = r
-        const sx = Math.max(0, Math.min(1, r / blitzSec))
-        if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(' + sx + ')'
-        if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(r)
-        setBlitzRemain(r)
+      const r = clockRemainAt(performance.now())
+      if (r != null) {
+        paintClock(r)
         if (r <= 0.001) {
-          eng.lockReveal()
-          endRound()
-          return
-        }
-      }
-      if (perQ && qDeadlineRef.current != null) {
-        const r = Math.max(0, (qDeadlineRef.current + qPausedAccRef.current - now) / 1000)
-        const sx = qSec > 0 ? Math.max(0, Math.min(1, r / qSec)) : 1
-        if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(' + sx + ')'
-        if (suddenTimeRef.current) suddenTimeRef.current.textContent = Math.ceil(r) + 's'
-        setQRemain(r)
-        if (r <= 0.001) {
-          eng.timeoutMiss()
+          if (!perQ) eng.lockReveal()
+          else eng.timeoutMiss()
           endRound()
           return
         }
@@ -287,7 +349,7 @@ function BlitzMode({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- endRound is behavior-stable (closes over only stable setters + ref writes); excluded so its identity change doesn't restart the countdown
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clockRemainAt / paintClock / endRound are behavior-stable (they close over only the deps listed, stable setters and refs); excluded so their identity change doesn't restart the countdown
   }, [active, perQ, blitzSec, qSec, eng, clockPaused])
 
   // Rotate-overlay clock freeze (Q11). The countdown math above ALREADY carries pause
@@ -297,9 +359,9 @@ function BlitzMode({
   // pause start; on rotate-back (the cleanup) fold the paused span into the accumulators so
   // both clocks resume exactly where they stopped. The rAF loop is gated off while paused
   // (nothing visible to draw, and the round must not expire behind the overlay). Both
-  // sub-modes' refs are stamped unconditionally — the idle one's accumulator is reset by
-  // begin/freshQClock/resumeRound before its clock ever reads it; the null-guards make the
-  // fold a no-op if the round was torn down mid-pause (stopRound nulls the stamps).
+  // sub-modes' refs are stamped unconditionally — the idle one's accumulator is reset by armClock
+  // (Begin / a fresh question clock / a resume / an Undo) before its clock ever reads it; the
+  // null-guards make the fold a no-op if the round was torn down mid-pause (stopRound nulls them).
   useEffect(() => {
     if (!clockPaused) return
     const at = performance.now()
@@ -318,21 +380,29 @@ function BlitzMode({
     }
   }, [clockPaused])
 
-  // Arm a FRESH per-question clock for the question now on screen — one home for the stamp
-  // (deadline = now + qSec, pause bookkeeping cleared, display reset). Every per-Q advance
-  // grants one: Begin, a correct answer, an in-round Override credit that advanced (C3a), and
-  // the Override-rescue resume.
-  const freshQClock = () => {
-    qDeadlineRef.current = performance.now() + qSec * 1000
-    qPausedAccRef.current = 0
-    qPausedAtRef.current = null
-    setQRemain(qSec)
+  // Arm the running sub-mode's clock with `r` seconds left — the one home for the stamp (pause
+  // bookkeeping cleared, display redrawn). Per Round: the round started (blitzSec − r) ago. Per
+  // Question: the deadline is r from now. Begin arms a full clock; a correct answer, an in-round
+  // Override credit that advanced (C3a) and the Override-rescue resume arm a FRESH question clock;
+  // an Undo arms whatever the untouched clock would read now.
+  const armClock = (r: number) => {
+    const now = performance.now()
+    if (!perQ) {
+      blitzStartRef.current = now - (blitzSec - r) * 1000
+      blitzPausedAccRef.current = 0
+      blitzPausedAtRef.current = null
+    } else {
+      qDeadlineRef.current = now + r * 1000
+      qPausedAccRef.current = 0
+      qPausedAtRef.current = null
+    }
+    paintClock(r)
   }
   const begin = () => {
     eng.resetStats() // fresh round (S→0, history clear, new date)
     currentRoundIdRef.current = nextRoundIdRef.current++
     // Snapshot the FULL Best records standing before this round (per the active config) — the
-    // reconcile floor + the resume-revert target.
+    // reconcile floor + the resume-revert target — and the ★ markers standing with them.
     prevRoundBestRef.current = {
       blitzBk,
       suddenBk,
@@ -340,24 +410,22 @@ function BlitzMode({
       sudden: suddenBest[suddenBk],
       suddenAm: suddenAmBest[suddenBk],
     }
+    prevRoundStarsRef.current = {
+      blitz: blitzBestNew[blitzBk],
+      sudden: suddenBestNew[suddenBk],
+      suddenAm: suddenAmBestNew[suddenBk],
+    }
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
-    if (!perQ) {
-      blitzStartRef.current = performance.now()
-      blitzPausedAccRef.current = 0
-      blitzPausedAtRef.current = null
-      setBlitzRemain(blitzSec)
-      blitzRemainRef.current = blitzSec
-    } else freshQClock()
-    resetTimerBars()
+    armClock(perQ ? qSec : blitzSec)
   }
   const onAnswer = (i: number) => {
     if (!active) return
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i })
     eng.answer(i)
     if (i === correct) {
-      if (perQ) freshQClock()
+      if (perQ) armClock(qSec) // a new date gets a fresh question clock
       // per-round: round continues; engine already advanced to the next date
     } else {
       // Wrong: ends the round only when Allow Mistakes is off (either timing sub-mode). With
@@ -371,19 +439,19 @@ function BlitzMode({
       }
     }
   }
-  // Resume a round that an Override just RESCUED. A player action (a wrong answer, a Reveal, or
-  // a Show Codes — or, in per-Q + Allow Mistakes, the clock expiring on a question already
-  // answered wrong; see resumableEnd) ended the round (the clock stopped, the Best was
-  // provisionally saved by the timerDone effect) and crediting that resolved question via
-  // Override continues the round instead of leaving it dead. Two halves: (1) revert the active
-  // sub-mode's Best to the pre-round record (it re-saves only when the round genuinely ends) +
-  // clear its ★ — safe to branch on the live prefs, the toggles are idle-locked; (2) restart
-  // the clock — Per Round continues the countdown WHERE IT STOPPED (blitzStart = now − elapsed,
-  // so the remaining time = blitzRemainRef), Per Question starts a fresh per-question timer on
-  // the (already-advanced) next date. Restores the pre-rewrite behavior the Blitz mode-untangle
-  // dropped (original 7176a50 did exactly this). (C2 Q2-A.)
-  const resumeRound = () => {
+  // Put an ENDED round back on the clock with `remain` seconds left. Two doors use it: an Override
+  // that RESCUES a round a player action ended (a wrong answer, a Reveal, or a Show Codes — or, in
+  // per-Q + Allow Mistakes, the clock expiring on a question already answered wrong; see
+  // resumableEnd), and an Undo of an Override that ENDED a running round. Two halves: (1) revert the
+  // active sub-mode's Best AND its ★ to the pre-round records (the round's provisional save is gone;
+  // it re-saves only when the round genuinely ends) — safe to branch on the live prefs, the toggles
+  // are idle-locked; (2) re-arm the clock. The rescue passes Per Round the stamped remaining (the
+  // countdown continues WHERE IT STOPPED) and Per Question a fresh qSec on the (already-advanced)
+  // next date — restoring the pre-rewrite behavior the Blitz mode-untangle dropped (original 7176a50
+  // did exactly this; C2 Q2-A). The Undo passes what the never-stopped clock would read now.
+  const resumeRound = (remain: number) => {
     const snap = prevRoundBestRef.current
+    const stars = prevRoundStarsRef.current
     if (!perQ) {
       setBlitzBest((prev) => {
         const nx = { ...prev }
@@ -391,12 +459,7 @@ function BlitzMode({
         else delete nx[snap.blitzBk]
         return nx
       })
-      setBlitzBestNew((p) => {
-        if (!(snap.blitzBk in p)) return p
-        const nx = { ...p }
-        delete nx[snap.blitzBk]
-        return nx
-      })
+      setBlitzBestNew((p) => setStars(p, snap.blitzBk, stars.blitz ?? null))
     } else if (allowMistakes) {
       setSuddenAmBest((prev) => {
         const nx = { ...prev }
@@ -404,12 +467,7 @@ function BlitzMode({
         else delete nx[snap.suddenBk]
         return nx
       })
-      setSuddenAmBestNew((p) => {
-        if (!(snap.suddenBk in p)) return p
-        const nx = { ...p }
-        delete nx[snap.suddenBk]
-        return nx
-      })
+      setSuddenAmBestNew((p) => setStars(p, snap.suddenBk, stars.suddenAm ?? null))
     } else {
       setSuddenBest((prev) => {
         const nx = { ...prev }
@@ -417,12 +475,7 @@ function BlitzMode({
         else delete nx[snap.suddenBk]
         return nx
       })
-      setSuddenBestNew((p) => {
-        if (!(snap.suddenBk in p)) return p
-        const nx = { ...p }
-        delete nx[snap.suddenBk]
-        return nx
-      })
+      setSuddenBestNew((p) => setStars(p, snap.suddenBk, stars.sudden ? true : null))
     }
     setActive(true)
     setTimerDone(false)
@@ -437,12 +490,49 @@ function BlitzMode({
     // closed (src/main.tsx, the modal gate on its Category 1 and 2). This line is what makes it not
     // matter.
     setBreakdownOpen(false)
-    if (!perQ) {
-      blitzStartRef.current = performance.now() - (blitzSec - blitzRemainRef.current) * 1000
-      blitzPausedAccRef.current = 0
-      blitzPausedAtRef.current = null
-    } else freshQClock()
+    armClock(remain)
   }
+  // ── Override ⇄ Undo (round 23 Q6) ──────────────────────────────────────────────────────────
+  // An Override can change the ROUND, not just the score: it can rescue an ended round (resumeRound)
+  // and it can end a running one (a flip-to-wrong with Allow Mistakes off). The engine's Undo puts
+  // the score back; this puts the round back. Everything it needs is noted here, BEFORE the Override
+  // runs — the round's id, whether it was running, its clock's remaining seconds, and the play clock
+  // (usePlayClock: rotate-overlay time excluded). No absolute clock stamps are kept: they are only
+  // meaningful beside the pause accumulators of the clock that made them, which a resume or an end
+  // re-zeroes. One slot, because only one Override can be pending, and every Override overwrites it.
+  //
+  // ★ THE CLOCK RULE IS "AS IF THE OVERRIDE NEVER HAPPENED", and that means two different things:
+  //   • The round was RUNNING: an untouched clock would have kept running, so the Undo arms whatever
+  //     it would read now. Standing it still instead would be a free pause — and a real one: a retro
+  //     Override (Path 5) leaves the live date on screen, so Override → think → Undo → answer would
+  //     buy unlimited thinking time on every question. It also stops a per-question Override that
+  //     advanced (which granted a fresh qSec) from refilling the question clock it undoes.
+  //     ⚠ THIS INCLUDES AN OVERRIDE THAT ENDED THE ROUND (a to-wrong flip with Allow Mistakes off),
+  //     even though the clock was stopped in between, and it is deliberate: that flip is a retro
+  //     Path 5, the question it leaves is the LIVE one, and an ended round keeps its date on screen
+  //     (showTimerDate). A clock handed back where it stopped would be the same free pause through a
+  //     different door — Override (round "ends"), think as long as you like, Undo, answer. What the
+  //     player is charged is only the time they spent looking at that question, so toggling cannot
+  //     cost more than playing; the drain the ended-round rule below guards against is the one where
+  //     the waiting bought nothing.
+  //   • The round had ENDED: its clock was stopped, so the Undo re-ends it with the remaining the
+  //     Override found. Letting the resumed seconds count would make Override ⇄ Undo drain an ended
+  //     round's clock a toggle at a time — and nothing is gained by waiting on a resumed round, because
+  //     the date an Override advances to is freshly drawn every time.
+  // The Best records and their ★ need nothing here: prevRoundBestRef / prevRoundStarsRef are written
+  // only by Begin, the reconcile effect folds every change onto them, and resumeRound reverts to them,
+  // so any number of toggles lands where the last one says.
+  // ⚠ ACCEPTED EDGE: a clock that runs out between the Override and the Undo ends the round as it
+  // always does — LOCK_REVEAL / TIMEOUT_MISS are engine actions, so they end the undo window and the
+  // button goes back to Override. That is the contract (the window is only as long as nothing
+  // happens), and the clock running out is something happening.
+  const playNow = usePlayClock(clockPaused)
+  const undoRoundRef = useRef<{
+    roundId: number | null
+    wasActive: boolean
+    remain: number
+    at: number
+  } | null>(null)
   // Override-to-wrong is a mistake: flipping a CORRECT answer to wrong (a live first-try
   // reversal, or retro-flipping the most-recent correct history entry) ends the round when
   // Allow Mistakes is off — exactly like a real wrong answer (bug #1); with AM on the round
@@ -461,9 +551,15 @@ function BlitzMode({
       const last = state.stack[state.stack.length - 1]
       flipToWrong = !!(last?.capsule?.snapshot && !last.capsule.snapshot.wasWrong)
     }
+    undoRoundRef.current = {
+      roundId: currentRoundIdRef.current,
+      wasActive: active,
+      remain: active ? (clockRemainAt(performance.now()) ?? 0) : clockRemainRef.current,
+      at: playNow(),
+    }
     if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override() // credit (Path 3/4/5); the round then resumes (rescue) or the timerDone effect reconciles
-    if (resumableEnd) resumeRound()
+    if (resumableEnd) resumeRound(perQ ? qSec : clockRemainRef.current)
     else if (active && flipToWrong && !allowMistakes) endRound()
     else if (active && perQ && (state.countedWrong || state.pendingWrongOverride != null)) {
       // The override ADVANCED the live question (Path 3 credits this burned question and
@@ -473,8 +569,34 @@ function BlitzMode({
       // PRE-dispatch snapshot (the same idiom flipToWrong reads above), and the three branches
       // are mutually exclusive: a retro flip requires neither field set, so it correctly
       // leaves the live question's clock draining.
-      freshQClock()
+      armClock(qSec)
     }
+  }
+  const onUndo = () => {
+    eng.undo()
+    const snap = undoRoundRef.current
+    undoRoundRef.current = null
+    // A snapshot from another round cannot be pending (Begin/Reset dispatch a RESET, which ends the
+    // undo window, and a parked round is restored with none) — the id check says so rather than
+    // trusting it.
+    if (!snap || snap.roundId !== currentRoundIdRef.current) return
+    if (snap.wasActive) {
+      // The clock never stopped: arm what it would read now. If the Override ended the round, this
+      // is the resume door (Best + ★ back to the pre-round records, which the ended round had
+      // provisionally overwritten); if the round kept running, just the clock — a per-question
+      // Override that advanced had re-armed it for a date the Undo has taken away again.
+      const r = Math.max(0, snap.remain - (playNow() - snap.at) / 1000)
+      if (active) armClock(r)
+      else resumeRound(r)
+    } else if (active) {
+      // The Override resumed an ended round: end it again, with the readout it had. settleEnded, not
+      // endRound — the stamp is the one noted, not the resumed clock's. The reconcile effect then
+      // re-saves the round's Best exactly as the original ending did (resumeRound had reverted it).
+      paintClock(snap.remain)
+      settleEnded()
+    }
+    // Ended before and after (an Override on a finished round's history): the score was the whole
+    // change, and the engine has put it back.
   }
   const onReveal = () => {
     eng.reveal()
@@ -544,7 +666,10 @@ function BlitzMode({
   )
 
   // Reconcile Best when a round is over: set to max(S) tagged with the round id, and roll
-  // back when an Override has dropped the score of the round that set the Best. Runs on
+  // back when an Override has dropped the score of the round that set the Best. The ★ markers are
+  // set EXACTLY on every write rather than OR-folded (roundStars): an Override that raises a Best
+  // and its Undo that lowers it again must take the ★ with it — and must not take a ★ an earlier
+  // round earned under the same config, which is what the pre-round ★ snapshot is for. Runs on
   // S changes while timerDone (covers both round-end and post-round override). Three-way by
   // sub-mode (safe on live prefs — the toggles are idle-locked): per-round → blitzBest;
   // per-Q + Allow Mistakes → suddenAmBest, the SAME BlitzBest shape + reconcile (C3a);
@@ -573,13 +698,9 @@ function BlitzMode({
           next.streakRoundId === cur.streakRoundId
         )
           return prev
-        const scoreUp = next.score > cur.score,
-          streakUp = next.streak > cur.streak
-        if (scoreUp || streakUp)
-          setBlitzBestNew((p) => {
-            const e = p[blitzBk] || { score: false, streak: false }
-            return { ...p, [blitzBk]: { score: e.score || scoreUp, streak: e.streak || streakUp } }
-          })
+        setBlitzBestNew((p) =>
+          setStars(p, blitzBk, roundStars(prevRoundStarsRef.current.blitz, next, fb.blitz)),
+        )
         return { ...prev, [blitzBk]: next }
       })
     } else if (allowMistakes) {
@@ -602,13 +723,9 @@ function BlitzMode({
           next.streakRoundId === cur.streakRoundId
         )
           return prev
-        const scoreUp = next.score > cur.score,
-          streakUp = next.streak > cur.streak
-        if (scoreUp || streakUp)
-          setSuddenAmBestNew((p) => {
-            const e = p[suddenBk] || { score: false, streak: false }
-            return { ...p, [suddenBk]: { score: e.score || scoreUp, streak: e.streak || streakUp } }
-          })
+        setSuddenAmBestNew((p) =>
+          setStars(p, suddenBk, roundStars(prevRoundStarsRef.current.suddenAm, next, fb.suddenAm)),
+        )
         return { ...prev, [suddenBk]: next }
       })
     } else {
@@ -621,7 +738,9 @@ function BlitzMode({
           prevRoundBestRef.current.sudden?.score ?? 0,
         )
         if (next.score === cur.score && next.roundId === cur.roundId) return prev
-        if (next.score > cur.score) setSuddenBestNew((p) => ({ ...p, [suddenBk]: true }))
+        const floor = prevRoundBestRef.current.sudden?.score ?? 0
+        const lit = !!prevRoundStarsRef.current.sudden || next.score > floor
+        setSuddenBestNew((p) => setStars(p, suddenBk, lit ? true : null))
         return { ...prev, [suddenBk]: next }
       })
     }
@@ -698,6 +817,7 @@ function BlitzMode({
     state.canOverrideCorrect === false &&
     state.pendingWrongOverride === null &&
     state.overrideUsedThisQ === false &&
+    state.undoCapsule === null &&
     state.calcOpen === false &&
     active === false &&
     timerDone === false &&
@@ -746,8 +866,9 @@ function BlitzMode({
   // inert. Two sibling modes disagreeing about the same screen.
   //
   // WHY `timerDone` IS THE SIGNAL, and it is worth being exact because Blitz names nothing
-  // "complete". `setTimerDone(true)` has exactly ONE writer — endRound() — and EVERY way a round
-  // can finish routes through it, in BOTH timing sub-modes: the Per Round countdown hitting 0, any
+  // "complete". `setTimerDone(true)` has exactly ONE writer — settleEnded(), reached through endRound()
+  // or through an Undo re-ending a round its Override had resumed — and EVERY way a round can finish
+  // routes through it, in BOTH timing sub-modes: the Per Round countdown hitting 0, any
   // single question's Per Question clock hitting 0, a wrong answer with Allow Mistakes off, Reveal,
   // Show Codes, opening ⚙ mid-round, and an override-to-wrong with Allow Mistakes off. So there is
   // no per-sub-mode branch to write here: one flag already means "this round is over" everywhere.
@@ -778,7 +899,7 @@ function BlitzMode({
   // for the price of these three lines because Blitz's Begin is a full engine RESET — so the round's
   // history IS the whole engine history, and the times ledger's carried-in count is 0, which is what
   // makes the rows add up to the strip's Mean exactly.
-  // ⚠ `timerDone` is the right flag: every way a Blitz round can end routes through endRound(),
+  // ⚠ `timerDone` is the right flag: every way a Blitz round can end routes through settleEnded(),
   // sudden-death losses included, so a lost round opens its breakdown exactly like one the clock
   // ended — the rule AoX adopted for its failed runs in round 22 (its `isLocked`). (The long
   // argument is in the timing note directly above.) Gated on `saveStats` for the reason MoX is: a
@@ -867,7 +988,7 @@ function BlitzMode({
                 setBlitzSec(v)
                 if (!active) {
                   setBlitzRemain(v)
-                  blitzRemainRef.current = v
+                  clockRemainRef.current = v
                   if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(v)
                   if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
                 }
@@ -895,7 +1016,7 @@ function BlitzMode({
                 setBlitzSec(v)
                 if (!active) {
                   setBlitzRemain(v)
-                  blitzRemainRef.current = v
+                  clockRemainRef.current = v
                   if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(v)
                   if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
                 }
@@ -1031,14 +1152,12 @@ function BlitzMode({
             >
               Reveal
             </button>
-            <button
-              type="button"
-              data-key="O"
-              className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail ? 'opacity-60 pointer-events-none' : ''}`}
-              onClick={onOverride}
-            >
-              Override
-            </button>
+            <OverrideButton
+              overrideAvail={overrideAvail}
+              undoAvail={undoAvail}
+              onOverride={onOverride}
+              onUndo={onUndo}
+            />
           </div>
           <MethodBreakdownSection
             date={shouldShowTimerDate ? date : null}

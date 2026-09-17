@@ -13,8 +13,8 @@
 //
 // This is the engine ALL FIVE modes run on (Classic/Flash/Blitz/Deduction directly;
 // AoX via the same hook + a component run/Best layer). The full action set lives here:
-// the question loop (NEW/ANSWER/REVEAL/SHOW_CODES/RESET), the 5-path OVERRIDE, the
-// Back/Forward history nav, the date regen (REGEN_DATE), and the timed-mode helpers
+// the question loop (NEW/ANSWER/REVEAL/SHOW_CODES/RESET), the 5-path OVERRIDE and its UNDO (a
+// verbatim restore — see GameState.undoCapsule and the gameReducer wrapper), the Back/Forward history nav, the date regen (REGEN_DATE), and the timed-mode helpers
 // (RESET_ROUND/LOCK_REVEAL/TIMEOUT_MISS + the ANSWER `complete` / OVERRIDE `noAdvance`
 // flags AoX uses).
 //
@@ -155,7 +155,15 @@ export interface GameState {
   countedWrong: boolean //          this question has been "burned" (wrong / Reveal / Show Codes)
   canOverrideCorrect: boolean //    a first-try-correct is reversible via Override
   pendingWrongOverride: PendingWrongOverride | null // previous wrong reclaimable via Override
-  overrideUsedThisQ: boolean //     Override already fired for this live question
+  // Override has fired for the question on screen. TWO JOBS, and the second is why it can never be
+  // deleted or relaxed now that Override toggles with Undo: (1) it is one of the three mechanisms that
+  // make `overrideAvail` false in every post-Override state, which is exactly where the button reads
+  // Undo instead; (2) BACK/FORWARD serialise it into `StackEntry.overrideUsed`, the per-entry
+  // "credited at most once" gate — the thing that stops a Back→Forward round trip re-arming a credit an
+  // Override already took away (tests/engine/scoreIntegrity.regression pins the flip-flop). Undo does
+  // not clear it; it restores the pre-Override value along with everything else (see `undoCapsule`).
+  // The name is frozen: it lives inside the round blobs store/sessionRound parks.
+  overrideUsedThisQ: boolean
   calcOpen: boolean //              Show Codes panel open
   calcPenaltyActive: boolean //     codes were shown on this question (penalty applied)
   browseHasCredit: boolean //       credit flag for the entry currently being browsed
@@ -220,7 +228,28 @@ export interface GameState {
   // breakdown relies on (engine/runBreakdown).
   liveSolveTime: number | null
   timesBase: number
+  // ── THE UNDO CAPSULE (Override ⇄ Undo, round 23 Q6) ─────────────────────────────────────────
+  // The whole engine state as it stood the instant before the most recent Override, or null. Its
+  // presence IS "Undo is available": the Override button reads Undo, and UNDO puts this state back
+  // verbatim. ★ WHY A FULL-STATE CAPSULE AND NOT FIVE HAND-WRITTEN INVERSES: no Override path's
+  // inverse is computable from its post-state — the paths destroy `wrongTime`, `prevStatsSnapshot`,
+  // the original answer grid and (on the advancing branches) `forwardStack` — and `prevStatsSnapshot`
+  // must NOT be reused as a rollback: the repo already tried restoring stats from it and it clobbered
+  // credits earned in between (the fix notes on Paths 2 and 4). A verbatim restore of a state the
+  // reducer itself produced satisfies every invariant by construction (they are pure functions of
+  // GameState), and it RESTORES `overrideUsedThisQ` rather than relaxing the gate.
+  // ⚠ THE CONTRACT IS "UNDO REVERSES THE LAST OVERRIDE, ONLY WHILE IT IS STILL THE LAST THING YOU DID".
+  // Every action other than OVERRIDE/UNDO discards the capsule, in ONE place (the exported
+  // gameReducer wrapper below), so the window between an Override and its Undo contains zero
+  // gameplay — which is what makes a verbatim restore safe (nothing earned in the window can be
+  // erased, because nothing can be earned in it) and what lets the timed modes reverse their own
+  // component half (a resumed or ended round) without reconciling against intervening play.
+  // `UndoCapsule` omits this field, so a capsule can never nest inside a capsule.
+  undoCapsule: UndoCapsule | null
 }
+
+// A GameState minus its own undo slot — what the capsule holds (see GameState.undoCapsule).
+export type UndoCapsule = Omit<GameState, 'undoCapsule'>
 
 // ── The action set (discriminated union on `type`) ───────────────────────────
 // Each action carries the impure inputs the reducer can't compute (the next date,
@@ -260,6 +289,9 @@ export type GameAction =
     }
   | { type: 'BACK' }
   | { type: 'FORWARD'; useJulian: boolean }
+  // Put back the state the most recent Override replaced (see GameState.undoCapsule). No payload:
+  // everything it needs was captured when the Override ran.
+  | { type: 'UNDO' }
 
 // Weekday index (0=Sun) honoring the active calendar (Julian vs Gregorian).
 export const activeWday = (y: number, m: number, d: number, useJulian: boolean): number =>
@@ -348,7 +380,12 @@ export const initEngine = (date: Question, initialStats?: Stats): GameState => (
   // mount, on every boot, and the player meets the error card instead of the app. `?? 0` is the
   // same answer a blank start gives, which is the honest reading of a silo that names no times.
   timesBase: initialStats?.times?.length ?? 0,
+  undoCapsule: null, //  nothing to undo on a fresh engine
 })
+
+// The state minus its undo slot — what OVERRIDE files into the capsule. Destructuring the slot away
+// (rather than copying it in and nulling it) is what keeps a capsule from ever holding a capsule.
+const stripUndo = ({ undoCapsule, ...rest }: GameState): UndoCapsule => rest
 
 // The card's LIFETIME number — the figure the Q# badge shows beside the Score box. `stack` holds the
 // entries BEHIND the card being viewed (browsing back pops them), so the base plus that depth plus
@@ -553,7 +590,23 @@ const liveStreakContribution = (live: StackEntry | undefined): 'credit' | 'miss'
   return earnedCredit(btns, ls.revealed, ls.countedWrong) ? 'credit' : 'miss'
 }
 
+// ★ THE ENGINE'S ONE DOOR, and the undo contract's ONE choke point. Every action runs through the
+// core below; then every action that is not OVERRIDE or UNDO discards the undo capsule HERE, rather
+// than each case remembering to clear it at each of its return sites. That is the whole enforcement
+// of "Undo reverses the last Override only while it is still the last thing you did" — NEW, ANSWER,
+// REVEAL, SHOW_CODES (open AND close), RESET, REGEN_DATE, LOCK_REVEAL, TIMEOUT_MISS, RESET_ROUND,
+// BACK, FORWARD and any action added later all end the window by default, including a no-op one (a
+// locked ANSWER, a BACK with no history): the capsule is only ever safe to restore over a state
+// nothing else has touched, and "nothing else was dispatched" is the only proof of that which does
+// not need re-arguing per action. OVERRIDE is exempt because it is what files the capsule; UNDO
+// because it is what spends it.
 export function gameReducer(state: GameState, action: GameAction): GameState {
+  const next = coreReducer(state, action)
+  if (action.type === 'OVERRIDE' || action.type === 'UNDO') return next
+  return next.undoCapsule === null ? next : { ...next, undoCapsule: null }
+}
+
+function coreReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     // ── NEW ────────────────────────────────────────────────────────────────
     // Advance to a fresh question (the "New" button / doNew→pushAndNext).
@@ -566,7 +619,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // length stay in lockstep while browsing, so this terminates at the live edge. Fix 2026-06-06.
       let s = state
       while (s.backDepth > 0 && s.forwardStack.length > 0)
-        s = gameReducer(s, { type: 'FORWARD', useJulian })
+        s = coreReducer(s, { type: 'FORWARD', useJulian })
       return advance(s, { nextDate, useJulian, saved: effectiveSaveStats(s, saveStats) })
     }
 
@@ -875,8 +928,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     // stat updates apply unconditionally here. Paths are checked 1→5; first match wins.
     case 'OVERRIDE': {
       const { useJulian, tracking, timingOff, nextDate, noAdvance } = action
+      // An Override while an Undo is pending cannot happen in the app: `overrideAvail` is false in
+      // every state an Override leaves behind (overrideUsedThisQ, an overrideUsed history entry, or
+      // a spent pendingWrongOverride — the fuzz asserts it), so the button reads Undo there. The
+      // engine refuses anyway rather than trust that: filing a second capsule over the first would
+      // make the older Override un-undoable while its capsule silently vanished.
+      if (state.undoCapsule !== null) return state
       const correct = correctIndexOf(state.date, useJulian)
-      const s0: GameState = { ...state, overrideUsedThisQ: true } // setOverrideUsedThisQ(true) at top
+      // setOverrideUsedThisQ(true) at top — and the capsule is filed here, ONCE, so every path and
+      // branch below inherits it by building from s0 (advance() spreads its input, so the advancing
+      // branches carry it through too).
+      const s0: GameState = { ...state, overrideUsedThisQ: true, undoCapsule: stripUndo(state) }
 
       // PATH 1 — browsing-back: delta-adjust stats for the browsed entry, recalc streak.
       if (state.backDepth > 0 && state.canOverrideCorrect && state.prevStatsSnapshot) {
@@ -1323,6 +1385,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         browseHasCredit: fwd.hasCredit ?? computeHasCredit(fwd.btns),
         saveStatsThisQ: true,
       }
+    }
+
+    // ── UNDO ─────────────────────────────────────────────────────────────────────
+    // Put back the state the most recent Override replaced, verbatim — including `questionId`
+    // (an advancing Override bumped it, so Undo steps it back; useGameEngine carries the solve timer
+    // back with it rather than letting the re-fired effect restart the clock) and `gridEpoch` (no
+    // Override path bumps it, so the grids are never remounted). The restored state has no capsule,
+    // so the button reads Override again; pressing it files a fresh one. No capsule → nothing to undo.
+    case 'UNDO': {
+      if (state.undoCapsule === null) return state
+      return { ...state.undoCapsule, undoCapsule: null }
     }
 
     default:

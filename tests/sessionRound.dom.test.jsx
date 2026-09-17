@@ -407,3 +407,54 @@ describe('Q11 wiring does not weaken the remount that isolates presets', () => {
     expect(statValue('Score')).toBe('3/4') // preset 1's ended round came back exactly as left, uncontaminated
   })
 })
+
+// ── Override ⇄ Undo across a preset round-trip (round 23 Q6) ───────────────────────────────────
+// An Undo reverses the engine half AND the screen's half of an Override (a resumed/ended round, a run
+// phase). The screen's half lives in refs and state that are never parked, so a parked round comes
+// back with NO Undo pending — useGameEngine strips the capsule at the one door every parked state
+// comes through. The round itself comes back exactly as the Override left it.
+describe('Round 23 Q6 — a parked round never comes back with an Undo pending', () => {
+  beforeEach(() => resetAppState())
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('Blitz: an ended round with a pending Undo comes back overridden, offering no Undo', () => {
+    mountApp()
+    pinReadable()
+    switchToBlitz()
+    finishBlitzRound(2) // 2/3
+    tap(ctrl('<')) // the second credited solve
+    tap(ctrl('Override')) // flip it → 1/3
+    expect(statValue('Score')).toBe('1/3')
+    expect(isOffered(ctrl('Undo'))).toBe(true)
+
+    const p2 = createPreset()
+    openPreset(p2.id)
+    openPreset(1)
+    expect(statValue('Score')).toBe('1/3') // the Override stands…
+    expect(queryCtrl('Undo')).toBeNull() // …but its Undo did not survive the remount
+    expect(isOffered(ctrl('Override'))).toBe(false) // this card's override is spent
+  })
+
+  it('MoX: a failed run with a pending Undo comes back failed, offering no Undo', () => {
+    mountApp()
+    pinReadable()
+    switchToMox()
+    act(() => useModePrefs.getState().setAoxN('2'))
+    tap(ctrl('Begin'))
+    tap(screen.getByRole('button', { name: correctName(readDate()) }))
+    tap(screen.getByRole('button', { name: correctName(readDate()) })) // done 2/2
+    tap(ctrl('Override')) // reverse the completing solve → failed 1/2
+    expect(statValue('Score')).toBe('1/2')
+    expect(isOffered(ctrl('Undo'))).toBe(true)
+
+    const p2 = createPreset()
+    openPreset(p2.id)
+    openPreset(1)
+    expect(statValue('Score')).toBe('1/2')
+    expect(ctrl('Reset')).toBeInTheDocument()
+    expect(queryCtrl('Undo')).toBeNull()
+  })
+})

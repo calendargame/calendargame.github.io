@@ -34,6 +34,7 @@ import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
 import CardNumber from '../components/CardNumber.jsx'
+import OverrideButton from '../components/OverrideButton.jsx'
 import RunBreakdown from '../components/RunBreakdown.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
@@ -141,7 +142,7 @@ function AoxMode({
     // restores the incoming preset's own run.
     getInitialState: () => parkedRun?.engine ?? null,
   })
-  const { state, correct } = eng
+  const { state, correct, undoAvail } = eng
   // Android Back closes AoX's Show-Codes panel (Q1) — see the same hook in the other modes.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const S = state.stats
@@ -213,8 +214,9 @@ function AoxMode({
   // the floor restored, as if the run never completed. Before the C2 fix only the live-edge
   // reversal rolled back (rollbackBest, gated on !inBack), so a back-browse un-credit left a
   // FABRICATED Best standing on a run with fewer than n credits — and a mid-done settings change
-  // (key moved) dodged even that. ★ markers: an improving write OR-folds into the key's marker
-  // (a prior run's star survives); a write that only restores the floor clears it.
+  // (key moved) dodged even that. ★ markers: set exactly from each reconcile — lit only for a metric
+  // this run's standing figure still improves — so a write that restores the floor clears the key's ★
+  // (safe: reset() has cleared every ★ before a run can begin; see the note at the write).
   // ⚠ The disables in this effect and the next are NEW at extraction time, not behaviour changes —
   // same cause as FlashMode's and DeductionMode's: main.tsx's dense one-line style meant the React
   // Compiler never analyzed this component (linting HEAD's main.tsx reports these rules ZERO
@@ -244,18 +246,24 @@ function AoxMode({
     setBests((p) => {
       const cur = p[snap.key] || emptyAoxBest()
       if (aoxBestEqual(cur, next)) return p
-      if (avgImp || medImp)
-        setBestNew((b) => {
-          const e = b[snap.key] || { avg: false, med: false }
-          return { ...b, [snap.key]: { avg: e.avg || avgImp, med: e.med || medImp } }
-        })
-      else
-        setBestNew((b) => {
-          if (!(snap.key in b)) return b
-          const nx = { ...b }
-          delete nx[snap.key]
-          return nx
-        })
+      // The ★ markers, set EXACTLY from this reconcile (never OR-folded onto whatever is lit now), so
+      // an improving write cannot leave a ★ on a metric a later Override — or its Undo — has stopped
+      // improving. "Exactly" needs no pre-run ★ floor here, unlike Blitz: every ★ is gone before any
+      // run can begin, because Begin is offered only from idle and the one way an ended run reaches
+      // idle is reset(), which clears the whole ★ map (a remount starts it empty too). So a
+      // floor-restoring write clearing the key can never take a ★ an earlier run earned.
+      const avg = avgImp
+      const med = medImp
+      setBestNew((b) => {
+        if (avg || med) {
+          const e = b[snap.key]
+          return e && e.avg === avg && e.med === med ? b : { ...b, [snap.key]: { avg, med } }
+        }
+        if (!(snap.key in b)) return b
+        const nx = { ...b }
+        delete nx[snap.key]
+        return nx
+      })
       return { ...p, [snap.key]: next }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -331,6 +339,7 @@ function AoxMode({
     Object.keys(bestNew).length === 0 &&
     state.pendingWrongOverride === null &&
     state.overrideUsedThisQ === false &&
+    state.undoCapsule === null &&
     state.countedWrong === false
   useEffect(() => {
     onFreshChange?.(aoxIsFreshLocal)
@@ -470,7 +479,13 @@ function AoxMode({
       return
     }
     if (oneByOne) return // One-by-One: pause on "Next" (awaitingNext) — see the answer, then Continue
-    setFlashWithTimeout({ type: 'good', idx: correct }) // flash the revealed answer
+    flashThenAdvance(correct)
+  }
+  // Flash the revealed answer (grid index `idx`) for FLASH_MS, then advance. onReveal's flow, and an
+  // Undo's: an Override inside that window cancels the advance, so undoing it must arm it again or
+  // the player is left on a revealed miss with no Next button and nothing to press but Reset.
+  const flashThenAdvance = (idx: number) => {
+    setFlashWithTimeout({ type: 'good', idx })
     if (revealAdvanceRef.current) clearTimeout(revealAdvanceRef.current)
     revealAdvanceRef.current = setTimeout(() => {
       revealAdvanceRef.current = null
@@ -493,6 +508,11 @@ function AoxMode({
     if (oneByOne) setShown(false)
   }
   const onOverride = () => {
+    undoRunRef.current = {
+      runId: currentRunIdRef.current,
+      runPhase,
+      revealAdvanceIdx: revealAdvanceRef.current != null ? correct : null,
+    }
     // A credit / completion via Override DURING the reveal-flash window must kill the pending
     // auto-advance — otherwise the stale doNew() fires ~FLASH_MS later and either SKIPS the
     // freshly-advanced question or, at the final question, re-opens the phantom-Q(N+1) overshoot the
@@ -533,6 +553,37 @@ function AoxMode({
       // what makes it not matter.
       setBreakdownOpen(false)
     }
+  }
+  // ── Override ⇄ Undo (round 23 Q6) ──
+  // An Override can move the RUN, not just the score: it can fail a run (a to-wrong flip with Allow
+  // Mistakes off), resume a failed one (crediting the wrong that failed it), resume a completed one
+  // (reversing its final solve with Allow Mistakes on) — and the completion effect can then flip a
+  // resumed run to done. The engine's Undo puts the score back; this puts the phase back, which is
+  // all an Override changes here (MoX has no round clock; a question's solve clock is the engine
+  // hook's, and it hands that back itself). Noted BEFORE the Override runs; one slot, because only
+  // one Override can be pending and every Override overwrites it. One more thing an Override stops: a
+  // pending reveal auto-advance (onOverride cancels it), so a snapshot that had one re-arms it — with
+  // the grid index of the question it belongs to, noted then, since an advancing Override has since
+  // changed what `correct` means. The Best and its ★ need nothing:
+  // prevBestSnapRef is latched once per run and every reconcile folds onto it, so
+  // any number of toggles lands where the last one says. The breakdown stays CLOSED — it belongs to
+  // the run as it ended, and the Override that moved the phase already closed it.
+  const undoRunRef = useRef<{
+    runId: number | null
+    runPhase: string
+    revealAdvanceIdx: number | null //  the pending reveal auto-advance's answer index, or null
+  } | null>(null)
+  const onUndo = () => {
+    eng.undo()
+    const snap = undoRunRef.current
+    undoRunRef.current = null
+    // A snapshot from another run cannot be pending (Begin/Reset dispatch a RESET, which ends the
+    // undo window, and a parked run is restored with none) — the id check says so rather than
+    // trusting it.
+    if (!snap || snap.runId !== currentRunIdRef.current) return
+    setRunPhase(snap.runPhase)
+    setBreakdownOpen(false)
+    if (snap.revealAdvanceIdx != null) flashThenAdvance(snap.revealAdvanceIdx)
   }
   const reset = () => {
     cancelRevealAdvance()
@@ -850,14 +901,12 @@ function AoxMode({
           >
             Reveal
           </button>
-          <button
-            type="button"
-            data-key="O"
-            className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail ? 'opacity-60 pointer-events-none' : ''}`}
-            onClick={onOverride}
-          >
-            Override
-          </button>
+          <OverrideButton
+            overrideAvail={overrideAvail}
+            undoAvail={undoAvail}
+            onOverride={onOverride}
+            onUndo={onUndo}
+          />
         </div>
         {/* Show Codes — the SHARED MethodBreakdownSection, exactly like the other four modes
                 (Q5, round 8). AoX's gate isn't "is there a date" but "is the date SHOWABLE": the run

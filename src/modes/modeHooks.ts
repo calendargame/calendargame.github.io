@@ -47,9 +47,37 @@ export function engineFresh(s: GameState) {
     s.canOverrideCorrect === false &&
     s.pendingWrongOverride === null &&
     s.overrideUsedThisQ === false &&
+    s.undoCapsule === null &&
     s.calcOpen === false &&
     s.calcPenaltyActive === false
   )
+}
+// The countdown modes' PLAY CLOCK — performance.now() with the rotate-back overlay's pauses taken
+// out, so "how much round time has passed since X" can be asked across a pause without anyone
+// having to have been watching when it happened. Its one consumer is Undo (round 23 Q6): an
+// Override on a RUNNING countdown notes the clock's remaining time and this clock's reading, and
+// the Undo re-arms the countdown with the remaining minus the play time that has passed — "as if
+// the Override never happened", because an untouched clock would have kept running. The live
+// countdowns keep their own pause bookkeeping (they are driven every frame and must also freeze
+// their display); this exists for the gap between two taps, where nothing is being driven.
+// An in-progress pause counts as paused (the second term), so the reading never includes overlay
+// time whichever side of the rotation it is taken on.
+export function usePlayClock(clockPaused: boolean | undefined) {
+  const pausedMsRef = useRef(0)
+  const pausedAtRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!clockPaused) return
+    pausedAtRef.current = performance.now()
+    return () => {
+      if (pausedAtRef.current != null)
+        pausedMsRef.current += performance.now() - pausedAtRef.current
+      pausedAtRef.current = null
+    }
+  }, [clockPaused])
+  return () => {
+    const now = performance.now()
+    return now - pausedMsRef.current - (pausedAtRef.current != null ? now - pausedAtRef.current : 0)
+  }
 }
 // Shared "hideable stats" chrome for the three non-timed modes (Classic, Flash, Deduction): the
 // show/hide toggles, the "Enable and Reset Stats?" desync case, and the 6-box stats array for

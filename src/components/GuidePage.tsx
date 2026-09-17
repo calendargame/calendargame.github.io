@@ -799,10 +799,21 @@ export default function GuidePage({
             A previously correct date flipped to wrong shows a green-and-red diagonal split:
             green-upper-left (originally correct), red-lower-right (now counted wrong).
           </li>
-          <li>You can only override each date once.</li>
           <li>
             Overriding a wrong answer (however you do it) clears any wrong highlights; only the
             correct answer is shown.
+          </li>
+          <li>
+            <b>Undo</b> — once you've overridden, the Override button turns into <b>Undo</b>. Undo
+            puts back exactly what that Override changed (your score, streak, times, the date on
+            screen, and in Blitz, Flash and MoX the round, flash or run too), and the button reads
+            Override again. You can switch back and forth as many times as you like.
+          </li>
+          <li>
+            Undo only lasts until your next action. Answer, press New, Reveal, Show Codes, Back or
+            Forward, Reset — or let a Blitz clock run out — and the Override stays as it is; the
+            button goes back to Override (greyed out if that date has already been overridden). Undo
+            also doesn't survive switching presets.
           </li>
         </UL>
         <p>Override in the run modes:</p>
@@ -819,6 +830,15 @@ export default function GuidePage({
             In both run modes, if a round/run ended because you answered wrong, revealed, or showed
             codes, Override credits that question and it continues — picking up where it left off
             instead of staying ended.
+          </li>
+          <li>
+            Undo reverses the round or run along with the score: a resumed round or run ends again,
+            and one the Override ended picks back up. Blitz&apos;s clock is put back as if you had
+            never overridden — a round that had ended gets back exactly the time it had left, while
+            a round that was still going (including one your Override ended) has kept counting down
+            the whole time, so Override and Undo are never a free pause. Flash works the same way:
+            undoing an Override made during a flash brings the flash back, with whatever of its
+            reveal time would still be left.
           </li>
           <li>
             Override is <b>locked</b> when Save Stats is off in the casual modes (Classic, Flash,
@@ -1247,7 +1267,7 @@ export default function GuidePage({
               </div>
               <div className="flex items-center gap-2">
                 <Kbd>O</Kbd>
-                <span>Override</span>
+                <span>Override / Undo</span>
               </div>
               <div className="flex items-center gap-2">
                 <Kbd>C</Kbd>
@@ -1323,10 +1343,11 @@ export default function GuidePage({
           </li>
           <li>
             The answer keys and the Game Actions above are ignored while a popup is open, too —
-            whatever is behind a popup is out of reach until you close it, so an answer or an
-            Override can't be pressed through one. The Overlays and Mode Switching keys still work:
-            a mode letter or <Kbd>H</Kbd> leaves the screen, and any popup belonging to it goes at
-            the same moment, while <Kbd>G</Kbd> opens and closes the ⚙ menu with its own popups.
+            whatever is behind a popup is out of reach until you close it, so an answer, an Override
+            or an Undo can't be pressed through one. The Overlays and Mode Switching keys still
+            work: a mode letter or <Kbd>H</Kbd> leaves the screen, and any popup belonging to it
+            goes at the same moment, while <Kbd>G</Kbd> opens and closes the ⚙ menu with its own
+            popups.
           </li>
           <li>
             <Kbd>Tab</Kbd> is the exception — it toggles the mode selector even from inputs (use{' '}
@@ -2431,7 +2452,10 @@ export default function GuidePage({
       >
         <Lead>The main practice mode — no time pressure, answer at your own pace.</Lead>
         <UL>
-          <li>Override works after both wrong and correct answers.</li>
+          <li>
+            Override works after both wrong and correct answers, and Undo takes it back until your
+            next action.
+          </li>
           <li>
             Reset Stats clears your stats and question history; when timing stats are hidden and you
             haven't burned the current date, the date is kept.
@@ -2483,8 +2507,10 @@ export default function GuidePage({
             or a Show Codes with Allow Mistakes off), Override credits that question and the run
             continues where it left off. You can also override past dates while browsing back. If
             overriding on the last question with Allow Mistakes on, a new date is generated to
-            complete the mean. One override per question. Override works the same whether Save Stats
-            is on or off.
+            complete the mean. Once used, the button turns into Undo, which puts back the score and
+            the run exactly as they were — a failed run fails again, a completed one completes again
+            — until your next action; you can switch between Override and Undo as often as you like.
+            Override works the same whether Save Stats is on or off.
           </li>
         </UL>
         <Subhead>Stats and bests</Subhead>
@@ -2696,6 +2722,14 @@ export default function GuidePage({
           question timer starts on the next date (Per Question), and the round's bests aren't locked
           in until the round ends for real (so a misclick you fix doesn't update your bests).
           Override works the same whether Save Stats is on or off.
+        </p>
+        <p>
+          After an Override the button reads <b>Undo</b> until your next action (or until the clock
+          runs out). Undo puts the round back too: a round the Override resumed ends again with
+          exactly the time it had left, so switching back and forth never costs you time; a round
+          that was running when you overrode — even if the Override ended it — carries on as if you
+          hadn&apos;t, with the time that has passed since counted, so it's never a free pause. Your
+          bests and their ★ markers follow every switch, and a ★ an earlier round earned stays lit.
         </p>
         <Subhead>Streak and bests</Subhead>
         <UL>

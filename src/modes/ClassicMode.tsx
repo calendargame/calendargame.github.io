@@ -15,6 +15,7 @@ import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import CardNumber from '../components/CardNumber.jsx'
+import OverrideButton from '../components/OverrideButton.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -65,7 +66,7 @@ function ClassicMode({
     timingOff,
     getInitialStats: () => useProgress.getState().stats.classic,
   })
-  const { state, correct, overrideAvail } = eng
+  const { state, correct, overrideAvail, undoAvail } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
@@ -94,7 +95,9 @@ function ClassicMode({
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i })
     eng.answer(i)
   }
-  // Override Path 3 (override-after-wrong) flashes green on the correct button, matching App.
+  // Override Path 3 (override-after-wrong) flashes green on the correct button, matching App. Its
+  // Undo (the same button, relabelled — components/OverrideButton) is the engine's alone: Classic
+  // keeps no state of its own that an Override changes.
   const onOverride = () => {
     if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override()
@@ -213,14 +216,12 @@ function ClassicMode({
             >
               Reveal
             </button>
-            <button
-              type="button"
-              data-key="O"
-              className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${!overrideAvail ? 'opacity-60 pointer-events-none' : ''}`}
-              onClick={onOverride}
-            >
-              Override
-            </button>
+            <OverrideButton
+              overrideAvail={overrideAvail}
+              undoAvail={undoAvail}
+              onOverride={onOverride}
+              onUndo={eng.undo}
+            />
           </div>
           <MethodBreakdownSection
             date={date}

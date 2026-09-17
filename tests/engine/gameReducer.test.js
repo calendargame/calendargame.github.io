@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { gameReducer, initEngine, cardNumber } from '../../src/engine/gameReducer.js'
 import { wday } from '../../src/lib/calendar.js'
+import { checkGameInvariants } from '../../src/engine/invariants.js'
 
 const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
 const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
@@ -471,5 +472,146 @@ describe('gameReducer — historyBase / cardNumber (the Q# badge)', () => {
     s = override(s) // Path 5: retro-flip the credit away — played untouched
     expect(s.stats.played).toBe(501)
     expect(cardNumber(s)).toBe(502)
+  })
+})
+
+// ── Override ⇄ Undo (round 23 Q6) ───────────────────────────────────────────────────────────────
+// Where the Override button used to go inert after use, it now reads Undo and puts back EXACTLY the
+// state the Override replaced; then it reads Override again, as many times as you like. The engine
+// half is one full-state capsule filed by OVERRIDE and spent by UNDO, discarded by every other
+// action in one choke point (the exported gameReducer wrapper). So the pins below are whole-object:
+// for EVERY path and branch, undo(override(s)) must deep-equal s — not "the stats match", the state.
+describe('gameReducer — Override ⇄ Undo', () => {
+  const undo = (s) => gameReducer(s, { type: 'UNDO' })
+  // Timing ON (the advancing branches) with times tracked, so the pool/ledger are exercised too.
+  const ovr = (s, extra = {}) => override(s, { tracking: true, timingOff: false, ...extra })
+  const T = { tracking: true, elapsed: 1.25 }
+  const credited = () => answer(initEngine(DATE), C, T) // 1/1 with a time, advanced to NEXT
+  const burned = () => answer(initEngine(DATE), W, T) // 0/1, wrong on DATE, stays
+  const held = () => answer(initEngine(DATE), C, { ...T, complete: true }) // AoX held completing solve
+  const pending = () => answer(burned(), C) // late correct → advanced, Path 4 armed
+
+  // Every path and branch of the OVERRIDE case, as [label, pre-state, dispatch].
+  const CASES = [
+    ['Path 1 — back-browse flip', () => back(credited()), (s) => ovr(s)],
+    ['Path 2 — live reversal, advances', held, (s) => ovr(s)],
+    ['Path 2 — live reversal, stays (noAdvance)', held, (s) => ovr(s, { noAdvance: true })],
+    ['Path 2 — live reversal, stays (timing off)', held, (s) => ovr(s, { timingOff: true })],
+    ['Path 3 — credit the burned question, advances', burned, (s) => ovr(s)],
+    [
+      'Path 3 — credit the burned question, held (noAdvance)',
+      burned,
+      (s) => ovr(s, { noAdvance: true }),
+    ],
+    ['Path 4 — retro-credit the previous wrong, advances', pending, (s) => ovr(s)],
+    [
+      'Path 4 — retro-credit the previous wrong, stays (timing off)',
+      pending,
+      (s) => ovr(s, { timingOff: true }),
+    ],
+    ['Path 5 — retro-flip the last entry', credited, (s) => ovr(s)],
+    // The two degenerate returns — unreachable through overrideAvail, but they still file a capsule.
+    [
+      'Path 4 — spent target (skip branch)',
+      () => {
+        let s = pending()
+        s = back(s) // browse onto the previous wrong
+        s = ovr(s) // Path 1 credits it — overrideUsed rides FORWARD onto the entry
+        s = forward(s) // back at the live edge: pending re-armed from liveState, target spent
+        return s
+      },
+      (s) => ovr(s),
+    ],
+    ['no path matched (fall-through)', () => initEngine(DATE), (s) => ovr(s)],
+  ]
+
+  it.each(CASES)(
+    '%s: undo(override(s)) deep-equals s, and both states are healthy',
+    (_, pre, go) => {
+      const s0 = pre()
+      expect(s0.undoCapsule).toBe(null)
+      const s1 = go(s0)
+      expect(s1.undoCapsule).not.toBe(null) //  the Override filed a capsule…
+      expect(s1).not.toEqual(s0) //              …and did something
+      expect(checkGameInvariants(s1, false)).toEqual([])
+      const s2 = undo(s1)
+      expect(s2).toEqual(s0) //                  exactly the pre-Override state, capsule slot included
+      expect(checkGameInvariants(s2, false)).toEqual([])
+    },
+  )
+
+  it.each(CASES)('%s: O→U→O→U→O deep-equals a single O (toggling never drifts)', (_, pre, go) => {
+    const once = go(pre())
+    let s = pre()
+    s = go(s)
+    s = undo(s)
+    s = go(s)
+    s = undo(s)
+    s = go(s)
+    expect(s).toEqual(once)
+  })
+
+  it('the capsule survives the advancing branches (advance() spreads it through)', () => {
+    const s = ovr(burned())
+    expect(s.date).toBe(NEXT) // advanced…
+    expect(s.undoCapsule.date).toBe(DATE) // …and the capsule still holds the burned question
+    expect(undo(s).questionId).toBe(s.questionId - 1) // Undo steps the question id back with it
+    expect(undo(s).gridEpoch).toBe(s.gridEpoch) // no Override path remounts the grids
+  })
+
+  it('a capsule never nests — it has no undo slot of its own', () => {
+    const s = ovr(burned())
+    expect('undoCapsule' in s.undoCapsule).toBe(false)
+  })
+
+  it('UNDO with no capsule is a no-op (same object)', () => {
+    const s = burned()
+    expect(undo(s)).toBe(s)
+    const fresh = initEngine(DATE)
+    expect(undo(fresh)).toBe(fresh)
+  })
+
+  it('OVERRIDE while a capsule is pending is refused (same object) — never files over the first', () => {
+    const s = ovr(credited()) // Path 5 filed a capsule
+    expect(ovr(s)).toBe(s)
+  })
+
+  // ⚠ THE LOAD-BEARING SAFETY PROPERTY: the window between an Override and its Undo contains zero
+  // gameplay. Every action that is not OVERRIDE/UNDO discards the capsule — including the no-op ones.
+  describe('every other action discards the capsule', () => {
+    const J = { useJulian: false }
+    const OTHER = [
+      ['NEW', { type: 'NEW', nextDate: NEXT, useJulian: false, saveStats: true }],
+      ['ANSWER (correct)', { type: 'ANSWER', idx: C, ...ctx, elapsed: null, nextDate: NEXT }],
+      ['ANSWER (wrong)', { type: 'ANSWER', idx: W, ...ctx, elapsed: null, nextDate: NEXT }],
+      ['REVEAL', { type: 'REVEAL', ...J, elapsed: null, saveStats: true }],
+      ['SHOW_CODES open', { type: 'SHOW_CODES', open: true, ...J, elapsed: null, saveStats: true }],
+      [
+        'SHOW_CODES close',
+        { type: 'SHOW_CODES', open: false, ...J, elapsed: null, saveStats: true },
+      ],
+      ['RESET', { type: 'RESET', timingOff: false, nextDate: NEXT }],
+      ['REGEN_DATE', { type: 'REGEN_DATE', nextDate: NEXT }],
+      ['LOCK_REVEAL', { type: 'LOCK_REVEAL', ...J }],
+      ['TIMEOUT_MISS', { type: 'TIMEOUT_MISS', ...J, saveStats: true }],
+      ['RESET_ROUND', { type: 'RESET_ROUND' }],
+      ['BACK', { type: 'BACK' }],
+      ['FORWARD', { type: 'FORWARD', ...J }],
+      ['an unknown action', { type: 'NOT_AN_ACTION' }],
+    ]
+    // Two capsule-carrying states: one at the live edge after a Path 5 (history behind, fresh live Q)
+    // and one where the Override LEFT the player on a locked question (Path 3 held) — so the no-op
+    // variants (ANSWER on a locked grid, FORWARD with nothing ahead) are covered too.
+    const carriers = [
+      ['after Path 5', () => ovr(credited())],
+      ['after a Path 3 hold (locked)', () => ovr(burned(), { noAdvance: true })],
+    ]
+    for (const [where, make] of carriers) {
+      it.each(OTHER)(`${where}: %s`, (_, action) => {
+        const s = make()
+        expect(s.undoCapsule).not.toBe(null)
+        expect(gameReducer(s, action).undoCapsule).toBe(null)
+      })
+    }
   })
 })

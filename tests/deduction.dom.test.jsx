@@ -294,7 +294,11 @@ describe('Deduction — characterization (batch 2: Day live Override)', () => {
     clickCtrl('Override')
     expect(statValue('Score')).toBe('0/1')
     expect(statValue('Streak')).toBe('0/0')
-    expect(isDisabled(ctrl('Override'))).toBe(true) // single-shot
+    expect(isDisabled(ctrl('Undo'))).toBe(false) // the spent Override reads Undo (round 23 Q6)
+    clickCtrl('Undo')
+    expect(statValue('Score')).toBe('1/1')
+    expect(statValue('Streak')).toBe('1/1')
+    expect(isDisabled(ctrl('Override'))).toBe(false)
   })
 
   it('Path 3 (wrong → Override): retroactively credits the wrong answer and advances (0/1 → 1/1)', () => {
@@ -306,7 +310,15 @@ describe('Deduction — characterization (batch 2: Day live Override)', () => {
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Streak')).toBe('1/1')
     expect(isDisabled(ctrl('<'))).toBe(false) // advanced → history has the credited entry
-    expect(isDisabled(ctrl('Override'))).toBe(true)
+    // Toggle three times: Undo returns to the burned puzzle, Override credits it again, no drift.
+    for (let i = 0; i < 3; i++) {
+      clickCtrl('Undo')
+      expect(statValue('Score')).toBe('0/1')
+      expect(isDisabled(ctrl('<'))).toBe(true) // back on the burned question — nothing behind it
+      clickCtrl('Override')
+      expect(statValue('Score')).toBe('1/1')
+      expect(statValue('Streak')).toBe('1/1')
+    }
   })
 })
 
@@ -365,7 +377,10 @@ describe('Deduction — characterization (batch 3: Day Back/Forward + history Ov
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Streak')).toBe('1/1')
     expect(readPuzzle().raw).toBe(q2.raw) // timing off (Deduction default) → live Q does not advance
-    expect(isDisabled(ctrl('Override'))).toBe(true)
+    clickCtrl('Undo') // the retro credit comes back off, and is armed again
+    expect(statValue('Score')).toBe('0/1')
+    expect(readPuzzle().raw).toBe(q2.raw)
+    expect(isDisabled(ctrl('Override'))).toBe(false)
   })
 })
 
