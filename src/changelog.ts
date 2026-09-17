@@ -85,7 +85,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    date: '2026-09-15',
+    date: '2026-09-16',
     items: [
       'Popups no longer carry a Cancel button. The one button left on a popup is the one that goes ahead — Delete, Reset Stats, Full Reset, Save — and to back out you tap outside the box, press Esc, or use Back, exactly the way the Changelog and the saved-defaults popup already closed.',
       'In ⚙ Settings → Manage Presets, backing out of a delete question now takes you back to the list of presets with the popup still open, instead of closing the whole thing. Back out again from there and it closes.',
