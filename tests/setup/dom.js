@@ -27,6 +27,8 @@ import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
 import { discardAllSessionModes } from '../../src/store/sessionMode.js'
 import { discardAllSessionRounds } from '../../src/store/sessionRound.js'
+import { useUserDefaults } from '../../src/store/userDefaults.js'
+import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
 
 if (typeof window !== 'undefined') {
   if (!window.matchMedia) {
@@ -75,6 +77,17 @@ if (typeof window !== 'undefined') {
 // it can leak stats / bests between tests. Reset it before EVERY test (the DOM tests also
 // localStorage.clear() + resetToFactory() in their own beforeEach). Cheap + idempotent.
 beforeEach(() => {
+  // ⚠⚠ THE REGISTRY GOES BACK FIRST, AND THE ORDER IS THE WHOLE POINT — it decides WHERE every reset
+  // below lands. The four per-preset stores persist through a preset-SCOPED storage (store/presets'
+  // presetScopedStorage), so while the registry still says "preset 2" a reset writes preset 2's
+  // namespaced keys: a file that switched presets in one test left `cg-settings-v1~p2` behind for the
+  // next, written by this very net a moment after the file's own localStorage.clear(). Nothing in the
+  // app reads that key afterwards — but store/presetControl's createPreset does (its skip loop refuses
+  // an id whose keys already exist), so the next test's "createPreset then switch to preset 2" got
+  // preset 3 and switched to a preset that did not exist. Found by a shuffled run (round 22's fixer).
+  // It is the same ordering tests/helpers/settingsPanel's resetAppState states for the same reason;
+  // this is the global net saying it for every file, including the ones with a reset of their own.
+  usePresets.setState(makePresetRegistryDefaults())
   useProgress.getState().resetProgress()
   // The per-mode setup store (Stage D follow-up) is the same kind of persisted singleton.
   useModePrefs.getState().resetModePrefs()
@@ -97,4 +110,13 @@ beforeEach(() => {
   // MoX run leaves a parked snapshot a later test's cold mountApp() would restore onto the timed
   // screen. Cleared the same way, before every test.
   discardAllSessionRounds()
+  // The SAVED PERSONAL DEFAULTS snapshot (store/userDefaults) is the last singleton of this shape,
+  // and it was the one this net was missing — found by a shuffled run (round 22's fixer), where a
+  // file that saves a snapshot left it standing for whatever file ran next in the same worker.
+  // It is the widest leak of the lot, because almost nothing reads the snapshot directly: what reads
+  // it is the word "default" everywhere else — the gear indicator, both footer dims, Full Reset's
+  // own dim, every mode screen's freshness report — so the symptom is never "a default is wrong", it
+  // is a button in the wrong state three files away. A file that wants a snapshot saves it in its
+  // own beforeEach, as several already do; this only guarantees nobody INHERITS one.
+  useUserDefaults.getState().clearDefaults()
 })
