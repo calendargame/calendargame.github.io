@@ -33,6 +33,7 @@ import {
   resetAppState,
   isOffered,
   footerOfferState,
+  drainHistory,
 } from './helpers/settingsPanel.jsx'
 
 // ── Harness helpers (tests/helpers/settingsPanel, plus the manager's own) ──
@@ -461,22 +462,11 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     saveSnapshot()
     // Flush jsdom's queued history traversals until quiescent (the saveDefaults.dom pattern):
     // earlier tests' UI closes — and saveSnapshot's own Save-popup close just above — each ran
-    // popOverlay's guarded history.back(), whose to-be-ignored popstate fires on a later task
+    // popOverlay's guarded unwind (one history.go per commit), whose to-be-ignored popstate fires on a later task
     // and would otherwise swallow the first synthetic Back below.
-    await act(async () => {
-      let quiet = 0
-      let seen = 0
-      const count = () => {
-        seen++
-      }
-      window.addEventListener('popstate', count)
-      for (let i = 0; i < 20 && quiet < 2; i++) {
-        seen = 0
-        await new Promise((r) => setTimeout(r, 0))
-        quiet = seen === 0 ? quiet + 1 : 0
-      }
-      window.removeEventListener('popstate', count)
-    })
+    // The shared helper, not a private copy of it (round 22's fixer): it also waits while a guarded
+    // traversal is still OUTSTANDING, which a bare "two quiet ticks" cannot tell from a cancelled one.
+    await drainHistory()
     openManager()
     expect(savedManager()).toBeInTheDocument()
     act(() => window.dispatchEvent(new PopStateEvent('popstate')))
@@ -492,20 +482,9 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     openSettings()
     saveSnapshot()
     // The same quiescence flush as above (saveSnapshot's popup close queues a traversal).
-    await act(async () => {
-      let quiet = 0
-      let seen = 0
-      const count = () => {
-        seen++
-      }
-      window.addEventListener('popstate', count)
-      for (let i = 0; i < 20 && quiet < 2; i++) {
-        seen = 0
-        await new Promise((r) => setTimeout(r, 0))
-        quiet = seen === 0 ? quiet + 1 : 0
-      }
-      window.removeEventListener('popstate', count)
-    })
+    // The shared helper, not a private copy of it (round 22's fixer): it also waits while a guarded
+    // traversal is still OUTSTANDING, which a bare "two quiet ticks" cannot tell from a cancelled one.
+    await drainHistory()
     act(() => fireEvent.click(btn('Clear Saved Defaults')))
     expect(screen.getByText('Clear your saved defaults?')).toBeInTheDocument()
     act(() => window.dispatchEvent(new PopStateEvent('popstate')))

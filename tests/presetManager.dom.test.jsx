@@ -39,6 +39,7 @@ import {
   modalScrim,
   picker,
   pressBack,
+  drainHistory,
   pressDragFromGear,
   pressKey,
   isSettingsOpen,
@@ -779,6 +780,34 @@ describe('deleting', () => {
     await pressBack()
     expect(queryModalCard('presets')).toBeNull()
     expect(isSettingsOpen()).toBe(true)
+  })
+
+  // ⚠⚠ CLOSING EVERYTHING AT ONCE MUST UNWIND EXACTLY WHAT WAS PUSHED (round 22's fixer, F14). With
+  // the delete question up, three Back entries are registered — 'settings', 'presets' and Q2's
+  // 'presets-delete' — and G (or a mode letter) closes the whole ⚙ panel in one commit. Each close
+  // used to call history.back() on its own under ONE shared "that was us" flag; in Chromium (measured
+  // in a real browser) all three traversals ran, the second popstate was taken for a real Back, and
+  // a FOURTH traversal stepped off the app's own first entry — the app navigated away on a key press.
+  // jsdom instead coalesces three back() calls into one traversal, which is why nothing here caught
+  // it — and why this case is written against a SENTINEL entry pushed before the panel opened: the
+  // unwind is correct only if it lands exactly there, whichever way an engine runs the steps.
+  it('G closing the panel with the question up lands exactly where the panel opened from', async () => {
+    createUsedPreset('Timed')
+    mountApp()
+    act(() => window.history.pushState({ sentinel: true }, ''))
+    openSettings()
+    openModal('presets')
+    tap(rowButton('Timed', 'delete'))
+    expect(confirmCard()).toBeTruthy()
+    pressKey('G')
+    expect(isSettingsOpen()).toBe(false)
+    await drainHistory()
+    expect(window.history.state).toEqual({ sentinel: true })
+    // …and the next REAL Back press is not eaten by a leftover "that was us" flag: open the panel
+    // again and a single Back closes it.
+    openSettings()
+    await pressBack()
+    expect(isSettingsOpen()).toBe(false)
   })
 
   it('re-opening the manager after a step back shows the LIST, never the question again', () => {

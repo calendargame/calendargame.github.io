@@ -30,6 +30,7 @@ import {
   resetAppState,
   switchState,
   toggleSwitch,
+  drainHistory,
 } from './helpers/settingsPanel.jsx'
 
 // ── Harness helpers (tests/helpers/settingsPanel, plus this file's own) ──────
@@ -615,25 +616,14 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
   it('Android Back closes the popup first, then Settings (LIFO overlay stack)', async () => {
     mountApp()
     // Flush jsdom's queued history traversals first: earlier tests' UI closes each ran
-    // popOverlay's guarded history.back(), whose to-be-ignored popstate fires on a LATER task —
+    // popOverlay's guarded unwind (one history.go per commit), whose to-be-ignored popstate fires on a LATER task —
     // unflushed, a stale ignorePop would swallow the first synthetic Back below. A single
     // setTimeout(0) tick is NOT enough under full-suite CPU load (a flushed popstate can queue
     // another traversal), so flush until QUIESCENT: two consecutive ticks with zero popstate
     // events (bounded at 20 ticks).
-    await act(async () => {
-      let quiet = 0
-      let seen = 0
-      const count = () => {
-        seen++
-      }
-      window.addEventListener('popstate', count)
-      for (let i = 0; i < 20 && quiet < 2; i++) {
-        seen = 0
-        await new Promise((r) => setTimeout(r, 0))
-        quiet = seen === 0 ? quiet + 1 : 0
-      }
-      window.removeEventListener('popstate', count)
-    })
+    // The shared helper, not a private copy of it (round 22's fixer): it also waits while a guarded
+    // traversal is still OUTSTANDING, which a bare "two quiet ticks" cannot tell from a cancelled one.
+    await drainHistory()
     makeSaveable() // round 14 (D7): a dimmed Save Defaults no longer opens its popup — see the helper
     openSettings()
     openPopup()

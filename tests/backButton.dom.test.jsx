@@ -23,6 +23,9 @@ import { render, act, cleanup } from '@testing-library/react'
 let popstateListeners = []
 let pushSpy
 let backSpy
+let goSpy
+// Traversals asked for (back/go) whose popstate has not arrived yet — see flushTraversals.
+let outstanding = 0
 
 function setStandalone(value) {
   // navigator.standalone is WebKit-only, so jsdom never defines it; define it per-test.
@@ -47,7 +50,11 @@ async function flushTraversals() {
       seen++
     }
     window.addEventListener('popstate', count)
-    for (let i = 0; i < 20 && quiet < 2; i++) {
+    // ⚠ "Two quiet ticks" alone cannot tell a SLOW traversal from a finished one: under full-suite
+    // load jsdom can take longer than that to land a history.go(-n). So it also waits while a
+    // traversal is still outstanding — still bounded, because jsdom may cancel or coalesce one and
+    // then its popstate never comes.
+    for (let i = 0; i < 20 && (quiet < 2 || outstanding > 0); i++) {
       seen = 0
       await new Promise((r) => setTimeout(r, 0))
       quiet = seen === 0 ? quiet + 1 : 0
@@ -63,10 +70,24 @@ beforeEach(() => {
     if (type === 'popstate') popstateListeners.push(handler)
     return realAdd(type, handler, options)
   })
-  // Pass-through spies (vi.spyOn keeps the real jsdom implementations) so entry counts are
-  // observable while traversals still actually happen.
+  // Pass-through spies — every call reaches the real jsdom implementation — so entry counts are
+  // observable while traversals still actually happen. back/go also count themselves OUTSTANDING
+  // until a popstate arrives, which is what lets flushTraversals wait for a slow one.
   pushSpy = vi.spyOn(window.history, 'pushState')
-  backSpy = vi.spyOn(window.history, 'back')
+  outstanding = 0
+  const realBack = window.history.back.bind(window.history)
+  const realGo = window.history.go.bind(window.history)
+  backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => {
+    outstanding++
+    realBack()
+  })
+  goSpy = vi.spyOn(window.history, 'go').mockImplementation((delta) => {
+    outstanding++
+    realGo(delta)
+  })
+  window.addEventListener('popstate', () => {
+    if (outstanding > 0) outstanding--
+  })
 })
 
 afterEach(async () => {
@@ -118,9 +139,11 @@ describe('Android-like (navigator.standalone undefined) — entries pushed', () 
     expect(log).toEqual(['b', 'a'])
     // Neither Back-driven close may unwind history again — the browser already did.
     expect(backSpy).not.toHaveBeenCalled()
+    await flushTraversals()
+    expect(goSpy).not.toHaveBeenCalled()
   })
 
-  it('a UI close unwinds its entry with a guarded history.back() whose popstate closes nothing', async () => {
+  it('a UI close unwinds its entry with ONE guarded traversal whose popstate closes nothing', async () => {
     const useBackButton = await freshUseBackButton()
     const close = vi.fn()
     function Host({ open }) {
@@ -130,10 +153,44 @@ describe('Android-like (navigator.standalone undefined) — entries pushed', () 
     const { rerender } = render(<Host open />)
     expect(pushSpy).toHaveBeenCalledTimes(1)
     rerender(<Host open={false} />) // the UI close path: effect cleanup → popOverlay
-    expect(backSpy).toHaveBeenCalledTimes(1)
     await flushTraversals()
-    expect(close).not.toHaveBeenCalled() // our own back()'s popstate was swallowed (ignorePop)
+    expect(goSpy).toHaveBeenCalledTimes(1)
+    expect(goSpy).toHaveBeenCalledWith(-1)
+    expect(backSpy).not.toHaveBeenCalled()
+    expect(close).not.toHaveBeenCalled() // our own traversal's popstate was swallowed (ignorePop)
     // …and swallowed exactly once: the next overlay still closes on a real Back.
+    rerender(<Host open />)
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  // ⚠⚠ SEVERAL OVERLAYS CLOSING IN ONE COMMIT (round 22's fixer). G or a mode letter shuts the ⚙
+  // panel with everything open inside it — up to three entries since Q2. One back() per close under
+  // one shared flag is what Chromium turned into a FOURTH traversal off the app's own first entry
+  // (all three run there, and the second popstate was taken for a real Back), while jsdom coalesces
+  // them into one. So the closes of one commit unwind as ONE history.go(-n): a single traversal and a
+  // single swallowed popstate in every engine — pinned here against a sentinel entry, because
+  // "where it lands" is the claim, not how many calls it took.
+  it('overlays that close together unwind together — one go(-n), landing exactly below them', async () => {
+    const useBackButton = await freshUseBackButton()
+    const close = vi.fn()
+    function Host({ open }) {
+      useBackButton(open, close, 'settings')
+      useBackButton(open, close, 'presets')
+      useBackButton(open, close, 'presets-delete')
+      return null
+    }
+    window.history.pushState({ sentinel: true }, '')
+    const { rerender } = render(<Host open />)
+    expect(pushSpy).toHaveBeenCalledTimes(4) // the sentinel + one per overlay
+    rerender(<Host open={false} />) // all three close in ONE commit
+    await flushTraversals()
+    expect(goSpy).toHaveBeenCalledTimes(1)
+    expect(goSpy).toHaveBeenCalledWith(-3)
+    expect(backSpy).not.toHaveBeenCalled()
+    expect(window.history.state).toEqual({ sentinel: true }) // exactly where they were opened from
+    expect(close).not.toHaveBeenCalled()
+    // …and nothing is left armed to eat the next real Back press.
     rerender(<Host open />)
     act(() => window.dispatchEvent(new PopStateEvent('popstate')))
     expect(close).toHaveBeenCalledTimes(1)
@@ -153,13 +210,14 @@ describe('Android-like (navigator.standalone undefined) — entries pushed', () 
     // {cgOverlay:'settings'} entry itself survives in the session history.
     const { rerender } = render(<Host open />)
     rerender(<Host open={false} />)
-    expect(backSpy).toHaveBeenCalledTimes(1)
     await flushTraversals()
+    expect(goSpy).toHaveBeenCalledTimes(1) // the UI close
     // Forward parks on the dead entry → its popstate carries the marker with an empty stack →
     // the guarded bounce snaps back and its own popstate is swallowed.
     act(() => window.history.forward())
     await flushTraversals()
-    expect(backSpy).toHaveBeenCalledTimes(2) // the UI close + the bounce, nothing more
+    expect(backSpy).toHaveBeenCalledTimes(1) // the bounce, and nothing more
+    expect(goSpy).toHaveBeenCalledTimes(1) // …beside the one UI-close unwind
     expect(close).not.toHaveBeenCalled()
     expect(window.history.state?.cgOverlay).toBeUndefined() // rests on the base entry again
   })
@@ -185,7 +243,9 @@ describe('iOS standalone (navigator.standalone === true) — history never writt
     expect(close).toHaveBeenCalledTimes(1)
     // …and the follow-up cleanup finds the stack entry consumed. No history call anywhere.
     rerender(<Host open={false} />)
+    await flushTraversals()
     expect(backSpy).not.toHaveBeenCalled()
+    expect(goSpy).not.toHaveBeenCalled()
   })
 
   it('a stale marker popstate still bounces (the dead-entry bounce is ungated on purpose — self-heals pre-Q3 leftovers)', async () => {

@@ -17,8 +17,8 @@ import { dismissKeyboard } from '../lib/textEntry.js'
 // close that overlay — not exit the whole app. So each open overlay pushes ONE history entry:
 // pressing Back fires `popstate`, which closes the TOP-most overlay (the browser already popped
 // its entry). Closing an overlay via the UI instead steps BACK past its entry with a guarded
-// `history.back()` — the entry itself survives as a dead forward entry (history.back() cannot
-// delete; see the bounce below) — keeping position in lockstep with what's open. When nothing is
+// traversal (popOverlay — batched, so overlays closing together step back together) — the entry
+// itself survives as a dead forward entry (a traversal cannot delete; see the bounce below) — keeping position in lockstep with what's open. When nothing is
 // open, Back does its normal thing (leaves the app). A single module-level popstate listener
 // drives a LIFO stack, so nested overlays close one at a time, newest-first. In a browser tab the
 // entries help beyond the hardware button — a back-swipe closes the overlay instead of leaving
@@ -31,7 +31,7 @@ import { dismissKeyboard } from '../lib/textEntry.js'
 // ping-pong), entries accumulating all session. Apple provides no gesture opt-out for home-screen
 // web apps (w3c/manifest#1041, open since 2022; overscroll-behavior / touch-action never reach
 // the system gesture), so the root-cause fix is to never CREATE entries there: pushOverlay skips
-// pushState and popOverlay skips history.back() — pure stack bookkeeping — leaving the history at
+// pushState and popOverlay skips the traversal — pure stack bookkeeping — leaving the history at
 // ONE entry forever, which makes both swipe directions inert (nothing to traverse to). Overlays
 // still close via X / tap-outside / Esc, exactly as before. Android, desktop, and the iOS Safari
 // TAB keep the old behavior byte-identical.
@@ -56,12 +56,12 @@ const IOS_STANDALONE =
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', (event) => {
     if (ignorePop) {
-      ignorePop = false // this popstate came from our own history.back() — not a real Back
+      ignorePop = false // this popstate came from our own unwind (or bounce) — not a real Back
       return
     }
     // A real Back press: close the top-most overlay. The browser already popped its history entry,
     // and popping it from the stack HERE means the overlay's effect-cleanup popOverlay() finds it
-    // gone and does NOT call history.back() again (which would over-pop). See useBackButton's
+    // gone and does NOT step back again (which would over-pop). See useBackButton's
     // cleanup below.
     const top = stack.pop()
     if (top) {
@@ -111,14 +111,41 @@ function pushOverlay(id: string, close: () => void) {
   if (!IOS_STANDALONE) window.history.pushState({ cgOverlay: id }, '')
 }
 
+// ⚠⚠ OVERLAYS THAT CLOSE TOGETHER UNWIND TOGETHER — ONE TRAVERSAL, ONE IGNORED popstate (round 22's
+// fixer). This used to call history.back() once per closing overlay, each marked by setting the one
+// `ignorePop` flag. That is only sound for ONE overlay at a time, and several routinely close in a
+// single commit: G, or any mode letter, shuts the whole ⚙ panel with whatever is open inside it —
+// and since Q2 the preset manager's delete question makes that THREE entries ('settings',
+// 'presets', 'presets-delete'). Browsers do not agree on what three back() calls in one task mean:
+//   • CHROMIUM RUNS ALL THREE, each with its own popstate (measured in a real browser). The first
+//     cleared the flag; the second, arriving on the 'settings' entry with nothing registered, was
+//     taken for the dead-entry bounce below and went back ONCE MORE — a fourth traversal, off the
+//     app's own first entry: the app navigated away on a key press. (Two entries never showed it,
+//     because the second popstate lands on a marker-less entry and does nothing — which is why Q2's
+//     third entry is what made it reachable.)
+//   • jsdom COALESCES them into one traversal and one popstate, which is how the suite missed it,
+//     and it leaves two dead entries behind. A counter in place of the flag would be right for the
+//     first engine and would EAT the user's next real Back press in the second.
+// One `history.go(-n)` is a single traversal in every engine, with exactly one popstate, so exactly
+// one ignore is always right. The closes are gathered in a microtask: every cleanup of one React
+// commit runs synchronously before it, so a whole panel's worth lands in one count, and nothing a
+// user does can come in between. (A traversal was never synchronous anyway — history.back() only
+// queues one — so deferring the call moves nothing a user could observe.)
+let pendingUnwind = 0
+const flushUnwind = () => {
+  const n = pendingUnwind
+  pendingUnwind = 0
+  ignorePop = true
+  window.history.go(-n) // step back past every entry the closed overlays pushed (one popstate, ignored)
+}
+
 function popOverlay(id: string) {
   if (typeof window === 'undefined') return
   const i = stack.findIndex((e) => e.id === id)
   if (i === -1) return // already removed by a real Back press → nothing to undo (avoids over-popping)
   stack.splice(i, 1)
   if (IOS_STANDALONE) return // no entry was pushed for this overlay → no history to unwind
-  ignorePop = true
-  window.history.back() // remove the one history entry this overlay pushed (its popstate is ignored)
+  if (pendingUnwind++ === 0) queueMicrotask(flushUnwind)
 }
 
 // Register `id` as an open overlay while `isOpen` is true; Back (or `popOverlay`) calls `close`.

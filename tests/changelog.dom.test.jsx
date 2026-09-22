@@ -34,6 +34,7 @@ import {
   gear,
   modalCard,
   resetAppState,
+  drainHistory,
 } from './helpers/settingsPanel.jsx'
 import { BUILD_STAMP_KEY, writeBuildStamp } from '../src/lib/buildStamp.js'
 import { APP_VERSION } from '../src/appVersion.js'
@@ -603,22 +604,11 @@ describe('the Changelog popup (modal parity + content)', () => {
   it('Android Back closes the popup first, then Settings (LIFO overlay stack)', async () => {
     mountApp()
     // Flush jsdom's queued history traversals until quiescent (the saveDefaults.dom pattern):
-    // earlier tests' UI closes each ran popOverlay's guarded history.back(), whose to-be-ignored
+    // earlier tests' UI closes each ran popOverlay's guarded unwind (one history.go per commit), whose to-be-ignored
     // popstate fires on a later task and would otherwise swallow the first synthetic Back below.
-    await act(async () => {
-      let quiet = 0
-      let seen = 0
-      const count = () => {
-        seen++
-      }
-      window.addEventListener('popstate', count)
-      for (let i = 0; i < 20 && quiet < 2; i++) {
-        seen = 0
-        await new Promise((r) => setTimeout(r, 0))
-        quiet = seen === 0 ? quiet + 1 : 0
-      }
-      window.removeEventListener('popstate', count)
-    })
+    // The shared helper, not a private copy of it (round 22's fixer): it also waits while a guarded
+    // traversal is still OUTSTANDING, which a bare "two quiet ticks" cannot tell from a cancelled one.
+    await drainHistory()
     // This file's heavy open/close churn can also EXHAUST jsdom's history: a guarded
     // history.back() with no earlier entry never fires its popstate at all, leaving ignorePop
     // stale forever — no amount of flushing delivers a traversal that will never come. Prime it

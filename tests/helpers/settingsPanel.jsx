@@ -179,7 +179,7 @@ export function installSystemColorScheme({ dark = false } = {}) {
 //
 // THE PROBLEM, and it is entirely an artefact of the test environment — nothing here is a claim
 // about the app. Closing an overlay through the UI runs useBackButton's popOverlay, which sets a
-// private `ignorePop` flag and calls history.back() to unwind the entry that overlay pushed. The
+// private `ignorePop` flag and traverses back (history.go, batched per commit) to unwind the entry that overlay pushed. The
 // resulting popstate is meant to arrive and be swallowed, clearing the flag. jsdom performs the
 // traversal on a LATER task, so two things can go wrong before it does:
 //   1. a synthetic Back fired in the meantime is swallowed by the pending flag INSTEAD — so the
@@ -193,8 +193,9 @@ export function installSystemColorScheme({ dark = false } = {}) {
 // helper carries the whole problem and no case in the net has to know any of it.
 //
 // THE FIX IS A MIRROR OF THAT PRIVATE FLAG, kept honestly: it is set by exactly what sets the real
-// one (a history.back() call) and cleared by exactly what clears it (the next popstate, whatever
-// its origin). So after the wait, `backGuardArmed` says whether a guarded traversal was cancelled
+// one (a guarded traversal — history.back() for the dead-entry bounce, and since round 22's fixer
+// the ONE history.go(-n) that unwinds every overlay a commit closed) and cleared by exactly what
+// clears it (the next popstate, whatever its origin). So after the wait, `backGuardArmed` says whether a guarded traversal was cancelled
 // — and if it was, ONE sacrificial popstate consumes the stale flag without touching the overlay
 // stack, because that is precisely what a set flag makes a popstate do. A boolean, not a count,
 // because the flag it mirrors is a boolean: two cancelled traversals still leave one flag set, and
@@ -209,6 +210,11 @@ if (typeof window !== 'undefined') {
     backGuardArmed = true
     nativeBack()
   }
+  const nativeGo = window.history.go.bind(window.history)
+  window.history.go = (delta) => {
+    backGuardArmed = true
+    nativeGo(delta)
+  }
   // Registered AFTER useBackButton's own module listener (this file imports the app first), so it
   // observes the same popstate one step later — which is exactly the mirror we want.
   window.addEventListener('popstate', () => {
@@ -218,9 +224,13 @@ if (typeof window !== 'undefined') {
 
 // Wait for jsdom's queued traversals to land, then clear a guard left armed by one that was
 // cancelled. One setTimeout(0) is not enough under full-suite load (a delivered popstate can queue
-// another traversal), so wait until QUIESCENT: two consecutive ticks with no popstate, bounded
-// at 20. Safe at any moment, including with an overlay open.
-async function drainHistory() {
+// another traversal), so wait until QUIESCENT: two consecutive ticks with no popstate AND no guarded
+// traversal still outstanding, bounded at 20. The second condition is what keeps a traversal that is
+// merely SLOW from being mistaken for a cancelled one — jsdom can take more than two ticks to land a
+// history.go(-n), and declaring it cancelled early would fire the sacrificial popstate AND then let
+// the real one arrive afterwards as a phantom Back press. Safe at any moment, including with an overlay open. Exported for the one case that has to
+// count the traversals an unwind makes (tests/presetManager.dom — closing three overlays at once).
+export async function drainHistory() {
   await act(async () => {
     let quiet = 0
     let seen = 0
@@ -228,7 +238,7 @@ async function drainHistory() {
       seen++
     }
     window.addEventListener('popstate', count)
-    for (let i = 0; i < 20 && quiet < 2; i++) {
+    for (let i = 0; i < 20 && (quiet < 2 || backGuardArmed); i++) {
       seen = 0
       await new Promise((r) => setTimeout(r, 0))
       quiet = seen === 0 ? quiet + 1 : 0
