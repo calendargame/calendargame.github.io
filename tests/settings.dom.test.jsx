@@ -1030,13 +1030,22 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
   // exactly one split: every section divider is `border-t` on --bd-500-20, and this one is twice the
   // weight on twice the contrast. A second `border-t-2` anywhere in the card is what would stop this
   // one reading as THE split, which is why the assertion is a count and not a lookup.
-  it('exactly one heavy divider, and it is the one above Per-preset', () => {
+  // ★ IT IS ALSO THE ONE RULE THAT REACHES THE CARD'S EDGES (round 22's fixer): `-mx-4 px-4` takes it
+  // out to the scroller's padding edge — which is its clipping edge, so nothing overflows and nothing
+  // is cut — and puts the section's contents straight back in the column every other control sits in.
+  // The owner asked for a clearly full-width split; the shipped version stopped at the text column on
+  // a premise that measured false in a real browser. jsdom lays nothing out, so what this case can
+  // hold is the pair of classes that produce it — the measurement itself is recorded in the component.
+  it('exactly one heavy divider, it is the one above Per-preset, and it spans the card', () => {
     mountPanel()
     const heavy = [...panelEl().querySelectorAll('*')].filter((el) =>
       String(el.className).split(' ').includes('border-t-2'),
     )
     expect(heavy).toHaveLength(1)
-    expect(heavy[0].className).toBe('space-y-2 pt-4 border-t-2 border-(--bd-500-40)')
+    expect(heavy[0].className).toBe('space-y-2 pt-4 -mx-4 px-4 border-t-2 border-(--bd-500-40)')
+    // The negative margin and the padding that answers it are ONE decision: either alone would be a
+    // defect (a rule in the column, or a section knocked out of it), so they are asserted as a pair.
+    for (const cls of ['-mx-4', 'px-4']) expect(heavy[0].className.split(' ')).toContain(cls)
     expect(heavy[0].contains(panel().getByText('Per-preset'))).toBe(true)
     // The category dividers stay light — asserted on the one directly below it, so "heavier" is a
     // comparison this case actually makes rather than a claim about a token in isolation.

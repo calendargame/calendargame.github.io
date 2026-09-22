@@ -1065,16 +1065,23 @@ export function SettingsPanel({
               treatment is written inline rather than lifted into a shared constant — a constant
               would invite a second user, and a second heavy rule is exactly what would stop this
               one reading as THE split.
-              ⚠ IT SPANS THE SCROLL REGION'S CONTENT COLUMN, NOT THE CARD'S FULL WIDTH, and the
-              obvious way to get the latter was tried and rejected rather than overlooked: the
-              scroller carries the px-4 lane (components/scrollRegion — the card owns py-4 only), so
-              reaching the card's edges means `-mx-4` on this div. A scroll container clips overflow
-              past its INLINE-START edge and cannot scroll to it, so the rule's left 1rem would
-              simply disappear while its right 1rem survived into the padding — a rule that looks
-              deliberately off-centre. Every other divider in the panel, and the footer's, sits in
-              this same column, so edge-to-edge here would also have been the only line in the card
-              that did not line up with the rest. */}
-          <div className="space-y-2 pt-4 border-t-2 border-(--bd-500-40)">
+              ★★ AND IT REALLY DOES SPAN THE CARD, EDGE TO EDGE — `-mx-4 px-4` on this div, which is
+              what the owner asked for and what an earlier draft of this comment wrongly claimed was
+              impossible. That draft reasoned that a scroll container clips overflow past its
+              inline-START edge and cannot scroll to it, so the rule's left 1rem would vanish while
+              its right survived. The premise is real and the conclusion does not follow, because
+              NOTHING OVERFLOWS: the scroller carries the px-4 lane (components/scrollRegion — the
+              card owns py-4 only), a −1rem margin reaches exactly its PADDING edge, and the padding
+              box IS the clipping box. Measured in a real browser at 375px rather than argued:
+              scrollWidth stays equal to clientWidth (no horizontal overflow appears, so no second
+              scrollbar and nothing unreachable), and the rule lands flush on both of the card's
+              inner edges.
+              ⚠ THE px-4 PUTS THE SECTION'S CONTENTS BACK IN THE COLUMN the negative margin took
+              them out of, to the pixel — every control below this label lines up with every control
+              above it, exactly as before. It is deliberately the ONE line in the card that reaches
+              the edges: that is the whole difference between "another section starts here" and "the
+              panel's second half starts here", and every other divider stays in the column. */}
+          <div className="space-y-2 pt-4 -mx-4 px-4 border-t-2 border-(--bd-500-40)">
             <GroupLabel>Per-preset</GroupLabel>
             <div className="text-[11px] text-(--tx-300-60)">
               Saved for this preset. Save Defaults captures these; the two Reset buttons restore
