@@ -11,6 +11,9 @@ import {
   initEngine,
   correctIndexOf,
   effectiveSaveStats,
+  overrideTarget,
+  overridePlan,
+  liveCredited,
 } from '../../src/engine/gameReducer.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { computeStreaks } from '../../src/engine/streak.js'
@@ -85,27 +88,25 @@ function optionCount(q) {
   return 7
 }
 
-// Replicate the hook's overrideAvail gate so OVERRIDE is only dispatched when the APP would dispatch
-// it — exercising the real 5 paths instead of the no-op fall-through.
+// WHICH CARD THE ONE BUTTON POINTS AT — a DELIBERATE SECOND COPY of the reducer's overrideTarget,
+// written again here from the UI contract rather than imported: the harness gates every OVERRIDE on
+// it (so a press is only dispatched when the APP would offer one) and asserts, every step, that it
+// agrees with the reducer's own selector — the button's label and the press it makes can never be
+// told different stories without a profile failing. Browsing → the browsed card; else a SCORED live
+// card that is burned, holds a clean credit on its grid, or is already overridden → the live card; else
+// the newest history card; else nothing (the button is dimmed).
+function harnessTarget(state) {
+  if (state.backDepth > 0) return 'browsed'
+  const cleanCreditOnGrid =
+    computeHasCredit(state.persistBtns) && !state.revealed && !state.countedWrong
+  const scored = state.saveStatsThisQ === true
+  if (scored && (state.countedWrong || cleanCreditOnGrid || state.card.answered !== null))
+    return 'live'
+  return state.stack.length > 0 ? 'retro' : null
+}
+// The hook's gate: the frozen Save-Stats for the card (or the live setting before any stat action).
 function overrideAvail(state, saveStats) {
-  const last = state.stack[state.stack.length - 1]
-  const retro =
-    !state.locked &&
-    !state.revealed &&
-    !state.countedWrong &&
-    !state.canOverrideCorrect &&
-    state.pendingWrongOverride == null &&
-    !!last &&
-    !last.overrideUsed &&
-    last.capsule?.snapshot != null
-  return (
-    effectiveSaveStats(state, saveStats) &&
-    (state.countedWrong ||
-      state.canOverrideCorrect ||
-      (state.pendingWrongOverride != null && !last?.overrideUsed) ||
-      retro) &&
-    !state.overrideUsedThisQ
-  )
+  return effectiveSaveStats(state, saveStats) && harnessTarget(state) !== null
 }
 
 // ── Weighting profiles ───────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ export const PROFILES = {
     pSolveTime: 0.5,
     pAnswerCorrect: 0.5,
     pComplete: 0.2,
-    pNoAdvance: 0.2,
+    pHold: 0.2,
   },
   'override-heavy': {
     name: 'override-heavy',
@@ -146,8 +147,7 @@ export const PROFILES = {
     steps: 320,
     weights: {
       ANSWER: 5,
-      OVERRIDE: 5,
-      UNDO: 3,
+      OVERRIDE: 8,
       BACK: 3,
       FORWARD: 2,
       NEW: 2,
@@ -167,7 +167,7 @@ export const PROFILES = {
     pSolveTime: 0.5,
     pAnswerCorrect: 0.5,
     pComplete: 0.1,
-    pNoAdvance: 0.1,
+    pHold: 0.1,
   },
   'aox-complete-heavy': {
     name: 'aox-complete-heavy',
@@ -176,8 +176,7 @@ export const PROFILES = {
     steps: 230,
     weights: {
       ANSWER: 6,
-      OVERRIDE: 4,
-      UNDO: 2,
+      OVERRIDE: 6,
       NEW: 2,
       BACK: 2,
       FORWARD: 1,
@@ -195,7 +194,7 @@ export const PROFILES = {
     pSolveTime: 0.6,
     pAnswerCorrect: 0.8,
     pComplete: 0.7,
-    pNoAdvance: 0.7,
+    pHold: 0.7,
   },
   'reveal-heavy': {
     name: 'reveal-heavy',
@@ -224,7 +223,7 @@ export const PROFILES = {
     pSolveTime: 0.5,
     pAnswerCorrect: 0.5,
     pComplete: 0.05,
-    pNoAdvance: 0.1,
+    pHold: 0.1,
   },
   // ── strongOracle profiles (Classic/Deduction surface) ──
   'classic-strict': {
@@ -253,7 +252,7 @@ export const PROFILES = {
     pSolveTime: 0.5,
     pAnswerCorrect: 0.5,
     pComplete: 0,
-    pNoAdvance: 0,
+    pHold: 0,
   },
   'deep-history': {
     name: 'deep-history',
@@ -280,7 +279,7 @@ export const PROFILES = {
     pSolveTime: 0.5,
     pAnswerCorrect: 0.6,
     pComplete: 0,
-    pNoAdvance: 0,
+    pHold: 0,
   },
   'times-churn': {
     name: 'times-churn',
@@ -308,11 +307,12 @@ export const PROFILES = {
     pSolveTime: 0.9,
     pAnswerCorrect: 0.55,
     pComplete: 0,
-    pNoAdvance: 0,
+    pHold: 0,
   },
   // ── AoX-complete strong-oracle profile (C2 Part 1) ──
   // Exercises the AoX action surface — first-try corrects HELD as completing solves (`complete`),
-  // their reversal (OVERRIDE `noAdvance`, Path 2), back-browsing AWAY from a held credit, and Show
+  // the Override on them (taking the held credit away, and crediting a burned card with `hold` —
+  // MoX's completing solve via Override), back-browsing AWAY from a held credit, and Show
   // Codes / Reveal on a held credit — under the now-extended EXACT oracle. Excludes TIMEOUT_MISS +
   // RESET_ROUND (oracle-incompatible — RESET_ROUND keeps stats while wiping history) AND LOCK_REVEAL:
   // AoX's lockReveal fires ONLY after a WRONG answer (never a `complete`), so complete→LOCK_REVEAL is
@@ -328,8 +328,7 @@ export const PROFILES = {
     pHydrate: 0.5,
     weights: {
       ANSWER: 6,
-      OVERRIDE: 4,
-      UNDO: 2,
+      OVERRIDE: 6,
       BACK: 3,
       FORWARD: 2,
       NEW: 2,
@@ -346,7 +345,7 @@ export const PROFILES = {
     pSolveTime: 0.6,
     pAnswerCorrect: 0.7,
     pComplete: 0.5,
-    pNoAdvance: 0.4,
+    pHold: 0.4,
   },
   // ── Timed-mode strong-oracle profile (C2 Part 1) ──
   // The Blitz per-round / per-question surface = the Classic engine PLUS the two timeout actions
@@ -365,8 +364,7 @@ export const PROFILES = {
     pHydrate: 0.5,
     weights: {
       ANSWER: 5,
-      OVERRIDE: 3,
-      UNDO: 2,
+      OVERRIDE: 5,
       LOCK_REVEAL: 3,
       TIMEOUT_MISS: 3,
       NEW: 3,
@@ -385,7 +383,7 @@ export const PROFILES = {
     pSolveTime: 0.6,
     pAnswerCorrect: 0.55,
     pComplete: 0,
-    pNoAdvance: 0,
+    pHold: 0,
   },
   // ── referenceModel profiles (C2 Part 3) ──
   // Run the fully-INDEPENDENT reference score model (referenceModel.js) in lockstep with the
@@ -403,8 +401,7 @@ export const PROFILES = {
     referenceModel: true,
     weights: {
       ANSWER: 5,
-      OVERRIDE: 4,
-      UNDO: 2,
+      OVERRIDE: 6,
       BACK: 3,
       FORWARD: 2,
       NEW: 3,
@@ -421,7 +418,7 @@ export const PROFILES = {
     pSolveTime: 0.6,
     pAnswerCorrect: 0.55,
     pComplete: 0,
-    pNoAdvance: 0,
+    pHold: 0,
   },
   // The full reducer surface: the AoX held-complete corner + both timed timeouts, under the model.
   'ref-full': {
@@ -434,8 +431,7 @@ export const PROFILES = {
     referenceModel: true,
     weights: {
       ANSWER: 5,
-      OVERRIDE: 4,
-      UNDO: 2,
+      OVERRIDE: 6,
       BACK: 3,
       FORWARD: 2,
       NEW: 2,
@@ -454,18 +450,19 @@ export const PROFILES = {
     pSolveTime: 0.6,
     pAnswerCorrect: 0.65,
     pComplete: 0.35,
-    pNoAdvance: 0.35,
+    pHold: 0.35,
   },
-  // ── Override ⇄ Undo churn (round 23 Q6) ──
-  // Override and Undo dominate, with just enough ANSWER / NEW / BACK / FORWARD between them to arm
-  // every Override path (a held solve, a burn, a pending retro credit, a browse) and to END undo
-  // windows mid-flight. Under the strong oracle AND the independent reference model — the model
-  // reaches the same position by running its own hand-written inverse of each path, so a restore
-  // that lands anywhere else disagrees here. Timeouts ride along (LOCK_REVEAL / TIMEOUT_MISS are how
-  // a Blitz clock ends an undo window in the app). RESET_ROUND stays out for the reason every
-  // oracle profile excludes it.
-  'undo-churn': {
-    name: 'undo-churn',
+  // ── Override ⇄ Undo toggle churn (round 23 Q6) ──
+  // The button is a permanent per-card toggle, so OVERRIDE dominates the stream — every press lands
+  // on the card the button points at, flipping it one way or the other — with enough Back / Forward
+  // between presses to toggle cards deep in the history, and enough ANSWER / NEW / REVEAL / Show
+  // Codes to keep making new cards of every kind (credited, burned, revealed, held). Under the
+  // strong oracle AND the independent reference model, whose toggle is a single bit on a question it
+  // stores as-answered — no shared mechanism with the reducer's two materialised states. The Blitz
+  // timeouts ride along (a pristine timeout is the one scored card the button skips). RESET_ROUND
+  // stays out for the reason every oracle profile excludes it.
+  'toggle-churn': {
+    name: 'toggle-churn',
     seedBase: 11_000_000,
     seqs: 4000,
     steps: 300,
@@ -473,11 +470,10 @@ export const PROFILES = {
     pHydrate: 0.5,
     referenceModel: true,
     weights: {
-      OVERRIDE: 6,
-      UNDO: 6,
+      OVERRIDE: 8,
+      BACK: 3,
+      FORWARD: 3,
       ANSWER: 3,
-      BACK: 2,
-      FORWARD: 2,
       NEW: 2,
       REVEAL: 1,
       SHOW_CODES_OPEN: 1,
@@ -491,7 +487,7 @@ export const PROFILES = {
     pSolveTime: 0.6,
     pAnswerCorrect: 0.6,
     pComplete: 0.35,
-    pNoAdvance: 0.35,
+    pHold: 0.35,
   },
 }
 
@@ -510,23 +506,24 @@ function pickKind(rnd, weights) {
 // ── The STRONG, EXACT score oracle (strongOracle profiles only) ────────────────────────────────
 // Reconstructs the chronological credit sequence INDEPENDENTLY of the reducer's incrementally-
 // maintained good/streak/best, then cross-checks good == credits, best == longest run, and (at a
-// clean live edge) streak == trailing run. The sequence is the same one the reducer's streaksFromStacks
-// walks — back-stack ++ the browsed question ++ the de-reversed non-live forward-stack — PLUS the
-// LIVE question's own credit, which the reducer keeps in good/streak separately from the stack:
-//   • Not browsing: a HELD live credit (AoX `complete` — a first-try-correct that credited good but
-//     STAYED on the question instead of advancing) sits at the live edge, not in the stack. It's
-//     flagged by canOverrideCorrect and was scored only if Save Stats was on for it (saveStatsThisQ).
+// clean live edge) streak == trailing run. The sequence walks the same cards the reducer's
+// creditSequence does — back-stack ++ the browsed question ++ the de-reversed non-live forward-stack —
+// PLUS the LIVE question's own credit, re-derived here rather than read from any reducer helper:
+//   • Not browsing: a HELD live credit (AoX `complete`, or a crediting Override that held — a
+//     credit that STAYED on the question instead of advancing) sits at the live edge, not in the
+//     stack. It is re-derived from the grid and the two flags (a green with no red, not revealed,
+//     not burned), and was scored only if Save Stats was on for it (saveStatsThisQ).
 //   • Browsing: the question we backed away from is parked in forwardStack as the isLive entry; the
 //     base walk excludes it (filter !isLive) and we fold its true contribution back in at the newest
 //     slot via liveCredit — 'credit' → a credit, 'miss' → a played non-credit, null → not played.
 // This widens the exact oracle from the no-complete Classic/Deduction surface onto the AoX-complete
-// reducer surface (C2 Part 1). It stays OFF for RESET_ROUND/TIMEOUT_MISS profiles — RESET_ROUND keeps
-// stats while wiping the history (good != reconstructed by design), and TIMEOUT_MISS can clear
-// canOverrideCorrect without un-crediting a held solve; both are unreachable in real AoX play.
+// reducer surface (C2 Part 1). It stays OFF for the RESET_ROUND profiles — RESET_ROUND keeps stats
+// while wiping the history (good != reconstructed by design).
 //
-// liveCredit is re-implemented here (NOT imported from the reducer's liveStreakContribution) so a bug
-// in the reducer's own copy makes the two DISAGREE and the oracle catches it — keeping the check a
-// genuinely independent cross-reference of the same rule advance() uses to set hasCredit.
+// liveCredit / heldLiveCredit are re-implemented here (NOT imported from the reducer's liveCredited /
+// creditSequence) so a bug in the reducer's own copy makes the two DISAGREE and the oracle catches it
+// — keeping the check a genuinely independent cross-reference of the same rule advance() uses to set
+// hasCredit.
 function liveCredit(live) {
   if (!live) return null
   const ls = live.liveState
@@ -555,9 +552,14 @@ export function checkStrongScoreOracle(state, priorHistory = []) {
     const liveBool = lc === 'credit' ? [true] : lc === 'miss' ? [false] : []
     history = [...priorHistory, ...stackBools, !!state.browseHasCredit, ...fwdBools, ...liveBool]
   } else {
-    // A held live credit (canOverrideCorrect at the edge) was counted in good only if Save Stats was
-    // on for the question (saveStatsThisQ===true); a complete-while-off neither credits nor pushes.
-    const heldLiveCredit = state.canOverrideCorrect && state.saveStatsThisQ === true
+    // A held live credit (a clean green on the grid at the edge) was counted in good only if Save
+    // Stats was on for the question (saveStatsThisQ===true); a complete-while-off neither credits
+    // nor pushes.
+    const heldLiveCredit =
+      computeHasCredit(state.persistBtns) &&
+      !state.revealed &&
+      !state.countedWrong &&
+      state.saveStatsThisQ === true
     history = heldLiveCredit
       ? [...priorHistory, ...stackBools, true]
       : [...priorHistory, ...stackBools]
@@ -587,18 +589,18 @@ export function freshCov() {
     back: 0,
     deduction: 0,
     complete: 0,
-    noAdvance: 0,
+    hold: 0, //         OVERRIDE dispatched with `hold`
     reveal: 0,
     maxStack: 0,
     maxTimes: 0,
-    heldComplete: 0, // reached a HELD completing solve (locked + canOverrideCorrect at the live edge)
-    overrideHeldComplete: 0, // reached the OVERRIDE Path-3 completing-hold specifically (vs the ANSWER-complete hold)
+    heldComplete: 0, // reached a HELD credit at the live edge (locked + a clean credit on the grid)
+    liveHold: 0, //     a crediting Override that HELD on the live card (vs the ANSWER-complete hold)
     browsedHeld: 0, //  back-browsed AWAY from a held live credit (the oracle's isLive-fold corner)
     timedTimeout: 0, // fired a LOCK_REVEAL / TIMEOUT_MISS on the active live edge (timed surface)
     refChecks: 0, //   reference-model comparisons performed (referenceModel profiles)
-    undo: 0, //        UNDO dispatched (a pending capsule was spent)
-    undoAdvanced: 0, // an UNDO that stepped back across an ADVANCING Override (questionId went back)
-    undoToggles: 0, // an OVERRIDE filed straight after an UNDO — the Override ⇄ Undo toggle itself
+    toggleBack: 0, //  an Undo — a press on a card that was already overridden (O → A)
+    toggleDeep: 0, //  a press on a card browsed two or more deep
+    retoggle: 0, //    the same card pressed three times running (consecutive presses hit one card)
     hydrated: 0, //    sequences seeded with a prior-session baseline (the hydration net)
   }
 }
@@ -640,7 +642,10 @@ export function runSequence(seed, steps, cov, profile) {
     ? createRefModel(!!state.date.type, priorHistory, priorTimes)
     : null
   const recent = []
-  let lastKind = null // the previous DISPATCHED action's type (coverage of the Undo → Override toggle)
+  // Consecutive OVERRIDE dispatches. Consecutive presses always land on ONE card — a press that
+  // stays leaves the button on the same card, and the one that advances leaves it on the card just
+  // pushed — so a run of three is the same card flipped three times.
+  let pressRun = 0
 
   for (let i = 0; i < steps; i++) {
     const saveStats = chance(rnd, profile.pSaveStats)
@@ -692,11 +697,13 @@ export function runSequence(seed, steps, cov, profile) {
         break
       case 'OVERRIDE':
         if (overrideAvail(state, saveStats)) {
-          const noAdvance = chance(rnd, profile.pNoAdvance)
-          action = { type: 'OVERRIDE', useJulian, tracking, timingOff, nextDate, noAdvance }
+          const hold = chance(rnd, profile.pHold)
+          action = { type: 'OVERRIDE', useJulian, tracking, nextDate, hold }
           cov.override++
-          if (noAdvance) cov.noAdvance++
+          if (hold) cov.hold++
           if (state.backDepth > 0) cov.overrideBrowsing++
+          if (state.backDepth >= 2) cov.toggleDeep++
+          if (overridePlan(state).overridden) cov.toggleBack++
         }
         break
       case 'RESET':
@@ -724,13 +731,6 @@ export function runSequence(seed, steps, cov, profile) {
         break
       case 'RESET_ROUND':
         action = { type: 'RESET_ROUND' }
-        break
-      case 'UNDO':
-        // The app only offers Undo while a capsule is pending (the button reads Undo exactly then).
-        if (state.undoCapsule != null) {
-          action = { type: 'UNDO' }
-          cov.undo++
-        }
         break
     }
 
@@ -763,41 +763,40 @@ export function runSequence(seed, steps, cov, profile) {
     if (kind === 'REVEAL' && !prev.countedWrong && state.countedWrong) cov.reveal++
     // A HELD completing solve at the live edge (locked + reversible) — the AoX-complete corner the
     // extended strong oracle now covers; browsing away from one parks the credit as the isLive entry.
-    if (state.backDepth === 0 && state.locked && state.canOverrideCorrect) cov.heldComplete++
-    // The OVERRIDE Path-3 completing-hold specifically (gameReducer ~L850: a countedWrong question
-    // credited via Override with noAdvance, on a scored edge, HELD at the live edge). cov.heldComplete
-    // alone conflates this with the ANSWER-complete hold (identical end state); this proves the override
-    // branch is actually reached, not just the answer one. (F7 coverage-gap fix.)
+    if (state.backDepth === 0 && state.locked && liveCredited(state)) cov.heldComplete++
+    // The crediting Override that HELD on the live card specifically (a burned, scored card credited
+    // with `hold`, still on screen afterwards). cov.heldComplete alone conflates this with the
+    // ANSWER-complete hold (identical end state); this proves the override branch is actually
+    // reached, not just the answer one. (F7 coverage-gap fix.)
     if (
       action.type === 'OVERRIDE' &&
-      action.noAdvance &&
+      action.hold &&
+      prev.backDepth === 0 &&
       prev.countedWrong &&
       prev.saveStatsThisQ === true &&
-      state.locked &&
-      state.canOverrideCorrect
+      state.questionId === prev.questionId &&
+      liveCredited(state)
     )
-      cov.overrideHeldComplete++
-    if (kind === 'BACK' && prev.backDepth === 0 && prev.locked && prev.canOverrideCorrect)
+      cov.liveHold++
+    if (kind === 'BACK' && prev.backDepth === 0 && prev.locked && liveCredited(prev))
       cov.browsedHeld++
-    if (action.type === 'UNDO' && state.questionId < prev.questionId) cov.undoAdvanced++
-    if (action.type === 'OVERRIDE' && lastKind === 'UNDO') cov.undoToggles++
-    lastKind = action.type
+    pressRun = action.type === 'OVERRIDE' ? pressRun + 1 : 0
+    if (pressRun === 3) cov.retoggle++
     const S = state.stats
     recent.push(
-      `${i}:${kind}${saveStats ? '+' : '-'} p${S.played}g${S.good}s${S.streak}b${S.best} bd${state.backDepth} stk${state.stack.length} cw${state.countedWrong ? 1 : 0} coc${state.canOverrideCorrect ? 1 : 0}`,
+      `${i}:${kind}${saveStats ? '+' : '-'} p${S.played}g${S.good}s${S.streak}b${S.best} bd${state.backDepth} stk${state.stack.length} cw${state.countedWrong ? 1 : 0} ov${state.card.answered !== null ? 1 : 0}`,
     )
     if (recent.length > 20) recent.shift()
 
     const violations = checkGameInvariants(state, useJulian)
-    // "Undo shows exactly where Override would otherwise be locked": the one Override button can only
-    // ever mean one thing, so a pending capsule and an available Override must never coexist. Checked
-    // here rather than argued — it is true by three different mechanisms across the five paths. The
-    // Save-Stats term is neutralised (a null freeze + setting on) so this checks the UNGATED
-    // availability MoX and Blitz use, which is the stricter of the two forms.
-    if (state.undoCapsule != null && overrideAvail({ ...state, saveStatsThisQ: null }, true))
-      violations.push('Override is available while an Undo is pending')
+    // The button and the press agree: the harness's own reading of which card the button points at
+    // must be the reducer's, every step — so "Override is offered" ⇔ "there is a card to toggle"
+    // (overrideAvail ⇔ overrideTarget !== null under the same Save-Stats gate).
+    const ht = harnessTarget(state)
+    if (ht !== overrideTarget(state))
+      violations.push(`TARGET: harness ${ht}, reducer ${overrideTarget(state)}`)
     if (profile.strongOracle) violations.push(...checkStrongScoreOracle(state, priorHistory))
-    if (model) violations.push(...compareRefModel(model, state))
+    if (model) violations.push(...compareRefModel(model, state, overridePlan(state)))
     if (violations.length) {
       return {
         ok: false,
