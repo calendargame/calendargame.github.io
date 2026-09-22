@@ -45,7 +45,7 @@ import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import type { AoxBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/userDefaults.js'
-import { useGameEngine } from '../engine/useGameEngine.js'
+import { useGameEngine, withoutPendingUndo } from '../engine/useGameEngine.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
@@ -285,7 +285,7 @@ function AoxMode({
     const pid = usePresets.getState().activeId
     if (runPhase === 'done' || runPhase === 'failed')
       writeSessionRound(pid, 'aox', {
-        engine: state,
+        engine: withoutPendingUndo(state),
         runPhase,
         shown,
         currentRunId: currentRunIdRef.current,

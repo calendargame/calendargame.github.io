@@ -2,7 +2,7 @@
 // sudden-death variant, and Best Score/Streak with round-id rollback. Extracted verbatim from
 // main.tsx (Q1 phase 1); it was already a module-level sibling of App taking everything through
 // props, so nothing about its behaviour changes by living here.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { useButtonFlash, usePlayClock } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
@@ -30,7 +30,7 @@ import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import type { BlitzBest, SuddenBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
-import { useGameEngine } from '../engine/useGameEngine.js'
+import { useGameEngine, withoutPendingUndo } from '../engine/useGameEngine.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
@@ -86,6 +86,10 @@ function roundStars(
 // need; store/sessionRound never looks inside it. `currentRoundId` + `prevRoundBest` are what keep
 // the Best-reconcile / Override-rollback correct on a restored round — without them a later Override
 // that drops the round's score could leave a fabricated Best standing, or wipe a legitimate one.
+// `remain` is the round's clock as it stopped — what an Override that rescues the restored round
+// resumes from (Per Round) and what its readout shows. OPTIONAL because a blob parked by an earlier
+// build has none; such a round restores with the configured round length, which is what every build
+// before this one showed on that readout anyway.
 interface BlitzRoundSnapshot {
   engine: GameState
   timerDone: boolean
@@ -93,6 +97,7 @@ interface BlitzRoundSnapshot {
   active: boolean
   currentRoundId: number | null
   prevRoundBest: PrevRoundBest
+  remain?: number
 }
 
 // ============================================================
@@ -153,15 +158,16 @@ function BlitzMode({
     setBlitzSec = useModePrefs((s) => s.setBlitzSec) // persisted (mode-prefs store)
   const qSec = useModePrefs((s) => s.blitzQSec),
     setQSec = useModePrefs((s) => s.setBlitzQSec) // persisted (mode-prefs store)
-  const [, setBlitzRemain] = useState(60)
-  const [, setQRemain] = useState(5)
   // `clockRemainRef` — the running sub-mode's remaining seconds as last drawn (the countdown writes it
-  // every frame) or as STAMPED when the round ended. One ref serves both sub-modes because Per Round /
-  // Per Question is idle-locked: it cannot change while there is a round for the value to belong to.
+  // every frame), as STAMPED when the round ended, or as PARKED with an ended round (round 22's fixer:
+  // the park used to omit it, so a restored Per Round round that an Override rescued resumed with a
+  // hard-coded 60 s whatever its length and whatever it had left). One ref serves both sub-modes
+  // because Per Round / Per Question is idle-locked: it cannot change while there is a round for the
+  // value to belong to. With nothing parked, the configured length is the honest starting value.
   const blitzStartRef = useRef<number | null>(null),
     blitzPausedAtRef = useRef<number | null>(null),
     blitzPausedAccRef = useRef(0),
-    clockRemainRef = useRef(60)
+    clockRemainRef = useRef(parkedRound?.remain ?? (perQ ? qSec : blitzSec))
   const blitzBarRef = useRef<HTMLSpanElement | null>(null),
     blitzTimeRef = useRef<HTMLSpanElement | null>(null)
   const qDeadlineRef = useRef<number | null>(null),
@@ -299,14 +305,19 @@ function BlitzMode({
       const sx = Math.max(0, Math.min(1, r / blitzSec))
       if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(' + sx + ')'
       if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(r)
-      setBlitzRemain(r)
     } else {
       const sx = qSec > 0 ? Math.max(0, Math.min(1, r / qSec)) : 1
       if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(' + sx + ')'
       if (suddenTimeRef.current) suddenTimeRef.current.textContent = Math.ceil(r) + 's'
-      setQRemain(r)
     }
   }
+  // A restored ended round shows the clock it stopped on — the readout and bar it had before the
+  // switch — rather than the full length the markup renders. A layout effect so the first paint is
+  // already right. Mount-only: after this, every change to the clock is drawn by the code that makes it.
+  useLayoutEffect(() => {
+    if (parkedRound) paintClock(clockRemainRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design (see above)
+  }, [])
   // The round-over state with the clock stopped — the ONE writer of `timerDone = true`. endRound is
   // how play reaches it; the only other caller is an Undo putting back a round an Override resumed,
   // which must NOT restamp the remaining from the resumed clock (it restores the stamp it noted).
@@ -769,17 +780,20 @@ function BlitzMode({
   // `state` is a dep so a post-round Override (which edits the ended round's engine state and
   // re-runs the Best-reconcile effect above) re-parks the updated snapshot. currentRoundIdRef and
   // prevRoundBestRef are written only by begin(), which also flips active/timerDone, so they are
-  // already stable whenever timerDone is true and need no dep of their own.
+  // already stable whenever timerDone is true and need no dep of their own. clockRemainRef needs none
+  // either: every writer that can leave a round ended — endRound's stamp, and the Undo that re-ends a
+  // resumed round (paintClock) — writes it in the same handler that flips timerDone, before this runs.
   useEffect(() => {
     const pid = usePresets.getState().activeId
     if (timerDone)
       writeSessionRound(pid, 'blitz', {
-        engine: state,
+        engine: withoutPendingUndo(state),
         timerDone,
         showTimerDate,
         active,
         currentRoundId: currentRoundIdRef.current,
         prevRoundBest: prevRoundBestRef.current,
+        remain: clockRemainRef.current,
       })
     else discardSessionRound(pid, 'blitz')
   }, [timerDone, active, showTimerDate, state])
@@ -870,7 +884,9 @@ function BlitzMode({
   // or through an Undo re-ending a round its Override had resumed — and EVERY way a round can finish
   // routes through it, in BOTH timing sub-modes: the Per Round countdown hitting 0, any
   // single question's Per Question clock hitting 0, a wrong answer with Allow Mistakes off, Reveal,
-  // Show Codes, opening ⚙ mid-round, and an override-to-wrong with Allow Mistakes off. So there is
+  // Show Codes, and an override-to-wrong with Allow Mistakes off. (The ⚙ panel is NOT one of them:
+  // opening it leaves the round running, and closing it after changing a setting the round depends on
+  // RESETS the round to idle rather than ending it — the useSettingsCloseEffect above.) So there is
   // no per-sub-mode branch to write here: one flag already means "this round is over" everywhere.
   // It is also the flag the Best-reconcile effect gates on — a Blitz round that ends on a wrong in
   // sudden death still RECORDS its result, so it is a finished round, not an abandoned one. AoX
@@ -987,7 +1003,6 @@ function BlitzMode({
                 const v = +e.target.value
                 setBlitzSec(v)
                 if (!active) {
-                  setBlitzRemain(v)
                   clockRemainRef.current = v
                   if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(v)
                   if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
@@ -1015,7 +1030,6 @@ function BlitzMode({
               onCommit={(v) => {
                 setBlitzSec(v)
                 if (!active) {
-                  setBlitzRemain(v)
                   clockRemainRef.current = v
                   if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(v)
                   if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
@@ -1035,7 +1049,6 @@ function BlitzMode({
                 const v = +e.target.value
                 setQSec(v)
                 if (!active) {
-                  setQRemain(v)
                   if (suddenTimeRef.current) suddenTimeRef.current.textContent = v + 's'
                   if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(1)'
                 }
@@ -1060,7 +1073,6 @@ function BlitzMode({
               onCommit={(v) => {
                 setQSec(v)
                 if (!active) {
-                  setQRemain(v)
                   if (suddenTimeRef.current) suddenTimeRef.current.textContent = v + 's'
                   if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(1)'
                 }

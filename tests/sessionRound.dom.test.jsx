@@ -11,7 +11,7 @@
 // must not be weakened. Nothing short of a mounted app, a real switch, and a finished round can show
 // that the wiring is there — a green suite without this file is not proof (it was green with the
 // wiring entirely missing).
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, cleanup, act, fireEvent } from '@testing-library/react'
 import { createPreset, switchPreset, deletePreset } from '../src/store/presetControl.js'
 import { readSessionRound } from '../src/store/sessionRound.js'
@@ -429,6 +429,9 @@ describe('Round 23 Q6 — a parked round never comes back with an Undo pending',
     tap(ctrl('Override')) // flip it → 1/3
     expect(statValue('Score')).toBe('1/3')
     expect(isOffered(ctrl('Undo'))).toBe(true)
+    // The park strips the pending Undo on the way IN, not only on the way out (round 22's fixer):
+    // the capsule is a whole second GameState, and no restore could ever use it.
+    expect(readSessionRound(1, 'blitz').engine.undoCapsule).toBeNull()
 
     const p2 = createPreset()
     openPreset(p2.id)
@@ -449,6 +452,7 @@ describe('Round 23 Q6 — a parked round never comes back with an Undo pending',
     tap(ctrl('Override')) // reverse the completing solve → failed 1/2
     expect(statValue('Score')).toBe('1/2')
     expect(isOffered(ctrl('Undo'))).toBe(true)
+    expect(readSessionRound(1, 'aox').engine.undoCapsule).toBeNull() // stripped on the way in too
 
     const p2 = createPreset()
     openPreset(p2.id)
@@ -456,5 +460,86 @@ describe('Round 23 Q6 — a parked round never comes back with an Undo pending',
     expect(statValue('Score')).toBe('1/2')
     expect(ctrl('Reset')).toBeInTheDocument()
     expect(queryCtrl('Undo')).toBeNull()
+  })
+})
+
+// ── A restored Blitz round keeps the clock it stopped on (round 22's fixer) ───────────────────
+// The park used to omit the round's remaining seconds, and the screen's clock ref started at a
+// hard-coded 60 — so a Per Round round of ANY length, ended by a wrong answer with time left, came
+// back after a preset round-trip reading its full length, and an Override that rescued it resumed
+// with a whole minute (an Undo then painted "1m 0s"). Fake timers drive rAF and performance.now in
+// lockstep, so the seconds below are exact.
+describe('a restored Blitz round resumes with the time it had left', () => {
+  beforeEach(() => {
+    resetAppState()
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  const tick = (ms) => act(() => vi.advanceTimersByTime(ms))
+  // The round clock's readout: the visible Blitz-time span sitting directly above the countdown bar
+  // (the slider's own value readout shows a time too, and is not the clock).
+  const readout = () => {
+    const hits = Array.from(document.querySelectorAll('span')).filter(
+      (el) =>
+        !isHidden(el) &&
+        /^(\d+m )?\d+s$/.test(el.textContent) &&
+        el.parentElement?.nextElementSibling?.classList.contains('bar'),
+    )
+    if (hits.length !== 1) throw new Error(`expected one clock readout, found ${hits.length}`)
+    return hits[0].textContent
+  }
+  const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
+  // A 30-second Per Round round, sudden death, ended by a wrong answer with 24.5 seconds left.
+  const endRoundWith25sLeft = () => {
+    mountApp()
+    pinReadable()
+    act(() => {
+      useModePrefs.getState().setBlitzSec(30)
+      useModePrefs.getState().setBlitzAllowMistakes(false)
+    })
+    switchToBlitz()
+    tap(ctrl('Begin'))
+    tick(5500) // mid-second, so the readout (which rounds up) reads 25s whatever the frame timing
+    tap(screen.getByRole('button', { name: wrongName(readDate()) }))
+    expect(ctrl('Reset')).toBeInTheDocument() // ended
+    expect(readout()).toBe('25s')
+  }
+  const roundTrip = () => {
+    const p2 = createPreset()
+    openPreset(p2.id)
+    openPreset(1)
+  }
+
+  it('the readout comes back as it stopped, Override resumes from there, and Undo paints it back', () => {
+    endRoundWith25sLeft()
+    roundTrip()
+    expect(ctrl('Reset')).toBeInTheDocument() // the ended round is back…
+    expect(readout()).toBe('25s') // …showing the clock it stopped on, not the round length
+    tap(ctrl('Override')) // credit the wrong → the round resumes
+    tick(16)
+    expect(readout()).toBe('25s') // from where it stopped — not 60s
+    tick(10_000)
+    expect(readout()).toBe('15s') // …and it is genuinely draining from there
+    tap(ctrl('Undo')) // the Override resumed an ended round: Undo re-ends it with its readout
+    expect(readout()).toBe('25s')
+  })
+
+  it('a round parked by an earlier build (no remaining time saved) restores with the configured length', () => {
+    endRoundWith25sLeft()
+    const raw = JSON.parse(sessionStorage.getItem('cg-round-v1'))
+    delete raw['1:blitz'].remain
+    sessionStorage.setItem('cg-round-v1', JSON.stringify(raw))
+    roundTrip()
+    expect(ctrl('Reset')).toBeInTheDocument()
+    expect(readout()).toBe('30s')
+    tap(ctrl('Override'))
+    tick(16)
+    expect(readout()).toBe('30s') // the round's own length — never a stray 60
   })
 })

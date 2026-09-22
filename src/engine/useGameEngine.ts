@@ -48,6 +48,17 @@ export interface UseGameEngineOptions {
   getInitialState?: () => GameState | null
 }
 
+// A GameState in the one form it may be PARKED in and RESTORED from (store/sessionRound): with no
+// Undo pending. An Undo reverses the engine half AND the component half of an Override (a resumed or
+// ended Blitz round, a MoX run phase) and the component half lives in refs and state that are never
+// parked — so an Undo carried across a remount could only put back half of what it took. It also
+// halves the blob, since the capsule is a whole second GameState.
+// ★ APPLIED AT BOTH DOORS: the two timed screens call it on the way INTO sessionStorage, and the lazy
+// init below calls it on the way OUT — the second is not redundant, because a blob parked by an
+// earlier build still carries its capsule, or has no `undoCapsule` key at all (which is not null).
+export const withoutPendingUndo = (state: GameState): GameState =>
+  state.undoCapsule === null ? state : { ...state, undoCapsule: null }
+
 export function useGameEngine({
   genDate,
   minY,
@@ -61,13 +72,9 @@ export function useGameEngine({
 }: UseGameEngineOptions) {
   const [state, dispatch] = useReducer(gameReducer, undefined, () => {
     const parked = getInitialState?.()
-    // ⚠ A RESTORED STATE ARRIVES WITH NO UNDO. An Undo reverses the engine half AND the component
-    // half of an Override (a resumed or ended Blitz round, a MoX run phase, a Flash countdown) and
-    // the component half lives in refs and state that are never parked — so an Undo filed before the
-    // remount could only put back half of what it took. Stripping it here, at the one door every
-    // parked state comes through, also normalises a blob parked by a build that predates the field
-    // (it has no `undoCapsule` key at all, which is not the same as null).
-    if (parked) return { ...parked, undoCapsule: null }
+    // ⚠ A RESTORED STATE ARRIVES WITH NO UNDO — withoutPendingUndo above says why, and why this door
+    // strips it even though the parking door already did.
+    if (parked) return withoutPendingUndo(parked)
     return initEngine(genDate(minY, maxY), getInitialStats?.())
   })
 
