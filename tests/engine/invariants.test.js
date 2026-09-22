@@ -148,65 +148,98 @@ describe('checkGameInvariants — the card-number ledger', () => {
   })
 })
 
-// ── The undo capsule (round 23 Q6) ─────────────────────────────────────────────────────────────
-// A pending Undo is a state one tap away (UNDO installs it verbatim), so it must be healthy itself,
-// and it must still be the state from just before the Override on top of it.
-describe('checkGameInvariants — the undo capsule', () => {
-  const wrongThenOverride = () => {
-    let s = gameReducer(initEngine(DATE), {
+// ── The per-card Override record (round 23 Q6) ─────────────────────────────────────────────────
+// Every scored card holds two fixed states — A (as answered) and O (overridden) — and its credit is
+// A.credited XOR overridden. A card in O stores its A in `meta.answered`; these tripwires catch a
+// record that has come apart from the card it describes, which is the one way a toggle could
+// silently stack credit or strand a time.
+describe('checkGameInvariants — the per-card Override record', () => {
+  const ov = (s, extra = {}) =>
+    gameReducer(s, {
+      type: 'OVERRIDE',
+      useJulian: false,
+      tracking: true,
+      nextDate: NEXT,
+      ...extra,
+    })
+  const answer = (s, idx, extra = {}) =>
+    gameReducer(s, {
       type: 'ANSWER',
-      idx: (C + 1) % 7,
+      idx,
       useJulian: false,
       elapsed: 0.5,
       tracking: true,
       saveStats: true,
       nextDate: NEXT,
+      ...extra,
     })
-    s = gameReducer(s, {
-      type: 'OVERRIDE',
-      useJulian: false,
-      tracking: true,
-      timingOff: false,
-      nextDate: NEXT,
-    })
-    return s
-  }
-
-  it('a real Override leaves a healthy state carrying a healthy capsule', () => {
-    const s = wrongThenOverride()
-    expect(s.undoCapsule).not.toBe(null)
-    expect(checkGameInvariants(s, false)).toEqual([])
+  const W = (C + 1) % 7
+  // A history card in O (credited — the wrong answer's time frozen as its oTime), and a live one.
+  const retroCredited = () => ov(answer(answer(initEngine(DATE), W), C))
+  const liveUncredited = () => ov(answer(initEngine(DATE), C, { complete: true }))
+  const tail = (s) => s.stack[s.stack.length - 1]
+  const withTail = (s, patch) => ({
+    ...s,
+    stack: [...s.stack.slice(0, -1), { ...tail(s), ...patch }],
   })
 
-  it("reports a corrupt capsule's own violations, prefixed `undo:`", () => {
-    const s = wrongThenOverride()
-    const bad = {
-      ...s,
-      undoCapsule: { ...s.undoCapsule, stats: { ...s.undoCapsule.stats, good: 9 } },
+  it('real toggles leave healthy records — history, live, browsed and parked', () => {
+    expect(checkGameInvariants(retroCredited(), false)).toEqual([])
+    expect(checkGameInvariants(liveUncredited(), false)).toEqual([])
+    const one = answer(initEngine(DATE), C) // a card behind, then the live card held and overridden
+    const held = answer(one, wday(one.date.y, one.date.m, one.date.d), { complete: true })
+    const parked = gameReducer(ov(held), { type: 'BACK' })
+    expect(parked.forwardStack[0].meta.answered.live).toBeDefined()
+    expect(parked.forwardStack[0].isLive).toBe(true)
+    expect(checkGameInvariants(parked, false)).toEqual([])
+  })
+
+  it('1 — an overridden card whose credit is not the opposite of its as-answered credit', () => {
+    const s = retroCredited()
+    const bad = withTail(s, {
+      meta: { ...tail(s).meta, answered: { ...tail(s).meta.answered, hasCredit: true } },
+    })
+    expect(join(checkGameInvariants(bad, false))).toContain('credit is not the opposite')
+  })
+
+  it('2 — an overridden card whose grid is not the answer alone', () => {
+    const s = retroCredited()
+    expect(
+      join(checkGameInvariants(withTail(s, { btns: { [C]: 'override-wrong' } }), false)),
+    ).toContain('grid')
+    const two = withTail(s, { btns: { [C]: 'correct', [W]: 'wrong-prev' } })
+    expect(join(checkGameInvariants(two, false))).toContain('grid')
+    // …the live card is checked the same way.
+    const live = { ...liveUncredited(), persistBtns: { [C]: 'correct' } }
+    expect(join(checkGameInvariants(live, false))).toContain('grid')
+  })
+
+  it('3 — an uncredited state holding a time, on the card or in its stored as-answered state', () => {
+    const s = liveUncredited()
+    const a = { ...s.card.answered, hasCredit: false, solveTime: 0.5 }
+    const bad = { ...s, card: { ...s.card, answered: a } }
+    expect(join(checkGameInvariants(bad, false))).toContain('uncredited')
+  })
+
+  it('4 — a credited overridden card contributing anything but its frozen O time', () => {
+    const s = retroCredited()
+    const bad = withTail(s, { meta: { ...tail(s).meta, oTime: 9 } })
+    expect(join(checkGameInvariants(bad, false))).toContain('frozen O time')
+  })
+
+  it('5 — live flags on a history card, or none on the live one', () => {
+    const s = retroCredited()
+    const a = {
+      ...tail(s).meta.answered,
+      live: { locked: true, revealed: true, countedWrong: true, calcPenaltyActive: false },
     }
-    const out = join(checkGameInvariants(bad, false))
-    expect(out).toContain('undo: stats: good(9) > played(1)')
-    // …and ONLY the capsule is blamed — the live state is untouched.
-    expect(checkGameInvariants(bad, false).every((x) => x.startsWith('undo'))).toBe(true)
-  })
-
-  it('reports a stale capsule: a historyBase that no Override moves has moved', () => {
-    const s = wrongThenOverride()
-    const stale = { ...s, undoCapsule: { ...s.undoCapsule, historyBase: 7 } }
-    expect(join(checkGameInvariants(stale, false))).toContain(
-      'undo capsule is stale: historyBase 7 → 0',
-    )
-  })
-
-  it('reports a stale capsule: the grids were remounted (gridEpoch) since it was filed', () => {
-    const s = wrongThenOverride()
-    const stale = { ...s, gridEpoch: s.gridEpoch + 1 }
-    expect(join(checkGameInvariants(stale, false))).toContain('undo capsule is stale: gridEpoch')
-  })
-
-  it('reports a stale capsule: questionId moved by more than one advance', () => {
-    const s = wrongThenOverride()
-    const stale = { ...s, questionId: s.undoCapsule.questionId + 2 }
-    expect(join(checkGameInvariants(stale, false))).toContain('undo capsule is stale: questionId')
+    const bad = withTail(s, { meta: { ...tail(s).meta, answered: a } })
+    expect(join(checkGameInvariants(bad, false))).toContain('live flags')
+    const l = liveUncredited()
+    const { live, ...rest } = l.card.answered
+    expect(live).toBeDefined()
+    expect(
+      join(checkGameInvariants({ ...l, card: { ...l.card, answered: rest } }, false)),
+    ).toContain('live flags')
   })
 })

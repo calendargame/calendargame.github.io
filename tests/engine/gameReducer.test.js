@@ -3,9 +3,18 @@
 // These mirror the Classic characterization (tests/classic.dom) at the reducer level —
 // the two must agree, which is what makes wiring the reducer into App (1c) safe.
 import { describe, it, expect } from 'vitest'
-import { gameReducer, initEngine, cardNumber } from '../../src/engine/gameReducer.js'
+import {
+  gameReducer,
+  initEngine,
+  cardNumber,
+  overrideTarget,
+  overridePlan,
+  liveCredited,
+} from '../../src/engine/gameReducer.js'
 import { wday } from '../../src/lib/calendar.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
+import { buildRunBreakdown } from '../../src/engine/runBreakdown.js'
+import { calcAvg } from '../../src/engine/stats.js'
 
 const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
 const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
@@ -20,17 +29,21 @@ const reveal = (s, extra = {}) => gameReducer(s, { type: 'REVEAL', ...ctx, ...ex
 const showCodes = (s, open = true, extra = {}) =>
   gameReducer(s, { type: 'SHOW_CODES', open, ...ctx, ...extra })
 const neu = (s, extra = {}) => gameReducer(s, { type: 'NEW', nextDate: NEXT, ...ctx, ...extra })
+// The one button. No direction and no timing flag: what a press does is read off the card it
+// points at (overridePlan); `hold` is the run modes' "credit the live card but stay on it".
 const override = (s, extra = {}) =>
   gameReducer(s, {
     type: 'OVERRIDE',
     useJulian: false,
     tracking: false,
-    timingOff: true,
     nextDate: NEXT,
     ...extra,
   })
 const back = (s) => gameReducer(s, { type: 'BACK' })
 const forward = (s) => gameReducer(s, { type: 'FORWARD', useJulian: false })
+// The correct / a wrong index for whatever date is on screen (the helpers above answer DATE's).
+const cOf = (s) => wday(s.date.y, s.date.m, s.date.d)
+const wOf = (s, k = 1) => (cOf(s) + k) % 7
 
 describe('gameReducer — initial state', () => {
   it('starts at a clean slate', () => {
@@ -52,37 +65,36 @@ describe('gameReducer — ANSWER', () => {
     expect(s.stack).toHaveLength(1)
     expect(s.stack[0].hasCredit).toBe(true)
     expect(s.stack[0].btns).toEqual({ [C]: 'correct' })
-    // The history entry carries the pre-answer snapshot (so Override can reverse it later).
-    // contributedTime is null here — timing is hidden (tracking off), so no solve time was recorded.
-    expect(s.stack[0].capsule.snapshot).toEqual({
-      played: 0,
-      good: 0,
-      streak: 0,
-      best: 0,
-      timesLen: 0,
-      wasWrong: false,
-      contributedTime: null,
-    })
-    expect(s.pendingWrongOverride).toBe(null)
+    // The entry carries its Override record: never wrong (no wrongTime), never overridden — so its
+    // materialised fields ARE its as-answered state, and nothing is stored twice.
+    expect(s.stack[0].meta).toEqual({ wrongTime: null, answered: null })
+    expect(s.card).toEqual({ wrongTime: null, answered: null }) // the fresh live card starts blank
   })
 
-  it('wrong: counts as played, streak 0, marks the button, does NOT advance, arms snapshot', () => {
+  it('wrong: counts as played, streak 0, marks the button, does NOT advance, records its wrongTime', () => {
     const s = answer(initEngine(DATE), W, { elapsed: 0.5 })
     expect(s.stats).toEqual({ played: 1, good: 0, streak: 0, best: 0, times: [] })
     expect(s.date).toBe(DATE) // not advanced
     expect(s.persistBtns).toEqual({ [W]: 'wrong-latest' })
     expect(s.countedWrong).toBe(true)
-    expect(s.wrongTime).toBe(0.5)
-    expect(s.prevStatsSnapshot.wasWrong).toBe(true)
+    expect(s.card.wrongTime).toBe(0.5) // what a crediting Override would contribute
+    expect(overrideTarget(s)).toBe('live') // the burned card is the button's target
   })
 
-  it('correct after a wrong on the same question: no extra credit, advances, arms pendingWrongOverride', () => {
-    let s = answer(initEngine(DATE), W) // 0/1, burned
+  it('a second wrong on the same card keeps the FIRST wrong’s time', () => {
+    let s = answer(initEngine(DATE), W, { elapsed: 0.5 })
+    s = answer(s, (C + 2) % 7, { elapsed: 1.9 })
+    expect(s.card.wrongTime).toBe(0.5)
+  })
+
+  it('correct after a wrong on the same question: no extra credit, advances, and that card is the retro target', () => {
+    let s = answer(initEngine(DATE), W, { elapsed: 0.5 }) // 0/1, burned
     s = answer(s, C) // late-correct
     expect(s.stats).toEqual({ played: 1, good: 0, streak: 0, best: 0, times: [] }) // no credit
     expect(s.date).toBe(NEXT) // advanced
-    expect(s.pendingWrongOverride).not.toBe(null) // Path 4 armed
-    expect(s.stack).toHaveLength(1) // the wrong-then-right entry was pushed
+    expect(s.stack).toHaveLength(1) // the wrong-then-right entry was pushed…
+    expect(s.stack[0].meta.wrongTime).toBe(0.5) // …carrying the time an Override would credit it with
+    expect(overrideTarget(s)).toBe('retro') // …and the fresh live card points the button at it
   })
 
   it('builds streak across correct answers; a wrong resets current but keeps best', () => {
@@ -158,12 +170,12 @@ describe('gameReducer — NEW', () => {
     expect(s.stats).toEqual({ played: 0, good: 0, streak: 0, best: 0, times: [] })
   })
 
-  it('after a wrong answer: pushes the entry, advances, arms pendingWrongOverride', () => {
+  it('after a wrong answer: pushes the entry, advances, and the button points at the pushed card', () => {
     let s = answer(initEngine(DATE), W) // burned, not advanced
     s = neu(s)
     expect(s.stack).toHaveLength(1)
     expect(s.date).toBe(NEXT)
-    expect(s.pendingWrongOverride).not.toBe(null)
+    expect(overridePlan(s)).toEqual({ target: 'retro', overridden: false, credits: true })
   })
 })
 
@@ -184,56 +196,93 @@ describe('gameReducer — RESET', () => {
   })
 })
 
-describe('gameReducer — OVERRIDE', () => {
-  it('Path 5 (correct then Override): retro-flips the just-answered entry to wrong (1/1 → 0/1)', () => {
+// ── OVERRIDE: which card the button points at, and a FIRST press on each ───────────────────────
+// Round 23 Q6 replaced the five hand-written Override paths with one per-card toggle. A first press
+// is still what those paths did, target by target — pinned here with the old paths' own numbers so
+// the equivalence is checked rather than argued. The two deliberate differences are pinned too:
+// the old Path 4 (credit the previous wrong) no longer moves play on, and the old Path 2 (take a
+// held credit away) no longer advances off the card it just flipped.
+describe('gameReducer — OVERRIDE (a first press, target by target)', () => {
+  it('retro (was Path 5) — correct then Override: flips the just-answered entry to a miss (1/1 → 0/1)', () => {
     let s = answer(initEngine(DATE), C) // 1/1, advanced; stack[0] is the credited DATE entry
-    s = override(s) // live Q untouched → Path 5 flips the entry
+    expect(overridePlan(s)).toEqual({ target: 'retro', overridden: false, credits: false })
+    const qid = s.questionId
+    s = override(s) // the live card is untouched; the entry flips
     expect(s.stats).toMatchObject({ played: 1, good: 0, streak: 0 })
     expect(s.stack[0].btns).toEqual({ [C]: 'override-wrong' })
     expect(s.stack[0].hasCredit).toBe(false)
-    expect(s.overrideUsedThisQ).toBe(true)
+    expect(s.stack[0].meta.answered).toEqual({
+      btns: { [C]: 'correct' },
+      hasCredit: true,
+      solveTime: null,
+    })
+    expect(s.date).toBe(NEXT) // the live card stayed…
+    expect(s.questionId).toBe(qid) // …and no new question was drawn
   })
 
-  it('Path 3 (wrong then Override): credits the wrong answer and advances (0/1 → 1/1)', () => {
+  it('live (was Path 3) — wrong then Override: credits the burned card and advances (0/1 → 1/1)', () => {
     let s = answer(initEngine(DATE), W) // 0/1, burned, not advanced
+    expect(overridePlan(s)).toEqual({ target: 'live', overridden: false, credits: true })
     s = override(s)
     expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1 })
     expect(s.date).toBe(NEXT) // advanced
     expect(s.stack).toHaveLength(1)
-    expect(s.stack[0].overrideUsed).toBe(true)
+    expect(s.stack[0].btns).toEqual({ [C]: 'correct' })
+    expect(s.stack[0].meta.answered.btns).toEqual({ [W]: 'wrong-prev', [C]: 'correct' }) // A kept, green synthesized
   })
 
-  it('Path 4 (wrong-then-right then Override): credits the previous question; live Q stays (timing off)', () => {
+  it('retro (was Path 4) — wrong-then-right then Override: credits the previous card and the live card STAYS', () => {
     let s = answer(initEngine(DATE), W) // 0/1
-    s = answer(s, C) // late-correct: advances to NEXT, arms pendingWrongOverride
-    s = override(s)
+    s = answer(s, C) // late-correct: advances to NEXT
+    const qid = s.questionId
+    s = override(s, { nextDate: DATE }) // a date is offered… and not drawn
     expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1 })
-    expect(s.date).toBe(NEXT) // not advanced again (timing off)
+    expect(s.date).toBe(NEXT) // ⚠ DELIBERATE CHANGE: the old Path 4 advanced with timing on
+    expect(s.questionId).toBe(qid)
     expect(s.stack[0].hasCredit).toBe(true)
   })
 
-  it('Path 1 (Back to a correct answer then Override): undoes the credit (1/1 → 0/1)', () => {
+  it('browsed (was Path 1) — Back to a correct answer then Override: takes the credit away (1/1 → 0/1)', () => {
     let s = answer(initEngine(DATE), C) // 1/1, advanced
-    s = back(s) // browse the credited entry; canOverrideCorrect restored
-    expect(s.canOverrideCorrect).toBe(true)
-    s = override(s) // delta-undo
+    s = back(s) // browse the credited entry
+    expect(overridePlan(s)).toEqual({ target: 'browsed', overridden: false, credits: false })
+    s = override(s)
     expect(s.stats).toMatchObject({ played: 1, good: 0, streak: 0 })
     expect(s.persistBtns).toEqual({ [C]: 'override-wrong' })
+    expect(s.browseHasCredit).toBe(false)
+    expect(s.revealed).toBe(true) // the answer is on the grid — a browse Reveal cannot paint over it
+    expect(reveal(s)).toBe(s)
   })
 
-  it('Path 2 (live canOverrideCorrect, timing off): undoes a correct in place without advancing', () => {
-    // Path 2 isn't reached in normal Classic flow (advance clears canOverrideCorrect); exercise it directly.
-    const armed = {
-      ...initEngine(DATE),
-      canOverrideCorrect: true,
-      prevStatsSnapshot: { played: 5, good: 5, streak: 5, best: 6, timesLen: 0, wasWrong: false },
-      stats: { played: 6, good: 6, streak: 6, best: 6, times: [] },
-    }
-    const s = override(armed)
-    expect(s.stats).toMatchObject({ played: 6, good: 5, streak: 0 }) // played u+1, good kept, streak 0
-    expect(s.countedWrong).toBe(true)
-    expect(s.locked).toBe(false) // timing-off branch leaves the live Q open
-    expect(s.date).toBe(DATE) // not advanced
+  it('live (was Path 2) — a HELD credit overridden: STAYS on the card as a resolved miss', () => {
+    let s = answer(initEngine(DATE), C, { complete: true, elapsed: 0.5, tracking: true })
+    expect(overridePlan(s)).toEqual({ target: 'live', overridden: false, credits: false })
+    s = override(s, { tracking: true })
+    expect(s.stats).toEqual({ played: 1, good: 0, streak: 0, best: 0, times: [] })
+    expect(s.date).toBe(DATE) // ⚠ DELIBERATE CHANGE: never advances off the card it just flipped
+    expect(s.persistBtns).toEqual({ [C]: 'override-wrong' })
+    expect([s.locked, s.revealed, s.countedWrong]).toEqual([true, true, true])
+    expect(s.liveSolveTime).toBe(null)
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+
+  it('a pristine per-question timeout is not a target — the button points at the card before it', () => {
+    let s = answer(initEngine(DATE), C) // one scored card behind
+    s = gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true })
+    expect(overrideTarget(s)).toBe('retro')
+    // …and with nothing behind it, there is nothing to point at at all.
+    const alone = gameReducer(initEngine(DATE), {
+      type: 'TIMEOUT_MISS',
+      useJulian: false,
+      saveStats: true,
+    })
+    expect(overrideTarget(alone)).toBe(null)
+    expect(override(alone)).toBe(alone) // no target → a no-op, same object
+  })
+
+  it('a card played with Save Stats OFF is never the live target', () => {
+    const s = answer(initEngine(DATE), W, { saveStats: false })
+    expect(overrideTarget(s)).toBe(null)
   })
 })
 
@@ -356,19 +405,20 @@ describe('gameReducer — gridEpoch (Q9: bumps on the two resets only)', () => {
   })
 })
 
-// The two general flags AoX adds (Stage C, Step 5 fold). `complete` = credit-and-stay (the run's
-// last solve); `noAdvance` = override-without-advancing (the failing reversal of that solve). The
-// one-question-loop modes never pass either, so their behavior is unchanged (regressions below).
-describe('gameReducer — complete (AoX last solve) + noAdvance (AoX failing override)', () => {
-  it('ANSWER complete: credits the correct answer but does NOT advance — marks, locks, stays, reversible', () => {
+// The two general flags the run modes add. `complete` = credit-and-stay (MoX's last solve); `hold`
+// = a crediting Override that stays on the live card instead of moving on (MoX's completing solve
+// via Override, and a Blitz round / MoX run that stays ended). The one-question-loop modes never
+// pass either, so their behavior is unchanged (regressions below).
+describe('gameReducer — complete (MoX last solve) + hold (a crediting Override that stays)', () => {
+  it('ANSWER complete: credits the correct answer but does NOT advance — marks, locks, stays, overridable', () => {
     const s = answer(initEngine(DATE), C, { complete: true, elapsed: 0.5, tracking: true })
     expect(s.stats).toEqual({ played: 1, good: 1, streak: 1, best: 1, times: [0.5] }) // credited
     expect(s.date).toBe(DATE) // stayed (NOT advanced to NEXT)
     expect(s.persistBtns).toEqual({ [C]: 'correct' }) // answer marked
     expect(s.locked).toBe(true) // run is over → grid locked
     expect(s.stack).toEqual([]) // not pushed — the completing solve is the live (reviewable) question
-    expect(s.canOverrideCorrect).toBe(true) // still reversible via Override
-    expect(s.prevStatsSnapshot).not.toBe(null)
+    expect(liveCredited(s)).toBe(true) // read straight off the grid — no flag to fall out of step
+    expect(overrideTarget(s)).toBe('live')
   })
 
   it('ANSWER without complete still advances (regression: the other modes are unchanged)', () => {
@@ -378,31 +428,30 @@ describe('gameReducer — complete (AoX last solve) + noAdvance (AoX failing ove
     expect(s.stack).toHaveLength(1)
   })
 
-  it('OVERRIDE noAdvance: reverses the completing solve without advancing (run fails in place)', () => {
-    let s = answer(initEngine(DATE), C, { complete: true, elapsed: 0.5, tracking: true })
-    s = gameReducer(s, {
-      type: 'OVERRIDE',
-      useJulian: false,
-      tracking: true,
-      timingOff: false,
-      noAdvance: true,
-      nextDate: NEXT,
-    })
-    expect(s.stats.good).toBe(0) // credit reversed
-    expect(s.stats.played).toBe(1) // the attempt still counts
-    expect(s.date).toBe(DATE) // stayed — the component marks the run failed
+  it('OVERRIDE hold: credits the burned live card and STAYS on it — locked, the answer alone in green', () => {
+    let s = answer(initEngine(DATE), W, { elapsed: 1.5 })
+    s = override(s, { hold: true, tracking: true })
+    expect(s.date).toBe(DATE) // stayed
+    expect(s.stats).toEqual({ played: 1, good: 1, streak: 1, best: 1, times: [1.5] })
+    expect(s.persistBtns).toEqual({ [C]: 'correct' })
+    expect([s.locked, s.revealed, s.countedWrong]).toEqual([true, false, false])
+    expect(liveCredited(s)).toBe(true)
+    expect(s.liveSolveTime).toBe(1.5) // the wrong answer's time, frozen as this card's O time
+    expect(s.card.oTime).toBe(1.5)
+    expect(checkGameInvariants(s, false)).toEqual([])
   })
 
-  it('OVERRIDE without noAdvance (timing on) advances after reversing (the Classic/Blitz path is intact)', () => {
-    let s = answer(initEngine(DATE), C, { complete: true, elapsed: 0.5, tracking: true })
-    s = gameReducer(s, {
-      type: 'OVERRIDE',
-      useJulian: false,
-      tracking: true,
-      timingOff: false,
-      nextDate: NEXT,
-    })
-    expect(s.date).toBe(NEXT) // advanced
+  it('OVERRIDE without hold on the same card advances (the Classic/Blitz credit-and-move-on)', () => {
+    let s = answer(initEngine(DATE), W, { elapsed: 1.5 })
+    s = override(s, { tracking: true })
+    expect(s.date).toBe(NEXT)
+  })
+
+  it('hold changes nothing about a press that does not credit the live card', () => {
+    const held = answer(initEngine(DATE), C, { complete: true })
+    expect(override(held, { hold: true })).toEqual(override(held))
+    const retro = answer(initEngine(DATE), C)
+    expect(override(retro, { hold: true })).toEqual(override(retro))
   })
 })
 
@@ -475,143 +524,249 @@ describe('gameReducer — historyBase / cardNumber (the Q# badge)', () => {
   })
 })
 
-// ── Override ⇄ Undo (round 23 Q6) ───────────────────────────────────────────────────────────────
-// Where the Override button used to go inert after use, it now reads Undo and puts back EXACTLY the
-// state the Override replaced; then it reads Override again, as many times as you like. The engine
-// half is one full-state capsule filed by OVERRIDE and spent by UNDO, discarded by every other
-// action in one choke point (the exported gameReducer wrapper). So the pins below are whole-object:
-// for EVERY path and branch, undo(override(s)) must deep-equal s — not "the stats match", the state.
-describe('gameReducer — Override ⇄ Undo', () => {
-  const undo = (s) => gameReducer(s, { type: 'UNDO' })
-  // Timing ON (the advancing branches) with times tracked, so the pool/ledger are exercised too.
-  const ovr = (s, extra = {}) => override(s, { tracking: true, timingOff: false, ...extra })
-  const T = { tracking: true, elapsed: 1.25 }
-  const credited = () => answer(initEngine(DATE), C, T) // 1/1 with a time, advanced to NEXT
-  const burned = () => answer(initEngine(DATE), W, T) // 0/1, wrong on DATE, stays
-  const held = () => answer(initEngine(DATE), C, { ...T, complete: true }) // AoX held completing solve
-  const pending = () => answer(burned(), C) // late correct → advanced, Path 4 armed
+// ── Override ⇄ Undo: a PERMANENT two-state toggle on every scored card (round 23 Q6) ────────────
+// The owner's rule: everything reads either Override or Undo — no locked Override any more — and a
+// card remembers how you answered it, so an Undo reached by browsing back (or after a preset
+// switch) shows your ORIGINAL red highlights. Every scored card holds two fixed states, A (as
+// answered) and O (overridden); credited = A.credited XOR overridden. These pin that it really is
+// a two-state switch: exact, unlimited, reachable from anywhere, and never drawing a date.
+describe('gameReducer — Override ⇄ Undo, the per-card toggle', () => {
+  const T = { tracking: true }
+  // What "the same position" means across a full A → O → A cycle. Two things legitimately differ
+  // and nothing else may: O's frozen time (card.oTime / meta.oTime) is recorded the first time O
+  // credits and kept for every later flip — that IS the two-state guarantee — and a time put back
+  // into the pool joins it at the end (the pool is a multiset; its order is not a card's).
+  const same = (s) =>
+    JSON.parse(
+      JSON.stringify(s, (k, v) => (k === 'oTime' ? undefined : k === 'times' ? [...v].sort() : v)),
+    )
 
-  // Every path and branch of the OVERRIDE case, as [label, pre-state, dispatch].
-  const CASES = [
-    ['Path 1 — back-browse flip', () => back(credited()), (s) => ovr(s)],
-    ['Path 2 — live reversal, advances', held, (s) => ovr(s)],
-    ['Path 2 — live reversal, stays (noAdvance)', held, (s) => ovr(s, { noAdvance: true })],
-    ['Path 2 — live reversal, stays (timing off)', held, (s) => ovr(s, { timingOff: true })],
-    ['Path 3 — credit the burned question, advances', burned, (s) => ovr(s)],
+  // Each target, as [label, the position before the first press, extra OVERRIDE payload].
+  const TARGETS = [
     [
-      'Path 3 — credit the burned question, held (noAdvance)',
-      burned,
-      (s) => ovr(s, { noAdvance: true }),
-    ],
-    ['Path 4 — retro-credit the previous wrong, advances', pending, (s) => ovr(s)],
-    [
-      'Path 4 — retro-credit the previous wrong, stays (timing off)',
-      pending,
-      (s) => ovr(s, { timingOff: true }),
-    ],
-    ['Path 5 — retro-flip the last entry', credited, (s) => ovr(s)],
-    // The two degenerate returns — unreachable through overrideAvail, but they still file a capsule.
-    [
-      'Path 4 — spent target (skip branch)',
+      'browsed',
       () => {
-        let s = pending()
-        s = back(s) // browse onto the previous wrong
-        s = ovr(s) // Path 1 credits it — overrideUsed rides FORWARD onto the entry
-        s = forward(s) // back at the live edge: pending re-armed from liveState, target spent
-        return s
+        let s = answer(initEngine(DATE), C, { tracking: true, elapsed: 1.25 })
+        s = answer(s, wOf(s), { tracking: true, elapsed: 0.8 }) // the live card burned too
+        return back(s)
       },
-      (s) => ovr(s),
+      {},
     ],
-    ['no path matched (fall-through)', () => initEngine(DATE), (s) => ovr(s)],
+    ['live, crediting (hold)', () => answer(initEngine(DATE), W, { elapsed: 1.5 }), { hold: true }],
+    [
+      'live, un-crediting a held solve',
+      () => answer(initEngine(DATE), C, { complete: true, tracking: true, elapsed: 2.5 }),
+      {},
+    ],
+    ['retro', () => answer(initEngine(DATE), C, { tracking: true, elapsed: 1.25 }), {}],
   ]
 
-  it.each(CASES)(
-    '%s: undo(override(s)) deep-equals s, and both states are healthy',
-    (_, pre, go) => {
-      const s0 = pre()
-      expect(s0.undoCapsule).toBe(null)
-      const s1 = go(s0)
-      expect(s1.undoCapsule).not.toBe(null) //  the Override filed a capsule…
-      expect(s1).not.toEqual(s0) //              …and did something
-      expect(checkGameInvariants(s1, false)).toEqual([])
-      const s2 = undo(s1)
-      expect(s2).toEqual(s0) //                  exactly the pre-Override state, capsule slot included
-      expect(checkGameInvariants(s2, false)).toEqual([])
+  it.each(TARGETS)(
+    '%s: seven presses alternate the WHOLE state between exactly two values, stats never drift',
+    (_, pre, extra) => {
+      const states = [pre()]
+      for (let i = 0; i < 7; i++) states.push(override(states[i], { ...T, ...extra }))
+      for (const s of states) expect(checkGameInvariants(s, false)).toEqual([])
+      for (let i = 3; i < states.length; i += 2) expect(states[i]).toEqual(states[1]) // every O
+      for (let i = 4; i < states.length; i += 2) expect(states[i]).toEqual(states[2]) // every A
+      expect(same(states[2])).toEqual(same(states[0])) // …and A is where it started
+      expect(states[1].stats.good).toBe(
+        states[0].stats.good + (overridePlan(states[0]).credits ? 1 : -1),
+      )
+      for (const s of states) {
+        expect(s.stats.played).toBe(states[0].stats.played) // a toggle never plays a card
+        expect(s.questionId).toBe(states[0].questionId) //    …or draws one
+      }
+      // The label follows the card: O reads Undo, A reads Override.
+      expect(overridePlan(states[1]).overridden).toBe(true)
+      expect(overridePlan(states[2]).overridden).toBe(false)
     },
   )
 
-  it.each(CASES)('%s: O→U→O→U→O deep-equals a single O (toggling never drifts)', (_, pre, go) => {
-    const once = go(pre())
-    let s = pre()
-    s = go(s)
-    s = undo(s)
-    s = go(s)
-    s = undo(s)
-    s = go(s)
-    expect(s).toEqual(once)
+  it('the original reds come back: wrong twice then right → Override → play on → browse to it → Undo', () => {
+    const W2 = (C + 2) % 7
+    let s = answer(initEngine(DATE), W)
+    s = answer(s, W2)
+    s = answer(s, C) // late correct → pushed as a miss, with its reds and a synthesized green
+    const reds = { [W]: 'wrong-prev', [W2]: 'wrong-prev', [C]: 'correct' }
+    expect(s.stack[0].btns).toEqual(reds)
+    s = override(s) // retro: credits it
+    expect(s.stack[0].btns).toEqual({ [C]: 'correct' })
+    s = answer(s, cOf(s)) // play on — a whole new card after it
+    s = back(s)
+    s = back(s) // browse to it
+    expect(s.persistBtns).toEqual({ [C]: 'correct' })
+    expect(overridePlan(s)).toEqual({ target: 'browsed', overridden: true, credits: false }) // reads Undo
+    const good = s.stats.good
+    s = override(s) // Undo
+    expect(s.persistBtns).toEqual(reds) // ★ byte-for-byte, the owner's sentence
+    expect(s.browseHasCredit).toBe(false)
+    expect(s.stats.good).toBe(good - 1)
+    s = forward(s)
+    s = forward(s) // …and the history card keeps them once you leave it
+    expect(s.stack[0].btns).toEqual(reds)
+    expect(checkGameInvariants(s, false)).toEqual([])
   })
 
-  it('the capsule survives the advancing branches (advance() spreads it through)', () => {
-    const s = ovr(burned())
-    expect(s.date).toBe(NEXT) // advanced…
-    expect(s.undoCapsule.date).toBe(DATE) // …and the capsule still holds the burned question
-    expect(undo(s).questionId).toBe(s.questionId - 1) // Undo steps the question id back with it
-    expect(undo(s).gridEpoch).toBe(s.gridEpoch) // no Override path remounts the grids
+  it('the original TIME comes back: a 2.10s solve → Override → play on → browse back → Undo', () => {
+    let s = answer(initEngine(DATE), C, { tracking: true, elapsed: 2.1 })
+    s = override(s, T) // un-credit it: its time leaves the mean
+    expect(s.stats.times).toEqual([])
+    s = answer(s, cOf(s), { tracking: true, elapsed: 3.0 })
+    s = back(s)
+    s = back(s)
+    s = override(s, T) // Undo
+    expect(s.stats.times.sort()).toEqual([2.1, 3.0]) // A's own time — not its (null) wrongTime
+    expect(calcAvg(s.stats.times)).toBeCloseTo(2.55, 10)
+    expect(s.liveSolveTime).toBe(2.1)
   })
 
-  it('a capsule never nests — it has no undo slot of its own', () => {
-    const s = ovr(burned())
-    expect('undoCapsule' in s.undoCapsule).toBe(false)
+  it('a card toggled with timing hidden, then shown, keeps the time its O state first had (the freeze)', () => {
+    let s = answer(initEngine(DATE), W, { elapsed: 1.5 })
+    s = answer(s, C) // pushed as a miss with wrongTime 1.5
+    s = override(s, { tracking: false }) // O credits with timing hidden → contributes nothing
+    expect(s.stats.times).toEqual([])
+    s = override(s, { tracking: true }) // Undo
+    s = override(s, { tracking: true }) // Override again, timing now shown…
+    expect(s.stats.times).toEqual([]) // …still nothing: O is ONE state, not one per press
+    expect(s.stack[0].solveTime).toBe(null)
   })
 
-  it('UNDO with no capsule is a no-op (same object)', () => {
-    const s = burned()
-    expect(undo(s)).toBe(s)
-    const fresh = initEngine(DATE)
-    expect(undo(fresh)).toBe(fresh)
-  })
-
-  it('OVERRIDE while a capsule is pending is refused (same object) — never files over the first', () => {
-    const s = ovr(credited()) // Path 5 filed a capsule
-    expect(ovr(s)).toBe(s)
-  })
-
-  // ⚠ THE LOAD-BEARING SAFETY PROPERTY: the window between an Override and its Undo contains zero
-  // gameplay. Every action that is not OVERRIDE/UNDO discards the capsule — including the no-op ones.
-  describe('every other action discards the capsule', () => {
-    const J = { useJulian: false }
-    const OTHER = [
-      ['NEW', { type: 'NEW', nextDate: NEXT, useJulian: false, saveStats: true }],
-      ['ANSWER (correct)', { type: 'ANSWER', idx: C, ...ctx, elapsed: null, nextDate: NEXT }],
-      ['ANSWER (wrong)', { type: 'ANSWER', idx: W, ...ctx, elapsed: null, nextDate: NEXT }],
-      ['REVEAL', { type: 'REVEAL', ...J, elapsed: null, saveStats: true }],
-      ['SHOW_CODES open', { type: 'SHOW_CODES', open: true, ...J, elapsed: null, saveStats: true }],
-      [
-        'SHOW_CODES close',
-        { type: 'SHOW_CODES', open: false, ...J, elapsed: null, saveStats: true },
-      ],
-      ['RESET', { type: 'RESET', timingOff: false, nextDate: NEXT }],
-      ['REGEN_DATE', { type: 'REGEN_DATE', nextDate: NEXT }],
-      ['LOCK_REVEAL', { type: 'LOCK_REVEAL', ...J }],
-      ['TIMEOUT_MISS', { type: 'TIMEOUT_MISS', ...J, saveStats: true }],
-      ['RESET_ROUND', { type: 'RESET_ROUND' }],
-      ['BACK', { type: 'BACK' }],
-      ['FORWARD', { type: 'FORWARD', ...J }],
-      ['an unknown action', { type: 'NOT_AN_ACTION' }],
+  it('a mid-history toggle on a six-card run: every figure consistent, and toggling back restores the state', () => {
+    let s = initEngine(DATE)
+    const play = [
+      (x) => answer(x, cOf(x), { tracking: true, elapsed: 1 }),
+      (x) => answer(x, cOf(x), { tracking: true, elapsed: 2 }),
+      (x) => answer(x, cOf(x), { tracking: true, elapsed: 3 }), // card 3 — the one we toggle
+      (x) => answer(answer(x, wOf(x), { tracking: true, elapsed: 9 }), cOf(x)), // a miss
+      (x) => answer(x, cOf(x), { tracking: true, elapsed: 5 }),
+      (x) => answer(x, cOf(x), { tracking: true, elapsed: 6 }),
     ]
-    // Two capsule-carrying states: one at the live edge after a Path 5 (history behind, fresh live Q)
-    // and one where the Override LEFT the player on a locked question (Path 3 held) — so the no-op
-    // variants (ANSWER on a locked grid, FORWARD with nothing ahead) are covered too.
-    const carriers = [
-      ['after Path 5', () => ovr(credited())],
-      ['after a Path 3 hold (locked)', () => ovr(burned(), { noAdvance: true })],
-    ]
-    for (const [where, make] of carriers) {
-      it.each(OTHER)(`${where}: %s`, (_, action) => {
-        const s = make()
-        expect(s.undoCapsule).not.toBe(null)
-        expect(gameReducer(s, action).undoCapsule).toBe(null)
-      })
+    for (const p of play) s = p(s)
+    expect(s.stats).toMatchObject({ played: 6, good: 5, streak: 2, best: 3 })
+    const before = s
+    for (let i = 0; i < 4; i++) s = back(s) // on card 3
+    expect(cardNumber(s)).toBe(3)
+    s = override(s, T) // take card 3's credit away
+    expect(s.stats).toMatchObject({ played: 6, good: 4, streak: 2, best: 2 }) // runs 1-2 and 5-6
+    expect(s.stats.times.sort()).toEqual([1, 2, 5, 6])
+    const rows = buildRunBreakdown(s, false).rows
+    expect(rows.map((r) => r.credited)).toEqual([true, true, false, false, true, true])
+    expect(rows.map((r) => r.time)).toEqual([1, 2, null, null, 5, 6])
+    expect(rows[2].mark).toBe('override')
+    expect(checkGameInvariants(s, false)).toEqual([])
+    s = override(s, T) // and back
+    for (let i = 0; i < 4; i++) s = forward(s)
+    expect(same(s)).toEqual(same(before))
+  })
+
+  it('an advancing Override and its Undo never draw a date: the free re-roll is gone', () => {
+    const OTHER = { y: 1999, m: 9, d: 9, _fmt: 'numeric-ymd', _jul: false }
+    let s = answer(initEngine(DATE), W) // burned live card
+    s = override(s) // credits it and moves on to NEXT — the one date this ever draws
+    expect(s.date).toBe(NEXT)
+    const qid = s.questionId
+    for (let i = 0; i < 6; i++) {
+      s = override(s, { nextDate: OTHER }) // Undo, Override, Undo, … — now on the history card
+      expect(s.date).toBe(NEXT)
+      expect(s.questionId).toBe(qid)
     }
+  })
+
+  it('Undo on the live card puts its flags back exactly as the answer left them', () => {
+    // A Reveal-burned card (locked + revealed), credited with hold, then undone.
+    let s = reveal(initEngine(DATE), { elapsed: 0.7 })
+    const a = s
+    s = override(s, { hold: true })
+    expect([s.locked, s.revealed, s.countedWrong]).toEqual([true, false, false])
+    s = override(s) // Undo — never navigates, hold or no hold
+    expect(s.persistBtns).toEqual(a.persistBtns)
+    expect([s.locked, s.revealed, s.countedWrong, s.calcPenaltyActive]).toEqual([
+      a.locked,
+      a.revealed,
+      a.countedWrong,
+      a.calcPenaltyActive,
+    ])
+    expect(s.date).toBe(DATE)
+  })
+
+  it('the Override record rides Back and Forward with its card — including the live card’s', () => {
+    let s = answer(initEngine(DATE), C, { complete: true })
+    s = override(s) // the live card in O (un-credited, held)
+    const card = s.card
+    s = gameReducer(s, { type: 'NEW', nextDate: NEXT, ...ctx }) // pushed into history in O
+    expect(s.stack[0].meta.answered).toEqual({
+      btns: { [C]: 'correct' },
+      hasCredit: true,
+      solveTime: null,
+    }) // no live flags on a history card
+    s = back(s) // browsing it: its record is the on-screen card's record
+    expect(s.card.answered.hasCredit).toBe(true)
+    s = forward(s)
+    expect(s.stack[0].meta.answered).not.toBe(null)
+    // …and the LIVE card's own record parks on the isLive entry, live flags and all.
+    let l = answer(initEngine(DATE), C) // one card behind
+    l = answer(l, cOf(l), { complete: true })
+    l = override(l)
+    const liveCard = l.card
+    l = back(l)
+    expect(l.forwardStack[0].isLive).toBe(true)
+    expect(l.forwardStack[0].meta).toBe(liveCard)
+    l = forward(l)
+    expect(l.card).toBe(liveCard)
+    expect(card.answered.live).toEqual({
+      locked: true,
+      revealed: false,
+      countedWrong: false,
+      calcPenaltyActive: false,
+    })
+  })
+
+  it('the button is dimmed only when there is truly nothing to point at', () => {
+    let s = initEngine(DATE)
+    expect(overrideTarget(s)).toBe(null) // a fresh mode, no history
+    s = answer(s, C)
+    expect(overrideTarget(s)).toBe('retro') // one scored card → live on the fresh next question
+    s = answer(s, cOf(s))
+    s = override(s)
+    s = override(s)
+    expect(overrideTarget(s)).toBe('retro') // …and never dimmed again while history exists
+    s = back(s)
+    expect(overrideTarget(s)).toBe('browsed')
+    s = forward(s)
+    s = answer(s, wOf(s))
+    expect(overrideTarget(s)).toBe('live')
+  })
+
+  it('a retro toggle counts a scored live miss behind the streak (the old retro paths dropped it)', () => {
+    let s = answer(initEngine(DATE), C) // credit, streak 1
+    s = gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true }) // live scored miss
+    expect(s.stats).toMatchObject({ played: 2, good: 1, streak: 0 })
+    s = override(s) // retro: un-credit the card behind
+    s = override(s) // Undo: credit it again
+    expect(s.stats).toMatchObject({ played: 2, good: 1, streak: 0, best: 1 }) // not streak 1
+  })
+
+  it('RESET_ROUND re-bases the streak baseline, so a later toggle cannot drop a Best set before it', () => {
+    let s = initEngine(DATE, { played: 10, good: 5, streak: 0, best: 2, times: [] })
+    for (let i = 0; i < 4; i++) s = answer(s, cOf(s))
+    expect(s.stats.best).toBe(4)
+    s = gameReducer(s, { type: 'RESET_ROUND' })
+    expect([s.bestFloor, s.streakCarry]).toEqual([4, 4])
+    s = answer(s, cOf(s)) // streak 5, best 5
+    s = override(s) // un-credit it: the run of 4 before the Reset still stands
+    expect(s.stats).toMatchObject({ streak: 0, best: 4 })
+    s = override(s) // and back
+    expect(s.stats).toMatchObject({ streak: 5, best: 5 })
+  })
+
+  it('LOCK_REVEAL cannot paint over a locked (e.g. overridden) card', () => {
+    const s = override(answer(initEngine(DATE), C, { complete: true }))
+    expect(gameReducer(s, { type: 'LOCK_REVEAL', useJulian: false })).toBe(s)
+  })
+
+  it('REGEN_DATE never swaps the date under a credited live card, timed or not', () => {
+    const held = answer(initEngine(DATE), C, { complete: true }) // tracking off → no time recorded
+    expect(gameReducer(held, { type: 'REGEN_DATE', nextDate: NEXT })).toBe(held)
   })
 })

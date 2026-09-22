@@ -36,16 +36,21 @@
 //     ledger's times are a sub-multiset of the pool (no card names a second the mean does not
 //     contain), and the counts add up (no second in the mean goes unnamed). In a run mode, where
 //     timesBase is 0 by construction, the pair forces exact equality.
-//   • The UNDO CAPSULE: a pending Undo is a state one tap away, so it must itself be healthy, and it
-//     must still be the state from just before the Override on top of it (fields no Override moves
-//     must match) — a mismatch means it outlived a boundary that should have discarded it.
+//   • The PER-CARD OVERRIDE RECORD (round 23 Q6): every scored card holds two fixed states, A (as
+//     answered) and O (overridden), and its credit is A.credited XOR overridden. A card in O stores
+//     its A; if that record and the card it describes ever come apart — the credit not the opposite,
+//     the grid not the answer alone, a time on an uncredited state, O not contributing its frozen
+//     time, live flags where there is no live card to put them back on — a later Undo would land
+//     somewhere that is neither of the card's two states, which is exactly how a toggle could stack
+//     credit or strand a second. So each of those is a tripwire, over every card in play.
 //   • Date/calendar sanity: month 1-12, day 1-31, integer year; a weekday question resolves
 //     to an index in 0-6, and a Deduction puzzle's correct answer is actually among its
 //     options (correctIndexOf returns -1 if a generator ever produced a puzzle whose answer
 //     isn't selectable).
 // ─────────────────────────────────────────────────────────────────────────
-import { correctIndexOf } from './gameReducer.js'
-import type { GameState, Question, Stats } from './gameReducer.js'
+import { correctIndexOf, earnedCredit, liveCredited } from './gameReducer.js'
+import type { Btns } from './answerButtons.js'
+import type { CardMeta, GameState, Question, Stats } from './gameReducer.js'
 
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0
 
@@ -179,28 +184,77 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
         `times ledger: timesBase(${state.timesBase}) + named(${named.length}) != times.length(${state.stats.times.length})`,
       )
   }
-  // ── The undo capsule (Override ⇄ Undo) ──
-  // Undo installs the capsule VERBATIM, so a capsule is a state the player can be standing on one
-  // tap from now — it owes every invariant above exactly as much as the live state does. Two checks:
-  //   (1) the capsule itself is a healthy state: checked by the same function, once (a capsule has
-  //       no capsule of its own — UndoCapsule omits the field — so this recursion is one level deep),
-  //       with each report prefixed `undo: ` so it names which state broke. ⚠ This doubles the cost
-  //       of a check whenever an Undo is pending; the window is one action long (any other action
-  //       discards the capsule), so it is at most one doubled check per Override.
-  //   (2) STALENESS tripwires: the capsule must still describe the moment just before the Override
-  //       that sits on top of it. No Override path moves historyBase, timesBase, gridEpoch, bestFloor
-  //       or streakCarry, and an advancing path bumps questionId by exactly one — so any other gap
-  //       means the capsule survived a transition (a RESET, a RESET_ROUND, a regen…) that should have
-  //       discarded it, and an Undo would rewind the player across it.
-  const cap = state.undoCapsule
-  if (cap) {
-    for (const x of checkGameInvariants({ ...cap, undoCapsule: null }, useJulian))
-      v.push(`undo: ${x}`)
-    for (const k of ['historyBase', 'timesBase', 'gridEpoch', 'bestFloor', 'streakCarry'] as const)
-      if (cap[k] !== state[k]) v.push(`undo capsule is stale: ${k} ${cap[k]} → ${state[k]}`)
-    const dq = state.questionId - cap.questionId
-    if (dq !== 0 && dq !== 1)
-      v.push(`undo capsule is stale: questionId ${cap.questionId} → ${state.questionId}`)
+  // ── The per-card Override record ──
+  // See the header note. Every card in play, in the one shape each check needs: its grid, its
+  // CURRENT credit, the time it contributes, its record, and whether it is the live card (on screen
+  // at the live edge, or parked as the isLive forward entry — the only two places live flags belong).
+  const cards: RecordView[] = [
+    ...state.stack.map((e, i) => entryView(e, `stack[${i}]`)),
+    ...state.forwardStack.map((e, i) => entryView(e, `forwardStack[${i}]`)),
+    {
+      where: 'on-screen card',
+      btns: state.persistBtns,
+      credited: state.backDepth === 0 ? liveCredited(state) : state.browseHasCredit,
+      solveTime: state.liveSolveTime,
+      meta: state.card,
+      live: state.backDepth === 0,
+    },
+  ]
+  for (const c of cards) v.push(...checkRecord(c))
+  return v
+}
+
+// One card as the record checks see it (see checkGameInvariants' per-card block).
+interface RecordView {
+  where: string
+  btns: Btns | undefined
+  credited: boolean
+  solveTime: number | null
+  meta: CardMeta | undefined
+  live: boolean
+}
+// A history / forward entry. The parked LIVE entry's `hasCredit` is BACK's raw read of its grid, so
+// its credit is re-derived through the same rule the reducer applies to a live card (earnedCredit
+// on its parked flags) — a revealed live card must not pass as a credit here.
+function entryView(e: GameState['stack'][number], where: string): RecordView {
+  const ls = e.liveState
+  return {
+    where,
+    btns: e.btns,
+    credited: e.isLive && ls ? earnedCredit(e.btns, ls.revealed, ls.countedWrong) : !!e.hasCredit,
+    solveTime: e.solveTime ?? null,
+    meta: e.meta,
+    live: !!e.isLive,
   }
+}
+// The five tripwires on one card's record. Optional chaining throughout: a tripwire that throws on a
+// corrupt state (an entry with no record at all) would hide the very report it exists to make.
+function checkRecord(c: RecordView): string[] {
+  const v: string[] = []
+  const a = c.meta?.answered ?? null
+  // 3 (first half) — holds for every card, overridden or not: no credit, no time.
+  if (!c.credited && c.solveTime != null)
+    v.push(`${c.where}: an uncredited card contributes a time (${c.solveTime})`)
+  if (a === null) return v
+  // 1 — the whole rule: O's credit is the opposite of A's.
+  if (c.credited === a.hasCredit)
+    v.push(`${c.where}: overridden, but its credit is not the opposite of its as-answered credit`)
+  // 2 — O's grid is the answer alone: green when O credits, 'override-wrong' when it does not.
+  const vals = Object.values(c.btns ?? {})
+  if (vals.length !== 1 || vals[0] !== (c.credited ? 'correct' : 'override-wrong'))
+    v.push(`${c.where}: overridden, but its grid is not the answer alone`)
+  // 3 (second half) — a stored uncredited A holds no time either.
+  if (!a.hasCredit && a.solveTime != null)
+    v.push(`${c.where}: its stored uncredited as-answered state holds a time (${a.solveTime})`)
+  // 4 — a credited O contributes exactly the time frozen the first time O credited.
+  if (c.credited && c.solveTime !== (c.meta?.oTime ?? null))
+    v.push(
+      `${c.where}: a credited overridden card contributes ${c.solveTime}, not its frozen O time`,
+    )
+  // 5 — live flags exist exactly where there is a live card to restore them onto.
+  if (c.live !== (a.live !== undefined))
+    v.push(
+      `${c.where}: overridden, with live flags ${c.live ? 'missing from' : 'on'} a ${c.live ? 'live' : 'history'} card`,
+    )
   return v
 }

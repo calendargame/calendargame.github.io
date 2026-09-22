@@ -4,8 +4,8 @@
 // is not a report about the run, it is the run's own decomposition — so the multiset of row times
 // must equal `stats.times` after ANY sequence of moves, and the row-derived mean must therefore be
 // the same number the stat strip prints. Every case below re-asserts it through one shared helper,
-// including all five Override paths, because Override is where this app's hardest bugs live and it
-// is the only thing that can move a time from one card to another (or take one away).
+// including every Override target and its Undo, because Override is where this app's hardest bugs
+// live and it is the only thing that can move a time from one card to another (or take one away).
 //
 // CLAIM 2: the rows are the run, in order, and each one says what it is — its number, its date, the
 // weekday that date fell on (under the card's OWN calendar snapshot), its time, and a mark when it
@@ -43,7 +43,6 @@ const override = (s, nextDate, extra = {}) =>
     type: 'OVERRIDE',
     useJulian: false,
     tracking: true,
-    timingOff: false,
     nextDate,
     ...extra,
   })
@@ -138,7 +137,10 @@ describe('runBreakdown — the marks a card that earned nothing carries', () => 
   })
 })
 
-describe('runBreakdown — Override moves the time and the row together (the five paths)', () => {
+// The case names keep the old five-path names (the Override has been ONE per-card toggle since round
+// 23 Q6 — see gameReducer): Path 1 = the browsed card, Paths 2/3 = the live card, Paths 4/5 = the card
+// just behind a fresh live one.
+describe('runBreakdown — Override moves the time and the row together (every target)', () => {
   it('PATH 3: crediting the live wrong gives that card the wrong answer’s time', () => {
     let s = answer(initEngine(D1), wrong(D1), 7, D2)
     expect(s.stats.times).toEqual([]) //  a wrong records nothing yet
@@ -151,7 +153,7 @@ describe('runBreakdown — Override moves the time and the row together (the fiv
   it('PATH 4: the retro credit lands on the PREVIOUS card, not the live one', () => {
     let s = answer(initEngine(D1), wrong(D1), 7, D2) //  D1 burned
     s = answer(s, cor(D1), 9, D2) //                     late correct advances to D2
-    s = override(s, D3) //                               Path 4 credits D1 and advances
+    s = override(s, D3) //                               the retro toggle credits D1; D2 stays live
     const b = expectReconciles(s)
     expect(b.rows[0]).toMatchObject({ n: 1, credited: true, time: 7 })
     expect(b.rows.filter((r) => r.time != null)).toHaveLength(1)
@@ -180,11 +182,25 @@ describe('runBreakdown — Override moves the time and the row together (the fiv
     let s = answer(initEngine(D1), cor(D1), 2, D2)
     s = answer(s, cor(D2), 8, D3, { complete: true }) //  credited but held — no advance
     expect(expectReconciles(s).rows.map((r) => r.time)).toEqual([2, 8])
-    s = override(s, D3, { noAdvance: true }) //           reverse the held solve
+    s = override(s, D3) //                               take the held solve's credit away (it stays)
     const b = expectReconciles(s)
     expect(s.stats.times).toEqual([2])
     expect(b.rows.map((r) => r.time)).toEqual([2, null])
     expect(b.rows[1].mark).toBe('override')
+  })
+
+  it('UNDO: toggling a card back puts its OWN time back in its row and in the mean, together', () => {
+    let s = answer(initEngine(D1), cor(D1), 2, D2) //  credited, 2s
+    s = answer(s, cor(D2), 4, D3) //                   credited, 4s
+    s = back(s)
+    s = back(s) //                                      browse to D1
+    s = override(s, D3) //                              un-credit it
+    expect(expectReconciles(s).rows.map((r) => r.time)).toEqual([null, 4])
+    s = override(s, D3) //                              Undo — its 2s come back to its own row
+    const b = expectReconciles(s)
+    expect(b.rows.map((r) => r.time)).toEqual([2, 4])
+    expect(b.rows[0]).toMatchObject({ credited: true, mark: null })
+    expect(b.summary.mean).toBe(3)
   })
 
   it('PATH 1: a browse-back credit puts the time on the card being BROWSED, in its own place', () => {
@@ -331,7 +347,7 @@ describe('runBreakdown — a FAILED MoX run', () => {
   it('failed on an Override of the completing solve: that card is the last row, marked overridden', () => {
     let s = answer(initEngine(D1), cor(D1), 2, D2)
     s = answer(s, cor(D2), 8, D3, { complete: true })
-    s = override(s, D3, { noAdvance: true }) //  AoxMode's failNow path: reverse the held Nth, stay put
+    s = override(s, D3) //  take the held Nth's credit away — the card stays put, the run fails
     const b = expectReconciles(s)
     expect(b.rows.map((r) => r.time)).toEqual([2, null])
     expect(b.rows[1]).toMatchObject({ credited: false, mark: 'override' })

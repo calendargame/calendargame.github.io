@@ -8,8 +8,15 @@
 // 'correct' on the grid WITHOUT crediting good. A later Override that recomputes the streak from
 // history then counted those false credits. Fixed in gameReducer.advance (hasCredit gated on
 // !revealed && !countedWrong) + Path 2's best/btns revert + TIMEOUT_MISS marking revealed.
+//
+// ⚠ "PATH 1…5" BELOW ARE HISTORICAL NAMES. Until round 23 Q6 the Override was five hand-written
+// paths; it is now ONE per-card toggle (gameReducer's OVERRIDE, targeted by overrideTarget). Each
+// regression keeps the name of the path it was found in because that is how the bug was reported,
+// and each still drives the same sequence against the toggle: Path 1 is today's 'browsed' target,
+// Paths 2/3 are the 'live' target (taking a held credit away / crediting a burned card), and Paths
+// 4/5 are the 'retro' target (the card just behind a fresh live question).
 import { describe, it, expect } from 'vitest'
-import { gameReducer, initEngine } from '../../src/engine/gameReducer.js'
+import { gameReducer, initEngine, liveCredited } from '../../src/engine/gameReducer.js'
 import { wday } from '../../src/lib/calendar.js'
 import { checkStrongScoreOracle } from './fuzzHarness.js'
 
@@ -40,8 +47,9 @@ const answerComplete = (s, idx) =>
     nextDate: D2,
     complete: true,
   })
+// The one button (round 23 Q6: a per-card toggle — no direction, no timing flag; see gameReducer).
 const override = (s, nextDate, extra = {}) =>
-  gameReducer(s, { type: 'OVERRIDE', ...ctx, tracking: false, timingOff: true, nextDate, ...extra })
+  gameReducer(s, { type: 'OVERRIDE', ...ctx, tracking: false, nextDate, ...extra })
 
 describe('score-integrity regressions (C2 fuzz fixes, 2026-06-06)', () => {
   it('a Reveal-miss is NOT recorded in history as a credit', () => {
@@ -77,7 +85,7 @@ describe('score-integrity regressions (C2 fuzz fixes, 2026-06-06)', () => {
       complete: true,
     })
     expect(s.stats).toMatchObject({ good: 1, streak: 1, best: 1 })
-    s = override(s, D2, { noAdvance: true })
+    s = override(s, D2) // takes the held credit away (the card stays on screen as a miss)
     expect(s.stats.good).toBe(0)
     expect(s.stats.best).toBe(0)
     expect(s.stats.best).toBeLessThanOrEqual(s.stats.good)
@@ -128,10 +136,11 @@ describe('score-integrity regressions (C1 expanded-fuzz fixes, 2026-06-07)', () 
     s = showCodesOpen(s) // burn D2 — captures a snapshot at good 0 (the stale one)
     s = back(s) // browse Q1 (D2's snapshot rides along in liveState)
     s = override(s, D2) // Path 1: credit Q1 → good 0→1 (the drift)
-    s = neu(s, D3) // return to D2 + advance → arms Path 4 with the STALE good-0 snapshot
-    s = override(s, D3) // Path 4: credit D2
-    // Both Q1 and D2 are now credits. The old form set good = snap.good+1 = 1 while history held 2
-    // credits → streak/best 2 > good 1. Now good reflects both.
+    s = neu(s, D3) // return to D2 + advance (D2 pushed as a miss)
+    s = override(s, D3) // the retro toggle: credit D2 (the old Path 4)
+    // Both Q1 and D2 are now credits. The old Path 4 set good = snap.good+1 = 1 while history held 2
+    // credits → streak/best 2 > good 1. Since round 23 there is no snapshot to be stale — a toggle
+    // moves good by exactly one, read off the card — and good reflects both.
     expect(s.stats).toMatchObject({ played: 2, good: 2, streak: 2, best: 2 })
     expect(s.stats.streak).toBeLessThanOrEqual(s.stats.good)
     expect(s.stats.best).toBeLessThanOrEqual(s.stats.good)
@@ -149,8 +158,8 @@ describe('score-integrity regressions (C1 expanded-fuzz fixes, 2026-06-07)', () 
     s = answerComplete(s, cOf(D2)) // D2 first-try correct, stays live + reversible → good 1
     s = back(s) // browse Q1 (D2 saved live with its good-0 snapshot)
     s = override(s, D2) // Path 1: credit Q1 → good 1→2 (the browse credit)
-    s = forward(s) // return to live D2 (restores canOverrideCorrect + the stale good-0 snapshot)
-    s = override(s, D3) // Path 2: reverse D2 → must keep Q1's credit (good 2→1, NOT →0)
+    s = forward(s) // return to live D2, still held
+    s = override(s, D3) // the live toggle: take D2's credit away → must keep Q1's (good 2→1, NOT →0)
     expect(s.stats.good).toBe(1)
     expect(s.stats.best).toBeLessThanOrEqual(s.stats.good)
     expect(s.stats.streak).toBeLessThanOrEqual(s.stats.good)
@@ -165,7 +174,8 @@ describe('score-integrity regressions (C1 expanded-fuzz fixes, 2026-06-07)', () 
 // the live question, so it counted the streak PAST that miss (streak stayed ≤ good, so it slipped the
 // good≤played / streak≤good checks). The inflated streak then inflated `best` via the next correct
 // answer's Math.max. Fixed in gameReducer Path 1 by folding the live question's true contribution
-// (liveStreakContribution: a scored miss → trailing 0, a scored live credit → +1) into the recompute.
+// (a scored miss → trailing 0, a scored live credit → +1) into the recompute — since round 23 that
+// fold is part of the one credit sequence every toggle recomputes from (gameReducer creditSequence).
 describe('score-integrity regressions (C1 deeper-fuzz fix, 2026-06-08)', () => {
   it('a back-browse Override does not count the streak past a more-recent live MISS', () => {
     let s = initEngine(D1)
@@ -195,23 +205,23 @@ describe('score-integrity regressions (C1 deeper-fuzz fix, 2026-06-08)', () => {
 })
 
 // The C2 fuzz fix (2026-06-08): opening Show Codes on a HELD completing (AoX) solve must be a read-only
-// review, not a burn. A completing solve credits good but stays on the question (locked + reversible,
-// canOverrideCorrect); the SHOW_CODES penalty assumed an UNANSWERED live question, so it counted a
+// review, not a burn. A completing solve credits good but stays on the question (locked + reversible);
+// the SHOW_CODES penalty assumed an UNANSWERED live question, so it counted a
 // phantom played + reset the streak + cleared the credit flag while good kept the credit — desyncing
 // good from the reconstructable credit history (good > credits), and (on the next advance) recording
 // the credited solve as a miss. Found by the new aox-strong strong-oracle profile (the EXACT oracle,
-// extended to the AoX-complete surface). Fixed in gameReducer SHOW_CODES (penalty-free when
-// canOverrideCorrect, like the back-browse review).
+// extended to the AoX-complete surface). Fixed in gameReducer SHOW_CODES (penalty-free on a credited
+// live card — liveCredited, which replaced the old canOverrideCorrect flag — like the back-browse review).
 describe('score-integrity regressions (C2 fuzz fix — Show Codes on a held complete, 2026-06-08)', () => {
   it('Show Codes on a held completing solve does not burn it (good stays a real credit)', () => {
     let s = initEngine(D1)
     s = answerComplete(s, C) // D1 first-try correct, HELD as a completing solve → good 1, reversible
     expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1, best: 1 })
-    expect(s.canOverrideCorrect).toBe(true)
+    expect(liveCredited(s)).toBe(true)
     s = showCodesOpen(s) // review the codes on the finished solve
     // No burn: stats untouched, the credit stays reversible, the panel opened.
     expect(s.stats).toMatchObject({ played: 1, good: 1, streak: 1, best: 1 }) // was 1/2 streak 0 (burned)
-    expect(s.canOverrideCorrect).toBe(true) // still reversible (was cleared)
+    expect(liveCredited(s)).toBe(true) // still a credit, still the Override target (was burned)
     expect(s.countedWrong).toBe(false) // not burned (was true)
     expect(s.calcOpen).toBe(true)
   })
@@ -235,19 +245,17 @@ describe('score-integrity regressions (C2 fuzz fix — Show Codes on a held comp
 // level — both require a countdown to expire, impractical to drive through the rAF timer in jsdom;
 // the reducer drives the exact reachable action sequence (the strong oracle confirms full consistency).
 describe('score-integrity regressions (C2 timed-mode fuzz fixes, 2026-06-08)', () => {
-  // helpers (timingOff:false so Override Path 4 actually advances; the file's `override` uses timingOff:true)
   const lockReveal = (s) => gameReducer(s, { type: 'LOCK_REVEAL', useJulian: false })
   const timeoutMiss = (s) =>
     gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true })
-  const overrideAdvance = (s, nextDate) =>
-    gameReducer(s, { type: 'OVERRIDE', ...ctx, tracking: false, timingOff: false, nextDate })
 
-  it('a Path-4 override after a per-round timeout (LOCK_REVEAL) does not push the unplayed question', () => {
+  it('an Override after a per-round timeout (LOCK_REVEAL) never pushes the unplayed question', () => {
     let s = initEngine(D1)
     s = answerAt(s, wOf(D1), D2) // D1 wrong → played 1, good 0, countedWrong
-    s = answerAt(s, cOf(D1), D2) // D1 right (late) → advance to D2, arm pendingWrongOverride; D1 pushed as a miss
+    s = answerAt(s, cOf(D1), D2) // D1 right (late) → advance to D2; D1 pushed as a miss
     s = lockReveal(s) // Blitz per-round timeout: shows D2's answer WITHOUT counting it as played
-    s = overrideAdvance(s, D3) // Path 4: credit D1 + advance past D2
+    s = override(s, D3) // the retro toggle credits D1 (it used to credit AND advance past D2)
+    s = neu(s, D3) // …and moving on past D2 anyway
     // D2 was never played, so it must NOT enter history — pushing it added a PHANTOM miss that left
     // streak(1) ≠ the polluted stack's trailing run (0).
     expect(s.stats.good).toBe(1) // D1 credited
@@ -258,10 +266,11 @@ describe('score-integrity regressions (C2 timed-mode fuzz fixes, 2026-06-08)', (
   it('reviewing the codes on a per-round-timeout question keeps it unplayed (no phantom on advance)', () => {
     let s = initEngine(D1)
     s = answerAt(s, wOf(D1), D2) // D1 wrong
-    s = answerAt(s, cOf(D1), D2) // D1 right (late) → advance to D2, arm pendingWrongOverride
+    s = answerAt(s, cOf(D1), D2) // D1 right (late) → advance to D2
     s = lockReveal(s) // D2 per-round timeout (shown, never played)
     s = showCodesOpen(s) // review the codes on D2 — must stay read-only (NOT mark D2 as "scored")
-    s = overrideAdvance(s, D3) // Path 4: credit D1 + advance past D2
+    s = override(s, D3) // credit D1
+    s = neu(s, D3) // advance past D2
     // Without the review-only-on-revealed fix, Show Codes set saveStatsThisQ on D2, defeating the
     // advance scored-gate → D2 got pushed as a phantom miss.
     expect(s.stack).toHaveLength(1) // still only D1
@@ -316,31 +325,44 @@ describe('score-integrity regressions (C2 Session-6 — TIMEOUT_MISS engine-cons
   })
 })
 
-describe('score-integrity regressions (C2 Session-6 — the reference model’s first catch)', () => {
-  it('a reversed-away credit cannot be re-credited via Path 4 after advancing (flip-flop)', () => {
-    // The flip-flop the independent reference model caught (ref-full seed 10000013): a held
-    // completing solve is REVERSED via Override (Path 2, noAdvance — its one override is spent and
-    // its correction capsule nulled), stays on screen, then a plain advance (NEW) pushed it with
-    // overrideUsed reset to false AND armed pendingWrongOverride — so a second Override re-credited
-    // the very credit the first one took away (good 0→1 on an already-corrected question). The
-    // strong oracle can't see it (good and hasCredit move together); the inequalities hold. The
-    // contract is one override per question: arming now requires the question to still carry its
-    // correction capsule (prevStatsSnapshot) — the same eligibility gate Paths 1/5 already use.
-    let s = answerComplete(initEngine(D1), cOf(D1)) // the held completing solve: 1/1, credited
-    expect(s.stats.good).toBe(1)
-    expect(s.canOverrideCorrect).toBe(true)
-    s = override(s, D2, { noAdvance: true }) // reverse it: the credit is overridden away
-    expect(s.stats.good).toBe(0)
-    expect(s.countedWrong).toBe(true)
-    expect(s.prevStatsSnapshot).toBeNull() // the correction capsule is spent
-    s = neu(s, D3) // advance past the reversed question
+// The Session-6 flip-flop, which the independent reference model caught (ref-full seed 10000013):
+// a held completing solve overridden to a miss, advanced past, then overridden AGAIN back to a
+// credit. Under the old one-override-per-question contract that second credit was a bug and was
+// blocked. Round 23 Q6 made it the SPECIFIED behaviour — the owner's rule is that every card can be
+// toggled back, forever — and what makes it safe is that the second press is no longer a new
+// credit at all: it is the card returning to the state it was answered in, with that state's OWN
+// time (not its wrongTime, which a held first-try solve never had). This pins exactly that.
+describe('score-integrity regressions (the Session-6 flip-flop, now the specified toggle)', () => {
+  it('a reversed held credit, advanced past, toggles back to its own credit and time — and no further', () => {
+    let s = gameReducer(initEngine(D1), {
+      type: 'ANSWER',
+      idx: cOf(D1),
+      ...ctx,
+      tracking: true,
+      elapsed: 1.2,
+      nextDate: D2,
+      complete: true,
+    })
+    expect(s.stats).toMatchObject({ played: 1, good: 1, times: [1.2] })
+    s = override(s, D2) // take it away: it stays on screen as a miss
+    expect(s.stats).toMatchObject({ played: 1, good: 0, times: [] })
+    s = neu(s, D3) // advance past it — it enters history in its overridden state
     expect(s.stats.played).toBe(1)
-    // No retroactive-credit arming: the question already had its one override.
-    expect(s.pendingWrongOverride).toBeNull()
-    // And even a raw OVERRIDE dispatch falls through without re-crediting.
-    const after = override(s, D3)
-    expect(after.stats.good).toBe(0)
-    expect(after.stats).toEqual(s.stats)
+    const flips = []
+    for (let i = 0; i < 6; i++) {
+      s = override(s, D3) // Undo, Override, Undo, …
+      flips.push([s.stats.good, s.stats.times.join()])
+      expect(checkStrongScoreOracle(s)).toEqual([])
+    }
+    // Exactly two positions, and the credited one carries the card's own 1.2s — never more.
+    expect(flips).toEqual([
+      [1, '1.2'],
+      [0, ''],
+      [1, '1.2'],
+      [0, ''],
+      [1, '1.2'],
+      [0, ''],
+    ])
   })
 })
 
@@ -370,8 +392,8 @@ describe('hydration score integrity — Best/Streak survive Override after a loa
   it('Path 4 (retro-credit the previous wrong): best 50, streak 6 (was 1/1)', () => {
     let s = hydrate()
     s = answerAt(s, wOf(D1), D2) // wrong (played 51, good 50, streak 0, countedWrong)
-    s = neu(s, D3) // advance → arms pendingWrongOverride; live D3 fresh
-    s = override(s, D3) // Path 4 (timingOff): credit the previous wrong, no advance
+    s = neu(s, D3) // advance; live D3 fresh
+    s = override(s, D3) // the retro toggle: credit the previous wrong (it never advances)
     expect(s.stats.best).toBe(50)
     expect(s.stats.streak).toBe(6)
     expect(s.stats.good).toBe(51)
