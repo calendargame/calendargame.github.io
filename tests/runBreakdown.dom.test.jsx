@@ -159,6 +159,52 @@ describe('the run breakdown — MoX', () => {
     expect(figure(dlg, 'Spread')).toBe('4.00s')
   })
 
+  // ★★ THE SUMMARY AND THE ROWS MUST FORMAT THE SAME SOLVE THE SAME WAY (round 22's fixer). Fastest
+  // and Slowest are SINGLE SOLVES, so they truncate like their rows (WCA 9f1, lib/modeFormat) —
+  // before the fix they were rounded, and a 0.395s solve read "Fastest 0.40s" over a row reading
+  // "fastest 0.39s". Every existing case above uses whole-millisecond times, where truncation and
+  // rounding agree; this one is deliberately on the third decimal, where they do not.
+  it('Fastest and Slowest print exactly what their own rows print, to the hundredth', () => {
+    mountApp()
+    switchTo('A')
+    const input = Array.from(document.querySelectorAll('input[type="text"]')).find(
+      (i) => !isHidden(i),
+    )
+    act(() => {
+      fireEvent.change(input, { target: { value: '2' } })
+      fireEvent.blur(input)
+    })
+    click('Begin')
+    tick(395) //  0.395s — rounds UP to 0.40, truncates DOWN to 0.39
+    answerCorrect()
+    tick(1899) //  1.899s — the same split at the other end of the run
+    answerCorrect()
+    tapStat('Score')
+    const dlg = dialog('Mean Breakdown')
+    expect(figure(dlg, 'Fastest')).toBe('0.39s')
+    expect(figure(dlg, 'Slowest')).toBe('1.89s')
+    const r = rows(dlg)
+    expect(r[0].textContent).toContain('fastest0.39s') // (textContent runs the two spans together)
+    expect(r[1].textContent).toContain('slowest1.89s')
+    // …while the averages keep the ROUNDING formatter, which is the other half of the same WCA rule.
+    expect(figure(dlg, 'Mean')).toBe('1.15s') // (0.395 + 1.899) / 2 = 1.147
+    expect(figure(dlg, 'Spread')).toBe('1.50s') // 1.899 − 0.395 = 1.504
+  })
+
+  // ⚠ COSMETIC, AND STILL A FACT ABOUT THE LAYOUT: the number column used to be a flat `w-8` — room
+  // for "1000." — so a short run left a loose gap between "1." and the weekday letter. It is sized
+  // to the widest number the list actually holds, and every row shares that one width or the
+  // columns behind it would stagger.
+  it('the number column is sized to the widest number in the list, and is one width for every row', () => {
+    finishedMo2()
+    tapStat('Score')
+    const numbers = rows(dialog('Mean Breakdown')).map((li) => li.firstElementChild)
+    expect(numbers.map((el) => el.textContent)).toEqual(['1.', '2.'])
+    expect(new Set(numbers.map((el) => el.style.width)).size).toBe(1)
+    expect(numbers[0].style.width).toBe('2ch') // one digit + its period
+    expect(numbers[0].className).not.toContain('w-8')
+  })
+
   it('lists one row per card, in order, each with its own date and time', () => {
     finishedMo2()
     tapStat('Median')

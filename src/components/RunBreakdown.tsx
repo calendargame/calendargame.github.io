@@ -128,9 +128,16 @@ export default function RunBreakdown({
           </span>
         </div>
         {/* THE SUMMARY. Two columns of label/value pairs, so seven figures fit above the list
-            without pushing it off the card. Every time here goes through fmtTime — the ROUNDED
-            formatter — because all five are aggregates or bests, not single solve times; the rows
-            below use truncTime, which is the WCA split this app has always kept (lib/modeFormat).
+            without pushing it off the card.
+            ★ WHICH FORMATTER EACH FIGURE TAKES IS THE WCA SPLIT (lib/modeFormat, regulation 9f1),
+            APPLIED PER FIGURE RATHER THAN PER SECTION — which is what this block got wrong until
+            round 22's fixer: it sent all of them through the ROUNDING formatter on the reasoning
+            that "the summary is aggregates", and Fastest and Slowest are not aggregates. They are
+            SINGLE SOLVES — the very rows below, which truncate — so a 0.395s solve printed
+            "Fastest 0.40s" above its own row reading "fastest 0.39s", the panel contradicting itself
+            about one number in two places. Both now truncate, exactly as their rows do.
+            Mean, Median and Spread keep fmtTime: the first two are averages, and Spread is a
+            DIFFERENCE of two times rather than a time anybody solved.
             ⚠ SPREAD IS A DIFFERENCE OF TWO ROUNDED-LOOKING NUMBERS AND IS COMPUTED FROM THE RAW
             ONES, so it can print a hundredth away from (slowest − fastest) as displayed. That is
             the correct trade: rounding the inputs first to make the subtraction "look right" would
@@ -142,8 +149,8 @@ export default function RunBreakdown({
           <Figure label="Accuracy" value={fmtAccuracyPct(summary.solves, summary.cards)} />
           <Figure label="Mean" value={fmtTime(summary.mean)} />
           <Figure label="Median" value={fmtTime(summary.median)} />
-          <Figure label="Fastest" value={fmtTime(summary.fastest)} />
-          <Figure label="Slowest" value={fmtTime(summary.slowest)} />
+          <Figure label="Fastest" value={truncTime(summary.fastest)} />
+          <Figure label="Slowest" value={truncTime(summary.slowest)} />
           {summary.spread != null && <Figure label="Spread" value={fmtTime(summary.spread)} />}
         </div>
         {/* THE LIST. The shared scroll-region recipe (components/scrollRegion): the card owns py-4
@@ -165,9 +172,23 @@ export default function RunBreakdown({
               }
             >
               {/* The card's own number — the same figure the Q# badge shows on this run, so a row
-                  and the card it names can be matched by eye. Fixed width + tabular-nums so three
-                  digits do not shove the letters and dates out of column. */}
-              <span className="w-8 shrink-0 tabular-nums text-(--mut-color)">{r.n}.</span>
+                  and the card it names can be matched by eye. Fixed width + tabular-nums so a
+                  three-digit number does not shove the letters and dates out of column.
+                  ⚠ THE WIDTH IS THE WIDEST NUMBER THIS LIST ACTUALLY HAS, not the widest the app
+                  can produce (round 22's fixer). It was `w-8` — 2rem, room for "1000." — which on a
+                  two-solve run left a visible gap between "1." and the weekday letter for digits
+                  that were never coming. `ch` is the width of a "0" and tabular-nums makes every
+                  digit exactly that, so digits + 1 covers the number and its period with a hair to
+                  spare (a "." is narrower than a digit). The row count IS the widest number, because
+                  `n` is the 1-based position in the run (engine/runBreakdown), and it is measured
+                  once for the whole list — so the column is still one width and everything behind
+                  it still lines up. */}
+              <span
+                style={{ width: `${String(rows.length).length + 1}ch` }}
+                className="shrink-0 tabular-nums text-(--mut-color)"
+              >
+                {r.n}.
+              </span>
               {/* THE WEEKDAY, as one letter (lib/format's DAY_LETTER — How to Play's breakdown notes
                   carry the key). Beside the date and BEFORE it, the way a written date leads with its
                   day ("Thu, 4 Jan"), and in a fixed-width, centred box: the letters are not equally
