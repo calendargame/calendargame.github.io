@@ -39,6 +39,14 @@ describe('buildChanged (pure)', () => {
 })
 
 describe('readBuildStamp / writeBuildStamp (plain localStorage)', () => {
+  // ⚠ CLEARED BEFORE AS WELL AS AFTER (round 22's fixer, found by a shuffled run). The first case
+  // below asserts "nothing is stored yet" — a precondition this block never actually established,
+  // so it passed only while no earlier file left the key behind. Plenty do: the key is App's own
+  // build stamp, written on mount by every file that mounts the app, and a file that clears
+  // localStorage in ITS beforeEach clears it for itself, not for whoever runs next in the worker.
+  beforeEach(() => {
+    localStorage.removeItem(BUILD_STAMP_KEY)
+  })
   afterEach(() => {
     localStorage.removeItem(BUILD_STAMP_KEY)
   })
