@@ -160,7 +160,7 @@ function ClassicMode({
         onCancel={closeEnableReset}
         onConfirm={confirmEnableReset}
         title="Enable and Reset Stats?"
-        body="The timer readouts were hidden while this mode's stats changed, so turning them back on has to reset this mode's stats for the current preset."
+        body="The timer readouts were hidden while this mode's stats changed, so turning them back on has to reset this mode's stats for the preset you are on. The other modes keep theirs, and no other preset is touched."
         confirmLabel="Enable and Reset Stats"
         backButtonId="enable-reset-stats-classic"
       />
