@@ -807,7 +807,10 @@ export default function GuidePage({
             <b>Undo</b> — once you've overridden, the Override button turns into <b>Undo</b>. Undo
             puts back exactly what that Override changed (your score, streak, times, the date on
             screen, and in Blitz, Flash and MoX the round, flash or run too), and the button reads
-            Override again. You can switch back and forth as many times as you like.
+            Override again. You can switch back and forth as many times as you like. A second tap
+            within about a third of a second of the first is ignored, so a quick double-tap
+            can&apos;t override and then immediately undo it — tap again a moment later. (The{' '}
+            <Kbd>O</Kbd> key is never held back this way.)
           </li>
           <li>
             Undo only lasts until your next action. Answer, press New, Reveal, Show Codes, Back or
@@ -836,9 +839,7 @@ export default function GuidePage({
             and one the Override ended picks back up. Blitz&apos;s clock is put back as if you had
             never overridden — a round that had ended gets back exactly the time it had left, while
             a round that was still going (including one your Override ended) has kept counting down
-            the whole time, so Override and Undo are never a free pause. Flash works the same way:
-            undoing an Override made during a flash brings the flash back, with whatever of its
-            reveal time would still be left.
+            the whole time, so Override and Undo are never a free pause.
           </li>
           <li>
             Override is <b>locked</b> when Save Stats is off in the casual modes (Classic, Flash,
@@ -945,7 +946,9 @@ export default function GuidePage({
           </li>
           <li>
             Switching clears the screens, including a Blitz round or an MoX run in progress — every
-            screen has to be re-read from the copy of your stats that is now live.
+            screen has to be re-read from the copy of your stats that is now live. A round or run
+            that has already <i>ended</i> is the exception: that preset keeps it, and it is still on
+            screen when you switch back, until you press Reset or close the app.
           </li>
           <li>
             A long name is cut short with an … so the bar can never be pushed wider than the screen.
@@ -953,8 +956,9 @@ export default function GuidePage({
         </UL>
         <Subhead>Making and managing them</Subhead>
         <p>
-          ⚙ &rarr; <b>Presets</b>, at the top of the menu, names the preset you are on and opens{' '}
-          <b>Manage Presets</b>. Everything you can do to the set of presets is in that one popup:
+          The <b>Global</b> section at the top of the ⚙ menu names the preset you are on and holds
+          the <b>Manage Presets</b> button. Everything you can do to the set of presets is in that
+          one popup:
         </p>
         <UL>
           <li>
@@ -1007,15 +1011,16 @@ export default function GuidePage({
           </li>
           <li>
             Deleting a preset removes <i>everything</i> it holds — its stats and all-time bests, its
-            per-mode setup, every ⚙ setting it was on, and its saved defaults. It cannot be undone,
-            and no other preset is touched. Your Lookup history is untouched too, for the same
-            reason switching presets does not change what Lookup shows: it was never any
-            preset&apos;s to hold.
+            per-mode setup, every ⚙ setting it was on, its saved defaults, and any finished round or
+            run it was keeping. It cannot be undone, and no other preset is touched. Your Lookup
+            history is untouched too, for the same reason switching presets does not change what
+            Lookup shows: it was never any preset&apos;s to hold.
           </li>
           <li>
             You can delete the preset you are currently on. The popup says so, and names the one it
             will open instead — the row below it, or the row above when it was the last. That is a
-            switch like any other, so the screens clear with it.
+            switch like any other, so the screens clear with it — a Blitz round or MoX run in
+            progress included.
           </li>
           <li>
             The <i>last</i> preset cannot be deleted — there is always at least one — so its ✕ is
@@ -1061,11 +1066,11 @@ export default function GuidePage({
             recent 1000 rather than all-time. Within a single visit, every solve still counts.
           </li>
           <li>
-            <b>Formatting (WCA speedcubing convention)</b> — single times (Last) are{' '}
-            <i>truncated</i> to hundredths (the third decimal is dropped, never rounded); means,
-            medians, and bests are <i>rounded</i> to the nearest hundredth. Truncating singles
-            prevents fortunate rounding boundaries; rounding aggregates avoids systematic downward
-            bias.
+            <b>Formatting (WCA speedcubing convention)</b> — single times (Last, and each solve and
+            the fastest and slowest in a breakdown) are <i>truncated</i> to hundredths (the third
+            decimal is dropped, never rounded); means, medians, and bests are <i>rounded</i> to the
+            nearest hundredth. Truncating singles prevents fortunate rounding boundaries; rounding
+            aggregates avoids systematic downward bias.
           </li>
           <li>
             One question = one attempt. Getting a question wrong then right still counts as one
@@ -1118,9 +1123,10 @@ export default function GuidePage({
           the current date is regenerated if still unanswered; if you've already answered wrong,
           revealed, or shown codes, the date stays until you advance. If any questions were answered
           while timing was hidden, a desync would arise on re-enable, so turning timing back on
-          opens an "Enable and Reset Stats?" popup — confirm to turn it on and reset this mode's
-          stats, or dismiss the popup (tap outside it, <Kbd>Esc</Kbd>, or Back) to leave timing
-          hidden.
+          opens an "Enable and Reset Stats?" popup — which says, like Reset Stats does, that the
+          other modes keep theirs and no other preset is touched — confirm to turn it on and reset
+          this mode's stats, or dismiss the popup (tap outside it, <Kbd>Esc</Kbd>, or Back) to leave
+          timing hidden.
         </p>
         <p>
           When Save Stats is off, the whole stats strip dims site-wide (every mode, including MoX)
@@ -1183,9 +1189,10 @@ export default function GuidePage({
             Override on an ended run moves the rows and the mean together.
           </li>
           <li>
-            <b>It isn't saved.</b> The breakdown exists for as long as the ended run or round is on
-            screen; Reset clears it along with everything else, and nothing about it persists
-            between visits.
+            <b>It isn't saved.</b> The breakdown is built from the ended run or round on your
+            screen, each time you open it, and exists only as long as that run or round does — which
+            includes going to another mode or another preset and coming back. Reset (or Full Reset)
+            clears it along with the run, and so does closing the app.
           </li>
         </UL>
         <Subhead>Hiding stats (Blitz, MoX)</Subhead>
@@ -1201,7 +1208,8 @@ export default function GuidePage({
           toggling — what you are looking at is the result, not a control. A tap on the ended strip
           does something else instead: it opens the breakdown of that run or round, solve by solve
           (see above). Your hide setting is not forgotten, only set aside; it applies again the
-          moment the next round or run starts.
+          moment the next round or run starts — or the moment an Override puts the ended one back
+          into play.
         </p>
       </GuideSection>
       <GuideSection
@@ -1530,13 +1538,14 @@ export default function GuidePage({
         <Subhead>Panels and popups</Subhead>
         <UL>
           <li>
-            The five ⚙ popups — Save Defaults, the saved-defaults list, the confirmation before
-            clearing them, the Changelog, and Manage Presets — are proper dialogs. Opening one puts
-            the keyboard inside it, <Kbd>Tab</Kbd> and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> cycle that
-            popup&apos;s own controls and wrap around at the ends rather than wandering into the
-            menu beneath, and <Kbd>Esc</Kbd> closes it. The Changelog has no controls to cycle — it
-            and the resting saved-defaults list are read-only, closed by tapping outside,{' '}
-            <Kbd>Esc</Kbd>, or Back — and there the keyboard simply stays on the dialog.
+            The seven ⚙ popups — Save Defaults, the saved-defaults list, the three confirmations
+            (Reset Settings, Full Reset, and clearing your saved defaults), the Changelog, and
+            Manage Presets — are proper dialogs. Opening one puts the keyboard inside it,{' '}
+            <Kbd>Tab</Kbd> and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> cycle that popup&apos;s own controls
+            and wrap around at the ends rather than wandering into the menu beneath, and{' '}
+            <Kbd>Esc</Kbd> closes it. The Changelog has no controls to cycle — it and the resting
+            saved-defaults list are read-only, closed by tapping outside, <Kbd>Esc</Kbd>, or Back —
+            and there the keyboard simply stays on the dialog.
           </li>
           <li>
             Manage Presets asks its delete question — when there is one to ask; an untouched preset
@@ -2237,7 +2246,7 @@ export default function GuidePage({
           other preset is left exactly as it was, with one exception: your <b>Lookup history</b>{' '}
           isn&apos;t any preset&apos;s alone, so it goes too — press Full Reset from any preset and
           the one shared list is gone for all of them. Removing a preset&apos;s saved copy outright
-          is <b>Delete</b>, in ⚙ &rarr; Presets &rarr; Manage Presets.
+          is <b>Delete</b>, in ⚙ &rarr; Global &rarr; Manage Presets.
         </p>
       </GuideSection>
       <GuideSection
@@ -2407,15 +2416,15 @@ export default function GuidePage({
         <p>Restores the preset you are on to its launch state:</p>
         <UL>
           <li>
-            Wipes all stats, all-time bests (Blitz and MoX), your <b>Lookup history</b>, and
-            in-progress rounds and runs. Your stats and all-time bests are saved on this device, so
-            Full Reset clears that saved copy permanently. That is true in a preset with{' '}
-            <b>Amnesic</b> on as well: it clears both the session you are in and the saved stats
-            waiting behind it, so nothing comes back when you turn Amnesic off again. Amnesic stops
-            your play from being recorded; it does not shield anything from a reset you asked for.
-            Lookup history is the one thing on this list that isn&apos;t only this preset&apos;s —
-            it is shared by every preset (see <b>Presets</b> above), so Full Reset clears it for all
-            of them, not just this one.
+            Wipes all stats, all-time bests (Blitz and MoX), your <b>Lookup history</b>, and every
+            round and run — the ones in progress and the finished ones still on screen. Your stats
+            and all-time bests are saved on this device, so Full Reset clears that saved copy
+            permanently. That is true in a preset with <b>Amnesic</b> on as well: it clears both the
+            session you are in and the saved stats waiting behind it, so nothing comes back when you
+            turn Amnesic off again. Amnesic stops your play from being recorded; it does not shield
+            anything from a reset you asked for. Lookup history is the one thing on this list that
+            isn&apos;t only this preset&apos;s — it is shared by every preset (see <b>Presets</b>{' '}
+            above), so Full Reset clears it for all of them, not just this one.
           </li>
           <li>
             Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode
@@ -2442,7 +2451,8 @@ export default function GuidePage({
           Back — backs out. When every setting, toggle, stat, best, history entry, and live state in
           the preset you are on is already where Full Reset would put it, the button dims and locks
           since tapping it would have no effect. It never counts anything in another preset, and it
-          never clears one — the way to remove a whole preset is <b>Delete</b>, in ⚙ &rarr; Presets.
+          never clears one — the way to remove a whole preset is <b>Delete</b>, in ⚙ &rarr; Global
+          &rarr; Manage Presets.
         </p>
       </GuideSection>
       <Divider label="Modes" />
@@ -2519,20 +2529,22 @@ export default function GuidePage({
         <Subhead>Stats and bests</Subhead>
         <p>
           Stats in MoX always track — the clock never stops. You can blank the timing trio (Last /
-          Mean / Median) with a tap while a run is going, but it's visual only, and a completed run
-          always shows its result. Best mean and best median are tracked independently — they can
-          come from different runs. Beneath each best, the companion metric from the run that set it
-          is also shown (e.g. the median from the run that set your best mean). A <i>Same Round</i>{' '}
-          or <i>Different Rounds</i> tag tells you whether your best mean and best median came from
-          the same exceptional run, or from two different strong ones.
+          Mean / Median) with a tap while a run is going, but it's visual only, and a run that has
+          ended — completed or failed — always shows its times. Best mean and best median are
+          tracked independently — they can come from different runs. Beneath each best, the
+          companion metric from the run that set it is also shown (e.g. the median from the run that
+          set your best mean). A <i>Same Round</i> or <i>Different Rounds</i> tag tells you whether
+          your best mean and best median came from the same exceptional run, or from two different
+          strong ones.
         </p>
         <p>
           Bests stay honest under Override: a finished run's record follows its corrected stats —
           overriding away one of its credited solves (on the last question or while browsing back)
           restores the best that stood before the run, and a correction that changes the run's mean
           or median updates its record to match. The score display freezes when a run ends and only
-          resets after pressing Reset. Leaving MoX mid-run resets it; a finished run's summary is
-          preserved when you return.
+          resets after pressing Reset. Leaving MoX mid-run resets it; a run that has ended —
+          completed or failed — stays on screen when you come back, from another mode or from
+          another preset, until you press Reset or Full Reset, or close the app.
         </p>
         <p>
           Bests are tracked per exact configuration: MoX run length, Allow Mistakes, Date Format (or
@@ -2655,8 +2667,9 @@ export default function GuidePage({
           Switch sub-types anytime — progress in each is preserved, including question history.
           Stats are tracked separately for each sub-type, and Back/Forward only walks the current
           sub-type's entries. Reset Stats clears the current sub-type's stats and history only; the
-          others are untouched. When timing stats are hidden and you haven't burned the current
-          question, the question is kept.
+          others are untouched. Override and its Undo work as they do in Classic, and each sub-type
+          has its own: they act only on the sub-type you are playing. When timing stats are hidden
+          and you haven't burned the current question, the question is kept.
         </p>
       </GuideSection>
       <GuideSection id="flash" title="Flash" openId={open} onToggle={toggle} durationMs={motionMs}>
@@ -2677,6 +2690,11 @@ export default function GuidePage({
           number stop together) and keep the date on screen. Reveal shows the answer and counts a
           miss; Show Codes does the same and also opens the calculation breakdown.
         </p>
+        <p>
+          An Override made while the date is showing ends that flash. Undoing it brings the flash
+          back, with whatever of its reveal time would still be left — the countdown keeps running
+          in between, so Override and Undo are never a free look at the date.
+        </p>
       </GuideSection>
       <GuideSection id="blitz" title="Blitz" openId={open} onToggle={toggle} durationMs={motionMs}>
         <Lead>Answer as many dates as possible before time runs out.</Lead>
@@ -2687,7 +2705,8 @@ export default function GuidePage({
           Accuracy stay visible, along with Streak wherever the mode shows it. Hiding applies to a
           round in progress: once a round ends, the three time boxes show that round's times and
           stop toggling — a tap on the ended strip opens that round's breakdown instead (see Stats).
-          Your hide setting comes back with the next round.
+          Your hide setting comes back with the next round, or as soon as an Override puts the ended
+          round back on the clock.
         </p>
         <Subhead>Round options</Subhead>
         <UL>
