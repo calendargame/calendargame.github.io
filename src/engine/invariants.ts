@@ -49,8 +49,7 @@
 //     isn't selectable).
 // ─────────────────────────────────────────────────────────────────────────
 import { correctIndexOf, earnedCredit, liveCredited } from './gameReducer.js'
-import type { Btns } from './answerButtons.js'
-import type { CardMeta, GameState, Question, Stats } from './gameReducer.js'
+import type { EntryMeta, GameState, Question, Stats } from './gameReducer.js'
 
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0
 
@@ -99,33 +98,6 @@ function checkQuestionInvariants(q: Question, useJulian: boolean, where: string)
   return v
 }
 
-// Has the LIVE question already taken its `played` increment? Every stat-affecting action FREEZES
-// saveStatsThisQ, and every one that freezes it to `true` increments `played` exactly once for that
-// question (a later action on the same question is gated by countedWrong, so it never double-counts)
-// — so `saveStatsThisQ === true` IS "this question is counted". The other two values are both
-// "not counted": `false` = it was played with Save Stats off, `null` = no stat action ran on it at
-// all (a fresh card, or a Blitz per-round LOCK_REVEAL, which shows the answer without scoring it).
-// While browsing back, the live question is parked in forwardStack as the isLive entry, which
-// carries that same frozen flag as `saveStatsFrozen` — read it there instead.
-function liveCounted(state: GameState): number {
-  const frozen =
-    state.backDepth === 0
-      ? state.saveStatsThisQ
-      : (state.forwardStack.find((e) => e.isLive)?.liveState?.saveStatsFrozen ?? null)
-  return frozen === true ? 1 : 0
-}
-
-// Every second the ledger currently names: one per history entry that holds a time, plus the card
-// on screen. `forwardStack` is included because browsing back PARKS cards there — including the
-// live one — and a parked card is still contributing to the pool it left behind.
-function ledgerTimes(state: GameState): number[] {
-  const out: number[] = []
-  for (const e of state.stack) if (e.solveTime != null) out.push(e.solveTime)
-  for (const e of state.forwardStack) if (e.solveTime != null) out.push(e.solveTime)
-  if (state.liveSolveTime != null) out.push(state.liveSolveTime)
-  return out
-}
-
 // Is every value in `sub` present in `sup`, counting duplicates? Both are sorted copies walked once
 // — the same two solve times really can occur twice, so a Set would silently accept a ledger naming
 // one second twice when the pool holds it once.
@@ -153,6 +125,47 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
     v.push(`questionId is not a non-negative integer (${state.questionId})`)
   if (!isCount(state.gridEpoch))
     v.push(`gridEpoch is not a non-negative integer (${state.gridEpoch})`)
+  // ── ONE WALK OVER EVERY CARD IN PLAY ──
+  // Three of the checks below are about the cards the state is holding — the history behind the
+  // viewed card (`stack`), the cards parked ahead of it (`forwardStack`, where browsing back parks
+  // them, the live one included), and the card on screen — so they share ONE pass that visits each
+  // card exactly once and collects what all three need:
+  //   • the SECONDS the cards name (the times ledger),
+  //   • the parked LIVE entry (the card ledger's last term — see liveCounted's note below),
+  //   • the per-card Override record (the five tripwires — see visitCard).
+  // The card on screen is handed to the same visitor in the shape a history entry already has
+  // (EntryMeta), so there is one visitor rather than one per place a card can be.
+  //
+  // ⚠ HOT PATH. This runs in the app after EVERY state change (useGameEngine's tripwire effect) and
+  // a run mode's history reaches a thousand cards, so the pass materialises nothing per card: no
+  // view object, no result array, and a card's label built only when it has something to report.
+  // (Round 23's first cut built all three per card, in a walk of its own on top of this one — it
+  // cost ~4x the whole check and timed the fuzz survey's deep-history profile out. Keep it so.)
+  const named: number[] = []
+  const rec: string[] = []
+  let parkedLive: EntryMeta | undefined
+  for (let i = 0; i < state.stack.length; i++) visitCard(named, rec, state.stack[i], 'stack', i)
+  for (let i = 0; i < state.forwardStack.length; i++) {
+    const e = state.forwardStack[i]
+    if (e.isLive && !parkedLive) parkedLive = e
+    visitCard(named, rec, e, 'forwardStack', i)
+  }
+  visitCard(
+    named,
+    rec,
+    {
+      btns: state.persistBtns,
+      // Not browsing → the live edge, whose credit is the live rule's; browsing → the entry under
+      // the cursor, whose flag BACK already resolved. No liveState either way, so visitCard's
+      // re-derivation falls through to exactly this value.
+      hasCredit: state.backDepth === 0 ? liveCredited(state) : state.browseHasCredit,
+      solveTime: state.liveSolveTime,
+      meta: state.card,
+      isLive: state.backDepth === 0,
+    },
+    'on-screen card',
+    -1,
+  )
   // ── The card ledger ──
   // played == historyBase + (cards behind the viewed one) + (the live card, if it was counted).
   // The middle term is `stack.length + backDepth`, not just the stack: browsing back POPS entries
@@ -164,7 +177,7 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
     v.push(`historyBase is not a non-negative integer (${state.historyBase})`)
   } else if (isCount(state.stats.played)) {
     const behind = state.stack.length + state.backDepth
-    const live = liveCounted(state)
+    const live = liveCounted(state, parkedLive)
     if (state.historyBase + behind + live !== state.stats.played)
       v.push(
         `card ledger: historyBase(${state.historyBase}) + history(${behind}) + live(${live}) != played(${state.stats.played})`,
@@ -176,7 +189,6 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
   if (!isCount(state.timesBase)) {
     v.push(`timesBase is not a non-negative integer (${String(state.timesBase)})`)
   } else if (Array.isArray(state.stats.times)) {
-    const named = ledgerTimes(state)
     if (!isSubMultiset(named, state.stats.times))
       v.push(`times ledger: a card names a solve time that is not in stats.times`)
     if (state.timesBase + named.length !== state.stats.times.length)
@@ -184,77 +196,73 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
         `times ledger: timesBase(${state.timesBase}) + named(${named.length}) != times.length(${state.stats.times.length})`,
       )
   }
-  // ── The per-card Override record ──
-  // See the header note. Every card in play, in the one shape each check needs: its grid, its
-  // CURRENT credit, the time it contributes, its record, and whether it is the live card (on screen
-  // at the live edge, or parked as the isLive forward entry — the only two places live flags belong).
-  const cards: RecordView[] = [
-    ...state.stack.map((e, i) => entryView(e, `stack[${i}]`)),
-    ...state.forwardStack.map((e, i) => entryView(e, `forwardStack[${i}]`)),
-    {
-      where: 'on-screen card',
-      btns: state.persistBtns,
-      credited: state.backDepth === 0 ? liveCredited(state) : state.browseHasCredit,
-      solveTime: state.liveSolveTime,
-      meta: state.card,
-      live: state.backDepth === 0,
-    },
-  ]
-  for (const c of cards) v.push(...checkRecord(c))
+  v.push(...rec)
   return v
 }
 
-// One card as the record checks see it (see checkGameInvariants' per-card block).
-interface RecordView {
-  where: string
-  btns: Btns | undefined
-  credited: boolean
-  solveTime: number | null
-  meta: CardMeta | undefined
-  live: boolean
+// Has the LIVE question already taken its `played` increment? Every stat-affecting action FREEZES
+// saveStatsThisQ, and every one that freezes it to `true` increments `played` exactly once for that
+// question (a later action on the same question is gated by countedWrong, so it never double-counts)
+// — so `saveStatsThisQ === true` IS "this question is counted". The other two values are both
+// "not counted": `false` = it was played with Save Stats off, `null` = no stat action ran on it at
+// all (a fresh card, or a Blitz per-round LOCK_REVEAL, which shows the answer without scoring it).
+// While browsing back, the live question is parked in forwardStack as the isLive entry, which
+// carries that same frozen flag as `saveStatsFrozen` — read it there instead (`parked`, picked up
+// by the one card walk).
+function liveCounted(state: GameState, parked: EntryMeta | undefined): number {
+  const frozen =
+    state.backDepth === 0 ? state.saveStatsThisQ : (parked?.liveState?.saveStatsFrozen ?? null)
+  return frozen === true ? 1 : 0
 }
-// A history / forward entry. The parked LIVE entry's `hasCredit` is BACK's raw read of its grid, so
-// its credit is re-derived through the same rule the reducer applies to a live card (earnedCredit
-// on its parked flags) — a revealed live card must not pass as a credit here.
-function entryView(e: GameState['stack'][number], where: string): RecordView {
+
+// Where a report points — built only when there is a report to make (idx < 0: the name stands alone).
+const at = (arr: string, idx: number): string => (idx < 0 ? arr : `${arr}[${idx}]`)
+
+// ONE card, for every check that is about a card (see the walk in checkGameInvariants):
+//   • the second it names goes into `named` — the times ledger's side of the pool. `forwardStack`
+//     cards count because a parked card is still contributing to the pool it left behind.
+//   • the five Override-record tripwires go into `rec`.
+// Optional chaining throughout: a tripwire that throws on a corrupt state (an entry with no record
+// at all) would hide the very report it exists to make.
+// The parked LIVE entry's `hasCredit` is BACK's raw read of its grid, so its credit is re-derived
+// here through the same rule the reducer applies to a live card (earnedCredit on its parked flags) —
+// a revealed live card must not pass as a credit.
+function visitCard(named: number[], rec: string[], e: EntryMeta, arr: string, idx: number): void {
+  const solveTime = e.solveTime ?? null
+  if (solveTime != null) named.push(solveTime)
   const ls = e.liveState
-  return {
-    where,
-    btns: e.btns,
-    credited: e.isLive && ls ? earnedCredit(e.btns, ls.revealed, ls.countedWrong) : !!e.hasCredit,
-    solveTime: e.solveTime ?? null,
-    meta: e.meta,
-    live: !!e.isLive,
-  }
-}
-// The five tripwires on one card's record. Optional chaining throughout: a tripwire that throws on a
-// corrupt state (an entry with no record at all) would hide the very report it exists to make.
-function checkRecord(c: RecordView): string[] {
-  const v: string[] = []
-  const a = c.meta?.answered ?? null
+  const credited =
+    e.isLive && ls ? earnedCredit(e.btns, ls.revealed, ls.countedWrong) : !!e.hasCredit
+  const a = e.meta?.answered ?? null
   // 3 (first half) — holds for every card, overridden or not: no credit, no time.
-  if (!c.credited && c.solveTime != null)
-    v.push(`${c.where}: an uncredited card contributes a time (${c.solveTime})`)
-  if (a === null) return v
+  if (!credited && solveTime != null)
+    rec.push(`${at(arr, idx)}: an uncredited card contributes a time (${solveTime})`)
+  // Everything below is about a card in state O, and most cards are not — this is where the walk
+  // over a thousand-card history stops for them.
+  if (a === null) return
   // 1 — the whole rule: O's credit is the opposite of A's.
-  if (c.credited === a.hasCredit)
-    v.push(`${c.where}: overridden, but its credit is not the opposite of its as-answered credit`)
+  if (credited === a.hasCredit)
+    rec.push(
+      `${at(arr, idx)}: overridden, but its credit is not the opposite of its as-answered credit`,
+    )
   // 2 — O's grid is the answer alone: green when O credits, 'override-wrong' when it does not.
-  const vals = Object.values(c.btns ?? {})
-  if (vals.length !== 1 || vals[0] !== (c.credited ? 'correct' : 'override-wrong'))
-    v.push(`${c.where}: overridden, but its grid is not the answer alone`)
+  const vals = Object.values(e.btns ?? {})
+  if (vals.length !== 1 || vals[0] !== (credited ? 'correct' : 'override-wrong'))
+    rec.push(`${at(arr, idx)}: overridden, but its grid is not the answer alone`)
   // 3 (second half) — a stored uncredited A holds no time either.
   if (!a.hasCredit && a.solveTime != null)
-    v.push(`${c.where}: its stored uncredited as-answered state holds a time (${a.solveTime})`)
+    rec.push(
+      `${at(arr, idx)}: its stored uncredited as-answered state holds a time (${a.solveTime})`,
+    )
   // 4 — a credited O contributes exactly the time frozen the first time O credited.
-  if (c.credited && c.solveTime !== (c.meta?.oTime ?? null))
-    v.push(
-      `${c.where}: a credited overridden card contributes ${c.solveTime}, not its frozen O time`,
+  if (credited && solveTime !== (e.meta?.oTime ?? null))
+    rec.push(
+      `${at(arr, idx)}: a credited overridden card contributes ${solveTime}, not its frozen O time`,
     )
   // 5 — live flags exist exactly where there is a live card to restore them onto.
-  if (c.live !== (a.live !== undefined))
-    v.push(
-      `${c.where}: overridden, with live flags ${c.live ? 'missing from' : 'on'} a ${c.live ? 'live' : 'history'} card`,
+  const live = !!e.isLive
+  if (live !== (a.live !== undefined))
+    rec.push(
+      `${at(arr, idx)}: overridden, with live flags ${live ? 'missing from' : 'on'} a ${live ? 'live' : 'history'} card`,
     )
-  return v
 }
