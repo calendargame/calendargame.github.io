@@ -47,6 +47,10 @@ function readDate() {
   return { y, m, d }
 }
 const correctName = ({ y, m, d }) => DAY[wday(y, m, d)]
+// The class list on the CORRECT weekday's button for a given date — how the grid says what state that
+// card is in ('btn-correct-persist' for the answer it earned, 'btn-override-wrong' for a credit an
+// Override took away; see components/controlClasses).
+const dayClass = (d) => ctrl(correctName(d)).className
 // Value of a stat cell on the VISIBLE mode, read via its label span's parent + the [data-statval]
 // marker — robust whether the cell is a <div>, an <fn> <button>, or a <div> inside the strip-button
 // an ended round turns the whole panel into.
@@ -409,39 +413,46 @@ describe('Q11 wiring does not weaken the remount that isolates presets', () => {
 })
 
 // ── Override ⇄ Undo across a preset round-trip (round 23 Q6) ───────────────────────────────────
-// An Undo reverses the engine half AND the screen's half of an Override (a resumed/ended round, a run
-// phase). The screen's half lives in refs and state that are never parked, so a parked round comes
-// back with NO Undo pending — useGameEngine strips the capsule at the one door every parked state
-// comes through. The round itself comes back exactly as the Override left it.
-describe('Round 23 Q6 — a parked round never comes back with an Undo pending', () => {
+// ★ THE OWNER'S SENTENCE, END TO END: "if you get smth wrong then override then later come back to
+// that question by browsing or FROM ANOTHER PRESET or smth and undo there it shows your original red
+// highlight(s)." Nothing here has to be rebuilt or stripped on the way through: the whole record is
+// one bit and one stashed grid PER CARD inside the parked engine state, so it rides along with the
+// round and the button reads it again on the other side.
+describe('Round 23 Q6 — an overridden card comes back overridden, and still toggles', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()
     document.getElementById('root')?.remove()
   })
 
-  it('Blitz: an ended round with a pending Undo comes back overridden, offering no Undo', () => {
+  it('Blitz: a browsed card overridden before the switch reads Undo after it, and restores its mark', () => {
     mountApp()
     pinReadable()
     switchToBlitz()
     finishBlitzRound(2) // 2/3
     tap(ctrl('<')) // the second credited solve
+    const card2 = readDate()
     tap(ctrl('Override')) // flip it → 1/3
     expect(statValue('Score')).toBe('1/3')
     expect(isOffered(ctrl('Undo'))).toBe(true)
-    // The park strips the pending Undo on the way IN, not only on the way out (round 22's fixer):
-    // the capsule is a whole second GameState, and no restore could ever use it.
-    expect(readSessionRound(1, 'blitz').engine.undoCapsule).toBeNull()
+    expect(dayClass(card2)).toContain('btn-override-wrong') // the credit taken away, on the grid
+    // The record is IN the parked engine state — the card on screen carries its as-answered state.
+    expect(readSessionRound(1, 'blitz').engine.card.answered).not.toBe(null)
 
     const p2 = createPreset()
     openPreset(p2.id)
     openPreset(1)
     expect(statValue('Score')).toBe('1/3') // the Override stands…
-    expect(queryCtrl('Undo')).toBeNull() // …but its Undo did not survive the remount
-    expect(isOffered(ctrl('Override'))).toBe(false) // this card's override is spent
+    expect(readDate()).toEqual(card2) // …on the same browsed card…
+    expect(isOffered(ctrl('Undo'))).toBe(true) // …and the button still reads Undo for it
+    tap(ctrl('Undo'))
+    expect(statValue('Score')).toBe('2/3')
+    expect(dayClass(card2)).toContain('btn-correct-persist') // the answer it left is back
+    tap(ctrl('Override')) // …and it re-credits, as many times as the player likes
+    expect(statValue('Score')).toBe('1/3')
   })
 
-  it('MoX: a failed run with a pending Undo comes back failed, offering no Undo', () => {
+  it('MoX: a done run comes back with its reversed completing solve, and undoing it completes again', () => {
     mountApp()
     pinReadable()
     switchToMox()
@@ -449,17 +460,22 @@ describe('Round 23 Q6 — a parked round never comes back with an Undo pending',
     tap(ctrl('Begin'))
     tap(screen.getByRole('button', { name: correctName(readDate()) }))
     tap(screen.getByRole('button', { name: correctName(readDate()) })) // done 2/2
-    tap(ctrl('Override')) // reverse the completing solve → failed 1/2
+    const solved = readDate()
+    tap(ctrl('Override')) // take the completing solve's credit away → failed 1/2
     expect(statValue('Score')).toBe('1/2')
     expect(isOffered(ctrl('Undo'))).toBe(true)
-    expect(readSessionRound(1, 'aox').engine.undoCapsule).toBeNull() // stripped on the way in too
+    expect(readSessionRound(1, 'aox').engine.card.answered).not.toBe(null)
 
     const p2 = createPreset()
     openPreset(p2.id)
     openPreset(1)
     expect(statValue('Score')).toBe('1/2')
     expect(ctrl('Reset')).toBeInTheDocument()
-    expect(queryCtrl('Undo')).toBeNull()
+    expect(readDate()).toEqual(solved) // the card never left the screen, switch included
+    expect(isOffered(ctrl('Undo'))).toBe(true)
+    tap(ctrl('Undo'))
+    expect(statValue('Score')).toBe('2/2') // the run is whole again, and done again
+    expect(dayClass(solved)).toContain('btn-correct-persist')
   })
 })
 
@@ -526,8 +542,12 @@ describe('a restored Blitz round resumes with the time it had left', () => {
     expect(readout()).toBe('25s') // from where it stopped — not 60s
     tick(10_000)
     expect(readout()).toBe('15s') // …and it is genuinely draining from there
-    tap(ctrl('Undo')) // the Override resumed an ended round: Undo re-ends it with its readout
-    expect(readout()).toBe('25s')
+    // Pressing again takes that card's credit back, which is a miss on a sudden-death round — so the
+    // round ends again, and it ends with the clock it HAS, not the clock it had before the resume:
+    // those ten seconds were real play. (Round 23 Q6 — a round only ever keeps the time it did not use.)
+    tap(ctrl('Undo'))
+    expect(ctrl('Reset')).toBeInTheDocument()
+    expect(readout()).toBe('15s')
   })
 
   it('a round parked by an earlier build (no remaining time saved) restores with the configured length', () => {

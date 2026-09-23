@@ -45,7 +45,7 @@ import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import type { AoxBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/userDefaults.js'
-import { useGameEngine, withoutPendingUndo } from '../engine/useGameEngine.js'
+import { useGameEngine } from '../engine/useGameEngine.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
@@ -142,7 +142,7 @@ function AoxMode({
     // restores the incoming preset's own run.
     getInitialState: () => parkedRun?.engine ?? null,
   })
-  const { state, correct, undoAvail } = eng
+  const { state, correct, overrideAvail, undoAvail } = eng
   // Android Back closes AoX's Show-Codes panel (Q1) — see the same hook in the other modes.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const S = state.stats
@@ -153,13 +153,23 @@ function AoxMode({
   // A live question RESOLVED AS A MISS (Allow Mistakes on): Reveal or Show Codes showed the answer
   // + counted a played miss (a plain wrong answer sets countedWrong but NOT revealed, so it stays
   // retryable — excluded). The grid is dimmed for it (the engine ignores answers on it).
+  // …and since round 23 Q6 a live card a PRESS left as a miss is one of those too, by construction:
+  // the engine leaves an overridden-to-miss card locked, revealed and burned, which is exactly the
+  // shape above. `overriddenMiss` names it for the Next rule below — an override state that is not a
+  // credit can only be a miss, because a card's two states are each other's opposite.
   const resolvedMiss = isRunning && !inBack && state.revealed && state.countedWrong
+  const overriddenMiss = resolvedMiss && state.card.answered !== null
   // Of those, which WAIT on a "Next" button vs auto-advance: SHOW CODES (calcPenaltyActive — set by
   // SHOW_CODES, never by REVEAL) always pauses so you can read the codes; a One-by-One Reveal also
   // pauses (One-by-One pauses between dates by design). A plain non-One-by-One Reveal does NOT wait
   // — onReveal flashes the answer then auto-advances (owner's call, C2: a reveal doesn't need to
   // pause when the run flows date-to-date on its own). (C2 Q4 + the reveal-flash refinement.)
-  const awaitingNext = resolvedMiss && (state.calcPenaltyActive || oneByOne)
+  // ⚠ overriddenMiss BELONGS IN THIS LIST, and leaving it out would strand the player: a Reveal or a
+  // Show Codes has something behind it (an auto-advance, or a panel to close), but a press that takes
+  // the run's completing solve away starts nothing — so without a Next button the run would sit on a
+  // resolved miss with nothing to press but Reset. Pressing again is not an answer to that: the way
+  // ON from a miss is Next, exactly as it is for the other two.
+  const awaitingNext = resolvedMiss && (state.calcPenaltyActive || oneByOne || overriddenMiss)
 
   // Per-config Best Mean / Median (component-owned, like Blitz's Best Score). A run records
   // its Best on completion and keeps it RECONCILED while its stats move post-completion (a
@@ -285,7 +295,7 @@ function AoxMode({
     const pid = usePresets.getState().activeId
     if (runPhase === 'done' || runPhase === 'failed')
       writeSessionRound(pid, 'aox', {
-        engine: withoutPendingUndo(state),
+        engine: state,
         runPhase,
         shown,
         currentRunId: currentRunIdRef.current,
@@ -334,38 +344,37 @@ function AoxMode({
     Object.keys(state.persistBtns).length === 0 &&
     state.calcOpen === false &&
     breakdownOpen === false &&
-    state.canOverrideCorrect === false &&
     Object.keys(bests).length === 0 &&
     Object.keys(bestNew).length === 0 &&
-    state.pendingWrongOverride === null &&
-    state.overrideUsedThisQ === false &&
-    state.undoCapsule === null &&
+    // Nothing on the card: never wrong, never overridden (round 23 Q6 — one record replaced the four
+    // flags the old Override machinery kept here; same pair as modeHooks.engineFresh).
+    state.card.wrongTime === null &&
+    state.card.answered === null &&
     state.countedWrong === false
   useEffect(() => {
     onFreshChange?.(aoxIsFreshLocal)
   }, [aoxIsFreshLocal, onFreshChange])
 
   // Derived UI state.
-  const dateVisible = isLocked || (isRunning && (!oneByOne || shown)) || inBack
+  // ★ IS THE CARD ON SCREEN ONE THIS RUN ACTUALLY PLAYED? A press on a PAST card can end a run —
+  // credit the last miss and the run completes, flip a card and it fails — while the live date is
+  // FRESH and never answered. Showing that date on an ended run would put a phantom Q(N+1) on the
+  // screen: the same overshoot the completing-solve hold closes from the other side, arriving through
+  // the other door. `saveStatsThisQ` goes non-null the moment any stat action touches a card, and BACK
+  // sets it for a browsed one, so this is exactly "this card was played".
+  const liveCardScored = state.saveStatsThisQ !== null
+  const dateVisible = (isLocked && liveCardScored) || (isRunning && (!oneByOne || shown)) || inBack
   const revealLocked = !isRunning || state.calcOpen || (oneByOne && !shown) || inBack
   const backDisabled = state.stack.length === 0 || runPhase === 'idle' || runPhase === 'running'
   const fwdDisabled =
     state.forwardStack.length === 0 || runPhase === 'idle' || runPhase === 'running'
-  const last = state.stack[state.stack.length - 1]
-  // Override availability is NOT gated on the live `saveStats` — it's the SAME whether Save Stats
-  // is on or off (owner's call, C2: gating it on saveStats made Override more forgiving when ON
-  // than OFF, which is backwards). AoX feeds the engine saveStats:true (above), so every run
-  // question IS scored (played always increments) → crediting via Override can't hit the
-  // unscored-question 1/0 bug; the credit is simply invisible in practice mode (stats hidden, no
-  // Best recorded). So Override is available whenever there's something to override — a wrong, a
-  // Reveal, a Show Codes, a reversible correct, or a retro/pending target — regardless of Save
-  // Stats. (Do NOT switch this to effectiveSaveStats — saveStatsThisQ is always true here.)
-  const overrideAvail =
-    !state.overrideUsedThisQ &&
-    (state.countedWrong ||
-      state.canOverrideCorrect ||
-      (state.pendingWrongOverride != null && !last?.overrideUsed) ||
-      eng.retroOverrideEligible)
+  // Override availability is the engine's, unchanged (`overrideAvail` above) — and it is NOT gated on
+  // the live `saveStats`, which is the same call C2 made: gating it made Override more forgiving when
+  // Save Stats was ON than OFF, which is backwards. AoX feeds the engine saveStats:true, so the hook's
+  // frozen Save-Stats gate is always true here and the whole condition reduces to "is there a card to
+  // toggle" — a wrong, a Reveal, a Show Codes, a held credit, an already-overridden card, or the card
+  // behind the one on screen. Every run question IS scored (played always increments), so crediting
+  // one can never hit the unscored-question 1/0 bug; the credit is simply invisible in practice mode.
   const codesDisabled = runPhase === 'idle' || (oneByOne && !shown && !inBack && !isLocked)
   // resolvedMiss dims the grid — a revealed/show-coded question the engine ignores answers on
   // (covers the brief non-One-by-One reveal flash before it auto-advances, the Show-Codes pause,
@@ -507,83 +516,64 @@ function AoxMode({
     eng.doNew()
     if (oneByOne) setShown(false)
   }
+  // ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ─────────────────────
+  // ONE PRESS, BOTH DIRECTIONS — and it can move the RUN, not just the score: fail it, resume it, or
+  // hand a completed run back to the player. Which of those it does is read off the engine's plan
+  // (what this press will do, and to which card) BEFORE the press, from the same object the reducer
+  // acts on, so the phase and the score can never be told different stories.
+  //
+  // ★ THE PHASE STAYS EVENT-DRIVEN, AND DERIVING IT WOULD BE A TRAP. "good ≥ n ⇒ done" reads like the
+  // whole rule, but a press on a card of a DONE run that retracts a credit would then flip the phase
+  // to 'running' — and 'running' disables Back and Forward, which would strand the player mid-browse
+  // with no way out but Reset. So each press says what it does to the phase, and nothing else does.
+  //
+  // The three rules, and what deliberately has none:
+  //   • a press that leaves a card a MISS with Allow Mistakes off FAILS the run — the long-standing
+  //     "an override to a wrong is a mistake like any other", now reachable from the Undo direction;
+  //   • a press that CREDITS while the run is failed, at the live edge, leaving no miss behind it,
+  //     resumes it — and the completion effect then flips a completing one straight to 'done';
+  //   • a press that takes the HELD COMPLETING SOLVE's credit away (Allow Mistakes on — with it off the
+  //     first rule already fired) hands the run back as 'running'. The card stays on screen as a
+  //     resolved miss and the existing Next button carries the run on (see `awaitingNext`).
+  //   • a press on a HISTORY card of a done run changes no phase at all: the run is over, and the only
+  //     thing that reacts is reconcileAoxStanding, which raises or restores the Best from the floor.
+  // prevBestSnapRef and currentRunIdRef are NEVER written here — only reset() and the run's own
+  // completion touch them — which is what makes any number of presses land where the last one says.
   const onOverride = () => {
-    undoRunRef.current = {
-      runId: currentRunIdRef.current,
-      runPhase,
-      revealAdvanceIdx: revealAdvanceRef.current != null ? correct : null,
-    }
-    // A credit / completion via Override DURING the reveal-flash window must kill the pending
-    // auto-advance — otherwise the stale doNew() fires ~FLASH_MS later and either SKIPS the
-    // freshly-advanced question or, at the final question, re-opens the phantom-Q(N+1) overshoot the
-    // completion hold closed. The other run-mutating handlers (reset, hidden, unmount) already cancel.
+    const plan = eng.overridePlan
+    if (!plan) return
+    // A press DURING the reveal-flash window must kill the pending auto-advance — otherwise the stale
+    // doNew() fires ~FLASH_MS later and either SKIPS the question the press advanced to or, at the
+    // final question, re-opens the phantom Q(N+1) overshoot the completion hold closed. (Round 23's
+    // first cut re-armed this advance when its Undo rewound the press; the per-card toggle has no
+    // rewind — an Undo flips a card, it does not put a flash back — so the re-arm is gone with it.)
     cancelRevealAdvance()
-    const reverseCompleting = state.canOverrideCorrect && !state.countedWrong && !inBack // Path 2: reverse the live completing solve
-    const reverseToWrong =
-      reverseCompleting && state.prevStatsSnapshot && !state.prevStatsSnapshot.wasWrong
-    const retroToWrong =
-      eng.retroOverrideEligible && last?.capsule?.snapshot && !last.capsule.snapshot.wasWrong // Path 5: retro-flip a correct entry to wrong
-    const crediting = state.countedWrong || state.pendingWrongOverride != null // Path 3/4: credit a wrong
-    // Crediting the CURRENT wrong (Path 3) when good is at N-1 is the run's COMPLETING solve →
-    // credit but DON'T advance (stay on this question, locked), or the run would complete while
-    // sitting on a phantom extra question (an Ao10 via Reveal+Override showed Q11). Mirrors a
-    // normal final correct answer's `complete`. (C2 fix.)
-    const completeViaOverride = state.countedWrong && doneCount === n - 1
-    const toWrong = reverseToWrong || retroToWrong
-    const failNow = toWrong && !allowMistakes
-    if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct }) // crediting the current wrong → green flash
-    eng.override({ noAdvance: !!((reverseCompleting && failNow) || completeViaOverride) }) // any Best impact reconciles in the effect above
-    if (failNow) {
-      setRunPhase('failed') // a to-wrong override with no mistakes fails the run (bug #2 / unified rule)
-    } else if ((crediting && runPhase === 'failed') || (reverseCompleting && allowMistakes)) {
-      // The two RESUME cases, and they are one branch rather than two `else if`s only so the line
-      // under them is written once: crediting the wrong that failed the run resumes it (the
-      // completion effect then flips a completing one to done), and — with Allow Mistakes on —
-      // reversing the completing solve resumes it too. Both used to call this identical setter
-      // separately; merging them changes no behaviour.
+    // ⚠ THE COMPLETING SOLVE HOLD: crediting the live wrong when this credit is the run's Nth must NOT
+    // advance, or the run would complete while sitting on a phantom extra question (an Ao10 via
+    // Reveal + Override showed Q11). Same rule as a normal final correct answer's `complete`. Taking a
+    // credit AWAY never advances — the engine's own rule — so it needs nothing here.
+    const hold = plan.target === 'live' && plan.credits && !plan.overridden && doneCount === n - 1
+    // `good` after this press — `played` never moves, so "no miss left behind" is one comparison.
+    const goodAfter = S.good + (plan.credits ? 1 : -1)
+    if (plan.target === 'live' && plan.credits) setFlashWithTimeout({ type: 'good', idx: correct })
+    eng.override({ hold }) // any Best impact reconciles in the effect above
+    if (!plan.credits && !allowMistakes && runPhase !== 'idle') {
+      setRunPhase('failed')
+    } else if (
+      (runPhase === 'failed' && plan.credits && state.backDepth === 0 && S.played === goodAfter) ||
+      (runPhase === 'done' && plan.target === 'live' && !plan.credits)
+    ) {
+      // The two RESUME cases, one branch so the line under them is written once. The second is the
+      // held completing solve handed back; it is reachable only with Allow Mistakes on, because with
+      // it off the fail branch above took the press instead.
       setRunPhase('running')
-      // ⚠ THE BREAKDOWN BELONGS TO THE RUN THAT ENDED, and this is the one door that puts an ENDED
-      // run — a failed one via its credited wrong, or a completed one via its reversed final solve —
-      // back on the clock (Blitz's resumeRound is the same door in that mode, with the same line). `breakdownShown` ANDs the flag with availability, so the popup is already gone
-      // from the screen the instant the run is live again — but the FLAG would survive, and the
-      // next time this run completed the breakdown would spring open with nobody having asked for
-      // it. Belt and braces: the only route into this state with the popup up was App's keyboard
-      // handler walking the DOM for [data-key="O"] and finding Override through the scrim, which
-      // the same change closed (src/main.tsx, the modal gate on its Category 1 and 2). This line is
-      // what makes it not matter.
+      // ⚠ THE BREAKDOWN BELONGS TO THE RUN THAT ENDED, and this is the one door that puts an ENDED run
+      // back on the clock (Blitz's resumeRound is the same door in that mode, with the same line).
+      // `breakdownShown` ANDs the flag with availability, so the popup is already gone from the screen
+      // the instant the run is live again — but the FLAG would survive, and the next time this run
+      // completed the breakdown would spring open with nobody having asked for it.
       setBreakdownOpen(false)
     }
-  }
-  // ── Override ⇄ Undo (round 23 Q6) ──
-  // An Override can move the RUN, not just the score: it can fail a run (a to-wrong flip with Allow
-  // Mistakes off), resume a failed one (crediting the wrong that failed it), resume a completed one
-  // (reversing its final solve with Allow Mistakes on) — and the completion effect can then flip a
-  // resumed run to done. The engine's Undo puts the score back; this puts the phase back, which is
-  // all an Override changes here (MoX has no round clock; a question's solve clock is the engine
-  // hook's, and it hands that back itself). Noted BEFORE the Override runs; one slot, because only
-  // one Override can be pending and every Override overwrites it. One more thing an Override stops: a
-  // pending reveal auto-advance (onOverride cancels it), so a snapshot that had one re-arms it — with
-  // the grid index of the question it belongs to, noted then, since an advancing Override has since
-  // changed what `correct` means. The Best and its ★ need nothing:
-  // prevBestSnapRef is latched once per run and every reconcile folds onto it, so
-  // any number of toggles lands where the last one says. The breakdown stays CLOSED — it belongs to
-  // the run as it ended, and the Override that moved the phase already closed it.
-  const undoRunRef = useRef<{
-    runId: number | null
-    runPhase: string
-    revealAdvanceIdx: number | null //  the pending reveal auto-advance's answer index, or null
-  } | null>(null)
-  const onUndo = () => {
-    eng.undo()
-    const snap = undoRunRef.current
-    undoRunRef.current = null
-    // A snapshot from another run cannot be pending (Begin/Reset dispatch a RESET, which ends the
-    // undo window, and a parked run is restored with none) — the id check says so rather than
-    // trusting it.
-    if (!snap || snap.runId !== currentRunIdRef.current) return
-    setRunPhase(snap.runPhase)
-    setBreakdownOpen(false)
-    if (snap.revealAdvanceIdx != null) flashThenAdvance(snap.revealAdvanceIdx)
   }
   const reset = () => {
     cancelRevealAdvance()
@@ -857,7 +847,7 @@ function AoxMode({
       )}
       <div className="mt-4 rounded-2xl panel p-4">
         <div className="text-center relative">
-          <CardNumber state={state} show={inBack || isLocked} />
+          <CardNumber state={state} show={inBack || (isLocked && liveCardScored)} />
           <div className="text-3xl font-bold">
             {dateVisible ? fmtDate(date.y, date.m, date.d, date._fmt) : '—'}
           </div>
@@ -901,12 +891,7 @@ function AoxMode({
           >
             Reveal
           </button>
-          <OverrideButton
-            overrideAvail={overrideAvail}
-            undoAvail={undoAvail}
-            onOverride={onOverride}
-            onUndo={onUndo}
-          />
+          <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
         </div>
         {/* Show Codes — the SHARED MethodBreakdownSection, exactly like the other four modes
                 (Q5, round 8). AoX's gate isn't "is there a date" but "is the date SHOWABLE": the run

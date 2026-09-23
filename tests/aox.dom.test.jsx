@@ -1614,24 +1614,76 @@ describe('MoX — Override ⇄ Undo', () => {
   }
   const gridLive = () => !isDisabled(dayBtn('Sunday'))
 
-  it('the label toggles Override → Undo → Override, Undo is live, and three cycles never drift', () => {
+  it('the label follows the card it points at, and the toggle never runs out', () => {
     mountApp()
     switchToAox()
     click('Allow Mistakes') // on
     setN(3)
     click('Begin')
-    const d = readDate()
     answerWrong() // 0/1, still running
+    click('Override') // credits the burned card and moves the run on
+    expect(statValue('Score')).toBe('1/1')
+    const live = readDate()
+    // The credited card is now the one behind: the button reads Undo for it, and pressing it is a
+    // score change and nothing else — the run keeps running on the same date, ready to be answered.
     for (let i = 0; i < 3; i++) {
-      click('Override') // Path 3: credit + advance
-      expect(statValue('Score')).toBe('1/1')
-      expect(screen.queryByRole('button', { name: 'Override' })).toBeNull()
       expect(isDisabled(ctrl('Undo'))).toBe(false)
       click('Undo')
       expect(statValue('Score')).toBe('0/1')
-      expect(readDate()).toEqual(d)
+      expect(readDate()).toEqual(live)
+      expect(gridLive()).toBe(true)
       expect(isDisabled(ctrl('Override'))).toBe(false)
+      click('Override')
+      expect(statValue('Score')).toBe('1/1')
+      expect(readDate()).toEqual(live)
     }
+  })
+
+  // ★ THE COMPLETING SOLVE HANDED BACK (spec §7.2). With Allow Mistakes ON, taking the held final
+  // credit away does not fail the run — it hands it back as running, with that card left on screen as
+  // a resolved miss and the existing Next button to carry on from. (With Allow Mistakes off the same
+  // press fails the run instead, which the case below this one pins.)
+  it('taking the held completing solve away with Allow Mistakes on hands the run back, with a Next', () => {
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes') // on
+    setN(2)
+    click('Begin')
+    solveIn(1000)
+    solveIn(1000) // 2/2 — done, still sitting on the completing solve
+    const solved = readDate()
+    expect(bestVal('Mean')).toBe('1.00s')
+    click('Override')
+    expect(statValue('Score')).toBe('1/2')
+    expect(readDate()).toEqual(solved) // the card never left the screen
+    expect(bestVal('Mean')).toBe('—') // the run is not done, so it records nothing
+    expect(ctrl('Next')).toBeInTheDocument() // …and this is the way on, not another press
+    click('Next')
+    expect(readDate()).not.toEqual(solved)
+    solveIn(1000) // finish it again
+    expect(statValue('Score')).toBe('2/3')
+    expect(bestVal('Mean')).toMatch(/^\d+\.\d{2}s$/)
+  })
+
+  // ⚠ THE PHANTOM Q(N+1), THROUGH THE OTHER DOOR. The completing-solve hold stops a run completing
+  // while sitting on a fresh extra question when the press is ON the live card. A press on a PAST card
+  // can complete a run too — and there the live card is a fresh date nobody has answered, which an
+  // ended run must not show as if it were part of the run.
+  it('a press that completes the run from a PAST card shows no phantom extra card', () => {
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes') // on — so a missed card can sit in history uncredited
+    setN(2)
+    click('Begin')
+    solveIn(1000) // 1/1 → card 2
+    click('Reveal') // card 2 is a revealed miss; a non-One-by-One reveal auto-advances
+    act(() => vi.advanceTimersByTime(700))
+    expect(statValue('Score')).toBe('1/2') // on a fresh card 3, run still running
+    click('Override') // credit the missed card 2 → good 2 = N → the run completes
+    expect(statValue('Score')).toBe('2/2')
+    expect(screen.queryByText('Q3')).toBeNull() // the fresh date is not numbered…
+    expect(() => readDate()).toThrow() // …and not shown: no visible date at all
+    expect(bestVal('Mean')).toMatch(/^\d+\.\d{2}s$/) // the run did record, on its own two cards
   })
 
   it('undoing the reversal of a completing solve restores the DONE run and its Best Mean; three cycles leave it unchanged', () => {
@@ -1725,23 +1777,24 @@ describe('MoX — Override ⇄ Undo', () => {
     expect(screen.queryByText('Q3')).toBeNull()
   })
 
-  it('reveal flash: undoing an Override made inside the flash re-arms the auto-advance, which fires once', () => {
+  it('reveal flash: a press cancels the pending auto-advance, and its Undo neither restarts nor strands it', () => {
     mountApp()
     switchToAox()
     click('Allow Mistakes')
     setN(3)
     click('Begin')
     const q1 = readDate()
-    click('Reveal') // Q1 revealed miss, auto-advance armed
-    click('Override') // credit + advance; the auto-advance is cancelled
-    click('Undo') // back on the revealed Q1 — which must not be left stranded with no way on
-    expect(readDate()).toEqual(q1)
+    click('Reveal') // card 1 is a revealed miss, auto-advance armed
+    click('Override') // credit + advance; the armed auto-advance is cancelled
+    const q2 = readDate()
+    expect(q2).not.toEqual(q1)
+    expect(statValue('Score')).toBe('1/1')
+    click('Undo') // flips card 1 back to a miss — it does not step back onto it
+    expect(readDate()).toEqual(q2)
     expect(statValue('Score')).toBe('0/1')
-    act(() => vi.advanceTimersByTime(700))
-    const next = readDate()
-    expect(next).not.toEqual(q1) // moved on, exactly once
+    act(() => vi.advanceTimersByTime(700)) // the cancelled timer stays cancelled…
+    expect(readDate()).toEqual(q2)
     expect(statValue('Score')).toBe('0/1')
-    act(() => vi.advanceTimersByTime(700))
-    expect(readDate()).toEqual(next)
+    expect(gridLive()).toBe(true) // …and the live card is answerable, not stranded
   })
 })
