@@ -1185,12 +1185,13 @@ export default function GuidePage({
           recorded. Classic and Deduction start out this way, with their timing stats already hidden
           and paused until you tap one; Flash starts with them shown. When you turn timing back on,
           the current date is regenerated if still unanswered; if you've already answered wrong,
-          revealed, or shown codes, the date stays until you advance. If any questions were answered
-          while timing was hidden, a desync would arise on re-enable, so turning timing back on
-          opens an "Enable and Reset Stats?" popup — which says, like Reset Stats does, that the
-          other modes keep theirs and no other preset is touched — confirm to turn it on and reset
-          this mode's stats, or dismiss the popup (tap outside it, <Kbd>Esc</Kbd>, or Back) to leave
-          timing hidden.
+          revealed, or shown codes, the date stays until you advance. If a date came to count as
+          correct while timing was hidden — a correct answer, or a credit from Override — it has no
+          time, so your score and your times no longer match; turning timing back on then opens an
+          "Enable and Reset Stats?" popup — which says, like Reset Stats does, that the other modes
+          keep theirs and no other preset is touched — confirm to turn it on and reset this mode's
+          stats, or dismiss the popup (tap outside it, <Kbd>Esc</Kbd>, or Back) to leave timing
+          hidden.
         </p>
         <p>
           When Save Stats is off, the whole stats strip dims site-wide (every mode, including MoX)
