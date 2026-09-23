@@ -485,10 +485,11 @@ describe('Flash — Q7 round-6 (Reset Settings restoring the Flash speed re-sync
   })
 })
 
-// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
-// An Override during a live flash ENDS the flash. Its Undo hands the flash back — and the flash's
-// clock is treated as having kept running through the gap (a clock that stood still would be a free
-// pause), so the Undo lands in whatever phase that clock now reads: still showing, or hidden ("…").
+// ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ───────────────────────────────
+// ★ ONLY A JUDGEMENT ON THE LIVE QUESTION ENDS THE FLASH, because only that takes the question away:
+// crediting the flashed question moves play on, so the reveal window belonged to a card that is no
+// longer on screen. A press on ANY other card — the one behind it, or one browsed to — leaves the
+// live question mid-flash and the flash running, and no press ever restarts a flash that ended.
 describe('Flash — Override ⇄ Undo', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -509,52 +510,66 @@ describe('Flash — Override ⇄ Undo', () => {
   const press = (name) => act(() => fireEvent.click(ctrl(name)))
   const wait = (ms) => act(() => vi.advanceTimersByTime(ms))
 
-  it('undoing inside the reveal window hands the flash back still showing; three cycles never drift', () => {
+  it('crediting the live flashed question ends the flash, and no later press brings it back', () => {
     mountApp()
     switchToFlash()
     press('Begin')
     const date = readDate()
     act(() => fireEvent.click(dayBtn(wrongName(date)))) // 0/1, the flash keeps going
+    expect(ctrl('Reset')).toBeInTheDocument() // …live
+    press('Override') // credits the flashed card and moves play on
+    expect(statValue('Score')).toBe('1/1')
+    expect(ctrl('Begin')).toBeInTheDocument() // the flash is over
+    // The card it credited is now the one behind, so the button reads Undo for it — and toggling it
+    // is a score change and nothing else: the flash that ended stays ended, three cycles over.
     for (let i = 0; i < 3; i++) {
-      press('Override')
-      expect(statValue('Score')).toBe('1/1')
-      expect(ctrl('Begin')).toBeInTheDocument() // the Override ended the flash
       expect(isDisabled(ctrl('Undo'))).toBe(false)
       press('Undo')
       expect(statValue('Score')).toBe('0/1')
-      expect(ctrl('Reset')).toBeInTheDocument() // the flash is live again…
-      expect(dateDisplayText()).toBe(`${date.y}-${date.m}-${date.d}`) // …on the same date, still showing
-      expect(isDisabled(ctrl('Override'))).toBe(false)
+      expect(ctrl('Begin')).toBeInTheDocument() // …not 'Reset': nothing restarted the flash
+      expect(dateDisplayText()).toBe('—') //      …and the date it flashed is not shown again
+      press('Override')
+      expect(statValue('Score')).toBe('1/1')
+      expect(ctrl('Begin')).toBeInTheDocument()
     }
-    wait(2500) // the rest of the window runs out on its own
-    expect(dateDisplayText()).toBe('…')
-    act(() => fireEvent.click(dayBtn(correctName(date)))) // still answerable: a late correct
-    expect(statValue('Score')).toBe('0/1')
+    wait(3000) // and no stale flash timer is waiting to fire
     expect(ctrl('Begin')).toBeInTheDocument()
+    expect(dateDisplayText()).toBe('—')
   })
 
-  it("the flash's clock keeps running between Override and Undo — no free pause", () => {
+  it('a press on a PAST card leaves a live flash running on the date it belongs to', () => {
     mountApp()
     switchToFlash()
     press('Begin')
-    const date = readDate()
-    act(() => fireEvent.click(dayBtn(wrongName(date))))
-    press('Override')
-    wait(3000) // longer than the whole 2000 ms window
-    press('Undo')
-    expect(statValue('Score')).toBe('0/1')
-    expect(ctrl('Reset')).toBeInTheDocument() // live…
-    expect(dateDisplayText()).toBe('…') // …but the window is gone — the date does not come back
-    expect(flashCountdownText()).toBe('0.0s')
+    const first = readDate()
+    act(() => fireEvent.click(dayBtn(correctName(first)))) // 1/1, that flash is over
+    press('Begin') // a second flash, live, with a card behind it
+    const live = readDate()
+    for (let i = 0; i < 3; i++) {
+      press('Override') // the card BEHIND the flashed one — the live question is untouched
+      expect(statValue('Score')).toBe('0/1')
+      expect(ctrl('Reset')).toBeInTheDocument() // …the flash is still live
+      expect(dateDisplayText()).toBe(`${live.y}-${live.m}-${live.d}`) // …still showing its own date
+      press('Undo')
+      expect(statValue('Score')).toBe('1/1')
+      expect(ctrl('Reset')).toBeInTheDocument()
+    }
+    // The window then runs out on its own, exactly as if nothing had been pressed.
+    wait(2500)
+    expect(dateDisplayText()).toBe('…')
+    // …and it is still answerable, and still a clean credit — hiding the date is not a burn in Flash,
+    // which is exactly what it would be if a press had ended this flash early.
+    act(() => fireEvent.click(dayBtn(correctName(live))))
+    expect(statValue('Score')).toBe('2/2')
   })
 
-  it('an Override with no live flash is undone on the score alone (the flash stays idle)', () => {
+  it('a press with no live flash is a score change alone (the flash stays idle)', () => {
     mountApp()
     switchToFlash()
     press('Begin')
     const date = readDate()
     act(() => fireEvent.click(dayBtn(correctName(date)))) // 1/1, flash over
-    press('Override') // Path 5 on the idle screen
+    press('Override') // the card just finished, from the idle screen
     expect(statValue('Score')).toBe('0/1')
     press('Undo')
     expect(statValue('Score')).toBe('1/1')

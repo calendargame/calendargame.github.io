@@ -284,9 +284,11 @@ describe('Classic — characterization (batch 3: Back/Forward + history Override
 })
 
 // ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
-// "Undo will only show when pressing the override button would otherwise be locked, then you can
-// always override/undo anything continuously forever." One button: after an Override it reads Undo
-// and puts back exactly what the Override changed; then it reads Override again.
+// "everything will either say override or undo, no locked override anymore. We just gotta store what
+// you got wrong so that if you get smth wrong then override then later come back to that question by
+// browsing or from another preset or smth and undo there it shows your original red highlight(s)."
+// Every scored date remembers how it was answered plus whether it is overridden, so the button reads
+// the date it points at — Undo when that date is overridden, Override when it is not — forever.
 describe('Classic — Override ⇄ Undo', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -306,26 +308,37 @@ describe('Classic — Override ⇄ Undo', () => {
     date: readDate(),
   })
 
-  it('Path 3: the label toggles Override → Undo → Override, Undo is live, and three cycles never drift', () => {
+  it('crediting the live wrong moves play on, and the button then reads Undo for the card behind', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1, burned
-    const before = snapshot()
-    fireEvent.click(ctrl('Override')) // Path 3: credit + advance
-    const after = snapshot()
-    expect(after.score).toBe('1/1')
-    expect(after.date).not.toEqual(q1) // advanced
+    fireEvent.click(ctrl('Override')) // credits the burned live card and moves play on
+    const live = snapshot()
+    expect(live.score).toBe('1/1')
+    expect(live.date).not.toEqual(q1)
+    // ★ THE PRESS FLIPS A CARD; IT DOES NOT REWIND PLAY. The card it just credited is the one
+    // behind, so the button reads Undo for it while the fresh question stays exactly where it is —
+    // and it never runs out, three cycles or thirty.
     for (let i = 0; i < 3; i++) {
       expect(isDisabled(ctrl('Undo'))).toBe(false)
       fireEvent.click(ctrl('Undo'))
-      expect(snapshot()).toEqual(before) // back on the burned question, 0/1
-      expect(dayState(wrongName(q1))).toBe('wrong-latest')
+      expect(snapshot()).toEqual({ score: '0/1', streak: '0/0', date: live.date })
       expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
       expect(isDisabled(ctrl('Override'))).toBe(false)
       fireEvent.click(ctrl('Override'))
-      expect(snapshot().score).toBe(after.score) // the date re-draws; the score never drifts
-      expect(snapshot().streak).toBe(after.streak)
+      expect(snapshot()).toEqual(live) // the score, the streak and the date, all where they were
     }
+    // …and the reds the Undo put back are there to be seen: browse to that card and it is the grid
+    // the player left, not the answer the Override painted over it (the owner's sentence).
+    fireEvent.click(ctrl('Undo'))
+    fireEvent.click(ctrl('<'))
+    expect(readDate()).toEqual(q1)
+    // 'wrong-prev', not 'wrong-latest': a history card's reds are always dimmed beside the
+    // synthesized green (answerButtons.entryWithGreen), and advance() gives state A the SAME green —
+    // so an undone card looks exactly like a card that was never overridden, which is the point.
+    expect(dayState(wrongName(q1))).toBe('wrong-prev')
+    expect(dayState(correctName(q1))).toBe('correct')
+    expect(ctrl('Override')).toBeInTheDocument() // the card is back in A, so the word is Override
   })
 
   it('Path 5 toggles on the history entry and leaves the live question alone', () => {
@@ -369,22 +382,38 @@ describe('Classic — Override ⇄ Undo', () => {
     expect(ctrl('Override')).toBeInTheDocument()
   })
 
-  it('Undo lasts only until your next action — anything else puts the button back to its old meaning', () => {
+  // ★ THE INVERSION OF THE OLD RULE, and the heart of what the owner asked for. An Override used to
+  // last "until your next action": play on and the way back was gone forever. Now the record belongs
+  // to the DATE, so playing on, browsing away and coming back all leave it exactly where it was, and
+  // the button reads Undo the moment it points at that date again.
+  it('an Override outlives every later action — play on, browse back, and it still toggles', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(q1))) // 1/1
-    fireEvent.click(ctrl('Override')) // Path 5: 0/1, Undo offered
+    fireEvent.click(ctrl('Override')) // take q1's credit away: 0/1, and q1 is overridden
     const q2 = readDate()
-    fireEvent.click(dayBtn(correctName(q2))) // play on — the window closes
+    fireEvent.click(dayBtn(correctName(q2))) // play on — which used to close the window
     expect(statValue('Score')).toBe('1/2')
-    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    // The button now points at q2 (the card just finished, in A), so it reads Override…
     expect(ctrl('Override')).toBeInTheDocument()
-    // …and a Back/Forward round trip does not bring it back either.
-    fireEvent.click(ctrl('Override')) // Path 5 on q2: 0/2
+    // …and browsing back to q1 finds it still overridden, two cards later.
     fireEvent.click(ctrl('<'))
+    fireEvent.click(ctrl('<'))
+    expect(readDate()).toEqual(q1)
+    expect(dayState(correctName(q1))).toBe('override-wrong')
+    expect(ctrl('Undo')).toBeInTheDocument()
+    fireEvent.click(ctrl('Undo')) // …and it undoes there, not where it was pressed
+    expect(statValue('Score')).toBe('2/2')
+    expect(dayState(correctName(q1))).toBe('correct')
+    expect(ctrl('Override')).toBeInTheDocument()
+    // A Back/Forward round trip changes nothing about any of it.
+    fireEvent.click(ctrl('Override'))
     fireEvent.click(ctrl('>'))
-    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
-    expect(statValue('Score')).toBe('0/2')
+    fireEvent.click(ctrl('>'))
+    expect(statValue('Score')).toBe('1/2')
+    fireEvent.click(ctrl('<'))
+    fireEvent.click(ctrl('<'))
+    expect(ctrl('Undo')).toBeInTheDocument()
   })
 })
 
@@ -615,16 +644,16 @@ describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-0
   })
 })
 
-// ── Override + back-browse: credit a question AT MOST ONCE (deliberate fix, 2026-06-06) ─────────
-// Owner-reported scenarios. The bug: crediting a back-browsed wrong entry (Path 1) does NOT
-// invalidate the live question's pendingWrongOverride (which targets the SAME entry), so Forward +
-// Override credits it again (Path 4) → impossible 2/1. New (not Forward) happened to clear it, which
-// is why the New variants were already correct. Plus an asymmetry: a wrong ANSWER stores a stats
-// snapshot on its history entry (so it can be back-browse-overridden), but Reveal / Show Codes set
-// that snapshot to null — so a revealed/show-coded question can't be overridden after New + Back,
-// even though it was scored and should be. These lock the correct behavior (the 2/3 + Reveal/Show
-// Codes cases fail RED against the pre-fix engine).
-describe('Classic — Override credits a question at most once (fix 2026-06-06)', () => {
+// ── Override + back-browse: a question can never be credited TWICE (owner's scenarios, 2026-06-06) ─
+// Owner-reported scenarios, and the reason the old engine had a per-question lock: crediting a
+// back-browsed wrong entry did not invalidate the live question's pending override (which targeted the
+// SAME entry), so Forward + Override credited it again → an impossible 2/1. The lock is GONE (round 23
+// Q6) and the guarantee is stronger without it: a card's credit is its as-answered credit XOR one
+// `overridden` bit, so a second press on the same card is its Undo, by construction, whatever route
+// the player took to it. These six scenarios are kept exactly as the owner reported them and now
+// assert that shape — the button reads Undo on the card it already flipped, and pressing it takes the
+// credit back instead of stacking a second one.
+describe('Classic — a question is never credited twice (owner scenarios, 2026-06-06)', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
@@ -638,74 +667,80 @@ describe('Classic — Override credits a question at most once (fix 2026-06-06)'
     document.getElementById('root')?.remove()
   })
 
-  // Scenario 1 (already correct): first-try correct → back → override flips it → forward → locked.
-  it('S1: correct → back → override (flip to wrong) → forward → Override locked', () => {
+  // Scenario 1: first-try correct → back → the press flips it to a miss → forward → it reads Undo.
+  it('S1: correct → back → Override (flip to a miss) → forward → the button reads Undo for it', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(q1))) // 1/1 → advance
     fireEvent.click(ctrl('<')) // back to Q1
-    fireEvent.click(ctrl('Override')) // Path 1: flip correct→wrong → 0/1
+    fireEvent.click(ctrl('Override')) // browsed: flip correct → a miss → 0/1
     expect(statValue('Score')).toBe('0/1')
     fireEvent.click(ctrl('>')) // forward to live
-    expect(isDisabled(ctrl('Override'))).toBe(true)
-    expect(statValue('Score')).toBe('0/1')
+    expect(ctrl('Undo')).toBeInTheDocument() // the fresh question's button points back at Q1
+    fireEvent.click(ctrl('Undo'))
+    expect(statValue('Score')).toBe('1/1') // its credit, back — never 2/1, never 0/1 twice
   })
 
-  // Scenario 2 (BUG): wrong→right → back → override (credit) → forward → override must be LOCKED.
-  it('S2: wrong→right → back → override → forward → Override locked, no double-credit (not 2/1)', () => {
+  // Scenario 2 (the reported BUG): wrong→right → back → credit it → forward → a second press must
+  // take the credit BACK, not add another one (the old engine's 2/1).
+  it('S2: wrong→right → back → Override → forward → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1
-    fireEvent.click(dayBtn(correctName(q1))) // wrong→right: advance, pendingWrongOverride armed
+    fireEvent.click(dayBtn(correctName(q1))) // wrong→right: advance, Q1 pushed as a miss
     expect(statValue('Score')).toBe('0/1')
     fireEvent.click(ctrl('<')) // back to Q1
-    fireEvent.click(ctrl('Override')) // Path 1: credit Q1 → 1/1
+    fireEvent.click(ctrl('Override')) // browsed: credit Q1 → 1/1
     expect(statValue('Score')).toBe('1/1')
     fireEvent.click(ctrl('>')) // forward to live
-    expect(isDisabled(ctrl('Override'))).toBe(true) // Q1 already credited — must not credit again
-    expect(statValue('Score')).toBe('1/1')
+    expect(ctrl('Undo')).toBeInTheDocument()
+    fireEvent.click(ctrl('Undo'))
+    expect(statValue('Score')).toBe('0/1')
   })
 
-  // Scenario 3 (BUG): wrong → New → back → override (credit) → forward → override must be LOCKED.
-  it('S3: wrong → New → back → override → forward → Override locked, no double-credit (not 2/1)', () => {
+  // Scenario 3 (the same BUG by the New route).
+  it('S3: wrong → New → back → Override → forward → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1
-    fireEvent.click(ctrl('New')) // advance, pendingWrongOverride armed
+    fireEvent.click(ctrl('New')) // advance, Q1 pushed
     fireEvent.click(ctrl('<')) // back to Q1
-    fireEvent.click(ctrl('Override')) // Path 1: credit Q1 → 1/1
+    fireEvent.click(ctrl('Override')) // browsed: credit Q1 → 1/1
     expect(statValue('Score')).toBe('1/1')
     fireEvent.click(ctrl('>')) // forward to live
-    expect(isDisabled(ctrl('Override'))).toBe(true)
-    expect(statValue('Score')).toBe('1/1')
+    expect(ctrl('Undo')).toBeInTheDocument()
+    fireEvent.click(ctrl('Undo'))
+    expect(statValue('Score')).toBe('0/1')
   })
 
-  // Scenario 4 (already correct): wrong→right → back → override → New → locked.
-  it('S4: wrong→right → back → override → New → Override locked', () => {
+  // Scenario 4: wrong→right → back → credit → New.
+  it('S4: wrong→right → back → Override → New → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1)))
     fireEvent.click(dayBtn(correctName(q1))) // advance, 0/1
     fireEvent.click(ctrl('<'))
-    fireEvent.click(ctrl('Override')) // Path 1 credit → 1/1
+    fireEvent.click(ctrl('Override')) // browsed: credit → 1/1
     expect(statValue('Score')).toBe('1/1')
     fireEvent.click(ctrl('New'))
-    expect(isDisabled(ctrl('Override'))).toBe(true)
-    expect(statValue('Score')).toBe('1/1')
+    expect(ctrl('Undo')).toBeInTheDocument()
+    fireEvent.click(ctrl('Undo'))
+    expect(statValue('Score')).toBe('0/1')
   })
 
-  // Scenario 5 (already correct): wrong → New → back → override → New → locked.
-  it('S5: wrong → New → back → override → New → Override locked', () => {
+  // Scenario 5: wrong → New → back → credit → New.
+  it('S5: wrong → New → back → Override → New → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1)))
     fireEvent.click(ctrl('New'))
     fireEvent.click(ctrl('<'))
-    fireEvent.click(ctrl('Override')) // Path 1 credit → 1/1
+    fireEvent.click(ctrl('Override')) // browsed: credit → 1/1
     expect(statValue('Score')).toBe('1/1')
     fireEvent.click(ctrl('New'))
-    expect(isDisabled(ctrl('Override'))).toBe(true)
-    expect(statValue('Score')).toBe('1/1')
+    expect(ctrl('Undo')).toBeInTheDocument()
+    fireEvent.click(ctrl('Undo'))
+    expect(statValue('Score')).toBe('0/1')
   })
 
   // Owner's extra find (BUG): a revealed question must be back-browse-overridable after New.
@@ -735,19 +770,21 @@ describe('Classic — Override credits a question at most once (fix 2026-06-06)'
   })
 
   // New while browsing a credited entry must not duplicate it (which would let it be re-credited).
-  it('New while browsing a credited entry → no duplicate, no re-credit (stays 1/1, Override locked)', () => {
+  it('New while browsing a credited entry → no duplicate, and the one copy still toggles', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1
     fireEvent.click(ctrl('New')) // advance, Q1 pushed
     fireEvent.click(ctrl('<')) // back to Q1
-    fireEvent.click(ctrl('Override')) // Path 1: credit Q1 → 1/1 (still browsing the credited Q1)
+    fireEvent.click(ctrl('Override')) // browsed: credit Q1 → 1/1 (still browsing the credited Q1)
     expect(statValue('Score')).toBe('1/1')
     fireEvent.click(ctrl('New')) // New WHILE browsing — must return to live + advance, not duplicate Q1
     expect(statValue('Score')).toBe('1/1')
     fireEvent.click(ctrl('<')) // back to the (single, credited) Q1
-    expect(isDisabled(ctrl('Override'))).toBe(true) // already credited → cannot re-credit
-    expect(statValue('Score')).toBe('1/1')
+    expect(screen.getByText('Q1')).toBeInTheDocument() // …and it is still card 1 — one copy, not two
+    expect(isDisabled(ctrl('<'))).toBe(true) // nothing older behind it
+    fireEvent.click(ctrl('Undo')) // its own record, not a second crediting of a duplicate
+    expect(statValue('Score')).toBe('0/1')
   })
 })
 

@@ -44,10 +44,10 @@ export function engineFresh(s: GameState) {
     s.locked === false &&
     s.revealed === false &&
     s.countedWrong === false &&
-    s.canOverrideCorrect === false &&
-    s.pendingWrongOverride === null &&
-    s.overrideUsedThisQ === false &&
-    s.undoCapsule === null &&
+    // Nothing on the card: never wrong, never overridden (round 23 Q6 — one record replaced the
+    // four flags the old Override machinery kept here).
+    s.card.wrongTime === null &&
+    s.card.answered === null &&
     s.calcOpen === false &&
     s.calcPenaltyActive === false
   )

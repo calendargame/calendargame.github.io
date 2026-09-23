@@ -217,12 +217,13 @@ function DeductionMode({
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i, n: date.options.length })
     eng.answer(i)
   }
-  // Override-after-wrong flashes green on the correct option, matching App's dedFlash branch. Its
-  // Undo is the ACTIVE silo's engine alone (components/OverrideButton): Deduction keeps no state of
-  // its own that an Override changes, and switching sub-type shows a different silo whose own
-  // capsule, if any, is what the button then offers.
+  // The one Override ⇄ Undo press (round 23 Q6), on the ACTIVE silo's engine. A press that CREDITS
+  // the live puzzle flashes green on the correct option, matching App's dedFlash branch. Deduction
+  // keeps no state of its own that an Override changes, and switching sub-type shows a different
+  // silo, whose own cards — each with their own Override records — are what the button then reads.
   const onOverride = () => {
-    if (state.countedWrong)
+    const plan = eng.overridePlan
+    if (plan?.target === 'live' && plan.credits)
       setFlashWithTimeout({ type: 'good', idx: correct, n: date.options.length })
     eng.override()
   }
@@ -639,12 +640,7 @@ function DeductionMode({
             >
               Reveal
             </button>
-            <OverrideButton
-              overrideAvail={overrideAvail}
-              undoAvail={undoAvail}
-              onOverride={onOverride}
-              onUndo={eng.undo}
-            />
+            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={calcTarget}

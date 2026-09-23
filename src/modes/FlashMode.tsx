@@ -8,7 +8,6 @@ import {
   useStatsHideToggles,
   engineFresh,
   useResetStatsConfirm,
-  usePlayClock,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS, RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
@@ -101,14 +100,14 @@ function FlashMode({
       flashBarRef.current.style.transform = 'scaleX(1)'
     }
   }
-  // Sweep the bar to empty over `ms`, starting from `from` (1 = full). Begin sweeps a whole flash from
-  // full; an Undo that hands a live flash back sweeps what was left of it from where it stood.
-  const startFlashBar = (ms: number, from = 1) => {
+  // Sweep the bar to empty over `ms`, from full — one whole flash. (The rotate-overlay pause resumes
+  // a half-swept bar instead, inline in its own effect, from the scale it pinned.)
+  const startFlashBar = (ms: number) => {
     requestAnimationFrame(() => {
       if (!flashBarRef.current) return
       const s = flashBarRef.current
       s.style.transition = 'none'
-      s.style.transform = `scaleX(${from})`
+      s.style.transform = 'scaleX(1)'
       s.getBoundingClientRect()
       s.style.transition = `transform ${ms}ms linear`
       s.style.transform = 'scaleX(0)'
@@ -266,60 +265,30 @@ function FlashMode({
     if (open && active) freezeFlash()
     eng.showCodes(open)
   }
-  // ── Override ⇄ Undo (round 23 Q6) ──
-  // An Override during a live flash ENDS the flash (below). Its Undo must hand the flash back, or
-  // "Undo" would leave the player on their question with the date blanked and the grid dead — an
-  // Undo of the score that is not an undo of the screen. The rule is the timed modes' rule: as if the
-  // Override never happened, which means the flash's clock KEPT RUNNING through the gap (a clock that
-  // stood still would be a free pause — Override, stare, Undo). So the Override notes the phase, what
-  // was left of the reveal window, and the play clock (usePlayClock — rotate-overlay time excluded);
-  // the Undo puts the flash back in whatever phase that clock now says it would be in: still showing
-  // with the rest of its window, or already hidden ("…"). Null = the Override touched no flash (it was
-  // not live), so its Undo is the engine's alone. Only one Override can be pending, so one slot.
-  const playNow = usePlayClock(clockPaused)
-  const flashUndoRef = useRef<{ phase: string; leftMs: number; at: number } | null>(null)
+  // ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ──
+  // ★ ONLY A JUDGEMENT ON THE LIVE QUESTION ENDS THE FLASH, because only that takes the question
+  // away: crediting the flashed question moves play on to a fresh date, so the reveal window the
+  // player was in belongs to a question that is no longer on screen. A press on any OTHER card —
+  // the one behind this one, or one browsed to — leaves the live question exactly where it was,
+  // mid-flash, and the flash must keep running: it is that question's reveal window, and stopping
+  // it would blank a date the player is still answering (and hand them the un-flashed date for
+  // free on the next press). Its Undo needs nothing here either — the flash never stopped.
+  // A press that credits the live question also flashes green on the correct button, as in Classic.
   const onOverride = () => {
-    const wasActive = active
-    flashUndoRef.current = wasActive
-      ? {
-          phase: flashPhase,
-          leftMs:
-            flashDeadlineRef.current != null
-              ? Math.max(0, flashDeadlineRef.current - performance.now())
-              : 0,
-          at: playNow(),
-        }
-      : null
-    if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct })
+    const plan = eng.overridePlan
+    const live = plan?.target === 'live'
+    // Does this press move play on? Flash never asks the engine to HOLD a credit, so it is exactly
+    // "the live card goes from as-answered to a credited override" — the same rule the engine's
+    // overrideAdvances applies, read from the same plan. Written out rather than inferred from "the
+    // target is live": an Undo on a live card in an override state would NOT advance, and stopping
+    // the flash for it would blank a date the player is still answering. (Flash cannot reach that
+    // state today — a credit here always advances — and this needs no such argument to be right.)
+    const advanced = live && !plan.overridden && plan.credits
+    if (advanced) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override()
-    if (wasActive) {
+    if (advanced && active) {
       setActive(false)
       stopFlash()
-    }
-  }
-  const onUndo = () => {
-    eng.undo()
-    const snap = flashUndoRef.current
-    flashUndoRef.current = null
-    if (!snap) return
-    const left = snap.phase === 'show' ? snap.leftMs - (playNow() - snap.at) : 0
-    setActive(true)
-    setShowTimerDate(false)
-    if (left > 0) {
-      // Still inside the reveal window: re-arm exactly what begin() arms, for what is left of it.
-      setFlashPhase('show')
-      flashDeadlineRef.current = performance.now() + left
-      setFlashRemainMs(left)
-      clearTimeout(flashTimerRef.current ?? undefined)
-      flashTimerRef.current = setTimeout(endFlashPhase, Math.max(50, left)) // begin()'s ≥50ms floor
-      startFlashBar(left, Math.min(1, left / flashMs))
-    } else {
-      // The window has closed (or had already): the date is hidden and the question is answerable.
-      endFlashPhase()
-      if (flashBarRef.current) {
-        flashBarRef.current.style.transition = 'none'
-        flashBarRef.current.style.transform = 'scaleX(0)'
-      }
     }
   }
   const resetRound = () => {
@@ -579,12 +548,7 @@ function FlashMode({
             >
               Reveal
             </button>
-            <OverrideButton
-              overrideAvail={overrideAvail}
-              undoAvail={undoAvail}
-              onOverride={onOverride}
-              onUndo={onUndo}
-            />
+            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={shouldShowTimerDate || inBack ? date : null}

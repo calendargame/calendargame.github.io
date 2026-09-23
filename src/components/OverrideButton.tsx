@@ -3,16 +3,21 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 
 // OverrideButton — the Override ⇄ Undo control at the end of every mode's action row (round 23 Q6).
 //
-// ONE BUTTON, TWO MEANINGS, AND IT CAN ONLY EVER MEAN ONE. Where an Override used to leave the button
-// greyed out, it now reads Undo and puts back exactly what that Override changed; then it reads
-// Override again, as many times as the player likes. The two can never be offered at once: the
-// engine's `overrideAvail` is already false in every state an Override leaves behind (see
-// engine/useGameEngine — and the fuzz asserts it every step), which is precisely where `undoAvail`
-// is true. So the label follows `undoAvail`, and the button is inert only when neither is available.
+// ONE BUTTON, ONE PRESS, AND THE CARD DECIDES WHAT IT MEANS. Every scored date remembers how you
+// answered it plus whether it has been overridden, so the button simply reads the date it points at
+// (the live one, the one you have browsed to, or the one you just finished): it says Undo when that
+// date is currently overridden and Override when it is not, and a press flips it the other way.
+// There is no "used it once" state left anywhere — the same date can be toggled as many times as
+// the player likes, today or after browsing back to it tomorrow.
+//
+// `avail` is false in one situation only: there is genuinely no date to point at (a fresh mode with
+// no history behind it — or, in the casual modes, Save Stats off for the date on screen). The word
+// follows `overridden`; the two are computed together from the engine's one selector
+// (engine/useGameEngine → gameReducer's overridePlan), so the label can never disagree with the flip.
 //
 // It was the same markup in all five mode screens; the toggle would have made it the same five
 // ternaries too, so the markup, the label rule and the inert rule live here and each mode supplies
-// only its two handlers (a timed mode's handlers also carry the round/run half of the reversal).
+// only its handler (a timed mode's handler also carries the round/run half of the flip).
 // `data-key="O"` stays on the one element: App's keyboard handler clicks whatever the button
 // currently is, so the O key follows the label for free.
 //
@@ -55,15 +60,13 @@ const DOUBLE_PRESS_MS = 350
 const POINTER_PRESS_MS = 1000
 
 const OverrideButton = ({
-  overrideAvail,
-  undoAvail,
-  onOverride,
-  onUndo,
+  avail,
+  overridden,
+  onToggle,
 }: {
-  overrideAvail: boolean
-  undoAvail: boolean
-  onOverride: () => void
-  onUndo: () => void
+  avail: boolean
+  overridden: boolean
+  onToggle: () => void
 }) => {
   // The last press this button ACTED on, and the last pointerdown it saw. −Infinity so the first
   // press of a mount is never inside either window, however long the page has been open.
@@ -74,20 +77,19 @@ const OverrideButton = ({
     const fromPointer = e.detail > 0 || now - lastPointerRef.current < POINTER_PRESS_MS
     if (fromPointer && now - lastPressRef.current < DOUBLE_PRESS_MS) return
     lastPressRef.current = now
-    if (undoAvail) onUndo()
-    else onOverride()
+    onToggle()
   }
   return (
     <button
       type="button"
       data-key="O"
-      className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${undoAvail || overrideAvail ? '' : 'opacity-60 pointer-events-none'}`}
+      className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${avail ? '' : 'opacity-60 pointer-events-none'}`}
       onPointerDown={() => {
         lastPointerRef.current = performance.now()
       }}
       onClick={press}
     >
-      {undoAvail ? 'Undo' : 'Override'}
+      {overridden ? 'Undo' : 'Override'}
     </button>
   )
 }

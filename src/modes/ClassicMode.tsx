@@ -95,11 +95,14 @@ function ClassicMode({
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i })
     eng.answer(i)
   }
-  // Override Path 3 (override-after-wrong) flashes green on the correct button, matching App. Its
-  // Undo (the same button, relabelled — components/OverrideButton) is the engine's alone: Classic
-  // keeps no state of its own that an Override changes.
+  // The one Override ⇄ Undo press (round 23 Q6). A press that CREDITS the live question flashes
+  // green on the correct button, matching App — read from the engine's plan (what this press will do
+  // to which card) rather than from `countedWrong`, so the flash follows the rule instead of
+  // restating it. Everything else is the engine's alone: Classic keeps no state of its own that an
+  // Override changes, in either direction.
   const onOverride = () => {
-    if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct })
+    const plan = eng.overridePlan
+    if (plan?.target === 'live' && plan.credits) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override()
   }
 
@@ -216,12 +219,7 @@ function ClassicMode({
             >
               Reveal
             </button>
-            <OverrideButton
-              overrideAvail={overrideAvail}
-              undoAvail={undoAvail}
-              onOverride={onOverride}
-              onUndo={eng.undo}
-            />
+            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={date}
