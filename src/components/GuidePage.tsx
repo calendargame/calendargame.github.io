@@ -785,38 +785,44 @@ export default function GuidePage({
         </p>
         <p>
           <b>Override</b> — fix a mistake. Override any date in your history by browsing to it with
-          Back/Forward:
+          Back/Forward. The one button always tells you which state that date is in: it reads{' '}
+          <b>Override</b> when the date still counts the way you answered it, and <b>Undo</b> when
+          you have already overridden it.
         </p>
         <UL>
           <li>After a wrong answer: gives you credit with time recorded and adjusts your score.</li>
           <li>After a correct answer: undoes the credit and adjusts your score.</li>
           <li>
             You can also override the most recent past date directly from a fresh, untouched live
-            question (any mode) — Override is enabled when the live date hasn't been answered yet,
-            and tapping it flips your previous date's right/wrong status.
+            question (any mode) — the button points at that past date, so it reads <b>Undo</b> there
+            when that date is already overridden, and tapping it flips its right/wrong status either
+            way.
           </li>
           <li>
             A previously correct date flipped to wrong shows a green-and-red diagonal split:
-            green-upper-left (originally correct), red-lower-right (now counted wrong).
+            green-upper-left (originally correct), red-lower-right (now counted wrong). Undo puts
+            the plain green back.
           </li>
           <li>
-            Overriding a wrong answer (however you do it) clears any wrong highlights; only the
-            correct answer is shown.
+            Overriding a wrong answer (however you do it) shows only the correct answer — but your
+            wrong highlights are not lost, they are stored with that date. Undo brings back exactly
+            the reds you left there.
           </li>
           <li>
-            <b>Undo</b> — once you've overridden, the Override button turns into <b>Undo</b>. Undo
-            puts back exactly what that Override changed (your score, streak, times, the date on
-            screen, and in Blitz, Flash and MoX the round, flash or run too), and the button reads
-            Override again. You can switch back and forth as many times as you like. A second tap
-            within about a third of a second of the first is ignored, so a quick double-tap
-            can&apos;t override and then immediately undo it — tap again a moment later. (The{' '}
-            <Kbd>O</Kbd> key is never held back this way.)
+            <b>Undo</b> — when the button reads Undo, tapping it puts that date back the way you
+            answered it: its original right/wrong marks, its own solve time, and your score, streak
+            and mean with it. Then it reads Override again. You can switch back and forth as many
+            times as you like, forever. A second tap within about a third of a second of the first
+            is ignored, so a quick double-tap can&apos;t override and then immediately undo it — tap
+            again a moment later. (The <Kbd>O</Kbd> key is never held back this way.)
           </li>
           <li>
-            Undo only lasts until your next action. Answer, press New, Reveal, Show Codes, Back or
-            Forward, Reset — or let a Blitz clock run out — and the Override stays as it is; the
-            button goes back to Override (greyed out if that date has already been overridden). Undo
-            also doesn't survive switching presets.
+            There is no time limit and nothing is ever used up. Every date in your history remembers
+            how you answered it and whether it is overridden — so you can answer more questions,
+            browse away and come back to it, and the button still reads Undo there and still works.
+            A Blitz round or MoX run that comes back after a preset switch brings all of it with it.
+            What clears these dates is what clears history itself: a Reset (or a Full Reset), and
+            closing the app.
           </li>
         </UL>
         <p>Override in the run modes:</p>
@@ -827,19 +833,25 @@ export default function GuidePage({
             the round, just like a wrong answer; with it on, the round keeps going.
           </li>
           <li>
-            <b>MoX</b> — without Allow Mistakes, overriding a correct answer ends the run.
+            <b>MoX</b> — without Allow Mistakes, flipping a date to wrong ends the run. With Allow
+            Mistakes on, taking the credit off the solve that finished the run hands the run back to
+            you: that date stays on screen as a resolved miss and a <b>Next</b> button carries the
+            run on.
           </li>
           <li>
             In both run modes, if a round/run ended because you answered wrong, revealed, or showed
-            codes, Override credits that question and it continues — picking up where it left off
-            instead of staying ended.
+            codes, crediting that question continues it — picking up where it left off instead of
+            staying ended.
           </li>
           <li>
-            Undo reverses the round or run along with the score: a resumed round or run ends again,
-            and one the Override ended picks back up. Blitz&apos;s clock is put back as if you had
-            never overridden — a round that had ended gets back exactly the time it had left, while
-            a round that was still going (including one your Override ended) has kept counting down
-            the whole time, so Override and Undo are never a free pause.
+            Because the button works both ways, a tap can also end a round or run that is still
+            going (a flip to wrong with Allow Mistakes off) and then put it back. In Blitz the clock
+            tells you which happened. A round that ended because its question was answered, revealed
+            or show-coded has its answer on screen, so its clock is FROZEN and comes back untouched.
+            A round a tap ended still has its live date on screen, unanswered — so its clock keeps
+            counting down while the round sits ended, in full view, and putting the round back costs
+            you every second of that. Waiting is never free, and if the clock runs out while the
+            round waits, the round is over for good.
           </li>
           <li>
             Override is <b>locked</b> when Save Stats is off in the casual modes (Classic, Flash,
@@ -1186,7 +1198,7 @@ export default function GuidePage({
           <li>
             <b>The list always adds up to the mean above it.</b> The summary is worked out from the
             rows themselves, not from a second running total, so the two cannot drift apart — and an
-            Override on an ended run moves the rows and the mean together.
+            Override or an Undo on an ended run moves the rows and the mean together.
           </li>
           <li>
             <b>It isn't saved.</b> The breakdown is built from the ended run or round on your
@@ -2466,8 +2478,8 @@ export default function GuidePage({
         <Lead>The main practice mode — no time pressure, answer at your own pace.</Lead>
         <UL>
           <li>
-            Override works after both wrong and correct answers, and Undo takes it back until your
-            next action.
+            Override works after both wrong and correct answers, and Undo takes it back — on that
+            date, whenever you next point the button at it.
           </li>
           <li>
             Reset Stats clears your stats and question history; when timing stats are hidden and you
@@ -2515,15 +2527,17 @@ export default function GuidePage({
           </li>
           <li>
             <b>Override</b> — after wrong: gives credit with time recorded, preserves streak. After
-            correct: undoes the credit, resets streak, and either ends the run (Allow Mistakes off)
-            or advances to a new date (Allow Mistakes on). If a run ended (a wrong answer, a Reveal,
-            or a Show Codes with Allow Mistakes off), Override credits that question and the run
-            continues where it left off. You can also override past dates while browsing back. If
-            overriding on the last question with Allow Mistakes on, a new date is generated to
-            complete the mean. Once used, the button turns into Undo, which puts back the score and
-            the run exactly as they were — a failed run fails again, a completed one completes again
-            — until your next action; you can switch between Override and Undo as often as you like.
-            Override works the same whether Save Stats is on or off.
+            correct: undoes the credit and resets streak. With Allow Mistakes off that ends the run.
+            With it on, the date stays on screen as a resolved miss and a <b>Next</b> button carries
+            the run on. If a run ended (a wrong answer, a Reveal, or a Show Codes with Allow
+            Mistakes off), crediting that question continues the run where it left off. You can also
+            override past dates while browsing back. If overriding on the last question with Allow
+            Mistakes on, a new date is generated to complete the mean. When a date is already
+            overridden the button reads <b>Undo</b> for it, which puts back the score, that date's
+            own marks and time, and the run's state with them — a failed run fails again, a
+            completed one completes again. There is no time limit and nothing is used up: you can
+            switch a date between Override and Undo as often as you like, now or after browsing back
+            to it later. Override works the same whether Save Stats is on or off.
           </li>
         </UL>
         <Subhead>Stats and bests</Subhead>
@@ -2541,10 +2555,12 @@ export default function GuidePage({
           Bests stay honest under Override: a finished run's record follows its corrected stats —
           overriding away one of its credited solves (on the last question or while browsing back)
           restores the best that stood before the run, and a correction that changes the run's mean
-          or median updates its record to match. The score display freezes when a run ends and only
-          resets after pressing Reset. Leaving MoX mid-run resets it; a run that has ended —
-          completed or failed — stays on screen when you come back, from another mode or from
-          another preset, until you press Reset or Full Reset, or close the app.
+          or median updates its record to match. That holds however many times you toggle a date,
+          including after a preset switch: a best follows the run it belongs to, and the last tap
+          decides. The score display freezes when a run ends and only resets after pressing Reset.
+          Leaving MoX mid-run resets it; a run that has ended — completed or failed — stays on
+          screen when you come back, from another mode or from another preset, until you press Reset
+          or Full Reset, or close the app.
         </p>
         <p>
           Bests are tracked per exact configuration: MoX run length, Allow Mistakes, Date Format (or
@@ -2668,8 +2684,9 @@ export default function GuidePage({
           Stats are tracked separately for each sub-type, and Back/Forward only walks the current
           sub-type's entries. Reset Stats clears the current sub-type's stats and history only; the
           others are untouched. Override and its Undo work as they do in Classic, and each sub-type
-          has its own: they act only on the sub-type you are playing. When timing stats are hidden
-          and you haven't burned the current question, the question is kept.
+          keeps its own dates and their own Override records: the button always means a date in the
+          sub-type you are playing. When timing stats are hidden and you haven't burned the current
+          question, the question is kept.
         </p>
       </GuideSection>
       <GuideSection id="flash" title="Flash" openId={open} onToggle={toggle} durationMs={motionMs}>
@@ -2691,9 +2708,11 @@ export default function GuidePage({
           miss; Show Codes does the same and also opens the calculation breakdown.
         </p>
         <p>
-          An Override made while the date is showing ends that flash. Undoing it brings the flash
-          back, with whatever of its reveal time would still be left — the countdown keeps running
-          in between, so Override and Undo are never a free look at the date.
+          Crediting the flashed date ends that flash, because the credit moves you on to a new date
+          — the reveal window belonged to the date you just left. Nothing brings a finished flash
+          back: undoing that credit changes the score and nothing on screen. A tap aimed at an
+          EARLIER date instead (the one behind this one, or one you have browsed to) leaves the
+          flash running on its own date, right where it was, so it is never a free extra look.
         </p>
       </GuideSection>
       <GuideSection id="blitz" title="Blitz" openId={open} onToggle={toggle} durationMs={motionMs}>
@@ -2731,8 +2750,8 @@ export default function GuidePage({
           When the round ends, the correct answer for the current date is highlighted and your bests
           are recorded. A round ends when time runs out — the round countdown in Per Round, or any
           single question's clock in Per Question. It also ends if you give up on the current date
-          with Reveal or Show Codes, or — with Allow Mistakes off — on a wrong answer or if you
-          override a correct answer to wrong.
+          with Reveal or Show Codes, or — with Allow Mistakes off — on a wrong answer or if a tap of
+          the Override / Undo button flips any date to wrong.
         </p>
         <p>
           You can then browse your round's history with Back/Forward and override past dates to
@@ -2746,12 +2765,31 @@ export default function GuidePage({
           Override works the same whether Save Stats is on or off.
         </p>
         <p>
-          After an Override the button reads <b>Undo</b> until your next action (or until the clock
-          runs out). Undo puts the round back too: a round the Override resumed ends again with
-          exactly the time it had left, so switching back and forth never costs you time; a round
-          that was running when you overrode — even if the Override ended it — carries on as if you
-          hadn&apos;t, with the time that has passed since counted, so it's never a free pause. Your
-          bests and their ★ markers follow every switch, and a ★ an earlier round earned stays lit.
+          The button reads <b>Undo</b> for any date you have already overridden, with no time limit
+          — answer more questions, browse away, come back to that date later, even after a preset
+          switch, and it still undoes there. Tapping it moves the round as well as the score, and
+          the clock tells you how:
+        </p>
+        <UL>
+          <li>
+            A round that ended because its date was <b>answered, revealed or show-coded</b> has that
+            answer on screen, so its clock is FROZEN while it waits. Credit that date and the round
+            resumes with exactly the time it had left — so fixing a misclick costs you nothing, and
+            waiting before you fix it gains you nothing either.
+          </li>
+          <li>
+            A round a <b>tap ended</b> (a flip to wrong with Allow Mistakes off) still has its live
+            date on screen and unanswered — so its clock keeps counting down while the round sits
+            ended, in full view. Putting that date's credit back resumes the round on the SAME date,
+            charged for every second of the wait: no new date is drawn, and there is no free pause.
+            If the clock runs out while the round waits, the round is over for good.
+          </li>
+        </UL>
+        <p>
+          A round&apos;s bests aren&apos;t locked in until it ends for real, so a misclick you fix
+          doesn&apos;t update them. Your bests and their ★ markers follow every tap, and a ★ an
+          earlier round earned stays lit. A round that came back from a preset switch starts with a
+          clean slate of ★ markers, so a tap that re-raises its best lights the ★ again.
         </p>
         <Subhead>Streak and bests</Subhead>
         <UL>

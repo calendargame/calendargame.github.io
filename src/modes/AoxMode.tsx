@@ -72,8 +72,8 @@ interface AoxRunSnapshot {
 // (idle/running/done/failed), the Mo-N count, Best Mean/Median (per config, with rollback),
 // One-by-One, and the fail-on-mistake rule. The run's stats ARE the engine stats — good =
 // credited solves, played = attempts, times = solve times, streak/best. The fold needs only
-// two general engine flags: `complete` (the Nth solve credits without advancing) and
-// `noAdvance` (a failing override of that solve stays put). See gameReducer.
+// two general engine flags: `complete` (the Nth solve credits without advancing) and `hold` (a press
+// that credits the live card keeps it on screen instead of moving play on). See gameReducer.
 function AoxMode({
   minY,
   maxY,
@@ -220,8 +220,8 @@ function AoxMode({
   // (b) From the latch on, every stats change re-reconciles the record under the key the run
   // RECORDED under (the panel's bestKey can move — settings stay editable while a run sits done):
   // still standing (good ≥ n) → the floor improved by the run's CURRENT avg/median; not standing
-  // (an Override retracted a credit — back-browse Path 1, retro Path 5, or the live reversal) →
-  // the floor restored, as if the run never completed. Before the C2 fix only the live-edge
+  // (a press retracted a credit — on a browsed card, on the card behind the live one, or on the held
+  // completing solve) → the floor restored, as if the run never completed. Before the C2 fix only the live-edge
   // reversal rolled back (rollbackBest, gated on !inBack), so a back-browse un-credit left a
   // FABRICATED Best standing on a run with fewer than n credits — and a mid-done settings change
   // (key moved) dodged even that. ★ markers: set exactly from each reconcile — lit only for a metric

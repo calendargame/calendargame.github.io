@@ -10,8 +10,9 @@
 // runs and each carries the matching stats from its own run.
 //
 // RECONCILE is continuous, like Blitz's. An ended run's history stays browsable and overridable, so
-// a post-completion Override can retract one of the run's n credited solves (back-browse Path 1 /
-// retro Path 5) or add a credit (crediting a miss) — the run's standing stats keep moving after the
+// a press of the Override ⇄ Undo button can retract one of the run's n credited solves (on a browsed
+// card, on the card behind the live one, or on the held completing solve) or add a credit back — any
+// number of times, in either direction — so the run's standing stats keep moving after the
 // completion recorded the Best. So AoxMode snapshots the ENTIRE pre-run Best object when the run
 // records (the cumulative best of every PRIOR run — the floor that can never be lost, the cross-run
 // corner the Blitz C2 fix had to add) and, on every post-completion stats change, sets the record to
