@@ -1000,7 +1000,11 @@ describe('Blitz — Per Question + Allow Mistakes (C3a)', () => {
     expect(statValue('Score')).toBe('2/2')
   })
 
-  it('in-round Override after a retry-correct (Path 4) retro-credits and re-arms the clock', () => {
+  // ★ ROUND 23 Q6 CHANGED THIS ONE DELIBERATELY. A press on the card BEHIND the live question used to
+  // both advance past the live question and re-arm its clock — which, once the toggle became
+  // unlimited, was a question clock the player could refill a press at a time. A press on a past card
+  // now does nothing to the live question at all: it stays, and its own clock keeps draining.
+  it('in-round: a press on the card behind retro-credits and does NOT touch the live clock', () => {
     mountApp()
     switchToBlitz()
     clickText('Per Round')
@@ -1008,15 +1012,17 @@ describe('Blitz — Per Question + Allow Mistakes (C3a)', () => {
     begin()
     const d = readDate()
     click(wrongName(d)) // burned — played 1
-    click(correctName(d)) // uncredited advance → fresh clock, pendingWrongOverride armed
+    click(correctName(d)) // uncredited advance → a fresh 1 s clock on the next date
     expect(statValue('Score')).toBe('0/1')
-    tick(600)
-    act(() => fireEvent.click(ctrl('Override'))) // credit the earlier wrong; the live question advances past itself
+    const live = readDate()
+    tick(600) // 0.4 s left on the live question
+    act(() => fireEvent.click(ctrl('Override'))) // credit the earlier wrong — the live question stays
     expect(statValue('Score')).toBe('1/1')
-    tick(600) // past the pre-override deadline — the C3a branch must have re-armed
+    expect(readDate()).toEqual(live)
     expect(ctrl('Reset')).toBeInTheDocument()
-    click(correctName(readDate()))
-    expect(statValue('Score')).toBe('2/2')
+    tick(600) // past the live question's OWN deadline — a refilled clock would still be live
+    expect(isDisabled(dayBtn('Sunday'))).toBe(true) // the grid only answers while a round runs
+    expect(statValue('Score')).toBe('1/2') // the timeout counted the miss it always would have
   })
 
   it('retro-flipping a correct to wrong with AM on keeps the round going (AM off ends it — pinned above)', () => {
@@ -1424,26 +1430,35 @@ describe('Blitz — Override ⇄ Undo', () => {
   const roundLive = () => !isDisabled(dayBtn('Sunday')) // the grid only answers while a round runs
   const bestScore = () => screen.getByText(/Best Score:/).textContent
 
-  it('the label toggles Override → Undo → Override, Undo is live, and three cycles never drift', () => {
+  it('the label follows the card it points at, and the toggle never runs out', () => {
     mountApp()
     switchToBlitz()
     begin()
     const d = readDate()
     click(wrongName(d)) // 0/1 — Allow Mistakes on, the round keeps going
+    clickText('Override') // credits the burned live card and advances
+    expect(statValue('Score')).toBe('1/1')
+    const live = readDate()
+    // The credited card is now the one behind: the button reads Undo for it, and pressing it is a
+    // score change and nothing else — the live question, and the round, stay exactly as they are.
     for (let i = 0; i < 3; i++) {
-      clickText('Override') // Path 3: credit + advance
-      expect(statValue('Score')).toBe('1/1')
-      expect(screen.queryByRole('button', { name: 'Override' })).toBeNull()
       expect(isDisabled(ctrl('Undo'))).toBe(false)
       clickText('Undo')
       expect(statValue('Score')).toBe('0/1')
-      expect(readDate()).toEqual(d) // back on the burned question
+      expect(readDate()).toEqual(live)
       expect(roundLive()).toBe(true)
       expect(isDisabled(ctrl('Override'))).toBe(false)
+      clickText('Override')
+      expect(statValue('Score')).toBe('1/1')
+      expect(readDate()).toEqual(live)
+      expect(roundLive()).toBe(true)
     }
   })
 
-  it('undoing a RESUMING Override re-ends the round; the next Override resumes with the SAME time left', () => {
+  // ★ THE 'answer' END: the round ended because the LIVE card became a resolved miss, so its answer
+  // is already on screen and there is nothing left to read — the clock FREEZES. Crediting that card
+  // resumes the round from the stamp the ending took.
+  it("an 'answer'-ended round resumes from its frozen stamp, and the clock did not drain while ended", () => {
     mountApp()
     switchToBlitz()
     clickText('Allow Mistakes') // off → a wrong ends the round
@@ -1454,76 +1469,130 @@ describe('Blitz — Override ⇄ Undo', () => {
     expect(roundLive()).toBe(false)
     expect(clockText()).toBe('26s')
     expect(bestScore()).toMatch(/Best Score: 1\b/)
-    for (let i = 0; i < 3; i++) {
-      clickText('Override') // credit + RESUME
-      expect(statValue('Score')).toBe('2/2')
-      expect(roundLive()).toBe(true)
-      expect(clockText()).toBe('26s') // resumes where the round stopped…
-      expect(bestScore()).toMatch(/Best Score: —/) // …with the provisional Best reverted
-      tick(10000) // the resumed round runs for a while
-      expect(clockText()).toBe('16s')
-      clickText('Undo')
-      expect(statValue('Score')).toBe('1/2')
-      expect(roundLive()).toBe(false) // ended again…
-      expect(clockText()).toBe('26s') // …with the clock it had, not the drained one
-      expect(bestScore()).toMatch(/Best Score: 1\b/) // …and its Best re-saved
-    }
+    tick(8000) // the answer is on screen: waiting here gains nothing, and costs nothing
+    expect(clockText()).toBe('26s')
+    clickText('Override') // credit the resolved card + RESUME
+    expect(statValue('Score')).toBe('2/2')
+    expect(roundLive()).toBe(true)
+    expect(clockText()).toBe('26s') // …from the stamp, not 26 − 8
+    expect(bestScore()).toMatch(/Best Score: —/) // …with the provisional Best reverted
   })
 
-  it('undoing an Override that ENDED a running round resumes it — and its clock kept running', () => {
+  // ★ THE 'toggle' END, and the rule that makes it fair (spec §7.1iii): the LIVE card is untouched
+  // and still unresolved on screen, so a frozen clock would be a free pause — press, study the date,
+  // press back. The clock keeps DRAINING while the round sits ended, and the resume is charged for
+  // every second of it.
+  it('a press that ends a running round keeps the clock draining, and the resume is charged for it', () => {
     mountApp()
     switchToBlitz()
     clickText('Allow Mistakes') // off
     begin()
     click(correctName(readDate())) // 1/1
     tick(2500) // 27.5 s left
-    clickText('Override') // retro-flip the correct to wrong → the round ends (no mistakes allowed)
+    clickText('Override') // flip that correct card to a miss → the round ends (no mistakes allowed)
     expect(statValue('Score')).toBe('0/1')
     expect(roundLive()).toBe(false)
-    const live = readDate() // the live question is still on screen while the round sits ended…
-    tick(5000) // …so staring at it is not free time
+    const live = readDate() // the live question never left the screen…
+    tick(5000) // …so staring at it is not free time: the ended clock drains in view
     expect(readDate()).toEqual(live)
-    clickText('Undo')
+    expect(clockText()).toBe('23s') // 27.5 − 5 → 22.5
+    // The flipped card is in its override state, so the button reads Undo — for the card, not for the
+    // round. Pressing it puts that card's credit back, which makes the round legal again.
+    clickText('Undo') // → the round resumes on the SAME live card
     expect(statValue('Score')).toBe('1/1')
     expect(roundLive()).toBe(true)
-    expect(clockText()).toBe('23s') // 27.5 − 5 → 22.5, not 27.5
+    expect(readDate()).toEqual(live) // no advance, no fresh date drawn
+    expect(clockText()).toBe('23s') // charged for the gap
     expect(bestScore()).toMatch(/Best Score: —/) // the ending's provisional Best went with it
   })
 
-  it('Per Question: undoing an advancing Override gives the question back its OWN draining clock (no refill)', () => {
+  it('a gap longer than the clock leaves the round ended for good', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    begin()
+    click(correctName(readDate())) // 1/1
+    clickText('Override') // → a miss, the round ends with ~30 s left and draining
+    expect(roundLive()).toBe(false)
+    tick(31_000) // the whole clock runs out while the round sits ended
+    expect(clockText()).toBe('0s')
+    clickText('Undo') // the credit comes back…
+    expect(statValue('Score')).toBe('1/1')
+    expect(roundLive()).toBe(false) // …but there is no time left to resume into
+    clickText('Override')
+    clickText('Undo')
+    expect(roundLive()).toBe(false) // and no number of presses finds any
+  })
+
+  it('with Allow Mistakes ON a press that flips a card to a miss leaves the round running', () => {
+    mountApp()
+    switchToBlitz()
+    begin() // Allow Mistakes on (the factory default)
+    click(correctName(readDate())) // 1/1
+    const live = readDate()
+    tick(2000)
+    clickText('Override') // flip it to a miss — a mistake the round allows
+    expect(statValue('Score')).toBe('0/1')
+    expect(roundLive()).toBe(true)
+    expect(readDate()).toEqual(live)
+    tick(2000)
+    expect(clockText()).toBe('26s') // the clock never stopped, so nothing to charge
+  })
+
+  it('a round the CLOCK ended never resumes, however the score is toggled afterwards', () => {
+    mountApp()
+    switchToBlitz()
+    act(() => useModePrefs.getState().setBlitzSec(5))
+    begin()
+    click(correctName(readDate())) // 1/1
+    tick(6000) // the round clock runs out on a fresh question
+    expect(roundLive()).toBe(false)
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
+    // The button points at the card behind the timed-out one (a pristine timeout is never a target).
+    clickText('Override')
+    expect(statValue('Score')).toBe('0/1')
+    expect(roundLive()).toBe(false)
+    clickText('Undo')
+    expect(statValue('Score')).toBe('1/1')
+    expect(roundLive()).toBe(false)
+  })
+
+  it('Per Question: a press on a past card does NOT refill the live question clock', () => {
     mountApp()
     switchToBlitz()
     clickText('Per Round') // → Per Question (Allow Mistakes stays on)
     act(() => useModePrefs.getState().setBlitzQSec(5))
     begin()
-    tick(3000) // 2 s left on this question
-    const d = readDate()
-    click(wrongName(d)) // burned, clock still draining
-    clickText('Override') // Path 3: credit + advance with a FRESH 5 s clock
-    tick(1000)
-    clickText('Undo') // back on the burned question: 2 − 1 = 1 s left, not a fresh 5
-    expect(readDate()).toEqual(d)
+    click(correctName(readDate())) // 1/1 → a fresh 5 s question clock
+    const live = readDate()
+    tick(3000) // 2 s left on it
+    clickText('Override') // flip the card BEHIND it — the live question's clock is not its business
+    expect(statValue('Score')).toBe('0/1')
+    expect(readDate()).toEqual(live)
     expect(roundLive()).toBe(true)
-    tick(1100) // past the burned question's own deadline
-    expect(roundLive()).toBe(false) // the clock ran out on it — a refilled clock would still be live
-    // The timeout is an engine action: it ended the undo window, and the burned-question timeout is
-    // itself a resumable end, so the button offers Override again.
-    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
-    expect(isDisabled(ctrl('Override'))).toBe(false)
+    clickText('Undo') // …and back, still no refill
+    tick(2100) // past the live question's own deadline
+    expect(roundLive()).toBe(false) // a refilled clock would still be live
   })
 
-  it('answering after a resuming Override ends the undo window', () => {
+  // ★ THE INVERSION OF THE OLD RULE: an Override used to last only until the next action. Now the
+  // record belongs to the card, so playing on leaves it exactly where it was.
+  it('an Override on a resumed round outlives every later answer', () => {
     mountApp()
     switchToBlitz()
     clickText('Allow Mistakes') // off
     begin()
     click(wrongName(readDate())) // ends 0/1
-    clickText('Override') // resume, 1/1
+    clickText('Override') // credit it + resume, 1/1
     expect(ctrl('Undo')).toBeInTheDocument()
     click(correctName(readDate())) // play on
     expect(statValue('Score')).toBe('2/2')
-    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
-    expect(ctrl('Override')).toBeInTheDocument()
+    expect(ctrl('Override')).toBeInTheDocument() // …now pointing at the card just answered
+    act(() => fireEvent.click(ctrl('<'))) // the card just answered
+    act(() => fireEvent.click(ctrl('<'))) // …and the overridden one behind it
+    expect(ctrl('Undo')).toBeInTheDocument()
+    clickText('Undo')
+    expect(statValue('Score')).toBe('1/2')
   })
 
   it('a post-round Override that raises a Best and its Undo that lowers it land the Best correctly across three cycles', () => {

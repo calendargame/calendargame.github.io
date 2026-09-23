@@ -4,7 +4,7 @@
 // props, so nothing about its behaviour changes by living here.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
-import { useButtonFlash, usePlayClock } from './modeHooks.js'
+import { useButtonFlash } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS } from '../components/controlClasses.js'
 import {
@@ -30,7 +30,8 @@ import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import type { BlitzBest, SuddenBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
-import { useGameEngine, withoutPendingUndo } from '../engine/useGameEngine.js'
+import { useGameEngine } from '../engine/useGameEngine.js'
+import { liveCredited } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
@@ -90,6 +91,21 @@ function roundStars(
 // resumes from (Per Round) and what its readout shows. OPTIONAL because a blob parked by an earlier
 // build has none; such a round restores with the configured round length, which is what every build
 // before this one showed on that readout anyway.
+// WHY A ROUND ENDED — the one fact that decides whether it can come back, and what its clock does
+// while it waits (round 23 Q6):
+//   'clock'  — the countdown expired on a card the player had not already burned. Never resumable:
+//              running out of time is not a misclick.
+//   'answer' — the LIVE card became a scored miss (a wrong with Allow Mistakes off, a Reveal, a Show
+//              Codes, or a Per Question expiry on a card already answered wrong). Its answer is on
+//              screen, so there is nothing left to read and the clock FREEZES at the stamp the
+//              ending took. Crediting that card resumes the round. (This is the old `resumableEnd`.)
+//   'toggle' — a press flipped some card to a miss with Allow Mistakes off. The LIVE card is
+//              untouched and still unresolved ON SCREEN, so the clock keeps DRAINING while the round
+//              sits ended (see `remainNow`): a frozen clock here would be a free pause — press,
+//              study the date at leisure, press back. Putting that card's credit back resumes the
+//              round on the SAME live card, charged for every second of the gap.
+type EndKind = 'clock' | 'answer' | 'toggle'
+
 interface BlitzRoundSnapshot {
   engine: GameState
   timerDone: boolean
@@ -98,6 +114,12 @@ interface BlitzRoundSnapshot {
   currentRoundId: number | null
   prevRoundBest: PrevRoundBest
   remain?: number
+  // Why this round ended, and — for a 'toggle' end only — the WALL-CLOCK instant it ended at, so the
+  // charge for the gap survives the remount a preset switch causes (every performance.now()-based
+  // stamp restarts there; Date.now() does not). Both OPTIONAL because a blob parked by an earlier
+  // build has neither: such a round is read as the end it would have been then (see `parkedEndKind`).
+  endKind?: EndKind
+  endedAt?: number | null
 }
 
 // ============================================================
@@ -152,6 +174,20 @@ function BlitzMode({
   // from the blob for symmetry rather than assumed.
   const [active, setActive] = useState(parkedRound?.active ?? false)
   const [timerDone, setTimerDone] = useState(parkedRound?.timerDone ?? false)
+  // Why the round on screen ended (null while there is no ended round). ⚠ THE MIGRATION LINE: a round
+  // parked by a build before this one carries no `endKind`, and the honest reading of such a blob is
+  // the rule that build itself applied — `resumableEnd = timerDone && countedWrong`, i.e. a burned
+  // live card meant "a player action ended this" and anything else meant the clock. A 'toggle' end
+  // could not exist then, so no old blob can need it.
+  const [endKind, setEndKind] = useState<EndKind | null>(
+    !parkedRound?.timerDone
+      ? null
+      : (parkedRound.endKind ?? (parkedRound.engine.countedWrong ? 'answer' : 'clock')),
+  )
+  // The wall-clock instant a 'toggle' end happened — what `remainNow` charges the gap against. A ref,
+  // not state: nothing renders from it directly (the drain effect below paints from remainNow), and it
+  // must be readable by the press that resumes without waiting for a re-render.
+  const endedAtRef = useRef<number | null>(parkedRound?.endedAt ?? null)
   const [breakdownOpen, setBreakdownOpen] = useState(false) // the round breakdown popup (components/RunBreakdown) — ephemeral, dies with the round
   const [showTimerDate, setShowTimerDate] = useState(parkedRound?.showTimerDate ?? false)
   const blitzSec = useModePrefs((s) => s.blitzSec),
@@ -245,19 +281,13 @@ function BlitzMode({
   const S = state.stats
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
 
-  // A round ended by a player ACTION (not the clock) is RESUMABLE via Override — credit the
-  // resolved question + continue. countedWrong is set by a wrong answer, a Reveal, OR a Show
-  // Codes; a TIMER end on a pristine question (LOCK_REVEAL / TIMEOUT_MISS) does NOT set it, so
-  // the clock simply running out is correctly NOT resumable. One deliberate corner (per-Q +
-  // Allow Mistakes, C3a): a wrong answer leaves the round running with countedWrong SET, so a
-  // timeout on that burned question ends the round with countedWrong still true — that end IS
-  // resumable (crediting the wrong resumes with a fresh question clock, exactly what a
-  // judged-correct answer would have granted before the expiry; owner-ratified). So "reveal or
-  // show codes then override" continues the round, same as a misclick (owner's call, C2 —
-  // override is uniform). The resume reverts the interrupted round's provisionally-saved Best
-  // (see resumeRound). One source of truth for both the resume (onOverride) and any
-  // round-end-resumable check.
-  const resumableEnd = timerDone && state.countedWrong
+  // (Round 23 Q6: `resumableEnd = timerDone && state.countedWrong` lived here — one boolean standing
+  // for "a player action, not the clock, ended this round". It became the `endKind` the ending itself
+  // records, because a press can now end a round too, and that end has different clock rules from an
+  // action's; see EndKind at the top and `onOverride`. The old corner it documented still holds and is
+  // recorded where the countdown decides its kind: a Per Question expiry on a card the player had
+  // ALREADY answered wrong is an 'answer' end, and crediting that card resumes the round with a fresh
+  // question clock — exactly what a judged-correct answer would have granted before the expiry.)
   // Override availability is uniform — NOT gated on the live `saveStats` (owner's call, C2: gating
   // it made Override more forgiving when Save Stats is ON than OFF, which is backwards). Blitz
   // always-tracks internally (saveStats:true above), so engOverrideAvail (which uses the frozen
@@ -296,11 +326,13 @@ function BlitzMode({
       ? null
       : Math.max(0, (qDeadlineRef.current + qPausedAccRef.current - now) / 1000)
   }
-  // Draw `r` remaining seconds on the running sub-mode's bar + readout (and keep clockRemainRef in
-  // step). Direct DOM writes, like every frame of the countdown — a React render per frame would be
-  // the expensive way to move one bar.
-  const paintClock = (r: number) => {
-    clockRemainRef.current = r
+  // Draw `r` remaining seconds on the running sub-mode's bar + readout. Direct DOM writes, like every
+  // frame of the countdown — a React render per frame would be the expensive way to move one bar.
+  // ⚠ SPLIT FROM paintClock ON PURPOSE (round 23 Q6). A 'toggle'-ended round's remaining is DERIVED
+  // (`remainNow` = the stamped base minus the wall-clock gap), so its drain loop must draw without
+  // writing the base back — storing the charged value while the stamp stood still would charge the
+  // same seconds again on the next frame, and the clock would drain at compounding speed.
+  const drawClock = (r: number) => {
     if (!perQ) {
       const sx = Math.max(0, Math.min(1, r / blitzSec))
       if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(' + sx + ')'
@@ -311,23 +343,43 @@ function BlitzMode({
       if (suddenTimeRef.current) suddenTimeRef.current.textContent = Math.ceil(r) + 's'
     }
   }
+  // …and the same draw that also records `r` as the round's remaining. Everything that CHANGES the
+  // clock goes through here; only the derived drain loop uses drawClock directly.
+  const paintClock = (r: number) => {
+    clockRemainRef.current = r
+    drawClock(r)
+  }
+  // ★ AN ENDED ROUND'S CLOCK, AS IT READS NOW — the one place the freeze/drain rule lives (see
+  // EndKind). An 'answer' or 'clock' end froze at its stamp; a 'toggle' end has been draining ever
+  // since, in wall-clock seconds, minus any time the rotate-back overlay held the app (the pause
+  // effect below pushes `endedAt` forward, exactly as the live clocks fold a pause into their
+  // accumulators — the gap charges the player for thinking, not for turning their phone).
+  const remainNow = () =>
+    endKind === 'toggle' && endedAtRef.current != null
+      ? Math.max(0, clockRemainRef.current - (Date.now() - endedAtRef.current) / 1000)
+      : clockRemainRef.current
   // A restored ended round shows the clock it stopped on — the readout and bar it had before the
   // switch — rather than the full length the markup renders. A layout effect so the first paint is
   // already right. Mount-only: after this, every change to the clock is drawn by the code that makes it.
+  // A round parked mid-'toggle'-gap is drawn at its CHARGED reading (drawClock, so the stamped base
+  // survives for remainNow to keep charging against) — the seconds spent in the other preset count.
   useLayoutEffect(() => {
-    if (parkedRound) paintClock(clockRemainRef.current)
+    if (parkedRound) drawClock(remainNow())
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design (see above)
   }, [])
-  // The round-over state with the clock stopped — the ONE writer of `timerDone = true`. endRound is
-  // how play reaches it; the only other caller is an Undo putting back a round an Override resumed,
-  // which must NOT restamp the remaining from the resumed clock (it restores the stamp it noted).
-  const settleEnded = () => {
+  // The round-over state with the clock stopped — the ONE writer of `timerDone = true`, and of
+  // `endKind`. endRound is how play reaches it; a press that ends a running round calls it too.
+  const settleEnded = (kind: EndKind) => {
     setActive(false)
     setShowTimerDate(true)
     setTimerDone(true)
+    setEndKind(kind)
+    // Only a 'toggle' end has a gap to charge; the other two freeze, so they must not leave a stamp
+    // a later 'toggle' end could be charged against.
+    endedAtRef.current = kind === 'toggle' ? Date.now() : null
     stopRound()
   }
-  const endRound = () => {
+  const endRound = (kind: EndKind) => {
     // Stamp the EXACT remaining time at this instant into clockRemainRef BEFORE settleEnded() nulls
     // the clock refs, so a later Override-resume (Per Round) continues from the true remaining rather
     // than the last rAF frame's value (up to a frame stale, always in the player's favor), and an Undo
@@ -335,7 +387,7 @@ function BlitzMode({
     // the remaining is already ~0. (F: Blitz resume sub-frame timer drift.)
     const r = clockRemainAt(performance.now())
     if (r != null) clockRemainRef.current = r
-    settleEnded()
+    settleEnded(kind)
   }
 
   // Countdown loop (Per Round drains the round clock; Per Question drains the question clock). On 0
@@ -352,7 +404,12 @@ function BlitzMode({
         if (r <= 0.001) {
           if (!perQ) eng.lockReveal()
           else eng.timeoutMiss()
-          endRound()
+          // 'clock' unless the card the clock ran out on was ALREADY a scored miss — the Per Question
+          // + Allow Mistakes corner where a wrong answer leaves the round running on the same card.
+          // That end is the one the player can still fix by crediting that card, so it is an 'answer'
+          // end (exactly the old `resumableEnd`, which read countedWrong for the same reason).
+          // Neither timeout action sets countedWrong, so this pre-dispatch read is also its value after.
+          endRound(state.countedWrong ? 'answer' : 'clock')
           return
         }
       }
@@ -360,7 +417,7 @@ function BlitzMode({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- clockRemainAt / paintClock / endRound are behavior-stable (they close over only the deps listed, stable setters and refs); excluded so their identity change doesn't restart the countdown
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clockRemainAt / paintClock / endRound are behavior-stable (they close over only the deps listed, stable setters and refs); excluded so their identity change doesn't restart the countdown. `state.countedWrong` needs no dep of its own: `eng` carries `state`, so every engine change already re-runs this with a fresh closure.
   }, [active, perQ, blitzSec, qSec, eng, clockPaused])
 
   // Rotate-overlay clock freeze (Q11). The countdown math above ALREADY carries pause
@@ -388,14 +445,48 @@ function BlitzMode({
         qPausedAtRef.current = null
         qPausedAccRef.current += dt
       }
+      // …and the same fold for a 'toggle'-ended round's draining gap (round 23 Q6). It cannot use an
+      // accumulator like the two above, because the gap is measured in WALL-CLOCK time so that it
+      // survives a preset switch — so the stamp itself moves forward by the paused span, which leaves
+      // `Date.now() − endedAt` reading exactly the un-paused gap. Same rule, one clock later: an
+      // ended round charges for thinking, never for turning the phone.
+      if (endedAtRef.current != null) endedAtRef.current += dt
     }
   }, [clockPaused])
 
+  // ★ THE ENDED ROUND THAT IS STILL DRAINING (round 23 Q6). A 'toggle'-ended round keeps its clock
+  // running (see EndKind), and the player can SEE the readout — so it has to be drawn, or the screen
+  // would promise time the round no longer has. This is the countdown loop's other half: it paints
+  // remainNow() and, at zero, demotes the end to 'clock' — the round waited out its own clock, so
+  // there is nothing left to resume into and it can never come back. No engine action fires (the live
+  // card was never judged; nothing was played), and the demotion is what makes that permanent.
+  useEffect(() => {
+    if (!timerDone || endKind !== 'toggle' || clockPaused) return
+    let raf = 0
+    const loop = () => {
+      const r = remainNow()
+      drawClock(r)
+      if (r <= 0.001) {
+        // Bank the zero into the base and drop the stamp BEFORE demoting: from here remainNow() is
+        // the plain frozen read, and it must agree with the 0 on screen — a base still saying 27
+        // seconds behind a readout saying none would offer a resume the round has not got.
+        paintClock(0)
+        setEndKind('clock')
+        endedAtRef.current = null
+        return
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remainNow / paintClock are behavior-stable (refs + the deps listed); excluded so their per-render identity does not restart the sweep
+  }, [timerDone, endKind, clockPaused, perQ, blitzSec, qSec])
+
   // Arm the running sub-mode's clock with `r` seconds left — the one home for the stamp (pause
   // bookkeeping cleared, display redrawn). Per Round: the round started (blitzSec − r) ago. Per
-  // Question: the deadline is r from now. Begin arms a full clock; a correct answer, an in-round
-  // Override credit that advanced (C3a) and the Override-rescue resume arm a FRESH question clock;
-  // an Undo arms whatever the untouched clock would read now.
+  // Question: the deadline is r from now. Begin arms a full clock; a correct answer and an in-round
+  // Override credit that ADVANCED (C3a) arm a FRESH question clock; a resume arms what the ended
+  // round has left — its frozen stamp, or, for a 'toggle' end, the stamp charged for the gap.
   const armClock = (r: number) => {
     const now = performance.now()
     if (!perQ) {
@@ -429,6 +520,8 @@ function BlitzMode({
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
+    setEndKind(null) // a fresh round has not ended
+    endedAtRef.current = null
     armClock(perQ ? qSec : blitzSec)
   }
   const onAnswer = (i: number) => {
@@ -446,20 +539,20 @@ function BlitzMode({
       // Override credit advances (C3a).
       if (!allowMistakes) {
         eng.lockReveal()
-        endRound()
+        endRound('answer') // the live card is now a resolved miss — crediting it resumes the round
       }
     }
   }
-  // Put an ENDED round back on the clock with `remain` seconds left. Two doors use it: an Override
-  // that RESCUES a round a player action ended (a wrong answer, a Reveal, or a Show Codes — or, in
-  // per-Q + Allow Mistakes, the clock expiring on a question already answered wrong; see
-  // resumableEnd), and an Undo of an Override that ENDED a running round. Two halves: (1) revert the
-  // active sub-mode's Best AND its ★ to the pre-round records (the round's provisional save is gone;
-  // it re-saves only when the round genuinely ends) — safe to branch on the live prefs, the toggles
-  // are idle-locked; (2) re-arm the clock. The rescue passes Per Round the stamped remaining (the
-  // countdown continues WHERE IT STOPPED) and Per Question a fresh qSec on the (already-advanced)
-  // next date — restoring the pre-rewrite behavior the Blitz mode-untangle dropped (original 7176a50
-  // did exactly this; C2 Q2-A). The Undo passes what the never-stopped clock would read now.
+  // Put an ENDED round back on the clock with `remain` seconds left — the ONE door back, used by the
+  // Override ⇄ Undo press below for both kinds of end it can undo (see EndKind and `onOverride`).
+  // Two halves: (1) revert the active sub-mode's Best AND its ★ to the pre-round records (the round's
+  // provisional save is gone; it re-saves only when the round genuinely ends) — safe to branch on the
+  // live prefs, the toggles are idle-locked; (2) re-arm the clock with whatever the caller says is
+  // left. An 'answer' end passes Per Round its frozen stamp (the countdown continues WHERE IT
+  // STOPPED) and Per Question a fresh qSec on the already-advanced next date (restoring the
+  // pre-rewrite behaviour the Blitz mode-untangle dropped — original 7176a50 did exactly this; C2
+  // Q2-A); a 'toggle' end passes the stamp CHARGED for the gap, in both sub-modes, because its live
+  // card never left the screen and no fresh date was drawn.
   const resumeRound = (remain: number) => {
     const snap = prevRoundBestRef.current
     const stars = prevRoundStarsRef.current
@@ -501,129 +594,111 @@ function BlitzMode({
     // closed (src/main.tsx, the modal gate on its Category 1 and 2). This line is what makes it not
     // matter.
     setBreakdownOpen(false)
+    setEndKind(null) // live again: nothing ended, and nothing to charge a gap against
+    endedAtRef.current = null
     armClock(remain)
   }
-  // ── Override ⇄ Undo (round 23 Q6) ──────────────────────────────────────────────────────────
-  // An Override can change the ROUND, not just the score: it can rescue an ended round (resumeRound)
-  // and it can end a running one (a flip-to-wrong with Allow Mistakes off). The engine's Undo puts
-  // the score back; this puts the round back. Everything it needs is noted here, BEFORE the Override
-  // runs — the round's id, whether it was running, its clock's remaining seconds, and the play clock
-  // (usePlayClock: rotate-overlay time excluded). No absolute clock stamps are kept: they are only
-  // meaningful beside the pause accumulators of the clock that made them, which a resume or an end
-  // re-zeroes. One slot, because only one Override can be pending, and every Override overwrites it.
+  // ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ─────────────────────
+  // ONE PRESS, BOTH DIRECTIONS — and it can change the ROUND, not just the score: it can put an ended
+  // round back on the clock, and it can end a running one. Which of those it does is read off the
+  // engine's plan (what this press will do, and to which card) BEFORE the press, from the same object
+  // the reducer acts on, so the round's half and the score's half can never be told different stories.
   //
-  // ★ THE CLOCK RULE IS "AS IF THE OVERRIDE NEVER HAPPENED", and that means two different things:
-  //   • The round was RUNNING: an untouched clock would have kept running, so the Undo arms whatever
-  //     it would read now. Standing it still instead would be a free pause — and a real one: a retro
-  //     Override (Path 5) leaves the live date on screen, so Override → think → Undo → answer would
-  //     buy unlimited thinking time on every question. It also stops a per-question Override that
-  //     advanced (which granted a fresh qSec) from refilling the question clock it undoes.
-  //     ⚠ THIS INCLUDES AN OVERRIDE THAT ENDED THE ROUND (a to-wrong flip with Allow Mistakes off),
-  //     even though the clock was stopped in between, and it is deliberate: that flip is a retro
-  //     Path 5, the question it leaves is the LIVE one, and an ended round keeps its date on screen
-  //     (showTimerDate). A clock handed back where it stopped would be the same free pause through a
-  //     different door — Override (round "ends"), think as long as you like, Undo, answer. What the
-  //     player is charged is only the time they spent looking at that question, so toggling cannot
-  //     cost more than playing; the drain the ended-round rule below guards against is the one where
-  //     the waiting bought nothing.
-  //   • The round had ENDED: its clock was stopped, so the Undo re-ends it with the remaining the
-  //     Override found. Letting the resumed seconds count would make Override ⇄ Undo drain an ended
-  //     round's clock a toggle at a time — and nothing is gained by waiting on a resumed round, because
-  //     the date an Override advances to is freshly drawn every time.
-  // The Best records and their ★ need nothing here: prevRoundBestRef / prevRoundStarsRef are written
-  // only by Begin, the reconcile effect folds every change onto them, and resumeRound reverts to them,
-  // so any number of toggles lands where the last one says.
-  // ⚠ ACCEPTED EDGE: a clock that runs out between the Override and the Undo ends the round as it
-  // always does — LOCK_REVEAL / TIMEOUT_MISS are engine actions, so they end the undo window and the
-  // button goes back to Override. That is the contract (the window is only as long as nothing
-  // happens), and the clock running out is something happening.
-  const playNow = usePlayClock(clockPaused)
-  const undoRoundRef = useRef<{
-    roundId: number | null
-    wasActive: boolean
-    remain: number
-    at: number
-  } | null>(null)
-  // Override-to-wrong is a mistake: flipping a CORRECT answer to wrong (a live first-try
-  // reversal, or retro-flipping the most-recent correct history entry) ends the round when
-  // Allow Mistakes is off — exactly like a real wrong answer (bug #1); with AM on the round
-  // keeps going in either timing sub-mode (C3a). Wrong→credit overrides (countedWrong /
-  // pendingWrongOverride) are corrections and never end the round. Detect the to-wrong
-  // direction from the same fields the reducer reads.
+  // ★ THE TWO ROUND RULES, and they are each other's inverse:
+  //   • A press that leaves a card a MISS while the round is RUNNING and Allow Mistakes is off ENDS
+  //     it — the long-standing "an override to a wrong is a mistake like any other", now reachable
+  //     from the Undo direction too. That is a 'toggle' end: the live card was never touched, so its
+  //     clock keeps draining while the round waits (EndKind). It cannot BE the live card, and that is
+  //     structural rather than lucky — taking a credit away needs a credited card, and the only
+  //     credited card that ever sits at the live edge is one a press HELD there, which only ever
+  //     happens on a round that is already ended.
+  //   • A press on an ENDED round that leaves the round LEGAL again resumes it. "Legal" is the round's
+  //     own rule: with Allow Mistakes off, no misses at all; with it on, the card whose miss ended the
+  //     round — the live one — credited. A 'clock' end is never legal again (the time is gone), a
+  //     round being BROWSED is not resumed under the player's feet, and a clock with nothing left on
+  //     it cannot be resumed into.
+  // Nothing is remembered between presses: both halves are derived, every time, from the state and the
+  // plan — which is what makes any number of presses on any cards land where the last one says. The
+  // Best records and their ★ need nothing here either: prevRoundBestRef / prevRoundStarsRef are
+  // written only by Begin, the reconcile effect folds every change onto them, and resumeRound reverts
+  // to them. (⚠ A RESTORED round starts with an empty ★ floor by design — the markers are per-mount
+  // state and a parked copy would resurrect stars the remount cleared — so a press that re-raises a
+  // restored round's Best re-lights a ★ the switch had cleared. That is the honest reading of "this
+  // record is new to this session".)
   const onOverride = () => {
-    // A round ended by an action (wrong / Reveal / Show Codes — see `resumableEnd` above) is
-    // RESUMABLE: crediting the resolved question via Override continues the round instead of
-    // leaving it dead, and resumeRound reverts the interrupted round's provisional Best. Captured
-    // BEFORE override mutates state. (C2 Q2-A + the uniform-override extension.)
-    let flipToWrong = false
-    if (state.canOverrideCorrect && state.prevStatsSnapshot)
-      flipToWrong = !state.prevStatsSnapshot.wasWrong
-    else if (eng.retroOverrideEligible) {
-      const last = state.stack[state.stack.length - 1]
-      flipToWrong = !!(last?.capsule?.snapshot && !last.capsule.snapshot.wasWrong)
-    }
-    undoRoundRef.current = {
-      roundId: currentRoundIdRef.current,
-      wasActive: active,
-      remain: active ? (clockRemainAt(performance.now()) ?? 0) : clockRemainRef.current,
-      at: playNow(),
-    }
-    if (state.countedWrong) setFlashWithTimeout({ type: 'good', idx: correct })
-    eng.override() // credit (Path 3/4/5); the round then resumes (rescue) or the timerDone effect reconciles
-    if (resumableEnd) resumeRound(perQ ? qSec : clockRemainRef.current)
-    else if (active && flipToWrong && !allowMistakes) endRound()
-    else if (active && perQ && (state.countedWrong || state.pendingWrongOverride != null)) {
-      // The override ADVANCED the live question (Path 3 credits this burned question and
-      // advances; Path 4 credits the previous wrong and advances — overrideAvail already
-      // excludes the spent-target Path-4 no-op) — a new date must never inherit the old date's
-      // drained clock, exactly as a correct answer refreshes it (C3a). `state` here is the
-      // PRE-dispatch snapshot (the same idiom flipToWrong reads above), and the three branches
-      // are mutually exclusive: a retro flip requires neither field set, so it correctly
-      // leaves the live question's clock draining.
+    const plan = eng.overridePlan
+    if (!plan) return
+    // The round as this press will leave it. `played` never moves (a toggle neither adds nor removes a
+    // card) and `good` moves by one in the card's new direction; the live card's credit is the plan's
+    // own when the press targets it. A press that ADVANCES is deliberately counted here as crediting
+    // "the live card": the card it credits is the cause of an 'answer' end, and fixing that cause is
+    // what makes the round legal again, wherever the engine then files the card.
+    const goodAfter = S.good + (plan.credits ? 1 : -1)
+    const liveCreditAfter = plan.target === 'live' ? plan.credits : liveCredited(state)
+    // …and the clock that resume would arm. ⚠ THE GATE IS THIS NUMBER, NOT THE STAMP, and the
+    // difference is a ratified corner: a Per Question round whose clock expired on a card the player
+    // had already answered wrong stamps ~0 remaining, yet crediting that card resumes it with a FRESH
+    // question clock — exactly what a judged-correct answer would have granted a moment earlier. Gating
+    // on the stamp would have silently killed that rescue. Every other end resumes into its own
+    // remaining, so for them the two readings are the same number.
+    const resumeWith = endKind === 'answer' && perQ ? qSec : remainNow()
+    const resumes =
+      timerDone &&
+      endKind !== 'clock' &&
+      state.backDepth === 0 &&
+      (allowMistakes ? liveCreditAfter : S.played === goodAfter) &&
+      resumeWith > 0.001
+    // ⚠ THE ONE PLACE BLITZ ASKS THE ENGINE TO HOLD: a press that credits the live card while the
+    // round is STAYING ended must not move play on, because advancing would draw a fresh date onto a
+    // dead round — a question nobody can answer, carrying a Q№ nobody played. While the round runs,
+    // or when this press resumes it, the credit advances exactly as it always has.
+    const hold = timerDone && !resumes
+    const advances = plan.target === 'live' && !plan.overridden && plan.credits && !hold
+    if (advances) setFlashWithTimeout({ type: 'good', idx: correct })
+    eng.override({ hold })
+    if (resumes) {
+      // 'answer': Per Round continues from its frozen stamp, Per Question gets a fresh clock on the
+      // date the credit advanced to (owner-ratified — that card's answer was already on screen).
+      // 'toggle': the stamp CHARGED for the gap, in both sub-modes, on the same live card.
+      resumeRound(resumeWith)
+    } else if (active && !plan.credits && !allowMistakes) {
+      endRound('toggle')
+    } else if (active && perQ && advances) {
+      // A fresh question clock for the fresh date, exactly as a correct answer grants one — a new date
+      // must never inherit the drained clock of the one before it (C3a). This is the ONLY in-round arm
+      // a press makes: a toggle on any card that is not the live one leaves the live question's clock
+      // alone, which is what stops Override ⇄ Undo refilling it a press at a time.
       armClock(qSec)
     }
   }
-  const onUndo = () => {
-    eng.undo()
-    const snap = undoRoundRef.current
-    undoRoundRef.current = null
-    // A snapshot from another round cannot be pending (Begin/Reset dispatch a RESET, which ends the
-    // undo window, and a parked round is restored with none) — the id check says so rather than
-    // trusting it.
-    if (!snap || snap.roundId !== currentRoundIdRef.current) return
-    if (snap.wasActive) {
-      // The clock never stopped: arm what it would read now. If the Override ended the round, this
-      // is the resume door (Best + ★ back to the pre-round records, which the ended round had
-      // provisionally overwritten); if the round kept running, just the clock — a per-question
-      // Override that advanced had re-armed it for a date the Undo has taken away again.
-      const r = Math.max(0, snap.remain - (playNow() - snap.at) / 1000)
-      if (active) armClock(r)
-      else resumeRound(r)
-    } else if (active) {
-      // The Override resumed an ended round: end it again, with the readout it had. settleEnded, not
-      // endRound — the stamp is the one noted, not the resumed clock's. The reconcile effect then
-      // re-saves the round's Best exactly as the original ending did (resumeRound had reverted it).
-      paintClock(snap.remain)
-      settleEnded()
-    }
-    // Ended before and after (an Override on a finished round's history): the score was the whole
-    // change, and the engine has put it back.
-  }
   const onReveal = () => {
     eng.reveal()
-    endRound()
+    endRound('answer') // the live card is a resolved miss now, with its answer on screen
   }
   // Opening Show Codes during an active round ends the round (so Best Score is recorded and
   // the countdown stops), exactly like Reveal — bug #3. The original applyCalcPenalty ended
   // the round for an active timer; the Blitz migration dropped it (bare eng.showCodes).
   const onShowCodes = (open: boolean) => {
     eng.showCodes(open)
-    if (open && active) endRound()
+    if (open && active) endRound('answer')
+    // ★ THE ONE WAY A 'toggle' GAP CAN END WITHOUT A PRESS. Show Codes is the only control still
+    // offered on an ENDED round that resolves the live card — and that is exactly what a 'toggle' end
+    // was waiting on: the card's answer is now on screen, so there is nothing left to read and the
+    // clock must stop draining. Convert the end to 'answer' and freeze the remaining at its CHARGED
+    // value, so the gap already spent is kept and no further second is charged. (Reveal is withheld
+    // while timerDone and the grid does not answer, so no other route reaches this.)
+    else if (open && timerDone && endKind === 'toggle') {
+      paintClock(remainNow())
+      setEndKind('answer')
+      endedAtRef.current = null
+    }
   }
   const resetRound = () => {
     eng.resetStats()
     setActive(false)
     setTimerDone(false)
+    setEndKind(null) //  no round, so no end
+    endedAtRef.current = null
     setBreakdownOpen(false) //  the breakdown belongs to the round being cleared
     setShowTimerDate(false)
     stopRound()
@@ -787,16 +862,20 @@ function BlitzMode({
     const pid = usePresets.getState().activeId
     if (timerDone)
       writeSessionRound(pid, 'blitz', {
-        engine: withoutPendingUndo(state),
+        engine: state,
         timerDone,
         showTimerDate,
         active,
         currentRoundId: currentRoundIdRef.current,
         prevRoundBest: prevRoundBestRef.current,
         remain: clockRemainRef.current,
+        // WHY this round ended, and — for a 'toggle' end — the wall-clock instant it did, so the
+        // charge for the gap keeps running across the switch instead of resetting to free.
+        endKind: endKind ?? undefined,
+        endedAt: endedAtRef.current,
       })
     else discardSessionRound(pid, 'blitz')
-  }, [timerDone, active, showTimerDate, state])
+  }, [timerDone, active, showTimerDate, state, endKind])
 
   // Both toggles are bare idle-gated flips — fully independent since C3a (the old auto-off
   // coupling died with the sudden-death-only per-Q). The idle lock (also mirrored by the
@@ -828,13 +907,14 @@ function BlitzMode({
     state.locked === false &&
     state.revealed === false &&
     state.countedWrong === false &&
-    state.canOverrideCorrect === false &&
-    state.pendingWrongOverride === null &&
-    state.overrideUsedThisQ === false &&
-    state.undoCapsule === null &&
+    // Nothing on the card: never wrong, never overridden (round 23 Q6 — one record replaced the four
+    // flags the old Override machinery kept here; same pair as modeHooks.engineFresh).
+    state.card.wrongTime === null &&
+    state.card.answered === null &&
     state.calcOpen === false &&
     active === false &&
     timerDone === false &&
+    endKind === null &&
     breakdownOpen === false &&
     showTimerDate === false &&
     perQ === false &&
@@ -1164,12 +1244,7 @@ function BlitzMode({
             >
               Reveal
             </button>
-            <OverrideButton
-              overrideAvail={overrideAvail}
-              undoAvail={undoAvail}
-              onOverride={onOverride}
-              onUndo={onUndo}
-            />
+            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={shouldShowTimerDate ? date : null}
