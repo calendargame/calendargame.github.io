@@ -1398,11 +1398,11 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
 })
 
 // ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
-// Where Override used to go inert after use it reads Undo, and Undo puts back exactly what the
-// Override changed — in Blitz that includes the ROUND: an Override can resume an ended round or end
-// a running one, and its Undo reverses that too. The clock rule is "as if the Override never
-// happened": a round that was RUNNING kept its clock running through the gap (no free pause, no
-// refill), a round that had ENDED gets its stopped clock back exactly (toggling never drains it).
+// Where Override used to go inert after use it reads Undo, and every press flips one card — which in
+// Blitz can move the ROUND as well: a press can resume an ended round or end a running one. The
+// clock rule: a round that ended on its LIVE date (answered, revealed, show-coded — an 'answer' end)
+// keeps a stopped clock and resumes from it; a round a PRESS ended (a 'toggle' end) keeps draining
+// while it waits, and its resume is charged for the gap. No free pause, no refill.
 describe('Blitz — Override ⇄ Undo', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -1504,6 +1504,33 @@ describe('Blitz — Override ⇄ Undo', () => {
     expect(readDate()).toEqual(live) // no advance, no fresh date drawn
     expect(clockText()).toBe('23s') // charged for the gap
     expect(bestScore()).toMatch(/Best Score: —/) // the ending's provisional Best went with it
+  })
+
+  // ⚠ ONLY A SHOW CODES THAT RESOLVES THE LIVE DATE STOPS THE DRAIN. Opening the codes while BROWSING
+  // a past date is a read-only review — the live date stays untouched and unanswered — so the gap
+  // must keep charging. It used to stop the clock anyway, which was a free pause on demand (browse
+  // back, open the codes, think), and in Per Question it also turned the end into one that resumes
+  // with a FRESH question clock on the same, still-unanswered date: a refill.
+  it('Show Codes opened while browsing does not stop a tap-ended round draining', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    begin()
+    click(correctName(readDate())) // 1/1
+    click(correctName(readDate())) // 2/2
+    tick(2500) // 27.5 s left
+    clickText('Override') // card 2 flipped to a miss → a tap-ended round, draining
+    expect(roundLive()).toBe(false)
+    click('<') // browse to card 2…
+    act(() => fireEvent.click(ctrl('Show Codes'))) // …and review its codes: read-only
+    expect(statValue('Score')).toBe('1/2') // nothing scored
+    tick(5000)
+    expect(clockText()).toBe('23s') // 27.5 − 5 → 22.5: still draining
+    act(() => fireEvent.click(ctrl('Hide Codes')))
+    click('>') // back to the live date
+    clickText('Undo') // put card 2's credit back → resumes, charged for the whole gap
+    expect(roundLive()).toBe(true)
+    expect(clockText()).toBe('23s')
   })
 
   it('a gap longer than the clock leaves the round ended for good', () => {

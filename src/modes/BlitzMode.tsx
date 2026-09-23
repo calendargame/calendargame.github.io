@@ -31,7 +31,12 @@ import { useProgress } from '../store/progress.js'
 import type { BlitzBest, SuddenBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { creditsLiveCard, liveCredited, overrideAdvances } from '../engine/gameReducer.js'
+import {
+  creditsLiveCard,
+  liveCredited,
+  overrideAdvances,
+  showCodesPenalizes,
+} from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
@@ -693,6 +698,9 @@ function BlitzMode({
   // the countdown stops), exactly like Reveal — bug #3. The original applyCalcPenalty ended
   // the round for an active timer; the Blitz migration dropped it (bare eng.showCodes).
   const onShowCodes = (open: boolean) => {
+    // Read BEFORE the dispatch: does this open penalise the live date? (A browsed date's codes are a
+    // read-only review and change nothing.)
+    const resolvesLive = open && showCodesPenalizes(state)
     eng.showCodes(open)
     if (open && active) endRound('answer')
     // ★ THE ONE WAY A 'toggle' GAP CAN END WITHOUT A PRESS. Show Codes is the only control still
@@ -701,7 +709,11 @@ function BlitzMode({
     // clock must stop draining. Convert the end to 'answer' and freeze the remaining at its CHARGED
     // value, so the gap already spent is kept and no further second is charged. (Reveal is withheld
     // while timerDone and the grid does not answer, so no other route reaches this.)
-    else if (open && timerDone && endKind === 'toggle') {
+    // ⚠ ONLY WHEN IT DID RESOLVE THE LIVE DATE (`resolvesLive`). The codes open on an ended round
+    // while BROWSING too, and there they are a read-only review of a past date: the live date stays
+    // unanswered, so the drain must go on. Converting there was a free pause on demand, and in Per
+    // Question an 'answer' end resumes with a fresh question clock — on the same unanswered date.
+    else if (resolvesLive && timerDone && endKind === 'toggle') {
       paintClock(remainNow())
       setEndKind('answer')
       endedAtRef.current = null

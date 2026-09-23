@@ -424,6 +424,14 @@ export const earnedCredit = (
 export const liveCredited = (s: GameState): boolean =>
   earnedCredit(s.persistBtns, s.revealed, s.countedWrong)
 
+// Does opening Show Codes PENALISE the card on screen — count it a miss, show its answer, burn it?
+// Exactly when it is the LIVE card and still unresolved: not browsing, not a credited live card, its
+// answer not already shown (the SHOW_CODES case argues each exclusion). One rule, because a mode
+// reacts to the penalty too: Blitz ends a running round on it, and stops a tap-ended round's
+// draining clock on it — and a read-only review (a browsed date's codes) must do neither.
+export const showCodesPenalizes = (s: GameState): boolean =>
+  s.backDepth === 0 && !liveCredited(s) && !s.revealed
+
 // The per-question frozen Save-Stats value (frozen on first stat-affecting action),
 // else the live setting. Mirrors App's effectiveSaveStats / saveStatsThisQRef.
 export const effectiveSaveStats = (state: GameState, saveStats: boolean): boolean =>
@@ -862,7 +870,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Show Codes is a PENALTY-FREE, read-only review (just open the panel) whenever the current
       // question is already RESOLVED — opening the codes then can't be a "peek before answering". Three
       // resolved cases, all of which must NOT run the penalty path below (which counts a played, resets
-      // the streak, arms countedWrong, and re-sets saveStatsThisQ):
+      // the streak, arms countedWrong, and re-sets saveStatsThisQ) — showCodesPenalizes is the three as
+      // one rule, so the modes that react to the penalty read the very same one:
       //   • browsing back (backDepth>0) — reviewing history. Burning a browsed entry would count a
       //     second `played` for a card whose one was counted when it was played (good > played).
       //     (Fix 2026-06-06; test: classic.dom "Show Codes while browsing back is read-only".)
@@ -878,9 +887,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     saveStatsThisQ — which on a never-played LOCK_REVEAL'd question makes it look "scored" so
       //     a later advance pushes it as a PHANTOM history miss (a good/streak desync). A read-only
       //     review keeps saveStatsThisQ untouched. (C2 fuzz fix, timed-strong profile.)
-      if (state.backDepth > 0 || liveCredited(state) || state.revealed) {
-        return { ...state, calcOpen: true }
-      }
+      if (!showCodesPenalizes(state)) return { ...state, calcOpen: true }
       const correct = correctIndexOf(state.date, useJulian)
       const effective = effectiveSaveStats(state, saveStats)
       const next: GameState = {
