@@ -1777,6 +1777,45 @@ describe('MoX — Override ⇄ Undo', () => {
     expect(screen.queryByText('Q3')).toBeNull()
   })
 
+  // ⚠ A CREDIT THAT LEAVES THE RUN ENDED MUST HOLD (second review round, F1). Crediting the failing
+  // wrong while ANOTHER miss still stands elsewhere in the run cannot resume it (Allow Mistakes off:
+  // no miss anywhere) — so the press must stay on the card, exactly as Blitz holds a credit on a round
+  // that stays ended. Advancing drew a fresh date onto the failed run, which the screen then hid as
+  // "—": the card just credited vanished and a question nobody could answer took its place.
+  it('crediting the failing wrong while another miss stands keeps the card on screen, and the run stays failed until the last miss goes', () => {
+    mountApp()
+    switchToAox()
+    setN(4) // Allow Mistakes off
+    click('Begin')
+    solveIn(1000) // card 1
+    solveIn(1000) // card 2
+    fakeNow += 1000
+    const failing = readDate()
+    answerWrong() // card 3 — the run fails
+    click('<') // browse to card 2…
+    click('Override') // …and take its credit away: the run now has a second miss
+    expect(statValue('Score')).toBe('1/3')
+    click('>') // back to the live card 3
+    expect(readDate()).toEqual(failing)
+    click('Override') // credit card 3 — card 2 is still a miss, so the run cannot resume
+    expect(statValue('Score')).toBe('2/3')
+    expect(readDate()).toEqual(failing) // the card stays, credited, on the failed run
+    expect(screen.getByText('Q3')).toBeInTheDocument()
+    expect(ctrl('Undo')).toBeInTheDocument() // the button still points at it
+    expect(gridLive()).toBe(false) // failed, locked
+    click('<') // put card 2's credit back while browsing — a browsed press never resumes a run
+    click('Undo')
+    expect(statValue('Score')).toBe('3/3')
+    click('>')
+    expect(gridLive()).toBe(false) // still failed: the run was not resumed under the player's feet
+    click('Undo') // card 3 back to the miss it was…
+    expect(statValue('Score')).toBe('2/3')
+    click('Override') // …and credited again with no other miss left: the run resumes and moves on
+    expect(statValue('Score')).toBe('3/3')
+    expect(readDate()).not.toEqual(failing)
+    expect(gridLive()).toBe(true)
+  })
+
   it('reveal flash: a press cancels the pending auto-advance, and its Undo neither restarts nor strands it', () => {
     mountApp()
     switchToAox()

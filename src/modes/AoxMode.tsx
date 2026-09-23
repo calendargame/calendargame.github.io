@@ -488,13 +488,10 @@ function AoxMode({
       return
     }
     if (oneByOne) return // One-by-One: pause on "Next" (awaitingNext) — see the answer, then Continue
-    flashThenAdvance(correct)
-  }
-  // Flash the revealed answer (grid index `idx`) for FLASH_MS, then advance. onReveal's flow, and an
-  // Undo's: an Override inside that window cancels the advance, so undoing it must arm it again or
-  // the player is left on a revealed miss with no Next button and nothing to press but Reset.
-  const flashThenAdvance = (idx: number) => {
-    setFlashWithTimeout({ type: 'good', idx })
+    // Flash the revealed answer for FLASH_MS, then advance. A press of Override inside that window
+    // cancels the advance (onOverride) and nothing ever re-arms it: the press either moved play on
+    // itself, or left the card a credit / a miss the run's own controls carry on from.
+    setFlashWithTimeout({ type: 'good', idx: correct })
     if (revealAdvanceRef.current) clearTimeout(revealAdvanceRef.current)
     revealAdvanceRef.current = setTimeout(() => {
       revealAdvanceRef.current = null
@@ -548,24 +545,31 @@ function AoxMode({
     // first cut re-armed this advance when its Undo rewound the press; the per-card toggle has no
     // rewind — an Undo flips a card, it does not put a flash back — so the re-arm is gone with it.)
     cancelRevealAdvance()
-    // ⚠ THE COMPLETING SOLVE HOLD: crediting the live wrong when this credit is the run's Nth must NOT
-    // advance, or the run would complete while sitting on a phantom extra question (an Ao10 via
-    // Reveal + Override showed Q11). Same rule as a normal final correct answer's `complete`. Taking a
-    // credit AWAY never advances — the engine's own rule — so it needs nothing here.
-    const hold = plan.target === 'live' && plan.credits && !plan.overridden && doneCount === n - 1
     // `good` after this press — `played` never moves, so "no miss left behind" is one comparison.
     const goodAfter = S.good + (plan.credits ? 1 : -1)
+    const fails = !plan.credits && !allowMistakes && runPhase !== 'idle'
+    // The two RESUME cases. The second is the held completing solve handed back; it is reachable only
+    // with Allow Mistakes on, because with it off `fails` takes the press instead.
+    const resumes =
+      !fails &&
+      ((runPhase === 'failed' && plan.credits && state.backDepth === 0 && S.played === goodAfter) ||
+        (runPhase === 'done' && plan.target === 'live' && !plan.credits))
+    // ⚠ HOLD WHENEVER THE RUN IS ENDED AFTER THIS PRESS — the one rule, with two ways in:
+    //   • this credit is the run's Nth (goodAfter ≥ n): advancing would complete the run while
+    //     sitting on a phantom extra question (an Ao10 via Reveal + Override showed Q11). Same rule as
+    //     a normal final correct answer's `complete`, and it covers a press that resumes AND completes.
+    //   • the run is over and this press does not resume it — crediting the failing wrong while
+    //     another miss still stands elsewhere in the run: advancing would draw a fresh date onto a dead
+    //     run, a question nobody can answer (the screen then hid it as "—", and the card just credited
+    //     vanished with it). Blitz holds for the same reason on a round that stays ended.
+    // `hold` only ever matters to a press that would otherwise advance (the live card newly credited);
+    // taking a credit away never advances — the engine's own rule — so it needs nothing here.
+    const hold = goodAfter >= n || (isLocked && !resumes)
     if (plan.target === 'live' && plan.credits) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override({ hold }) // any Best impact reconciles in the effect above
-    if (!plan.credits && !allowMistakes && runPhase !== 'idle') {
+    if (fails) {
       setRunPhase('failed')
-    } else if (
-      (runPhase === 'failed' && plan.credits && state.backDepth === 0 && S.played === goodAfter) ||
-      (runPhase === 'done' && plan.target === 'live' && !plan.credits)
-    ) {
-      // The two RESUME cases, one branch so the line under them is written once. The second is the
-      // held completing solve handed back; it is reachable only with Allow Mistakes on, because with
-      // it off the fail branch above took the press instead.
+    } else if (resumes) {
       setRunPhase('running')
       // ⚠ THE BREAKDOWN BELONGS TO THE RUN THAT ENDED, and this is the one door that puts an ENDED run
       // back on the clock (Blitz's resumeRound is the same door in that mode, with the same line).
