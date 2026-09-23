@@ -85,11 +85,26 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    date: '2026-09-16',
+    date: '2026-09-23',
     items: [
+      'Override is now a switch you can flip as often as you like, in every mode. After you override a date the button reads Undo — press it and that date goes back to exactly how you answered it, red highlights and all, with your score, streak and times following. Every date you’ve played remembers this for as long as it’s in your history, so you can browse back to one and flip it again.',
+      'A finished Blitz round or MoX run you come back to after switching presets brings every date’s Override or Undo with it.',
+      'In Blitz and MoX a tap of Override or Undo can now end a round or run as well as rescue one. A Blitz round that a tap ended keeps its date on screen and its clock running until you put it right, and with Allow Mistakes on in MoX, taking the credit off a run’s final solve hands the run back with a Next button. How to Play has the full rules.',
+      'A failed MoX run now opens its breakdown too — tap the stats strip, just like a finished run — and a failed run always shows its times.',
+      'Each row of the run breakdown now shows that date’s day of the week as one letter (the key is in How to Play), and fastest, slowest, missed, shown and overridden now sit before the time, so the times line up in one column.',
+      'In ⚙ Settings the Global and Per-preset headings are now centered, with a heavier line across the menu splitting it into its two halves.',
       'Popups no longer carry a Cancel button. The one button left on a popup is the one that goes ahead — Delete, Reset Stats, Full Reset, Save — and to back out you tap outside the box, press Esc, or use Back, exactly the way the Changelog and the saved-defaults popup already closed.',
       'In ⚙ Settings → Manage Presets, backing out of a delete question now takes you back to the list of presets with the popup still open, instead of closing the whole thing. Back out again from there and it closes.',
-      'Each mode’s Reset Stats popup now also says that no other preset is touched, alongside the other modes keeping their stats.',
+      'Deleting a preset you’ve never used — nothing played, nothing changed, nothing saved — no longer asks first. A preset with anything in it, including a round or run still going, still asks.',
+      'Each mode’s Reset Stats popup now also says that no other preset is touched, and Reset Settings and Full Reset now say exactly what they restore.',
+      'How to Play has been checked line by line against the app, and the Stats, Override, Blitz and MoX sections in particular now say exactly what each number and button does.',
+      'Another attempt at dimming the iPhone status bar along with the rest of the screen when a popup opens in the app installed on your home screen. An earlier note said this already worked; in the installed app it didn’t.',
+      'If this update arrives while a finished Blitz round or MoX run is waiting on screen, dates you’d already overridden in it come back without your original wrong highlights — the older version never kept them. Your score and times are unaffected.',
+      'Fixed: turning Amnesic on by itself could not be saved as a default. Now it can, and it lights up Reset Settings and Full Reset like any other change.',
+      'Fixed: a star could stay lit next to a Blitz best that an Override had taken back.',
+      'Fixed: a finished Blitz round you came back to after switching presets could resume with a full minute on the clock instead of the time it actually had left.',
+      'Fixed: the Last time could show an older date’s time after an Override.',
+      'Fixed: the breakdown’s Fastest and Slowest could read a hundredth of a second different from the same solve in the list below.',
     ],
   },
   {
