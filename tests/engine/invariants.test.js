@@ -242,4 +242,27 @@ describe('checkGameInvariants — the per-card Override record', () => {
       join(checkGameInvariants({ ...l, card: { ...l.card, answered: rest } }, false)),
     ).toContain('live flags')
   })
+
+  // The shape an older build's migrated blob once reached: a credited O still carrying the codes
+  // penalty its as-answered state had, so the first Undo lost it (second review round, F2).
+  it('6 — an overridden live card not wearing the overridden flags, on screen or parked', () => {
+    const credited = ov(answer(initEngine(DATE), W), { hold: true }) // a held credited O
+    expect(checkGameInvariants(credited, false)).toEqual([])
+    expect(join(checkGameInvariants({ ...credited, calcPenaltyActive: true }, false))).toContain(
+      'overridden shape',
+    )
+    const miss = liveUncredited()
+    expect(join(checkGameInvariants({ ...miss, locked: false }, false))).toContain(
+      'overridden shape',
+    )
+    const one = answer(initEngine(DATE), C) // a card behind, so there is somewhere to browse to
+    const parked = gameReducer(ov(answer(one, W), { hold: true }), { type: 'BACK' }) // W is wrong for NEXT too
+    expect(checkGameInvariants(parked, false)).toEqual([])
+    const f0 = parked.forwardStack[0]
+    const bad = {
+      ...parked,
+      forwardStack: [{ ...f0, liveState: { ...f0.liveState, revealed: true } }],
+    }
+    expect(join(checkGameInvariants(bad, false))).toContain('overridden shape')
+  })
 })

@@ -324,3 +324,103 @@ describe('migrateEngineState — every legacy shape comes back healthy, scored a
     expect(checkGameInvariants(s, false)).toEqual([])
   })
 })
+
+// ── Show Codes survives the migration as a two-state fact (second review round, F2) ────────────────
+// An old build's crediting Override that HELD on the live card left the card's as-answered
+// `calcPenaltyActive` (Show Codes was opened on it) standing on the state. The migration used to
+// write `false` into the stored as-answered flags while leaving the state's own `true` in place — so
+// the first Undo put back `false`, and the "codes were shown" fact was gone for good: three states,
+// not two. The fact belongs to state A, and state O takes today's overridden shape.
+describe('migrateEngineState — the as-answered Show Codes flag round-trips', () => {
+  const heldCodesCredit = () => ({
+    ...baseTop,
+    gridEpoch: 0,
+    questionId: 0,
+    date: D1,
+    persistBtns: b([c(D1), 'correct']),
+    stats: { played: 1, good: 1, streak: 1, best: 1, times: [] },
+    stack: [],
+    forwardStack: [],
+    backDepth: 0,
+    locked: true,
+    revealed: false,
+    countedWrong: false,
+    canOverrideCorrect: true,
+    pendingWrongOverride: null,
+    overrideUsedThisQ: true,
+    calcOpen: false,
+    calcPenaltyActive: true,
+    browseHasCredit: false,
+    prevStatsSnapshot: null,
+    wrongTime: 1.5,
+    saveStatsThisQ: true,
+    liveSolveTime: null,
+  })
+  const flags = (s) => [s.locked, s.revealed, s.countedWrong, s.calcPenaltyActive]
+  const O_CREDIT_FLAGS = [true, false, false, false] // today's overridden-credit shape
+  const A_CODES_FLAGS = [true, true, true, true] // a Show-Codes miss, the answer shown
+
+  it('on screen: Override and Undo alternate between exactly two sets of flags', () => {
+    let s = migrateEngineState(heldCodesCredit(), false)
+    expect(checkGameInvariants(s, false)).toEqual([])
+    expect(flags(s)).toEqual(O_CREDIT_FLAGS)
+    for (let i = 0; i < 3; i++) {
+      s = gameReducer(s, { ...OV, hold: true }) // Undo
+      expect(flags(s)).toEqual(A_CODES_FLAGS)
+      expect(s.stats.good).toBe(0)
+      expect(checkGameInvariants(s, false)).toEqual([])
+      s = gameReducer(s, { ...OV, hold: true }) // Override
+      expect(flags(s)).toEqual(O_CREDIT_FLAGS)
+      expect(s.stats.good).toBe(1)
+      expect(checkGameInvariants(s, false)).toEqual([])
+    }
+  })
+
+  it('parked while browsing: the same card, carried in the isLive entry, comes back the same way', () => {
+    // Browsing card 1 (a 1.0s first-try correct); the live card above is parked as the isLive entry.
+    const live = heldCodesCredit()
+    const blob = {
+      ...live,
+      date: D2,
+      persistBtns: b([c(D2), 'correct']),
+      stats: { played: 2, good: 2, streak: 2, best: 2, times: [1.0] },
+      forwardStack: [
+        {
+          isLive: true,
+          ...D1,
+          btns: live.persistBtns,
+          overrideUsed: true,
+          capsule: { snapshot: null, wrongTime: 1.5 },
+          liveState: {
+            locked: true,
+            revealed: false,
+            countedWrong: false,
+            calcPenaltyActive: true,
+            canOverrideCorrect: true,
+            pendingWrongOverride: null,
+            saveStatsFrozen: true,
+          },
+          hasCredit: true,
+          solveTime: null,
+        },
+      ],
+      backDepth: 1,
+      overrideUsedThisQ: false,
+      calcPenaltyActive: false,
+      browseHasCredit: true,
+      liveSolveTime: 1.0,
+      wrongTime: null,
+    }
+    let s = migrateEngineState(blob, false)
+    expect(checkGameInvariants(s, false)).toEqual([])
+    const ls = s.forwardStack[0].liveState
+    expect([ls.locked, ls.revealed, ls.countedWrong, ls.calcPenaltyActive]).toEqual(O_CREDIT_FLAGS)
+    s = gameReducer(s, { type: 'FORWARD', useJulian: false })
+    expect(flags(s)).toEqual(O_CREDIT_FLAGS)
+    s = gameReducer(s, { ...OV, hold: true }) // Undo
+    expect(flags(s)).toEqual(A_CODES_FLAGS)
+    s = gameReducer(s, { ...OV, hold: true }) // Override
+    expect(flags(s)).toEqual(O_CREDIT_FLAGS)
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+})

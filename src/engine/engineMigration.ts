@@ -27,7 +27,13 @@
 // Idempotent: a state already in today's shape passes through unchanged, entry by entry, so the
 // door can run on every restore without knowing which build wrote the blob.
 // ─────────────────────────────────────────────────────────────────────────
-import { blankCard, correctIndexOf, earnedCredit, oneBtn } from './gameReducer.js'
+import {
+  blankCard,
+  correctIndexOf,
+  earnedCredit,
+  oneBtn,
+  overriddenLiveFlags,
+} from './gameReducer.js'
 import type {
   AnsweredState,
   CardMeta,
@@ -73,27 +79,20 @@ type LegacyState = Omit<GameState, 'stack' | 'forwardStack' | 'card'> & {
   undoCapsule?: unknown
 }
 
-// The live flags of the two overridden live shapes, as today's engine writes them (gameReducer's
-// OVERRIDE): a credited O holds the card locked with the answer alone in green; an un-credited O is
-// a resolved miss. The old engine left the un-credited one UNLOCKED (its Path 2 "stay"), which today
-// would let an answer paint over the overridden grid — so it is normalised, never carried over.
-const O_CREDIT: Pick<LiveFlags, 'locked' | 'revealed' | 'countedWrong'> = {
-  locked: true,
-  revealed: false,
-  countedWrong: false,
-}
-const O_MISS: Pick<LiveFlags, 'locked' | 'revealed' | 'countedWrong'> = {
-  locked: true,
-  revealed: true,
-  countedWrong: true,
-}
-// …and the as-answered flags an overridden LIVE card goes back to on Undo, which the old engine
-// never kept. A credited A was a held completing solve (locked, nothing shown or burned — exact);
-// an un-credited A had its grid replaced by the answer alone, so it is given the one miss shape that
-// grid actually is — a Reveal's.
-const liveA = (aCredited: boolean): LiveFlags => ({
-  ...(aCredited ? O_CREDIT : O_MISS),
-  calcPenaltyActive: false,
+// An overridden live card takes today's fixed O flags (gameReducer's overriddenLiveFlags). The old
+// engine left an un-credited one UNLOCKED (its Path 2 "stay"), which today would let an answer paint
+// over the overridden grid — so the old flags are normalised, never carried over.
+// …and the as-answered flags it goes back to on Undo, which the old engine never kept — except ONE:
+// the codes penalty. No old Override ever touched `calcPenaltyActive`, so whatever the old state
+// carries is the card's as-answered fact, and it is carried into A (dropping it made the first Undo
+// forget that Show Codes had been opened, for good — a third state, not a two-state switch). The rest
+// is reconstructed: a credited A was a held completing solve (locked, nothing shown or burned —
+// exact); an un-credited A had its grid replaced by the answer alone, so it is given the one miss
+// shape that grid actually is — a Reveal's, or a Show Codes' when the penalty says so. Those are the
+// same two shapes as O's, which is why O's definition serves.
+const liveA = (aCredited: boolean, calcPenaltyActive: boolean): LiveFlags => ({
+  ...overriddenLiveFlags(aCredited),
+  calcPenaltyActive,
 })
 
 // The O record of an overridden card: its as-answered state is the opposite credit, shown as the
@@ -144,14 +143,14 @@ const migrateEntry = (raw: LegacyEntry, useJulian: boolean): StackEntry => {
     return {
       ...e,
       btns: oneBtn(ci, credited ? 'correct' : 'override-wrong'),
-      liveState: { ...ls, ...(credited ? O_CREDIT : O_MISS) },
+      liveState: { ...ls, ...overriddenLiveFlags(credited) },
       meta: overriddenMeta(
         credited,
         e.solveTime ?? null,
         wrongTime,
         ci,
         capsule?.snapshot,
-        liveA(!credited),
+        liveA(!credited, ls.calcPenaltyActive),
       ),
     }
   }
@@ -199,14 +198,14 @@ export function migrateEngineState(blob: unknown, useJulian: boolean): GameState
   return {
     ...base,
     persistBtns: oneBtn(ci, credited ? 'correct' : 'override-wrong'),
-    ...(credited ? O_CREDIT : O_MISS),
+    ...overriddenLiveFlags(credited),
     card: overriddenMeta(
       credited,
       s.liveSolveTime,
       meta.wrongTime,
       ci,
       prevStatsSnapshot,
-      liveA(!credited),
+      liveA(!credited, s.calcPenaltyActive),
     ),
   }
 }

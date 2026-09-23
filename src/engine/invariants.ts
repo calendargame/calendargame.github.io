@@ -40,7 +40,8 @@
 //     answered) and O (overridden), and its credit is A.credited XOR overridden. A card in O stores
 //     its A; if that record and the card it describes ever come apart — the credit not the opposite,
 //     the grid not the answer alone, a time on an uncredited state, O not contributing its frozen
-//     time, live flags where there is no live card to put them back on — a later Undo would land
+//     time, live flags where there is no live card to put them back on, a live card in O not
+//     wearing O's fixed flags — a later Undo (or the Override after it) would land
 //     somewhere that is neither of the card's two states, which is exactly how a toggle could stack
 //     credit or strand a second. So each of those is a tripwire, over every card in play.
 //   • Date/calendar sanity: month 1-12, day 1-31, integer year; a weekday question resolves
@@ -48,7 +49,7 @@
 //     options (correctIndexOf returns -1 if a generator ever produced a puzzle whose answer
 //     isn't selectable).
 // ─────────────────────────────────────────────────────────────────────────
-import { correctIndexOf, earnedCredit, liveCredited } from './gameReducer.js'
+import { correctIndexOf, earnedCredit, liveCredited, overriddenLiveFlags } from './gameReducer.js'
 import type { EntryMeta, GameState, Question, Stats } from './gameReducer.js'
 
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0
@@ -132,7 +133,7 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
   // card exactly once and collects what all three need:
   //   • the SECONDS the cards name (the times ledger),
   //   • the parked LIVE entry (the card ledger's last term — see liveCounted's note below),
-  //   • the per-card Override record (the five tripwires — see visitCard).
+  //   • the per-card Override record (the six tripwires — see visitCard).
   // The card on screen is handed to the same visitor in the shape a history entry already has
   // (EntryMeta), so there is one visitor rather than one per place a card can be.
   //
@@ -156,12 +157,25 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
     {
       btns: state.persistBtns,
       // Not browsing → the live edge, whose credit is the live rule's; browsing → the entry under
-      // the cursor, whose flag BACK already resolved. No liveState either way, so visitCard's
-      // re-derivation falls through to exactly this value.
+      // the cursor, whose flag BACK already resolved. (At the live edge visitCard re-derives the same
+      // value from the liveState below — liveCredited IS earnedCredit on these flags.)
       hasCredit: state.backDepth === 0 ? liveCredited(state) : state.browseHasCredit,
       solveTime: state.liveSolveTime,
       meta: state.card,
       isLive: state.backDepth === 0,
+      // The live card's flags, in the parked shape, so tripwire 6 reads one shape wherever the live
+      // card sits. (One object per check, not per card — the hot-path note above is about the walk.)
+      ...(state.backDepth === 0
+        ? {
+            liveState: {
+              locked: state.locked,
+              revealed: state.revealed,
+              countedWrong: state.countedWrong,
+              calcPenaltyActive: state.calcPenaltyActive,
+              saveStatsFrozen: state.saveStatsThisQ,
+            },
+          }
+        : {}),
     },
     'on-screen card',
     -1,
@@ -221,7 +235,7 @@ const at = (arr: string, idx: number): string => (idx < 0 ? arr : `${arr}[${idx}
 // ONE card, for every check that is about a card (see the walk in checkGameInvariants):
 //   • the second it names goes into `named` — the times ledger's side of the pool. `forwardStack`
 //     cards count because a parked card is still contributing to the pool it left behind.
-//   • the five Override-record tripwires go into `rec`.
+//   • the six Override-record tripwires go into `rec`.
 // Optional chaining throughout: a tripwire that throws on a corrupt state (an entry with no record
 // at all) would hide the very report it exists to make.
 // The parked LIVE entry's `hasCredit` is BACK's raw read of its grid, so its credit is re-derived
@@ -265,4 +279,18 @@ function visitCard(named: number[], rec: string[], e: EntryMeta, arr: string, id
     rec.push(
       `${at(arr, idx)}: overridden, with live flags ${live ? 'missing from' : 'on'} a ${live ? 'live' : 'history'} card`,
     )
+  // 6 — an overridden LIVE card wears O's fixed flags, exactly (gameReducer's overriddenLiveFlags).
+  // Anything else is a third state: an Undo would put A's flags back, and the next Override would
+  // not reproduce what was on screen before it (an old build's blob once carried the codes penalty
+  // into O this way, and the first Undo lost it).
+  if (ls) {
+    const o = overriddenLiveFlags(credited)
+    if (
+      ls.locked !== o.locked ||
+      ls.revealed !== o.revealed ||
+      ls.countedWrong !== o.countedWrong ||
+      ls.calcPenaltyActive !== o.calcPenaltyActive
+    )
+      rec.push(`${at(arr, idx)}: an overridden live card's flags are not the overridden shape`)
+  }
 }

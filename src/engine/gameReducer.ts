@@ -128,6 +128,23 @@ export interface CardMeta {
   oTime?: number | null
 }
 
+// ★ THE LIVE FLAGS OF AN OVERRIDDEN LIVE CARD — state O's half of LiveFlags, which (unlike state A's)
+// is fixed: it depends only on whether O credits. A credited O is a clean held credit — locked, the
+// answer alone in green, nothing revealed or burned — which is exactly earnedCredit's shape, so
+// liveCredited, advance() and the run breakdown all read it as the credit it is. An un-credited O is
+// a resolved miss — locked, the answer shown, burned. Neither carries the codes penalty: O's grid is
+// the answer alone either way, and the as-answered fact that the codes were shown lives in state A
+// (AnsweredState.live), where the Undo puts it back. (An un-credited O only ever comes from a
+// credited A, and a credited live card can never have paid the codes penalty — SHOW_CODES is
+// read-only on one — so there is no penalty to carry there either.)
+// ONE definition, read by the reducer that writes these flags, by engine/engineMigration that
+// normalises an older build's overridden live card to them, and by engine/invariants, which holds
+// every overridden live card to them.
+export const overriddenLiveFlags = (credits: boolean): LiveFlags =>
+  credits
+    ? { locked: true, revealed: false, countedWrong: false, calcPenaltyActive: false }
+    : { locked: true, revealed: true, countedWrong: true, calcPenaltyActive: false }
+
 // The live question's on-screen flags, stashed on the forward-stack so FORWARD can restore it.
 export interface LiveState extends LiveFlags {
   saveStatsFrozen: boolean | null
@@ -1040,23 +1057,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         // AnsweredState. The spread is a no-op on a corrupt record, which the invariants report.)
         return withStreaks({ ...onCard, ...state.card.answered?.live })
       }
-      if (plan.credits) {
-        // A → O, crediting a burned card: a clean credited card — locked, the answer alone in green,
-        // nothing revealed or burned — which is exactly earnedCredit's shape, so liveCredited,
-        // advance() and the run breakdown all read it as the credit it now is.
-        const credited: GameState = {
-          ...onCard,
-          locked: true,
-          revealed: false,
-          countedWrong: false,
-          calcPenaltyActive: false,
-        }
-        if (!overrideAdvances(plan, hold)) return withStreaks(credited)
-        return withStreaks(advance(credited, { nextDate, useJulian, saved: true }))
-      }
-      // A → O, taking a held credit away: STAYS on the card as a resolved miss — locked, the answer
-      // shown, burned — and the mode offers whatever it offers after a miss (MoX's Next).
-      return withStreaks({ ...onCard, locked: true, revealed: true, countedWrong: true })
+      // A → O: the card takes O's fixed flags (overriddenLiveFlags).
+      const overridden: GameState = { ...onCard, ...overriddenLiveFlags(plan.credits) }
+      // Crediting a burned card moves play on unless the caller holds it; taking a held credit away
+      // STAYS on the card as a resolved miss, and the mode offers whatever it offers after a miss
+      // (MoX's Next).
+      if (!overrideAdvances(plan, hold)) return withStreaks(overridden)
+      return withStreaks(advance(overridden, { nextDate, useJulian, saved: true }))
     }
 
     // ── BACK ───────────────────────────────────────────────────────────────────
