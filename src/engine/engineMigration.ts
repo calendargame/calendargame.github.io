@@ -33,6 +33,7 @@ import {
   blankCard,
   correctIndexOf,
   earnedCredit,
+  forEachCard,
   oneBtn,
   overriddenLiveFlags,
 } from './gameReducer.js'
@@ -165,7 +166,35 @@ const migrateEntry = (raw: LegacyEntry, useJulian: boolean): StackEntry => {
   }
 }
 
+// ⚠ AND THE TIMES POOL IN PLAY ORDER. Today's engine keeps stats.times as the carried-in times
+// followed by the cards' times in play order (gameReducer's poolSlot) — "Last" on the stat strip
+// reads its end. An older build appended an Override's time wherever it happened (a browsed card's
+// credit went on the END, behind newer cards) and dropped by value, so its pool can hold exactly the
+// right times in the wrong order. Re-laid here from the cards themselves: the carried-in prefix keeps
+// its own order and the cards' times follow in play order, so the mean cannot move. A pool the cards
+// do not account for (a corrupt blob) is left exactly as it came, for the tripwire to report — never
+// silently "repaired" into a shape nothing played.
+const inPlayOrder = (s: GameState): GameState => {
+  const named: number[] = []
+  forEachCard(s, (e) => {
+    if (e.solveTime != null) named.push(e.solveTime)
+  })
+  const carried = s.stats.times.slice()
+  for (const t of named) {
+    const i = carried.lastIndexOf(t)
+    if (i < 0) return s
+    carried.splice(i, 1)
+  }
+  if (carried.length !== s.timesBase) return s
+  return { ...s, stats: { ...s.stats, times: [...carried, ...named] } }
+}
+
 export function migrateEngineState(blob: unknown, useJulian: boolean): GameState {
+  return inPlayOrder(migrateShape(blob, useJulian))
+}
+
+// The per-card record, from whichever build wrote the blob.
+function migrateShape(blob: unknown, useJulian: boolean): GameState {
   const {
     card,
     wrongTime,

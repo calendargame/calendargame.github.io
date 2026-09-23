@@ -1,7 +1,7 @@
 // tests/engine/runBreakdown.test.js — the run breakdown's two claims (sub-group 3C).
 //
 // CLAIM 1 (the point of the whole thing): THE ROWS RECONCILE EXACTLY WITH THE MEAN. The breakdown
-// is not a report about the run, it is the run's own decomposition — so the multiset of row times
+// is not a report about the run, it is the run's own decomposition — so the row times, in order,
 // must equal `stats.times` after ANY sequence of moves, and the row-derived mean must therefore be
 // the same number the stat strip prints. Every case below re-asserts it through one shared helper,
 // including every Override target and its Undo, because Override is where this app's hardest bugs
@@ -51,15 +51,16 @@ const forward = (s) => gameReducer(s, { type: 'FORWARD', useJulian: false })
 
 // ── The reconciliation assertion, used by every case ────────────────────────────────────────────
 // Three things at once, and they are separable on purpose: the ledger is healthy (the engine's own
-// tripwire agrees), the rows name exactly the pool's seconds, and the summary the popup PRINTS is
+// tripwire agrees), the rows name exactly the pool's seconds — in the pool's own order, since the pool
+// is kept in play order (gameReducer.poolSlot) and a run starts with nothing carried in — and the
+// summary the popup PRINTS is
 // therefore the same number the stat strip prints from `stats.times`. The last one is the claim a
 // player could catch us on, and it is the one that would silently rot without this line.
-const sorted = (a) => [...a].sort((x, y) => x - y)
 function expectReconciles(state) {
   expect(checkGameInvariants(state, false)).toEqual([])
   const b = buildRunBreakdown(state, false) //  every fixture date is stamped, so the fallback is moot
   const rowTimes = b.rows.map((r) => r.time).filter((t) => t != null)
-  expect(sorted(rowTimes)).toEqual(sorted(state.stats.times))
+  expect(rowTimes).toEqual(state.stats.times)
   expect(b.summary.mean).toBe(calcAvg(state.stats.times))
   expect(b.summary.median).toBe(calcMed(state.stats.times))
   // One row per card played — the same correspondence the card ledger asserts for the Q# badge.

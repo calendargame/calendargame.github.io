@@ -323,10 +323,12 @@ export function compareRefModel(m, state, plan) {
   if (s.played !== played) v.push(`REF played: model ${played}, reducer ${s.played}`)
   if (s.good !== good) v.push(`REF good: model ${good}, reducer ${s.good}`)
   if (s.best !== best) v.push(`REF best: model ${best}, reducer ${s.best}`)
-  const a = [...times].sort((x, y) => x - y)
-  const b = [...s.times].sort((x, y) => x - y)
-  if (a.length !== b.length || a.some((x, i) => x !== b[i]))
-    v.push(`REF times: model [${a}], reducer [${b}]`)
+  // IN ORDER, not as a multiset: the model's questions sit in play order (the hydrated prefix, then
+  // history, then the live question), and the reducer keeps its pool the same way — which is what
+  // makes the pool's last entry, "Last" on every stat strip, the newest solve. A toggle that put a
+  // time back at the end instead of in its question's place disagrees here (second review round, F4).
+  if (times.length !== s.times.length || times.some((x, i) => x !== s.times[i]))
+    v.push(`REF times: model [${times}], reducer [${s.times}]`)
   // The trailing streak is asserted only at a CLEAN live edge (not browsing, no miss on screen) —
   // mid-correction the displayed streak is transitional by design.
   if (m.cursor === 0 && !viewBurned(m.live) && !viewRevealed(m.live) && s.streak !== trailing)

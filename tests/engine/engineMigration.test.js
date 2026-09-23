@@ -186,7 +186,6 @@ const headBrowsing = () => ({
 })
 
 const OV = { type: 'OVERRIDE', useJulian: false, tracking: true, nextDate: D4 }
-const sorted = (a) => [...a].sort((x, y) => x - y)
 
 // Toggle whatever the button points at twice: the state must stay healthy through both presses, the
 // first must move `good` by exactly one, and the second must put every counter back.
@@ -198,10 +197,7 @@ function expectToggleable(s) {
   expect(o.stats.good).toBe(s.stats.good + (plan.credits ? 1 : -1))
   const a = gameReducer(o, OV)
   expect(checkGameInvariants(a, false)).toEqual([])
-  expect({ ...a.stats, times: sorted(a.stats.times) }).toEqual({
-    ...s.stats,
-    times: sorted(s.stats.times),
-  })
+  expect(a.stats).toEqual(s.stats) // the times too, in order — each goes back into its own slot
 }
 // Walk every card: toggle it where it stands, then step back to the next one.
 function expectEveryCardToggleable(s) {
@@ -464,5 +460,25 @@ describe('restoreParkedEngine — the one door a parked blob comes through', () 
       where: 'restore-parked-round',
       mode: 'aox',
     })
+  })
+})
+
+// ── An older build's pool comes back in play order (second review round, F4) ──────────────────────
+// Today's engine keeps stats.times as the cards' times in play order — "Last" reads its end. An older
+// build appended an Override's time wherever it happened (a browsed Path-1 credit went on the END,
+// behind newer cards), so its pool can hold the right times in the wrong order.
+describe('migrateEngineState — the times pool is re-laid in play order', () => {
+  it('a pool an old Override left out of order comes back in the cards’ order, the mean unmoved', () => {
+    const blob = { ...v2250(), stats: { ...v2250().stats, times: [0.9, 1.5] } }
+    const s = migrateEngineState(blob, false)
+    expect(s.stats.times).toEqual([1.5, 0.9]) // card 1's, then card 3's
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+
+  it('a pool the cards do not account for is left exactly as it came, for the tripwire to report', () => {
+    const blob = { ...v2250(), stats: { ...v2250().stats, times: [0.9, 7] } } // no 1.5 anywhere
+    const s = migrateEngineState(blob, false)
+    expect(s.stats.times).toEqual([0.9, 7])
+    expect(checkGameInvariants(s, false).join(' | ')).toContain('times ledger')
   })
 })

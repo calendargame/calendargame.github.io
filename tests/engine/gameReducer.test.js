@@ -14,7 +14,7 @@ import {
 import { wday } from '../../src/lib/calendar.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { buildRunBreakdown } from '../../src/engine/runBreakdown.js'
-import { calcAvg } from '../../src/engine/stats.js'
+import { calcAvg, calcLast } from '../../src/engine/stats.js'
 
 const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
 const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
@@ -532,14 +532,12 @@ describe('gameReducer — historyBase / cardNumber (the Q# badge)', () => {
 // a two-state switch: exact, unlimited, reachable from anywhere, and never drawing a date.
 describe('gameReducer — Override ⇄ Undo, the per-card toggle', () => {
   const T = { tracking: true }
-  // What "the same position" means across a full A → O → A cycle. Two things legitimately differ
+  // What "the same position" means across a full A → O → A cycle. ONE thing legitimately differs
   // and nothing else may: O's frozen time (card.oTime / meta.oTime) is recorded the first time O
-  // credits and kept for every later flip — that IS the two-state guarantee — and a time put back
-  // into the pool joins it at the end (the pool is a multiset; its order is not a card's).
-  const same = (s) =>
-    JSON.parse(
-      JSON.stringify(s, (k, v) => (k === 'oTime' ? undefined : k === 'times' ? [...v].sort() : v)),
-    )
+  // credits and kept for every later flip — that IS the two-state guarantee. The times pool is
+  // compared EXACTLY, order included: a time put back goes back into its card's own place (second
+  // review round, F4 — it used to join the pool at the end, which is what "Last" reads).
+  const same = (s) => JSON.parse(JSON.stringify(s, (k, v) => (k === 'oTime' ? undefined : v)))
 
   // Each target, as [label, the position before the first press, extra OVERRIDE payload].
   const TARGETS = [
@@ -616,9 +614,28 @@ describe('gameReducer — Override ⇄ Undo, the per-card toggle', () => {
     s = back(s)
     s = back(s)
     s = override(s, T) // Undo
-    expect(s.stats.times.sort()).toEqual([2.1, 3.0]) // A's own time — not its (null) wrongTime
+    expect(s.stats.times).toEqual([2.1, 3.0]) // A's own time — not its (null) wrongTime — in its place
     expect(calcAvg(s.stats.times)).toBeCloseTo(2.55, 10)
     expect(s.liveSolveTime).toBe(2.1)
+  })
+
+  // "Last" is calcLast(stats.times) — the pool's last entry — so the pool must stay in PLAY ORDER
+  // through any toggle, or Last reads an old card's time (second review round, F4: this exact
+  // sequence read 3.00s, the FIRST card's, where the newest solve took 5.00s).
+  it('a toggle puts a time back in its own card’s place, so Last stays the newest solve', () => {
+    let s = initEngine(DATE)
+    for (const t of [3, 1, 2, 4, 5]) s = answer(s, cOf(s), { tracking: true, elapsed: t })
+    expect(calcLast(s.stats.times)).toBe(5)
+    for (let i = 0; i < 5; i++) s = back(s) // on card 1
+    s = override(s, T) // its credit and its 3.0 leave the pool…
+    expect(s.stats.times).toEqual([1, 2, 4, 5])
+    s = override(s, T) // …and the Undo puts the 3.0 back where card 1 sits, not at the end
+    expect(s.stats.times).toEqual([3, 1, 2, 4, 5])
+    expect(calcLast(s.stats.times)).toBe(5)
+    for (let i = 0; i < 5; i++) s = forward(s)
+    s = override(s, T) // retro: card 5 un-credited — Last is now the newest solve that still counts
+    expect(calcLast(s.stats.times)).toBe(4)
+    expect(checkGameInvariants(s, false)).toEqual([])
   })
 
   it('a card toggled with timing hidden, then shown, keeps the time its O state first had (the freeze)', () => {
@@ -649,7 +666,7 @@ describe('gameReducer — Override ⇄ Undo, the per-card toggle', () => {
     expect(cardNumber(s)).toBe(3)
     s = override(s, T) // take card 3's credit away
     expect(s.stats).toMatchObject({ played: 6, good: 4, streak: 2, best: 2 }) // runs 1-2 and 5-6
-    expect(s.stats.times.sort()).toEqual([1, 2, 5, 6])
+    expect(s.stats.times).toEqual([1, 2, 5, 6])
     const rows = buildRunBreakdown(s, false).rows
     expect(rows.map((r) => r.credited)).toEqual([true, true, false, false, true, true])
     expect(rows.map((r) => r.time)).toEqual([1, 2, null, null, 5, 6])

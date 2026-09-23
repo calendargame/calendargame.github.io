@@ -612,8 +612,9 @@ export function runSequence(seed, steps, cov, profile) {
   // baseline — lifetime stats the in-session stack CANNOT reconstruct (a continuous mode hydrates stats
   // but not the history behind them). This is what exercises the override bestFloor/streakCarry fold —
   // the blind spot that hid the owner-reported best/streak-collapse bug. priorHistory = the prior
-  // per-question credit flags; priorTimes = one solve time per prior credit (distinct >=10 range so it
-  // never value-collides with an in-session time in dropContributedTime). The derived baseline satisfies
+  // per-question credit flags; priorTimes = one solve time per prior credit (a distinct >=10 range, so
+  // a reproduce dump shows at a glance which seconds were carried in — the engine no longer cares:
+  // a toggle moves a time by its card's slot, never by its value). The derived baseline satisfies
   // every invariant (good<=played, streak/best<=good, times.length<=good). RESET clears it (the engine
   // re-inits blank), so the oracle's prepended prefix is dropped in lockstep.
   let priorHistory = []

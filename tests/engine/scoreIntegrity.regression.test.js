@@ -95,7 +95,9 @@ describe('score-integrity regressions (C2 fuzz fixes, 2026-06-06)', () => {
 // Three more app-reachable score-integrity bugs the C1 expanded fuzz (new weighting profiles) found
 // + fixed (2026-06-07). Two are one family — a reversed first-try-correct removed its solve time by a
 // stale ABSOLUTE index (`timesLen`), which a prior reversal had shifted, stranding a time
-// (times.length > good); fixed by removing the time by VALUE (gameReducer.dropContributedTime). The
+// (times.length > good); fixed then by removing the time by VALUE, and since round 23 by removing it
+// from its own card's slot in the play-ordered pool (gameReducer.poolSlot), which is computed from the
+// cards at the moment of the press and so cannot go stale the way a stored index did. The
 // third is Path 4 restoring `good` from a stale snapshot, clobbering a credit earned since (streak/
 // best > good); fixed by incrementing the live `good` (and the now-dead snapshot was removed).
 describe('score-integrity regressions (C1 expanded-fuzz fixes, 2026-06-07)', () => {

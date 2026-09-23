@@ -32,7 +32,8 @@
 // — good is only ever maintained incrementally), plus best and clean-edge streak.
 //   • classic-strict — balanced Classic/Deduction play under the strong oracle.
 //   • deep-history   — long (600-step) sequences over DEEP stacks under the strong oracle.
-//   • times-churn    — heavy solve-time + tracking churn → hammers the times pool (dropContributedTime).
+//   • times-churn    — heavy solve-time + tracking churn → hammers the times pool (its play order —
+//                      gameReducer.poolSlot — held exactly by the invariants' times ledger).
 //   • aox-strong (C2 Part 1) — the AoX `complete` (held completing solve) surface. The oracle now
 //     folds the HELD live credit (a clean credit on the live grid) and the back-browsed isLive forward
 //     entry into the reconstruction, so the exact check runs where it previously couldn't. Still
@@ -136,7 +137,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
     T,
   )
 
-  // Times-churn — hammers the solve-time pool + dropContributedTime under the exact oracle.
+  // Times-churn — hammers the solve-time pool (and its play order) under the exact oracle.
   it(
     'times-churn — survives heavy solve-time churn under the EXACT score oracle',
     () => {

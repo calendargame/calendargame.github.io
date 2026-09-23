@@ -520,58 +520,99 @@ const toggleCard = (
   }
 }
 
-// Remove one occurrence of a now-reversed answer's solve time from the pool. Matches by VALUE (not an
-// index, which goes stale once an earlier reversal removed a time) so the count stays in lockstep
-// with `good`. null ⇒ the card contributed no time, so nothing to remove. (C1 fuzz fix.)
-const dropContributedTime = (times: number[], t: number | null): number[] => {
-  if (t == null) return times
-  const i = times.indexOf(t)
-  return i < 0 ? times : [...times.slice(0, i), ...times.slice(i + 1)]
+// ── EVERY CARD IN PLAY, IN PLAY ORDER — the one definition of "which card came before which" ─────
+// The cards behind the one on screen (`stack`, oldest first), then — while browsing — the browsed card
+// itself, then the cards parked ahead of it (`forwardStack`, which BACK fills newest-first, so it is
+// walked from its END; its index 0 is always the parked LIVE card, which therefore comes last), and at
+// the live edge the live card on screen. The card on screen has no entry of its own, so it is handed
+// to `visit` in an entry's shape (onScreenCard) — its flags as a LiveState when it is the live card, so
+// the live card reads the same whether it is on screen or parked.
+// Three readers, which is why it is one function: the streak recompute (creditSequence), the times
+// pool's order (below), and engine/invariants' walk, which holds the pool to it. ⚠ It allocates
+// nothing per card — the invariant walk runs after every state change in the app, over histories a
+// thousand cards long.
+export const onScreenCard = (s: GameState): EntryMeta => ({
+  btns: s.persistBtns,
+  // Not browsing → the live edge, whose credit is the live rule's; browsing → the entry under the
+  // cursor, whose flag BACK already resolved.
+  hasCredit: s.backDepth === 0 ? liveCredited(s) : s.browseHasCredit,
+  solveTime: s.liveSolveTime,
+  meta: s.card,
+  isLive: s.backDepth === 0,
+  ...(s.backDepth === 0
+    ? {
+        liveState: {
+          locked: s.locked,
+          revealed: s.revealed,
+          countedWrong: s.countedWrong,
+          calcPenaltyActive: s.calcPenaltyActive,
+          saveStatsFrozen: s.saveStatsThisQ,
+        },
+      }
+    : {}),
+})
+export type CardPlace = 'stack' | 'forwardStack' | 'on-screen card'
+export function forEachCard(
+  s: GameState,
+  visit: (e: EntryMeta, place: CardPlace, idx: number) => void,
+): void {
+  for (let i = 0; i < s.stack.length; i++) visit(s.stack[i], 'stack', i)
+  const screen = onScreenCard(s)
+  if (s.backDepth > 0) visit(screen, 'on-screen card', -1)
+  for (let i = s.forwardStack.length - 1; i >= 0; i--) visit(s.forwardStack[i], 'forwardStack', i)
+  if (s.backDepth === 0) visit(screen, 'on-screen card', -1)
+}
+
+// ── THE TIMES POOL IS IN PLAY ORDER ─────────────────────────────────────────────────────────────
+// `stats.times` = the carried-in times (`timesBase` of them — hydrated, or kept across a
+// RESET_ROUND), then every time a card names, in play order (forEachCard). "Last" on every stat
+// strip is calcLast — the pool's final entry — so this order is what makes it the newest solve.
+// ANSWER keeps it for free (it appends the live card's time, and the live card is last in play). A
+// toggle must put a card's time back in the card's OWN place: it used to drop by value and append,
+// which after a single Override ⇄ Undo on an old card made "Last" read that old card's time (second
+// review round, F4). The place is exact and cheap: the cards before a toggled card are always the
+// first `n` history entries — `stack` holds everything behind the card on screen, and the retro
+// target is its last entry — so its slot is the carried-in count plus the times those name.
+// engine/invariants holds the whole pool to this order after every change, and the fuzz's reference
+// model (which keeps its questions in play order and shares no code with this) compares it exactly.
+const poolSlot = (s: GameState, before: number): number => {
+  let at = s.timesBase
+  for (let i = 0; i < before; i++) if (s.stack[i].solveTime != null) at++
+  return at
 }
 
 // A toggle's effect on the counters: `good` moves by one in the card's new direction, and the card's
-// old contribution leaves the pool as its new one enters. `played` never moves — a toggle neither
+// old contribution leaves its slot as its new one takes it. `played` never moves — a toggle neither
 // adds nor removes a card — which is why historyBase and timesBase are never touched by one either.
-const retime = (stats: Stats, before: CardFields, after: CardFields): Stats => {
-  const times = dropContributedTime(stats.times, before.solveTime)
-  return {
-    ...stats,
-    good: stats.good + (after.hasCredit ? 1 : -1),
-    times: after.solveTime == null ? times : [...times, after.solveTime],
-  }
+const retime = (stats: Stats, at: number, before: CardFields, after: CardFields): Stats => {
+  const times = stats.times.slice()
+  if (before.solveTime != null) times.splice(at, 1)
+  if (after.solveTime != null) times.splice(at, 0, after.solveTime)
+  return { ...stats, good: stats.good + (after.hasCredit ? 1 : -1), times }
 }
 
 // ── THE CREDIT SEQUENCE — every scored card in play order, as credit / miss ──────────────────────
 // What streak and best are recomputed from after a toggle, because a toggle can change ANY card's
-// credit — not just the newest — and a run of credits is a fact about the whole sequence:
-//   the hydrated trailing streak (as leading credits — see GameState.streakCarry), then the cards
-//   behind the one on screen (`stack`), then the browsed card, then the cards parked ahead of it
-//   (the forward stack, newest-first, so reversed), then the LIVE card if it was scored.
+// credit — not just the newest — and a run of credits is a fact about the whole sequence: the
+// hydrated trailing streak (as leading credits — see GameState.streakCarry), then every card in play
+// order (forEachCard).
 // The live card is folded in wherever it is — on screen, or parked as the isLive forward entry while
-// you browse — because a scored live card belongs to the trailing history exactly as advance() will
-// later push it: a scored miss at the live edge breaks the streak, a scored live credit extends it.
-// (This replaced five hand-passed variants, two of which dropped a scored live card altogether.)
-const liveContribution = (s: GameState): boolean[] => {
-  if (s.backDepth === 0) {
-    const scored = s.saveStatsThisQ === true && Object.keys(s.persistBtns).length > 0
-    return scored ? [liveCredited(s)] : []
-  }
-  const e = s.forwardStack.find((f) => f.isLive)
-  const ls = e?.liveState
-  if (!e || !ls || ls.saveStatsFrozen !== true || !e.btns || !Object.keys(e.btns).length) return []
-  return [earnedCredit(e.btns, ls.revealed, ls.countedWrong)]
+// you browse — but only if it was SCORED, because a scored live card belongs to the trailing history
+// exactly as advance() will later push it: a scored miss at the live edge breaks the streak, a scored
+// live credit extends it; a fresh or unscored one is not a card of the history at all. Its credit is
+// the live rule (earnedCredit on its flags), never its entry's raw `hasCredit` — BACK stamps that from
+// the grid alone, and a revealed live card is not a credit. (This replaced five hand-passed variants,
+// two of which dropped a scored live card altogether.)
+const creditSequence = (s: GameState): boolean[] => {
+  const seq = Array.from({ length: s.streakCarry }, () => true)
+  forEachCard(s, (e) => {
+    const ls = e.liveState
+    if (!e.isLive) seq.push(!!e.hasCredit)
+    else if (ls?.saveStatsFrozen === true && e.btns && Object.keys(e.btns).length)
+      seq.push(earnedCredit(e.btns, ls.revealed, ls.countedWrong))
+  })
+  return seq
 }
-const creditSequence = (s: GameState): boolean[] => [
-  ...Array.from({ length: s.streakCarry }, () => true),
-  ...s.stack.map((e) => !!e.hasCredit),
-  ...(s.backDepth > 0 ? [s.browseHasCredit] : []),
-  ...s.forwardStack
-    .slice()
-    .reverse()
-    .filter((e) => !e.isLive)
-    .map((e) => !!e.hasCredit),
-  ...liveContribution(s),
-]
 // streak = the trailing run, best = the longest run — never below the hydrated best (bestFloor, 0 for
 // a blank start). Prepending the carry already captures a run joining the prior trailing streak to
 // in-session credits; the floor covers a longer prior run the carry does not represent.
@@ -1003,7 +1044,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const entry: StackEntry = { ...e, ...after }
         return withStreaks({
           ...state,
-          stats: retime(state.stats, before, after),
+          stats: retime(state.stats, poolSlot(state, state.stack.length - 1), before, after),
           stack: [...state.stack.slice(0, -1), entry],
         })
       }
@@ -1018,7 +1059,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const after = toggleCard(before, correctIndexOf(state.date, useJulian), tracking)
         return withStreaks({
           ...state,
-          stats: retime(state.stats, before, after),
+          stats: retime(state.stats, poolSlot(state, state.stack.length), before, after),
           persistBtns: after.btns,
           browseHasCredit: after.hasCredit,
           // The card being browsed IS `state.date`, so its share of the pool is the on-screen half —
@@ -1046,7 +1087,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const after = toggleCard(before, correctIndexOf(state.date, useJulian), tracking, liveFlags)
       const onCard: GameState = {
         ...state,
-        stats: retime(state.stats, before, after),
+        stats: retime(state.stats, poolSlot(state, state.stack.length), before, after),
         persistBtns: after.btns,
         liveSolveTime: after.solveTime,
         card: after.meta,

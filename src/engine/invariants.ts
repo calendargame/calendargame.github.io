@@ -32,10 +32,12 @@
 //     from saved progress, or kept across a RESET_ROUND that wiped the history) or is named by
 //     exactly one card. That is what lets the run breakdown list the solves one per row and have
 //     the rows RECONCILE with the mean printed above them, instead of being a second, independently
-//     computed opinion that could quietly drift. Two checks, and they are strongest together: the
-//     ledger's times are a sub-multiset of the pool (no card names a second the mean does not
-//     contain), and the counts add up (no second in the mean goes unnamed). In a run mode, where
-//     timesBase is 0 by construction, the pair forces exact equality.
+//     computed opinion that could quietly drift. And it is exact, ORDER included: the pool is its
+//     carried-in times followed by the cards' times in play order — no card names a second the mean
+//     does not contain, no second in the mean goes unnamed, and the pool's last entry is the newest
+//     solve, which is what every stat strip's "Last" reads (a toggle once broke that — see
+//     gameReducer's poolSlot). In a run mode, where timesBase is 0 by construction, the pool IS the
+//     cards' times, in order.
 //   • The PER-CARD OVERRIDE RECORD (round 23 Q6): every scored card holds two fixed states, A (as
 //     answered) and O (overridden), and its credit is A.credited XOR overridden. A card in O stores
 //     its A; if that record and the card it describes ever come apart — the credit not the opposite,
@@ -49,7 +51,7 @@
 //     options (correctIndexOf returns -1 if a generator ever produced a puzzle whose answer
 //     isn't selectable).
 // ─────────────────────────────────────────────────────────────────────────
-import { correctIndexOf, earnedCredit, liveCredited, overriddenLiveFlags } from './gameReducer.js'
+import { correctIndexOf, earnedCredit, forEachCard, overriddenLiveFlags } from './gameReducer.js'
 import type { EntryMeta, GameState, Question, Stats } from './gameReducer.js'
 
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0
@@ -99,19 +101,6 @@ function checkQuestionInvariants(q: Question, useJulian: boolean, where: string)
   return v
 }
 
-// Is every value in `sub` present in `sup`, counting duplicates? Both are sorted copies walked once
-// — the same two solve times really can occur twice, so a Set would silently accept a ledger naming
-// one second twice when the pool holds it once.
-function isSubMultiset(sub: number[], sup: number[]): boolean {
-  const a = [...sub].sort((x, y) => x - y)
-  const b = [...sup].sort((x, y) => x - y)
-  let i = 0
-  for (const v of b) {
-    if (i < a.length && a[i] === v) i++
-  }
-  return i === a.length
-}
-
 // The full engine-state check. `useJulian` honors the active calendar in the date checks (matching
 // what the reducer used to compute this state).
 export function checkGameInvariants(state: GameState, useJulian: boolean): string[] {
@@ -129,57 +118,33 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
   // ── ONE WALK OVER EVERY CARD IN PLAY ──
   // Three of the checks below are about the cards the state is holding — the history behind the
   // viewed card (`stack`), the cards parked ahead of it (`forwardStack`, where browsing back parks
-  // them, the live one included), and the card on screen — so they share ONE pass that visits each
-  // card exactly once and collects what all three need:
-  //   • the SECONDS the cards name (the times ledger),
+  // them, the live one included), and the card on screen — so they share ONE pass, in PLAY ORDER
+  // (gameReducer's forEachCard, the one definition of it), that visits each card exactly once and
+  // collects what all three need:
+  //   • the SECONDS the cards name, held against the pool in order as the walk goes (the times
+  //     ledger — see below),
   //   • the parked LIVE entry (the card ledger's last term — see liveCounted's note below),
   //   • the per-card Override record (the six tripwires — see visitCard).
-  // The card on screen is handed to the same visitor in the shape a history entry already has
-  // (EntryMeta), so there is one visitor rather than one per place a card can be.
   //
   // ⚠ HOT PATH. This runs in the app after EVERY state change (useGameEngine's tripwire effect) and
   // a run mode's history reaches a thousand cards, so the pass materialises nothing per card: no
   // view object, no result array, and a card's label built only when it has something to report.
   // (Round 23's first cut built all three per card, in a walk of its own on top of this one — it
   // cost ~4x the whole check and timed the fuzz survey's deep-history profile out. Keep it so.)
-  const named: number[] = []
+  const pool = Array.isArray(state.stats.times) ? state.stats.times : null
+  const base = isCount(state.timesBase) ? state.timesBase : null
+  let named = 0
+  let misplaced = false
   const rec: string[] = []
   let parkedLive: EntryMeta | undefined
-  for (let i = 0; i < state.stack.length; i++) visitCard(named, rec, state.stack[i], 'stack', i)
-  for (let i = 0; i < state.forwardStack.length; i++) {
-    const e = state.forwardStack[i]
-    if (e.isLive && !parkedLive) parkedLive = e
-    visitCard(named, rec, e, 'forwardStack', i)
-  }
-  visitCard(
-    named,
-    rec,
-    {
-      btns: state.persistBtns,
-      // Not browsing → the live edge, whose credit is the live rule's; browsing → the entry under
-      // the cursor, whose flag BACK already resolved. (At the live edge visitCard re-derives the same
-      // value from the liveState below — liveCredited IS earnedCredit on these flags.)
-      hasCredit: state.backDepth === 0 ? liveCredited(state) : state.browseHasCredit,
-      solveTime: state.liveSolveTime,
-      meta: state.card,
-      isLive: state.backDepth === 0,
-      // The live card's flags, in the parked shape, so tripwire 6 reads one shape wherever the live
-      // card sits. (One object per check, not per card — the hot-path note above is about the walk.)
-      ...(state.backDepth === 0
-        ? {
-            liveState: {
-              locked: state.locked,
-              revealed: state.revealed,
-              countedWrong: state.countedWrong,
-              calcPenaltyActive: state.calcPenaltyActive,
-              saveStatsFrozen: state.saveStatsThisQ,
-            },
-          }
-        : {}),
-    },
-    'on-screen card',
-    -1,
-  )
+  forEachCard(state, (e, place, idx) => {
+    // The walk runs forwardStack from its end, so the last isLive it meets is the lowest-indexed.
+    if (place === 'forwardStack' && e.isLive) parkedLive = e
+    const t = visitCard(rec, e, place, idx)
+    if (t == null) return
+    if (pool && base != null && pool[base + named] !== t) misplaced = true
+    named++
+  })
   // ── The card ledger ──
   // played == historyBase + (cards behind the viewed one) + (the live card, if it was counted).
   // The middle term is `stack.length + backDepth`, not just the stack: browsing back POPS entries
@@ -198,17 +163,19 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
       )
   }
   // ── The times ledger ──
-  // See the header note. Checked only against a real times array (a corrupt one is already
-  // reported above, and arithmetic on it would just report the same break a second time).
-  if (!isCount(state.timesBase)) {
+  // See the header note. The pool is EXACTLY its carried-in times followed by the cards' times in
+  // play order, so the walk held each named second against its own slot as it went (`misplaced`), and
+  // the count closes it. Checked only against a real times array (a corrupt one is already reported
+  // above, and arithmetic on it would just report the same break a second time).
+  if (base == null) {
     v.push(`timesBase is not a non-negative integer (${String(state.timesBase)})`)
-  } else if (Array.isArray(state.stats.times)) {
-    if (!isSubMultiset(named, state.stats.times))
-      v.push(`times ledger: a card names a solve time that is not in stats.times`)
-    if (state.timesBase + named.length !== state.stats.times.length)
+  } else if (pool) {
+    if (misplaced)
       v.push(
-        `times ledger: timesBase(${state.timesBase}) + named(${named.length}) != times.length(${state.stats.times.length})`,
+        `times ledger: the cards' times are not stats.times after its ${base} carried-in, in play order`,
       )
+    if (base + named !== pool.length)
+      v.push(`times ledger: timesBase(${base}) + named(${named}) != times.length(${pool.length})`)
   }
   v.push(...rec)
   return v
@@ -233,17 +200,17 @@ function liveCounted(state: GameState, parked: EntryMeta | undefined): number {
 const at = (arr: string, idx: number): string => (idx < 0 ? arr : `${arr}[${idx}]`)
 
 // ONE card, for every check that is about a card (see the walk in checkGameInvariants):
-//   • the second it names goes into `named` — the times ledger's side of the pool. `forwardStack`
-//     cards count because a parked card is still contributing to the pool it left behind.
-//   • the six Override-record tripwires go into `rec`.
+//   • the six Override-record tripwires go into `rec`;
+//   • it returns the second the card names — the times ledger's side of the pool, which the walk
+//     holds against the card's slot. `forwardStack` cards name one too, because a parked card is
+//     still contributing to the pool it left behind.
 // Optional chaining throughout: a tripwire that throws on a corrupt state (an entry with no record
 // at all) would hide the very report it exists to make.
 // The parked LIVE entry's `hasCredit` is BACK's raw read of its grid, so its credit is re-derived
 // here through the same rule the reducer applies to a live card (earnedCredit on its parked flags) —
 // a revealed live card must not pass as a credit.
-function visitCard(named: number[], rec: string[], e: EntryMeta, arr: string, idx: number): void {
+function visitCard(rec: string[], e: EntryMeta, arr: string, idx: number): number | null {
   const solveTime = e.solveTime ?? null
-  if (solveTime != null) named.push(solveTime)
   const ls = e.liveState
   const credited =
     e.isLive && ls ? earnedCredit(e.btns, ls.revealed, ls.countedWrong) : !!e.hasCredit
@@ -253,7 +220,7 @@ function visitCard(named: number[], rec: string[], e: EntryMeta, arr: string, id
     rec.push(`${at(arr, idx)}: an uncredited card contributes a time (${solveTime})`)
   // Everything below is about a card in state O, and most cards are not — this is where the walk
   // over a thousand-card history stops for them.
-  if (a === null) return
+  if (a === null) return solveTime
   // 1 — the whole rule: O's credit is the opposite of A's.
   if (credited === a.hasCredit)
     rec.push(
@@ -293,4 +260,5 @@ function visitCard(named: number[], rec: string[], e: EntryMeta, arr: string, id
     )
       rec.push(`${at(arr, idx)}: an overridden live card's flags are not the overridden shape`)
   }
+  return solveTime
 }
