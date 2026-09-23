@@ -533,7 +533,7 @@ describe('AoX — bug fix (Override-completed run stays on the Nth question, C2)
   // The completing-on-Nth fix must hold for EVERY way the final question becomes a counted wrong —
   // a wrong answer, a Reveal, or a Show Codes (owner: "regardless of … pressed the wrong answer,
   // revealed, or showed codes") — and with Save Stats on (the default `pin()` here). All three set
-  // countedWrong → Path 3 → the completing-credit hold. Ao2: finish Q1 to reach good=1, then complete
+  // countedWrong → the live card is the target → the completing-credit hold. Ao2: finish Q1 to reach good=1, then complete
   // Q2 the given way; the run must end ON Q2 (not Q3).
   const completeQ1 = () => {
     click('Reveal')
@@ -624,7 +624,7 @@ describe('AoX — reveal-flash race (Override during the flash cancels the pendi
     setN(3)
     click('Begin')
     click('Reveal') // Q1 revealed miss → arms the flash timer
-    click('Override') // Path 3 credit → advances to Q2 (good 1)
+    click('Override') // credits the live card → advances to Q2 (good 1)
     expect(statValue('Score')).toBe('1/1')
     const q2 = readDate()
     act(() => {
@@ -739,7 +739,7 @@ describe('AoX — bug fix (Show Codes on a completed run is review-only, C2)', (
 
 // ── Batch 9: bug fix — a post-completion Override reconciles the Best (C2, AoX run layer) ───────
 // A completed run records its Best, but its history stays browsable and overridable — and a
-// back-browse Override (Path 1) can retract one of the run's n credited solves. Before the fix, only
+// back-browse Override (the browsed target) can retract one of the run's n credited solves. Before the fix, only
 // the LIVE-edge reversal of the completing solve rolled the Best back (rollbackBest was gated on
 // !inBack), so a back-browse un-credit left the recorded Best standing on a run that no longer has
 // n credits — a fabricated Best (the AoX analog of the Blitz cross-round rollback bug, and the same
@@ -769,7 +769,7 @@ describe('AoX — bug fix (post-completion Override reconciles the Best, C2)', (
     expect(bestVal('Mean')).toMatch(/^\d+\.\d{2}s$/)
     click('<') // review the first solve
     expect(isDisabled(ctrl('Override'))).toBe(false)
-    click('Override') // Path-1 un-credit: retract the first solve (2/2 → 1/2)
+    click('Override') // browsed un-credit: retract the first solve (2/2 → 1/2)
     expect(statValue('Score')).toBe('1/2')
     // The run no longer stands at 2 credits, so its recorded Best must not stand either.
     expect(bestVal('Mean')).toBe('—')
@@ -1711,7 +1711,7 @@ describe('MoX — Override ⇄ Undo', () => {
     expect(bestVal('Median')).toBe('1.00s')
   })
 
-  it('undoing a Path-3 Override that COMPLETED a failed run returns it to FAILED', () => {
+  it('undoing the live credit that COMPLETED a failed run returns it to FAILED', () => {
     mountApp()
     switchToAox()
     setN(2) // Allow Mistakes off

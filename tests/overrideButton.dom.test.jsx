@@ -56,7 +56,8 @@ const clickButton = (el) => act(() => fireEvent.click(el))
 const wait = (ms) => act(() => vi.advanceTimersByTime(ms))
 
 // Classic, one question answered correctly: the Override on offer is the retro flip of that entry
-// (Path 5), so the score says plainly which presses landed — 1/1 before, 0/1 after an Override, 1/1
+// (the card behind the fresh live one), so the score says plainly which presses landed — 1/1 before,
+// 0/1 after an Override, 1/1
 // again after its Undo.
 const answeredCorrectly = () => {
   mountApp()

@@ -213,7 +213,7 @@ describe('runBreakdown — Override moves the time and the row together (every t
     s = override(s, D4) //                               Path 1 credits the browsed D1 with its 7s
     const b = expectReconciles(s)
     expect(b.rows.map((r) => r.n)).toEqual([1, 2])
-    expect(b.rows.map((r) => r.time)).toEqual([7, 3]) //  in CARD order, not in pool order
+    expect(b.rows.map((r) => r.time)).toEqual([7, 3]) //  in CARD order — which the pool keeps too
     s = forward(s)
     s = forward(s)
     expect(expectReconciles(s).rows.map((r) => r.time)).toEqual([7, 3]) //  unchanged by the round trip

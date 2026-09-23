@@ -45,7 +45,7 @@ describe('useGameEngine', () => {
     expect(result.current.state.countedWrong).toBe(true)
     expect(result.current.overrideAvail).toBe(true)
     act(() => result.current.override())
-    expect(result.current.state.stats).toMatchObject({ played: 1, good: 1 }) // Path 3 credit
+    expect(result.current.state.stats).toMatchObject({ played: 1, good: 1 }) // the live wrong, credited
   })
 
   it('reset clears stats and history', () => {

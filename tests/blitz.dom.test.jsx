@@ -983,7 +983,7 @@ describe('Blitz — Per Question + Allow Mistakes (C3a)', () => {
     expect(screen.getByText(/Best Score: 3\b/)).toBeInTheDocument()
   })
 
-  it('in-round Override on a wrong (Path 3) credits, advances, keeps the round live, and re-arms the clock', () => {
+  it('in-round Override on a live wrong credits, advances, keeps the round live, and re-arms the clock', () => {
     mountApp()
     switchToBlitz()
     clickText('Per Round')

@@ -242,7 +242,7 @@ describe('blitzBest — per-Q + Allow Mistakes fuzz (C3a): two independent oracl
   // The RESUME-REVERT composite for the NEW map — the component machinery is shared with
   // per-round (resumeRound reverts to the pre-round snapshot, the timerDone effect re-reconciles),
   // but per-Q + AM reaches it through its own ends (Reveal / Show Codes / a timeout on a burned
-  // question) and its rescue credits the resolved question (Path 3). Same independent oracles as
+  // question) and its rescue credits the resolved live question. Same independent oracles as
   // above over rounds that have FULLY ended, plus post-end override-downs that must never pull
   // either field below the pre-round fallback floor (the floor is inside the oracle: prior
   // rounds' values never drop).
@@ -276,7 +276,7 @@ describe('blitzBest — per-Q + Allow Mistakes fuzz (C3a): two independent oracl
         if ((good > 0 || hw > 0) && rnd() < 0.5) {
           best = { ...preRound } // Override rescue → resumeRound reverts to the pre-round snapshot
           if (rnd() < 0.8) {
-            good++ // the rescue credited the resolved question (Path 3 extends the streak too)
+            good++ // the rescue credited the resolved live question (which extends the streak too)
             streak++
             hw = Math.max(hw, streak)
           }

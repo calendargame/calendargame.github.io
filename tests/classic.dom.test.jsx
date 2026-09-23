@@ -135,8 +135,8 @@ describe('Classic — characterization (batch 1: basics)', () => {
     expect(statValue('Streak')).toBe('1/1')
     // The just-answered question was pushed to history → Back becomes available.
     expect(isDisabled(ctrl('<'))).toBe(false)
-    // After a first-try correct, the live Q is fresh and Override can retro-flip the
-    // just-answered entry (Path 5) → Override is enabled.
+    // After a first-try correct, the live Q is fresh and Override points at the just-answered
+    // entry behind it (the retro target) → Override is enabled.
     expect(isDisabled(ctrl('Override'))).toBe(false)
   })
 
@@ -150,7 +150,7 @@ describe('Classic — characterization (batch 1: basics)', () => {
     expect(dayState(wrongName(date))).toBe('wrong-latest')
     // The correct answer is NOT auto-revealed on a wrong (only Reveal/Show Codes/lock do that).
     expect(dayState(correctName(date))).toBe('idle')
-    // Same question stays (no advance); Override is now available (wrong → Path 3).
+    // Same question stays (no advance); Override is now available (the burned live card is the target).
     expect(readDate()).toEqual(date)
     expect(isDisabled(ctrl('Override'))).toBe(false)
     // Back stays disabled — a still-live wrong question hasn't been pushed to history.
@@ -195,7 +195,7 @@ describe('Classic — characterization (batch 2: live Override paths)', () => {
     document.getElementById('root')?.remove()
   })
 
-  it('Path 5 (correct → Override): retro-flips the just-answered question to wrong (1/1 → 0/1, streak 0)', () => {
+  it('retro (correct → Override): flips the just-answered question to wrong (1/1 → 0/1, streak 0)', () => {
     mountApp()
     const date = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(date)))
@@ -209,7 +209,7 @@ describe('Classic — characterization (batch 2: live Override paths)', () => {
     expect(isDisabled(ctrl('Undo'))).toBe(false)
   })
 
-  it('Path 3 (wrong → Override): retroactively credits the wrong answer and advances (0/1 → 1/1)', () => {
+  it('live (wrong → Override): credits the wrong answer and advances (0/1 → 1/1)', () => {
     mountApp()
     const date = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(date)))
@@ -217,7 +217,7 @@ describe('Classic — characterization (batch 2: live Override paths)', () => {
     fireEvent.click(ctrl('Override'))
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Streak')).toBe('1/1')
-    // Path 3 advances to a fresh question (history now has the credited entry).
+    // Crediting the live wrong advances to a fresh question (history now has the credited entry).
     expect(isDisabled(ctrl('<'))).toBe(false)
     expect(isDisabled(ctrl('Undo'))).toBe(false)
   })
@@ -255,29 +255,29 @@ describe('Classic — characterization (batch 3: Back/Forward + history Override
     expect(isDisabled(ctrl('>'))).toBe(true) // at the live edge again
   })
 
-  it('Path 1 (Back to a correct answer → Override): undoes the credit and marks it override-wrong (1/1 → 0/1)', () => {
+  it('browsed (Back to a correct answer → Override): takes the credit away and marks it override-wrong (1/1 → 0/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(q1))) // 1/1, advance
     fireEvent.click(ctrl('<')) // back to Q1
     expect(isDisabled(ctrl('Override'))).toBe(false)
-    fireEvent.click(ctrl('Override')) // delta-based undo of the credit
+    fireEvent.click(ctrl('Override')) // the browsed card flips to its overridden state: no credit
     expect(statValue('Score')).toBe('0/1')
     expect(statValue('Streak')).toBe('0/0')
     expect(dayState(correctName(q1))).toBe('override-wrong')
   })
 
-  it('Path 4 (wrong, then correct on same Q, then Override): credits the previous question; live Q stays put (timing off)', () => {
+  it('retro (wrong, then correct on the same Q, then Override): credits the previous question; the live Q stays put', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1
-    fireEvent.click(dayBtn(correctName(q1))) // advances to a fresh Q, still 0/1, arms pendingWrongOverride
+    fireEvent.click(dayBtn(correctName(q1))) // advances to a fresh Q, still 0/1; Q1 is now the retro target
     const q2 = readDate()
     expect(statValue('Score')).toBe('0/1')
     fireEvent.click(ctrl('Override')) // retroactively credits the previous (wrong-then-right) Q
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Streak')).toBe('1/1')
-    // With timing hidden (Classic default), Path 4 does NOT advance the live question.
+    // A press on a card behind the live one never moves the live question (timing shown or hidden).
     expect(readDate()).toEqual(q2)
     expect(isDisabled(ctrl('Undo'))).toBe(false)
   })
@@ -341,7 +341,7 @@ describe('Classic — Override ⇄ Undo', () => {
     expect(ctrl('Override')).toBeInTheDocument() // the card is back in A, so the word is Override
   })
 
-  it('Path 5 toggles on the history entry and leaves the live question alone', () => {
+  it('a retro press toggles the history entry and leaves the live question alone', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(q1))) // 1/1
@@ -440,7 +440,7 @@ describe('Classic — characterization (batch 4: Show Codes, streaks, Reset Stat
     expect(statValue('Score')).toBe('0/1')
     expect(statValue('Streak')).toBe('0/0')
     expect(dayState(correctName(date))).toBe('correct')
-    // Burned like a wrong → Override (Path 3) becomes available to reclaim credit.
+    // Burned like a wrong → Override (the live target) becomes available to reclaim credit.
     expect(isDisabled(ctrl('Override'))).toBe(false)
   })
 
@@ -501,7 +501,7 @@ describe('Classic — characterization (batch 5: timing-on, history & override n
     expect(statValue('Median')).toMatch(/^\d+\.\d{2}s$/)
   })
 
-  it('answering correctly AFTER a wrong (no Override) advances with no credit but arms Override', () => {
+  it('answering correctly AFTER a wrong (no Override) advances with no credit, and Override points at it', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1, streak 0
@@ -509,15 +509,15 @@ describe('Classic — characterization (batch 5: timing-on, history & override n
     expect(statValue('Score')).toBe('0/1') // no credit for the late-correct
     expect(statValue('Streak')).toBe('0/0')
     expect(isDisabled(ctrl('<'))).toBe(false) // advanced → history has the (uncredited) entry
-    expect(isDisabled(ctrl('Override'))).toBe(false) // pendingWrongOverride armed (Path 4 ready)
+    expect(isDisabled(ctrl('Override'))).toBe(false) // the uncredited card behind is the retro target
   })
 
-  it('Override after Reveal retroactively credits the question (Path 3 via Reveal)', () => {
+  it('Override after Reveal credits the question (the live target, via Reveal)', () => {
     mountApp()
     pressNewAndRead() // advance to a fresh, normalized question
     fireEvent.click(ctrl('Reveal')) // 0/1, revealed + counted wrong + locked
     expect(statValue('Score')).toBe('0/1')
-    fireEvent.click(ctrl('Override')) // Path 3: credit + advance
+    fireEvent.click(ctrl('Override')) // credit + advance
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Streak')).toBe('1/1')
     expect(isDisabled(ctrl('<'))).toBe(false) // advanced
@@ -554,12 +554,12 @@ describe('Classic — characterization (batch 5: timing-on, history & override n
 // ── Save Stats / Override availability (deliberate fix, 2026-06-06) ────────────
 // A question processed (answered wrong / Reveal / Show Codes) while Save Stats is OFF is
 // never scored (played is NOT incremented). Turning Save Stats back ON must NOT make that
-// question override-able again — otherwise Override Path 3 credits good+1 with played still
+// question override-able again — otherwise crediting the live card puts good+1 on played still
 // 0, an impossible 1/0 (good > played). The fix gates override AVAILABILITY on whether THIS
 // question was actually scored (state.saveStatsThisQ via effectiveSaveStats), not on the live
 // Save Stats setting. These assert the corrected behavior — they fail RED against the pre-fix
 // code (Override was wrongly enabled and the score jumped to 1/0). The Save-Stats-ON path
-// staying override-able is already covered by "Override after Reveal … (Path 3 via Reveal)".
+// staying override-able is already covered by "Override after Reveal … (the live target, via Reveal)".
 describe('Classic — Save Stats / Override availability (fix 2026-06-06)', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -596,9 +596,10 @@ describe('Classic — Save Stats / Override availability (fix 2026-06-06)', () =
     expect(statValue('Score')).toBe('0/0')
   })
 
-  it('Wrong while Save Stats OFF, then New + Save Stats ON: no Path-4 over-credit (Override locked)', () => {
-    // The unscored wrong must NOT arm pendingWrongOverride on the next question — else Override
-    // Path 4 credits good+1 on a played it never incremented (1/0). Gated at arming (advance `saved`).
+  it('Wrong while Save Stats OFF, then New + Save Stats ON: no retro over-credit (Override locked)', () => {
+    // The unscored wrong never enters history (advance pushes a card only when it was scored —
+    // `saved`), so there is no card behind the next question for a retro press to credit; if there
+    // were, it would put good+1 on a played it never incremented (1/0).
     mountApp()
     setSaveStats(false)
     const q1 = pressNewAndRead()
@@ -628,8 +629,8 @@ describe('Classic — Save Stats / Override availability (fix 2026-06-06)', () =
 // Browsing back (backDepth>0) is review-only: opening Show Codes on a browsed entry must NOT
 // change anything. The reducer's penalty-free guard only covered UNANSWERED browsed entries
 // (`!state.revealed`), so opening codes on a browsed ANSWERED/correct entry fell through and
-// armed countedWrong — which then let Override fire Path 3 (good+1) instead of the legitimate
-// Path 1 (flip), over-crediting to an impossible 2/1 (good > played). The fix makes Show Codes
+// armed countedWrong — which then let Override credit the card as a live one (good+1) instead of the
+// legitimate browsed flip, over-crediting to an impossible 2/1 (good > played). The fix makes Show Codes
 // penalty-free for ANY browsed entry. Surfaced by the C3 all-modes score-integrity survey.
 describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-06)', () => {
   beforeEach(() => {
@@ -645,7 +646,7 @@ describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-0
     document.getElementById('root')?.remove()
   })
 
-  it('Back to a correct entry → Show Codes → Override does Path 1 flip (0/1), never over-credits (2/1)', () => {
+  it('Back to a correct entry → Show Codes → Override flips the browsed card (0/1), never over-credits (2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(q1))) // 1/1 → advance to Q2 (Q1 now in history)
@@ -653,7 +654,7 @@ describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-0
     fireEvent.click(ctrl('<')) // browse back to Q1 (the correct, revealed entry)
     fireEvent.click(ctrl('Show Codes')) // review the codes — must be penalty-free
     expect(statValue('Score')).toBe('1/1') // reviewing never changes the score
-    fireEvent.click(ctrl('Override')) // back-browse override = Path 1 (flip correct→wrong)
+    fireEvent.click(ctrl('Override')) // the browsed target: flip correct → wrong
     expect(statValue('Score')).toBe('0/1') // the legit flip — NOT the pre-fix 2/1 over-credit
   })
 })
@@ -809,7 +810,8 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
 // recompute EXCLUDED the live question, so it counted PAST the live miss — the Streak read 1/1 instead
 // of 0/1 (and that inflated streak then inflated Best on the next correct answer). Both stayed ≤ Score,
 // so the good≤played / streak≤good checks couldn't catch it; the exact-history oracle did. Fixed in
-// gameReducer Path 1 (liveStreakContribution). Both tests fail RED against the pre-fix engine.
+// the engine's streak recompute (today gameReducer's creditSequence, which folds the scored live card
+// in wherever it sits). Both tests fail RED against the pre-fix engine.
 describe('Classic — back-browse Override past a live miss (fix 2026-06-08)', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -833,7 +835,7 @@ describe('Classic — back-browse Override past a live miss (fix 2026-06-08)', (
     expect(statValue('Score')).toBe('0/2')
     expect(statValue('Streak')).toBe('0/0')
     fireEvent.click(ctrl('<')) // browse back to Q1 (the live Q2 miss parks aside)
-    fireEvent.click(ctrl('Override')) // Path 1: credit Q1 — must NOT count the streak past the Q2 miss
+    fireEvent.click(ctrl('Override')) // browsed: credit Q1 — must NOT count the streak past the Q2 miss
     expect(statValue('Score')).toBe('1/2')
     expect(statValue('Streak')).toBe('0/1') // was 1/1 before the fix (the live Q2 miss was skipped)
     // Returning to the live edge keeps it honest.

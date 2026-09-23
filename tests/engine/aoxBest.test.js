@@ -242,7 +242,7 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
         best = reconcileAoxStanding(floor, run.good, n, run.times, rid).next
         expect(best, `seed ${seed} run ${r} record`).toEqual(expectedBest(runs))
       }
-      // Post-end Override edits on the ended run (back-browse Path 1 / retro Path 5 / Path 4).
+      // Post-end Override ⇄ Undo presses on the ended run (on a browsed card or the card behind).
       const edits = Math.floor(rnd() * 5)
       for (let e = 0; e < edits; e++) {
         if (rnd() < 0.5) {

@@ -234,10 +234,10 @@ describe('Deduction — characterization (batch 1: Day basics)', () => {
     expect(statValue('Accuracy')).toBe('100.0%')
     expect(statValue('Streak')).toBe('1/1')
     expect(isDisabled(ctrl('<'))).toBe(false) // pushed to history
-    expect(isDisabled(ctrl('Override'))).toBe(false) // Path 5 retro-flip available
+    expect(isDisabled(ctrl('Override'))).toBe(false) // the card behind is the retro target
   })
 
-  it('wrong answer: Score 0/1, Accuracy 0.0%, Streak 0/0, marks wrong, does NOT advance, arms Override', () => {
+  it('wrong answer: Score 0/1, Accuracy 0.0%, Streak 0/0, marks wrong, does NOT advance, offers Override', () => {
     mountApp()
     switchToDeduction()
     const before = readPuzzle()
@@ -247,7 +247,7 @@ describe('Deduction — characterization (batch 1: Day basics)', () => {
     expect(statValue('Streak')).toBe('0/0')
     expect(optState(optButtons()[j])).toBe('wrong-latest')
     expect(readPuzzle().raw).toBe(before.raw) // same puzzle, no advance
-    expect(isDisabled(ctrl('Override'))).toBe(false) // Path 3 armed
+    expect(isDisabled(ctrl('Override'))).toBe(false) // the burned live card is the target
     expect(isDisabled(ctrl('<'))).toBe(true) // still-live wrong not pushed to history
   })
 
@@ -286,7 +286,7 @@ describe('Deduction — characterization (batch 2: Day live Override)', () => {
     document.getElementById('root')?.remove()
   })
 
-  it('Path 5 (correct → Override): retro-flips the just-answered question to wrong (1/1 → 0/1, streak 0)', () => {
+  it('retro (correct → Override): flips the just-answered question to wrong (1/1 → 0/1, streak 0)', () => {
     mountApp()
     switchToDeduction()
     answerCorrect()
@@ -355,7 +355,7 @@ describe('Deduction — characterization (batch 3: Day Back/Forward + history Ov
     expect(isDisabled(ctrl('>'))).toBe(true) // at the live edge again
   })
 
-  it('Path 1 (Back to a correct answer → Override): undoes the credit, marks it override-wrong (1/1 → 0/1)', () => {
+  it('browsed (Back to a correct answer → Override): takes the credit away, marks it override-wrong (1/1 → 0/1)', () => {
     mountApp()
     switchToDeduction()
     answerCorrect() // 1/1, advance
@@ -368,18 +368,18 @@ describe('Deduction — characterization (batch 3: Day Back/Forward + history Ov
     expect(optState(optButtons()[i])).toBe('override-wrong')
   })
 
-  it('Path 4 (wrong, then correct on same Q, then Override): credits the previous Q; live Q stays (timing off)', () => {
+  it('retro (wrong, then correct on the same Q, then Override): credits the previous Q; the live Q stays', () => {
     mountApp()
     switchToDeduction()
     answerWrong() // 0/1
-    answerCorrect() // late-correct: advances, still 0/1, arms pendingWrongOverride
+    answerCorrect() // late-correct: advances, still 0/1; the previous Q is now the retro target
     const q2 = readPuzzle()
     expect(statValue('Score')).toBe('0/1')
     clickCtrl('Override') // retroactively credits the previous (wrong-then-right) Q
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Streak')).toBe('1/1')
-    expect(readPuzzle().raw).toBe(q2.raw) // timing off (Deduction default) → live Q does not advance
-    clickCtrl('Undo') // the retro credit comes back off, and is armed again
+    expect(readPuzzle().raw).toBe(q2.raw) // a press on a card behind never moves the live Q
+    clickCtrl('Undo') // the retro credit comes back off, and the button reads Override again
     expect(statValue('Score')).toBe('0/1')
     expect(readPuzzle().raw).toBe(q2.raw)
     expect(isDisabled(ctrl('Override'))).toBe(false)
@@ -407,7 +407,7 @@ describe('Deduction — characterization (batch 4: Day Show Codes, streaks, Rese
     expect(statValue('Score')).toBe('0/1')
     expect(statValue('Streak')).toBe('0/0')
     expect(optState(optButtons()[i])).toBe('correct')
-    expect(isDisabled(ctrl('Override'))).toBe(false) // burned → Path 3 available
+    expect(isDisabled(ctrl('Override'))).toBe(false) // burned → the live card is the target
   })
 
   it('consecutive correct answers build the streak; a wrong resets current but keeps best', () => {
@@ -589,7 +589,7 @@ describe('Deduction — C2: a silo round-trip preserves browse + armed-override 
     clickCtrl('Hide Codes')
     clickCtrl('>') // forward to the live wrong question
     expect(optState(optButtons()[j])).toBe('wrong-latest') // the wrong mark survived the detour
-    // …and the armed Override still fires (Path 3): credits the wrong → 2/2.
+    // …and Override still points at it: credits the wrong → 2/2.
     expect(isDisabled(ctrl('Override'))).toBe(false)
     clickCtrl('Override')
     expect(statValue('Score')).toBe('2/2')

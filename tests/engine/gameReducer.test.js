@@ -420,7 +420,7 @@ describe('gameReducer — gridEpoch (Q9: bumps on the two resets only)', () => {
     s = gameReducer(s, { type: 'REGEN_DATE', nextDate: DATE }) // regen in place
     s = reveal(s) // burn
     s = showCodes(s) // read-only review (already revealed)
-    s = override(s) // Path 3 — credits + advances
+    s = override(s) // the live card — credits + advances
     s = back(s) // browse back
     s = forward(s) // return to the live edge
     s = gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true }) // counted miss + lock
@@ -542,7 +542,7 @@ describe('gameReducer — historyBase / cardNumber (the Q# badge)', () => {
   it('Override never moves the number — it never moves played', () => {
     let s = answer(initEngine(DATE, HYDRATED), C) // 472/501, live card is the 502nd
     expect(cardNumber(s)).toBe(502)
-    s = override(s) // Path 5: retro-flip the credit away — played untouched
+    s = override(s) // retro: flip the credit away — played untouched
     expect(s.stats.played).toBe(501)
     expect(cardNumber(s)).toBe(502)
   })

@@ -80,7 +80,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
       const cov = runFuzzProfile('override-heavy')
       expect(cov.override).toBeGreaterThan(0)
       expect(cov.toggleBack).toBeGreaterThan(0) // actually undid overrides between the overrides
-      expect(cov.overrideBrowsing).toBeGreaterThan(0) // reached back-browse Override (Path 1)
+      expect(cov.overrideBrowsing).toBeGreaterThan(0) // reached the browsed target
       expect(cov.back).toBeGreaterThan(0)
     },
     T,
