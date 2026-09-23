@@ -488,9 +488,24 @@ export function overridePlan(state: GameState): OverridePlan | null {
 }
 // Does the press move play on to a fresh date? Exactly one case: the LIVE card goes from A to a
 // CREDITED O and the caller did not ask to hold it — the old "credit the wrong and move on". Every
-// other press stays where it is, and in particular an Undo NEVER navigates.
+// other press stays where it is, and in particular an Undo NEVER navigates. The reducer's OVERRIDE
+// and the two mode screens that react to a move (Blitz re-arms a question clock, Flash ends its
+// flash) all read this one rule, never a copy of it.
 export const overrideAdvances = (plan: OverridePlan, hold: boolean): boolean =>
   plan.target === 'live' && !plan.overridden && plan.credits && !hold
+// ★ THE GREEN ANSWER PULSE MEANS "THIS PRESS CREDITED THE DATE IN PLAY" — the pulse a correct tap
+// gives, so it fires on exactly the presses that CREDIT THE LIVE CARD, whether that card then moves
+// on or holds on screen (a correct tap pulses on MoX's held completing solve too, and a press that
+// credits a card is the same event). Nothing else pulses: taking a credit away is not a correct
+// answer, and a press on a card behind the live one — or one browsed to, which is review — changes a
+// date that is not in play. Every mode's onOverride reads it here; the two run modes once disagreed
+// (Blitz pulsed only on a press that ADVANCED). ⚠ What the player SEES is the same under either rule,
+// and that is why "credits" is the right one rather than "advances": on a card that HOLDS, the
+// button's persisted green outranks a pulse (components/controlClasses buttonStateClass), so the
+// green shows either way — exactly as it does for a correct tap on a held completing solve — and the
+// pulse is visible only when play moves on. One event, one rule; the screen decides what it shows.
+export const creditsLiveCard = (plan: OverridePlan | null): boolean =>
+  plan?.target === 'live' && plan.credits
 
 // The card fields a toggle reads and writes, whichever of the three places the card lives in.
 interface CardFields {

@@ -12,7 +12,8 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 //
 // `avail` is false in one situation only: there is genuinely no date to point at (a fresh mode with
 // no history behind it — or, in the casual modes, Save Stats off for the date on screen). The word
-// follows `overridden`; the two are computed together from the engine's one selector
+// follows `overridden` whether or not the press is on offer — a dimmed button still says which state
+// its date is in; the two are computed together from the engine's one selector
 // (engine/useGameEngine → gameReducer's overridePlan), so the label can never disagree with the flip.
 //
 // It was the same markup in all five mode screens; the toggle would have made it the same five

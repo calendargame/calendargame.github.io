@@ -62,13 +62,14 @@ describe('useGameEngine — Override ⇄ Undo', () => {
   afterEach(() => vi.restoreAllMocks())
 
   // The gate and the label, from the one selector: `overrideAvail` = there is a card to point at and
-  // Save Stats was on for the card on screen; `undoAvail` = that card is overridden RIGHT NOW. There
-  // is no "used it once" state left, so the two alternate forever and the button is never locked.
+  // Save Stats was on for the card on screen; `overridden` = that card is overridden RIGHT NOW (the
+  // word the button reads). There is no "used it once" state left, so the two alternate forever and
+  // the button is never locked.
   it('the label follows the card it points at, and the toggle never runs out', () => {
     const { result } = renderHook(() => useGameEngine(opts))
     act(() => result.current.answer(W))
     expect(result.current.overrideAvail).toBe(true)
-    expect(result.current.undoAvail).toBe(false)
+    expect(result.current.overridden).toBe(false)
     expect(result.current.overridePlan).toMatchObject({
       target: 'live',
       overridden: false,
@@ -78,17 +79,33 @@ describe('useGameEngine — Override ⇄ Undo', () => {
     // button points at it (target 'retro') and reads Undo, on a question the player has not touched.
     act(() => result.current.override())
     expect(result.current.overrideAvail).toBe(true)
-    expect(result.current.undoAvail).toBe(true)
+    expect(result.current.overridden).toBe(true)
     expect(result.current.overridePlan).toMatchObject({ target: 'retro', overridden: true })
     expect(result.current.state.stats).toMatchObject({ played: 1, good: 1 })
     for (let i = 0; i < 3; i++) {
       act(() => result.current.override()) // Undo
-      expect(result.current.undoAvail).toBe(false)
+      expect(result.current.overridden).toBe(false)
       expect(result.current.state.stats).toMatchObject({ played: 1, good: 0 })
       act(() => result.current.override()) // Override again
-      expect(result.current.undoAvail).toBe(true)
+      expect(result.current.overridden).toBe(true)
       expect(result.current.state.stats).toMatchObject({ played: 1, good: 1 })
     }
+  })
+
+  // The word tells the truth about the card whether or not the press is on offer (second review
+  // round, F9): it used to be ANDed with the gate, so with Save Stats off an overridden card's dimmed
+  // button read "Override" — and "Undo" again the moment Save Stats came back, though nothing changed.
+  it('a dimmed button still reads Undo for an overridden card', () => {
+    const { result, rerender } = renderHook((p) => useGameEngine(p), { initialProps: opts })
+    act(() => result.current.answer(C))
+    act(() => result.current.override()) // retro: card 1 overridden away
+    expect(result.current.overridden).toBe(true)
+    rerender({ ...opts, saveStats: false }) // the fresh live card falls back to the live setting
+    expect(result.current.overrideAvail).toBe(false) // dimmed…
+    expect(result.current.overridden).toBe(true) // …and still saying Undo, because the card is
+    rerender(opts)
+    expect(result.current.overrideAvail).toBe(true)
+    expect(result.current.overridden).toBe(true)
   })
 
   // Spec test 8 — the dim rule, at the gate: dimmed ONLY when there is genuinely no card to point at.
@@ -198,9 +215,9 @@ describe('useGameEngine — Override ⇄ Undo', () => {
     expect(s.card).toEqual({ wrongTime: null, answered: null }) // today's shape, not the old flags
     expect(s.stack[0].meta.answered).not.toBe(null) // …and the card comes back OVERRIDDEN
     expect(s.stats).toMatchObject({ played: 1, good: 1 })
-    expect(result.current.undoAvail).toBe(true) // the button reads Undo on it, years later
+    expect(result.current.overridden).toBe(true) // the button reads Undo on it, years later
     act(() => result.current.override())
     expect(result.current.state.stats).toMatchObject({ played: 1, good: 0 })
-    expect(result.current.undoAvail).toBe(false)
+    expect(result.current.overridden).toBe(false)
   })
 })

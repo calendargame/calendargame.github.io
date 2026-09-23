@@ -46,6 +46,7 @@ import { useProgress } from '../store/progress.js'
 import type { AoxBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
+import { creditsLiveCard } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
@@ -152,7 +153,7 @@ function AoxMode({
     // restores the incoming preset's own run.
     getInitialState: () => parkedRun?.engine ?? null,
   })
-  const { state, correct, overrideAvail, undoAvail } = eng
+  const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes AoX's Show-Codes panel (Q1) — see the same hook in the other modes.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const S = state.stats
@@ -583,7 +584,8 @@ function AoxMode({
     // `hold` only ever matters to a press that would otherwise advance (the live card newly credited);
     // taking a credit away never advances — the engine's own rule — so it needs nothing here.
     const hold = goodAfter >= n || (isLocked && !resumes)
-    if (plan.target === 'live' && plan.credits) setFlashWithTimeout({ type: 'good', idx: correct })
+    // The green pulse on a press that credits the live card, held or not (the engine's creditsLiveCard).
+    if (creditsLiveCard(plan)) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override({ hold }) // any Best impact reconciles in the effect above
     if (fails) {
       setRunPhase('failed')
@@ -913,7 +915,7 @@ function AoxMode({
           >
             Reveal
           </button>
-          <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
+          <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
         </div>
         {/* Show Codes — the SHARED MethodBreakdownSection, exactly like the other four modes
                 (Q5, round 8). AoX's gate isn't "is there a date" but "is the date SHOWABLE": the run

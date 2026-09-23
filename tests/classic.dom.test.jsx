@@ -608,6 +608,20 @@ describe('Classic — Save Stats / Override availability (fix 2026-06-06)', () =
     expect(isDisabled(ctrl('Override'))).toBe(true) // no scored history → nothing to override
     expect(statValue('Score')).toBe('0/0')
   })
+
+  // The dimmed button still says which state its date is in (second review round, F9): it used to
+  // read "Override" while Save Stats was off, and "Undo" again when it came back on.
+  it('Save Stats OFF dims the button on an overridden date, and it still reads Undo', () => {
+    mountApp()
+    const q1 = pressNewAndRead()
+    fireEvent.click(dayBtn(correctName(q1))) // 1/1, Q1 into history
+    fireEvent.click(ctrl('Override')) // Q1 overridden away → the button reads Undo
+    setSaveStats(false)
+    expect(isDisabled(ctrl('Undo'))).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Override' })).toBeNull()
+    setSaveStats(true)
+    expect(isDisabled(ctrl('Undo'))).toBe(false)
+  })
 })
 
 // ── Show Codes while browsing back is read-only (deliberate fix, 2026-06-06) ───

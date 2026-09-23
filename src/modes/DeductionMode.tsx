@@ -23,6 +23,7 @@ import { isJulianDate, wday, wdayJulian } from '../lib/calendar.js'
 import { DAY, fmtPartial, fmtYear } from '../lib/format.js'
 import type { FormatId, DatePart } from '../lib/format.js'
 import { rollFormat, isTouch } from '../lib/modeFormat.js'
+import { creditsLiveCard } from '../engine/gameReducer.js'
 import type { DedPuzzle } from '../engine/gameReducer.js'
 import StatPanel from '../components/StatPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
@@ -139,7 +140,7 @@ function DeductionMode({
     getInitialStats: () => useProgress.getState().stats.dedYear,
   })
   const eng = dedType === 'month' ? monthEng : dedType === 'year' ? yearEng : dayEng
-  const { state, correct, overrideAvail, undoAvail } = eng
+  const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
@@ -218,12 +219,11 @@ function DeductionMode({
     eng.answer(i)
   }
   // The one Override ⇄ Undo press (round 23 Q6), on the ACTIVE silo's engine. A press that CREDITS
-  // the live puzzle flashes green on the correct option, matching App's dedFlash branch. Deduction
+  // the live puzzle pulses green on the correct option (the engine's creditsLiveCard). Deduction
   // keeps no state of its own that an Override changes, and switching sub-type shows a different
   // silo, whose own cards — each with their own Override records — are what the button then reads.
   const onOverride = () => {
-    const plan = eng.overridePlan
-    if (plan?.target === 'live' && plan.credits)
+    if (creditsLiveCard(eng.overridePlan))
       setFlashWithTimeout({ type: 'good', idx: correct, n: date.options.length })
     eng.override()
   }
@@ -640,7 +640,7 @@ function DeductionMode({
             >
               Reveal
             </button>
-            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
+            <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={calcTarget}

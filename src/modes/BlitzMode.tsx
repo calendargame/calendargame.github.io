@@ -31,7 +31,7 @@ import { useProgress } from '../store/progress.js'
 import type { BlitzBest, SuddenBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { liveCredited } from '../engine/gameReducer.js'
+import { creditsLiveCard, liveCredited, overrideAdvances } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
@@ -286,7 +286,12 @@ function BlitzMode({
     // ever restores the incoming preset's own round and cannot pull in the one just left.
     getInitialState: () => parkedRound?.engine ?? null,
   }) // Blitz: timing always tracked
-  const { state, correct, overrideAvail: engOverrideAvail, undoAvail } = eng
+  // Override availability is uniform — NOT gated on the live `saveStats` (owner's call, C2: gating
+  // it made Override more forgiving when Save Stats is ON than OFF, which is backwards). Blitz
+  // always-tracks internally (saveStats:true above), so the engine's overrideAvail (which uses the
+  // frozen effective save-stats, always true here) is correct in both states; the credit is just
+  // invisible in practice mode (stats dimmed, no Best recorded).
+  const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
@@ -301,12 +306,6 @@ function BlitzMode({
   // recorded where the countdown decides its kind: a Per Question expiry on a card the player had
   // ALREADY answered wrong is an 'answer' end, and crediting that card resumes the round with a fresh
   // question clock — exactly what a judged-correct answer would have granted before the expiry.)
-  // Override availability is uniform — NOT gated on the live `saveStats` (owner's call, C2: gating
-  // it made Override more forgiving when Save Stats is ON than OFF, which is backwards). Blitz
-  // always-tracks internally (saveStats:true above), so engOverrideAvail (which uses the frozen
-  // effective save-stats, always true here) is correct in both states; the credit is just
-  // invisible in practice mode (stats dimmed, no Best recorded).
-  const overrideAvail = engOverrideAvail
 
   // The per-config Best silo keys. blitzBk leads with an m/n Allow-Mistakes marker (both
   // per-round variants share the one blitzBest map); suddenBk has NO AM segment — for
@@ -666,8 +665,10 @@ function BlitzMode({
     // dead round — a question nobody can answer, carrying a Q№ nobody played. While the round runs,
     // or when this press resumes it, the credit advances exactly as it always has.
     const hold = timerDone && !resumes
-    const advances = plan.target === 'live' && !plan.overridden && plan.credits && !hold
-    if (advances) setFlashWithTimeout({ type: 'good', idx: correct })
+    const advances = overrideAdvances(plan, hold)
+    // The green pulse on a press that credits the live card — held on an ended round or not (the
+    // engine's creditsLiveCard, one rule for every mode).
+    if (creditsLiveCard(plan)) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override({ hold })
     if (resumes) {
       // 'answer': Per Round continues from its frozen stamp, Per Question gets a fresh clock on the
@@ -1257,7 +1258,7 @@ function BlitzMode({
             >
               Reveal
             </button>
-            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
+            <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={shouldShowTimerDate ? date : null}

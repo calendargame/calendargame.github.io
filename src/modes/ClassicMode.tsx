@@ -20,6 +20,7 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
+import { creditsLiveCard } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/useBackButton.js'
 
 // ============================================================
@@ -66,7 +67,7 @@ function ClassicMode({
     timingOff,
     getInitialStats: () => useProgress.getState().stats.classic,
   })
-  const { state, correct, overrideAvail, undoAvail } = eng
+  const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
@@ -95,14 +96,12 @@ function ClassicMode({
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i })
     eng.answer(i)
   }
-  // The one Override ⇄ Undo press (round 23 Q6). A press that CREDITS the live question flashes
-  // green on the correct button, matching App — read from the engine's plan (what this press will do
-  // to which card) rather than from `countedWrong`, so the flash follows the rule instead of
-  // restating it. Everything else is the engine's alone: Classic keeps no state of its own that an
-  // Override changes, in either direction.
+  // The one Override ⇄ Undo press (round 23 Q6). A press that CREDITS the live question pulses green
+  // on the correct button (the engine's creditsLiveCard — one rule for every mode). Everything else
+  // is the engine's alone: Classic keeps no state of its own that an Override changes, in either
+  // direction.
   const onOverride = () => {
-    const plan = eng.overridePlan
-    if (plan?.target === 'live' && plan.credits) setFlashWithTimeout({ type: 'good', idx: correct })
+    if (creditsLiveCard(eng.overridePlan)) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override()
   }
 
@@ -219,7 +218,7 @@ function ClassicMode({
             >
               Reveal
             </button>
-            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
+            <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={date}

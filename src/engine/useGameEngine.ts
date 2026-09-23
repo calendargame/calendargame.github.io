@@ -8,8 +8,8 @@
 //   • solve times — `performance.now()` deltas from a per-question start stamp.
 //
 // It returns the engine state, the derived `correct` weekday, the Override button's whole state
-// (`overrideAvail`, `undoAvail` = which word it reads, `overridePlan` = what a press would do to
-// which card), and the action callbacks the UI wires to buttons.
+// (`overrideAvail` = is the press on offer, `overridden` = which word it reads, `overridePlan` = what
+// a press would do to which card), and the action callbacks the UI wires to buttons.
 //
 // Mode-untangle (Stage C, Step 6, sub-step 1c). Classic is the first consumer;
 // Flash/Blitz/Deduction pass their own config when they move onto the engine.
@@ -139,9 +139,13 @@ export function useGameEngine({
   // off. Blitz and MoX feed the engine saveStats:true always, so for them this reads simply "is
   // there a card to toggle".
   const overrideAvail = effectiveSaveStats(state, saveStats) && plan !== null
-  // THE WORD IT READS: Undo when the card it points at is already overridden, Override otherwise.
-  // A label and nothing else — one press, one flip, whichever way the card currently sits.
-  const undoAvail = overrideAvail && plan !== null && plan.overridden
+  // THE WORD IT READS: Undo when the card it points at is already overridden, Override otherwise —
+  // a fact about the CARD, so it is NOT gated on `overrideAvail`: a dimmed button still says which
+  // state its date is in. (It was ANDed with the gate once, and with Save Stats off an overridden
+  // card's dimmed button read "Override", then "Undo" again when Save Stats came back — a label that
+  // changed with nothing about the card changing.) A label and nothing else — one press, one flip,
+  // whichever way the card currently sits.
+  const overridden = plan?.overridden ?? false
 
   // Actions are recreated each render (they close over the latest settings, which is what we
   // want); they read the timer from a ref, so there's no stale-closure hazard.
@@ -193,7 +197,7 @@ export function useGameEngine({
     state,
     correct,
     overrideAvail,
-    undoAvail,
+    overridden,
     overridePlan: plan,
     answer,
     reveal,

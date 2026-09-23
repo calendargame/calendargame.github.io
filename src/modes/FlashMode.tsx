@@ -23,6 +23,7 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
+import { creditsLiveCard, overrideAdvances } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/useBackButton.js'
 
 // ============================================================
@@ -83,7 +84,7 @@ function FlashMode({
     timingOff,
     getInitialStats: () => useProgress.getState().stats.flash,
   })
-  const { state, correct, overrideAvail, undoAvail } = eng
+  const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
@@ -273,18 +274,19 @@ function FlashMode({
   // mid-flash, and the flash must keep running: it is that question's reveal window, and stopping
   // it would blank a date the player is still answering (and hand them the un-flashed date for
   // free on the next press). Its Undo needs nothing here either — the flash never stopped.
-  // A press that credits the live question also flashes green on the correct button, as in Classic.
+  // A press that credits the live question also pulses green on the correct button (the engine's
+  // creditsLiveCard, as in every mode).
   const onOverride = () => {
     const plan = eng.overridePlan
-    const live = plan?.target === 'live'
-    // Does this press move play on? Flash never asks the engine to HOLD a credit, so it is exactly
-    // "the live card goes from as-answered to a credited override" — the same rule the engine's
-    // overrideAdvances applies, read from the same plan. Written out rather than inferred from "the
-    // target is live": an Undo on a live card in an override state would NOT advance, and stopping
-    // the flash for it would blank a date the player is still answering. (Flash cannot reach that
-    // state today — a credit here always advances — and this needs no such argument to be right.)
-    const advanced = live && !plan.overridden && plan.credits
-    if (advanced) setFlashWithTimeout({ type: 'good', idx: correct })
+    if (!plan) return
+    // Does this press move play on? The engine's own rule (overrideAdvances), from the same plan —
+    // Flash never asks the engine to HOLD a credit, so `hold` is false. Asked of the rule rather than
+    // inferred from "the target is live": an Undo on a live card in an override state would NOT
+    // advance, and stopping the flash for it would blank a date the player is still answering.
+    // (Flash cannot reach that state today — a credit here always advances — and this needs no such
+    // argument to be right.)
+    const advanced = overrideAdvances(plan, false)
+    if (creditsLiveCard(plan)) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override()
     if (advanced && active) {
       setActive(false)
@@ -548,7 +550,7 @@ function FlashMode({
             >
               Reveal
             </button>
-            <OverrideButton avail={overrideAvail} overridden={undoAvail} onToggle={onOverride} />
+            <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
           </div>
           <MethodBreakdownSection
             date={shouldShowTimerDate || inBack ? date : null}
