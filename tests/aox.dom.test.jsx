@@ -1767,9 +1767,9 @@ describe('MoX — Override ⇄ Undo', () => {
     click('Begin')
     answerCorrect() // good 1, Q2
     click('Reveal') // arms the auto-advance
-    click('Override') // completes on Q2
-    click('Undo') // back on the revealed Q2 — the auto-advance is re-armed…
-    click('Override') // …and cancelled again by the re-Override
+    click('Override') // completes on Q2 (the press cancelled the reveal's auto-advance)
+    click('Undo') // back on the revealed Q2 — nothing re-arms the auto-advance…
+    click('Override') // …so the re-Override completes it again with nothing pending behind it
     expect(statValue('Score')).toBe('2/2')
     act(() => vi.advanceTimersByTime(700))
     expect(statValue('Score')).toBe('2/2')
@@ -1813,6 +1813,31 @@ describe('MoX — Override ⇄ Undo', () => {
     click('Override') // …and credited again with no other miss left: the run resumes and moves on
     expect(statValue('Score')).toBe('3/3')
     expect(readDate()).not.toEqual(failing)
+    expect(gridLive()).toBe(true)
+  })
+
+  // ⚠ AN UNDO THAT PUTS A REVEALED MISS BACK ON SCREEN MUST LEAVE A WAY ON. The reveal's auto-advance
+  // was cancelled by the press, and nothing re-arms it — so the miss waits on Next, exactly as a
+  // One-by-One Reveal, a Show Codes and an overridden-to-miss card do. Without it the run sat on a
+  // resolved miss with a dimmed grid and nothing to press but Reset (or Override again).
+  it('reveal flash, final question: Reveal → Override → Undo leaves the revealed miss waiting on Next', () => {
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes')
+    setN(2)
+    click('Begin')
+    answerCorrect() // good 1, Q2
+    const q2 = readDate()
+    click('Reveal') // arms the auto-advance
+    click('Override') // completes on Q2
+    click('Undo') // the run is handed back, Q2 a revealed miss again
+    expect(statValue('Score')).toBe('1/2')
+    expect(ctrl('Next')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(700))
+    expect(readDate()).toEqual(q2) // nothing moved it on by itself
+    click('Next')
+    expect(readDate()).not.toEqual(q2)
+    expect(statValue('Score')).toBe('1/2')
     expect(gridLive()).toBe(true)
   })
 

@@ -155,21 +155,23 @@ function AoxMode({
   // retryable — excluded). The grid is dimmed for it (the engine ignores answers on it).
   // …and since round 23 Q6 a live card a PRESS left as a miss is one of those too, by construction:
   // the engine leaves an overridden-to-miss card locked, revealed and burned, which is exactly the
-  // shape above. `overriddenMiss` names it for the Next rule below — an override state that is not a
-  // credit can only be a miss, because a card's two states are each other's opposite.
+  // shape above — as is an Undo that puts a revealed miss back.
   const resolvedMiss = isRunning && !inBack && state.revealed && state.countedWrong
-  const overriddenMiss = resolvedMiss && state.card.answered !== null
-  // Of those, which WAIT on a "Next" button vs auto-advance: SHOW CODES (calcPenaltyActive — set by
-  // SHOW_CODES, never by REVEAL) always pauses so you can read the codes; a One-by-One Reveal also
-  // pauses (One-by-One pauses between dates by design). A plain non-One-by-One Reveal does NOT wait
-  // — onReveal flashes the answer then auto-advances (owner's call, C2: a reveal doesn't need to
-  // pause when the run flows date-to-date on its own). (C2 Q4 + the reveal-flash refinement.)
-  // ⚠ overriddenMiss BELONGS IN THIS LIST, and leaving it out would strand the player: a Reveal or a
-  // Show Codes has something behind it (an auto-advance, or a panel to close), but a press that takes
-  // the run's completing solve away starts nothing — so without a Next button the run would sit on a
-  // resolved miss with nothing to press but Reset. Pressing again is not an answer to that: the way
-  // ON from a miss is Next, exactly as it is for the other two.
-  const awaitingNext = resolvedMiss && (state.calcPenaltyActive || oneByOne || overriddenMiss)
+  // Is a non-One-by-One Reveal's auto-advance pending right now? (onReveal arms it; it fires, or a
+  // press / a reset cancels it.) State, not just the timer handle in revealAdvanceRef below, because
+  // the screen renders from it: it is the one thing that decides whether a resolved miss waits.
+  const [revealFlowing, setRevealFlowing] = useState(false)
+  // ★ A RESOLVED MISS WAITS ON "Next" UNLESS IT IS AUTO-ADVANCING — the whole rule, stated as the
+  // exception rather than a list of the cases that wait. Only ONE path moves a miss on by itself: a
+  // plain non-One-by-One Reveal flashes the answer, then auto-advances (owner's call, C2: a reveal
+  // doesn't need to pause when the run flows date-to-date on its own). Everything else that leaves a
+  // miss on screen starts nothing, so it must offer Next: a Show Codes (you need time to read them), a
+  // One-by-One Reveal (One-by-One pauses between dates by design), a press that takes the completing
+  // solve away, and an Undo that puts a revealed miss back after a press cancelled its auto-advance.
+  // (This used to be that list — Show Codes, One-by-One, an overridden miss — and the list missed the
+  // Undo: the run sat on a revealed miss with nothing to press but Reset. Pressing Override again is
+  // not an answer to that; the way ON from a miss is Next.)
+  const awaitingNext = resolvedMiss && !revealFlowing
 
   // Per-config Best Mean / Median (component-owned, like Blitz's Best Score). A run records
   // its Best on completion and keeps it RECONCILED while its stats move post-completion (a
@@ -187,13 +189,15 @@ function AoxMode({
   const nextRunIdRef = useRef(Math.max(1, (parkedRun?.currentRunId ?? 0) + 1))
   const currentRunIdRef = useRef<number | null>(parkedRun?.currentRunId ?? null)
   // Pending auto-advance after a non-One-by-One Reveal (flash the answer for FLASH_MS, then advance).
-  // Held in a ref so reset / leaving the mode / unmount can cancel it before it fires.
+  // The timer handle, held in a ref so reset / leaving the mode / unmount can cancel it before it
+  // fires; `revealFlowing` above is the same fact for the render, and the two move together.
   const revealAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelRevealAdvance = () => {
     if (revealAdvanceRef.current) {
       clearTimeout(revealAdvanceRef.current)
       revealAdvanceRef.current = null
     }
+    setRevealFlowing(false)
   }
   // The PRE-run Best record {key,best,runId}, latched once when this run records (completion with
   // Save Stats on) — the floor every post-completion reconcile starts from (see the effect below).
@@ -307,9 +311,11 @@ function AoxMode({
   // Reset the run if the panel is hidden mid-run (also cancel any pending reveal auto-advance).
   useEffect(() => {
     if (!visible && runPhase === 'running') {
+      // (The directive moved up a line when cancelRevealAdvance began setting `revealFlowing`: the
+      // rule reports only the effect's FIRST synchronous setState, which is now that call.)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       cancelRevealAdvance()
       eng.resetStats()
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRunPhase('idle')
       setShown(false)
     }
@@ -493,13 +499,15 @@ function AoxMode({
     // itself, or left the card a credit / a miss the run's own controls carry on from.
     setFlashWithTimeout({ type: 'good', idx: correct })
     if (revealAdvanceRef.current) clearTimeout(revealAdvanceRef.current)
+    setRevealFlowing(true)
     revealAdvanceRef.current = setTimeout(() => {
       revealAdvanceRef.current = null
+      setRevealFlowing(false)
       eng.doNew()
     }, FLASH_MS)
   }
   // Show Codes (Allow Mistakes on) counts a miss + opens the panel; it always pauses on "Next"
-  // (you need time to read the codes — calcPenaltyActive keeps awaitingNext true). Allow Mistakes
+  // (you need time to read the codes — it arms no auto-advance, so awaitingNext holds). Allow Mistakes
   // off fails the run. (C2 Q4 — Show Codes intentionally keeps the Next pause, unlike Reveal.)
   const onShowCodes = (open: boolean) => {
     eng.showCodes(open)
