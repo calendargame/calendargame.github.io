@@ -243,6 +243,18 @@ describe('checkGameInvariants — the per-card Override record', () => {
     ).toContain('live flags')
   })
 
+  it('7 — a timed-out card credited or overridden', () => {
+    const s = retroCredited() // its tail is an overridden credit…
+    const bad = withTail(s, { meta: { ...tail(s).meta, timedOut: true } }) // …that the clock timed out
+    expect(join(checkGameInvariants(bad, false))).toContain('timed-out')
+    const t = gameReducer(initEngine(DATE), {
+      type: 'TIMEOUT_MISS',
+      useJulian: false,
+      saveStats: true,
+    })
+    expect(checkGameInvariants(t, false)).toEqual([]) // the real thing is healthy
+  })
+
   // The shape an older build's migrated blob once reached: a credited O still carrying the codes
   // penalty its as-answered state had, so the first Undo lost it (second review round, F2).
   it('6 — an overridden live card not wearing the overridden flags, on screen or parked', () => {

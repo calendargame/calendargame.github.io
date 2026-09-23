@@ -54,7 +54,8 @@
 //     question when browsing; otherwise the live question when it was scored AND it has something
 //     to override (it was answered wrong / revealed / shown the codes, it holds a credit on screen,
 //     or it is already overridden) — a pristine per-question timeout does not; otherwise the most
-//     recent history question. A press on the live question moves play on only when it credits a
+//     recent history question. A question the clock timed out on untouched is never the one,
+//     wherever it sits: browsed to, or as the newest history question, the button means nothing. A press on the live question moves play on only when it credits a
 //     question that was not overridden and the driver did not ask to hold (`hold`); nothing else
 //     ever moves, and an Undo never does.
 //   • An overridden live question is resolved on screen: locked either way, and when the override
@@ -75,6 +76,7 @@ const freshLive = (ded) => ({
   revealed: false,
   locked: false,
   held: false, //     a correct answer held on screen (AoX `complete`)
+  timedOut: false, // the clock ran out on it untouched — it can never be overridden, wherever it goes
   // ── the Override ──
   overridden: false,
   oTime: undefined, // the overridden credit's time, taken once (undefined = never taken)
@@ -124,6 +126,7 @@ const advance = (m, nextDed) => {
       wrongTime: l.wrongTime,
       overridden: l.overridden,
       oTime: l.oTime,
+      timedOut: l.timedOut,
     })
   }
   m.live = freshLive(nextDed)
@@ -133,10 +136,11 @@ const advance = (m, nextDed) => {
 // 'browsed' | 'live' | 'retro' | null, the same vocabulary the reducer's selector uses, so the
 // harness can compare the two answers directly.
 export function refTarget(m) {
-  if (m.cursor > 0) return 'browsed'
+  if (m.cursor > 0) return m.history[m.history.length - m.cursor].timedOut ? null : 'browsed'
   const l = m.live
   if (l.ssFrozen === true && (l.burned || l.aCredited || l.overridden)) return 'live'
-  return m.history.length ? 'retro' : null
+  const newest = m.history[m.history.length - 1]
+  return newest && !newest.timedOut ? 'retro' : null
 }
 const targetQuestion = (m, t) =>
   t === 'browsed'
@@ -229,17 +233,23 @@ export function applyRefModel(m, kind, action, ctx) {
     case 'LOCK_REVEAL': {
       // Resolves the question WITHOUT scoring it (a Blitz per-round timeout) — it shows the answer
       // and locks; an unscored question later vanishes instead of entering history. An already
-      // locked question (an overridden one included) is left exactly as it is.
-      if (viewLocked(live)) return
+      // locked question (an overridden one included) is left exactly as it is, and so is everything
+      // while browsing: the clock belongs to the live question, and the view is a history one.
+      if (m.cursor > 0 || viewLocked(live)) return
       live.locked = true
       live.revealed = true
       return
     }
     case 'TIMEOUT_MISS': {
-      // A per-question timeout: a scored miss (one played, first touch only) + resolved. It does not
-      // burn the question, so it gives the Override nothing to point at on it.
-      if (viewLocked(live)) return
-      if (!live.burned) freeze(m, action.saveStats)
+      // A per-question timeout: a scored miss (one played, first touch only) + resolved. On an
+      // untouched question the question is TIMED OUT — the Override can never point at it, now or
+      // after it becomes history; on one already answered wrong it is just the end of a burned
+      // question, which stays overridable. Nothing while browsing (see LOCK_REVEAL).
+      if (m.cursor > 0 || viewLocked(live)) return
+      if (!live.burned) {
+        freeze(m, action.saveStats)
+        live.timedOut = true
+      }
       live.revealed = true
       live.locked = true
       live.held = false

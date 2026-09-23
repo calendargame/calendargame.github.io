@@ -212,6 +212,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
       expect(cov.complete).toBeGreaterThan(0) // actually held completing solves
       expect(cov.hold).toBeGreaterThan(0) // actually pressed Override with `hold`
       expect(cov.timedTimeout).toBeGreaterThan(0) // actually fired the timeout actions
+      expect(cov.timedOutBehind).toBeGreaterThan(0) // a timed-out card left the live edge, and both sides still refused it
       expect(cov.override).toBeGreaterThan(0)
       expect(cov.hydrated).toBeGreaterThan(0) // held-complete + timeout surface verified on hydrated starts too
       expect(cov.toggleBack).toBeGreaterThan(0)

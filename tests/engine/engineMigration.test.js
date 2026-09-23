@@ -482,3 +482,62 @@ describe('migrateEngineState — the times pool is re-laid in play order', () =>
     expect(checkGameInvariants(s, false).join(' | ')).toContain('times ledger')
   })
 })
+
+// ── A live card an old build's clock timed out on comes back recorded as timed out (F5) ──────────
+describe('migrateEngineState — a timed-out live card is recorded as one', () => {
+  // v2.25.0, Blitz Per Question: card 1 answered right, card 2 left untouched until its clock ran out.
+  const timedOutRound = () => ({
+    ...baseTop,
+    date: D2,
+    questionId: 1,
+    persistBtns: b([c(D2), 'correct']),
+    stats: { played: 2, good: 1, streak: 0, best: 1, times: [1.2] },
+    stack: [
+      {
+        ...D1,
+        btns: b([c(D1), 'correct']),
+        overrideUsed: false,
+        capsule: { snapshot: snap({ contributedTime: 1.2 }), wrongTime: null },
+        hasCredit: true,
+        solveTime: 1.2,
+      },
+    ],
+    forwardStack: [],
+    backDepth: 0,
+    locked: true,
+    revealed: true,
+    countedWrong: false,
+    canOverrideCorrect: false,
+    pendingWrongOverride: null,
+    overrideUsedThisQ: false,
+    prevStatsSnapshot: snap({ played: 1, good: 1, streak: 1, best: 1 }),
+    wrongTime: null,
+    saveStatsThisQ: true,
+    liveSolveTime: null,
+  })
+
+  it('on screen: the record says so, and the button still means the card before it', () => {
+    const s = migrateEngineState(timedOutRound(), false)
+    expect(s.card).toEqual({ wrongTime: null, answered: null, timedOut: true })
+    expect(overridePlan(s).target).toBe('retro')
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+
+  it('parked while browsing: the isLive entry carries the same record', () => {
+    const s = migrateEngineState(timedOutRound(), false)
+    const parked = gameReducer(s, { type: 'BACK' })
+    expect(parked.forwardStack[0].meta.timedOut).toBe(true)
+    // …and a blob parked in exactly that shape by the old build migrates to the same thing.
+    const { card: _c, ...raw } = parked
+    const { meta: _m, ...entry } = parked.forwardStack[0]
+    const old = {
+      ...raw,
+      overrideUsedThisQ: false,
+      wrongTime: null,
+      forwardStack: [{ ...entry, overrideUsed: false }],
+    }
+    const m = migrateEngineState(old, false)
+    expect(m.forwardStack[0].meta).toEqual({ wrongTime: null, answered: null, timedOut: true })
+    expect(checkGameInvariants(m, false)).toEqual([])
+  })
+})

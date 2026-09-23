@@ -43,9 +43,10 @@
 //     its A; if that record and the card it describes ever come apart — the credit not the opposite,
 //     the grid not the answer alone, a time on an uncredited state, O not contributing its frozen
 //     time, live flags where there is no live card to put them back on, a live card in O not
-//     wearing O's fixed flags — a later Undo (or the Override after it) would land
-//     somewhere that is neither of the card's two states, which is exactly how a toggle could stack
-//     credit or strand a second. So each of those is a tripwire, over every card in play.
+//     wearing O's fixed flags — a later Undo (or the Override after it) would land somewhere that is
+//     neither of the card's two states, which is exactly how a toggle could stack credit or strand a
+//     second. And a card the clock timed out on has ONE state only, which no press may leave. So each
+//     of those is a tripwire, over every card in play.
 //   • Date/calendar sanity: month 1-12, day 1-31, integer year; a weekday question resolves
 //     to an index in 0-6, and a Deduction puzzle's correct answer is actually among its
 //     options (correctIndexOf returns -1 if a generator ever produced a puzzle whose answer
@@ -124,7 +125,7 @@ export function checkGameInvariants(state: GameState, useJulian: boolean): strin
   //   • the SECONDS the cards name, held against the pool in order as the walk goes (the times
   //     ledger — see below),
   //   • the parked LIVE entry (the card ledger's last term — see liveCounted's note below),
-  //   • the per-card Override record (the six tripwires — see visitCard).
+  //   • the per-card Override record (the seven tripwires — see visitCard).
   //
   // ⚠ HOT PATH. This runs in the app after EVERY state change (useGameEngine's tripwire effect) and
   // a run mode's history reaches a thousand cards, so the pass materialises nothing per card: no
@@ -200,7 +201,7 @@ function liveCounted(state: GameState, parked: EntryMeta | undefined): number {
 const at = (arr: string, idx: number): string => (idx < 0 ? arr : `${arr}[${idx}]`)
 
 // ONE card, for every check that is about a card (see the walk in checkGameInvariants):
-//   • the six Override-record tripwires go into `rec`;
+//   • the seven Override-record tripwires go into `rec`;
 //   • it returns the second the card names — the times ledger's side of the pool, which the walk
 //     holds against the card's slot. `forwardStack` cards name one too, because a parked card is
 //     still contributing to the pool it left behind.
@@ -218,6 +219,9 @@ function visitCard(rec: string[], e: EntryMeta, arr: string, idx: number): numbe
   // 3 (first half) — holds for every card, overridden or not: no credit, no time.
   if (!credited && solveTime != null)
     rec.push(`${at(arr, idx)}: an uncredited card contributes a time (${solveTime})`)
+  // 7 — a card the clock timed out on is a miss that nothing can override (CardMeta.timedOut).
+  if (e.meta?.timedOut && (credited || a !== null))
+    rec.push(`${at(arr, idx)}: a timed-out card is credited or overridden`)
   // Everything below is about a card in state O, and most cards are not — this is where the walk
   // over a thousand-card history stops for them.
   if (a === null) return solveTime

@@ -126,6 +126,12 @@ export interface CardMeta {
   // the freeze a card toggled with timing hidden, then toggled again with timing shown, would
   // contribute a different time each cycle — a third state, not a two-state switch.
   oTime?: number | null
+  // The clock ran out on this card before it was touched (Blitz Per Question's TIMEOUT_MISS on an
+  // untouched card) — so it can NEVER be overridden: running out of time is not a misclick (owner
+  // decision, round 23). Recorded on the card, not read off its flags, because the flags that say
+  // it (scored, answer shown, not burned) are the LIVE card's and do not survive it becoming history:
+  // there it would look exactly like a Reveal, which can be overridden. Absent on every other card.
+  timedOut?: true
 }
 
 // ★ THE LIVE FLAGS OF AN OVERRIDDEN LIVE CARD — state O's half of LiveFlags, which (unlike state A's)
@@ -430,21 +436,34 @@ export const effectiveSaveStats = (state: GameState, saveStats: boolean): boolea
 //   'browsed' — you are browsing history: the card on screen, whatever it is (every history card
 //               was scored — that is what put it in history).
 //   'live'    — the live card has something to override: it was scored AND it is burned, credited,
-//               or already overridden. ⚠ A card the clock timed out on (Blitz's per-question
-//               TIMEOUT_MISS on an untouched card) is scored but none of the three, so it is NOT a
-//               target — the clock running out is not a misclick, and that has always been the rule
-//               (owner decision, round 23). The target falls through to the card before it.
+//               or already overridden. A live card the clock timed out on is none of those, so the
+//               target falls through to the card before it.
 //   'retro'   — otherwise the most recent history card, with the live card untouched: a fresh date
 //               is on screen and the card you just finished is the one Override means.
 //   null      — nothing to point at (a fresh mode with no history): the button is dimmed.
-// The Save-Stats gate is the hook's (it needs the live setting); the reducer trusts it.
+// ★ A TIMED-OUT CARD (CardMeta.timedOut) IS NEVER THE TARGET, WHEREVER IT SITS — the clock running
+// out is not a misclick (owner decision, round 23). Live, it falls through to the card before it as
+// above. As the newest history card, or browsed to, the button has nothing to point at (a timed-out
+// card leaves the live edge only through a New, which the Blitz round it ends never offers — so those
+// two exist for the engine's own consistency, not for a screen). It used to hold only while the card
+// was LIVE, resting on flags the card sheds when it becomes history (second review round, F5).
+// ⚠ The Save-Stats gate is the hook's, and deliberately NOT the reducer's: it needs the LIVE setting,
+// which an OVERRIDE does not carry — and it is a presentation rule, not an integrity one. Every card
+// this selector can return was SCORED (a browsed or retro card is history, and history is scored by
+// construction — see GameState.historyBase; a live target needs saveStatsThisQ === true), so a press
+// on any of them keeps good ≤ played and every other invariant whatever Save Stats says. The gate
+// exists so a casual mode with Save Stats off does not offer to rescore a date whose score it is not
+// showing; the engine has no invalid move to forbid there.
 export type OverrideTarget = 'browsed' | 'live' | 'retro' | null
 const liveEligible = (s: GameState): boolean =>
-  s.saveStatsThisQ === true && (s.countedWrong || liveCredited(s) || s.card.answered !== null)
+  s.saveStatsThisQ === true &&
+  !s.card.timedOut &&
+  (s.countedWrong || liveCredited(s) || s.card.answered !== null)
 export function overrideTarget(state: GameState): OverrideTarget {
-  if (state.backDepth > 0) return 'browsed'
+  if (state.backDepth > 0) return state.card.timedOut ? null : 'browsed'
   if (liveEligible(state)) return 'live'
-  return state.stack.length > 0 ? 'retro' : null
+  const tail = state.stack[state.stack.length - 1]
+  return tail && !tail.meta.timedOut ? 'retro' : null
 }
 
 // What a press would do, read off the targeted card before it happens — the mode screens decide
@@ -932,9 +951,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     // ── TIMEOUT_MISS ─────────────────────────────────────────────────────────────
-    // Blitz per-question timeout: on a pristine question, count a played miss (this action sets
-    // no `countedWrong`, so a pristine expiry is not an Override target — see overrideTarget) +
-    // show the answer. On a burned question (per-Q + Allow Mistakes: answered wrong, then the clock
+    // Blitz per-question timeout: on a pristine question, count a played miss, RECORD on the card
+    // that the clock ran out on it untouched (CardMeta.timedOut — it is never an Override target, see
+    // overrideTarget; no `countedWrong` either), and show the answer. On a burned question (per-Q + Allow Mistakes: answered wrong, then the clock
     // died) `countedWrong` is ALREADY set, so that card stays an Override target and its round stays
     // resumable (modes/BlitzMode's end kinds), and the played increment is not repeated (the guard
     // below). The round-over lock is the component's (!active disables the grid). Distinct from
@@ -958,6 +977,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         saveStatsThisQ: effective,
         stats,
+        ...(state.countedWrong ? {} : { card: { ...state.card, timedOut: true as const } }),
         persistBtns: mkBtnsWithCorrect(state.persistBtns, correct),
         // The answer is shown → mark revealed (like LOCK_REVEAL), so if this question were ever
         // advanced into history its 'correct' grid isn't mistaken for an earned credit. (C2 fuzz
@@ -1022,7 +1042,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     // the card's own two stored states, never from a delta — so ANY sequence of presses on ANY
     // cards leaves every card in one of its two states and good ≤ played, streak/best ≤ good and
     // times.length ≤ good hold by construction. Only ever dispatched when overrideAvail (Save Stats
-    // on for the card, and a target exists); with no target it is a no-op.
+    // on for the card, and a target exists); with no target it is a no-op. (It does not re-check
+    // Save Stats itself, and need not: every target is a scored card — see overrideTarget.)
     // Navigation happens in exactly one case (overrideAdvances): the LIVE card credited from A
     // without `hold` moves play on, as crediting a wrong always has. Everything else stays put —
     // in particular taking a held credit away stays on the card as a resolved miss (advancing would

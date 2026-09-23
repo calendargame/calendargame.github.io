@@ -280,6 +280,30 @@ describe('gameReducer — OVERRIDE (a first press, target by target)', () => {
     expect(override(alone)).toBe(alone) // no target → a no-op, same object
   })
 
+  // The rule used to hold only while the timed-out card was LIVE — it rested on the live card's flags,
+  // which a card leaves behind when it becomes history (second review round, F5). The card now
+  // RECORDS that the clock ran out on it untouched, and no position can make it a target.
+  it('a timed-out card is never a target wherever it sits — history tail, or browsed', () => {
+    let s = answer(initEngine(DATE), C) // card 1, credited
+    s = gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true }) // card 2
+    expect(s.card.timedOut).toBe(true)
+    s = neu(s) // card 2 into history, a fresh card 3 on screen
+    expect(s.stack[1].meta.timedOut).toBe(true)
+    expect(overrideTarget(s)).toBe(null) // the newest history card cannot be overridden
+    expect(override(s)).toBe(s)
+    const browsed = back(s)
+    expect(overrideTarget(browsed)).toBe(null) // …nor browsed to
+    expect(overrideTarget(back(browsed))).toBe('browsed') // card 1 still can
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+
+  it('a timeout on a card already answered wrong is not a timed-out card: it stays a target', () => {
+    let s = answer(initEngine(DATE), W) // burned
+    s = gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true })
+    expect(s.card.timedOut).toBeUndefined()
+    expect(overrideTarget(s)).toBe('live')
+  })
+
   it('a card played with Save Stats OFF is never the live target', () => {
     const s = answer(initEngine(DATE), W, { saveStats: false })
     expect(overrideTarget(s)).toBe(null)

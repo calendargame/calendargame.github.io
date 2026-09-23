@@ -94,15 +94,17 @@ function optionCount(q) {
 // agrees with the reducer's own selector — the button's label and the press it makes can never be
 // told different stories without a profile failing. Browsing → the browsed card; else a SCORED live
 // card that is burned, holds a clean credit on its grid, or is already overridden → the live card; else
-// the newest history card; else nothing (the button is dimmed).
+// the newest history card; else nothing (the button is dimmed). A card the clock timed out on is never
+// the one, wherever it sits — it cannot be overridden, so its place yields nothing.
 function harnessTarget(state) {
-  if (state.backDepth > 0) return 'browsed'
+  if (state.backDepth > 0) return state.card.timedOut ? null : 'browsed'
   const cleanCreditOnGrid =
     computeHasCredit(state.persistBtns) && !state.revealed && !state.countedWrong
-  const scored = state.saveStatsThisQ === true
+  const scored = state.saveStatsThisQ === true && !state.card.timedOut
   if (scored && (state.countedWrong || cleanCreditOnGrid || state.card.answered !== null))
     return 'live'
-  return state.stack.length > 0 ? 'retro' : null
+  const newest = state.stack[state.stack.length - 1]
+  return newest && !newest.meta.timedOut ? 'retro' : null
 }
 // The hook's gate: the frozen Save-Stats for the card (or the live setting before any stat action).
 function overrideAvail(state, saveStats) {
@@ -602,6 +604,7 @@ export function freshCov() {
     toggleDeep: 0, //  a press on a card browsed two or more deep
     retoggle: 0, //    the same card pressed three times running (consecutive presses hit one card)
     hydrated: 0, //    sequences seeded with a prior-session baseline (the hydration net)
+    timedOutBehind: 0, // a timed-out card was the one the button would otherwise mean (history tail / browsed)
   }
 }
 
@@ -781,6 +784,10 @@ export function runSequence(seed, steps, cov, profile) {
       cov.liveHold++
     if (kind === 'BACK' && prev.backDepth === 0 && prev.locked && liveCredited(prev))
       cov.browsedHeld++
+    if (
+      state.backDepth > 0 ? state.card.timedOut : state.stack[state.stack.length - 1]?.meta.timedOut
+    )
+      cov.timedOutBehind++
     pressRun = action.type === 'OVERRIDE' ? pressRun + 1 : 0
     if (pressRun === 3) cov.retoggle++
     const S = state.stats

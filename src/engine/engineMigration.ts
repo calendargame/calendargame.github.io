@@ -99,6 +99,14 @@ const liveA = (aCredited: boolean, calcPenaltyActive: boolean): LiveFlags => ({
   calcPenaltyActive,
 })
 
+// Did the clock run out on this LIVE card untouched? The old engine kept no record of it (CardMeta
+// .timedOut is new), but the live flags still say it unambiguously: a per-question TIMEOUT_MISS is
+// the one action that leaves a card scored with its answer shown and NOT burned — a Reveal burns it,
+// and the per-round LOCK_REVEAL shows the answer without scoring. Only a live card can carry those
+// flags (a history card sheds them), and only a live card can have timed out in the old app too.
+const timedOutLive = (scored: boolean | null, revealed: boolean, countedWrong: boolean): boolean =>
+  scored === true && revealed && !countedWrong
+
 // The O record of an overridden card: its as-answered state is the opposite credit, shown as the
 // answer alone (see the header), with the time the old engine kept for it — only a credited A has
 // one. O's frozen time is whatever the card contributes now, if O credits.
@@ -139,8 +147,11 @@ const migrateEntry = (raw: LegacyEntry, useJulian: boolean): StackEntry => {
   // card behind — so, exactly as for the card on screen, it counts as overridden only if it was
   // scored. (A scored live card can never have been a Path-5 bystander: Path 5 needed it untouched.)
   const overridden = !!overrideUsed && (!e.isLive || ls?.saveStatsFrozen === true)
-  if (!overridden)
-    return { ...e, meta: { wrongTime, answered: null }, ...(ls ? { liveState: ls } : {}) }
+  if (!overridden) {
+    const timedOut = !!ls && timedOutLive(ls.saveStatsFrozen, ls.revealed, ls.countedWrong)
+    const meta: CardMeta = { wrongTime, answered: null, ...(timedOut ? { timedOut } : {}) }
+    return { ...e, meta, ...(ls ? { liveState: ls } : {}) }
+  }
   const ci = correctIndexOf(e, useJulian)
   if (e.isLive && ls) {
     const credited = earnedCredit(e.btns, ls.revealed, ls.countedWrong)
@@ -215,7 +226,10 @@ function migrateShape(blob: unknown, useJulian: boolean): GameState {
   // always scored (Back sets saveStatsThisQ).
   const overridden = !!overrideUsedThisQ && s.saveStatsThisQ === true
   const meta: CardMeta = { wrongTime: wrongTime ?? null, answered: null }
-  if (!overridden) return { ...base, card: meta }
+  if (!overridden) {
+    const timedOut = s.backDepth === 0 && timedOutLive(s.saveStatsThisQ, s.revealed, s.countedWrong)
+    return { ...base, card: timedOut ? { ...meta, timedOut } : meta }
+  }
   const ci = correctIndexOf(s.date, useJulian)
   if (s.backDepth > 0) {
     const credited = s.browseHasCredit
