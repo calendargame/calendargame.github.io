@@ -12,7 +12,7 @@
 // that the wiring is there — a green suite without this file is not proof (it was green with the
 // wiring entirely missing).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { screen, cleanup, act, fireEvent } from '@testing-library/react'
+import { screen, cleanup, act, fireEvent, render } from '@testing-library/react'
 import { createPreset, switchPreset, deletePreset } from '../src/store/presetControl.js'
 import { readSessionRound } from '../src/store/sessionRound.js'
 import { useSettings } from '../src/store/settings.js'
@@ -610,5 +610,75 @@ describe('a parked round in a shape this build cannot read', () => {
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
     expect(readSessionRound(1, 'aox')).toBeNull()
+  })
+})
+
+// ── A rotate pause during a 'toggle'-ended round's gap is not charged across a park (F10) ─────────
+// A round ended by a press that flipped a PAST card to a miss keeps its clock draining while it waits
+// (a frozen one would be a free pause), charged from a wall-clock stamp so the charge survives the
+// remount a preset switch causes. Turning the phone sideways PAUSES that drain — the stamp moves
+// forward by the paused span — but the park used to keep the stamp from before the pause (the stamp
+// is a ref, and nothing re-parked when it moved), so a switch after a rotation charged the restored
+// round for every second the overlay was up. Rendered as the bare screen so the pause can be driven
+// through its own prop; App feeds it the rotate overlay's flag (clockPaused={landscapeBlocked}).
+describe('a rotate pause in a toggle-ended round survives the park', () => {
+  beforeEach(() => {
+    resetAppState()
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('the restored round is charged only for the gap it was not paused for', async () => {
+    const { default: BlitzMode } = await import('../src/modes/BlitzMode.jsx')
+    const { randomDate } = await import('../src/lib/dateGen.js')
+    const tick = (ms) => act(() => vi.advanceTimersByTime(ms))
+    act(() => {
+      useModePrefs.getState().setBlitzSec(60)
+      useModePrefs.getState().setBlitzAllowMistakes(false)
+    })
+    const props = {
+      visible: true,
+      genDate: (lo, hi) => randomDate(lo, hi),
+      minY: 1583,
+      maxY: 10000,
+      useJulian: false,
+      saveStats: true,
+      dateFormat: 'numeric-ymd',
+      randomFormat: false,
+      leapChance: 'random',
+      janFebChance: 'random',
+      julianChance: 'random',
+      fmtDate: (y, m, d) => `${y}-${m}-${d}`,
+      settingsOpen: false,
+      clockPaused: false,
+    }
+    const readout = () =>
+      Array.from(document.querySelectorAll('span')).find(
+        (el) =>
+          /^(\d+m )?\d+s$/.test(el.textContent) &&
+          el.parentElement?.nextElementSibling?.classList.contains('bar'),
+      ).textContent
+    const { rerender, unmount } = render(<BlitzMode {...props} />)
+    tap(ctrl('Begin'))
+    tick(1500)
+    tap(screen.getByRole('button', { name: correctName(readDate()) })) // card 1, credited
+    tap(ctrl('Override')) // card 1 flipped to a miss: sudden death, so the round ENDS — a 'toggle' end
+    expect(ctrl('Reset')).toBeInTheDocument()
+    tick(2000) // 2 s of the gap, charged
+    rerender(<BlitzMode {...props} clockPaused={true} />) // the phone goes sideways…
+    tick(10_000) // …for 10 s, which must cost nothing
+    rerender(<BlitzMode {...props} clockPaused={false} />)
+    tick(1000) // 1 s more of the gap, charged
+    unmount() // what a preset switch does to the screen
+    render(<BlitzMode {...props} />) // …and the remount restores the parked round
+    expect(ctrl('Reset')).toBeInTheDocument()
+    // 60 − 1.5 played − 3 s of charged gap = 55.5 s left, which the readout rounds up to 56 s. The
+    // stale stamp read 45.5 (46 s): the ten paused seconds charged as if the player had been thinking.
+    expect(readout()).toBe('56s')
   })
 })

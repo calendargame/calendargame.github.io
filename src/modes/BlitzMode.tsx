@@ -870,8 +870,15 @@ function BlitzMode({
   // re-runs the Best-reconcile effect above) re-parks the updated snapshot. currentRoundIdRef and
   // prevRoundBestRef are written only by begin(), which also flips active/timerDone, so they are
   // already stable whenever timerDone is true and need no dep of their own. clockRemainRef needs none
-  // either: every writer that can leave a round ended — endRound's stamp, and the Undo that re-ends a
-  // resumed round (paintClock) — writes it in the same handler that flips timerDone, before this runs.
+  // either: every writer that can leave a round ended — endRound's stamp, the drain loop's final zero,
+  // and Show Codes freezing a 'toggle' gap — writes it in the same commit that changes timerDone or
+  // endKind, before this runs.
+  // ⚠ `clockPaused` IS a dep, for the one ref that moves on its own: endedAtRef. The rotate pause's
+  // release pushes a 'toggle' end's stamp forward by the paused span (the pause effect above), and
+  // without a re-park the blob kept the stamp from before the pause — so a preset switch after a
+  // rotation charged the restored round for every second the overlay was up. The release runs as that
+  // effect's CLEANUP, and React runs every cleanup of a commit before any effect body, so this body —
+  // re-run because `clockPaused` changed in the same commit — always parks the moved stamp.
   useEffect(() => {
     const pid = usePresets.getState().activeId
     if (timerDone)
@@ -889,7 +896,7 @@ function BlitzMode({
         endedAt: endedAtRef.current,
       })
     else discardSessionRound(pid, 'blitz')
-  }, [timerDone, active, showTimerDate, state, endKind])
+  }, [timerDone, active, showTimerDate, state, endKind, clockPaused])
 
   // Both toggles are bare idle-gated flips — fully independent since C3a (the old auto-off
   // coupling died with the sudden-death-only per-Q). The idle lock (also mirrored by the
