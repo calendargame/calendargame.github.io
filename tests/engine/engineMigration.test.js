@@ -7,8 +7,11 @@
 // The blobs below are HAND-BUILT in those exact shapes — field for field what those reducers wrote —
 // rather than produced by today's reducer, which can no longer produce them. Each must come back as
 // a healthy state (no invariant fires), with its score untouched, and with every card toggleable.
-import { describe, it, expect } from 'vitest'
-import { migrateEngineState } from '../../src/engine/engineMigration.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { migrateEngineState, restoreParkedEngine } from '../../src/engine/engineMigration.js'
+import { captureError } from '../../src/observability/sentry.js'
+
+vi.mock('../../src/observability/sentry.js', () => ({ captureError: vi.fn() }))
 import { gameReducer, overridePlan } from '../../src/engine/gameReducer.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { wday } from '../../src/lib/calendar.js'
@@ -422,5 +425,44 @@ describe('migrateEngineState — the as-answered Show Codes flag round-trips', (
     s = gameReducer(s, { ...OV, hold: true }) // Override
     expect(flags(s)).toEqual(O_CREDIT_FLAGS)
     expect(checkGameInvariants(s, false)).toEqual([])
+  })
+})
+
+// ── The restore door (second review round, F3) ─────────────────────────────────────────────────────
+// A blob this build cannot read must come back as "nothing parked" and be reported — never throw,
+// because the throw lands in a mode screen's mount and the blob outlives the reload.
+describe('restoreParkedEngine — the one door a parked blob comes through', () => {
+  beforeEach(() => vi.mocked(captureError).mockClear())
+
+  it('a readable blob, of any build, comes back migrated', () => {
+    expect(restoreParkedEngine(v2250(), false, 'blitz')).toEqual(migrateEngineState(v2250(), false))
+    const current = migrateEngineState(v2250(), false)
+    expect(restoreParkedEngine(current, false, 'blitz')).toEqual(current)
+    expect(captureError).not.toHaveBeenCalled()
+  })
+
+  const UNREADABLE = [
+    ['nothing', () => undefined],
+    ['a string', () => 'round'],
+    ['no date', () => ({ ...v2250(), date: undefined })],
+    ['no history', () => ({ ...v2250(), stack: undefined })],
+    ['a forward stack that is not a list', () => ({ ...v2250(), forwardStack: {} })],
+    ['a history entry that is not a card', () => ({ ...v2250(), stack: [null] })],
+    ['no grid', () => ({ ...v2250(), persistBtns: null })],
+    ['no stats', () => ({ ...v2250(), stats: undefined })],
+    ['no times', () => ({ ...v2250(), stats: { ...v2250().stats, times: 3 } })],
+    // Past the shape check, inside the migration: an overridden Deduction entry with no answer boxes.
+    [
+      'an entry the migration cannot read',
+      () => ({ ...v2250(), stack: [{ type: 'month', overrideUsed: true }] }),
+    ],
+  ]
+  it.each(UNREADABLE)('%s: null, and one report saying why', (_, make) => {
+    expect(restoreParkedEngine(make(), false, 'aox')).toBe(null)
+    expect(captureError).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(captureError).mock.calls[0][1]).toMatchObject({
+      where: 'restore-parked-round',
+      mode: 'aox',
+    })
   })
 })

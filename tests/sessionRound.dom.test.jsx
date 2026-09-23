@@ -563,3 +563,52 @@ describe('a restored Blitz round resumes with the time it had left', () => {
     expect(readout()).toBe('30s') // the round's own length — never a stray 60
   })
 })
+
+// ── A parked blob the restore door cannot read (second review round, F3) ────────────────────────
+// The park lives in sessionStorage, which live and staging SHARE (one origin), and which a reload
+// keeps — so a blob in a shape this build cannot read is not hypothetical, and before the guard it
+// threw inside the screen's mount (the engine's lazy initializer), every reload, for the whole
+// browsing session. Such a blob must be dropped WHOLE — the screen's own fields too, or an "ended"
+// round would sit on top of a fresh engine — reported, and the mode must come up fresh.
+describe('a parked round in a shape this build cannot read', () => {
+  beforeEach(() => resetAppState())
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const CORRUPT = [
+    ['an engine with no history arrays', (e) => ({ ...e, stack: undefined, forwardStack: 'x' })],
+    ['an engine with no date', (e) => ({ ...e, date: null })],
+    ['an engine with no times', (e) => ({ ...e, stats: { ...e.stats, times: null } })],
+    ['a history entry that is not a card', (e) => ({ ...e, stack: [null] })],
+    ['no engine at all', () => undefined],
+  ]
+  it.each(CORRUPT)('%s: both timed screens come up fresh, and the slot is gone', (_, corrupt) => {
+    mountApp()
+    pinReadable()
+    switchToBlitz()
+    finishBlitzRound(1)
+    const raw = JSON.parse(sessionStorage.getItem('cg-round-v1'))
+    const blitz = raw['1:blitz']
+    raw['1:blitz'] = { ...blitz, engine: corrupt(blitz.engine) }
+    raw['1:aox'] = {
+      engine: corrupt(blitz.engine),
+      runPhase: 'done',
+      shown: true,
+      currentRunId: 1,
+      prevBestSnap: null,
+    }
+    sessionStorage.setItem('cg-round-v1', JSON.stringify(raw))
+    const p2 = createPreset()
+    openPreset(p2.id)
+    openPreset(1) // both screens remount and read the corrupt slots
+    switchToBlitz()
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(statValue('Score')).toBe('0/0')
+    expect(readSessionRound(1, 'blitz')).toBeNull()
+    switchToMox()
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(statValue('Score')).toBe('0/0')
+    expect(readSessionRound(1, 'aox')).toBeNull()
+  })
+})

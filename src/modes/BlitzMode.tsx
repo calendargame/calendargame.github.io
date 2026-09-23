@@ -35,6 +35,8 @@ import { liveCredited } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
+import type { ParkedSnapshot } from '../store/sessionRound.js'
+import { restoreParkedEngine } from '../engine/engineMigration.js'
 import { useBackButton } from '../components/useBackButton.js'
 
 // The Best records that stood BEFORE the current round (snapshotted at Begin) — the reconcile
@@ -166,10 +168,18 @@ function BlitzMode({
   // (store/presetControl). So this is the incoming preset's OWN parked round and never the one just
   // left; the preset-id key is the whole contamination guard (a blob keyed to preset 1 is
   // unreachable while preset 2 is up). Factored into one read so the six initializers below don't
-  // each call sessionStorage.
-  const [parkedRound] = useState<BlitzRoundSnapshot | null>(() =>
-    readSessionRound<BlitzRoundSnapshot>(usePresets.getState().activeId, 'blitz'),
-  )
+  // each call sessionStorage. The engine inside goes through the one restore door here, before any
+  // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
+  // engine/engineMigration's restoreParkedEngine), so the screen never shows an "ended" round over a
+  // fresh engine.
+  const [parkedRound] = useState<BlitzRoundSnapshot | null>(() => {
+    const snap = readSessionRound<ParkedSnapshot<BlitzRoundSnapshot>>(
+      usePresets.getState().activeId,
+      'blitz',
+    )
+    const engine = snap && restoreParkedEngine(snap.engine, useJulian, 'blitz')
+    return engine ? { ...snap, engine } : null
+  })
   // Only ENDED rounds are ever parked, so a restored round always has active === false; it is read
   // from the blob for symmetry rather than assumed.
   const [active, setActive] = useState(parkedRound?.active ?? false)
@@ -178,7 +188,10 @@ function BlitzMode({
   // parked by a build before this one carries no `endKind`, and the honest reading of such a blob is
   // the rule that build itself applied — `resumableEnd = timerDone && countedWrong`, i.e. a burned
   // live card meant "a player action ended this" and anything else meant the clock. A 'toggle' end
-  // could not exist then, so no old blob can need it.
+  // could not exist then, so no old blob can need it. (It reads the MIGRATED engine, and that is the
+  // same bit: the migration rewrites a live card's flags only when an old Override left that card
+  // overridden in place, and the one shipped older build — v2.25.0 — never held an Override on a
+  // Blitz card; its every live-card credit advanced.)
   const [endKind, setEndKind] = useState<EndKind | null>(
     !parkedRound?.timerDone
       ? null

@@ -63,6 +63,14 @@ const write = (store: Store): void => {
   }
 }
 
+/**
+ * A snapshot as it comes OUT of storage: the mode's own shape, except that its `engine` is whatever
+ * JSON the build that parked it wrote — this build's, an older one's, or one this build has never
+ * seen (live and staging share the origin) — until the mode has put it through
+ * engine/engineMigration's restoreParkedEngine.
+ */
+export type ParkedSnapshot<T extends { engine: unknown }> = Omit<T, 'engine'> & { engine: unknown }
+
 /** The parked ended round for this (preset, mode), or null when there is none. */
 export const readSessionRound = <T>(presetId: number, mode: RoundMode): T | null => {
   const v = read()[slot(presetId, mode)]

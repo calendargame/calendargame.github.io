@@ -4,7 +4,9 @@
 // store/sessionRound parks whole engine states (an ended Blitz round / MoX run) in sessionStorage,
 // and a reload keeps them — so the first build with round 23's per-card Override record meets
 // states written by the builds before it, and must load them rather than crash or mis-score.
-// This is the ONE door they come through: useGameEngine's lazy initializer, for every parked state.
+// This is the ONE door they come through: `restoreParkedEngine` below, which each timed mode calls
+// on its parked snapshot at mount, BEFORE anything reads it — so the screen's own fields and its
+// engine are kept or dropped together, never one without the other.
 //
 // TWO LEGACY SHAPES, both from the one-override-per-question engine:
 //   • v2.25.0 — history entries carry `overrideUsed` (the per-question lock) and a `capsule`
@@ -34,6 +36,7 @@ import {
   oneBtn,
   overriddenLiveFlags,
 } from './gameReducer.js'
+import { captureError } from '../observability/sentry.js'
 import type {
   AnsweredState,
   CardMeta,
@@ -207,5 +210,52 @@ export function migrateEngineState(blob: unknown, useJulian: boolean): GameState
       prevStatsSnapshot,
       liveA(!credited, s.calcPenaltyActive),
     ),
+  }
+}
+
+// ★ THE RESTORE DOOR — a parked blob in, today's engine state out, or null when the blob cannot be
+// one. Null means "nothing is parked": the caller drops its WHOLE snapshot (its own fields ride on
+// this engine, so a fresh engine under a restored "ended" screen would be a state no play reaches)
+// and the mode comes up fresh, and its mirror effect then discards the slot on its first run.
+//
+// ⚠ WHY A BLOB CAN BE UNREADABLE AT ALL. sessionStorage is per ORIGIN, and the live site and the
+// staging build share one (calendargame.app/test_version/) — so a build this one has never heard of
+// can have written the slot, and a reload keeps it. Unguarded, the first bad read threw inside the
+// engine's lazy initializer at mount, and since the blob outlives the reload, every reload died the
+// same way for the rest of the browsing session: a mode screen bricked until the tab was closed.
+//
+// Two layers. The SHAPE check names every field the migration and the first render need before they
+// can even be asked — a date, the history arrays, the grid, the stats and their times (each of those
+// either throws in the migration or on the screen's first paint). Then the migration itself runs
+// inside a catch, so a card deep in the history that is not one (the check does not walk every field
+// of every entry, and should not have to) lands here too rather than on the error card. Either way
+// the report goes to the same place every other caught failure does, with the reason attached.
+export function restoreParkedEngine(
+  blob: unknown,
+  useJulian: boolean,
+  mode: string,
+): GameState | null {
+  const reject = (reason: string, error?: unknown): null => {
+    captureError(error ?? new Error(`Unreadable parked round: ${reason}`), {
+      where: 'restore-parked-round',
+      mode,
+      reason,
+    })
+    return null
+  }
+  const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+  if (!isObj(blob)) return reject('not an object')
+  const stats = blob.stats
+  if (!isObj(blob.date)) return reject('no date')
+  if (!Array.isArray(blob.stack) || !Array.isArray(blob.forwardStack))
+    return reject('no history arrays')
+  if (![...blob.stack, ...blob.forwardStack].every(isObj))
+    return reject('a history entry is not a card')
+  if (!isObj(blob.persistBtns)) return reject('no grid')
+  if (!isObj(stats) || !Array.isArray(stats.times)) return reject('no stats')
+  try {
+    return migrateEngineState(blob, useJulian)
+  } catch (e) {
+    return reject('the migration threw', e)
   }
 }

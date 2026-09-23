@@ -49,6 +49,8 @@ import { useGameEngine } from '../engine/useGameEngine.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
+import type { ParkedSnapshot } from '../store/sessionRound.js'
+import { restoreParkedEngine } from '../engine/engineMigration.js'
 import { useBackButton } from '../components/useBackButton.js'
 
 // Round-21 Q11 — the shape AoxMode parks in store/sessionRound for an ENDED run (done | failed). It
@@ -111,10 +113,18 @@ function AoxMode({
   // writes the registry before it rehydrates the stores, one synchronous turn (store/presetControl).
   // So this is the incoming preset's OWN parked run and never the one just left; the preset-id key
   // is the whole contamination guard. Factored into one read so the initializers below don't each
-  // hit sessionStorage.
-  const [parkedRun] = useState<AoxRunSnapshot | null>(() =>
-    readSessionRound<AoxRunSnapshot>(usePresets.getState().activeId, 'aox'),
-  )
+  // hit sessionStorage. The engine inside goes through the one restore door here, before any
+  // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
+  // engine/engineMigration's restoreParkedEngine), so the screen never shows an ended run over a
+  // fresh engine.
+  const [parkedRun] = useState<AoxRunSnapshot | null>(() => {
+    const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(
+      usePresets.getState().activeId,
+      'aox',
+    )
+    const engine = snap && restoreParkedEngine(snap.engine, useJulian, 'aox')
+    return engine ? { ...snap, engine } : null
+  })
   const [runPhase, setRunPhase] = useState(parkedRun?.runPhase ?? 'idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop) — only done/failed are ever parked (round-21 Q11)
   const [shown, setShown] = useState(parkedRun?.shown ?? false) // One-by-One: is the current date revealed? (always true for non-One-by-One while running; always true on a parked ended run)
   const [breakdownOpen, setBreakdownOpen] = useState(false) // the run breakdown popup (components/RunBreakdown) — ephemeral, dies with the run

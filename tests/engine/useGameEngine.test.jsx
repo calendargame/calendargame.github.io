@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useGameEngine } from '../../src/engine/useGameEngine.js'
 import { gameReducer, initEngine } from '../../src/engine/gameReducer.js'
+import { restoreParkedEngine } from '../../src/engine/engineMigration.js'
 import { wday } from '../../src/lib/calendar.js'
 
 // A deterministic genDate (fixed Gregorian date — value doesn't matter for these checks).
@@ -147,7 +148,9 @@ describe('useGameEngine — Override ⇄ Undo', () => {
   // by an older build (here v2.25.0's shape: a history entry locked by `overrideUsed` + its capsule,
   // and the dead top-level flags) mounts healthy, scored and TOGGLEABLE. The migration's own exact
   // per-shape expectations live in engine/engineMigration.test.js; this asserts the door is wired.
-  it('a legacy parked blob comes through the migration door and is toggleable', () => {
+  // The door is engine/engineMigration's restoreParkedEngine, which the timed modes call at their
+  // parked read; the hook seeds from whatever it returns.
+  it('a legacy parked blob comes through the restore door and is toggleable', () => {
     const scored = gameReducer(initEngine(genDate()), {
       type: 'ANSWER',
       idx: W,
@@ -188,7 +191,9 @@ describe('useGameEngine — Override ⇄ Undo', () => {
       pendingWrongOverride: null,
       undoCapsule: null,
     }
-    const { result } = renderHook(() => useGameEngine({ ...opts, getInitialState: () => legacy }))
+    const { result } = renderHook(() =>
+      useGameEngine({ ...opts, getInitialState: () => restoreParkedEngine(legacy, false, 'test') }),
+    )
     const s = result.current.state
     expect(s.card).toEqual({ wrongTime: null, answered: null }) // today's shape, not the old flags
     expect(s.stack[0].meta.answered).not.toBe(null) // …and the card comes back OVERRIDDEN

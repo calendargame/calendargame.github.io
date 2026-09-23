@@ -25,8 +25,7 @@ import {
   effectiveSaveStats,
   overridePlan,
 } from './gameReducer.js'
-import type { Question, Stats } from './gameReducer.js'
-import { migrateEngineState } from './engineMigration.js'
+import type { GameState, Question, Stats } from './gameReducer.js'
 import { checkGameInvariants } from './invariants.js'
 import { captureError } from '../observability/sentry.js'
 
@@ -52,10 +51,10 @@ export interface UseGameEngineOptions {
   // preset switch causes lands the incoming preset's OWN ended round back on screen. Returns null
   // (or is omitted) ⇒ a fresh question, exactly as before. When it returns a state, genDate is not
   // called and getInitialStats is ignored — the parked state already carries its stats.
-  // ⚠ `unknown`, not GameState, and that is the point: a parked blob may have been written by an
-  // OLDER build in an older shape, so the lazy init brings every one of them forward through
-  // engine/engineMigration before the reducer ever sees it.
-  getInitialState?: () => unknown
+  // ⚠ A GameState, already brought forward: the raw blob (which an older or unknown build may have
+  // written) goes through engine/engineMigration's restoreParkedEngine in the MODE, at its parked
+  // read, because only the mode can drop its own half of the snapshot along with an unreadable engine.
+  getInitialState?: () => GameState | null
 }
 
 export function useGameEngine({
@@ -69,15 +68,11 @@ export function useGameEngine({
   getInitialStats,
   getInitialState,
 }: UseGameEngineOptions) {
-  const [state, dispatch] = useReducer(gameReducer, undefined, () => {
-    const parked = getInitialState?.()
-    // ★ THE ONE RESTORE DOOR. Every parked round/run comes through engine/engineMigration, which
-    // brings a blob written by an older build (v2.25.0's one-override-per-question engine, or
-    // 44dd83f's whole-state undo capsule) into today's per-card shape, and passes a state already in
-    // today's shape through untouched. Nothing downstream needs to know which build wrote it.
-    if (parked) return migrateEngineState(parked, useJulian)
-    return initEngine(genDate(minY, maxY), getInitialStats?.())
-  })
+  const [state, dispatch] = useReducer(
+    gameReducer,
+    undefined,
+    () => getInitialState?.() ?? initEngine(genDate(minY, maxY), getInitialStats?.()),
+  )
 
   // The solve-timer starts when a NEW question is shown (advance / New / Reset bump
   // questionId). Back/Forward change `date` to a browsed entry but leave questionId
