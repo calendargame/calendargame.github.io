@@ -1815,7 +1815,7 @@ export function SettingsPanel({
         onCancel={closeResetSettingsConfirm}
         onConfirm={confirmResetSettings}
         title="Reset Settings for this preset?"
-        body="Restores this preset's ⚙ settings — Display, Dates, Stats (Amnesic included) and Default Mode — plus Flash speed, both Blitz timers and the MoX run length, to your saved defaults, or the launch defaults if you've saved none. Your stats and all-time bests are untouched, and you stay on the page you're on."
+        body="Restores this preset's ⚙ settings — Display, Dates, Stats (Amnesic included) and Default Mode — plus Flash speed, both Blitz timers and the MoX run length, to your saved defaults, or the launch defaults if you've saved none. Your stats and all-time bests are untouched — unless this switches Amnesic, which does exactly what flipping that switch yourself does — and you stay on the page you're on."
         confirmLabel="Reset Settings"
         backButtonId="reset-settings-confirm"
       />

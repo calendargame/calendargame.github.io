@@ -10,8 +10,9 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 // There is no "used it once" state left anywhere — the same date can be toggled as many times as
 // the player likes, today or after browsing back to it tomorrow.
 //
-// `avail` is false in one situation only: there is genuinely no date to point at (a fresh mode with
-// no history behind it — or, in the casual modes, Save Stats off for the date on screen). The word
+// `avail` is false in two situations only: there is genuinely no date to point at (a fresh mode with
+// no history behind it, or nothing behind a date the Blitz clock timed out on), or — in the casual
+// modes — Save Stats was off for the date on screen. The word
 // follows `overridden` whether or not the press is on offer — a dimmed button still says which state
 // its date is in; the two are computed together from the engine's one selector
 // (engine/useGameEngine → gameReducer's overridePlan), so the label can never disagree with the flip.

@@ -654,7 +654,7 @@ export default function GuidePage({
           <li>
             Your device's own Back — Android's Back button, or your browser's back arrow or
             back-swipe — closes whatever is open on top rather than leaving the app: the mode menu,
-            the ⚙ panel and its popups, Show Codes, or this guide. Press it again for the next layer
+            the ⚙ panel, any popup, Show Codes, or this guide. Press it again for the next layer
             down. (This is the phone or browser's Back, not the <b>&lt;</b> button inside the game,
             which walks back through dates.) Installed on an iPhone home screen there's no Back to
             press, and the app deliberately adds none.
@@ -708,17 +708,19 @@ export default function GuidePage({
         <Subhead>Loading dates</Subhead>
         <UL>
           <li>
-            <b>New</b> — load a fresh date. In timer modes, only available after pressing Begin.
+            <b>New</b> — Classic and Deduction: load a fresh date.
           </li>
           <li>
-            <b>Begin</b> — timer modes only (Blitz, Flash, MoX). Starts a round or run; the timer
-            starts and the date is shown (Flash hides it after the configured duration; MoX hides it
-            between solves only when One-by-One is on).
+            <b>Begin</b> — timer modes only (Blitz, Flash, MoX). In Flash it flashes the next date,
+            hiding it after the configured duration. In Blitz and MoX it starts a round or run: the
+            timer starts and the date is shown (MoX hides it between solves only when One-by-One is
+            on, and a <b>Continue</b> button shows each one).
           </li>
           <li>
-            <b>Reset</b> — timer modes only. In Blitz, ends the current round and unlocks settings;
-            in MoX, ends the current run. Saved bests are preserved either way. Press Reset then
-            Begin to start a fresh round/run.
+            <b>Reset</b> — timer modes only. In Flash it stands in for Begin while a date is in
+            play: it ends that question and clears your question history, keeping your stats. In
+            Blitz, it ends the current round and unlocks settings; in MoX, it ends the current run.
+            Saved bests are preserved either way. Press Reset then Begin to start a fresh round/run.
           </li>
           <li>
             <b>Reset Stats</b> — casual modes only (Classic, Flash, Deduction). See below.
@@ -726,9 +728,9 @@ export default function GuidePage({
         </UL>
         <Subhead>Reset Stats (casual modes)</Subhead>
         <p>
-          Clears your stats and all-time bests for the current mode (Deduction only resets the
-          current sub-type's), for the preset you are on. The other modes keep theirs, and no other
-          preset is touched. Details:
+          Clears your stats, all-time bests and question history for the current mode (Deduction
+          only resets the current sub-type's), for the preset you are on. The other modes keep
+          theirs, and no other preset is touched. Details:
         </p>
         <UL>
           <li>
@@ -797,11 +799,12 @@ export default function GuidePage({
           <li>
             After a wrong answer (or a Reveal, or a Show Codes): credits the date and adjusts your
             score. On the date you are playing, it then moves you on to a new date, just as a
-            correct answer would. The credit brings a time with it — how long you took over your
-            first attempt on that date — but only if timing stats were showing the first time you
-            overrode that date (in Blitz and MoX they always are). That time is fixed from then on:
-            a date first overridden with timing hidden adds nothing to your mean, and never will,
-            however many times you switch it later.
+            correct answer would — except where a Blitz round or MoX run stays ended, or the credit
+            completes a MoX run: then the date stays on screen (see below). The credit brings a time
+            with it — how long you took over your first attempt on that date — but only if timing
+            stats were showing the first time you overrode that date (in Blitz and MoX they always
+            are). That time is fixed from then on: a date first overridden with timing hidden adds
+            nothing to your mean, and never will, however many times you switch it later.
           </li>
           <li>After a correct answer: takes the credit away, and its time leaves your mean.</li>
           <li>
@@ -845,11 +848,12 @@ export default function GuidePage({
             how you answered it and whether it is overridden — so you can answer more questions,
             browse away and come back to it, and the button still reads Undo there and still works.
             What clears these dates is what clears the history itself. In every mode: a Reset (Reset
-            Stats, or Begin and Reset in Blitz and MoX), a Full Reset, and closing the app. In Blitz
-            and MoX, also changing a setting the round or run depends on (it resets when you close
-            the ⚙ menu) and leaving the mode while a round or run is still going. In Classic, Flash
-            and Deduction the history belongs to this visit, so switching presets or reloading the
-            app starts it over (your stats are kept). A Blitz round or MoX run that has <i>ended</i>
+            Stats; the Reset button in Flash, Blitz and MoX; or Begin in Blitz and MoX), a Full
+            Reset, and closing the app. In Blitz and MoX, also changing a setting the round or run
+            depends on (it resets when you close the ⚙ menu) and leaving the mode while a round or
+            run is still going. In Classic, Flash and Deduction the history belongs to this visit,
+            so switching presets or reloading the app starts it over (your stats are kept). A Blitz
+            round or MoX run that has <i>ended</i>
             is the one thing that comes back after a preset switch or a reload, and it brings every
             date&apos;s Override state with it.
           </li>
@@ -874,8 +878,7 @@ export default function GuidePage({
             staying ended. Two things hold that back. With Allow Mistakes off, nothing else in the
             round/run may still be wrong: if something is, the credit counts and the date stays on
             screen, but the round/run stays ended. And a tap made while browsing back never restarts
-            a round or run under you — it comes back only on a tap at the live date that credits a
-            date and leaves nothing wrong.
+            a round or run under you — it comes back only on a tap made at the live date.
           </li>
           <li>
             Because the button works both ways, a tap can also end a round or run that is still
@@ -980,10 +983,12 @@ export default function GuidePage({
           the page you were on.
         </p>
         <p>
-          <b>Lookup history is the one thing that is NOT in that list.</b> It is shared by every
-          preset — the same list, however many presets you have or whichever one you switch to —
-          because a Lookup is a question you asked, not a record of how you did. See{' '}
-          <b>Saved Progress</b> below for what that means for Amnesic and for Full Reset.
+          <b>
+            Lookup history is the one thing that is <i>not</i> in that list.
+          </b>{' '}
+          It is shared by every preset — the same list, however many presets you have or whichever
+          one you switch to — because a Lookup is a question you asked, not a record of how you did.
+          See <b>Saved Progress</b> below for what that means for Amnesic and for Full Reset.
         </p>
         <Subhead>Switching</Subhead>
         <UL>
@@ -1087,23 +1092,27 @@ export default function GuidePage({
         <Subhead>The stats</Subhead>
         <UL>
           <li>
-            <b>Score</b> — correct first-try answers out of total attempts. In Blitz, only the
-            current round. In MoX, correct answers out of total attempts; the run ends once correct
-            answers reach the set number.
+            <b>Score</b> — dates that count as correct (a first-try correct answer, or a date you
+            credited with Override) out of total attempts. In Blitz, only the current round. In MoX,
+            the run ends once that count reaches the set number.
           </li>
           <li>
-            <b>Accuracy</b> — percentage answered correctly on the first try. Shows "—" until your
-            first attempt.
+            <b>Accuracy</b> — the Score as a percentage. Shows "—" until your first attempt.
           </li>
           <li>
-            <b>Streak</b> — your current consecutive correct streak / your best this session.
+            <b>Streak</b> — your current run of consecutive correct dates / your longest. In Blitz
+            and MoX the longest is this round's or run's; in Classic, Flash and Deduction it is kept
+            with your other stats until you press Reset Stats.
           </li>
           <li>
-            <b>Last / Mean / Median</b> — timing stats from correct answers only. Last = the time of
-            the most recent date that currently counts as correct; Mean = the arithmetic mean of
-            every correct answer's time, with nothing dropped; Median = the middle time (less skewed
-            by outliers). If you cube: this Mean is an <i>untrimmed</i> mean, the Mo3 sense of the
-            word, not a trimmed average.
+            <b>Last / Mean / Median</b> — timing stats, built only from dates that count as correct.
+            Each adds at most one time: a first-try correct answer adds how long it took (if timing
+            was showing), and a date you credited with Override adds how long your first attempt on
+            it took — or nothing, if timing was hidden the first time you overrode it. Last = the
+            newest of those times, in the order you played the dates; Mean = the arithmetic mean of
+            all of them, with nothing dropped; Median = the middle one (less skewed by outliers). If
+            you cube: this Mean is an <i>untrimmed</i> mean, the Mo3 sense of the word, not a
+            trimmed average.
           </li>
         </UL>
         <Subhead>How times are counted</Subhead>
@@ -1128,7 +1137,8 @@ export default function GuidePage({
           </li>
           <li>
             One question = one attempt. Getting a question wrong then right still counts as one
-            attempt, marked correct.
+            attempt, and it counts as a miss — the right answer turns green, but only a first try
+            scores (or an Override).
           </li>
           <li>When you set a new best, a small ★ appears next to the value to flag it.</li>
         </UL>
@@ -1197,13 +1207,14 @@ export default function GuidePage({
         <Subhead>The breakdown (Blitz, MoX)</Subhead>
         <p>
           When a MoX run ends — whether you completed it or it failed — or a Blitz round ends, tap{' '}
-          <i>anywhere</i> on the stats strip to see that run or round solve by solve. A failed run
-          shows every date up to and including the one that ended it, and its mean is the mean of
-          the solves you did make. A summary sits at the top — solves, accuracy, mean, median,
-          fastest, slowest, and the spread between the fastest and the slowest — over a scrolling
-          list of every date you were asked, in order. Each row reads, left to right: its number,
-          the day of the week that date fell on (as one letter — the key is below), the date, any
-          note about it, and its time, with the times lined up in a column on the right.
+          <i>anywhere</i> on the stats strip to see that run or round solve by solve (with Save
+          Stats on — a dimmed strip does not open it). A failed run shows every date up to and
+          including the one that ended it, and its mean is the mean of the solves you did make. A
+          summary sits at the top — solves, accuracy, mean, median, fastest, slowest, and the spread
+          between the fastest and the slowest — over a scrolling list of every date you were asked,
+          in order. Each row reads, left to right: its number, the day of the week that date fell on
+          (as one letter — the key is below), the date, any note about it, and its time, with the
+          times lined up in a column on the right.
         </p>
         <UL>
           <li>
@@ -1233,9 +1244,10 @@ export default function GuidePage({
           <li>
             <b>A solve that didn't count is marked too</b>, in the same place — <i>missed</i> if you
             picked a wrong day, <i>shown</i> if the answer was put on screen for you (Reveal, Show
-            Codes, or a Blitz clock running out), or <i>overridden</i> if you took a credit back. A
-            date with a dash instead of a time contributed nothing to the mean: a miss, or a correct
-            answer that came after a wrong one.
+            Codes, or a Blitz Per Question clock running out), or <i>overridden</i> if you took a
+            credit back. A date you credited with Override is a solve like any other, timed by your
+            first attempt on it. A date with a dash instead of a time contributed nothing to the
+            mean: a miss, or a correct answer that came after a wrong one.
           </li>
           <li>
             <b>The list always adds up to the mean above it.</b> The summary is worked out from the
@@ -1324,7 +1336,7 @@ export default function GuidePage({
             <div className="space-y-1 text-sm">
               <div className="flex items-center gap-2">
                 <Kbd>N</Kbd>
-                <span>New / Begin / Reset</span>
+                <span>New / Begin / Reset (and MoX&apos;s Next / Continue)</span>
               </div>
               <div className="flex items-center gap-2">
                 <Kbd>R</Kbd>
@@ -1409,10 +1421,12 @@ export default function GuidePage({
           <li>
             The answer keys and the Game Actions above are ignored while a popup is open, too —
             whatever is behind a popup is out of reach until you close it, so an answer, an Override
-            or an Undo can't be pressed through one. The Overlays and Mode Switching keys still
-            work: a mode letter or <Kbd>H</Kbd> leaves the screen, and any popup belonging to it
-            goes at the same moment, while <Kbd>G</Kbd> opens and closes the ⚙ menu with its own
-            popups.
+            or an Undo can't be pressed through one. The mode letters and <Kbd>H</Kbd> still work:
+            they leave the screen, and any popup belonging to it goes at the same moment.{' '}
+            <Kbd>G</Kbd> still closes the ⚙ menu together with any of its popups, but does nothing
+            while a game screen&apos;s own popup (such as a Reset Stats question or a breakdown) is
+            open. <Kbd>Tab</Kbd> stays inside the popup rather than opening the mode selector (see
+            Accessibility).
           </li>
           <li>
             <Kbd>Tab</Kbd> is the exception — it toggles the mode selector even from inputs (use{' '}
@@ -1666,12 +1680,13 @@ export default function GuidePage({
           </li>
           <li>
             Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: the
-            three buttons at the foot of the ⚙ menu, Show Codes, every locked picker and the Amnesic
-            switch while Save Stats is off, and — in Manage Presets — <b>✕</b> when only one preset
-            is left. The reorder handle beside each row never greys out; it has no end it cannot
-            move toward. The rest of the game&apos;s buttons — Reveal, Override / Undo, <b>&lt;</b>{' '}
-            and <b>&gt;</b> — are only dimmed, so they still read as ordinary buttons even when
-            pressing one would do nothing.
+            three buttons at the foot of the ⚙ menu and the Clear Saved Defaults link under them,
+            Show Codes, every locked picker, the Rotate Dots CCW switch while it is locked, the
+            Amnesic switch while Save Stats is off, a timer value you can&apos;t type into right
+            now, and — in Manage Presets — <b>✕</b> when only one preset is left. The reorder handle
+            beside each row never greys out; it has no end it cannot move toward. The rest of the
+            game&apos;s buttons — Reveal, Override / Undo, <b>&lt;</b> and <b>&gt;</b> — are only
+            dimmed, so they still read as ordinary buttons even when pressing one would do nothing.
           </li>
         </UL>
       </GuideSection>
@@ -2282,9 +2297,9 @@ export default function GuidePage({
             <i>into</i> is the <b>Open in</b> setting (⚙ &rarr; Global).
           </li>
           <li>
-            Any timed round or run on screen &mdash; whether still in progress OR ended but not yet
-            Reset. An <i>ended</i> run is kept as you switch presets and return, the same as the
-            page above; only a fresh close of the app, or a manual Reset, clears it. A run still{' '}
+            Any timed round or run on screen &mdash; whether still in progress <i>or</i> ended but
+            not yet Reset. An <i>ended</i> run is kept as you switch presets and return, the same as
+            the page above; only a fresh close of the app, or a manual Reset, clears it. A run still{' '}
             <i>in progress</i> is discarded on a preset switch. Either way, only a Best it already
             recorded persists.
           </li>
@@ -2614,10 +2629,10 @@ export default function GuidePage({
           restores the best that stood before the run, and a correction that changes the run's mean
           or median updates its record to match. That holds however many times you toggle a date,
           including after a preset switch: a best follows the run it belongs to, and the last tap
-          decides. The score display freezes when a run ends and only resets after pressing Reset.
-          Leaving MoX mid-run resets it; a run that has ended — completed or failed — stays on
-          screen when you come back, from another mode or from another preset, until you press Reset
-          or Full Reset, or close the app.
+          decides. When a run ends its score stays on screen — changing only when you override one
+          of its dates — until you press Reset. Leaving MoX mid-run resets it; a run that has ended
+          — completed or failed — stays on screen when you come back, from another mode or from
+          another preset, until you press Reset or Full Reset, or close the app.
         </p>
         <p>
           Bests are tracked per exact configuration: MoX run length, Allow Mistakes, Date Format (or
@@ -2790,8 +2805,9 @@ export default function GuidePage({
             <b>Allow Mistakes</b> — when on, wrong answers count against accuracy and break your
             streak but don't end the round: in Per Round the countdown just keeps running, and in
             Per Question the current question's clock keeps running while you retry the same date
-            (you advance — with a fresh question clock — only by answering correctly). When off, a
-            wrong answer ends the round immediately in either sub-mode.
+            (you advance — with a fresh question clock — only by answering correctly, or by
+            crediting the date with Override). When off, a wrong answer ends the round immediately
+            in either sub-mode.
           </li>
           <li>
             <b>Per Round / Per Question</b> — tap to switch. Per Round uses a single countdown for
@@ -2804,11 +2820,12 @@ export default function GuidePage({
         </UL>
         <Subhead>Ending a round and Override</Subhead>
         <p>
-          When the round ends, the correct answer for the current date is highlighted and your bests
-          are recorded. A round ends when time runs out — the round countdown in Per Round, or any
-          single question's clock in Per Question. It also ends if you give up on the current date
-          with Reveal or Show Codes, or — with Allow Mistakes off — on a wrong answer or if a tap of
-          the Override / Undo button flips any date to wrong.
+          When the round ends, your bests are recorded and — unless a tap of Override / Undo ended
+          it (see below) — the correct answer for the current date is highlighted. A round ends when
+          time runs out — the round countdown in Per Round, or any single question's clock in Per
+          Question. It also ends if you give up on the current date with Reveal or Show Codes, or —
+          with Allow Mistakes off — on a wrong answer or if a tap of the Override / Undo button
+          flips any date to wrong.
         </p>
         <p>
           You can then browse your round's history with Back/Forward and override past dates to
@@ -2817,11 +2834,10 @@ export default function GuidePage({
           this includes a round that timed out on a date you&apos;d already answered wrong) —
           resumes the round, as long as you are at the live date and not browsing back, and, with
           Allow Mistakes off, nothing else in the round is still wrong. If something is, the credit
-          counts and the date stays on screen, but the round stays ended. The round&apos;s bests
-          aren&apos;t locked in until it ends for real (so a misclick you fix doesn&apos;t update
-          your bests). A round the clock ended — the Per Round countdown, or a Per Question clock on
-          a date you hadn&apos;t touched — is over for good; you can still override its dates.
-          Override works the same whether Save Stats is on or off.
+          counts and the date stays on screen, but the round stays ended. A round the clock ended —
+          the Per Round countdown, or a Per Question clock on a date you hadn&apos;t touched — is
+          over for good; you can still override its dates. Override works the same whether Save
+          Stats is on or off.
         </p>
         <p>
           The button reads <b>Undo</b> for any date you have already overridden, with no time limit
@@ -2888,8 +2904,9 @@ export default function GuidePage({
           Leaving Blitz mid-round abandons it — you return to a fresh, idle Blitz (no hidden
           countdown keeps running while you're away). If you leave after a round ends without
           pressing Reset, the round state (bests, history, final date) is preserved when you return.
-          Press Reset to clear your current round, unlock the settings, and start fresh. Changing
-          settings while idle resets the current round.
+          Press Reset to clear your current round, unlock the settings, and start fresh. Changing a
+          setting the round depends on — while a round is going or has ended — resets it when you
+          close the ⚙ menu.
         </p>
       </GuideSection>
       <GuideSection
