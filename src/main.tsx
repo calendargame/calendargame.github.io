@@ -1937,8 +1937,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // ended round" — so it must clear the park BEFORE the remount below, or the timed screens'
         // getInitialState would re-read the still-parked blob and restore the very round this button
         // just erased. Scoped to the active preset, like every other line here (a switch's own
-        // discard covers the preset you leave); an amnesic preset parks in the same sessionStorage
-        // keyed by id, so this one call covers that case too — no amnesic branch needed. The per-mode
+        // discard covers the preset you leave). It clears BOTH of the preset's stats copies' parks
+        // (round 23 Q2 keys them "<id>:saved" / "<id>:session"), which is exactly Full Reset's reach —
+        // in an amnesic preset it erases the parked permanent stats too — so no amnesic branch is
+        // needed: a round of either copy would otherwise come back over the stats just wiped. The per-mode
         // Reset button never reaches here: it drives the mode's own idle transition, whose mirror
         // effect discards the park itself.
         discardSessionRounds(usePresets.getState().activeId);

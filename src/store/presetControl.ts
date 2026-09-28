@@ -144,8 +144,8 @@ const clearPresetStorage = (presetId: number) => {
   // (round-21 Q3), in sessionStorage keyed by this id. Ids are never reused so a leftover entry is
   // harmless, but "remove exactly its keys" is the house rule.
   discardSessionMode(presetId)
-  // …and the FOURTH: its parked ended round/run (round-21 Q11), one sessionStorage entry per mode
-  // keyed by this id. discardSessionRounds clears every mode for the preset in one call — same house
+  // …and the FOURTH: its parked ended round/run (round-21 Q11), one sessionStorage entry per (stats
+  // copy, mode) for this id. discardSessionRounds clears both copies' modes in one call — same house
   // rule, same "harmless leftover but remove it anyway" reasoning as the page entry above.
   discardSessionRounds(presetId)
 }
