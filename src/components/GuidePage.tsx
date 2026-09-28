@@ -1140,7 +1140,12 @@ export default function GuidePage({
             attempt, and it counts as a miss — the right answer turns green, but only a first try
             scores (or an Override).
           </li>
-          <li>When you set a new best, a small ★ appears next to the value to flag it.</li>
+          <li>
+            In Blitz and MoX, a small ★ next to a best means the round or run on screen set it. It
+            stays for as long as that round or run is on screen — including after a preset switch or
+            a reload — and goes when you press Reset or start another. If an Override takes the best
+            away again, the ★ goes with it.
+          </li>
         </UL>
         <Subhead>Reading a stat box</Subhead>
         <p>
@@ -2873,9 +2878,9 @@ export default function GuidePage({
         </UL>
         <p>
           A round&apos;s bests aren&apos;t locked in until it ends for real, so a misclick you fix
-          doesn&apos;t update them. Your bests and their ★ markers follow every tap, and a ★ an
-          earlier round earned stays lit. A round that came back from a preset switch starts with a
-          clean slate of ★ markers, so a tap that re-raises its best lights the ★ again.
+          doesn&apos;t update them. Your bests and their ★ markers follow every tap: a ★ marks a
+          best the round on screen set, so a tap that hands a best back to an earlier round takes
+          the ★ away with it.
         </p>
         <Subhead>Streak and bests</Subhead>
         <UL>
