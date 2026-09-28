@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 //
 // sessionRound.dom — round-21 Q11: an ENDED timed round/run is re-shown after a preset switch and
-// return, restored from sessionStorage keyed by the NOW-ACTIVE preset; an in-progress one is not.
+// return, restored from sessionStorage keyed by the NOW-ACTIVE preset's stats copy (round 23 Q2 —
+// "<preset>:saved" / "<preset>:session"); an in-progress one is not.
 //
 // ★★ WHY THIS IS NOT A STORE-LEVEL TEST, same reason as tests/presetSwitch.dom. store/sessionRound
 // has its own unit coverage for the map read/write/discard. The behaviour Q11 adds lives in the two
@@ -211,11 +212,11 @@ describe('Q11 — a finished Blitz round survives a preset round-trip', () => {
     pinReadable()
     switchToBlitz()
     finishBlitzRound(1)
-    expect(readSessionRound(p2.id, 'blitz')).not.toBeNull()
+    expect(readSessionRound(`${p2.id}:saved`, 'blitz')).not.toBeNull()
 
     openPreset(1)
     act(() => deletePreset(p2.id))
-    expect(readSessionRound(p2.id, 'blitz')).toBeNull()
+    expect(readSessionRound(`${p2.id}:saved`, 'blitz')).toBeNull()
   })
 })
 
@@ -452,7 +453,7 @@ describe('Round 23 Q6 — an overridden card comes back overridden, and still to
     expect(isOffered(ctrl('Undo'))).toBe(true)
     expect(dayClass(card2)).toContain('btn-override-wrong') // the credit taken away, on the grid
     // The record is IN the parked engine state — the card on screen carries its as-answered state.
-    expect(readSessionRound(1, 'blitz').engine.card.answered).not.toBe(null)
+    expect(readSessionRound('1:saved', 'blitz').engine.card.answered).not.toBe(null)
 
     const p2 = createPreset()
     openPreset(p2.id)
@@ -479,7 +480,7 @@ describe('Round 23 Q6 — an overridden card comes back overridden, and still to
     tap(ctrl('Override')) // take the completing solve's credit away → failed 1/2
     expect(statValue('Score')).toBe('1/2')
     expect(isOffered(ctrl('Undo'))).toBe(true)
-    expect(readSessionRound(1, 'aox').engine.card.answered).not.toBe(null)
+    expect(readSessionRound('1:saved', 'aox').engine.card.answered).not.toBe(null)
 
     const p2 = createPreset()
     openPreset(p2.id)
@@ -567,9 +568,9 @@ describe('a restored Blitz round resumes with the time it had left', () => {
 
   it('a round parked by an earlier build (no remaining time saved) restores with the configured length', () => {
     endRoundWith25sLeft()
-    const raw = JSON.parse(sessionStorage.getItem('cg-round-v1'))
-    delete raw['1:blitz'].remain
-    sessionStorage.setItem('cg-round-v1', JSON.stringify(raw))
+    const raw = JSON.parse(sessionStorage.getItem('cg-round-v2'))
+    delete raw['1:saved:blitz'].remain
+    sessionStorage.setItem('cg-round-v2', JSON.stringify(raw))
     roundTrip()
     expect(ctrl('Reset')).toBeInTheDocument()
     expect(readout()).toBe('30s')
@@ -603,28 +604,28 @@ describe('a parked round in a shape this build cannot read', () => {
     pinReadable()
     switchToBlitz()
     finishBlitzRound(1)
-    const raw = JSON.parse(sessionStorage.getItem('cg-round-v1'))
-    const blitz = raw['1:blitz']
-    raw['1:blitz'] = { ...blitz, engine: corrupt(blitz.engine) }
-    raw['1:aox'] = {
+    const raw = JSON.parse(sessionStorage.getItem('cg-round-v2'))
+    const blitz = raw['1:saved:blitz']
+    raw['1:saved:blitz'] = { ...blitz, engine: corrupt(blitz.engine) }
+    raw['1:saved:aox'] = {
       engine: corrupt(blitz.engine),
       runPhase: 'done',
       shown: true,
       currentRunId: 1,
       prevBestSnap: null,
     }
-    sessionStorage.setItem('cg-round-v1', JSON.stringify(raw))
+    sessionStorage.setItem('cg-round-v2', JSON.stringify(raw))
     const p2 = createPreset()
     openPreset(p2.id)
     openPreset(1) // both screens remount and read the corrupt slots
     switchToBlitz()
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
-    expect(readSessionRound(1, 'blitz')).toBeNull()
+    expect(readSessionRound('1:saved', 'blitz')).toBeNull()
     switchToMox()
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
-    expect(readSessionRound(1, 'aox')).toBeNull()
+    expect(readSessionRound('1:saved', 'aox')).toBeNull()
   })
 })
 

@@ -27,6 +27,7 @@ import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
 import { discardAllSessionModes } from '../../src/store/sessionMode.js'
 import { discardAllSessionRounds } from '../../src/store/sessionRound.js'
+import { forgetBrowsingSession } from '../../src/store/browsingSession.js'
 import { useUserDefaults } from '../../src/store/userDefaults.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
 
@@ -110,6 +111,12 @@ beforeEach(() => {
   // MoX run leaves a parked snapshot a later test's cold mountApp() would restore onto the timed
   // screen. Cleared the same way, before every test.
   discardAllSessionRounds()
+  // The BROWSING-SESSION MARKER (store/browsingSession, round 23 Q2) is what tells a genuine cold open
+  // from a reload — it survives a reload and not a close. The harness has no close event, so without
+  // this every test after the first in a worker would boot as a "reload" and the Amnesic cold-open
+  // reseed would never run. Forgetting it here makes each test's first mount the fresh visit it
+  // models; a test that wants a reload simply remounts without forgetting it.
+  forgetBrowsingSession()
   // The SAVED PERSONAL DEFAULTS snapshot (store/userDefaults) is the last singleton of this shape,
   // and it was the one this net was missing — found by a shuffled run (round 22's fixer), where a
   // file that saves a snapshot left it standing for whatever file ran next in the same worker.

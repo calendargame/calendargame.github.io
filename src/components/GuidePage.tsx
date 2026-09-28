@@ -2171,7 +2171,11 @@ export default function GuidePage({
             stat toggles.
           </li>
           <li>Your saved defaults.</li>
-          <li>The Amnesic switch itself. A preset stays amnesic until you turn it off.</li>
+          <li>
+            The Amnesic switch itself, for as long as the app stays open — a reload included. When
+            the app is closed and opened again, the switch goes back to what your saved defaults say
+            (off, if you have not saved any), so guest mode ends with the guest.
+          </li>
         </UL>
         <p>
           So the split is stats, not setup: a preset stays itself across a close, and only forgets
@@ -2201,7 +2205,11 @@ export default function GuidePage({
         <p>
           Either direction clears the screens, including a Blitz round or an MoX run in progress —
           the same discard switching preset makes, and for the same reason: every screen has to be
-          re-read from whichever copy of your stats is now live.
+          re-read from whichever copy of your stats is now live. A round or run that had already{' '}
+          <i>ended</i> belongs to the stats it was played on, and only ever comes back with them:
+          yours is put aside while the guest plays and is back on screen, exactly as you left it,
+          when Amnesic goes off; the guest&apos;s is discarded along with the guest&apos;s stats,
+          and never touches your bests.
         </p>
         <Subhead>Two things it deliberately is not</Subhead>
         <UL>
@@ -2226,8 +2234,8 @@ export default function GuidePage({
         <Subhead>What &quot;closed&quot; honestly means</Subhead>
         <p>
           The stats last for the browsing session, and it is the browser that decides when one ends.
-          A refresh or a reload does not end it — come straight back and the session is still going.
-          Closing the app does.
+          A refresh or a reload does not end it — come straight back and the session is still going,
+          with Amnesic still on and any finished round still on screen. Closing the app does.
         </p>
         <p>
           On a phone there is no way to tell that apart from the inside. An app the system shuts
@@ -2294,6 +2302,11 @@ export default function GuidePage({
           does while a preset is amnesic.
         </p>
         <Subhead>Kept for the visit only (cleared when you fully close the app)</Subhead>
+        <p>
+          A reload — pulling down to refresh, or the app updating itself — is not a close: each
+          preset&apos;s page and any ended round or run are still there afterward. A round or run
+          still in progress is not; a reload stops it, just as a preset switch does.
+        </p>
         <UL>
           <li>
             <b>Which page each preset is on.</b> Change page, switch preset, come back &mdash; the

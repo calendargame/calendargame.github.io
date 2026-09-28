@@ -8,9 +8,9 @@ import {
   FIRST_PRESET_ID,
 } from './presets.js'
 import type { Preset } from './presets.js'
-import { isAmnesic, discardSessionStats, readSessionStats } from './amnesic.js'
+import { isAmnesic, discardSessionStats, readSessionStats, dataIdOf } from './amnesic.js'
 import { discardSessionMode } from './sessionMode.js'
-import { discardSessionRounds, hasSessionRound } from './sessionRound.js'
+import { discardSessionRounds, discardSessionRoundsOf, hasSessionRound } from './sessionRound.js'
 import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults } from './progress.js'
@@ -552,6 +552,12 @@ export function switchPreset(id: number): boolean {
  *   guarantees the session's numbers cannot be reconciled into the permanent ones afterwards:
  *   ⚠⚠ MERGING A SESSION BACK IS BANNED, and this is the line that makes it unwritable — by the
  *   time anything permanent is read again, the session's numbers no longer exist anywhere.
+ *   ⚠⚠ …AND NEITHER DO ITS ROUNDS (round 23 Q2). An ended Blitz round / MoX run carries a Best
+ *   floor and a round id, and the screen that restores it reconciles it into the live Bests — so a
+ *   guest round that survived the flip WAS a merge, by another door (reproduced: it replaced,
+ *   lowered or erased permanent bests). The session copy's parked rounds are discarded with its
+ *   stats, and store/sessionRound keys every parked round by the copy it was played on, so neither
+ *   copy's round can ever be restored against the other.
  *
  * ⚠ IT REHYDRATES ALL FOUR STORES, not just progress. Only progress can have moved, so the other
  * three re-read the values they already hold — a genuine no-op, since every one of them writes
@@ -572,6 +578,11 @@ export function setPresetAmnesic(id: number, amnesic: boolean): boolean {
     presets: reg.presets.map((p) => (p.id === id ? { ...p, amnesic } : p)),
   })
   discardSessionStats(id)
+  // …and the rounds parked against that session copy, which share its lifetime (round 23 Q2): a guest
+  // round must not outlive the guest stats it was scored against, and a fresh guest start must not
+  // find the last guest's round. The SAVED copy's parked rounds are untouched — turning Amnesic off
+  // brings your own finished round back exactly as you left it (store/sessionRound's header).
+  discardSessionRoundsOf(dataIdOf(id, true))
   // Only the ACTIVE preset has anything loaded to reload. Flipping the flag on a preset you are not
   // on changes nothing on screen and nothing in memory — it just decides where that preset's stats
   // will be read from the next time it is opened, which is exactly what deletePreset's `wasActive`

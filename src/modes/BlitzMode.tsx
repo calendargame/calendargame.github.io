@@ -40,6 +40,7 @@ import {
 } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
+import { activeDataId } from '../store/amnesic.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/engineMigration.js'
@@ -155,22 +156,26 @@ function BlitzMode({
     setAllowMistakes = useModePrefs((s) => s.setBlitzAllowMistakes) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.blitzTimingOff),
     setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the timing trio, the engine clock never stops (no arm/reset)
-  // Round-21 Q11 — the ended round this (preset, mode) parked before its last unmount, read EXACTLY
-  // ONCE at mount. On a preset switch the always-mounted screens remount (src/main.tsx
-  // remountScreens) and usePresets' activeId is ALREADY the INCOMING preset by the time this runs —
-  // switchPreset writes the registry before it rehydrates the stores, one synchronous turn
-  // (store/presetControl). So this is the incoming preset's OWN parked round and never the one just
-  // left; the preset-id key is the whole contamination guard (a blob keyed to preset 1 is
-  // unreachable while preset 2 is up). Factored into one read so the six initializers below don't
+  // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON — store/amnesic's activeDataId ("1:saved" /
+  // "1:session"), read ONCE at mount and never again. Every parked-round read, write and discard
+  // below uses it, so a round is only ever parked against — and restored against — the copy it was
+  // PLAYED on (round 23 Q2). Fixed for the life of the mount is exactly right, not a shortcut: any
+  // change of copy (a preset switch, an Amnesic toggle) remounts this screen (src/main.tsx's
+  // subscription on activeDataId), so a mount's engine never belongs to any other copy.
+  const [dataId] = useState(() => activeDataId(usePresets.getState()))
+  // Round-21 Q11 — the ended round this (stats copy, mode) parked before its last unmount, read
+  // EXACTLY ONCE at mount. On a preset switch or an Amnesic toggle the always-mounted screens remount
+  // (src/main.tsx remountScreens) and the registry ALREADY names the INCOMING copy by the time this
+  // runs — switchPreset / setPresetAmnesic write the registry before they rehydrate the stores, one
+  // synchronous turn (store/presetControl). So this is the incoming copy's OWN parked round and never
+  // the one just left; the copy key is the whole contamination guard (a blob keyed to preset 1's
+  // saved copy is unreachable while preset 2, or preset 1's guest session, is up). Factored into one read so the six initializers below don't
   // each call sessionStorage. The engine inside goes through the one restore door here, before any
   // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
   // engine/engineMigration's restoreParkedEngine), so the screen never shows an "ended" round over a
   // fresh engine.
   const [parkedRound] = useState<BlitzRoundSnapshot | null>(() => {
-    const snap = readSessionRound<ParkedSnapshot<BlitzRoundSnapshot>>(
-      usePresets.getState().activeId,
-      'blitz',
-    )
+    const snap = readSessionRound<ParkedSnapshot<BlitzRoundSnapshot>>(dataId, 'blitz')
     const engine = snap && restoreParkedEngine(snap.engine, useJulian, 'blitz')
     return engine ? { ...snap, engine } : null
   })
@@ -273,8 +278,8 @@ function BlitzMode({
     saveStats: true,
     timingOff: false,
     // Round-21 Q11 — seed the reducer from the parked ended round when there is one (a getter, read
-    // once in the lazy init). `parkedRound` was keyed to the ACTIVE preset at mount, so this only
-    // ever restores the incoming preset's own round and cannot pull in the one just left.
+    // once in the lazy init). `parkedRound` was keyed to the stats copy live at mount, so this only
+    // ever restores the incoming copy's own round and cannot pull in the one just left.
     getInitialState: () => parkedRound?.engine ?? null,
   }) // Blitz: timing always tracked
   // Override availability is uniform — NOT gated on the live `saveStats` (owner's call, C2: gating
@@ -773,10 +778,10 @@ function BlitzMode({
     setSuddenAmBest,
   ])
 
-  // Round-21 Q11 — mirror an ENDED round to sessionStorage, keyed by the ACTIVE preset, exactly as
-  // the effect above mirrors the round's Best to store/progress. On the remount a preset switch
-  // causes, the mount-time reads restore whatever is parked for the now-active preset (see
-  // `parkedRound`). Only an ENDED round is parked; every other state DISCARDS the slot:
+  // Round-21 Q11 — mirror an ENDED round to sessionStorage, keyed by the stats copy this screen was
+  // mounted on (`dataId`), exactly as the effect above mirrors the round's Best to store/progress. On
+  // the remount a preset switch or an Amnesic toggle causes, the mount-time reads restore whatever is
+  // parked for the now-live copy (see `parkedRound`). Only an ENDED round is parked; every other state DISCARDS the slot:
   //   • in-progress (active, !timerDone) → discard, so a mid-round switch parks nothing and the
   //     remount starts fresh — the owner's requirement — and any stale blob from a prior round goes;
   //   • idle after a manual Reset / Begin / an Override that resumed the round → discard, the park
@@ -796,9 +801,8 @@ function BlitzMode({
   // effect's CLEANUP, and React runs every cleanup of a commit before any effect body, so this body —
   // re-run because `clockPaused` changed in the same commit — always parks the moved stamp.
   useEffect(() => {
-    const pid = usePresets.getState().activeId
     if (timerDone)
-      writeSessionRound(pid, 'blitz', {
+      writeSessionRound(dataId, 'blitz', {
         engine: state,
         timerDone,
         showTimerDate,
@@ -811,8 +815,8 @@ function BlitzMode({
         endKind: endKind ?? undefined,
         endedAt: endedAtRef.current,
       })
-    else discardSessionRound(pid, 'blitz')
-  }, [timerDone, active, showTimerDate, state, endKind, clockPaused, roundId])
+    else discardSessionRound(dataId, 'blitz')
+  }, [timerDone, active, showTimerDate, state, endKind, clockPaused, roundId, dataId])
 
   // Both toggles are bare idle-gated flips — fully independent since C3a (the old auto-off
   // coupling died with the sudden-death-only per-Q). The idle lock (also mirrored by the

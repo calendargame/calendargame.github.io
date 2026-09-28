@@ -1,4 +1,4 @@
-// store/sessionRound.ts — an ENDED timed round/run, per (preset, mode), for THIS browsing session
+// store/sessionRound.ts — an ENDED timed round/run, per (stats copy, mode), for THIS browsing session
 // only (round-21 Q11).
 //
 // THE PROBLEM. A preset switch bumps every mode screen's remount key (src/main.tsx's
@@ -13,36 +13,55 @@
 // Reset or a full app close clears it.
 //
 // THE FIX, and why it does not go near the remount. Each of BlitzMode/AoxMode mirrors its ended
-// round to sessionStorage here, keyed by the ACTIVE preset's id and the mode, exactly as it already
-// mirrors its lifetime stats to store/progress. On mount (including the remount a switch causes) it
-// reads the key for the NOW-ACTIVE preset and, if an ended round is parked there, restores it as
-// the engine's initial reducer state plus the handful of component fields the completed view needs.
-//   • Keyed by PRESET ID, so the blob a switch restores is always the incoming preset's OWN round,
-//     never the one you just left — cross-preset contamination is impossible by construction, the
-//     same property store/amnesic's presetStatsStorage relies on. An Amnesic toggle keeps the same
-//     preset id, so it naturally preserves the round too, which is correct.
+// round to sessionStorage here, keyed by the STATS COPY it was played on and the mode, exactly as it
+// already mirrors its lifetime stats to store/progress. On mount (including the remount a switch
+// causes) it reads the key for the copy NOW underneath it and, if an ended round is parked there,
+// restores it as the engine's initial reducer state plus the handful of component fields the
+// completed view needs.
+//   ★★ KEYED BY THE STATS COPY — store/amnesic's `activeDataId`, "<presetId>:saved" or
+//     "<presetId>:session" — NOT by the preset alone (round 23 Q2). A parked round carries its Best
+//     floor and its round id, and the mount that restores it reconciles it into whatever Best records
+//     are live; so a round must only ever come back against the copy it was PLAYED on. Keyed by preset
+//     alone, turning Amnesic off restored the GUEST'S round over the permanent stats and reconciled it
+//     into them — replacing, lowering or erasing real bests (reproduced; tests/amnesicRound.dom) — and
+//     turning it on copied your round into the fresh guest copy. Keyed by copy, both are unreachable by
+//     construction, the same property that already stops one preset's round reaching another:
+//       • a switch restores the incoming preset's own copy's round, never the one you just left;
+//       • an Amnesic toggle restores the round of the copy that is now live: your own round, hidden
+//         for the guest's interlude, comes back exactly as you left it (the owner's "within one
+//         session everything comes back"), and the guest never sees it.
+//   • THE SESSION SLOT SHARES THE SESSION STATS' LIFETIME. store/presetControl's setPresetAmnesic
+//     discards a preset's session stats on every toggle, so it discards that preset's session-copy
+//     rounds in the same breath (discardSessionRoundsOf) — a guest round must not outlive the guest
+//     stats it was scored against, and a fresh guest start must not find the last guest's round.
 //   • ONLY ENDED rounds are parked. An in-progress round is never written, so a preset switch mid
 //     round restores nothing and the round is discarded — the owner's requirement.
 //   • sessionStorage, so a full app close clears the lot (the browser does it; nothing here
 //     schedules a wipe) and a reload keeps it — the same lifetime store/amnesic and store/sessionMode
-//     use.
+//     use, and the owner's rule that a reload is the SAME session (store/browsingSession).
 //   • A manual Reset takes the round to idle, at which point the mode's mirror effect deletes the
 //     key (discardSessionRound). Full Reset remounts every screen AND resetProgress/resetModePrefs
 //     run first, so the restored blob is stale-keyed and a fresh screen ignores it; the mode also
-//     discards on idle. discardSessionRounds clears every mode for a preset when the preset is
-//     deleted (store/presetControl's clearPresetStorage).
+//     discards on idle. discardSessionRounds clears every copy's rounds for a preset when the preset
+//     is deleted (store/presetControl's clearPresetStorage).
 //
-// ONE JSON BLOB under one key, a map of "<presetId>:<mode>" → snapshot. The snapshot shape is the
-// mode component's business (it round-trips its own engine state + flags); this module only reads
-// and writes it and never inspects it. Every access is try/catch-wrapped — sessionStorage throws on
-// the property access under locked-down browsing, and a round that cannot be parked just behaves the
-// way it did before Q11 (gone on the switch), which never breaks a render.
+// ONE JSON BLOB under one key, a map of "<dataId>:<mode>" (e.g. "1:saved:blitz") → snapshot. The
+// snapshot shape is the mode component's business (it round-trips its own engine state + flags); this
+// module only reads and writes it and never inspects it. Every access is try/catch-wrapped —
+// sessionStorage throws on the property access under locked-down browsing, and a round that cannot be
+// parked just behaves the way it did before Q11 (gone on the switch), which never breaks a render.
+// ⚠ THE KEY IS `cg-round-v2`. v1 keyed "<presetId>:<mode>" and cannot say which copy a round was
+// played on — which is the very fact whose absence was the bug — so a v1 blob is not read at all
+// rather than guessed at. The cost is bounded and one-off: an ended round on screen at the moment the
+// update reload lands is not restored (its Bests were saved when it ended). The v1 blob is not
+// deleted either: the other site on this shared origin may still be an older build using it, and the
+// browser drops it at the session's end anyway.
 
-const KEY = 'cg-round-v1'
+const KEY = 'cg-round-v2'
 type RoundMode = 'blitz' | 'aox'
 type Store = Record<string, unknown>
 
-const slot = (presetId: number, mode: RoundMode) => `${presetId}:${mode}`
+const slot = (dataId: string, mode: RoundMode) => `${dataId}:${mode}`
 
 const read = (): Store => {
   try {
@@ -63,6 +82,20 @@ const write = (store: Store): void => {
   }
 }
 
+// Remove every slot whose key starts with `prefix` — the one scan both prefix discards share.
+// (The trailing `:` every caller's prefix ends in is load-bearing: without it preset 1 would claim
+// preset 11's slots.)
+const discardPrefixed = (prefix: string): void => {
+  const store = read()
+  let changed = false
+  for (const k of Object.keys(store))
+    if (k.startsWith(prefix)) {
+      delete store[k]
+      changed = true
+    }
+  if (changed) write(store)
+}
+
 /**
  * A snapshot as it comes OUT of storage: the mode's own shape, except that its `engine` is whatever
  * JSON the build that parked it wrote — this build's, an older one's, or one this build has never
@@ -71,33 +104,32 @@ const write = (store: Store): void => {
  */
 export type ParkedSnapshot<T extends { engine: unknown }> = Omit<T, 'engine'> & { engine: unknown }
 
-/** The parked ended round for this (preset, mode), or null when there is none. */
-export const readSessionRound = <T>(presetId: number, mode: RoundMode): T | null => {
-  const v = read()[slot(presetId, mode)]
+/** The parked ended round for this (stats copy, mode), or null when there is none. */
+export const readSessionRound = <T>(dataId: string, mode: RoundMode): T | null => {
+  const v = read()[slot(dataId, mode)]
   return v == null ? null : (v as T)
 }
 
-/** Park this (preset, mode)'s ended round. Called from the mode's mirror effect while it is ended. */
-export const writeSessionRound = (presetId: number, mode: RoundMode, snapshot: unknown): void => {
+/** Park this (stats copy, mode)'s ended round. Called from the mode's mirror effect while it is ended. */
+export const writeSessionRound = (dataId: string, mode: RoundMode, snapshot: unknown): void => {
   const store = read()
-  store[slot(presetId, mode)] = snapshot
+  store[slot(dataId, mode)] = snapshot
   write(store)
 }
 
-/** Forget this (preset, mode)'s parked round — the mode calls it the moment the round goes idle. */
-export const discardSessionRound = (presetId: number, mode: RoundMode): void => {
+/** Forget this (stats copy, mode)'s parked round — the mode calls it the moment the round goes idle. */
+export const discardSessionRound = (dataId: string, mode: RoundMode): void => {
   const store = read()
-  const k = slot(presetId, mode)
+  const k = slot(dataId, mode)
   if (!(k in store)) return
   delete store[k]
   write(store)
 }
 
 /**
- * Does this preset have ANY parked ended round this session? The read-only twin of
- * discardSessionRounds below, sharing its prefix scan rather than re-deriving one — which is what
- * keeps "which slots belong to this preset" a fact this file states once. (The `:` in the prefix is
- * load-bearing: without it preset 1 would claim preset 11's slots.)
+ * Does this preset have ANY parked ended round this session, on either of its stats copies? A round
+ * on the copy that is not live right now counts too: it comes back the moment that copy is live again,
+ * so it is still a result the player can see.
  *
  * store/presetControl's isPresetFactory is the caller: a parked ended round is a RESULT the player
  * can still see, so a preset holding one is not factory-fresh and its delete still asks first.
@@ -105,17 +137,11 @@ export const discardSessionRound = (presetId: number, mode: RoundMode): void => 
 export const hasSessionRound = (presetId: number): boolean =>
   Object.keys(read()).some((k) => k.startsWith(`${presetId}:`))
 
-/** Forget every parked round for one preset — called when the preset is deleted. */
-export const discardSessionRounds = (presetId: number): void => {
-  const store = read()
-  let changed = false
-  for (const k of Object.keys(store))
-    if (k.startsWith(`${presetId}:`)) {
-      delete store[k]
-      changed = true
-    }
-  if (changed) write(store)
-}
+/** Forget every parked round of ONE stats copy — setPresetAmnesic, for the session copy. */
+export const discardSessionRoundsOf = (dataId: string): void => discardPrefixed(`${dataId}:`)
+
+/** Forget every parked round for one preset, both copies — called when the preset is deleted. */
+export const discardSessionRounds = (presetId: number): void => discardPrefixed(`${presetId}:`)
 
 /**
  * Forget every parked round, all presets. The app never needs this — a full close clears the

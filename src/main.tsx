@@ -39,6 +39,7 @@ import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpd
 import { usePresets } from './store/presets.js'
 import { activeDataId, selectAmnesic, discardParkedStats } from './store/amnesic.js'
 import { setPresetAmnesic } from './store/presetControl.js'
+import { openBrowsingSession } from './store/browsingSession.js'
 import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/settings.js'
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
 import { discardSessionRounds } from './store/sessionRound.js'
@@ -1652,33 +1653,32 @@ import BlitzMode from './modes/BlitzMode.jsx'
         remountScreens();
         if(s.activeId!==prev.activeId&&appScrollRef.current)appScrollRef.current.scrollTop=0;
       }),[remountScreens,switchMode]);
-      // ★ COLD-OPEN AMNESIC RESEED (round-21 Q1). An Amnesic flag is a SESSION toggle: guest mode is
-      // temporary by construction, so on every full app open EVERY preset's Amnesic flag is reset to
-      // that preset's own saved default (store/userDefaults' effectiveAmnesicDefault — false when
-      // nothing is saved, which is the owner-confirmed revert for a preset set Amnesic with no saved
-      // defaults). Session toggles still stick within the session; this only re-seeds on the next
-      // cold open — the empty dep list makes it a one-shot boot effect, so a mid-session toggle is
-      // never fought.
+      // ★ COLD-OPEN AMNESIC RESEED (round-21 Q1; round 23 Q2 made it a GENUINE cold open only). An
+      // Amnesic flag is a SESSION toggle: guest mode is temporary by construction, so when the app is
+      // truly opened afresh EVERY preset's Amnesic flag is reset to that preset's own saved default
+      // (store/userDefaults' effectiveAmnesicDefault — false when nothing is saved, which is the
+      // owner-confirmed revert for a preset set Amnesic with no saved defaults). Session toggles still
+      // stick within the session; this only re-seeds on the next cold open.
+      // ★★ A RELOAD IS NOT A COLD OPEN (round 23 Q2 — the owner reversed round 21's "a reload counts as
+      // a reopen"): "only truly closing the app starts fresh", so pull-to-refresh and the auto-update
+      // reload keep a guest's Amnesic preset Amnesic, with its session stats and its finished round,
+      // exactly like every other session-lived thing in the app. A boot effect alone cannot tell the
+      // two apart — both mount <App/> from scratch — so store/browsingSession asks sessionStorage,
+      // whose lifetime IS the browsing session: its marker survives a reload and not a close.
       // ⚠ DESIGN: reseed ALL presets here, not just the active one, by reading each preset's OWN
       // namespaced userDefaults key straight off disk (storedAmnesicDefault) — userDefaults is
       // per-preset-scoped, so `savedDefaults` bound above is only the ACTIVE preset's. Doing every
       // preset in one boot pass (rather than piggybacking a per-preset reseed onto switchPreset)
-      // keeps this a single self-contained effect with no session-lifetime tracking state and no
-      // coupling into the switch path. A realistic registry is two or three presets; the reads are
-      // one localStorage.getItem each, once.
+      // keeps this a single self-contained effect with no coupling into the switch path. A realistic
+      // registry is two or three presets; the reads are one localStorage.getItem each, once.
       // ⚠ setPresetAmnesic NO-OPS when the flag already equals the default (its own guard returns
       // before any registry write), so a preset already at its default causes no applyRegistry, no
-      // discardSessionStats and no remount. When it DOES flip the active preset, the subscription
-      // registered just above catches the activeDataId change and remounts the six screens — which
-      // is why this effect sits AFTER that subscription in source order.
-      // ⚠ `[]` DEPS FIRE ON EVERY MOUNT, an in-place reload included, not only a true cold open — and
-      // that is fine, precisely because of the no-op guard above. On a plain reload every preset's
-      // live flag already equals its stored default, so the whole loop is guards-only. The single
-      // preset it can act on is one whose live Amnesic diverged from its stored default this session
-      // — i.e. a guest turned Amnesic on for a preset with no saved default — and reseeding that one
-      // to false, discarding its session stats, IS the owner-confirmed "guest mode reverts on every
-      // reopen". A reload counts as a reopen here by the same reasoning sessionStorage does.
+      // discard and no remount. When it DOES flip the active preset, the subscription registered just
+      // above catches the activeDataId change and remounts the six screens — which is why this effect
+      // sits AFTER that subscription in source order. (On a genuine cold open there is no session copy
+      // left to discard anyway: the browser cleared sessionStorage when it closed the session.)
       useEffect(()=>{
+        if(!openBrowsingSession())return;
         for(const p of usePresets.getState().presets)setPresetAmnesic(p.id,storedAmnesicDefault(p.id));
       },[]);
       // ★ COLD-OPEN PAGE (round-21 Q3). `mode` starts "classic" only for the first paint; this

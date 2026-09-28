@@ -794,10 +794,15 @@ describe('is a preset factory-fresh', () => {
   // key (store/sessionRound).
   it('a parked ended round is not factory', () => {
     const id = other('Raced')
-    writeSessionRound(id, 'blitz', { score: 12 })
+    writeSessionRound(`${id}:saved`, 'blitz', { score: 12 })
     expect(isPresetFactory(id, true)).toBe(false)
     // …and the prefix scan is per preset: a neighbour's parked round says nothing about this one.
     expect(isPresetFactory(other('Clean'), true)).toBe(true)
+    // A round parked on the preset's GUEST (Amnesic session) copy counts as well (round 23 Q2 keys
+    // parked rounds by stats copy — the scan covers both of a preset's copies).
+    const guest = other('Guest')
+    writeSessionRound(`${guest}:session`, 'aox', { score: 3 })
+    expect(isPresetFactory(guest, true)).toBe(false)
   })
 
   // ⚠ A PAYLOAD THIS BUILD CANNOT READ IN TODAY'S SHAPE ASKS FIRST, which is how the check stays

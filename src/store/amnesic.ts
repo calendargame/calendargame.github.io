@@ -117,7 +117,18 @@ export const selectAmnesic = (reg: PresetRegistryValues): boolean => isAmnesic(r
  * away the run the player is in the middle of.
  */
 export const activeDataId = (reg: PresetRegistryValues): string =>
-  `${reg.activeId}:${selectAmnesic(reg) ? 'session' : 'saved'}`
+  dataIdOf(reg.activeId, selectAmnesic(reg))
+
+/**
+ * The spelling of one stats copy's identity — "<presetId>:saved" or "<presetId>:session" — for ANY
+ * preset, not just the active one. activeDataId above is this for the preset you are on; the other
+ * caller is store/presetControl's setPresetAmnesic, which has to name a preset's SESSION copy to
+ * discard the rounds parked against it (store/sessionRound keys parked rounds by this id, round 23
+ * Q2). One spelling, stated once, so the key a round is parked under and the key that throws it away
+ * can never drift apart.
+ */
+export const dataIdOf = (presetId: number, amnesic: boolean): string =>
+  `${presetId}:${amnesic ? 'session' : 'saved'}`
 
 // ── The session copy ──────────────────────────────────────────────────────────────────────────
 

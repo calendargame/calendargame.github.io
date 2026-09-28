@@ -50,6 +50,7 @@ import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
+import { activeDataId } from '../store/amnesic.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/engineMigration.js'
@@ -109,21 +110,21 @@ function AoxMode({
     setOneByOne = useModePrefs((s) => s.setAoxOneByOne) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
     setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
-  // Round-21 Q11 — the ended run this (preset, mode) parked before its last unmount, read EXACTLY
-  // ONCE at mount. On a preset switch the always-mounted screens remount (src/main.tsx
-  // remountScreens) and usePresets' activeId is ALREADY the INCOMING preset by then — switchPreset
-  // writes the registry before it rehydrates the stores, one synchronous turn (store/presetControl).
-  // So this is the incoming preset's OWN parked run and never the one just left; the preset-id key
-  // is the whole contamination guard. Factored into one read so the initializers below don't each
+  // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — see the same line in modes/BlitzMode
+  // for why a round is parked and restored ONLY against the copy it was played on (round 23 Q2).
+  const [dataId] = useState(() => activeDataId(usePresets.getState()))
+  // Round-21 Q11 — the ended run this (stats copy, mode) parked before its last unmount, read EXACTLY
+  // ONCE at mount. On a preset switch or an Amnesic toggle the always-mounted screens remount
+  // (src/main.tsx remountScreens) and the registry ALREADY names the INCOMING copy by then — the
+  // registry is written before the stores rehydrate, one synchronous turn (store/presetControl). So
+  // this is the incoming copy's OWN parked run and never the one just left; the copy key is the whole
+  // contamination guard. Factored into one read so the initializers below don't each
   // hit sessionStorage. The engine inside goes through the one restore door here, before any
   // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
   // engine/engineMigration's restoreParkedEngine), so the screen never shows an ended run over a
   // fresh engine.
   const [parkedRun] = useState<AoxRunSnapshot | null>(() => {
-    const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(
-      usePresets.getState().activeId,
-      'aox',
-    )
+    const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(dataId, 'aox')
     const engine = snap && restoreParkedEngine(snap.engine, useJulian, 'aox')
     return engine ? { ...snap, engine } : null
   })
@@ -150,8 +151,8 @@ function AoxMode({
     saveStats: true,
     timingOff: false,
     // Round-21 Q11 — seed the reducer from the parked ended run when there is one (a getter, read
-    // once in the lazy init). `parkedRun` was keyed to the ACTIVE preset at mount, so this only ever
-    // restores the incoming preset's own run.
+    // once in the lazy init). `parkedRun` was keyed to the stats copy live at mount, so this only ever
+    // restores the incoming copy's own run.
     getInitialState: () => parkedRun?.engine ?? null,
   })
   const { state, correct, overrideAvail, overridden } = eng
@@ -276,10 +277,10 @@ function AoxMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runPhase, doneCount, n, saveStats, S.good, S.times, runId, setBests])
 
-  // Round-21 Q11 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the ACTIVE
-  // preset, exactly as the effect above mirrors the run's Best to store/progress. On the remount a
-  // preset switch causes, the mount-time reads restore whatever is parked for the now-active preset
-  // (see `parkedRun`). Only an ended run is parked; every other state DISCARDS the slot:
+  // Round-21 Q11 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the stats copy
+  // this screen was mounted on (`dataId`), exactly as the effect above mirrors the run's Best to
+  // store/progress. On the remount a preset switch or an Amnesic toggle causes, the mount-time reads
+  // restore whatever is parked for the now-live copy (see `parkedRun`). Only an ended run is parked; every other state DISCARDS the slot:
   //   • running → discard, so a mid-run switch parks nothing and the remount starts fresh (owner's
   //     rule), and any stale blob from a prior run goes;
   //   • idle after Reset / Begin / an Override that resumed the run → discard, the park is stale.
@@ -290,17 +291,16 @@ function AoxMode({
   // `runId` is written only by begin() / reset(), so it is stable whenever a phase is ended (it is a
   // dep only because it is state this effect reads).
   useEffect(() => {
-    const pid = usePresets.getState().activeId
     if (runPhase === 'done' || runPhase === 'failed')
-      writeSessionRound(pid, 'aox', {
+      writeSessionRound(dataId, 'aox', {
         engine: state,
         runPhase,
         shown,
         currentRunId: runId,
         prevBestSnap: prevBestSnapRef.current,
       })
-    else discardSessionRound(pid, 'aox')
-  }, [runPhase, shown, state, runId])
+    else discardSessionRound(dataId, 'aox')
+  }, [runPhase, shown, state, runId, dataId])
 
   // Reset the run if the panel is hidden mid-run (also cancel any pending reveal auto-advance).
   useEffect(() => {

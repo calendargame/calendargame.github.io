@@ -577,16 +577,19 @@ describe('the Amnesic switch in the ⚙ panel', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// COLD-OPEN RESEED (round-21 Q1). An Amnesic flag is a SESSION toggle: every full app open resets
+// COLD-OPEN RESEED (round-21 Q1). An Amnesic flag is a SESSION toggle: every genuine app open resets
 // EVERY preset's Amnesic flag to that preset's own saved default (store/userDefaults'
 // effectiveAmnesicDefault — false when nothing is saved). A mid-session toggle still sticks until
 // the next cold open. src/main.tsx does this in a one-shot boot effect that walks the registry and
 // reads each preset's namespaced userDefaults key through storedAmnesicDefault.
 //
 // ⚠ THE SIMULATION. relaunch() elsewhere in this file is a store rehydrate — a RELOAD, which keeps
-// the session. A cold open is a full <App/> remount, so coldOpen() below unmounts and mounts again:
-// the store singletons and localStorage carry over (a real browser reloads them from disk to the
-// same values), and it is the boot effect on the fresh mount that does the reseed.
+// the session. A cold open is the browser ENDING the session and a fresh <App/> mount, so coldOpen()
+// below unmounts, clears sessionStorage (what a real close does — it is also what takes the session
+// stats and store/browsingSession's marker with it), and mounts again: the store singletons and
+// localStorage carry over (a real browser reloads them from disk to the same values), and it is the
+// boot effect on the fresh mount that does the reseed. ★ Round 23 Q2: a remount WITHOUT the clear is a
+// reload, and a reload no longer reseeds — pinned by the last case in this block.
 describe('cold-open reseed of Amnesic (round-21 Q1)', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
@@ -595,6 +598,12 @@ describe('cold-open reseed of Amnesic (round-21 Q1)', () => {
   })
 
   const coldOpen = () => {
+    cleanup()
+    document.getElementById('root')?.remove()
+    sessionStorage.clear()
+    mountApp()
+  }
+  const reloadApp = () => {
     cleanup()
     document.getElementById('root')?.remove()
     mountApp()
@@ -635,6 +644,16 @@ describe('cold-open reseed of Amnesic (round-21 Q1)', () => {
     expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
 
     coldOpen()
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(false)
+  })
+
+  it('a RELOAD is the same session: it does not reseed (round 23 Q2)', () => {
+    mountApp()
+    saveAmnesicDefault(false)
+    setAmnesic(true) // the guest flips it on…
+    reloadApp() // …and pulls to refresh
+    expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
+    coldOpen() // only a real close ends the guest session
     expect(isAmnesic(usePresets.getState(), 1)).toBe(false)
   })
 
