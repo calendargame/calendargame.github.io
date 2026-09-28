@@ -41,6 +41,7 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
 import { buildRunBreakdown } from '../engine/runBreakdown.js'
 import { reconcileAoxStanding, aoxBestEqual, emptyAoxBest } from '../engine/aoxBest.js'
+import { newRoundId, isNewBest } from '../engine/roundId.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import type { AoxBest } from '../store/progress.js'
@@ -58,8 +59,8 @@ import { useBackButton } from '../components/useBackButton.js'
 // round-trips its own engine state plus the component fields the completed view (and a
 // post-completion Override) need; store/sessionRound never looks inside it. `currentRunId` +
 // `prevBestSnap` are what keep the done/failed Best-reconcile correct on a restored run — the
-// reconcile floor is `prevBestSnap.best` and it only applies while `prevBestSnap.runId ===
-// currentRunIdRef.current`, so both have to come back together.
+// reconcile floor is `prevBestSnap.best` and it only applies while `prevBestSnap.runId === runId`,
+// so both have to come back together (and `currentRunId` is what keeps the restored run's ★ lit).
 interface AoxRunSnapshot {
   engine: GameState
   runPhase: string
@@ -190,15 +191,18 @@ function AoxMode({
   // standing (good ≥ n) → the pre-run floor improved by the current avg/median; not standing →
   // the floor restored. See the reconcile effect below (engine/aoxBest.ts owns the pure fold).
   // AoX all-time bests (avg/median, config-keyed) persist across reloads (Stage D1): from the
-  // progress store. (bestNew markers + the rollback refs below stay local — per-session/ephemeral.)
+  // progress store. Their ★ markers are not stored anywhere — each is DERIVED from the record's run id
+  // (engine/roundId's isNewBest) — and the rollback ref below stays local.
   const bests = useProgress((s) => s.aoxBest),
     setBests = useProgress((s) => s.setAoxBest)
-  const [bestNew, setBestNew] = useState<Record<string, { avg: boolean; med: boolean }>>({})
-  // Restored from the parked run (round-21 Q11) so `snap.runId === currentRunIdRef.current` still
-  // holds after a remount and the done/failed reconcile keeps recognising THIS run; nextRunIdRef is
-  // pushed past the restored id so the next Begin cannot reuse it within this mount.
-  const nextRunIdRef = useRef(Math.max(1, (parkedRun?.currentRunId ?? 0) + 1))
-  const currentRunIdRef = useRef<number | null>(parkedRun?.currentRunId ?? null)
+  // ★ THE RUN ON SCREEN — its id, from Begin until Reset (null while there is none). A Best tagged
+  // with it is a best this run set, which is the whole ★ rule (round 23 Q4). State, not a ref, because
+  // the ★ renders from it. NEVER-REPEATING (engine/roundId's newRoundId), because the id is SAVED
+  // inside the Best record: the per-screen counter that restarted at 1 made two different runs "the
+  // same run" to the Same Round tag. Restored from the parked run (round-21 Q11), so
+  // `snap.runId === runId` still holds after a remount and the done/failed reconcile keeps
+  // recognising THIS run — and its ★ comes back with it.
+  const [runId, setRunId] = useState<number | null>(parkedRun?.currentRunId ?? null)
   // Pending auto-advance after a non-One-by-One Reveal (flash the answer for FLASH_MS, then advance).
   // The timer handle, held in a ref so reset / leaving the mode / unmount can cancel it before it
   // fires; `revealFlowing` above is the same fact for the render, and the two move together.
@@ -239,9 +243,9 @@ function AoxMode({
   // completing solve) → the floor restored, as if the run never completed. Before the C2 fix only the live-edge
   // reversal rolled back (rollbackBest, gated on !inBack), so a back-browse un-credit left a
   // FABRICATED Best standing on a run with fewer than n credits — and a mid-done settings change
-  // (key moved) dodged even that. ★ markers: set exactly from each reconcile — lit only for a metric
-  // this run's standing figure still improves — so a write that restores the floor clears the key's ★
-  // (safe: reset() has cleared every ★ before a run can begin; see the note at the write).
+  // (key moved) dodged even that. ★ markers need nothing here: each is read off the record's run id,
+  // so it is lit exactly while this run's standing figure holds the record and goes out the moment a
+  // write restores the floor.
   // ⚠ The disables in this effect and the next are NEW at extraction time, not behaviour changes —
   // same cause as FlashMode's and DeductionMode's: main.tsx's dense one-line style meant the React
   // Compiler never analyzed this component (linting HEAD's main.tsx reports these rules ZERO
@@ -254,45 +258,23 @@ function AoxMode({
     if (runPhase === 'running' && doneCount >= n) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRunPhase('done')
-      if (
-        saveStats &&
-        currentRunIdRef.current != null &&
-        prevBestSnapRef.current?.runId !== currentRunIdRef.current
-      )
+      if (saveStats && runId != null && prevBestSnapRef.current?.runId !== runId)
         prevBestSnapRef.current = {
           key: bestKey,
           best: { ...(bests[bestKey] || emptyAoxBest()) },
-          runId: currentRunIdRef.current,
+          runId,
         }
     }
     const snap = prevBestSnapRef.current
-    if (!snap || snap.runId !== currentRunIdRef.current) return // this run hasn't recorded
-    const { next, avgImp, medImp } = reconcileAoxStanding(snap.best, S.good, n, S.times, snap.runId)
-    setBests((p) => {
-      const cur = p[snap.key] || emptyAoxBest()
-      if (aoxBestEqual(cur, next)) return p
-      // The ★ markers, set EXACTLY from this reconcile (never OR-folded onto whatever is lit now), so
-      // an improving write cannot leave a ★ on a metric a later Override — or its Undo — has stopped
-      // improving. "Exactly" needs no pre-run ★ floor here, unlike Blitz: every ★ is gone before any
-      // run can begin, because Begin is offered only from idle and the one way an ended run reaches
-      // idle is reset(), which clears the whole ★ map (a remount starts it empty too). So a
-      // floor-restoring write clearing the key can never take a ★ an earlier run earned.
-      const avg = avgImp
-      const med = medImp
-      setBestNew((b) => {
-        if (avg || med) {
-          const e = b[snap.key]
-          return e && e.avg === avg && e.med === med ? b : { ...b, [snap.key]: { avg, med } }
-        }
-        if (!(snap.key in b)) return b
-        const nx = { ...b }
-        delete nx[snap.key]
-        return nx
-      })
-      return { ...p, [snap.key]: next }
-    })
+    if (!snap || snap.runId !== runId) return // this run hasn't recorded
+    const next = reconcileAoxStanding(snap.best, S.good, n, S.times, snap.runId)
+    // No ★ bookkeeping here: the ★ is read off the record's run ids, so a write that improves a metric
+    // lights it and a write that restores the floor puts it out, with nothing to keep in step.
+    setBests((p) =>
+      aoxBestEqual(p[snap.key] || emptyAoxBest(), next) ? p : { ...p, [snap.key]: next },
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runPhase, doneCount, n, saveStats, S.good, S.times, setBests])
+  }, [runPhase, doneCount, n, saveStats, S.good, S.times, runId, setBests])
 
   // Round-21 Q11 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the ACTIVE
   // preset, exactly as the effect above mirrors the run's Best to store/progress. On the remount a
@@ -305,7 +287,8 @@ function AoxMode({
   // the reconcile effect above) re-parks the updated snapshot. This effect sits AFTER that
   // reconcile effect on purpose: the reconcile latches prevBestSnapRef in the same commit the phase
   // turns 'done', effects run top-to-bottom, so the write below always sees the latched floor.
-  // currentRunIdRef is written only by begin(), so it is stable whenever a phase is ended.
+  // `runId` is written only by begin() / reset(), so it is stable whenever a phase is ended (it is a
+  // dep only because it is state this effect reads).
   useEffect(() => {
     const pid = usePresets.getState().activeId
     if (runPhase === 'done' || runPhase === 'failed')
@@ -313,11 +296,11 @@ function AoxMode({
         engine: state,
         runPhase,
         shown,
-        currentRunId: currentRunIdRef.current,
+        currentRunId: runId,
         prevBestSnap: prevBestSnapRef.current,
       })
     else discardSessionRound(pid, 'aox')
-  }, [runPhase, shown, state])
+  }, [runPhase, shown, state, runId])
 
   // Reset the run if the panel is hidden mid-run (also cancel any pending reveal auto-advance).
   useEffect(() => {
@@ -362,7 +345,6 @@ function AoxMode({
     state.calcOpen === false &&
     breakdownOpen === false &&
     Object.keys(bests).length === 0 &&
-    Object.keys(bestNew).length === 0 &&
     // Nothing on the card: never wrong, never overridden (round 23 Q6 — one record replaced the four
     // flags the old Override machinery kept here; same pair as modeHooks.engineFresh).
     state.card.wrongTime === null &&
@@ -468,7 +450,7 @@ function AoxMode({
   // Handlers.
   const begin = () => {
     eng.resetStats()
-    currentRunIdRef.current = nextRunIdRef.current++
+    setRunId(newRoundId())
     prevBestSnapRef.current = null
     setRunPhase('running')
     setShown(true)
@@ -553,7 +535,7 @@ function AoxMode({
   //     resolved miss and the existing Next button carries the run on (see `awaitingNext`).
   //   • a press on a HISTORY card of a done run changes no phase at all: the run is over, and the only
   //     thing that reacts is reconcileAoxStanding, which raises or restores the Best from the floor.
-  // prevBestSnapRef and currentRunIdRef are NEVER written here — only reset() and the run's own
+  // prevBestSnapRef and `runId` are NEVER written here — only begin(), reset() and the run's own
   // completion touch them — which is what makes any number of presses land where the last one says.
   const onOverride = () => {
     const plan = eng.overridePlan
@@ -604,9 +586,8 @@ function AoxMode({
     eng.resetStats()
     setRunPhase('idle')
     setShown(false)
-    setBestNew({})
     prevBestSnapRef.current = null
-    currentRunIdRef.current = null
+    setRunId(null) // no run on screen — and so no ★: a best is marked only while its run is up
     setBreakdownOpen(false) //  the breakdown belongs to the run being cleared
   }
   // Cancel a pending reveal auto-advance if the component unmounts mid-flash (Full Reset remount).
@@ -711,7 +692,7 @@ function AoxMode({
           <div className="min-w-[125px]">
             <div>
               Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
-              {bestNew[bestKey]?.avg && <NewBestStar />}
+              {isNewBest(bestData.avgRoundId, runId) && <NewBestStar />}
             </div>
             <div className="text-[11px] opacity-70">
               Median: <span className="whitespace-nowrap">{fmtTime(bestData.avgMed)}</span>
@@ -720,7 +701,7 @@ function AoxMode({
           <div className="min-w-[125px]">
             <div>
               Best Median: <span className="whitespace-nowrap">{fmtTime(bestData.med)}</span>
-              {bestNew[bestKey]?.med && <NewBestStar />}
+              {isNewBest(bestData.medRoundId, runId) && <NewBestStar />}
             </div>
             <div className="text-[11px] opacity-70">
               Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>

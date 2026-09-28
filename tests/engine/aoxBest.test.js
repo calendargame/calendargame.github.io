@@ -32,7 +32,7 @@ import { mulberry32 } from '../helpers/rng.js'
 
 describe('aoxBest — reconcile unit cases', () => {
   it('records a new best for both metrics, tagged with the run id', () => {
-    const { next, avgImp, medImp } = reconcileAoxBest(emptyAoxBest(), 2.5, 2.0, 7)
+    const next = reconcileAoxBest(emptyAoxBest(), 2.5, 2.0, 7)
     expect(next).toEqual({
       avg: 2.5,
       avgMed: 2.0,
@@ -41,24 +41,24 @@ describe('aoxBest — reconcile unit cases', () => {
       medAvg: 2.5,
       medRoundId: 7,
     })
-    expect(avgImp).toBe(true)
-    expect(medImp).toBe(true)
+    expect(next.avgRoundId).toBe(7)
+    expect(next.medRoundId).toBe(7)
   })
 
   it('a slower run does not displace either record', () => {
-    let cur = reconcileAoxBest(emptyAoxBest(), 2.0, 2.0, 1).next
-    const { next, avgImp, medImp } = reconcileAoxBest(cur, 3.0, 3.0, 2) // both slower
+    let cur = reconcileAoxBest(emptyAoxBest(), 2.0, 2.0, 1)
+    const next = reconcileAoxBest(cur, 3.0, 3.0, 2) // both slower
     expect(next).toEqual(cur)
-    expect(avgImp).toBe(false)
-    expect(medImp).toBe(false)
+    expect(next.avgRoundId).not.toBe(2)
+    expect(next.medRoundId).not.toBe(2)
   })
 
   it('avg improves but median does not: companion stats track each from its own run', () => {
     // Run 1: avg 5, med 2 (the median champion). Run 2: avg 3 (faster avg), med 8 (slower median).
-    let cur = reconcileAoxBest(emptyAoxBest(), 5, 2, 1).next
-    const { next, avgImp, medImp } = reconcileAoxBest(cur, 3, 8, 2)
-    expect(avgImp).toBe(true)
-    expect(medImp).toBe(false)
+    let cur = reconcileAoxBest(emptyAoxBest(), 5, 2, 1)
+    const next = reconcileAoxBest(cur, 3, 8, 2)
+    expect(next.avgRoundId).toBe(2)
+    expect(next.medRoundId).not.toBe(2)
     expect(next).toEqual({
       avg: 3, // run 2's faster average
       avgMed: 8, // run 2's own median travels with it
@@ -70,10 +70,10 @@ describe('aoxBest — reconcile unit cases', () => {
   })
 
   it('a tie does not displace the earlier record (strict improvement only)', () => {
-    let cur = reconcileAoxBest(emptyAoxBest(), 2.0, 2.0, 1).next
-    const { next, avgImp, medImp } = reconcileAoxBest(cur, 2.0, 2.0, 2) // exact tie
-    expect(avgImp).toBe(false)
-    expect(medImp).toBe(false)
+    let cur = reconcileAoxBest(emptyAoxBest(), 2.0, 2.0, 1)
+    const next = reconcileAoxBest(cur, 2.0, 2.0, 2) // exact tie
+    expect(next.avgRoundId).not.toBe(2)
+    expect(next.medRoundId).not.toBe(2)
     expect(next.avgRoundId).toBe(1)
     expect(next.medRoundId).toBe(1)
   })
@@ -85,21 +85,21 @@ describe('aoxBest — reconcile unit cases', () => {
   // that read IDENTICALLY to the old one. 2.129999999999999 is genuinely < 2.13 at raw float
   // precision (proving the old `<` really would have fired), but both round to "2.13s".
   it('BUG PROOF: a raw-only difference that displays identically does NOT register as an improvement', () => {
-    const cur = reconcileAoxBest(emptyAoxBest(), 2.13, 2.13, 1).next
+    const cur = reconcileAoxBest(emptyAoxBest(), 2.13, 2.13, 1)
     expect(cur.avg).toBe(2.13)
-    const { next, avgImp, medImp } = reconcileAoxBest(cur, 2.129999999999999, 2.129999999999999, 2)
-    expect(avgImp).toBe(false)
-    expect(medImp).toBe(false)
+    const next = reconcileAoxBest(cur, 2.129999999999999, 2.129999999999999, 2)
+    expect(next.avgRoundId).not.toBe(2)
+    expect(next.medRoundId).not.toBe(2)
     expect(next).toEqual(cur) // untouched — no phantom ★, no reassigned round id
   })
 
   // The companion, real-improvement case: a run that is faster at DISPLAY precision (not just raw
   // float noise) still correctly registers — the fix narrows the comparison, it doesn't disable it.
   it('a genuine improvement at display precision still registers', () => {
-    const cur = reconcileAoxBest(emptyAoxBest(), 2.13, 2.13, 1).next
-    const { next, avgImp, medImp } = reconcileAoxBest(cur, 2.12, 2.12, 2) // one whole hundredth faster
-    expect(avgImp).toBe(true)
-    expect(medImp).toBe(true)
+    const cur = reconcileAoxBest(emptyAoxBest(), 2.13, 2.13, 1)
+    const next = reconcileAoxBest(cur, 2.12, 2.12, 2) // one whole hundredth faster
+    expect(next.avgRoundId).toBe(2)
+    expect(next.medRoundId).toBe(2)
     expect(next.avg).toBe(2.12)
     expect(next.avgRoundId).toBe(2)
   })
@@ -107,42 +107,42 @@ describe('aoxBest — reconcile unit cases', () => {
 
 describe('aoxBest — standing reconcile (the post-completion protocol)', () => {
   it('standing (good ≥ n): the floor improved by the CURRENT avg/median', () => {
-    const floor = reconcileAoxBest(emptyAoxBest(), 5, 5, 1).next // an earlier run's record
-    const { next, avgImp } = reconcileAoxStanding(floor, 2, 2, [2.0, 4.0], 2)
-    expect(avgImp).toBe(true)
+    const floor = reconcileAoxBest(emptyAoxBest(), 5, 5, 1) // an earlier run's record
+    const next = reconcileAoxStanding(floor, 2, 2, [2.0, 4.0], 2)
+    expect(next.avgRoundId).toBe(2)
     expect(next.avg).toBe(3.0) // (2+4)/2 beats 5
     expect(next.avgRoundId).toBe(2)
   })
 
   it('not standing (good < n): the floor unchanged — the completion was retracted', () => {
-    const floor = reconcileAoxBest(emptyAoxBest(), 5, 5, 1).next
-    const { next, avgImp, medImp } = reconcileAoxStanding(floor, 1, 2, [0.1], 2) // 1 credit left of n=2
+    const floor = reconcileAoxBest(emptyAoxBest(), 5, 5, 1)
+    const next = reconcileAoxStanding(floor, 1, 2, [0.1], 2) // 1 credit left of n=2
     expect(next).toEqual(floor) // NOT the (faster) 0.1 — the run no longer stands
-    expect(avgImp).toBe(false)
-    expect(medImp).toBe(false)
+    expect(next.avgRoundId).not.toBe(2)
+    expect(next.medRoundId).not.toBe(2)
   })
 
   it('an empty floor + a retracted run stays empty (no fabricated record)', () => {
-    const { next } = reconcileAoxStanding(emptyAoxBest(), 1, 2, [0.1], 1)
+    const next = reconcileAoxStanding(emptyAoxBest(), 1, 2, [0.1], 1)
     expect(next).toEqual(emptyAoxBest())
   })
 
   it('extra credits (good > n) still stand, at the run’s CURRENT stats', () => {
     // A post-end Override credited a miss: good 3 on an Ao2, times grew — the standing avg moved.
-    const { next } = reconcileAoxStanding(emptyAoxBest(), 3, 2, [1.0, 2.0, 6.0], 1)
+    const next = reconcileAoxStanding(emptyAoxBest(), 3, 2, [1.0, 2.0, 6.0], 1)
     expect(next.avg).toBe(3.0)
     expect(next.med).toBe(2.0)
   })
 
   it('degenerate: no times → no computable stats → the floor unchanged', () => {
-    const floor = reconcileAoxBest(emptyAoxBest(), 5, 5, 1).next
-    expect(reconcileAoxStanding(floor, 2, 2, [], 2).next).toEqual(floor)
+    const floor = reconcileAoxBest(emptyAoxBest(), 5, 5, 1)
+    expect(reconcileAoxStanding(floor, 2, 2, [], 2)).toEqual(floor)
   })
 
   it('a standing move SLOWER than the floor reverts to the floor (tie keeps the earlier run)', () => {
-    const floor = reconcileAoxBest(emptyAoxBest(), 3, 3, 1).next
+    const floor = reconcileAoxBest(emptyAoxBest(), 3, 3, 1)
     // This run recorded 2.0 earlier, then an un-credit removed its fastest time → standing 4.0.
-    const { next } = reconcileAoxStanding(floor, 2, 2, [4.0, 4.0], 2)
+    const next = reconcileAoxStanding(floor, 2, 2, [4.0, 4.0], 2)
     expect(next.avg).toBe(3) // the earlier run's record stands; 2.0 no longer exists anywhere
     expect(next.avgRoundId).toBe(1)
   })
@@ -154,16 +154,16 @@ describe('aoxBest — standing reconcile (the post-completion protocol)', () => 
   // overwritten the record (and its round id) for a difference that never appears on screen.
   it('BUG PROOF (via calcAvg noise): two runs that print the same Mean do not reassign the record', () => {
     expect(calcAvg([2.1, 2.15, 2.14])).toBeGreaterThan(calcAvg([2.08, 2.15, 2.15])) // the raw ordering
-    const floor = reconcileAoxStanding(emptyAoxBest(), 3, 3, [2.1, 2.15, 2.14], 1).next
+    const floor = reconcileAoxStanding(emptyAoxBest(), 3, 3, [2.1, 2.15, 2.14], 1)
     expect(floor.avg).toBe(2.13) // stored at display precision
-    const { next, avgImp } = reconcileAoxStanding(floor, 3, 3, [2.08, 2.15, 2.15], 2)
-    expect(avgImp).toBe(false)
+    const next = reconcileAoxStanding(floor, 3, 3, [2.08, 2.15, 2.15], 2)
+    expect(next.avgRoundId).not.toBe(2)
     expect(next.avg).toBe(2.13)
     expect(next.avgRoundId).toBe(1) // record stays with run 1 — run 2 never actually beat it on screen
   })
 
   it('aoxBestEqual: field-wise equality', () => {
-    const a = reconcileAoxBest(emptyAoxBest(), 2, 3, 1).next
+    const a = reconcileAoxBest(emptyAoxBest(), 2, 3, 1)
     expect(aoxBestEqual(a, { ...a })).toBe(true)
     expect(aoxBestEqual(a, { ...a, avgRoundId: 9 })).toBe(false)
     expect(aoxBestEqual(emptyAoxBest(), emptyAoxBest())).toBe(true)
@@ -239,7 +239,7 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
       let floor = null
       if (recorded) {
         floor = { ...best } // the latch: the pre-run Best, taken once
-        best = reconcileAoxStanding(floor, run.good, n, run.times, rid).next
+        best = reconcileAoxStanding(floor, run.good, n, run.times, rid)
         expect(best, `seed ${seed} run ${r} record`).toEqual(expectedBest(runs))
       }
       // Post-end Override ⇄ Undo presses on the ended run (on a browsed card or the card behind).
@@ -259,7 +259,7 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
         }
         if (run.recorded) {
           const prev = best
-          best = reconcileAoxStanding(floor, run.good, n, run.times, rid).next
+          best = reconcileAoxStanding(floor, run.good, n, run.times, rid)
           if (
             !aoxBestEqual(prev, best) &&
             floor.avg != null &&

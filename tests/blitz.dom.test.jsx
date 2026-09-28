@@ -312,7 +312,10 @@ describe('Blitz — characterization (batch 3: Override)', () => {
     const last = readDate()
     click(wrongName(last)) // wrong → round ends; good = 1
     expect(screen.getByText(/Best Score: 1\b/)).toBeInTheDocument()
-    // Back-browse to the credited answer and Override it to wrong → round score + Best drop to 0.
+    // Back-browse to the credited answer and Override it to wrong → the round scored nothing after
+    // all, and the Best it had created goes with it. Round 23 Q4: the record is REBUILT from the one
+    // before the round (none here), so it reads "—" exactly as it does after a round that never
+    // scored — not a "Best Score: 0" that only an Override could produce.
     act(() => {
       fireEvent.click(ctrl('<'))
     })
@@ -320,7 +323,7 @@ describe('Blitz — characterization (batch 3: Override)', () => {
     act(() => {
       fireEvent.click(ctrl('Override'))
     })
-    expect(screen.getByText(/Best Score: 0\b/)).toBeInTheDocument()
+    expect(screen.getByText(/Best Score: —/)).toBeInTheDocument()
   })
 })
 
@@ -695,6 +698,33 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
     expect(ctrl('Begin')).toBeInTheDocument() // ended round reset on close
   })
 
+  // ★ ROUND 23 Q2: an ended round is filed under the config it was PLAYED under. While the ⚙ panel is
+  // open the round waits for the close to reset it — and the reconcile effect used to read the LIVE
+  // Best key, so moving a key setting in that window filed the round's result a second time, under a
+  // config it was never played on.
+  it.each([
+    ['Per Round', false, 'blitzBest'],
+    ['Per Question + Allow Mistakes', true, 'suddenAmBest'],
+  ])(
+    '%s: moving a Best-key setting over an ENDED round files nothing under the new config',
+    (_, perQ, field) => {
+      if (perQ) act(() => useModePrefs.getState().setBlitzPerQ(true))
+      mountApp()
+      switchToBlitz()
+      begin()
+      click(correctName(readDate()))
+      clickText('Reveal') // ends 1/2 → a Best under the played config
+      const played = Object.keys(useProgress.getState()[field])
+      expect(played).toHaveLength(1)
+      toggleSettings()
+      act(() => useSettings.getState().setMinY(1700)) // the live key moves; the round is still up
+      expect(Object.keys(useProgress.getState()[field])).toEqual(played)
+      toggleSettings()
+      expect(ctrl('Begin')).toBeInTheDocument()
+      expect(Object.keys(useProgress.getState()[field])).toEqual(played)
+    },
+  )
+
   it('opening + closing settings with NO change leaves the round running', () => {
     mountApp()
     switchToBlitz()
@@ -962,7 +992,8 @@ describe('Blitz — Per Question + Allow Mistakes (C3a)', () => {
     act(() => fireEvent.click(ctrl('<'))) // browse the credited answer
     expect(isDisabled(ctrl('Override'))).toBe(false)
     act(() => fireEvent.click(ctrl('Override'))) // flip it to wrong → good 1→0
-    expect(screen.getByText(/Best Score: 0\b/)).toBeInTheDocument() // rolled back with the round
+    // rolled back with the round — to the record before it, which was none (round 23 Q4 rebuild)
+    expect(screen.getByText(/Best Score: —/)).toBeInTheDocument()
   })
 
   it('an Override rescue reverts the provisionally saved Best until the round truly ends', () => {
@@ -1650,13 +1681,15 @@ describe('Blitz — Override ⇄ Undo', () => {
   })
 })
 
-// ── The ★ on a rolled-back Best (fixed alongside Override ⇄ Undo) ─────────────────────────────────
-// The "new best" ★ is keyed by CONFIG, not by round. It used to be OR-folded on an improving write and
-// never cleared on a lowering one, so Override (new Best, ★) then Undo (Best rolled back) left the ★ on
-// a record that was no longer new. Clearing it on any lowering write would be wrong the other way — it
-// would wipe a ★ an EARLIER round earned under the same config. The ★ is restored the way the record
-// is: from the pre-round snapshot.
-describe('Blitz — the ★ follows a rolled-back Best without clearing an earlier round', () => {
+// ── The ★: "the round ON SCREEN set this best" (round 23 Q4 — the one meaning MoX already had) ──
+// The ★ is no longer a stored per-config flag: it is DERIVED from the record's round id matching the
+// round on screen (engine/roundId's isNewBest). So an Override that raises a Best lights it and its
+// Undo that hands the record back to an earlier round puts it out; an earlier round's record is NOT
+// starred while another round is on screen; a round that comes back from a preset switch or a reload
+// keeps its ★ (it keeps its id); and a Reset — no round on screen — clears every ★.
+// (These two cases replace round 22's "an earlier round's ★ survives" pair, which pinned the old
+// per-config meaning the owner retired.)
+describe('Blitz — the ★ marks exactly the bests the round on screen set', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -1692,54 +1725,59 @@ describe('Blitz — the ★ follows a rolled-back Best without clearing an earli
     clickText('Override') // 2
   }
 
-  it('a Best raised by an Override and lowered by its Undo takes its ★ with it (no stale ★)', () => {
-    // A Best of 1 from an earlier SESSION — recorded, but carrying no ★ in this one.
+  it('a restored round keeps its ★; a Reset clears it; Override lights it and Undo puts it out', () => {
     mountApp()
     switchToBlitz()
     begin()
     click(correctName(readDate()))
-    clickText('Reveal') // 1/2 → Best 1
+    clickText('Reveal') // round A: 1/2 → Best 1, set by the round on screen
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
+    expect(bestScore()).toContain('★')
     cleanup()
     document.getElementById('root')?.remove()
-    mountApp() // a fresh mount: the record stands, the ★ is gone
+    mountApp() // a remount (a reload, a preset round-trip): round A comes back from its park…
     switchToBlitz()
     expect(bestScore()).toMatch(/Best Score: 1\b/)
+    expect(bestScore()).toContain('★') // …still the round that set it, so still starred
+    clickText('Reset') // no round on screen → no ★, though the record stands
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
     expect(bestScore()).not.toContain('★')
-    clickText('Reset') // the ended round came back from its session park — clear it
-    twoBurnsThenReveal()
+    twoBurnsThenReveal() // round B ends 0/3 — A's record is not B's, so no ★
+    expect(bestScore()).toMatch(/Best Score: 1\b/)
+    expect(bestScore()).not.toContain('★')
     creditBothBurns()
     expect(bestScore()).toMatch(/Best Score: 2\b/)
-    expect(bestScore()).toContain('★') // a new Best
-    clickText('Undo')
+    expect(bestScore()).toContain('★') // B set it
+    clickText('Undo') // B back to 1 — a tie does not take the record, so it goes back to A
     expect(bestScore()).toMatch(/Best Score: 1\b/)
-    expect(bestScore()).not.toContain('★') // rolled back — and so is its ★
+    expect(bestScore()).not.toContain('★') // …and A is not on screen
   })
 
-  it("an earlier round's ★ survives the rollback, the Undo toggle, and a resume", () => {
+  it('the ★ follows every toggle and a resume, and never marks a record another round holds', () => {
     mountApp()
     switchToBlitz()
     begin()
     click(correctName(readDate()))
-    clickText('Reveal') // round A: 1/2 → Best 1 ★ (earned this session)
-    expect(bestScore()).toContain('★')
+    clickText('Reveal') // round A: Best 1 ★
     clickText('Reset')
     twoBurnsThenReveal() // round B ends 0/3
-    expect(bestScore()).toContain('★') // A's ★
     creditBothBurns() // B reaches 2 → Best 2 ★
     for (let i = 0; i < 3; i++) {
-      clickText('Undo') // B back to 1 — the Best rolls back to A's 1…
+      clickText('Undo') // B back to 1 — the record goes back to A's 1, unstarred
       expect(bestScore()).toMatch(/Best Score: 1\b/)
-      expect(bestScore()).toContain('★') // …and A's ★ is NOT collaterally cleared
+      expect(bestScore()).not.toContain('★')
       clickText('Override')
       expect(bestScore()).toMatch(/Best Score: 2\b/)
       expect(bestScore()).toContain('★')
     }
-    // A resume reverts the round's provisional Best to the pre-round record — and its ★ with it.
+    // A resume reverts the round's provisional Best to the pre-round record — B's 2, not this round's.
     clickText('Reset')
     begin()
-    clickText('Reveal') // round C ends 0/1: nothing new, B's 2 ★ still lit
+    clickText('Reveal') // round C ends 0/1: nothing new
+    expect(bestScore()).toMatch(/Best Score: 2\b/)
+    expect(bestScore()).not.toContain('★') // B's record, and B is gone
     clickText('Override') // credit + resume
     expect(bestScore()).toMatch(/Best Score: 2\b/)
-    expect(bestScore()).toContain('★') // the old resume deleted it
+    expect(bestScore()).not.toContain('★')
   })
 })

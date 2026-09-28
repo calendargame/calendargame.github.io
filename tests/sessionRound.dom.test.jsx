@@ -289,17 +289,30 @@ describe('Q11 — a finished MoX run survives a preset round-trip', () => {
 // useSettingsCloseEffect already resets an active OR ended round on a Best-key change (BlitzMode
 // `if (active || timerDone) resetRound()`; AoxMode `if (runPhase !== 'idle') reset()`), pinned
 // natively in tests/blitz.dom / tests/aox.dom; resetRound()/reset() never touches prevRoundBestRef
-// or prevBestSnapRef, so a rehydrated ended round resets identically to a natively-ended one. (The
-// reconcile effect has `blitzBk` / `bestKey` in its deps, so the key flip DOES write one entry
-// under the new key mirroring the round's own result before the reset flushes — that is native
-// behaviour, present with or without the round-trip, which is exactly why these cases compare the
-// two paths rather than assert a single fixed shape.)
+// or prevBestSnapRef, so a rehydrated ended round resets identically to a natively-ended one.
+// (Until round 23 the Blitz reconcile effect had the LIVE `blitzBk` in its deps, so the key flip wrote
+// a second entry under the new key mirroring the round's own result before the reset flushed — a
+// round filed under a config it was never played on. Q2 files every round under its own keys; the
+// native case pinning that is in tests/blitz.dom.)
+// ⚠ ROUND IDS ARE NEVER-REPEATING since round 23 Q4 (engine/roundId), so the two paths' rounds carry
+// DIFFERENT ids by design. Each side's ids are canonicalized to the order they first appear, which
+// keeps the claim exact — the same keys, the same values, and the same "which fields share a
+// round" — without pretending two different rounds had the same id.
 describe('Q11 composed — a Best-key change after a restored round lands where a native one does', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()
     document.getElementById('root')?.remove()
   })
+
+  // Replace each distinct round id with its order of first appearance (R1, R2, …) — see the ⚠ above.
+  const canonicalIds = (json) => {
+    const seen = new Map()
+    return json.replace(/"(\w*RoundId|roundId)":(\d+)/g, (_, k, id) => {
+      if (!seen.has(id)) seen.set(id, `R${seen.size + 1}`)
+      return `"${k}":"${seen.get(id)}"`
+    })
+  }
 
   const flipJulian = () => {
     openSettings('key')
@@ -314,7 +327,7 @@ describe('Q11 composed — a Best-key change after a restored round lands where 
     switchToBlitz()
     finishBlitzRound(2)
     flipJulian()
-    const nativeBest = JSON.stringify(useProgress.getState().blitzBest)
+    const nativeBest = canonicalIds(JSON.stringify(useProgress.getState().blitzBest))
     cleanup()
     document.getElementById('root')?.remove()
     resetAppState()
@@ -334,7 +347,8 @@ describe('Q11 composed — a Best-key change after a restored round lands where 
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
     expect(isOffered(ctrl('Override'))).toBe(false)
-    expect(JSON.stringify(useProgress.getState().blitzBest)).toBe(nativeBest)
+    expect(canonicalIds(JSON.stringify(useProgress.getState().blitzBest))).toBe(nativeBest)
+    expect(Object.keys(useProgress.getState().blitzBest)).toHaveLength(1) // filed under its own key only
   })
 
   it('MoX: restored-then-flip touches the same aoxBest keys, each reconciled exactly once, and the run resets clean', () => {
@@ -347,7 +361,8 @@ describe('Q11 composed — a Best-key change after a restored round lands where 
     }
     // aoxBest records SOLVE TIMES (wall-clock, no fake timers in this file), so the two runs'
     // avg/med values differ — the deterministic, meaningful comparison is the KEY SET and the
-    // round-id stamped on each entry: one reconcile per key, under round 1, on both paths.
+    // round-id stamped on each entry: one reconcile per key, both fields under the one run, on both
+    // paths (canonicalized — see the ⚠ above).
     const shape = (best) =>
       Object.fromEntries(
         Object.entries(best).map(([k, v]) => [
@@ -360,7 +375,7 @@ describe('Q11 composed — a Best-key change after a restored round lands where 
     pinReadable()
     finishMo2()
     flipJulian()
-    const nativeShape = JSON.stringify(shape(useProgress.getState().aoxBest))
+    const nativeShape = canonicalIds(JSON.stringify(shape(useProgress.getState().aoxBest)))
     cleanup()
     document.getElementById('root')?.remove()
     resetAppState()
@@ -378,7 +393,7 @@ describe('Q11 composed — a Best-key change after a restored round lands where 
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
     expect(isOffered(ctrl('Override'))).toBe(false)
-    expect(JSON.stringify(shape(useProgress.getState().aoxBest))).toBe(nativeShape)
+    expect(canonicalIds(JSON.stringify(shape(useProgress.getState().aoxBest)))).toBe(nativeShape)
   })
 })
 

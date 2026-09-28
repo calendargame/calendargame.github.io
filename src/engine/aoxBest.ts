@@ -53,16 +53,18 @@ export const emptyAoxBest = (): AoxBest => ({
 
 // Fold a completed run's (avg, med) into the Best record, tagged `rid`. Each metric improves only on a
 // STRICT decrease (a faster time), so the FIRST run to reach a given minimum keeps the record (and its
-// companion stat) — a later run that merely ties does not displace it. Returns the next record plus
-// which metric(s) improved (for the "new best ★" marker). The caller snapshots the PRE-call `cur` for
-// rollback (restore-on-undo), so this stays a pure forward fold.
+// companion stat) — a later run that merely ties does not displace it. Returns the next record; a
+// metric that improved is the one now tagged with `rid`, which is exactly what the "new best ★"
+// marker reads (engine/roundId's isNewBest — round 23 Q4 derived the ★ from the ids, so this no longer
+// reports a separate improved-flag pair). The caller snapshots the PRE-call `cur` for rollback
+// (restore-on-undo), so this stays a pure forward fold.
 //
 // ★ COMPARE AT DISPLAY PRECISION, NOT RAW FLOAT PRECISION. Best Mean / Best Median / Mean / Median are
 // NEVER shown to the player except through fmtTime (modeFormat.ts), which rounds to hundredths via
 // roundCentis (WCA reg 9f1). So two runs can print IDENTICALLY — "2.13s" and "2.13s" — while their raw
 // avg/med floats differ in the fourth-plus decimal (calcAvg/calcMed divide sums, which is where that
-// noise comes from). A raw `avg < cur.avg` still fires on that invisible difference and plants a ★ on
-// a "new best" no player can ever see or verify — that was the actual bug here, not the strict-`<`
+// noise comes from). A raw `avg < cur.avg` still fires on that invisible difference and hands the
+// record (and with it the ★) to a "new best" no player can ever see or verify — that was the actual bug here, not the strict-`<`
 // tie rule itself (a genuine full-precision tie correctly not counting as an improvement is correct
 // and unchanged). roundCentis is imported from modeFormat rather than reimplemented: that file's own
 // comment explains in detail why a second `Math.round(t * 100)` would silently disagree with it on a
@@ -85,14 +87,14 @@ export function reconcileAoxBest(
   avg: number,
   med: number,
   rid: number | null,
-): { next: AoxBest; avgImp: boolean; medImp: boolean } {
+): AoxBest {
   const avgCentis = roundCentis(avg)
   const medCentis = roundCentis(med)
   const curAvgCentis = cur.avg == null ? null : roundCentis(cur.avg)
   const curMedCentis = cur.med == null ? null : roundCentis(cur.med)
   const avgImp = curAvgCentis == null || avgCentis < curAvgCentis
   const medImp = curMedCentis == null || medCentis < curMedCentis
-  const next: AoxBest = {
+  return {
     avg: avgImp ? avgCentis / 100 : cur.avg,
     avgMed: avgImp ? medCentis / 100 : cur.avgMed,
     avgRoundId: avgImp ? rid : cur.avgRoundId,
@@ -100,7 +102,6 @@ export function reconcileAoxBest(
     medAvg: medImp ? avgCentis / 100 : cur.medAvg,
     medRoundId: medImp ? rid : cur.medRoundId,
   }
-  return { next, avgImp, medImp }
 }
 
 // The recorded run's reconcile target as its standing stats move post-completion. While the run
@@ -116,11 +117,10 @@ export function reconcileAoxStanding(
   n: number,
   times: number[],
   rid: number | null,
-): { next: AoxBest; avgImp: boolean; medImp: boolean } {
+): AoxBest {
   const avg = calcAvg(times)
   const med = calcMed(times)
-  if (good < n || avg == null || med == null)
-    return { next: { ...preRun }, avgImp: false, medImp: false }
+  if (good < n || avg == null || med == null) return { ...preRun }
   return reconcileAoxBest(preRun, avg, med, rid)
 }
 
