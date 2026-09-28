@@ -2587,7 +2587,9 @@ export default function GuidePage({
           </li>
           <li>
             <b>One-by-One</b> — hides the date between solves. Press Continue to reveal each new
-            date.
+            date. That holds however the run moves on — a correct answer, <b>Next</b>, or an
+            Override that credits a date and moves you along: the new date always waits for
+            Continue, and its clock starts when you press it.
           </li>
           <li>
             <b>Last / Mean / Med</b> — tap any of these to show or hide all three time stats. Hiding

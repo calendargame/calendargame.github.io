@@ -610,7 +610,7 @@ describe('a parked round in a shape this build cannot read', () => {
     raw['1:saved:aox'] = {
       engine: corrupt(blitz.engine),
       runPhase: 'done',
-      shown: true,
+      revealedQ: null,
       currentRunId: 1,
       prevBestSnap: null,
     }

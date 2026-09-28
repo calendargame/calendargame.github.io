@@ -351,6 +351,11 @@ const stripEntryMeta = ({
 const blankStats = (): Stats => ({ played: 0, good: 0, streak: 0, best: 0, times: [] })
 // A card nobody has answered or overridden — every fresh question starts with one.
 export const blankCard = (): CardMeta => ({ wrongTime: null, answered: null })
+// The `questionId` a RESET leaves behind — the one spelling of that bump, shared by the RESET case
+// below and by MoX's Begin, which has to name the run's FIRST question before the reset it dispatches
+// has rendered (modes/AoxMode's One-by-One `revealedQ`: Begin reveals the first date, and only a
+// Continue reveals any later one).
+export const questionIdAfterReset = (state: GameState): number => state.questionId + 1
 
 // The launch / fresh-question engine state for a given starting date. `initialStats` lets a
 // continuous mode (Classic/Flash/Deduction) HYDRATE its lifetime stats from saved progress on
@@ -923,7 +928,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const regen = !timingOff || state.countedWrong || state.revealed
       return {
         ...initEngine(regen ? nextDate : state.date),
-        questionId: state.questionId + 1,
+        questionId: questionIdAfterReset(state),
         // initEngine re-zeroes gridEpoch — carry the bump instead, so the reset remounts the grids (Q9).
         gridEpoch: state.gridEpoch + 1,
       }

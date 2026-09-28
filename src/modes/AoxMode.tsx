@@ -47,7 +47,7 @@ import { useProgress } from '../store/progress.js'
 import type { AoxBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { creditsLiveCard } from '../engine/gameReducer.js'
+import { creditsLiveCard, questionIdAfterReset } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { usePresets } from '../store/presets.js'
 import { activeDataId } from '../store/amnesic.js'
@@ -65,7 +65,7 @@ import { useBackButton } from '../components/useBackButton.js'
 interface AoxRunSnapshot {
   engine: GameState
   runPhase: string
-  shown: boolean
+  revealedQ: number | null
   currentRunId: number | null
   prevBestSnap: { key: string; best: AoxBest; runId: number } | null
 }
@@ -129,7 +129,18 @@ function AoxMode({
     return engine ? { ...snap, engine } : null
   })
   const [runPhase, setRunPhase] = useState(parkedRun?.runPhase ?? 'idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop) — only done/failed are ever parked (round-21 Q11)
-  const [shown, setShown] = useState(parkedRun?.shown ?? false) // One-by-One: is the current date revealed? (always true for non-One-by-One while running; always true on a parked ended run)
+  // ★ ONE-BY-ONE: WHICH QUESTION THE PLAYER HAS ASKED TO SEE (round 23 Q5) — the engine `questionId`
+  // Begin started the run on, or the one Continue revealed; null with no run. The date on screen is
+  // then a FUNCTION of the engine's question counter (`shown` below): a question is shown only if it
+  // is the one revealed, so EVERY way play moves on to a new question hides it until Continue —
+  // an answer, Next, an Override that credits and advances, a resume that advances, any path added
+  // later — with no hide call for anyone to forget. The owner: "no matter what you should have to
+  // click continue before you see the next date, that's the whole point of one-by-one." (It used to
+  // be a `shown` flag that two handlers hid by hand; the Override that credits and advances had no
+  // such line, so the next date appeared with its clock already running.) Back / Forward never move
+  // the counter, so browsing leaves it alone, and so does an Override that stays on its card.
+  // Harmless outside One-by-One: every use is guarded by `oneByOne`.
+  const [revealedQ, setRevealedQ] = useState<number | null>(parkedRun?.revealedQ ?? null)
   const [breakdownOpen, setBreakdownOpen] = useState(false) // the run breakdown popup (components/RunBreakdown) — ephemeral, dies with the run
   const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
   // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes,
@@ -160,6 +171,7 @@ function AoxMode({
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const S = state.stats
   const doneCount = S.good // credited solves this run
+  const shown = revealedQ === state.questionId // One-by-One: is the question on screen the one revealed?
   const isRunning = runPhase === 'running'
   const isLocked = runPhase === 'done' || runPhase === 'failed'
   const inBack = state.backDepth > 0
@@ -295,12 +307,12 @@ function AoxMode({
       writeSessionRound(dataId, 'aox', {
         engine: state,
         runPhase,
-        shown,
+        revealedQ,
         currentRunId: runId,
         prevBestSnap: prevBestSnapRef.current,
       })
     else discardSessionRound(dataId, 'aox')
-  }, [runPhase, shown, state, runId, dataId])
+  }, [runPhase, revealedQ, state, runId, dataId])
 
   // Reset the run if the panel is hidden mid-run (also cancel any pending reveal auto-advance).
   useEffect(() => {
@@ -311,7 +323,7 @@ function AoxMode({
       cancelRevealAdvance()
       eng.resetStats()
       setRunPhase('idle')
-      setShown(false)
+      setRevealedQ(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
@@ -331,7 +343,7 @@ function AoxMode({
     oneByOne === false &&
     timingOff === false &&
     runPhase === 'idle' &&
-    shown === false &&
+    revealedQ === null &&
     S.played === 0 &&
     S.good === 0 &&
     S.streak === 0 &&
@@ -453,10 +465,10 @@ function AoxMode({
     setRunId(newRoundId())
     prevBestSnapRef.current = null
     setRunPhase('running')
-    setShown(true)
+    setRevealedQ(questionIdAfterReset(state)) // the run's first question: Begin itself reveals it
   }
   const continueRun = () => {
-    setShown(true)
+    setRevealedQ(state.questionId)
     eng.restartTimer()
   } // One-by-One: reveal the already-loaded next date + start its solve timer
   const startOrContinue = () => {
@@ -466,13 +478,11 @@ function AoxMode({
   const submitDoW = (i: number) => {
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i })
     const willComplete = i === correct && !state.countedWrong && doneCount === n - 1 // the Nth credited solve completes the run
-    const willAdvance = i === correct && !willComplete // a non-completing correct (first-try or late) advances
-    eng.answer(i, { complete: willComplete })
+    eng.answer(i, { complete: willComplete }) // an advance moves the question counter → One-by-One hides the next date (`shown`)
     if (i !== correct && !allowMistakes) {
       eng.lockReveal()
       setRunPhase('failed')
     } // wrong + no mistakes → reveal the answer + fail the run
-    else if (willAdvance && oneByOne) setShown(false) // One-by-One: hide the freshly-loaded next date until Continue
   }
   // Reveal. Allow Mistakes OFF → fail the run. Allow Mistakes ON → count a played miss + show the
   // answer; then continue the run. One-by-One pauses on a "Next" button (awaitingNext) so you see
@@ -508,11 +518,11 @@ function AoxMode({
   }
   // Advance past a show-coded / One-by-One-revealed miss (Allow Mistakes on) — the run continues.
   // Closes the codes panel if open, loads the next date (the miss was already counted), One-by-One
-  // hides it until Continue. (Non-One-by-One Reveal auto-advances instead — see onReveal.) (C2 Q4.)
+  // hides it until Continue — by the question counter moving, like every advance (`shown`).
+  // (Non-One-by-One Reveal auto-advances instead — see onReveal.) (C2 Q4.)
   const onNext = () => {
     if (state.calcOpen) eng.showCodes(false)
     eng.doNew()
-    if (oneByOne) setShown(false)
   }
   // ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ─────────────────────
   // ONE PRESS, BOTH DIRECTIONS — and it can move the RUN, not just the score: fail it, resume it, or
@@ -585,7 +595,7 @@ function AoxMode({
     cancelRevealAdvance()
     eng.resetStats()
     setRunPhase('idle')
-    setShown(false)
+    setRevealedQ(null)
     prevBestSnapRef.current = null
     setRunId(null) // no run on screen — and so no ★: a best is marked only while its run is up
     setBreakdownOpen(false) //  the breakdown belongs to the run being cleared

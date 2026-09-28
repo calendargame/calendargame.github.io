@@ -403,6 +403,65 @@ describe('AoX — characterization (batch 5: One-by-One)', () => {
     answerCorrect()
     expect(statValue('Score')).toBe('2/2')
   })
+
+  // ★ ROUND 23 Q5 — the owner: "no matter what you should have to click continue before you see the
+  // next date, that's the whole point of one-by-one." The date shown is now a function of the
+  // engine's question counter (the question Continue revealed), so EVERY way play advances hides the
+  // next date — not only the two hand-written hide calls there used to be. Before the fix an Override
+  // that credited and advanced put the next date straight on screen with its clock running.
+  const hiddenNow = () => {
+    expect(ctrl('Continue')).toBeInTheDocument()
+    const visibleYmd = Array.from(document.querySelectorAll('div')).filter(
+      (e) =>
+        e.children.length === 0 && /^-?\d+-\d+-\d+$/.test(e.textContent.trim()) && !isHidden(e),
+    )
+    expect(visibleYmd.length).toBe(0)
+  }
+  it('Allow Mistakes on: an Override that credits a wrong and advances still waits for Continue', () => {
+    mountApp()
+    switchToAox()
+    click('One-by-One')
+    click('Allow Mistakes')
+    setN(3)
+    click('Begin')
+    answerWrong() // a miss on Q1 — the run goes on, same date
+    click('Override') // credit it → advances to Q2…
+    expect(statValue('Score')).toBe('1/1')
+    hiddenNow() // …which must NOT be on screen yet
+    click('Continue')
+    answerCorrect()
+    expect(statValue('Score')).toBe('2/2')
+  })
+  it('Allow Mistakes off: an Override that rescues a failed run and advances still waits for Continue', () => {
+    mountApp()
+    switchToAox()
+    click('One-by-One')
+    setN(3)
+    click('Begin')
+    answerWrong() // fails the run
+    expect(ctrl('Reset')).toBeInTheDocument()
+    click('Override') // credit the failing wrong → the run resumes on Q2…
+    expect(statValue('Score')).toBe('1/1')
+    hiddenNow() // …hidden until Continue
+    click('Continue')
+    answerCorrect()
+    expect(statValue('Score')).toBe('2/2')
+  })
+  it('the solve clock starts at Continue, not at the Override that advanced', () => {
+    mountApp()
+    switchToAox()
+    click('One-by-One')
+    click('Allow Mistakes')
+    setN(3)
+    click('Begin')
+    answerWrong()
+    click('Override') // advances to a hidden Q2
+    tick(7000) // seven seconds before the player asks to see it
+    click('Continue')
+    tick(1000)
+    answerCorrect()
+    expect(statValue('Last')).toBe('1.00s')
+  })
 })
 
 // ── Batch 6: Reveal + Show Codes (both burn the question) ────────────────────────
