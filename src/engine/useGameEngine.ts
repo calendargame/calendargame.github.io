@@ -5,7 +5,8 @@
 //   • new dates — via `genDate` passed in by the parent (exactly like AoxMode
 //     receives `genDate={genDate}`), so all the year-range / format / calendar
 //     settings stay baked into one place (App's genDate).
-//   • solve times — `performance.now()` deltas from a per-question start stamp.
+//   • solve times — `performance.now()` deltas from a per-question start stamp, snapped onto the
+//     0.1 ms grid (engine/stats' solveTimeFromMs).
 //
 // It returns the engine state, the derived `correct` weekday, the Override button's whole state
 // (`overrideAvail` = is the press on offer, `overridden` = which word it reads, `overridePlan` = what
@@ -27,6 +28,7 @@ import {
 } from './gameReducer.js'
 import type { GameState, Question, Stats } from './gameReducer.js'
 import { checkGameInvariants } from './invariants.js'
+import { solveTimeFromMs } from './stats.js'
 import { captureError } from '../observability/sentry.js'
 
 // genDate produces the next question for the active year range (the parent bakes in the
@@ -87,8 +89,10 @@ export function useGameEngine({
   useEffect(() => {
     tStartRef.current = performance.now()
   }, [state.questionId])
+  // On the 0.1 ms grid (engine/stats' solveTimeFromMs): the subtraction's float noise removed, every
+  // digit the browser measured kept — so the recorded time, the saved one and a reload's all agree.
   const elapsed = (): number | null =>
-    tStartRef.current != null ? (performance.now() - tStartRef.current) / 1000 : null
+    tStartRef.current != null ? solveTimeFromMs(performance.now() - tStartRef.current) : null
   // Restart the solve timer without changing the question — AoX One-by-One reveals the next date
   // on Continue (the date was loaded earlier, hidden), so the solve time must run from the reveal,
   // not from when it loaded. Other modes never call it (the questionId effect covers them).

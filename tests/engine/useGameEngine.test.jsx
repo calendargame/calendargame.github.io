@@ -161,6 +161,23 @@ describe('useGameEngine — Override ⇄ Undo', () => {
     expect(result.current.state.stats.times.at(-1)).toBe(22)
   })
 
+  // ★ A SOLVE TIME IS RECORDED ON THE 0.1 ms GRID (round 23 Q3). performance.now() is already
+  // clamped to 0.1 ms in Chrome (1 ms in Safari), but the SUBTRACTION of two such readings is not:
+  // 126913.4 − 123456.7 is 3456.699999999997 in floating point, which printed into the save as
+  // 3.456699999999997 — 17 characters of float noise per time. Every solve time is kept now, so the
+  // hook snaps the difference back onto the grid the browser measured on: the value, the save and a
+  // reload all hold the same short number (3.4567), and nothing the browser actually measured is lost.
+  it('records the solve time on the 0.1 ms grid, free of subtraction noise', () => {
+    let now = 123456.7
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const { result } = renderHook(() => useGameEngine({ ...opts, timingOff: false }))
+    now = 126913.4
+    expect((126913.4 - 123456.7) / 1000).not.toBe(3.4567) // the noise this test exists for
+    act(() => result.current.answer(C))
+    expect(result.current.state.stats.times).toEqual([3.4567])
+    expect(JSON.stringify(result.current.state.stats.times)).toBe('[3.4567]')
+  })
+
   // THE ONE RESTORE DOOR: every parked blob comes through engine/engineMigration, so a round parked
   // by an older build (here v2.25.0's shape: a history entry locked by `overrideUsed` + its capsule,
   // and the dead top-level flags) mounts healthy, scored and TOGGLEABLE. The migration's own exact
