@@ -125,11 +125,10 @@ const isTraySegment = (b) =>
 // buttons until round-9; the housing meant nothing while that was true. Turning Use System OFF
 // swaps 'Dark theme' + 'Light theme' for the single 'Theme' group that spans both rows.
 const PICKERS = [
-  // The Global section's "Open in" and the Per-preset "Default Mode" joined the panel in round-21
-  // Q3, both as trays. "Open in" is dynamic (Last used + one segment per preset); with the default
-  // single preset it is two segments. "Default Mode" is two stacked trays, one radiogroup — the
-  // Date Format shape — so pills('Default Mode') spans both.
-  'Open in',
+  // The Per-preset "Default Mode" joined the panel in round-21 Q3 as two stacked trays, one
+  // radiogroup — the Date Format shape — so pills('Default Mode') spans both. (The Global "Open in"
+  // arrived beside it as a tray too, and left this list in round 23, Q8: presets are unlimited, so
+  // it is the panel's one DROPDOWN now — pinned in the listbox-trigger test below.)
   'Default Mode',
   'Date Format',
   'Dark theme',
@@ -657,24 +656,26 @@ describe('Settings → Display — radio semantics and the retired theme dropdow
     })
   })
 
-  // The theme CustomSelects are gone; every dropdown left in the app lives in the BAR, not in
-  // this panel. (It was "the mode selector is the only one" until the top-bar rebuild added the
-  // preset switcher beside it — so the assertion moved from a COUNT of one to the claim it was
-  // always making: none of them is inside the panel card.)
-  it('the panel holds no dropdown — the bar owns every listbox trigger', () => {
+  // The theme CustomSelects are gone. Every dropdown in the app lives in the BAR except ONE: the
+  // Global "Open in", a dropdown since round 23 (Q8) because presets are unlimited and a tray grows
+  // a segment per preset — THE PICKER RULE's single, named exception. So the claim is exact: the
+  // bar's two, and "Open in" inside the panel, and nothing else anywhere.
+  it('the panel holds exactly one dropdown, "Open in"; the bar owns the other two', () => {
     mountPanel()
     const triggers = screen
       .getAllByRole('button', { hidden: true })
       .filter((b) => b.getAttribute('aria-haspopup') === 'listbox')
-    // Document order, which in the bar is left to right: preset, then mode. Asked by ACCESSIBLE
-    // NAME rather than by reading an aria-label attribute, because there no longer is one: a
-    // trigger names itself with its setting AND its current value (components/CustomSelect composes
-    // the two through aria-labelledby), so "Preset" and "Mode" are the openings of those names.
+    // Document order: the bar left to right (preset, then mode), then the panel. Asked by
+    // ACCESSIBLE NAME rather than by reading an aria-label attribute, because there no longer is
+    // one: a trigger names itself with its setting AND its current value (components/CustomSelect
+    // composes the two through aria-labelledby), so "Preset", "Mode" and "Open in" open those names.
+    const openIn = screen.getByRole('button', { name: /^Open in,/, hidden: true })
     expect(triggers).toEqual([
       screen.getByRole('button', { name: /^Preset,/, hidden: true }),
       screen.getByRole('button', { name: /^Mode,/, hidden: true }),
+      openIn,
     ])
-    for (const t of triggers) expect(panelEl().contains(t)).toBe(false)
+    expect(triggers.filter((t) => panelEl().contains(t))).toEqual([openIn])
   })
 })
 

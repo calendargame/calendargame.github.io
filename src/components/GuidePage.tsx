@@ -1048,7 +1048,8 @@ export default function GuidePage({
             <b>New Preset</b> — adds one at the foot of the list, starting from the{' '}
             <i>factory defaults</i>. It is not a copy of the preset you are on, and it does not
             switch you into it, so making one never disturbs the round you are in. Use the control
-            at the top left when you want to go there.
+            at the top left when you want to go there. There is no limit on how many presets you can
+            have; a long list scrolls, here and in both preset lists.
           </li>
           <li>
             <b>Rename</b> — the name in each row is a box; tap it and it is all selected, so you can
@@ -1596,10 +1597,12 @@ export default function GuidePage({
         <UL>
           <li>
             Every picker in the ⚙ menu is one named group of choices, not a row of loose buttons,
-            and it&apos;s named for the setting you&apos;re changing — Open in, Default Mode, Date
-            Format, Input, Rotate Dots, Theme, Leap Year Chance, Jan/Feb Chance on Leap Years,
-            Julian Chance. Landing on an option is choosing it; the keys that move within a group
-            are under Keyboard Input above.
+            and it&apos;s named for the setting you&apos;re changing — Default Mode, Date Format,
+            Input, Rotate Dots, Theme, Leap Year Chance, Jan/Feb Chance on Leap Years, Julian
+            Chance. Landing on an option is choosing it; the keys that move within a group are under
+            Keyboard Input above. <b>Open in</b> is the one list instead of a group, because it
+            holds every preset you make; like the lists in the top bar it reads its name and then
+            what it is set to.
           </li>
           <li>
             The five On/Off switches carry their setting&apos;s name — Random Format, Use System
@@ -1681,7 +1684,8 @@ export default function GuidePage({
           </li>
           <li>
             The preset control is the same kind of list, and once it&apos;s open the same keys do
-            the same things.
+            the same things. So is <b>Open in</b> in the ⚙ menu, and there <Kbd>Esc</Kbd> closes
+            just the list — the ⚙ menu stays open until a second <Kbd>Esc</Kbd>.
           </li>
         </UL>
         <Subhead>Motion</Subhead>
@@ -1750,7 +1754,12 @@ export default function GuidePage({
             <b>Global</b> — first, and app-wide, not per-preset: <b>Open in</b> (which preset a
             fresh open of the app lands in — &quot;Last used&quot;, or a preset you pin), and the
             door to <b>Manage Presets</b> (see <b>Presets</b> in the first section). Neither is part
-            of any preset, and neither is touched by the Reset buttons or Save Defaults.
+            of any preset, and neither is touched by the Reset buttons or Save Defaults.{' '}
+            <b>Open in</b> is a list like the preset control at the top left — tap it, then tap
+            &quot;Last used&quot; or a preset. It stays one row however many presets you have; the
+            list floats over the menu, scrolls when it is long, and the menu behind it holds still
+            until you have picked. If you open the ⚙ menu by pressing and dragging, letting go on{' '}
+            <b>Open in</b> opens its list; tap your choice from there.
           </li>
           <li>
             <b>Per-preset</b> — the label over everything that is saved for the current preset and

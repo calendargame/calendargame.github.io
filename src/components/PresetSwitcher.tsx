@@ -1,6 +1,7 @@
 import { type RefObject } from 'react'
 import CustomSelect from './CustomSelect.jsx'
 import { usePresets } from '../store/presets.js'
+import type { Preset } from '../store/presets.js'
 import { switchPreset } from '../store/presetControl.js'
 
 // PresetSwitcher — the control that says which preset you are on and moves you to another one.
@@ -159,6 +160,60 @@ export const PRESET_NAME_COL = '4.5em'
 // one, without needing to also filter for `aria-hidden="false"`.
 export const PRESET_NAME_CELL_SELECTOR = '[data-select-trigger] [data-preset-name-cell]'
 
+// ★ ONE PRESET'S ROW, AS EVERY PRESET LIST IN THE APP DRAWS IT — this switcher's, and since round 23
+// (Q8) the ⚙ panel's "Open in" dropdown, which is the SAME control showing the SAME list (the
+// owner's "learn it once"). Exported rather than copied so the two can never drift: a name that
+// truncates here and overflows there, or an amnesic "A" that one list forgets, would be exactly the
+// kind of disagreement this file's history keeps paying for.
+// ⚠ `data-preset-name-cell` COMES ALONG TO "Open in" TOO, AND IS INERT THERE: PRESET_NAME_CELL_SELECTOR
+// is scoped to a `[data-select-trigger]` ancestor, which only this switcher's trigger has (it is the
+// one with pressDrag), so lib/presetNameWidth can never measure the ⚙ panel's copy by mistake.
+export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
+  return (
+    // The name cell (floor PRESET_NAME_COL, grows past it — see the ⚠⚠ block above). `flex`
+    // makes it a block-level flex container, so inside the trigger's grid cell AND inside a
+    // dropdown row it is the same box with the same rules — one structure serving both, which is
+    // what stops the two from drifting. No `width` any more, only `minWidth`: the cell's actual
+    // width now comes from filling whatever its ancestor chain hands it (see the trigger's
+    // `w-full` below), and `data-preset-name-cell` is the hook lib/presetNameWidth's live
+    // measurement reads off THIS exact element via PRESET_NAME_CELL_SELECTOR.
+    <span
+      className="flex items-center"
+      style={{ minWidth: PRESET_NAME_COL }}
+      data-preset-name-cell="true"
+    >
+      {/* `truncate` (overflow-hidden + ellipsis + nowrap) goes on the NAME, not on the cell: a
+          flex container's own text-overflow never fires, because the ellipsis rule applies to a
+          block box's inline content and this box's children are flex items. Put it here and the
+          name shortens with a real "…" while the marker beside it stays put.
+          ⚠⚠ THE ELLIPSIS STAYS UNCONDITIONALLY, even with a live typing-time cap in front of it
+          (lib/presetNameWidth) — argued at length in components/PresetManager, where that cap is
+          actually applied. Short version: a typing-time cap can only promise "fit under THESE
+          conditions at the moment typed", never "fits forever" — the live site and staging share
+          one origin with proven build-skew bugs already, the switcher's own width can change
+          after typing (a rotation, a text-size accessibility setting, a viewport resize), and a
+          canvas measurement is not bit-for-bit identical to this element's own DOM layout. This
+          is the safety net that makes all three survivable instead of an overflowing name. */}
+      <span className="truncate">{p.name}</span>
+      {p.amnesic && (
+        <>
+          {/* ml-auto is the right-alignment: it eats the cell's leftover space, so the marker sits
+              on the cell's right edge and — because every cell is the same width — the markers
+              line up as a column down the menu. shrink-0 keeps the name, never the marker, as the
+              thing that gives way when a name is too long. */}
+          <span
+            aria-hidden="true"
+            className="ml-auto shrink-0 pl-1.5 text-[0.8em] font-semibold leading-none opacity-70"
+          >
+            A
+          </span>
+          <span className="sr-only">, amnesic</span>
+        </>
+      )}
+    </span>
+  )
+}
+
 export default function PresetSwitcher({
   // ⚠ REQUIRED, not optional, and that is the whole reason it exists (see the ⚠⚠ block above). Its
   // one job is to give App a handle on this control's wrapper so the ⚙ click-outside handler can
@@ -175,54 +230,13 @@ export default function PresetSwitcher({
   // it is the thing that says which preset you are on, so it cannot live inside a preset.
   const presets = usePresets((s) => s.presets)
   const activeId = usePresets((s) => s.activeId)
-  // Ids are numbers; CustomSelect's contract is strings. The conversion is confined to this file —
-  // String() on the way out, Number() on the way back in — because a stringly-typed preset id
-  // escaping into store/presetControl is how an `id` that never matches anything gets written.
+  // Ids are numbers; CustomSelect's contract is strings. The conversion is confined to the two
+  // controls that list presets (this one and the ⚙ panel's "Open in") — String() on the way out,
+  // Number() on the way back in, at the onChange — because a stringly-typed preset id escaping into
+  // store/presetControl is how an `id` that never matches anything gets written.
   const options = presets.map((p) => ({
     value: String(p.id),
-    label: (
-      // The name cell (floor PRESET_NAME_COL, grows past it — see the ⚠⚠ block above). `flex`
-      // makes it a block-level flex container, so inside the trigger's grid cell AND inside a
-      // dropdown row it is the same box with the same rules — one structure serving both, which is
-      // what stops the two from drifting. No `width` any more, only `minWidth`: the cell's actual
-      // width now comes from filling whatever its ancestor chain hands it (see the trigger's
-      // `w-full` below), and `data-preset-name-cell` is the hook lib/presetNameWidth's live
-      // measurement reads off THIS exact element via PRESET_NAME_CELL_SELECTOR.
-      <span
-        className="flex items-center"
-        style={{ minWidth: PRESET_NAME_COL }}
-        data-preset-name-cell="true"
-      >
-        {/* `truncate` (overflow-hidden + ellipsis + nowrap) goes on the NAME, not on the cell: a
-            flex container's own text-overflow never fires, because the ellipsis rule applies to a
-            block box's inline content and this box's children are flex items. Put it here and the
-            name shortens with a real "…" while the marker beside it stays put.
-            ⚠⚠ THE ELLIPSIS STAYS UNCONDITIONALLY, even with a live typing-time cap in front of it
-            (lib/presetNameWidth) — argued at length in components/PresetManager, where that cap is
-            actually applied. Short version: a typing-time cap can only promise "fit under THESE
-            conditions at the moment typed", never "fits forever" — the live site and staging share
-            one origin with proven build-skew bugs already, the switcher's own width can change
-            after typing (a rotation, a text-size accessibility setting, a viewport resize), and a
-            canvas measurement is not bit-for-bit identical to this element's own DOM layout. This
-            is the safety net that makes all three survivable instead of an overflowing name. */}
-        <span className="truncate">{p.name}</span>
-        {p.amnesic && (
-          <>
-            {/* ml-auto is the right-alignment: it eats the cell's leftover space, so the marker sits
-                on the cell's right edge and — because every cell is the same width — the markers
-                line up as a column down the menu. shrink-0 keeps the name, never the marker, as the
-                thing that gives way when a name is too long. */}
-            <span
-              aria-hidden="true"
-              className="ml-auto shrink-0 pl-1.5 text-[0.8em] font-semibold leading-none opacity-70"
-            >
-              A
-            </span>
-            <span className="sr-only">, amnesic</span>
-          </>
-        )}
-      </span>
-    ),
+    label: <PresetOptionLabel preset={p} />,
   }))
   return (
     <CustomSelect

@@ -27,6 +27,8 @@ import { UpdateDot } from './UpdateDot.jsx'
 import DefaultsCard from './DefaultsCard.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
 import PresetManager from './PresetManager.jsx'
+import CustomSelect from './CustomSelect.jsx'
+import { PresetOptionLabel } from './PresetSwitcher.jsx'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { useBackButton } from './useBackButton.js'
 import {
@@ -253,12 +255,14 @@ export function SettingsPanel({
   // and written through store/presetControl like the amnesic flag above. NOT captured by Save
   // Defaults (no registry field is in any snapshot). The picker offers "Last used" plus one entry
   // per preset; a fresh app open then lands in the pinned preset, or in whatever was active last
-  // time when it is 'last'. Options rebuild when the preset list changes (rename / add / delete).
+  // time when it is 'last'. Options rebuild when the preset list changes (rename / add / delete),
+  // and each preset is drawn by components/PresetSwitcher's PresetOptionLabel — the same row the
+  // top-bar switcher draws, truncation and amnesic "A" included, because it is the same list.
   const presetList = usePresets((s) => s.presets)
   const openInPreset = usePresets((s) => s.openInPreset)
   const openInOptions = [
     { value: 'last', label: 'Last used' },
-    ...presetList.map((p) => ({ value: String(p.id), label: p.name })),
+    ...presetList.map((p) => ({ value: String(p.id), label: <PresetOptionLabel preset={p} /> })),
   ]
   const openInValue = openInPreset === 'last' ? 'last' : String(openInPreset)
   const changeOpenIn = (v: string) => setOpenInPreset(v === 'last' ? 'last' : Number(v))
@@ -1024,14 +1028,44 @@ export function SettingsPanel({
             </div>
             {/* OPEN IN (round-21 Q3) — where a fresh app open lands. "Last used" is today's
                 behaviour (the preset that was active when the app last closed); pick a preset to
-                pin it instead. A PillTray of "Last used" + one segment per preset, following THE
-                PICKER RULE below; the segment list rebuilds when presets are renamed / added /
-                removed. NOT captured by Save Defaults (it is global — see store/presetControl's
-                setOpenInPreset). */}
+                pin it instead. NOT captured by Save Defaults (it is global — see
+                store/presetControl's setOpenInPreset).
+                ★★ A DROPDOWN, NOT A TRAY, SINCE ROUND 23 (Q8) — the one exception THE PICKER RULE
+                below now names, and the reason is that presets are UNLIMITED. A tray has one segment
+                per option, so its height grew with the preset count, and pill rows were rejected
+                outright: at 10 presets there are 11 options, and any fixed per-row count leaves a lone
+                orphan on the last row. The owner's requirement was that this control "should stay
+                the same height", so the list lives in a panel that FLOATS over the ⚙ card (nothing in
+                it moves when the list opens) and the closed trigger is one row whose height no
+                preset count can change. It is the SAME control as the top-bar preset switcher —
+                components/CustomSelect, the same list drawn by the same PresetOptionLabel — so it is
+                learned once. A popup (scrim + card) was considered and turned down: heavier than
+                "pick one from a list".
+                • CustomSelect HOLDS THE ⚙ CARD'S SCROLL REGION STILL while this list is open — its
+                  panel is fixed to where the trigger was when it opened, so the trigger must not move
+                  (CustomSelect's caller contract, whose second route this is the first user of).
+                • No pressDrag: this trigger is not the start of a gesture. A press-drag from the ⚙
+                  that releases HERE clicks it, which opens the list rather than picking from it —
+                  the owner accepted that cost; it is the Year Range boxes' pattern (release, then
+                  type). And because that click must not take the panel down with it (the card is
+                  data-drag-dismiss, like the Manage Presets button below), the wrapper carries
+                  data-drag-stay — without it the release would open the list and close the panel
+                  that holds it in the same breath.
+                • The trigger wears the tray's own housing (border, surface-tray, rounded-xl, the
+                  text-xs control tier) so it sits in this panel's rhythm at the height the tray's
+                  single row had; the ▲▼ chevron is the switcher's, and says "this opens a list". */}
             <div className="text-xs text-(--tx-200-80) pt-1">Open in</div>
-            <PillGroup label="Open in">
-              <PillTray value={openInValue} onChange={changeOpenIn} options={openInOptions} />
-            </PillGroup>
+            <div data-drag-stay>
+              <CustomSelect
+                value={openInValue}
+                onChange={changeOpenIn}
+                options={openInOptions}
+                ariaLabel="Open in"
+                showChevron
+                dropdownWidth="match-trigger"
+                className="w-full min-w-0 border surface-tray rounded-xl px-3 py-1.5 pr-6 text-xs font-medium text-left text-(--tx-100-80) focus:outline-hidden focus-ring"
+              />
+            </div>
             {/* ⚠⚠ data-drag-stay, AND IT IS NOT DECORATION — IT IS WHAT MAKES THIS BUTTON WORK AT
                 ALL FROM THE GESTURE THE OWNER USES MOST. The ⚙ card is data-drag-dismiss, so a
                 press-drag that starts on the gear and releases on a control inside it clicks the
@@ -1140,7 +1174,10 @@ export function SettingsPanel({
                 like the in-game rows that are genuinely INDEPENDENT toggles (Allow Mistakes,
                 One-by-One), which is the confusion the rule exists to remove. Round-8 had trays on
                 Date Format and Theme only; round-9 converted the two hold-outs (Input, and the
-                three chance rows) — so the panel is now trays and switches, nothing else.
+                three chance rows) — so the panel is now trays and switches, with ONE exception:
+                  • DROPDOWN — a choice among an OPEN-ENDED list, whose length the player decides.
+                    Exactly one: "Open in" (round 23, Q8), because presets are unlimited and a tray
+                    grows a segment per option. It is argued at the control, above.
                 Caption hierarchy (already correct, don't disturb it): the setting NAME is a
                 left-aligned sentence-case sub-label; FAMILY captions are centred uppercase
                 SectionLabels — tier 3 of the panel's three-tier heading rule, stated in
