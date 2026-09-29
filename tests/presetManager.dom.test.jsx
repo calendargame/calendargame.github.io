@@ -716,6 +716,24 @@ describe('reordering', () => {
       expect(rowOf('Timed').className).not.toMatch(/row-lifted/)
     })
 
+    // ★ A move or a lift can arrive before the render that follows the press. Found in real
+    // Chromium: a press and its first moves dispatched in ONE task moved nothing, because the
+    // handlers read the rendered drag, which did not exist yet. They read the live one now.
+    it('a press, a move and a lift in one task still reorder — nothing waits for a render', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed'])
+      const handle = reorderHandle('Preset 1')
+      act(() => {
+        handle.dispatchEvent(pointerEvt('pointerdown', 20))
+        handle.dispatchEvent(pointerEvt('pointermove', 61))
+        handle.dispatchEvent(pointerEvt('pointerup', 61))
+      })
+      expect(listedNames()).toEqual(['Timed', 'Preset 1'])
+    })
+
     it('a non-primary pointer (a second finger) cannot start a drag', () => {
       act(() => {
         createPreset('Timed')

@@ -650,9 +650,15 @@ export default function PresetManager({
     })
   }
 
+  // ⚠ BOTH POINTER HANDLERS READ THE DRAG THROUGH dragRef, NOT THE RENDERED `drag`. A handler's
+  // `drag` is whatever the last render saw, and a move or a lift can arrive before the render that
+  // follows the press has happened — the handler would then see no drag at all and drop the event
+  // (verified in real Chromium: a press and its first moves dispatched in one task moved nothing).
+  // The ref is written in the same breath as the state (applyDrag), so it is never behind.
   const onDragMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag || e.pointerId !== drag.pointerId) return
-    applyDrag(dragFrame(drag, e.clientY))
+    const d = dragRef.current
+    if (!d || e.pointerId !== d.pointerId) return
+    applyDrag(dragFrame(d, e.clientY))
   }
 
   // A scroll the drag did not cause itself — a mouse wheel turned mid-drag, say — moves the content
@@ -669,7 +675,8 @@ export default function PresetManager({
   // preview currently sits either way, so a cancelled drag still lands where it was visually
   // headed rather than silently reverting.
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag || e.pointerId !== drag.pointerId) return
+    const d = dragRef.current
+    if (!d || e.pointerId !== d.pointerId) return
     // Same try/catch as setPointerCapture above and for the identical reason: releasing a capture
     // that was never actually granted (the throw above, or a capture the browser already dropped
     // on its own — losing capture mid-gesture is a real, documented case, not hypothetical) would
@@ -680,7 +687,7 @@ export default function PresetManager({
     } catch {
       /* nothing to release */
     }
-    for (const step of stepsToReorder(drag.startIndex, drag.previewIndex)) movePreset(drag.id, step)
+    for (const step of stepsToReorder(d.startIndex, d.previewIndex)) movePreset(d.id, step)
     applyDrag(null)
   }
 
