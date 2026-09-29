@@ -41,7 +41,9 @@
 /**
  * Which slot the dragged row's current CENTER falls into, given the vertical centers every row
  * occupied at the moment the drag started — ascending, top to bottom, one entry per row in its
- * PRE-drag order (index i is where the row that started at position i was centered on screen).
+ * PRE-drag order (index i is where the row that started at position i was centered). Any one
+ * coordinate space will do so long as `centerY` is in the same one — the caller uses the list's
+ * scrollable CONTENT (see clampDragCenter).
  * Returns the index of the first slot the dragged row's center has REACHED (at-or-before it);
  * once it has passed every one of them, the last index (moving it there needs nothing to compare
  * past the final slot).
@@ -113,4 +115,67 @@ export function previewShift(
 export function averageRowHeight(slotMidpoints: readonly number[]): number {
   const n = slotMidpoints.length
   return n > 1 ? (slotMidpoints[n - 1] - slotMidpoints[0]) / (n - 1) : 0
+}
+
+/**
+ * Where the dragged row's CENTER may actually be drawn, given where the pointer would put it
+ * (`centerY`) — Q7, round 23, the fix for a dragged row that escaped the list. Every number is in
+ * the list's own CONTENT coordinates (0 = the top of the scrollable content, not of the screen),
+ * the same space `slotMidpoints` is captured in.
+ *
+ * Two bounds, applied in this order:
+ *   1. THE LIST'S OWN SLOTS. A row can only ever land between the first slot and the last, so there
+ *      is nothing for it to be dragged toward beyond them — and drawing it there is exactly the bug
+ *      the owner photographed: the row sliding up over the Presets popup's description text, or
+ *      down past the list's foot. Clamping the CENTER to the first/last slot's center keeps the row
+ *      inside the band the list itself occupies.
+ *   2. THE PART OF THE LIST THAT IS ON SCREEN (`visibleTop`/`visibleBottom`, i.e. scrollTop and
+ *      scrollTop + clientHeight). Unlimited presets (Q8) make a list taller than its scroll region
+ *      the ordinary case, and a row dragged past the region's edge would be clipped out of sight
+ *      while it was still in the player's hand. So it stops, whole, at the edge — `halfRow` in from
+ *      it — and the edge auto-scroll (autoScrollDirection below) brings the rest of the list to it,
+ *      the way iOS's own reorder lists behave.
+ *      ⚠ SKIPPED WHEN THE REGION CANNOT HOLD ONE WHOLE ROW (visibleBottom − visibleTop < 2·halfRow),
+ *      where "fully visible" has no answer at all. No real layout of this card gets there (the list
+ *      is at least one row tall by construction); it is the honest answer rather than an inverted
+ *      range, and it is also what a layout-free test environment reports (every size 0).
+ * The slot bound wins wherever the two disagree: it is the one that is about the list's meaning.
+ */
+export function clampDragCenter(
+  centerY: number,
+  slotMidpoints: readonly number[],
+  visibleTop: number,
+  visibleBottom: number,
+  halfRow: number,
+): number {
+  const first = slotMidpoints[0] ?? centerY
+  const last = slotMidpoints[slotMidpoints.length - 1] ?? centerY
+  let y = centerY
+  if (visibleBottom - visibleTop >= 2 * halfRow) {
+    y = Math.min(Math.max(y, visibleTop + halfRow), visibleBottom - halfRow)
+  }
+  return Math.min(Math.max(y, first), last)
+}
+
+/**
+ * Which way (if any) a drag should auto-scroll the list this frame: −1 up, 1 down, 0 not at all.
+ * `pointerY`/`startY` are the pointer's current and starting VIEWPORT y; `inBand` is lib/
+ * pointerGestures' bandDirection for the list's own rect — the SAME edge band and the same speed
+ * curve the ⚙ panel's press-drag auto-scroll uses, so the two scrolling drags in this app feel alike.
+ *
+ * ★ A BAND ONLY COUNTS IN THE DIRECTION THE FINGER HAS TRAVELLED. The band is 56px deep, which on a
+ * phone is well over a row: grab the TOP visible row and your finger is already inside the top band
+ * before it has moved at all. Honouring the band on its own would start scrolling the list upward
+ * the instant you pressed — the list sliding away under a row you meant to drag DOWN. So the top
+ * band engages only once the pointer is above where it started, and the bottom band only once it is
+ * below.
+ */
+export function autoScrollDirection(
+  pointerY: number,
+  startY: number,
+  inBand: -1 | 0 | 1,
+): -1 | 0 | 1 {
+  if (inBand < 0 && pointerY < startY) return -1
+  if (inBand > 0 && pointerY > startY) return 1
+  return 0
 }

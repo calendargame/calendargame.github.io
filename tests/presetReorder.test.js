@@ -11,6 +11,8 @@ import {
   stepsToReorder,
   previewShift,
   averageRowHeight,
+  clampDragCenter,
+  autoScrollDirection,
 } from '../src/lib/presetReorder.js'
 
 describe('targetIndexForCenter(centerY, slotMidpoints)', () => {
@@ -144,5 +146,59 @@ describe('averageRowHeight(slotMidpoints)', () => {
 
   it('handles a descending (reverse-order) list the same way — the span, not a sign assumption', () => {
     expect(averageRowHeight([150, 50])).toBe(-100)
+  })
+})
+
+// ── Q7, round 23: where the dragged row may be DRAWN ─────────────────────────────────────────────
+describe('clampDragCenter(centerY, slotMidpoints, visibleTop, visibleBottom, halfRow)', () => {
+  // Five 40px rows, centers 20 … 180, in content coordinates.
+  const slots = [20, 60, 100, 140, 180]
+
+  it('passes a center that is already inside the list straight through', () => {
+    expect(clampDragCenter(85, slots, 0, 1000, 20)).toBe(85)
+  })
+
+  // ★ THE OWNER'S BUG: the row escaped the list — up over the popup's description, down past its
+  // foot. The row's center can never go past the first or last slot's center.
+  it('never lets the row past the FIRST slot or the LAST slot, however far the pointer goes', () => {
+    expect(clampDragCenter(-500, slots, 0, 1000, 20)).toBe(20)
+    expect(clampDragCenter(5000, slots, 0, 1000, 20)).toBe(180)
+  })
+
+  it('keeps the whole row inside the part of the list on screen', () => {
+    // Showing content 60 … 140 (scrolled 60, 80px tall): a 40px row's center lives in 80 … 120.
+    expect(clampDragCenter(20, slots, 60, 140, 20)).toBe(80)
+    expect(clampDragCenter(180, slots, 60, 140, 20)).toBe(120)
+    expect(clampDragCenter(100, slots, 60, 140, 20)).toBe(100)
+  })
+
+  it('the slot bound wins where the two disagree', () => {
+    // Visible 0 … 400 would allow 20 … 380, but the last slot is 180.
+    expect(clampDragCenter(390, slots, 0, 400, 20)).toBe(180)
+  })
+
+  it('ignores a region too short to hold one whole row, rather than inverting the range', () => {
+    // 0 … 0 is what a layout-free environment reports; only the slot bound applies.
+    expect(clampDragCenter(85, slots, 0, 0, 20)).toBe(85)
+    expect(clampDragCenter(900, slots, 0, 0, 20)).toBe(180)
+  })
+})
+
+describe('autoScrollDirection(pointerY, startY, inBand)', () => {
+  // ★ Grab the TOP visible row and the finger is already in the top band before it has moved.
+  // A band only counts in the direction the finger has travelled, so that press does not start the
+  // list scrolling away under a row about to be dragged DOWN.
+  it('a band only counts in the direction the finger has travelled', () => {
+    expect(autoScrollDirection(100, 100, -1)).toBe(0) // pressed in the top band, not moved
+    expect(autoScrollDirection(110, 100, -1)).toBe(0) // moving DOWN inside the top band
+    expect(autoScrollDirection(90, 100, -1)).toBe(-1) // moved up into it
+    expect(autoScrollDirection(500, 500, 1)).toBe(0)
+    expect(autoScrollDirection(490, 500, 1)).toBe(0)
+    expect(autoScrollDirection(510, 500, 1)).toBe(1)
+  })
+
+  it('outside both bands, never', () => {
+    expect(autoScrollDirection(10, 300, 0)).toBe(0)
+    expect(autoScrollDirection(900, 300, 0)).toBe(0)
   })
 })

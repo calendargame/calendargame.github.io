@@ -19,7 +19,10 @@ import {
   stepsToReorder,
   previewShift,
   averageRowHeight,
+  clampDragCenter,
+  autoScrollDirection,
 } from '../lib/presetReorder.js'
+import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 
 // ============================================================
 // PresetManager — the card behind the ⚙ menu's "Manage Presets" button: make a preset, rename one,
@@ -457,12 +460,23 @@ export default function PresetManager({
   // at rest and one that might disagree with the others. Every row's transform and every pointer
   // handler below reads this one value directly rather than juggling several booleans.
   //
-  // `slotMidpoints[i]` is the vertical center the row THAT STARTED AT INDEX i occupied at the
-  // moment the drag began — captured ONCE, from a getBoundingClientRect() on every row, and never
-  // re-measured mid-drag. That is lib/presetReorder's contract for targetIndexForCenter and
-  // previewShift, and it is correct for the whole gesture only because nothing moves in the DOM's
-  // actual flow while a drag is in flight (that file's own header comment argues why the model
-  // commits once, at the finger-lift, rather than rewriting the list live).
+  // ★★ EVERY VERTICAL NUMBER IN IT IS IN THE LIST'S CONTENT COORDINATES (Q7, round 23) — 0 at the
+  // top of the scrollable content, not of the screen — except the two pointer readings, which are
+  // viewport y because that is what a pointer event reports. It used to be viewport y throughout,
+  // which was only correct while the list could not scroll mid-drag. Unlimited presets (Q8) make a
+  // list taller than its region the ordinary case, and the drag now scrolls it (the edge auto-scroll
+  // below), so "where is the row" has to be measured against the content, which is what the row's
+  // own transform is relative to. `startScrollTop` is what turns a pointer delta into a content
+  // delta: every pixel the list has scrolled since the grab is a pixel the pointer has effectively
+  // travelled through the list.
+  //
+  // `slotMidpoints[i]` is the vertical center the row THAT STARTED AT INDEX i occupies in the
+  // content — captured ONCE, from a getBoundingClientRect() on every row, and never re-measured
+  // mid-drag. That is lib/presetReorder's contract for targetIndexForCenter and previewShift, and it
+  // is correct for the whole gesture only because nothing moves in the DOM's actual flow while a
+  // drag is in flight (that file's own header comment argues why the model commits once, at the
+  // finger-lift, rather than rewriting the list live) — and, since the numbers are content
+  // coordinates, a scroll does not move them either.
   //
   // `pointerId` latches the gesture the same way lib/pointerGestures and CustomSelect's pressDrag
   // latch theirs: onPointerMove/onPointerUp/onPointerCancel below all ignore any pointer id but
@@ -474,16 +488,96 @@ export default function PresetManager({
     startIndex: number
     previewIndex: number
     slotMidpoints: number[]
+    halfRow: number
     startPointerY: number
+    pointerY: number
+    startScrollTop: number
     transformY: number
   }
   const [drag, setDrag] = useState<DragState | null>(null)
+  // The same value, readable from the auto-scroll loop below — a rAF callback closes over the render
+  // that started it, so it needs a ref to see the drag as it is NOW. Written only through applyDrag,
+  // so the two can never disagree.
+  const dragRef = useRef<DragState | null>(null)
+  const applyDrag = (next: DragState | null) => {
+    dragRef.current = next
+    setDrag(next)
+  }
 
   // One ref per row, keyed by the preset's ID rather than its index — an index is exactly what a
   // reorder changes, and a ref keyed by the wrong thing would measure the wrong row on the NEXT
   // drag's pointerdown. The callback ref below adds/removes its own entry, so a deleted preset's
   // detached node cannot linger in the map.
   const rowRefs = useRef(new Map<number, HTMLDivElement>())
+
+  // ★ WHERE THE DRAGGED ROW IS DRAWN, for a pointer at viewport y `pointerY` — the one place the
+  // pointer, the list's scroll position and lib/presetReorder's clamp meet. The row follows the
+  // finger exactly, EXCEPT that clampDragCenter keeps it between the first and last slot (the fix
+  // for the row escaping the list, over the description above it and past the foot below) and
+  // wholly inside the part of the list on screen (so a long list never clips it out of the hand).
+  const dragFrame = (d: DragState, pointerY: number): DragState => {
+    const list = listRef.current
+    const scrollTop = list?.scrollTop ?? 0
+    const startCenter = d.slotMidpoints[d.startIndex]
+    const wanted = startCenter + (pointerY - d.startPointerY) + (scrollTop - d.startScrollTop)
+    const center = clampDragCenter(
+      wanted,
+      d.slotMidpoints,
+      scrollTop,
+      scrollTop + (list?.clientHeight ?? 0),
+      d.halfRow,
+    )
+    return {
+      ...d,
+      pointerY,
+      transformY: center - startCenter,
+      previewIndex: targetIndexForCenter(center, d.slotMidpoints),
+    }
+  }
+
+  // ★ THE EDGE AUTO-SCROLL — hold the row near the top or bottom of the list and the list scrolls
+  // toward it, which is the only way a row can travel further than one screenful now that there is
+  // no limit on how many presets there are. Same band and same speed curve as the ⚙ panel's
+  // press-drag auto-scroll (lib/pointerGestures' bandDirection / scrollDelta), so the app has one
+  // feel for "drag to the edge and it scrolls"; lib/presetReorder's autoScrollDirection adds the one
+  // rule a reorder needs on top (a band only counts in the direction the finger has travelled).
+  // A rAF loop rather than pointermove, because a finger held still at the edge sends no events and
+  // the list must keep scrolling anyway. It exists only while a drag does, and it scrolls only a
+  // list that has somewhere to scroll — a short list (or a layout-free test environment) never moves.
+  // After each step it re-draws the row at once, from the new scrollTop, so the row stays glued to
+  // the finger in the same frame the content moved under it (waiting for the resulting scroll event
+  // would draw it a frame late — a visible shiver while the list runs).
+  const dragging = drag !== null
+  useEffect(() => {
+    if (!dragging) return
+    let raf = 0
+    let prevTs: number | null = null
+    const tick = (ts: number) => {
+      const d = dragRef.current
+      const list = listRef.current
+      if (d && list && list.scrollHeight > list.clientHeight + 1) {
+        const r = list.getBoundingClientRect()
+        const dir = autoScrollDirection(
+          d.pointerY,
+          d.startPointerY,
+          bandDirection(d.pointerY, r.top, r.bottom),
+        )
+        if (dir !== 0) {
+          const dt = prevTs == null ? 0 : ts - prevTs
+          prevTs = ts
+          list.scrollTop +=
+            dir * scrollDelta(dt, dir < 0 ? d.pointerY - r.top : r.bottom - d.pointerY)
+          applyDrag(dragFrame(d, d.pointerY))
+        } else prevTs = null
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+    // Keyed on whether a drag exists, not on the drag itself: the loop reads the live one through
+    // dragRef, so restarting it on every pointermove would only reset its frame clock.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging])
 
   const beginDrag = (p: Preset, index: number) => (e: ReactPointerEvent<HTMLDivElement>) => {
     // Mirrors CustomSelect's pressDrag guard verbatim (same primitive, same reasoning, see that
@@ -493,18 +587,16 @@ export default function PresetManager({
     // Native capture: once set, this exact element keeps receiving THIS pointerId's move/up
     // events even after the finger drifts off it, which is what lets onPointerMove stay attached
     // to the handle itself rather than to `window`. Optional-chained because jsdom has no
-    // implementation to call — there is nothing DOM-layout-dependent about the guard above it,
-    // which is what the unit tests below actually exercise.
+    // implementation to call.
     // ⚠ ALSO try/catch'd, matching this app's own idiom for a browser call that can throw rather
     // than quietly no-op (store/amnesic's openSessionStorage, lib/presetNameWidth's canvas guard,
     // presetScopedStorage's own localStorage try — this is the same shape of defensiveness applied
     // to a browser API instead of storage). setPointerCapture throws `NotFoundError` for a pointer
-    // id the browser does not currently recognise as active; the drag has already been armed above
-    // (the guard on line 377 already refused anything but a genuine primary press), so a throw here
-    // is not a reason to abandon the gesture — it only means capture did not take, and the drag
-    // continues on whatever ambient bubbling still reaches this handler. Never observed from a real
-    // press in this round's device-stand-in testing; guarded anyway; the identical reasoning is
-    // below at releasePointerCapture.
+    // id the browser does not currently recognise as active; the drag has already been armed by
+    // the guard above (which refused anything but a genuine primary press), so a throw here is not
+    // a reason to abandon the gesture — it only means capture did not take, and the drag continues
+    // on whatever ambient bubbling still reaches this handler. Never observed from a real press;
+    // guarded anyway; the identical reasoning is below at releasePointerCapture.
     try {
       e.currentTarget.setPointerCapture?.(e.pointerId)
     } catch {
@@ -514,43 +606,51 @@ export default function PresetManager({
     // suspenders with the handle's own touch-action:none.
     // ⚠⚠ AND IT TAKES THE ELEMENT'S OWN FOCUS-ON-POINTERDOWN WITH IT, VERIFIED ON A REAL BROWSER
     // RATHER THAN ASSUMED — jsdom has no notion of "default browser behaviour" for a pointerdown
-    // to suppress, so this could not have been caught by the suite above; only a real Chromium
-    // instance (this round's on-device stand-in, see the file header) showed it: preventDefault on
-    // pointerdown ALSO cancels the browser's own "focus this on press" behaviour for anything that
-    // is not a native form control, which a `role="button"` div is not exempt from. Without the
-    // explicit focus() below, a real drag (mouse or touch) would end with the handle un-focused —
-    // silently breaking the "focus survives a reorder" accessibility claim above for every route
-    // EXCEPT the keyboard one (Tab already focuses it, so the tests above never exercised a press
-    // starting from unfocused). Calling focus() here is unaffected by preventDefault — only the
-    // browser's OWN implicit behaviour was ever suppressed, never a programmatic call.
+    // to suppress, so this could not have been caught by the suite; only a real Chromium instance
+    // showed it: preventDefault on pointerdown ALSO cancels the browser's own "focus this on press"
+    // behaviour for anything that is not a native form control, which a `role="button"` div is not
+    // exempt from. Without the explicit focus() below, a real drag (mouse or touch) would end with
+    // the handle un-focused — silently breaking the "focus survives a reorder" accessibility claim
+    // for every route EXCEPT the keyboard one. Calling focus() here is unaffected by preventDefault
+    // — only the browser's OWN implicit behaviour was ever suppressed, never a programmatic call.
     e.currentTarget.focus()
     e.preventDefault()
+    // Every row's center, converted from the viewport to the list's content coordinates (the ★★
+    // above): minus the list's own top, plus how far it is already scrolled.
+    const list = listRef.current
+    const listTop = list?.getBoundingClientRect().top ?? 0
+    const scrollTop = list?.scrollTop ?? 0
     const slotMidpoints = presets.map((preset) => {
       const rect = rowRefs.current.get(preset.id)?.getBoundingClientRect()
-      return rect ? (rect.top + rect.bottom) / 2 : 0
+      return rect ? (rect.top + rect.bottom) / 2 - listTop + scrollTop : 0
     })
-    setDrag({
+    const ownRect = rowRefs.current.get(p.id)?.getBoundingClientRect()
+    applyDrag({
       id: p.id,
       pointerId: e.pointerId,
       startIndex: index,
       previewIndex: index,
       slotMidpoints,
+      halfRow: ownRect ? ownRect.height / 2 : 0,
       startPointerY: e.clientY,
+      pointerY: e.clientY,
+      startScrollTop: scrollTop,
       transformY: 0,
     })
   }
 
   const onDragMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drag || e.pointerId !== drag.pointerId) return
-    const transformY = e.clientY - drag.startPointerY
-    // The dragged row's CURRENT center — its start center plus how far it has moved — never the
-    // raw pointer position, per targetIndexForCenter's contract.
-    const currentCenter = drag.slotMidpoints[drag.startIndex] + transformY
-    setDrag({
-      ...drag,
-      transformY,
-      previewIndex: targetIndexForCenter(currentCenter, drag.slotMidpoints),
-    })
+    applyDrag(dragFrame(drag, e.clientY))
+  }
+
+  // A scroll the drag did not cause itself — a mouse wheel turned mid-drag, say — moves the content
+  // under a row that is glued to the pointer, so the row is re-drawn from the new scrollTop exactly
+  // as a pointer move would re-draw it. (The auto-scroll above re-draws in the same frame it
+  // scrolls, so its own scroll events arrive here with nothing left to change.)
+  const onListScroll = () => {
+    const d = dragRef.current
+    if (d) applyDrag(dragFrame(d, d.pointerY))
   }
 
   // One handler for both a real release and a system-cancelled gesture (the pointer became a
@@ -570,7 +670,7 @@ export default function PresetManager({
       /* nothing to release */
     }
     for (const step of stepsToReorder(drag.startIndex, drag.previewIndex)) movePreset(drag.id, step)
-    setDrag(null)
+    applyDrag(null)
   }
 
   // The keyboard path — unchanged in spirit from the ↑/↓ buttons it replaces, just moved onto the
@@ -677,6 +777,7 @@ export default function PresetManager({
       </div>
       <div
         ref={listRef}
+        onScroll={onListScroll}
         className={`${SCROLL_REGION_CLASS} max-h-[45vh] space-y-2 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
       >
         {presets.map((p, i) => (
@@ -702,13 +803,16 @@ export default function PresetManager({
             }
           >
             <div
-              className={`flex items-center gap-1 ${
-                // A small lift while THIS row is the one being dragged — existing shadow token
-                // (index.css's elev-shadow-down, the app's one "elevated above the surface" cue,
-                // reused rather than a bespoke box-shadow) plus a hair of scale. Both device-only
-                // to confirm: jsdom lays nothing out, so only the owner's iPhone can say whether
-                // this reads as "lifted" rather than merely "shifted".
-                drag?.id === p.id ? 'elev-shadow-down rounded-xl scale-[1.02]' : ''
+              className={`flex items-center gap-1 rounded-xl ${
+                // THE LIFT while THIS row is the one being dragged (Q7, round 23): index.css's
+                // .row-lifted — the card's own fill, so the rows sliding underneath do not show
+                // through the gaps between its controls, and ONE soft all-round shadow. It sits on
+                // THIS element, the controls' own box, rounded to the controls' own radius, so the
+                // lifted shape is the row itself. What it replaced drew the directional
+                // elev-shadow-down (a scroll-BOUNDARY cue whose negative spread leaves the side edges
+                // as slivers) plus a 2% scale that pushed the row out past its own lane — the "white
+                // band with stray shadow edges" the owner photographed.
+                drag?.id === p.id ? 'row-lifted' : ''
               }`}
             >
               {/* THE CURRENT-PRESET MARK, in a reserved fixed-width slot so every name box starts at

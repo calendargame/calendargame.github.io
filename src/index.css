@@ -480,6 +480,15 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .elev-shadow-down{box-shadow:0 4px 6px -2px rgb(var(--shadow-elev-c) / calc(var(--shadow-elev-a) * var(--shade,1)))}
 .elev-shadow-up{box-shadow:0 -4px 6px -2px rgb(var(--shadow-elev-c) / calc(var(--shadow-elev-a) * var(--shade,1)))}
 .card{background:var(--card-bg);border:1px solid var(--card-bd)}
+/* THE LIFTED ROW (Q7, round 23) — the Presets popup's row while it is being dragged by its grip
+   (components/PresetManager). The card's own fill, so the rows sliding underneath cannot show
+   through the gaps between its controls, and ONE soft, even shadow on every side — the "picked up"
+   cue, which is a different thing from elev-shadow-down's "content slides under this fixed edge"
+   and so does not borrow it (that one is directional, with a negative spread that leaves only
+   slivers at the sides, and it scales with --shade, a scroll signal that means nothing here). The
+   theme's own shadow colour and strength, so the violet-glow themes lift in violet like every other
+   elevation in them. */
+.row-lifted{background:var(--card-bg);box-shadow:0 3px 12px rgb(var(--shadow-elev-c) / var(--shadow-elev-a))}
 .panel{background:var(--panel-bg);border:1px solid var(--panel-bd)}
 .thin{border:1px solid var(--thin-bd)}
 /* ★ THE .2s BACKGROUND FADE — the app's three interactive surfaces (these two + .btn-solid below)

@@ -620,6 +620,49 @@ describe('reordering', () => {
       expect(listedNames()).toEqual(['Timed', 'Preset 1'])
     })
 
+    // ★ Q7, round 23 — THE DRAGGED ROW STAYS INSIDE THE LIST. The owner's screenshots showed it
+    // sliding up over the popup's description and down past the list's foot. The row is drawn at
+    // most as far as the first / last slot, however far the finger goes.
+    const transformOf = (name) => rowOf(name).parentElement.style.transform
+    it('the dragged row never travels past the first or last slot', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed', 'Guest'])
+      const handle = reorderHandle('Timed') // center 60; the slots run 20 … 100
+      act(() => handle.dispatchEvent(pointerEvt('pointerdown', 60)))
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', -400)))
+      expect(transformOf('Timed')).toBe('translateY(-40px)') // parked on slot 0, not 460px up
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', 900)))
+      expect(transformOf('Timed')).toBe('translateY(40px)') // parked on the last slot
+      act(() => handle.dispatchEvent(pointerEvt('pointerup', 900)))
+      expect(listedNames()).toEqual(['Preset 1', 'Guest', 'Timed'])
+      expect(transformOf('Timed')).toBe('translateY(0px)')
+    })
+
+    // ★ THE LIFT IS ONE CLASS ON THE ROW'S OWN BOX (index.css .row-lifted: the card's fill + one
+    // even shadow), worn only mid-drag. The old lift — a directional boundary shadow plus a scale —
+    // is what drew the owner's "white band with stray shadow edges"; neither may come back.
+    it('the row being dragged wears the lift, and only while it is being dragged', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed'])
+      const handle = reorderHandle('Timed')
+      expect(rowOf('Timed').className).not.toMatch(/row-lifted/)
+      act(() => handle.dispatchEvent(pointerEvt('pointerdown', 60)))
+      expect(rowOf('Timed').className).toMatch(/row-lifted/)
+      expect(rowOf('Preset 1').className).not.toMatch(/row-lifted/)
+      for (const el of [rowOf('Timed'), rowOf('Timed').parentElement]) {
+        expect(el.className).not.toMatch(/elev-shadow|scale-/)
+      }
+      act(() => handle.dispatchEvent(pointerEvt('pointerup', 60)))
+      expect(rowOf('Timed').className).not.toMatch(/row-lifted/)
+    })
+
     it('a non-primary pointer (a second finger) cannot start a drag', () => {
       act(() => {
         createPreset('Timed')
