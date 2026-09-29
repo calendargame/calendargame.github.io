@@ -277,14 +277,96 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
     expect(useProgress.getState().stats.classic.played).toBe(1)
   })
 
-  it('the solve-times rolling cap holds on the WRITE path (storage stays bounded)', () => {
-    const times = Array.from({ length: 1500 }, (_, i) => i)
+  // ★ EVERY SOLVE TIME IS KEPT (round 23 Q3). This case used to pin the opposite — a 1,000-time
+  // rolling window on the write path — and that window was the bug: it trimmed the saved times while
+  // the correct-answer count kept growing, so after a reload `good !== times.length` was true for
+  // every player past 1,000 timed answers (a false "Enable and Reset Stats?") and a reloaded Mean
+  // averaged a different set of solves than the one on screen a moment earlier.
+  it('every solve time is kept on the WRITE path — nothing is trimmed', () => {
+    const times = Array.from({ length: 1500 }, (_, i) => i / 10)
     useProgress
       .getState()
       .setModeStats('classic', { played: 1500, good: 1500, streak: 1, best: 1, times })
-    const t = useProgress.getState().stats.classic.times
-    expect(t).toHaveLength(1000) // STATS_TIMES_CAP
-    expect(t[0]).toBe(500) // the most RECENT 1000 are kept
-    expect(t[999]).toBe(1499)
+    expect(useProgress.getState().stats.classic.times).toEqual(times)
+    const saved = JSON.parse(localStorage.getItem('cg-progress-v1'))
+    expect(saved.state.stats.classic.times).toEqual(times)
+  })
+})
+
+// ── v4 → v5: the times the OLD 1,000-cap discarded are recorded once, as a baseline ─────────────
+// A save the old cap trimmed holds exactly 1,000 times and more correct answers than that; the
+// older times are gone for good. So hydration records the gap ONCE (`timesLost`) and the desync
+// check subtracts it — no false popup, ever — and every time from here on is kept.
+describe('progress store — v4 → v5 legacy baseline for saves the 1,000-cap trimmed', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useProgress.getState().resetProgress()
+  })
+  afterEach(() => {
+    localStorage.clear()
+    useProgress.getState().resetProgress()
+  })
+  const t1000 = Array.from({ length: 1000 }, (_, i) => 1 + i / 1000)
+  const seedV4 = (stats) =>
+    localStorage.setItem(
+      'cg-progress-v1',
+      JSON.stringify({ state: { ...makeProgressDefaults(), stats }, version: 4 }),
+    )
+
+  it('a trimmed silo (1,000 times, good > 1,000) gains timesLost = good − 1,000, and is re-saved at v5', async () => {
+    const trimmed = { played: 1600, good: 1500, streak: 3, best: 40, times: t1000 }
+    seedV4({ ...makeProgressDefaults().stats, flash: trimmed })
+    await useProgress.persist.rehydrate()
+    const s = useProgress.getState()
+    expect(s.stats.flash).toEqual({ ...trimmed, timesLost: 500 })
+    expect(s.stats.classic).toEqual(makeProgressDefaults().stats.classic) // untouched silo
+    const saved = JSON.parse(localStorage.getItem('cg-progress-v1'))
+    expect(saved.version).toBe(5)
+    expect(saved.state.stats.flash.timesLost).toBe(500)
+    expect(saved.state.stats.flash.times).toEqual(t1000) // the kept times are NOT rewritten
+  })
+
+  it('an untrimmed silo gains no baseline — its own counts are already exact', async () => {
+    const whole = { played: 900, good: 850, streak: 1, best: 9, times: t1000.slice(0, 840) }
+    const exactly = { played: 1000, good: 1000, streak: 1, best: 9, times: t1000 }
+    seedV4({ ...makeProgressDefaults().stats, classic: whole, dedDay: exactly })
+    await useProgress.persist.rehydrate()
+    const s = useProgress.getState()
+    expect(s.stats.classic).toEqual(whole)
+    expect(s.stats.dedDay).toEqual(exactly)
+  })
+
+  it('a baseline already carried in a v4 payload (an older build re-saved newer data) is kept', async () => {
+    const carried = {
+      played: 800,
+      good: 710,
+      streak: 1,
+      best: 9,
+      times: t1000.slice(0, 400),
+      timesLost: 300,
+    }
+    seedV4({ ...makeProgressDefaults().stats, dedYear: carried })
+    await useProgress.persist.rehydrate()
+    expect(useProgress.getState().stats.dedYear).toEqual(carried)
+  })
+
+  it('an older build re-trimming a silo that already had a baseline: the baseline is the WHOLE gap again', async () => {
+    const retrimmed = { played: 2400, good: 2300, streak: 1, best: 9, times: t1000, timesLost: 500 }
+    seedV4({ ...makeProgressDefaults().stats, classic: retrimmed })
+    await useProgress.persist.rehydrate()
+    expect(useProgress.getState().stats.classic.timesLost).toBe(1300)
+  })
+
+  it('a v5 payload is never re-baselined, whatever its counts', async () => {
+    const v5 = { played: 1600, good: 1500, streak: 3, best: 40, times: t1000 } // a genuine desync
+    localStorage.setItem(
+      'cg-progress-v1',
+      JSON.stringify({
+        state: { ...makeProgressDefaults(), stats: { ...makeProgressDefaults().stats, flash: v5 } },
+        version: 5,
+      }),
+    )
+    await useProgress.persist.rehydrate()
+    expect(useProgress.getState().stats.flash).toEqual(v5)
   })
 })

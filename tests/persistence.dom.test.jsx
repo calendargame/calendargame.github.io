@@ -182,15 +182,15 @@ describe('what you saved is there when you come back', () => {
     expect(back.amnesic).toBe(true)
   })
 
-  // The bounded-payload promise, stated as the player meets it: a long practice history does not
-  // grow the saved copy without limit, and what survives is the RECENT play the averages describe.
-  it('a very long run of solve times comes back capped, keeping the most recent', async () => {
+  // EVERY SOLVE IS KEPT (round 23 Q3), stated as the player meets it: a long practice history comes
+  // back whole, so the all-time Mean and Median a reopened app shows are the ones it showed before.
+  // (This case used to promise the opposite — a capped copy keeping only the most recent solves —
+  // and that cap is what made a reload change the Mean and raise a false "Enable and Reset Stats?".)
+  it('a very long run of solve times comes back whole — every solve, in order', async () => {
     const times = Array.from({ length: 1200 }, (_, i) => i)
-    progress.getState().setModeStats('classic', { ...PLAYED, played: 1200, times })
+    progress.getState().setModeStats('classic', { ...PLAYED, played: 1200, good: 1200, times })
     const fresh = await reopenApp()
-    const back = fresh.progress.getState().stats.classic.times
-    expect(back.length).toBeLessThan(times.length)
-    expect(back[back.length - 1]).toBe(1199) // the newest solve is the one kept
+    expect(fresh.progress.getState().stats.classic.times).toEqual(times)
   })
 })
 

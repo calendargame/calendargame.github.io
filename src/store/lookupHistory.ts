@@ -64,10 +64,11 @@ export interface LookupEntry {
 }
 
 // The Lookup history WINDOW, and the one function that applies it — moved verbatim from
-// store/progress. Newest to the front; past the cap the oldest simply falls off the end, the same
-// bounded-payload rule store/progress' STATS_TIMES_CAP states for solve-times, for the same reason
-// (localStorage — and now sessionStorage too — must not grow without bound across a session). 100
-// entries of {id,y,m,d} is a few KB, in either storage area.
+// store/progress. Newest to the front; past the cap the oldest simply falls off the end, so the
+// payload (localStorage — and sessionStorage too) cannot grow without bound. 100 entries of
+// {id,y,m,d} is a few KB, in either storage area. ⚠ This cap stays for its own reason — the list is
+// a convenience, not a record — while the solve times it used to be compared with are now kept in
+// full (store/progress, round 23 Q3), because every one of them is part of an all-time Mean.
 // (Keep the How-to-Play wording in sync with this number — GuidePage's Lookup section states it,
 // once.)
 export const LOOKUP_HISTORY_CAP = 100

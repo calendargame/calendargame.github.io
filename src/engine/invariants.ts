@@ -19,7 +19,8 @@
 //   • Score integrity (the C3 work): `good` can never exceed `played`; a run of credits
 //     (`streak`, `best`) can never exceed the total credits (`good`); counts are
 //     non-negative integers; `times` are finite, non-negative, and never outnumber the
-//     credits that produced them.
+//     credits that produced them — counting, for a save an old build trimmed, the times it
+//     discarded (`timesLost`, round 23 Q3) beside the ones it kept.
 //   • History structure: BACK pushes one forward entry + bumps backDepth, FORWARD undoes
 //     exactly that, advance() clears both — so backDepth and forwardStack.length move in
 //     lockstep. A mismatch means the Back/Forward bookkeeping desynced.
@@ -79,6 +80,15 @@ export function checkStatsInvariants(s: Stats, where: string): string[] {
       v.push(`${where}: times has a non-finite/negative value`)
     if (isCount(s.good) && s.times.length > s.good)
       v.push(`${where}: times.length(${s.times.length}) > good(${s.good})`)
+    // The legacy baseline (Stats.timesLost): the times an old build discarded are still credits.
+    if (s.timesLost !== undefined) {
+      if (!isCount(s.timesLost))
+        v.push(`${where}.timesLost is not a non-negative integer (${String(s.timesLost)})`)
+      else if (isCount(s.good) && s.times.length + s.timesLost > s.good)
+        v.push(
+          `${where}: times.length(${s.times.length}) + timesLost(${s.timesLost}) > good(${s.good})`,
+        )
+    }
   }
   return v
 }

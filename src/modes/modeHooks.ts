@@ -107,7 +107,13 @@ export function useStatsHideToggles({
       setTimingOff(true)
       return
     }
-    const desync = S.good !== S.times.length
+    // ★ EXACT, because every credited, timed solve keeps its time (round 23 Q3): the only way a
+    // credit comes to have no time is an answer given while timing was hidden, which is precisely
+    // what this popup is for. The one correction is a save an OLD build trimmed to its newest 1,000
+    // times — those credits had times once, and store/progress' v5 migration recorded how many as
+    // `timesLost`, so they never read as a desync. (Before the cap went, this check fired after
+    // every reload for anyone past 1,000 timed answers, offering to wipe their stats for nothing.)
+    const desync = S.good - (S.timesLost ?? 0) !== S.times.length
     if (!desync) {
       eng.regenDate()
       if (afterTimingEnabled) afterTimingEnabled()

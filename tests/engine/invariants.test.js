@@ -20,6 +20,14 @@ describe('checkStatsInvariants — passes healthy stats', () => {
     expect(
       checkStatsInvariants({ played: 5, good: 3, streak: 2, best: 3, times: [1, 2, 3] }, 'stats'),
     ).toEqual([]))
+  // A save the old 1,000-time cap trimmed (round 23 Q3): its lost times are a baseline beside the kept.
+  it('a legacy baseline that, with the kept times, accounts for no more than the credits', () =>
+    expect(
+      checkStatsInvariants(
+        { played: 9, good: 8, streak: 2, best: 3, times: [1, 2, 3], timesLost: 5 },
+        'stats',
+      ),
+    ).toEqual([]))
 })
 
 describe('checkStatsInvariants — catches impossible scores', () => {
@@ -49,6 +57,24 @@ describe('checkStatsInvariants — catches impossible scores', () => {
         checkStatsInvariants({ played: 3, good: 1, streak: 1, best: 1, times: [1, 2] }, 'stats'),
       ),
     ).toContain('times.length(2) > good(1)'))
+  it('kept + lost times outnumber the credits', () =>
+    expect(
+      join(
+        checkStatsInvariants(
+          { played: 9, good: 7, streak: 1, best: 1, times: [1, 2, 3], timesLost: 5 },
+          'stats',
+        ),
+      ),
+    ).toContain('times.length(3) + timesLost(5) > good(7)'))
+  it('a baseline that is not a non-negative integer', () =>
+    expect(
+      join(
+        checkStatsInvariants(
+          { played: 9, good: 8, streak: 1, best: 1, times: [1], timesLost: -2 },
+          'stats',
+        ),
+      ),
+    ).toContain('timesLost'))
   it('a non-finite time', () =>
     expect(
       join(

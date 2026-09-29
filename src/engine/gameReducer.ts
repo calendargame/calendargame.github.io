@@ -177,7 +177,16 @@ export interface Stats {
   good: number
   streak: number
   best: number
-  times: number[]
+  times: number[] // EVERY credited, timed solve, in seconds on the 0.1 ms grid (engine/stats)
+  // ⚠ LEGACY ONLY — the credited solves whose times a build before round 23 (Q3) threw away. Those
+  // builds kept only the newest 1,000 saved times while `good` kept counting, and the older times
+  // are gone for good; store/progress' v5 migration records the gap ONCE, here, so the "Enable and
+  // Reset Stats?" check (modes/modeHooks) can subtract it instead of seeing a desync that never
+  // happened. ABSENT means nothing was lost, which is every silo except such a save — so the engine
+  // never writes it: it rides through play on the `...stats` spreads, and every reset (blankStats)
+  // drops it along with the counts it described. `good ≥ times.length + timesLost` always
+  // (engine/invariants).
+  timesLost?: number
 }
 
 // ── The full engine state ────────────────────────────────────────────────────
