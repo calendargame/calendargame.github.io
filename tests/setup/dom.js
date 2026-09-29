@@ -28,6 +28,7 @@ import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistor
 import { discardAllSessionModes } from '../../src/store/sessionMode.js'
 import { discardAllSessionRounds } from '../../src/store/sessionRound.js'
 import { forgetBrowsingSession } from '../../src/store/browsingSession.js'
+import { forgetStorageHealth } from '../../src/store/storageHealth.js'
 import { useUserDefaults } from '../../src/store/userDefaults.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
 
@@ -117,6 +118,10 @@ beforeEach(() => {
   // reseed would never run. Forgetting it here makes each test's first mount the fresh visit it
   // models; a test that wants a reload simply remounts without forgetting it.
   forgetBrowsingSession()
+  // The STORAGE-FULL state (store/storageHealth, round 23 Q3) is in-memory module state: which stores
+  // a refused save left unsaved, and whether the notice is up. A test that fills the device would
+  // otherwise leave the next one mid-episode — a notice that never opens, or one already open.
+  forgetStorageHealth()
   // The SAVED PERSONAL DEFAULTS snapshot (store/userDefaults) is the last singleton of this shape,
   // and it was the one this net was missing — found by a shuffled run (round 22's fixer), where a
   // file that saves a snapshot left it standing for whatever file ran next in the same worker.

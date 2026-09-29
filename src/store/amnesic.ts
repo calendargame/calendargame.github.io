@@ -1,5 +1,6 @@
 import { createJSONStorage } from 'zustand/middleware'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from './presets.js'
+import { guardedSetItem } from './storageHealth.js'
 import type { PresetRegistryValues } from './presets.js'
 import type { ProgressValues } from './progress.js'
 
@@ -296,8 +297,12 @@ export const presetStatsStorage = <T>() =>
       },
       setItem: (name, value) => {
         const { key, amnesic } = target(name)
-        if (amnesic) ss?.setItem(key, value)
-        else ls.setItem(key, value)
+        // Guarded (store/storageHealth) in BOTH areas: sessionStorage has an allowance of its own,
+        // and a refusal there is the same promise broken — the guest's session stops being kept.
+        guardedSetItem(name, () => {
+          if (amnesic) ss?.setItem(key, value)
+          else ls.setItem(key, value)
+        })
       },
       removeItem: (name) => {
         const { key, amnesic } = target(name)

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { registerPersistFlush } from './storageHealth.js'
 import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import type { FormatId } from '../lib/format.js'
 import type { DotOrientation } from '../lib/dotLayout.js'
@@ -272,6 +273,8 @@ export const useSettings = create<SettingsState>()(
     },
   ),
 )
+// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
+registerPersistFlush(PRESET_STORE_KEYS.settings, () => useSettings.setState({}))
 
 // ★ THE defaultMode OF ANY PRESET, read straight off ITS namespaced settings key rather than
 // through the live store (which is only ever the ACTIVE preset's — persist scopes it via

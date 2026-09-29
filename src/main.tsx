@@ -29,6 +29,7 @@ import PresetSwitcher from './components/PresetSwitcher.jsx'
 import { useBackButton } from './components/useBackButton.js'
 import { useYearRangeMirrors } from './components/useYearRangeMirrors.js'
 import { SettingsPanel } from './components/SettingsPanel.jsx'
+import StorageFullNotice from './components/StorageFullNotice.jsx'
 import { SCROLLER_CORE_CLASS, scrollFadeClass, scrollEdgeGaps, isAtBottom, isScrolledFromTop, edgeShade, readShadeRampPx, writeShade, observeScrollExtent, BOTTOM_EDGE_BAND_PX } from './components/scrollRegion.js'
 import { installPointerGestures } from './lib/pointerGestures.js'
 import { installSelectAllOnEntry } from './lib/textEntry.js'
@@ -2444,6 +2445,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
             nothing, so a conditional mount would only re-add the on/off round 10 removed. */}
         {mode==="guide"?<div ref={docFadeTopRef} aria-hidden="true" className="doc-fade-top"/>:null}
         {mode==="guide"?<div ref={docFadeBottomRef} aria-hidden="true" className="doc-fade-bottom"/>:null}
+        {/* A save the device refused (store/storageHealth) — the one notice that can open on its
+            own, from any screen, the moment it happens. It reads its own open flag. */}
+        <StorageFullNotice/>
         </>
       );
     }

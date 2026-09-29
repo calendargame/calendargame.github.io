@@ -9,6 +9,7 @@ import {
 } from './presets.js'
 import type { Preset } from './presets.js'
 import { isAmnesic, discardSessionStats, readSessionStats, dataIdOf } from './amnesic.js'
+import { storageSpaceFreed } from './storageHealth.js'
 import { discardSessionMode } from './sessionMode.js'
 import { discardSessionRounds, discardSessionRoundsOf, hasSessionRound } from './sessionRound.js'
 import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
@@ -148,6 +149,10 @@ const clearPresetStorage = (presetId: number) => {
   // copy, mode) for this id. discardSessionRounds clears both copies' modes in one call — same house
   // rule, same "harmless leftover but remove it anyway" reasoning as the page entry above.
   discardSessionRounds(presetId)
+  // Deleting a preset is the likeliest way a player makes room after the storage-full notice, and
+  // this is the moment the room appears — so anything a full device refused is re-saved now, not at
+  // the player's next change (store/storageHealth).
+  storageSpaceFreed()
 }
 
 // One preset's saved copy of ONE store, as the raw stored text — or null when there is none (never

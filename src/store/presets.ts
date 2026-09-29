@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { guardedSetItem, guardedStorage, registerPersistFlush } from './storageHealth.js'
 
 // store/presets.ts — THE PRESET REGISTRY, and the storage layer every per-preset store sits on.
 //
@@ -307,6 +308,9 @@ export const usePresets = create<PresetRegistryState>()(
       // ⚠ The default storage, NOT the scoped adapter below. The registry says which preset you are
       // on; scoping it to a preset would make that question unanswerable.
       name: PRESET_REGISTRY_KEY,
+      // zustand's default localStorage, with its writes guarded (store/storageHealth): a refused save
+      // must never throw out of applyRegistry.
+      storage: createJSONStorage(guardedStorage(() => window.localStorage)),
       version: 1,
       partialize: (state) =>
         Object.fromEntries(
@@ -331,6 +335,8 @@ export const usePresets = create<PresetRegistryState>()(
     },
   ),
 )
+// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
+registerPersistFlush(PRESET_REGISTRY_KEY, () => usePresets.setState({}))
 
 // ── Where a per-preset store actually reads and writes ────────────────────────────────────────
 //
@@ -375,7 +381,9 @@ export const presetScopedStorage = <T>() =>
     const scoped = (name: string) => presetKey(name, usePresets.getState().activeId)
     return {
       getItem: (name) => ls.getItem(scoped(name)),
-      setItem: (name, value) => ls.setItem(scoped(name), value),
+      // Guarded (store/storageHealth): a save the device refuses becomes the storage-full notice,
+      // never a throw out of the store's setter.
+      setItem: (name, value) => guardedSetItem(name, () => ls.setItem(scoped(name), value)),
       removeItem: (name) => ls.removeItem(scoped(name)),
     }
   })
