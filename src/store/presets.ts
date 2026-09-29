@@ -32,9 +32,9 @@ import { guardedSetItem, guardedStorage, registerPersistFlush } from './storageH
 //     (one setting reverts; nothing is mis-attributed and no stats are lost) and it is inherent to
 //     two builds sharing one key rather than a fault of this scheme — a copy migration would have
 //     had the same interleaving with data loss on top. Today's instance is store/settings'
-//     `rotateDots` (the 15th setting, added after this design shipped, and since renamed from
-//     `dotOrientation` — Q3, round 20); the note, including the one direction a `migrate` step now
-//     recovers instead of reverting, is at that store's `name` option.
+//     `dotRotation` (the Rotate Dots setting, added after this design shipped as `dotOrientation`,
+//     then `rotateDots` in round 20, then three-way in round 23); the note, including the one
+//     direction a `migrate` step recovers instead of reverting, is at that store's `name` option.
 //
 // WHAT LIVES IN THIS FILE, and why they live together:
 //   • the REGISTRY store — the list of presets and which one is active. It is GLOBAL: it is the

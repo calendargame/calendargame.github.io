@@ -43,7 +43,7 @@ function ClassicMode({
   dateFormat,
   randomFormat,
   inputStyle = 'buttons',
-  dotOrientation = 'columns',
+  dotRotation = 'standard',
   leapChance,
   janFebChance,
   julianChance,
@@ -175,7 +175,7 @@ function ClassicMode({
           <WeekdayAnswer
             key={state.gridEpoch}
             inputStyle={inputStyle}
-            dotOrientation={dotOrientation}
+            dotRotation={dotRotation}
             persistBtns={state.persistBtns}
             flash={flash}
             optionsDisabled={optionsDisabled}

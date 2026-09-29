@@ -40,6 +40,7 @@ import {
   WRITTEN_FORMATS,
   NUMERIC_FORMATS,
   INPUT_STYLES,
+  DOT_ROTATION_OPTIONS,
   DARK_THEMES,
   LIGHT_THEMES,
   CHANCE_OPTIONS,
@@ -196,8 +197,8 @@ export function SettingsPanel({
   const setRandomFormat = useSettings((s) => s.setRandomFormat)
   const inputStyle = useSettings((s) => s.inputStyle)
   const setInputStyle = useSettings((s) => s.setInputStyle)
-  const rotateDots = useSettings((s) => s.rotateDots)
-  const setRotateDots = useSettings((s) => s.setRotateDots)
+  const dotRotation = useSettings((s) => s.dotRotation)
+  const setDotRotation = useSettings((s) => s.setDotRotation)
   // defaultMode (round-21 Q3) — the per-preset "Default Mode" picker under the Per-preset label. A
   // ⚙ setting like every other in this store: captured by Save Defaults, restored by Reset Settings
   // (App's settingsAtDefaults includes it, so a change lights the gear and un-dims Save Defaults).
@@ -1106,10 +1107,10 @@ export function SettingsPanel({
           <div className="space-y-2 pt-3 border-t border-(--bd-500-20)">
             <SectionLabel>Display</SectionLabel>
             <div className="text-xs text-(--tx-200-80)">Date Format</div>
-            {/* ★ EVERY SWITCH NAMES ITS SETTING (aria-label), on all four of them — this one, Use
-                System Settings, the Julian Calendar toggle and Save Stats. Their visible content is
-                the STATE ("On"/"Off"), which is the same two words on all four, so without a name a
-                screen reader hears four identical buttons and nothing can address one of them
+            {/* ★ EVERY SWITCH NAMES ITS SETTING (aria-label), on all five of them — this one, Use
+                System Settings, the Julian Calendar toggle, Save Stats and Amnesic. Their visible
+                content is the STATE ("On"/"Off"), which is the same two words on all five, so without
+                a name a screen reader hears identical buttons and nothing can address one of them
                 except by walking the DOM from its label span. The setting name is the row's label
                 text VERBATIM, so speaking what you see still activates the switch and there is no
                 second wording to keep in step. Not role="switch": that would change what these
@@ -1181,58 +1182,42 @@ export function SettingsPanel({
             <PillGroup label="Input" disabled={mode === 'deduction'}>
               <PillTray value={inputStyle} onChange={setInputStyle} options={INPUT_STYLES} />
             </PillGroup>
-            {/* Rotate Dots CCW — which way the 7-dot layout is TURNED (lib/dotLayout, the one array both
-                the real input and How-to-Play's diagram derive from). Q3 (round 20): this used to be
-                a two-option PillTray (Columns / Rows) and is a SWITCH now, on THE PICKER RULE's own
-                logic — a choice between exactly two named alternatives IS an on/off shape, and this
-                one always was. Built on the AMNESIC switch's exact pattern a few rows below (read
-                that block's comment in full before touching this one): the dim lives on the ROW's
-                wrapping div via opacity-60 when locked, never on the button itself (opacity would
-                otherwise multiply); aria-disabled ANNOUNCES the lock and the onClick guard is what
-                actually makes it inert; cursor-not-allowed is folded into the button's className
-                string; no pointer-events-none, so a keyboard user reaches the button and is told why
-                it does nothing rather than meeting a silent one.
-                ⚠ LABELLED "Rotate Dots CCW" SINCE Q9 (round 21), the owner's call, reversing this
-                block's former "not labelled Rotate" argument: "Dot Layout" gave no hint what the
-                switch did, where "Rotate Dots CCW" plus its own On/Off state says it outright. The
-                "turn your device" meaning the word also carries (components/RotateOverlay's
-                portrait-lock screen) is a full-screen prompt one navigation away, not a peer
-                control, so the two do not read as one setting — the plain-language win is worth
-                more than the reused word was worth avoiding. The internal field stays `rotateDots`.
+            {/* Rotate Dots — how far the 7-dot layout is TURNED counterclockwise: Standard / 45° CCW /
+                90° CCW (lib/dotLayout, the one geometry both the real input and How-to-Play's
+                diagram derive from). ITS SHAPE HAS FOLLOWED THE PICKER RULE ABOVE EACH TIME IT
+                CHANGED: two named options (Columns / Rows) were a PillTray until round 20 (Q3)
+                recognised them as an on/off shape and made them a SWITCH; round 23 (Q6) added 45°,
+                and three named alternatives are a PICKER again — one tray, no families, like
+                Input above it. The row name is "Rotate Dots" rather than round 21's "Rotate Dots
+                CCW" (the owner's call then, reversing an older "not labelled Rotate" argument —
+                the plain-language win beat the word's second meaning on RotateOverlay's
+                turn-your-device screen): the direction now rides in the pills themselves, so
+                saying it twice would only crowd the row.
                 ★ IT LOCKS WHENEVER THERE ARE NO DOTS ON SCREEN TO TURN, which is two conditions and
-                not one — UNCHANGED from the picker: Deduction (whose answers are not weekdays at all
-                — the same `mode === 'deduction'` the Input picker above uses, shared on purpose,
-                because a live control sitting directly beneath a dead one, both about dots, would
-                read as a bug in the lock), and ANY mode while Input is on Buttons — the second half
-                is what makes the mark's own fix (below) necessary in the first place: with Input on
-                Buttons there is nothing on screen for a turned mark to correspond to, so the CONTROL
-                that could turn it locks too, not just the mark itself.
+                not one: Deduction (whose answers are not weekdays at all — the same
+                `mode === 'deduction'` the Input picker above uses, shared on purpose, because a
+                live control sitting directly beneath a dead one, both about dots, would read as a
+                bug in the lock), and ANY mode while Input is on Buttons — the second half is what
+                makes the mark's own fix (main.tsx's W5Logo call site) necessary in the first place:
+                with Input on Buttons there is nothing on screen for a turned mark to correspond to,
+                so the CONTROL that could turn it locks too, not just the mark itself. Stated once,
+                as PillGroup's `disabled`, like every other picker.
                 ⚠ IT IS A LOCK, NOT A RESET — value preserved while locked, exactly how Julian Chance
                 behaves when the year range makes it moot and exactly how Amnesic behaves while Save
-                Stats is off. Switch Input back to Dots and the choice you made is still selected.
-                ⚠ THE ONE CONSEQUENCE, written down so it is not later reported as one, and CORRECTED
-                by this same round: the title-bar mark now follows this setting ONLY while Input is
-                Dots (main.tsx gates `<W5Logo>`'s prop on `inputStyle==='dots'`, not just this
-                setting) — it used to follow in EVERY mode and at EITHER input style, which was
-                precisely the bug (a mark rotated with nothing on screen it corresponded to). So
-                wherever this toggle is locked the mark's orientation is FROZEN at upright, same as
-                the rest of the answer layout it sits beside. */}
-            <div
-              className={`flex items-center justify-between ${mode === 'deduction' || inputStyle !== 'dots' ? 'opacity-60' : ''}`}
-            >
-              <span className="text-xs text-(--tx-200-80)">Rotate Dots CCW</span>
-              <button
-                type="button"
-                aria-label="Rotate Dots CCW"
-                aria-disabled={mode === 'deduction' || inputStyle !== 'dots' || undefined}
-                onClick={() => {
-                  if (mode !== 'deduction' && inputStyle === 'dots') setRotateDots((v) => !v)
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${rotateDots ? 'btn-solid border-transparent' : 'surface-toggle text-(--tx-100-80)'}${mode === 'deduction' || inputStyle !== 'dots' ? ' cursor-not-allowed' : ''}`}
-              >
-                {rotateDots ? 'On' : 'Off'}
-              </button>
-            </div>
+                Stats is off. Switch Input back to Dots and the rotation you chose is still
+                selected.
+                ⚠ THE ONE CONSEQUENCE, written down so it is not later reported as one: the title-bar
+                mark follows this setting ONLY while Input is Dots (main.tsx gates `<W5Logo>`'s prop
+                on `inputStyle==='dots'`), so wherever this picker is locked the mark is FROZEN at
+                Standard, same as the rest of the answer layout it sits beside. */}
+            <div className="text-xs text-(--tx-200-80) pt-1">Rotate Dots</div>
+            <PillGroup label="Rotate Dots" disabled={mode === 'deduction' || inputStyle !== 'dots'}>
+              <PillTray
+                value={dotRotation}
+                onChange={setDotRotation}
+                options={DOT_ROTATION_OPTIONS}
+              />
+            </PillGroup>
             <div className="text-xs text-(--tx-200-80) pt-1">Theme</div>
             {/* Flipping Use System Settings OFF seeds the manual theme from what is ALREADY on
                 screen (activeTheme — App's, because it folds in an OS signal App owns), so the

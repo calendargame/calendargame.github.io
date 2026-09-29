@@ -13,6 +13,7 @@
 // not part of the panel and stays in main.tsx.
 import type { FormatId } from '../lib/format.js'
 import type { InputStyle, DefaultMode } from '../store/settings.js'
+import type { DotRotation } from '../lib/dotLayout.js'
 
 // Default Mode — the page a preset OPENS ON (round-21 Q3). Seven choices = the seven entries of the
 // bar's mode CustomSelect (main.tsx MODE_LABELS), split across TWO stacked PillTrays reading and
@@ -51,11 +52,15 @@ export const INPUT_STYLES: { value: InputStyle; label: string }[] = [
   { value: 'buttons', label: 'Buttons' },
   { value: 'dots', label: 'Dots' },
 ]
-// Rotate Dots CCW — Q3 (round 20): no longer a picker array. The setting is a boolean now
-// (store/settings' `rotateDots`), drawn as an On/Off switch like Amnesic/Save Stats rather than a
-// PillTray, so there is no options table to keep here — see components/SettingsPanel's Rotate Dots CCW
-// block for the control itself and lib/dotLayout's `dotOrientationFor` for the boolean → geometry
-// derivation every consumer shares.
+// Rotate Dots — how far the 7-dot layout turns, counterclockwise (round-23 Q6; a picker again after
+// round 20's two-option switch — components/SettingsPanel's Rotate Dots block tells the story). The
+// values are lib/dotLayout's DotRotation, listed in DOT_ROTATIONS order. Every label is unique in
+// the panel, so no ariaLabel.
+export const DOT_ROTATION_OPTIONS: { value: DotRotation; label: string }[] = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'ccw45', label: '45° CCW' },
+  { value: 'ccw90', label: '90° CCW' },
+]
 // Theme — two independent picks under Use System Settings, one pick ACROSS both rows when it's off
 // (see the Theme block in the panel).
 export const DARK_THEMES = [

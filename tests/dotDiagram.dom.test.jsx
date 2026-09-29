@@ -7,35 +7,37 @@
 // These tests pin BOTH ends: the canonical physical layout in DOT_CELLS itself (so a data edit
 // can't silently pass a derivation-only check), and the rendered SVG/aria-label against that data.
 //
-// ★ AND SINCE THE LAYOUT TURNS (Settings → Display → Rotate Dots CCW) the same pair of claims is made
-// TWICE, once per orientation, with the rotated one's cells written out by hand here. That
-// hand-copy is the whole value of this file's half of the contract: lib/dotLayout BUILDS the
-// rotated array by mapping the upright one, so a test that re-derived it the same way would agree
-// with a wrong rotation just as happily as with a right one.
+// ★ AND SINCE THE LAYOUT TURNS (Settings → Display → Rotate Dots: Standard / 45° CCW / 90° CCW) the
+// same pair of claims is made THREE times, once per rotation, with the turned cells written out by
+// hand here. That hand-copy is the whole value of this file's half of the contract: lib/dotLayout
+// BUILDS the turned arrays by mapping the standard one, so a test that re-derived them the same way
+// would agree with a wrong rotation just as happily as with a right one.
 //
-// ⚠ Q3 (round 20): the store field driving this is the boolean `rotateDots`, set here through
-// setRotateDots(orientation === 'rows') — the diagram itself still derives through DOT_CELLS keyed
-// by 'columns' | 'rows', via GuidePage's own dotOrientationFor(rotateDots) call. UNLIKE the title-bar
-// mark (tests/dotOrientation.dom), this diagram is NOT gated on inputStyle — see the standalone case
-// at the foot of this file for why, and GuidePage's own header comment for the fuller argument
-// (it documents what turning the toggle on WOULD look like, regardless of the player's current
-// Input choice, the same way it renders at all regardless of Input).
+// The store field driving this is `dotRotation` (round-23 Q6), set here through setDotRotation.
+// UNLIKE the title-bar mark (tests/dotRotation.dom), this diagram is NOT gated on inputStyle — see
+// the standalone case at the foot of this file for why, and GuidePage's own header comment for the
+// fuller argument (it documents what the chosen rotation looks like, regardless of the player's
+// current Input choice, the same way it renders at all regardless of Input).
 import { describe, it, expect, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { renderGuidePage } from './helpers/guideScroller.jsx'
 import { useSettings } from '../src/store/settings.js'
-import { DOT_CELLS } from '../src/lib/dotLayout.js'
+import { DOT_CELLS, DOT_GRID_SIZE } from '../src/lib/dotLayout.js'
 import { DAY } from '../src/lib/format.js'
 
 // The physical truth, stated independently of the module under test: weekday index → grid cell.
-//   columns — Sun centre, Mon bottom-right, Tue mid-right, Wed top-right, Thu bottom-left,
-//             Fri mid-left, Sat top-left; centre-top (1,2) and centre-bottom (3,2) stay empty.
-//   rows    — the same seven a quarter turn ANTICLOCKWISE: the two weekday triples that ran down
-//             the side columns now lie along the top (Wed, Tue, Mon) and the bottom (Sat, Fri,
-//             Thu); Sunday is the turn's fixed point, and the empty pair moves to the middle row's
-//             two ends, (2,1) and (2,3).
+//   standard — Sun centre, Mon bottom-right, Tue mid-right, Wed top-right, Thu bottom-left,
+//              Fri mid-left, Sat top-left; centre-top (1,2) and centre-bottom (3,2) stay empty.
+//   ccw45    — an eighth turn ANTICLOCKWISE, on the 5×5 lattice: the square stands on a corner —
+//              Wed top, Sat left, Mon right, Thu bottom — with Tue and Fri on the two diagonals
+//              between; Sunday is the lattice's centre, and the empty pair lands on the other two
+//              diagonal cells, (2,2) and (4,4). Every filled cell has r + c even — a checkerboard.
+//   ccw90    — a quarter turn ANTICLOCKWISE: the two weekday triples that ran down the side
+//              columns now lie along the top (Wed, Tue, Mon) and the bottom (Sat, Fri, Thu); Sunday
+//              is the turn's fixed point, and the empty pair moves to the middle row's two ends,
+//              (2,1) and (2,3).
 const CANONICAL = {
-  columns: [
+  standard: [
     { r: 2, c: 2 }, // Sunday
     { r: 3, c: 3 }, // Monday
     { r: 2, c: 3 }, // Tuesday
@@ -44,7 +46,16 @@ const CANONICAL = {
     { r: 2, c: 1 }, // Friday
     { r: 1, c: 1 }, // Saturday
   ],
-  rows: [
+  ccw45: [
+    { r: 3, c: 3 }, // Sunday    — centre of the 5×5
+    { r: 3, c: 5 }, // Monday    — was bottom-right → right tip
+    { r: 2, c: 4 }, // Tuesday   — was mid-right    → upper-right
+    { r: 1, c: 3 }, // Wednesday — was top-right    → top tip
+    { r: 5, c: 3 }, // Thursday  — was bottom-left  → bottom tip
+    { r: 4, c: 2 }, // Friday    — was mid-left     → lower-left
+    { r: 3, c: 1 }, // Saturday  — was top-left     → left tip
+  ],
+  ccw90: [
     { r: 2, c: 2 }, // Sunday    — centre, unmoved
     { r: 1, c: 3 }, // Monday    — was bottom-right → top-right
     { r: 1, c: 2 }, // Tuesday   — was mid-right    → top-centre
@@ -54,15 +65,25 @@ const CANONICAL = {
     { r: 3, c: 1 }, // Saturday  — was top-left     → bottom-left
   ],
 }
-// Which two cells are unoccupied in each orientation — the dead cells a press slides onto to cancel.
-const EMPTY = { columns: ['1,2', '3,2'], rows: ['2,1', '2,3'] }
-// What a screen reader announces, pinned verbatim per orientation. Derivable from the cells + DAY,
+// Which two cells are unoccupied in each rotation — the dead cells a press slides onto to cancel.
+const EMPTY = { standard: ['1,2', '3,2'], ccw45: ['2,2', '4,4'], ccw90: ['2,1', '2,3'] }
+// Each rotation's grid size, and the diagram's step between neighbouring cells on it — the 5×5 is
+// the 3×3's frame cut into half steps.
+const GRID = {
+  standard: { size: 3, x: 60, y: 62 },
+  ccw45: { size: 5, x: 30, y: 31 },
+  ccw90: { size: 3, x: 60, y: 62 },
+}
+// What a screen reader announces, pinned verbatim per rotation. Derivable from the cells + DAY,
 // but asserted as a literal so a bug in the derivation AND the data can't cancel out.
 const SPOKEN = {
-  columns:
+  standard:
     'Dots layout: Saturday top-left, Wednesday top-right, Friday middle-left, Sunday centre, ' +
     'Tuesday middle-right, Thursday bottom-left, Monday bottom-right.',
-  rows:
+  ccw45:
+    'Dots layout: Wednesday top, Tuesday upper-right, Saturday left, Sunday centre, ' +
+    'Monday right, Friday lower-left, Thursday bottom.',
+  ccw90:
     'Dots layout: Wednesday top-left, Tuesday top-centre, Monday top-right, Sunday centre, ' +
     'Saturday bottom-left, Friday bottom-centre, Thursday bottom-right.',
 }
@@ -91,25 +112,29 @@ afterEach(() => {
 })
 
 describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
-  for (const orientation of ['columns', 'rows']) {
-    describe(`orientation: ${orientation}`, () => {
-      const cells = () => DOT_CELLS[orientation]
+  for (const rotation of ['standard', 'ccw45', 'ccw90']) {
+    describe(`rotation: ${rotation}`, () => {
+      const cells = () => DOT_CELLS[rotation]
+      const { size, x: stepX, y: stepY } = GRID[rotation]
 
       it('is the canonical 7-dot layout: weekday-indexed, unique cells, the right pair empty', () => {
         expect(DAY).toHaveLength(7)
         expect(cells()).toHaveLength(7)
-        expect(cells()).toEqual(CANONICAL[orientation])
+        expect(cells()).toEqual(CANONICAL[rotation])
+        expect(DOT_GRID_SIZE[rotation]).toBe(size)
         const keys = cells().map(({ r, c }) => `${r},${c}`)
         expect(new Set(keys).size).toBe(7)
-        for (const dead of EMPTY[orientation]) expect(keys).not.toContain(dead)
+        for (const dead of EMPTY[rotation]) expect(keys).not.toContain(dead)
         for (const { r, c } of cells()) {
-          expect([1, 2, 3]).toContain(r)
-          expect([1, 2, 3]).toContain(c)
+          expect(r).toBeGreaterThanOrEqual(1)
+          expect(r).toBeLessThanOrEqual(size)
+          expect(c).toBeGreaterThanOrEqual(1)
+          expect(c).toBeLessThanOrEqual(size)
         }
       })
 
       it('renders one labelled dot per weekday, in DAY order, at the cell-derived SVG position', () => {
-        useSettings.getState().setRotateDots(orientation === 'rows')
+        useSettings.getState().setDotRotation(rotation)
         const svg = renderDiagram()
         const groups = Array.from(svg.querySelectorAll('g'))
         expect(groups).toHaveLength(7)
@@ -120,48 +145,76 @@ describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
           // order is INVARIANT under the turn — only the drawn position moves — which is the
           // diagram's half of the same promise the real input makes about children[idx].
           expect(text.textContent).toBe(DAY[i].slice(0, 3))
-          // Position derived from the shared grid cell: x = 30+(c-1)*60, y = 28+(r-1)*62.
-          const { r, c } = CANONICAL[orientation][i]
-          expect(circle.getAttribute('cx')).toBe(String(30 + (c - 1) * 60))
-          expect(circle.getAttribute('cy')).toBe(String(28 + (r - 1) * 62))
+          // Position derived from the shared grid cell: x = 30+(c-1)*stepX, y = 28+(r-1)*stepY.
+          const { r, c } = CANONICAL[rotation][i]
+          expect(circle.getAttribute('cx')).toBe(String(30 + (c - 1) * stepX))
+          expect(circle.getAttribute('cy')).toBe(String(28 + (r - 1) * stepY))
           // The label sits centred just below its dot.
           expect(text.getAttribute('x')).toBe(circle.getAttribute('cx'))
           expect(text.getAttribute('y')).toBe(String(Number(circle.getAttribute('cy')) + 27))
         })
+        // Every rotation fits the SAME frame, labels included (viewBox 0 0 180 192; r 11 dots).
+        expect(svg.getAttribute('viewBox')).toBe('0 0 180 192')
+        for (const g of groups) {
+          const cx = Number(g.querySelector('circle').getAttribute('cx'))
+          const cy = Number(g.querySelector('circle').getAttribute('cy'))
+          expect(cx - 11).toBeGreaterThanOrEqual(0)
+          expect(cx + 11).toBeLessThanOrEqual(180)
+          expect(cy - 11).toBeGreaterThanOrEqual(0)
+          expect(cy + 27).toBeLessThanOrEqual(192)
+        }
       })
 
       it('speaks the layout accurately: aria-label lists every day at its cell position, in row order', () => {
-        useSettings.getState().setRotateDots(orientation === 'rows')
-        expect(renderDiagram().getAttribute('aria-label')).toBe(SPOKEN[orientation])
+        useSettings.getState().setDotRotation(rotation)
+        expect(renderDiagram().getAttribute('aria-label')).toBe(SPOKEN[rotation])
       })
     })
   }
 
-  // The two orientations must be the SAME SEVEN DAYS rearranged — not a second layout that happens
-  // to have seven dots in it. Stated against the hand-written pair above, so it holds even if
-  // lib/dotLayout stopped computing one from the other.
-  it('the two orientations are one layout turned: same seven cells, only Sunday fixed', () => {
+  // The rotations must be the SAME SEVEN DAYS rearranged — not other layouts that happen to have
+  // seven dots in them. Stated against the hand-written cells above, so it holds even if
+  // lib/dotLayout stopped computing one from another.
+  it('90° is the standard layout turned: same seven cells, only Sunday fixed', () => {
     const key = ({ r, c }) => `${r},${c}`
-    expect(new Set(CANONICAL.rows.map(key))).not.toEqual(new Set(CANONICAL.columns.map(key)))
-    expect(CANONICAL.rows[0]).toEqual(CANONICAL.columns[0]) // Sunday, the turn's fixed point
-    for (let i = 1; i < 7; i++) expect(CANONICAL.rows[i]).not.toEqual(CANONICAL.columns[i])
+    expect(new Set(CANONICAL.ccw90.map(key))).not.toEqual(new Set(CANONICAL.standard.map(key)))
+    expect(CANONICAL.ccw90[0]).toEqual(CANONICAL.standard[0]) // Sunday, the turn's fixed point
+    for (let i = 1; i < 7; i++) expect(CANONICAL.ccw90[i]).not.toEqual(CANONICAL.standard[i])
   })
 
-  // ⚠ UNLIKE THE TITLE-BAR MARK (tests/dotOrientation.dom), this diagram is NOT gated on
-  // inputStyle — stated as its own case rather than left implicit, since Q3 added exactly that gate
-  // to the OTHER consumer of this setting and a reader could otherwise wonder why this one lacks it.
-  // GuidePage's own header comment argues why: the diagram documents what turning Rotate Dots CCW on
-  // WOULD look like, so a player who currently has Buttons selected can still see it — the same way
-  // the diagram renders at all regardless of which Input they have chosen.
-  it('reflects rotateDots regardless of inputStyle — Buttons included', () => {
+  // 45° is the one rotation whose grid is not the standard one, so its claim is geometric: centred
+  // on the lattice, each day sits at the standard offset turned an eighth anticlockwise and scaled
+  // by √2 — (u, v) → (u + v, v − u), with v pointing DOWN the screen — and two of these eighth
+  // turns are the 90° turn. Worked from the hand-written tables, not from lib/dotLayout's function.
+  it('45° is the standard layout turned an eighth: the offsets rotate, and twice over is 90°', () => {
+    const off = ({ r, c }, centre) => ({ u: c - centre, v: r - centre })
+    const eighth = ({ u, v }) => ({ u: u + v, v: v - u })
+    for (let i = 0; i < 7; i++) {
+      const s = off(CANONICAL.standard[i], 2)
+      expect(off(CANONICAL.ccw45[i], 3)).toEqual(eighth(s))
+      // Twice: (u, v) → (2v, −2u), which is the 90° turn (u, v) → (v, −u) at twice the scale.
+      const quarter = off(CANONICAL.ccw90[i], 2)
+      expect(eighth(eighth(s))).toEqual({ u: 2 * quarter.u, v: 2 * quarter.v })
+      // The checkerboard: every filled 45° cell has an even r + c.
+      expect((CANONICAL.ccw45[i].r + CANONICAL.ccw45[i].c) % 2).toBe(0)
+    }
+  })
+
+  // ⚠ UNLIKE THE TITLE-BAR MARK (tests/dotRotation.dom), this diagram is NOT gated on inputStyle —
+  // stated as its own case rather than left implicit, since round 20 added exactly that gate to the
+  // OTHER consumer of this setting and a reader could otherwise wonder why this one lacks it.
+  // GuidePage's own header comment argues why: the diagram documents what the chosen rotation looks
+  // like, so a player who currently has Buttons selected can still see it — the same way the
+  // diagram renders at all regardless of which Input they have chosen.
+  it('reflects Rotate Dots regardless of inputStyle — Buttons included', () => {
     useSettings.getState().setInputStyle('buttons')
-    useSettings.getState().setRotateDots(true)
+    useSettings.getState().setDotRotation('ccw45')
     const svg = renderDiagram()
     const circles = Array.from(svg.querySelectorAll('circle'))
     expect(circles.map((c) => ({ cx: c.getAttribute('cx'), cy: c.getAttribute('cy') }))).toEqual(
-      DOT_CELLS.rows.map(({ r, c }) => ({
-        cx: String(30 + (c - 1) * 60),
-        cy: String(28 + (r - 1) * 62),
+      CANONICAL.ccw45.map(({ r, c }) => ({
+        cx: String(30 + (c - 1) * 30),
+        cy: String(28 + (r - 1) * 31),
       })),
     )
   })

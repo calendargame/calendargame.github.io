@@ -3,12 +3,12 @@ import { persist } from 'zustand/middleware'
 import { registerPersistFlush } from './storageHealth.js'
 import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import type { FormatId } from '../lib/format.js'
-import type { DotOrientation } from '../lib/dotLayout.js'
+import { isDotRotation, type DotRotation } from '../lib/dotLayout.js'
 
 // settings.js — the ⚙ Settings store (Stage C, Steps 5a + 5b).
 //
 // Holds the 16 values that live in the Settings popover (13 at the Stage-C extraction; the Input
-// style was added Session 10, the Rotate Dots CCW toggle in batch group 3, `defaultMode` in
+// style was added Session 10, the Rotate Dots setting in batch group 3, `defaultMode` in
 // round-21 Q3). Originally these were useState hooks inside App; centralizing them
 // is the structural groundwork
 // for (a) saved-progress and (b) splitting the fused game modes apart later,
@@ -58,15 +58,12 @@ export const DEFAULT_MODE_VALUES: readonly DefaultMode[] = [
 ]
 export const isDefaultMode = (v: unknown): v is DefaultMode =>
   typeof v === 'string' && (DEFAULT_MODE_VALUES as readonly string[]).includes(v)
-// Q3 (round 20): `dotOrientation: DotOrientation` ('columns' | 'rows', a PillTray choice of two
-// named options) became `rotateDots: boolean` below — the two options were always an on/off shape,
-// and the bug the rename fixes was never in this store at all: main.tsx's W5Logo used to read this
-// setting UNCONDITIONALLY, so a player on Buttons could leave it on and the title-bar mark sat
-// rotated forever with no dots on screen it corresponded to. DotOrientation itself is unchanged and
-// stays exactly where it always lived — lib/dotLayout, the geometry file — and is no longer
-// re-exported here: every remaining reader (WeekdayAnswer, W5Logo, GuidePage's DotDiagram,
-// modes/modeTypes) imports it straight from there, and lib/dotLayout's `dotOrientationFor` is the
-// one place this store's boolean is turned back into that type.
+// `dotRotation` — Settings → Display → Rotate Dots, a three-way pill: Standard / 45° CCW / 90° CCW
+// (round-23 Q6). ITS HISTORY, because two older shapes of it are still out there in saved data and
+// migrateDotRotation below reads both: it launched as `dotOrientation: 'columns' | 'rows'` (a
+// two-option picker), became the boolean `rotateDots` in round 20 (Q3 — two named options were
+// always an on/off shape), and became this when 45° was added. Its type, DotRotation, lives in
+// lib/dotLayout, the geometry file, because every geometry table there is indexed by it directly.
 
 // The 16 settings values, then the full store (values + setters). Each setter takes a direct
 // value OR a React-style functional updater (prev => next), matching App's setX(v=>!v) call sites.
@@ -74,7 +71,7 @@ export type SettingsValues = {
   randomFormat: boolean
   dateFormat: FormatId
   inputStyle: InputStyle
-  rotateDots: boolean
+  dotRotation: DotRotation
   defaultMode: DefaultMode
   useJulian: boolean
   minY: number
@@ -93,7 +90,7 @@ export type SettingsState = SettingsValues & {
   setRandomFormat: (v: Updater<boolean>) => void
   setDateFormat: (v: Updater<FormatId>) => void
   setInputStyle: (v: Updater<InputStyle>) => void
-  setRotateDots: (v: Updater<boolean>) => void
+  setDotRotation: (v: Updater<DotRotation>) => void
   setDefaultMode: (v: Updater<DefaultMode>) => void
   setUseJulian: (v: Updater<boolean>) => void
   setMinY: (v: Updater<number>) => void
@@ -120,9 +117,9 @@ export const SETTINGS_DEFAULTS: SettingsValues = {
   randomFormat: false,
   dateFormat: 'written-mdy',
   inputStyle: 'buttons',
-  // Launches upright — the orientation the app icon, the launch PNGs and every screenshot already
-  // show. `true` (turned) is the opt-in.
-  rotateDots: false,
+  // Launches Standard — the orientation the app icon, the launch PNGs and every screenshot already
+  // show. Both turns are opt-in.
+  dotRotation: 'standard',
   // Every preset opens on Classic until the player picks otherwise — the behaviour the app has
   // always had (main.tsx's `mode` useState was hard-coded to "classic"). An absent key on a
   // pre-Q3 payload merges to exactly this, so v2→v3 needs no migrate function.
@@ -158,18 +155,35 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
 // comparison, which left Save Defaults unreachable for an amnesic-only change.)
 const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
 
-// v1 → v2: the picker's old `dotOrientation` ('columns' | 'rows') collapses to the boolean it was
-// always describing — 'rows' is the turned/opt-in state, so it becomes `rotateDots: true`;
-// 'columns' becomes `false`. The old field name is not carried forward (nothing in this store's
-// shape reads it any more, and PERSISTED_KEYS — derived from SETTINGS_DEFAULTS — will never
-// re-persist it either). Mirrors progress.ts's `migrateAoxBestKeys`: a small pure rewrite, exported
-// so the transformation is tested directly rather than only through a simulated rehydrate. Called
-// only once `migrate` below has confirmed `dotOrientation` is actually present.
-export function migrateDotOrientation(
-  state: Partial<SettingsValues> & { dotOrientation?: DotOrientation },
+// The two shapes the Rotate Dots setting was saved in before today's `dotRotation` (its history is
+// at SettingsValues above). Typed `unknown` because they are read off saved data, never trusted.
+export type LegacyDotFields = { dotOrientation?: unknown; rotateDots?: unknown }
+
+// ★ THE ROTATE DOTS MIGRATION — every saved shape the setting has ever had, onto today's
+// `dotRotation`, in ONE pure step. Exported and reused by store/userDefaults (whose Save Defaults
+// snapshot is a full SettingsValues of its own, which this store's `migrate` can never reach), so
+// the two stores cannot disagree about what the rewrite does; tested directly, like progress.ts's
+// `migrateAoxBestKeys`.
+//   • Both legacy fields are ALWAYS dropped: nothing reads them, and PERSISTED_KEYS (derived from
+//     SETTINGS_DEFAULTS) would never re-persist them anyway.
+//   • A valid `dotRotation` already present WINS over any legacy field — a payload this build
+//     wrote and an older build then re-saved while keeping the unknown field (store/userDefaults'
+//     snapshot is persisted whole, so there it survives; see that store's `version` note).
+//   • Otherwise a legacy "turned" — `rotateDots: true`, or the original picker's 'rows' — becomes
+//     'ccw90', the one turn that existed before 45° did. Anything else becomes NO KEY AT ALL rather
+//     than an explicit 'standard': an absent key is exactly what `mergeOverDefaults` (and
+//     userDefaults' `effectiveSettingsDefaults`) turn into the factory value, so writing one would
+//     only be a second statement of the default.
+//   • ⚠ AN UNRECOGNISED `dotRotation` IS DROPPED too, and that is this build being the OLDER build
+//     for once: a future build that adds a fourth rotation will bump `version`, and zustand runs
+//     `migrate` on ANY version mismatch — newer included — so this screen is what turns a value this
+//     build cannot draw into the factory Standard instead of an undefined lookup in DOT_CELLS.
+export function migrateDotRotation(
+  state: Partial<SettingsValues> & LegacyDotFields,
 ): Partial<SettingsValues> {
-  const { dotOrientation, ...rest } = state
-  return { ...rest, rotateDots: dotOrientation === 'rows' }
+  const { dotOrientation, rotateDots, dotRotation, ...rest } = state
+  if (isDotRotation(dotRotation)) return { ...rest, dotRotation }
+  return rotateDots === true || dotOrientation === 'rows' ? { ...rest, dotRotation: 'ccw90' } : rest
 }
 
 export const useSettings = create<SettingsState>()(
@@ -179,7 +193,7 @@ export const useSettings = create<SettingsState>()(
       setRandomFormat: (v) => set((s) => ({ randomFormat: resolve(v, s.randomFormat) })),
       setDateFormat: (v) => set((s) => ({ dateFormat: resolve(v, s.dateFormat) })),
       setInputStyle: (v) => set((s) => ({ inputStyle: resolve(v, s.inputStyle) })),
-      setRotateDots: (v) => set((s) => ({ rotateDots: resolve(v, s.rotateDots) })),
+      setDotRotation: (v) => set((s) => ({ dotRotation: resolve(v, s.dotRotation) })),
       setDefaultMode: (v) => set((s) => ({ defaultMode: resolve(v, s.defaultMode) })),
       setUseJulian: (v) => set((s) => ({ useJulian: resolve(v, s.useJulian) })),
       setMinY: (v) => set((s) => ({ minY: resolve(v, s.minY) })),
@@ -226,41 +240,48 @@ export const useSettings = create<SettingsState>()(
       // ⚠ THIS STORE IS WHERE THAT PROMISE IS AT ITS WEAKEST, and it is worth stating here rather
       // than leaving to be rediscovered: the live site and staging share this origin, so an OLD
       // build and this one really do interleave on this key. The key they agree about is identical;
-      // the PAYLOAD is only as complete as the older build's own `partialize`. A build that still
-      // writes the old `dotOrientation` field (pre-Q3) saves its OWN `version: 1` alongside it, so
-      // THIS build's `migrate` below still catches it on the next boot here and `rotateDots` comes
-      // back correct — the one case the interleaving cannot silently lose. A build from before
-      // dotOrientation existed at all writes neither field, and that boot reads the factory
-      // `rotateDots: false`, the same silent-revert shape every setting added after launch already
-      // has. Nothing is mis-attributed and no stats are involved either way; it is the price of one
-      // key serving more than one build in flight, argued in full in store/presets' header.
+      // the PAYLOAD is only as complete as the older build's own `partialize`. For Rotate Dots, in
+      // both directions:
+      //   • AN OLDER BUILD WRITES, THIS ONE READS: its payload carries `rotateDots` (or, older
+      //     still, `dotOrientation`) under its OWN older `version`, so this build's `migrate` below
+      //     catches it on the next boot here, and a turned layout comes back as 90° — the only turn
+      //     those builds knew. A build from before the setting existed writes neither field, and
+      //     that boot reads the factory Standard.
+      //   • THIS BUILD WRITES, AN OLDER ONE READS (`dotRotation`, version 4): the older build finds
+      //     no `rotateDots` and draws its factory UPRIGHT layout — FAIL-SAFE, never a wrong turn and
+      //     never a crash, because it ignores the unknown field outright. But zustand runs that
+      //     build's `migrate` on the version mismatch and then RE-SAVES at once through its own
+      //     `partialize`, which drops `dotRotation`; so after an older build has merely OPENED, this
+      //     build reads the player's choice back as Standard. Bounded (one setting reverts; nothing
+      //     is mis-attributed, no stats are involved) and reachable only from a pre-round-23 tab
+      //     still open on the same origin. A legacy `rotateDots` mirror written beside `dotRotation`
+      //     would soften it for 90° alone, and would be a shim kept forever for a window that closes
+      //     the moment both sites update — so there is none.
+      // It is the price of one key serving more than one build in flight, argued in full in
+      // store/presets' header.
       name: PRESET_STORE_KEYS.settings,
       // …and this is what makes presets 2, 3, 4… land somewhere else. The `name` above never
       // changes; the adapter rewrites it to the ACTIVE preset's key at each read and each write.
       // See store/presets for why that beat swapping the name on every switch.
       storage: presetScopedStorage<Partial<SettingsState>>(),
-      // v2 = dotOrientation LEFT the shape (Q3, round 20 — see the `migrate` step immediately
-      // below, and the field's own comment near SettingsValues above).
-      // v3 = `defaultMode` JOINED the shape (round-21 Q3). It needs no `migrate` branch: an absent
-      // key on a v2 (or older) payload is exactly what `mergeOverDefaults` turns into the factory
-      // 'classic', which is the pre-Q3 behaviour. The bump is here only so the version field keeps
-      // pace with the shape and a future rewrite has a gate to hang off.
-      version: 3,
-      // Saved-shape migrations — the version-gated REWRITE, run once at hydrate when the stored
-      // version is older. Only dotOrientation → rotateDots needs one: a stored 'rows'/'columns' is
-      // information a later read cannot reconstruct from the boolean alone, exactly the shape
-      // progress.ts's own v1→v2 aoxBest migration argues in full (this store follows that precedent
-      // rather than re-deriving it). `migrate` runs BEFORE `merge` below, so by the time the
-      // unscreened persisted-spread in `merge` sees this object it already carries `rotateDots` (or
-      // nothing at all, for a payload that never had `dotOrientation` either) — `merge` itself needs
-      // no special-casing for the same reason progress.ts's `mergeOverDefaults` needed none for
-      // aoxBest: the rewrite already produced the CURRENT shape.
-      migrate: (persisted, version) => {
-        const state = persisted as Partial<SettingsValues> & { dotOrientation?: DotOrientation }
-        return version < 2 && state && 'dotOrientation' in state
-          ? migrateDotOrientation(state)
-          : state
-      },
+      // v2 = `dotOrientation` LEFT the shape for the boolean `rotateDots` (Q3, round 20).
+      // v3 = `defaultMode` JOINED the shape (round-21 Q3). It needs no rewrite: an absent key on an
+      // older payload is exactly what `mergeOverDefaults` turns into the factory 'classic', which
+      // is the pre-Q3 behaviour.
+      // v4 = `rotateDots` LEFT the shape for the three-way `dotRotation` (round-23 Q6).
+      version: 4,
+      // Saved-shape migration, run once at hydrate whenever the stored version DIFFERS — older OR
+      // newer, since that is when zustand calls it. Deliberately not gated on the number:
+      // migrateDotRotation is a pure, idempotent rewrite keyed on the SHAPE it finds, and it also
+      // screens a newer build's unknown rotation back to the factory, which a `version < 4` gate
+      // would skip (see its header). `migrate` runs BEFORE `merge` below, so by the time the
+      // unscreened persisted-spread in `merge` sees this object it already carries today's shape —
+      // `merge` itself needs no special-casing, for the reason progress.ts's aoxBest migration
+      // argues in full.
+      migrate: (persisted) =>
+        persisted && typeof persisted === 'object'
+          ? migrateDotRotation(persisted as Partial<SettingsValues> & LegacyDotFields)
+          : (persisted as Partial<SettingsValues>),
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<SettingsState>,

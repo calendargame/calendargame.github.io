@@ -572,13 +572,10 @@ export const changelogDot = () => updateDot(changelogLink())
 // Save Defaults was dimmed and inert for an Amnesic-only change, so the capture was unreachable).
 // It is listed here because this list is "every On/Off switch in the panel", which is a question
 // about the panel, not about the store.
-// ⚠ 'Rotate Dots CCW' joined in Q3 (round 20) as 'Dot Layout' — it was a two-option PillTray before
-// and is a switch now (store/settings' `rotateDots`), on THE PICKER RULE's own logic: a choice
-// between exactly two named alternatives IS an on/off shape. Renamed to 'Rotate Dots CCW' in Q9
-// (round 21).
+// ⚠ Rotate Dots is NOT here: it was a switch from round 20 ('Dot Layout', then 'Rotate Dots CCW')
+// until round 23 gave it a third option, which made it a picker again — see PICKER_NAMES.
 export const SWITCH_LABELS = [
   'Random Format',
-  'Rotate Dots CCW',
   'Use System Settings',
   'Julian Calendar (pre-Oct 15, 1582)',
   'Save Stats',
@@ -669,15 +666,22 @@ export const pickerChosen = (name) => litLabels(pickerPills(name))
 export const PICKER_NAMES = [
   'Date Format',
   'Input',
+  'Rotate Dots',
   'Dark theme',
   'Light theme',
   'Leap Year Chance',
   'Jan/Feb Chance on Leap Years',
   'Julian Chance',
 ]
-// The four that can LOCK, and the only four — Jan/Feb Chance is the deliberate negative control
+// The five that can LOCK, and the only five — Jan/Feb Chance is the deliberate negative control
 // (it has no lock branch at all) and the theme groups never take `disabled`.
-export const LOCKABLE_PICKERS = ['Input', 'Date Format', 'Leap Year Chance', 'Julian Chance']
+export const LOCKABLE_PICKERS = [
+  'Input',
+  'Rotate Dots',
+  'Date Format',
+  'Leap Year Chance',
+  'Julian Chance',
+]
 
 // A PICKER'S LOCK, reported as the things the USER meets rather than as the class that happens to
 // draw them. All of them come from ONE `disabled` on the PillGroup, which is exactly why they are
@@ -1081,10 +1085,7 @@ export function panelValues() {
     randomFormat: switchState('Random Format'),
     dateFormat: pickerChosen('Date Format'),
     input: pickerChosen('Input'),
-    // Rotate Dots CCW is a SWITCH (Q3, round 20; renamed from 'Dot Layout' in Q9, round 21), not a
-    // picker — read through switchState like every other On/Off setting in this snapshot, rather
-    // than pickerChosen.
-    rotateDots: switchState('Rotate Dots CCW'),
+    dotRotation: pickerChosen('Rotate Dots'),
     // Default Mode (round-21 Q3) — a two-tray PillGroup like Date Format; pickerChosen reads the lit
     // pill across both trays. Reported here so the "Reset Settings returns every value the panel
     // shows" round-trip covers it too.

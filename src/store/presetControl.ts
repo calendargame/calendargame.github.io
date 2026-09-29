@@ -227,9 +227,9 @@ const sameJson = (a: unknown, b: unknown): boolean => {
 // ⚠ AND AN **EXTRA** KEY IS A DIVERGENCE, which is the second reason the merge shape was chosen
 // over a per-key loop, and it is the line that makes this safe across VERSIONS with no version
 // check at all. A payload written by an older build carries fields this shape no longer has — a
-// pre-Q3 `dotOrientation` (store/settings' v1→v2), an old `lookupHistory` on a progress payload
-// (store/progress' v4) — and each of them survives the spread as a key the defaults do not have, so
-// the counts differ and the answer is "not factory". That is a FALSE NEGATIVE by construction:
+// pre-Q3 `dotOrientation` or a pre-round-23 `rotateDots` (store/settings' migrateDotRotation), an
+// old `lookupHistory` on a progress payload (store/progress' v4) — and each of them survives the
+// spread as a key the defaults do not have, so the counts differ and the answer is "not factory". That is a FALSE NEGATIVE by construction:
 // every payload this file cannot read in today's shape asks first. Re-deriving each store's
 // `migrate` here to judge such a payload precisely would be a second copy of the one thing that
 // must never have two versions.

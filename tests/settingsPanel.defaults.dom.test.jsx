@@ -194,7 +194,7 @@ const PERSONAL_SETTINGS = {
   randomFormat: true,
   dateFormat: 'numeric-ymd',
   inputStyle: 'dots',
-  rotateDots: true,
+  dotRotation: 'ccw45',
   defaultMode: 'blitz',
   useJulian: false,
   minY: 1600,

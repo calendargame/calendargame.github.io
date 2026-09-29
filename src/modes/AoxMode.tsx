@@ -92,7 +92,7 @@ function AoxMode({
   randomFormat = false,
   dateFormat = 'written-mdy',
   inputStyle = 'buttons',
-  dotOrientation = 'columns',
+  dotRotation = 'standard',
   saveStats = true,
   settingsOpen,
   onFreshChange,
@@ -870,7 +870,7 @@ function AoxMode({
         <WeekdayAnswer
           key={state.gridEpoch}
           inputStyle={inputStyle}
-          dotOrientation={dotOrientation}
+          dotRotation={dotRotation}
           persistBtns={state.persistBtns}
           flash={flash}
           optionsDisabled={optionsDisabled}

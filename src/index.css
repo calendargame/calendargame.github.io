@@ -682,11 +682,11 @@ button:focus,select:focus{outline:none}
    4-row labelled-button grid so switching layouts never shrinks the answer panel; the square 3×3
    .dot-cluster (which carries data-answer-grid, so the pointer controller's drag-to-select AND the
    keyboard 0–9 children[idx] path both operate on it) is centred inside it. DOM order stays Sun..Sat;
-   the logo positions come from inline grid-row/column — which orientation those positions describe
-   is Settings → Display → Rotate Dots CCW, resolved in JS (lib/dotLayout's DOT_CELLS) and NOT by a CSS
+   the logo positions come from inline grid-row/column — which rotation those positions describe
+   is Settings → Display → Rotate Dots, resolved in JS (lib/dotLayout's DOT_CELLS) and NOT by a CSS
    transform on this cluster: a transform would leave the DOM, the keyboard order and every hit
-   area below reasoning in the untransformed frame. Nothing in this block is orientation-specific.
-   Idle/flash/persist colours reuse the button
+   area below reasoning in the untransformed frame. Standard and 90° share every rule here; 45° is
+   the one override block at the end (see ⚠ THE 45° LATTICE). Idle/flash/persist colours reuse the button
    state classes (surface-button / flash-* / btn-*-persist); .dot-btn only adds the circular shape +
    border WIDTH (no background/border-colour, so the state class wins those). --ans-h must equal
    BASE_BTN's metrics so the two layouts match height: 4 rows × (text-base 1.5rem line + py-3 1.5rem +
@@ -703,17 +703,17 @@ button:focus,select:focus{outline:none}
    box-shadow (follows the circle, unlike the square outline). On-device knobs: --ans-h (box height)
    + --dot-frac (dot diameter as a FRACTION of its grid cell — unitless since sub-group 1B, because
    the hit-area rule below divides by it; ×100% recovers the width it always was).
-   ⚠ NOTHING BELOW IS ORIENTATION-SPECIFIC, and it must stay that way: the cluster is a uniform 3×3
-   of identical square cells, so the same rules hold whichever two cells the turn leaves empty
-   (centre-top + centre-bottom upright, mid-left + mid-right rotated). Any rule that named a
-   particular cell would have to be written twice and would rot the moment a third orientation was
-   ever considered.
+   ⚠ NO RULE HERE NAMES A CELL, and it must stay that way: the cluster is a uniform grid of identical
+   square cells, so the same rules hold whichever cells a rotation leaves empty (centre-top +
+   centre-bottom Standard, mid-left + mid-right at 90°, two diagonal cells of the 45° lattice). A
+   rule that named a particular cell would have to be written once per rotation. What 45° changes
+   is the LATTICE, never a cell — see its block.
    ⚠ EACH DOT'S HIT AREA IS ITS WHOLE SQUARE CELL (sub-group 1B), which is the dot rule's whole
    content: with no gap in the cluster, the cell boundary IS the midpoint between two neighbouring
    dots, so "own your cell" and "split the space between two dots down the middle" are the same
    sentence — and the circle no longer throws away the ~48% of its cell that falls outside the round
-   shape. THE TWO EMPTY CELLS — wherever the current orientation puts them — STAY DEAD, and so do the margins either
-   side of the cluster: a dot claims its own cell and not one pixel further, so the cluster keeps an
+   shape. THE TWO EMPTY CELLS — wherever the current rotation puts them — STAY DEAD, and so do the
+   margins either side of the cluster: a dot claims its own cell and not one pixel further, so the cluster keeps an
    in-cluster place to slide a press onto and cancel it. The ::after is CENTRED on the dot rather
    than inset from it (top/left 50% + a −50% translate), and that is what makes it exact: the
    pseudo, the dot's padding box, the dot's border box and the cell are all concentric, so the
@@ -725,6 +725,34 @@ button:focus,select:focus{outline:none}
 .dot-btn{--hit-bd:1px;position:relative;inline-size:calc(var(--dot-frac) * 100%);aspect-ratio:1;border-radius:50%;border-width:var(--hit-bd);border-style:solid}
 .dot-btn::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);inline-size:calc((100% + 2 * var(--hit-bd)) / var(--dot-frac));aspect-ratio:1}
 .dot-btn.drag-target{outline:none;box-shadow:0 0 0 2px var(--drag-ring)}
+/* ⚠ THE 45° LATTICE (Rotate Dots → 45° CCW, round-23 Q6). The Standard layout turned an eighth-turn
+   and scaled by --dot-scale — dots, spacing AND hit areas together, so it is the same shape, only
+   smaller (lib/dotLayout's DIAGONAL_DOT_SCALE argues the number; tests/dotRotation.dom checks the
+   two copies agree). Turned 45°, the 3×3's cells land on a 5×5 lattice, on a checkerboard (DOT_CELLS'
+   rotateCcw45); a turned cell's side is √2 lattice tracks, which is the one fact every line below
+   restates:
+     • THE BOX IS UNCHANGED — the same min(--ans-h, 100%) square as the other two, so the answer
+       panel never moves. The lattice is shrunk INSIDE it by padding: lattice side = box ×
+       5·k/(3·√2) (5 tracks, each a turned cell's side k·box/3 over √2). The padding's percentage
+       resolves against the same grid area the inline-size's does, so both sides of that sum are
+       one length.
+     • THE DOT is --dot-frac of its TURNED cell, so √2 × --dot-frac of a lattice track (≈1.018 — a
+       hair wider than its track; place-items:center overflows it evenly both ways).
+     • ITS HIT AREA is its turned cell — the base ::after (border box ÷ --dot-frac is exactly that
+       cell's side) rotated 45°, a diamond. Neighbouring diamonds meet edge to edge on the midline
+       between two dots, which is the dot rule above verbatim, turned; the two empty cells' diamonds
+       stay dead. (A dot's plain LATTICE square would be half that area — and, at 1.018 tracks, not
+       even cover the dot's own rim.)
+     • CLIPPED TO THE BOX — clip-path:inset(0), which clips hit-testing as well as painting. The
+       four outermost diamonds' tips reach past the box (3 tracks from centre against its ~2.65);
+       unclipped they would sit, positioned and therefore on top, over whatever is above or below
+       the answer panel. Nothing visible is lost: the outermost dot's far edge sits ~2.7% of the box
+       inside it (~6px on a phone), room for the 2px drag ring. (clip-path rather than overflow:clip for reach — Safari
+       gained overflow:clip only in 16 — and rather than overflow:hidden, which would make the
+       cluster a scroll container.) */
+.dot-cluster[data-dot-rotation="ccw45"]{--dot-scale:.8;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);padding:calc(min(var(--ans-h),100%) * (1 - 5 * var(--dot-scale) / (3 * 1.41421356)) / 2);clip-path:inset(0)}
+.dot-cluster[data-dot-rotation="ccw45"] .dot-btn{inline-size:calc(var(--dot-frac) * 1.41421356 * 100%)}
+.dot-cluster[data-dot-rotation="ccw45"] .dot-btn::after{transform:translate(-50%,-50%) rotate(45deg)}
 /* Q8 — the ⚙ gear "modified" indicator: a flush inside-bottom 2px violet bar shown while any
    CURRENTLY-IN-EFFECT menu setting, or any of the four capturable mode-screen prefs (Flash speed,
    both Blitz timers, AoX run length), diverges from the user's saved defaults (the factory launch

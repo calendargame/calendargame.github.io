@@ -2,10 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { registerPersistFlush } from './storageHealth.js'
 import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
-import { SETTINGS_DEFAULTS, migrateDotOrientation } from './settings.js'
-import type { SettingsValues } from './settings.js'
+import { SETTINGS_DEFAULTS, migrateDotRotation } from './settings.js'
+import type { SettingsValues, LegacyDotFields } from './settings.js'
 import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
-import type { DotOrientation } from '../lib/dotLayout.js'
 
 // userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, Q7 "Save Defaults").
 //
@@ -102,8 +101,8 @@ export const effectiveAmnesicDefault = (saved: SavedDefaults | null): boolean =>
 //
 // Reads the persist envelope directly — the same `{ state: {...} }` shape store/presets'
 // readStoredRegistry parses, and for the same reason: a store pointed at one preset cannot answer
-// for another. Only `saved.amnesic` is consulted, which the v1→v2 dotOrientation→rotateDots
-// migration never touches, so no migration step is reproduced here. An absent, unreadable or
+// for another. Only `saved.amnesic` is consulted, which the Rotate Dots migration (the only
+// rewrite this store has) never touches, so no migration step is reproduced here. An absent, unreadable or
 // malformed payload is treated as "nothing saved" → effectiveAmnesicDefault(null) → false, which
 // is the intended fallback: a preset manually set Amnesic with NO saved defaults reverts to off on
 // every reopen (owner-confirmed — guest mode is temporary by default).
@@ -172,40 +171,44 @@ export const useUserDefaults = create<UserDefaultsState>()(
       // saved values rather than on some other preset's.
       name: PRESET_STORE_KEYS.userDefaults,
       storage: presetScopedStorage<Pick<UserDefaultsState, 'saved'>>(),
-      // v2 = the same dotOrientation → rotateDots collapse as store/settings' own v1→v2 (Q3, round
-      // 20), because `saved.settings` is a FULL SettingsValues SNAPSHOT — not a live copy of that
-      // store — so useSettings' own migrate (which only ever sees ITS OWN persisted blob at
-      // `cg-settings-v1`) can never reach in here and fix it. Without this store's own migrate step,
-      // a snapshot saved before Q3 keeps its old `dotOrientation: 'rows' | 'columns'` forever: the
-      // unscreened top-level spread in `merge` below carries the stale nested object through
-      // byte-for-byte on every hydrate, `effectiveSettingsDefaults`' spread never finds a
-      // `rotateDots` key to override the factory `false` with, and Reset Settings / Full Reset
-      // (which both write `effectiveSettingsDefaults(saved)` straight into the live store) silently
-      // revert the player's saved Rotate Dots CCW choice back to upright — forever, since
+      // ★ THIS STORE NEEDS ITS OWN COPY OF EVERY SETTINGS MIGRATION, and has twice been the one a
+      // migration forgot: `saved.settings` is a FULL SettingsValues SNAPSHOT — not a live copy of
+      // that store — so useSettings' own migrate (which only ever sees ITS OWN persisted blob at
+      // `cg-settings-v1`) can never reach in here. Without this step a snapshot saved under an older
+      // shape keeps it forever: the unscreened top-level spread in `merge` below carries the stale
+      // nested object through byte-for-byte on every hydrate, `effectiveSettingsDefaults`' spread
+      // never finds a `dotRotation` key to override the factory Standard with, and Reset Settings /
+      // Full Reset (which both write `effectiveSettingsDefaults(saved)` straight into the live store)
+      // silently revert the player's SAVED Rotate Dots choice — forever, since
       // `commitManageDefaults` (components/SettingsPanel) then carries the same stale shape forward
       // on every subsequent Manage-Defaults edit-and-save.
-      version: 2,
-      // Saved-shape migration, run once at hydrate when the stored version is older — mirrors
-      // store/settings' own v1→v2 exactly, just reaching one level deeper: into `saved.settings`
-      // rather than the store's own top level. Reuses migrateDotOrientation rather than
-      // reimplementing it, so the two stores can never disagree about what the rewrite does. A
-      // snapshot with no `saved` (nothing ever saved) or whose `saved.settings` never had
-      // `dotOrientation` (saved after Q3, or before dotOrientation existed at all) passes through
-      // unchanged, same as store/settings' own guard.
-      migrate: (persisted, version) => {
+      // v2 = `dotOrientation` → the boolean `rotateDots` (Q3, round 20), as store/settings' v1→v2.
+      // v3 = `rotateDots` → the three-way `dotRotation` (round-23 Q6), as store/settings' v3→v4.
+      //   ⚠ AN OLDER BUILD READING A v3 SNAPSHOT is fail-safe AND lossless here, unlike the live
+      //   settings key: it finds no `rotateDots`, so its Reset Settings lands on its factory upright
+      //   layout; and although it re-saves at once (zustand's migrate-then-save on the version
+      //   mismatch), its `partialize` keeps `saved` WHOLE, so `dotRotation` rides through untouched
+      //   and this build reads it back intact.
+      version: 3,
+      // Saved-shape migration, run at hydrate whenever the stored version differs — the same pure,
+      // idempotent, shape-keyed migrateDotRotation store/settings runs on its own top level, reached
+      // one level deeper: into `saved.settings`. Reused rather than reimplemented, so the two stores
+      // can never disagree about what the rewrite does (including its screen of a newer build's
+      // unknown rotation). A snapshot with no `saved` (nothing ever saved) passes through unchanged.
+      migrate: (persisted) => {
         const state = persisted as {
           saved:
             | (Omit<SavedDefaults, 'settings'> & {
-                settings: Partial<SettingsValues> & { dotOrientation?: DotOrientation }
+                settings: Partial<SettingsValues> & LegacyDotFields
               })
             | null
-        }
-        if (version < 2 && state?.saved?.settings && 'dotOrientation' in state.saved.settings) {
+        } | null
+        if (state?.saved?.settings) {
           return {
             ...state,
             saved: {
               ...state.saved,
-              settings: migrateDotOrientation(state.saved.settings) as SettingsValues,
+              settings: migrateDotRotation(state.saved.settings) as SettingsValues,
             },
           } as Pick<UserDefaultsState, 'saved'>
         }

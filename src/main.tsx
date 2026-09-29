@@ -17,7 +17,6 @@ import { initObservability, captureError } from './observability/sentry'
 // itself, so the shim had nothing left to reconstruct.
 import { createRoot } from 'react-dom/client'
 import { fmt } from './lib/format.js'
-import { dotOrientationFor } from './lib/dotLayout.js'
 import { randomDate } from './lib/dateGen.js'
 import { makeDedPuzzle } from './lib/dedPuzzle.js'
 import { UpdateDot } from './components/UpdateDot.jsx'
@@ -100,15 +99,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // no longer imports it: its last tokens (RESET_BTN_CLASS, FOOTER_RESET_BTN_CLASS,
     // FOOTER_META_ROW_CLASS and NUM_INPUT_CLASS) left with the ⚙ card. Consumed now by
     // components/SettingsPanel + DefaultsCard + WeekdayAnswer and all five mode screens.
-    // DOT_CELLS — the logo's 7-position layout for the Dots input, in both orientations →
+    // DOT_CELLS — the logo's 7-position layout for the Dots input, in all three rotations →
     // src/lib/dotLayout.ts. NOT imported here: App renders no answer input. Its readers are
     // components/WeekdayAnswer (the Dots grid itself) and components/GuidePage's DotDiagram, which
-    // derives its diagram from the same data. What App DOES hold is the rotateDots SETTING (the
-    // boolean; the geometry's own two-valued DotOrientation lives only in lib/dotLayout), and
-    // `dotOrientationFor` — the ONE place that boolean is turned back into DotOrientation — IS
-    // imported here, because the top bar's mark needs a SECOND, stricter derivation the four weekday
-    // modes don't: the mark only turns while inputStyle is 'dots' (Q3, round 20 — see the W5Logo
-    // call site for why). DOT_MARK_ROTATION itself stays unimported; W5Logo applies it.
+    // derives its diagram from the same data. What App DOES hold is the dotRotation SETTING, passed
+    // straight to the four weekday modes, plus the one stricter reading of it the top bar's mark
+    // needs: the mark only turns while inputStyle is 'dots' (Q3, round 20 — see the W5Logo call
+    // site for why). Nothing from lib/dotLayout is imported here — W5Logo applies DOT_MARK_ROTATION.
     // WeekdayAnswer -> src/components/WeekdayAnswer.tsx. NOT imported here: all five mode screens
     // render their own, and App renders none.
     // MONTH / DAY name tables → src/lib/format.js. NOT imported here — see the format entry below for
@@ -464,18 +461,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const dateFormat=useSettings(s=>s.dateFormat);
       const randomFormat=useSettings(s=>s.randomFormat);
       const inputStyle=useSettings(s=>s.inputStyle);
-      const rotateDots=useSettings(s=>s.rotateDots);
+      const dotRotation=useSettings(s=>s.dotRotation);
       // defaultMode (round-21 Q3) — bound only for settingsAtDefaults below (a changed opening page
       // must light the gear and un-dim Save Defaults, since it is captured). The panel selects its
       // own setDefaultMode; nothing else in App reads this — the page itself is applied by the
       // boot effect / preset-switch subscription via readStoredDefaultMode, not this binding.
       const defaultMode=useSettings(s=>s.defaultMode);
-      // The raw derivation — passed to the four weekday mode screens (and, through them, to
-      // WeekdayAnswer), which only ever consult it while inputStyle is already 'dots' (they render
-      // no other branch that reads it), so no additional gate belongs here. The top bar's mark needs
-      // a STRICTER one — see its own call site below — and computes that separately rather than
-      // reusing this name for two different meanings.
-      const dotOrientation=dotOrientationFor(rotateDots);
       const leapChance=useSettings(s=>s.leapChance);
       const janFebChance=useSettings(s=>s.janFebChance);
       const julianChance=useSettings(s=>s.julianChance);
@@ -2026,7 +2017,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // `false` would leave such a player's gear permanently lit with a Reset Settings that undid
       // nothing, which is the dormant-theme false positive one store over.
       const amnesicAtDefault=amnesic===effectiveAmnesicDefault(savedDefaults);
-      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&rotateDots===defSettings.rotateDots&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&amnesicAtDefault&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
+      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&dotRotation===defSettings.dotRotation&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&amnesicAtDefault&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
       // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator (Q8), the Save
       // Defaults dim AND the Reset Settings dim. True when live state diverges from the effective
       // defaults in EITHER store — any menu setting, either year BOX, or any of the four capturable
@@ -2203,27 +2194,26 @@ import BlitzMode from './modes/BlitzMode.jsx'
                 is that one control. `flex-1 min-w-0` sits on the switcher's OWN wrapper below;
                 every other child keeps `shrink-0`, unchanged from before. */}
             <div className="flex items-center gap-1.5">
-              {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Rotate Dots CCW) — BUT ONLY
+              {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Rotate Dots) — BUT ONLY
                   WHILE Input IS Dots (Q3, round 20). The app icon IS that 7-dot grid, coordinate
                   for coordinate, so turning the input and leaving the mark upright would break the
                   very claim How-to-Play makes about them — while turning the mark when there are
                   no dots ANYWHERE on screen for it to correspond to is a different bug, and the one
-                  this round fixes: `rotateDots` alone used to reach this prop unconditionally, so a
+                  round 20 fixed: the setting alone used to reach this prop unconditionally, so a
                   player on Buttons could leave it on and the mark sat turned forever with nothing
-                  on screen it matched. `inputStyle==='dots' &&` is the fix, folded into the SAME
-                  dotOrientationFor() call every other consumer uses rather than a separate branch —
-                  the four weekday mode screens (and WeekdayAnswer through them) get the plain
-                  derivation above instead, because they only ever consult it already inside their
-                  own `inputStyle==='dots'` render branch and a second gate there would be dead code.
+                  on screen it matched. The `inputStyle==='dots'` test below is that fix. The four
+                  weekday mode screens (and WeekdayAnswer through them) get the plain setting
+                  instead, because they only ever consult it already inside their own
+                  `inputStyle==='dots'` render branch and a second gate there would be dead code.
                   This is the ONE drawing of the mark that follows: the title bar is app chrome, with
                   no static counterpart on screen beside it. The three full-screen frames —
                   index.html's #boot, the Updating overlay and the rotate-back overlay — keep the
-                  canonical upright form, because they stand next to (or back-to-back with) the
+                  canonical standard form, because they stand next to (or back-to-back with) the
                   iOS launch PNGs that are pre-renders of #boot and cannot follow anything. That
-                  is why W5Logo takes an ORIENTATION PROP defaulting to upright rather than
-                  reading the store itself: the default IS the fixed brand mark, and a caller has
-                  to ask for the player's. lib/dotLayout's DOT_MARK_ROTATION states the rest. */}
-              <W5Logo className="shrink-0" dotOrientation={dotOrientationFor(inputStyle==='dots'&&rotateDots)} />
+                  is why W5Logo takes a ROTATION PROP defaulting to standard rather than reading
+                  the store itself: the default IS the fixed brand mark, and a caller has to ask
+                  for the player's. lib/dotLayout's DOT_MARK_ROTATION states the rest. */}
+              <W5Logo className="shrink-0" dotRotation={inputStyle==='dots'?dotRotation:'standard'} />
               {/* THE PRESET SWITCHER, standing exactly where the wordmark stood — the owner's
                   layout, and the trade the wordmark's real estate paid for: a name you already
                   know, replaced by the one fact the bar could not otherwise tell you (which
@@ -2383,16 +2373,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
               together (clearing any caught error AND resetting the component's state). The
               always-mounted modes pass `active` so a hidden mode's crash paints nothing. */}
           <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="MoX" active={mode==="aox"}>
-            <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
+            <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"classic-"+classicResetKey} mode="Classic" active={mode==="classic"}>
-            <ClassicMode visible={mode==="classic"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
+            <ClassicMode visible={mode==="classic"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"flash-"+flashResetKey} mode="Flash" active={mode==="flash"}>
-            <FlashMode visible={mode==="flash"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
+            <FlashMode visible={mode==="flash"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"blitz-"+blitzResetKey} mode="Blitz" active={mode==="blitz"}>
-            <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotOrientation={dotOrientation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
+            <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"deduction-"+deductionResetKey} mode="Deduction" active={mode==="deduction"}>
             <DeductionMode visible={mode==="deduction"} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} settingsOpen={settingsOpen} onFreshChange={setDeductionIsFresh}/>

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useSettings, SETTINGS_DEFAULTS, migrateDotOrientation } from '../src/store/settings.js'
+import { useSettings, SETTINGS_DEFAULTS, migrateDotRotation } from '../src/store/settings.js'
 
 // settings.test.js — the ⚙ settings store. The store is the structural beachhead
 // for the mode-untangle, so its contract must be locked: (1) the 16 defaults,
@@ -21,8 +21,8 @@ describe('settings store', () => {
     expect(s.inputStyle).toBe('buttons')
     // Every preset opens on Classic until the player changes Default Mode (round-21 Q3).
     expect(s.defaultMode).toBe('classic')
-    // Upright — the orientation the app icon, the launch PNGs and every screenshot already show.
-    expect(s.rotateDots).toBe(false)
+    // Standard — the orientation the app icon, the launch PNGs and every screenshot already show.
+    expect(s.dotRotation).toBe('standard')
     expect(s.randomFormat).toBe(false) // launches OFF (Round-2): newcomers see ONE consistent format
     expect(s.useJulian).toBe(true)
     expect(s.julianChance).toBe('random')
@@ -85,33 +85,64 @@ describe('settings store', () => {
   })
 })
 
-// Q3 (round 20): dotOrientation ('columns' | 'rows') collapsed to the boolean rotateDots. The pure
-// rewrite is unit-tested here (Node); the wiring — that a stored v1 payload actually reaches this
-// function via useSettings.persist.rehydrate() — is settings.dom.test.jsx's claim (needs jsdom
-// localStorage), mirroring exactly how progress.test.js/progress.dom.test.js split the same concern
-// for migrateAoxBestKeys.
-describe('settings store — migrateDotOrientation (v1 → v2)', () => {
-  it('rows becomes rotateDots: true — the turned/opt-in state', () => {
-    expect(migrateDotOrientation({ dotOrientation: 'rows' })).toEqual({ rotateDots: true })
+// ★ THE ROTATE DOTS MIGRATION (round-23 Q6) — every saved shape the setting has had, onto today's
+// three-way `dotRotation`, in one pure step. Unit-tested here (Node); the WIRING — that stored
+// payloads actually reach it through useSettings.persist.rehydrate(), and that store/userDefaults'
+// snapshot gets the same rewrite — is tests/dotRotation.dom's and tests/userDefaults.dom's (both
+// need jsdom localStorage), mirroring how progress.test.js/progress.dom.test.js split the same
+// concern for migrateAoxBestKeys.
+describe('settings store — migrateDotRotation', () => {
+  it("round 20's boolean: rotateDots true becomes 90° CCW — the only turn that existed then", () => {
+    expect(migrateDotRotation({ rotateDots: true })).toEqual({ dotRotation: 'ccw90' })
   })
 
-  it('columns becomes rotateDots: false — the upright/factory state', () => {
-    expect(migrateDotOrientation({ dotOrientation: 'columns' })).toEqual({ rotateDots: false })
+  it('rotateDots false becomes NO key — the merge supplies the factory Standard', () => {
+    expect(migrateDotRotation({ rotateDots: false })).toEqual({})
   })
 
-  it('drops the old field name entirely rather than carrying it forward alongside the new one', () => {
-    const out = migrateDotOrientation({ dotOrientation: 'rows', dateFormat: 'written-mdy' })
+  it('the original picker: dotOrientation "rows" becomes 90° CCW, "columns" becomes no key', () => {
+    expect(migrateDotRotation({ dotOrientation: 'rows' })).toEqual({ dotRotation: 'ccw90' })
+    expect(migrateDotRotation({ dotOrientation: 'columns' })).toEqual({})
+  })
+
+  it('drops both legacy field names, always — even when they disagree or ride beside a current value', () => {
+    const out = migrateDotRotation({
+      dotOrientation: 'rows',
+      rotateDots: false,
+      dateFormat: 'numeric-ymd',
+    })
     expect(out).not.toHaveProperty('dotOrientation')
-    expect(out).toEqual({ dateFormat: 'written-mdy', rotateDots: true })
+    expect(out).not.toHaveProperty('rotateDots')
+    // Either legacy "turned" signal is enough — they were never both written by one build.
+    expect(out).toEqual({ dateFormat: 'numeric-ymd', dotRotation: 'ccw90' })
   })
 
-  it('passes every other field through untouched', () => {
-    const out = migrateDotOrientation({
-      dotOrientation: 'columns',
+  it('a valid dotRotation already present wins over any legacy field', () => {
+    // A payload this build wrote that an older build then re-saved with its own field beside it.
+    expect(migrateDotRotation({ dotRotation: 'ccw45', rotateDots: true })).toEqual({
+      dotRotation: 'ccw45',
+    })
+    for (const v of ['standard', 'ccw45', 'ccw90']) {
+      expect(migrateDotRotation({ dotRotation: v })).toEqual({ dotRotation: v })
+    }
+  })
+
+  it("an unrecognised dotRotation is dropped — a newer build's value this build cannot draw falls back to Standard", () => {
+    expect(migrateDotRotation({ dotRotation: 'ccw30' })).toEqual({})
+    expect(migrateDotRotation({ dotRotation: 45 })).toEqual({})
+    expect(migrateDotRotation({ dotRotation: null, rotateDots: true })).toEqual({
+      dotRotation: 'ccw90',
+    })
+  })
+
+  it('passes every other field through untouched, and is idempotent', () => {
+    const once = migrateDotRotation({
+      rotateDots: true,
       inputStyle: 'dots',
       minY: 1600,
       maxY: 1900,
     })
-    expect(out).toEqual({ inputStyle: 'dots', minY: 1600, maxY: 1900, rotateDots: false })
+    expect(once).toEqual({ inputStyle: 'dots', minY: 1600, maxY: 1900, dotRotation: 'ccw90' })
+    expect(migrateDotRotation(once)).toEqual(once)
   })
 })

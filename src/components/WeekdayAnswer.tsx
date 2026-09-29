@@ -4,7 +4,7 @@ import type { InputStyle } from '../store/settings.js'
 import type { ButtonState } from '../engine/answerButtons.js'
 import type { FlashState } from '../modes/modeTypes.js'
 import { DAY } from '../lib/format.js'
-import { DOT_CELLS, type DotOrientation } from '../lib/dotLayout.js'
+import { DOT_CELLS, type DotRotation } from '../lib/dotLayout.js'
 import { answerGridHitPad, colSpanClass } from '../lib/answerGrid.js'
 import { isTouch } from '../lib/modeFormat.js'
 import { buttonStateClass, BASE_BTN, ANSWER_GRID_GAP } from './controlClasses.js'
@@ -43,19 +43,21 @@ const WEEKDAY_HIT_PAD = answerGridHitPad(WEEKDAY_COLS, WEEKDAY_SPANS)
 // sides that may claim half of the ANSWER_GRID_GAP gutter beside them (lib/answerGrid decides which;
 // index.css draws the invisible ::after). The dots need no attribute at all: their cluster has NO
 // gutter — it is a square 3×3 place-items:center grid — so "half the space between two dots" is
-// exactly "the rest of my own cell", which .dot-btn::after states once for all seven. Both stop at
-// the outer edge, and in the dot layout the two empty cells stay dead on purpose: they, and the
-// space around either grid, are where a press slides to CANCEL.
+// exactly "the rest of my own cell", which .dot-btn::after states once for all seven. (At 45° the
+// cluster is a 5×5 lattice and "my own cell" is the standard cell TURNED — a diamond — which
+// index.css draws from the same rule plus a rotate; `data-dot-rotation` below is its hook.) Both
+// stop at the outer edge, and in the dot layout the two empty cells stay dead on purpose: they, and
+// the space around either grid, are where a press slides to CANCEL.
 function WeekdayAnswer({
   inputStyle,
-  dotOrientation,
+  dotRotation,
   persistBtns,
   flash,
   optionsDisabled,
   onPick,
 }: {
   inputStyle: InputStyle
-  dotOrientation: DotOrientation
+  dotRotation: DotRotation
   persistBtns: Record<string, ButtonState | undefined>
   flash: FlashState | null
   optionsDisabled: boolean
@@ -79,10 +81,10 @@ function WeekdayAnswer({
     return { bCls, inert, shouldDim, onClick }
   }
   if (inputStyle === 'dots') {
-    const cells = DOT_CELLS[dotOrientation]
+    const cells = DOT_CELLS[dotRotation]
     return (
       <div className="mt-4 dot-box">
-        <div className="dot-cluster" data-answer-grid="true">
+        <div className="dot-cluster" data-answer-grid="true" data-dot-rotation={dotRotation}>
           {DAY.map((nm, i) => {
             const o = opt(i)
             return (

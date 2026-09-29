@@ -10,7 +10,7 @@ import {
 import Expander from './Expander.jsx'
 import { Kbd, SectionLabel, SECTION_LABEL_CLASS } from './primitives.jsx'
 import { DAY, DAY_LETTER } from '../lib/format.js'
-import { DOT_CELLS, dotOrientationFor } from '../lib/dotLayout.js'
+import { DOT_CELLS, DOT_GRID_SIZE, type DotCell } from '../lib/dotLayout.js'
 import { selectionSuppressesToggle } from '../lib/selectionGuard.js'
 import { useSettings } from '../store/settings.js'
 import {
@@ -205,44 +205,60 @@ function UL({ children }: { children: ReactNode }) {
 // DotDiagram — a small inline SVG of the 7-dot answer layout (Settings → Display →
 // Input → Dots), each dot labelled with its weekday. Everything is DERIVED from the
 // shared DOT_CELLS grid (lib/dotLayout — the same data that positions the real Dots
-// input) + the DAY names (lib/format): grid cell (r,c) → SVG centre
-// (x = 30+(c-1)*60, y = 28+(r-1)*62), the label is the day's first three letters,
-// and the aria-label sentence reads the filled cells in row order — no hand-kept
-// copy of the layout exists here to drift. Drawn entirely in currentColor so it's
-// legible on every theme.
-// ★ IT SHOWS THE PLAYER'S OWN ORIENTATION (Settings → Display → Rotate Dots CCW), not a
-// fixed picture of the upright one: the section's heading is "Which dot is which",
-// and there is exactly one honest answer to that — the layout currently on screen.
-// A second diagram of the other orientation was considered and rejected: it would
-// document the setting twice (the words below already name both) while making the
-// answer to "which dot is which" ambiguous, which is the one thing the diagram is
-// for. Flipping the setting flips this picture, which is its own documentation.
-// The whole 3×3 frame is unchanged by the turn — only which cell each day occupies —
-// so the viewBox, the spacing and the labels-below-dots layout all still hold, and
-// the two rows of three labels the rotated form produces are the same count the
-// upright form's middle row already had.
+// input) + the DAY names (lib/format), and the aria-label sentence reads the filled cells
+// in row order — no hand-kept copy of the layout exists here to drift. Drawn entirely in
+// currentColor so it's legible on every theme.
+// ★ IT SHOWS THE PLAYER'S OWN ROTATION (Settings → Display → Rotate Dots), not a fixed
+// picture of the standard one: the section's heading is "Which dot is which", and there is
+// exactly one honest answer to that — the layout currently on screen. A diagram per
+// rotation was considered and rejected: it would document the setting three times (the
+// words below already name all three) while making the answer to "which dot is which"
+// ambiguous, which is the one thing the diagram is for. Changing the setting redraws this
+// picture, which is its own documentation.
+// THE FRAME NEVER CHANGES — viewBox, dot size, labels-below-dots — only the lattice inside it.
+// Standard and 90° are the 3×3: grid cell (r,c) → centre (x = 30+(c-1)*60, y = 28+(r-1)*62).
+// 45° is the 5×5 lattice (DOT_GRID_SIZE), and the same frame cut into HALF steps (30 × 31) —
+// which is exactly where the turned layout's points fall. Its seven dots sit on a
+// checkerboard, so a dot's nearest neighbour in its OWN column is two rows (62) down, the
+// same room the 3×3 gives each label; the diagonal neighbours are 30 across, clear of a
+// three-letter label either side.
 //   ⚠ A STORE SELECTOR, where every other consumer of this setting takes a prop. It is
 //     forced rather than chosen: GuidePage's entire signature is `visible` +
 //     `scrollerRef`, so a prop would mean opening a settings pipeline through the guide
 //     for one decorative SVG at the bottom of it. Selecting here also keeps the
-//     subscription at the leaf — the guide itself does not re-render on a flip.
-function DotDiagram() {
-  // Q3 (round 20): the store field is the boolean `rotateDots`; dotOrientationFor is the one place
-  // it is turned back into DotOrientation. Read RAW, deliberately not gated on inputStyle — see the
-  // header comment above (the diagram documents what turning the toggle ON would look like even
-  // when Buttons is the player's current Input, the same way it renders at all regardless of Input).
-  const DOT_CELL = DOT_CELLS[dotOrientationFor(useSettings((s) => s.rotateDots))]
-  const dotX = (cell: { r: number; c: number }) => 30 + (cell.c - 1) * 60
-  const dotY = (cell: { r: number; c: number }) => 28 + (cell.r - 1) * 62
-  // The cell's position in words: the centre cell reads "centre"; every other filled
-  // cell is edge-row-edge-column, so "row-column" ("top-left", "middle-right", …).
-  const posName = (cell: { r: number; c: number }) =>
-    cell.r === 2 && cell.c === 2
+//     subscription at the leaf — the guide itself does not re-render on a change.
+// Each rotation's grid → its step between neighbouring cells (x, y). The 5×5 steps are the 3×3's
+// halved, so both grids span the same frame.
+const DIAGRAM_STEP: Record<3 | 5, { x: number; y: number }> = {
+  3: { x: 60, y: 62 },
+  5: { x: 30, y: 31 },
+}
+// A cell's position in words, per grid. The 3×3's centre reads "centre" and every other filled
+// cell is row-column ("top-left", "middle-right", …). The 5×5's seven lie on the turned H: the
+// four tips of the diamond read as plain compass words ("top", "left", …) and the in-between cells
+// as "upper-right" / "lower-left" style, so each name still says where to look.
+const posName = (cell: DotCell, size: 3 | 5): string => {
+  if (size === 3)
+    return cell.r === 2 && cell.c === 2
       ? 'centre'
       : `${['top', 'middle', 'bottom'][cell.r - 1]}-${['left', 'centre', 'right'][cell.c - 1]}`
+  const v = ['top', 'upper', '', 'lower', 'bottom'][cell.r - 1]
+  const h = ['left', 'left', '', 'right', 'right'][cell.c - 1]
+  return [v, h].filter(Boolean).join('-') || 'centre'
+}
+function DotDiagram() {
+  // Read RAW, deliberately not gated on inputStyle — the diagram documents what the chosen
+  // rotation looks like even when Buttons is the player's current Input, the same way it renders
+  // at all regardless of Input.
+  const dotRotation = useSettings((s) => s.dotRotation)
+  const DOT_CELL = DOT_CELLS[dotRotation]
+  const size = DOT_GRID_SIZE[dotRotation]
+  const step = DIAGRAM_STEP[size]
+  const dotX = (cell: DotCell) => 30 + (cell.c - 1) * step.x
+  const dotY = (cell: DotCell) => 28 + (cell.r - 1) * step.y
   const ariaLabel = `Dots layout: ${DAY.map((day, i) => ({ day, cell: DOT_CELL[i] }))
     .sort((a, b) => a.cell.r - b.cell.r || a.cell.c - b.cell.c)
-    .map(({ day, cell }) => `${day} ${posName(cell)}`)
+    .map(({ day, cell }) => `${day} ${posName(cell, size)}`)
     .join(', ')}.`
   return (
     <svg
@@ -1567,15 +1583,15 @@ export default function GuidePage({
           <li>
             Every picker in the ⚙ menu is one named group of choices, not a row of loose buttons,
             and it&apos;s named for the setting you&apos;re changing — Open in, Default Mode, Date
-            Format, Input, Theme, Leap Year Chance, Jan/Feb Chance on Leap Years, Julian Chance.
-            Landing on an option is choosing it; the keys that move within a group are under
-            Keyboard Input above.
+            Format, Input, Rotate Dots, Theme, Leap Year Chance, Jan/Feb Chance on Leap Years,
+            Julian Chance. Landing on an option is choosing it; the keys that move within a group
+            are under Keyboard Input above.
           </li>
           <li>
-            The six On/Off switches carry their setting&apos;s name — Random Format, Rotate Dots
-            CCW, Use System Settings, Julian Calendar, Save Stats, Amnesic — rather than reading as
-            six identical buttons called &quot;On&quot;. Both Year Range boxes name themselves
-            Earliest Year and Latest Year.
+            The five On/Off switches carry their setting&apos;s name — Random Format, Use System
+            Settings, Julian Calendar, Save Stats, Amnesic — rather than reading as five identical
+            buttons called &quot;On&quot;. Both Year Range boxes name themselves Earliest Year and
+            Latest Year.
           </li>
           <li>
             The ⚙ button says what&apos;s behind it: that a setting has been changed, and that an
@@ -1689,12 +1705,12 @@ export default function GuidePage({
           <li>
             Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: the
             three buttons at the foot of the ⚙ menu and the Clear Saved Defaults link under them,
-            Show Codes, every locked picker, the Rotate Dots CCW switch while it is locked, the
-            Amnesic switch while Save Stats is off, a timer value you can&apos;t type into right
-            now, and — in Manage Presets — <b>✕</b> when only one preset is left. The reorder handle
-            beside each row never greys out; it has no end it cannot move toward. The rest of the
-            game&apos;s buttons — Reveal, Override / Undo, <b>&lt;</b> and <b>&gt;</b> — are only
-            dimmed, so they still read as ordinary buttons even when pressing one would do nothing.
+            Show Codes, every locked picker, the Amnesic switch while Save Stats is off, a timer
+            value you can&apos;t type into right now, and — in Manage Presets — <b>✕</b> when only
+            one preset is left. The reorder handle beside each row never greys out; it has no end it
+            cannot move toward. The rest of the game&apos;s buttons — Reveal, Override / Undo,{' '}
+            <b>&lt;</b> and <b>&gt;</b> — are only dimmed, so they still read as ordinary buttons
+            even when pressing one would do nothing.
           </li>
         </UL>
       </GuideSection>
@@ -1731,7 +1747,7 @@ export default function GuidePage({
           </li>
           <li>
             <b>Display</b> — how dates are shown and how you answer: Date Format (incl. Random
-            Format), Input (Buttons / Dots), Rotate Dots CCW, and Theme.
+            Format), Input (Buttons / Dots), Rotate Dots, and Theme.
           </li>
           <li>
             <b>Dates</b> — which dates get generated: Year Range, Leap Year Chance, Jan/Feb Chance
@@ -1829,14 +1845,14 @@ export default function GuidePage({
       </GuideSection>
       <GuideSection
         id="input"
-        title="Display — Input & Rotate Dots CCW"
+        title="Display — Input & Rotate Dots"
         openId={open}
         onToggle={toggle}
         durationMs={motionMs}
       >
         <Lead>
           Answer with labelled weekday buttons, or with the seven-dot logo layout — and turn that
-          layout 90° if you like.
+          layout 45° or 90° if you like.
         </Lead>
         <Subhead>Input</Subhead>
         <UL>
@@ -1860,36 +1876,49 @@ export default function GuidePage({
         <p className="text-(--tx-300-70) text-[12px] text-center">
           Sunday sits in the centre. The dots are deliberately unlabelled — their positions follow
           the day-of-week practice movement, so choosing one is the same motion you trace when
-          calculating. The diagram above always matches your Rotate Dots CCW setting.
+          calculating. The diagram above always matches your Rotate Dots setting.
         </p>
-        <Subhead>Rotate Dots CCW</Subhead>
+        <Subhead>Rotate Dots</Subhead>
+        <p>Three choices, each turning the dots further counterclockwise (CCW):</p>
+        <UL>
+          <li>
+            <b>Standard</b> (default) — the two runs of three weekdays go down the sides: Sat, Fri,
+            Thu down the left and Wed, Tue, Mon down the right.
+          </li>
+          <li>
+            <b>45° CCW</b> — the same seven dots turned an eighth of a turn, so the pattern stands
+            on a corner: Wed at the top, Sat at the left, Mon at the right and Thu at the bottom,
+            with Tue between Wed and Mon and Fri between Sat and Thu. The two runs now slant along
+            the diagonals. The whole pattern — dots and the spaces between them — is drawn at about
+            four-fifths of the usual size, because a turned square needs more room than the same
+            square standing straight, and the answer area doesn&apos;t grow.
+          </li>
+          <li>
+            <b>90° CCW</b> — a quarter turn, so the two runs lie along the top and bottom instead:
+            Wed, Tue, Mon across the top and Sat, Fri, Thu across the bottom.
+          </li>
+        </UL>
         <p>
-          <b>Off</b> (default) — the two runs of three weekdays go down the sides: Sat, Fri, Thu
-          down the left and Wed, Tue, Mon down the right.
-        </p>
-        <p>
-          <b>On</b> — the same seven dots turned 90° counterclockwise (CCW), so those two runs lie
-          along the top and bottom instead: Wed, Tue, Mon across the top and Sat, Fri, Thu across
-          the bottom.
-        </p>
-        <p>
-          Sunday stays in the centre either way, and the dots keep their tap-and-slide behaviour and
-          their keyboard numbers unchanged — only where each one sits on screen moves. Rotate Dots
-          CCW is locked whenever there are no dots to turn: in Deduction, alongside Input and for
-          the same reason, and in every mode while Input is set to Buttons. It keeps whatever you
-          last chose — and so does the logo below.
+          Sunday stays in the centre every way, and the dots keep their tap-and-slide behaviour and
+          their keyboard numbers unchanged — only where each one sits on screen moves. Each dot
+          still answers to a touch anywhere in its own share of the space, up to halfway to its
+          neighbours; the two empty gaps and the space around the pattern stay dead, so sliding off
+          onto them still cancels a press. Rotate Dots is locked whenever there are no dots to turn:
+          in Deduction, alongside Input and for the same reason, and in every mode while Input is
+          set to Buttons. It keeps whatever you last chose — and so does the logo below. Your choice
+          doesn&apos;t affect your stats: bests and history are shared across all three.
         </p>
         <p>
           <b>The logo turns with it — but only while Dots is your Input.</b> The mark at the top
-          left of every screen <i>is</i> this seven-dot layout, so turning Rotate Dots CCW on turns
-          that mark too, whenever Input is set to Dots. The rest of the time — in Deduction, or in
-          any mode while Input is set to Buttons — the mark stays upright, for the same reason
-          Rotate Dots itself locks there: with no dots anywhere on screen, there is nothing for a
-          turned mark to correspond to. What can't follow even when Dots is your Input are the
-          pictures your device saved earlier: the home-screen icon, the launch screen and the link
-          preview image are fixed image files, so those keep the upright logo whatever you choose
-          here. The full-screen launch screen and the <b>Rotate back to portrait</b> screen keep the
-          upright mark to match them.
+          left of every screen <i>is</i> this seven-dot layout, so turning the dots turns that mark
+          too (by the same amount, and at 45° shrunk the same way), whenever Input is set to Dots.
+          The rest of the time — in Deduction, or in any mode while Input is set to Buttons — the
+          mark stays upright, for the same reason Rotate Dots itself locks there: with no dots
+          anywhere on screen, there is nothing for a turned mark to correspond to. What can&apos;t
+          follow even when Dots is your Input are the pictures your device saved earlier: the
+          home-screen icon, the launch screen and the link preview image are fixed image files, so
+          those keep the upright logo whatever you choose here. The full-screen launch screen and
+          the <b>Rotate back to portrait</b> screen keep the upright mark to match them.
         </p>
       </GuideSection>
       <GuideSection
@@ -2271,9 +2300,9 @@ export default function GuidePage({
         </p>
         <UL>
           <li>
-            <b>⚙ Settings</b> — date format, answer input (Buttons / Dots), Rotate Dots CCW,
-            calendar system, year range, the leap / Jan-Feb / Julian chances, Save Stats, theme, and
-            this preset&apos;s Default Mode (the page it opens on).
+            <b>⚙ Settings</b> — date format, answer input (Buttons / Dots), Rotate Dots, calendar
+            system, year range, the leap / Jan-Feb / Julian chances, Save Stats, theme, and this
+            preset&apos;s Default Mode (the page it opens on).
           </li>
           <li>
             <b>Your saved defaults</b> — the Save Defaults snapshot (next section), which even
@@ -2385,7 +2414,7 @@ export default function GuidePage({
         <UL>
           <li>
             Every setting in the <b>Per-preset</b> half of the ⚙ menu: <b>Default Mode</b>, and all
-            of Display (Input and Rotate Dots CCW included), Dates, and Stats. (The <b>Global</b>{' '}
+            of Display (Input and Rotate Dots included), Dates, and Stats. (The <b>Global</b>{' '}
             section — <b>Open in</b> — is not part of it.)
           </li>
           <li>
@@ -2670,7 +2699,7 @@ export default function GuidePage({
           separate bucket — your previous bests remain stored and reappear when you switch back to
           that exact config. Everything else leaves your bests where they are: the mode&apos;s name
           (so the AoX &rarr; MoX rename kept everyone&apos;s), your answer input style, Rotate Dots
-          CCW, and the theme.
+          (all three rotations share one set of bests), and the theme.
         </p>
         <p>
           The small <b>Q#</b> label at the top-right of the date card appears not only while
@@ -2919,7 +2948,8 @@ export default function GuidePage({
             Jan/Feb Chance on Leap Years, Julian Chance, year range, and Calendar System (Julian
             on/off). Changing any of these creates a separate bucket — your previous bests remain
             stored and reappear when you switch back. Everything else leaves your bests untouched:
-            the mode&apos;s name, your answer input style, Rotate Dots CCW, and the theme.
+            the mode&apos;s name, your answer input style, Rotate Dots (all three rotations share
+            one set of bests), and the theme.
           </li>
           <li>
             Best score and best streak are tracked independently in Per Round and in Per Question

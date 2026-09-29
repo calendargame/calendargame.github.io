@@ -135,6 +135,8 @@ const PICKERS = [
   'Dark theme',
   'Light theme',
   'Input',
+  // Rotate Dots — a picker again since round 23 (Standard / 45° CCW / 90° CCW); a switch in between.
+  'Rotate Dots',
   'Julian Chance',
   'Leap Year Chance',
   'Jan/Feb Chance on Leap Years',
@@ -401,10 +403,9 @@ describe('Settings — THE PICKER RULE', () => {
   })
 
   // Every on/off setting, by the label text its row is found through. Order is the panel's own,
-  // top to bottom — Rotate Dots CCW joined here in Q3 (round 20), a switch now rather than a picker.
+  // top to bottom. (Rotate Dots was one from round 20 to round 23 and is a picker again — see PICKERS.)
   const SWITCHES = [
     'Random Format',
-    'Rotate Dots CCW',
     'Use System Settings',
     'Julian Calendar (pre-Oct 15, 1582)',
     'Save Stats',
@@ -709,9 +710,10 @@ describe('Settings — the radiogroup keyboard contract', () => {
   // told assistive tech there were seven groups.
   it('every group is ONE tab stop, on the selected pill, in both Use-System states', () => {
     mountPanel()
-    // Every remaining PICKER is live at the panel's launch state — Rotate Dots CCW, the one member that
-    // used to need Input on Dots to be live, left this sweep in Q3 (round 20): it is a SWITCH now,
-    // not a radiogroup, and its own lock/tab-stop contract is pinned in tests/dotOrientation.dom.
+    // Every PICKER is live at the panel's launch state except Rotate Dots, which is locked while
+    // Input is on Buttons (nothing on screen to turn) — and a locked group appoints no tab stop at
+    // all. Input goes to Dots first, through the store, so the sweep can stay exhaustive.
+    act(() => useSettings.getState().setInputStyle('dots'))
     PICKERS.forEach(expectOneTabStop)
     // The five pills the group spans include a whole tray with nothing selected in it: the tab
     // stop is a property of the CHOICE, so the empty tray contributes none.

@@ -141,7 +141,7 @@ function BlitzMode({
   dateFormat,
   randomFormat,
   inputStyle = 'buttons',
-  dotOrientation = 'columns',
+  dotRotation = 'standard',
   leapChance,
   janFebChance,
   julianChance,
@@ -1131,7 +1131,7 @@ function BlitzMode({
           <WeekdayAnswer
             key={state.gridEpoch}
             inputStyle={inputStyle}
-            dotOrientation={dotOrientation}
+            dotRotation={dotRotation}
             persistBtns={state.persistBtns}
             flash={flash}
             optionsDisabled={optionsDisabled}
