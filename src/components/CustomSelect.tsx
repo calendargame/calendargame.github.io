@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useBackButton } from './useBackButton.js'
+import { scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 
 // CustomSelect — the app's custom dropdown, replacing the native <select>.
 //
@@ -19,14 +20,23 @@ import { useBackButton } from './useBackButton.js'
 // click-outside-to-close handler that correctly treats taps inside the portaled
 // panel (and on native scrollbars) as "inside".
 //
-// ⚠ CALLER CONTRACT (Q8, round 11) — THE TRIGGER MUST LIVE IN FIXED CHROME. The panel is
-// position:fixed and is measured from the trigger's viewport rect on open; nothing re-measures it
-// while a scroller moves, by design. The app's one call site is the mode selector in the fixed top
-// bar, which no scroller can move. A future call site inside a SCROLLING region needs repositioning
-// WRITTEN AND TESTED against that real case — do not assume it, and do not restore a general
-// "reposition on any scroll" branch on spec: this component had one, it was provably unexercisable
-// (one live instance, trigger in fixed chrome), and re-measuring mid-scroll is exactly what
-// produced the momentum jitter Q8 removed.
+// ⚠ CALLER CONTRACT (Q8, round 11; widened by Q8, round 23) — THE TRIGGER MUST NOT MOVE WHILE THE
+// PANEL IS OPEN. The panel is position:fixed and is measured from the trigger's viewport rect on
+// open; nothing re-measures it while a scroller moves, by design — re-measuring mid-scroll is
+// exactly what produced the momentum jitter round 11's Q8 removed, and a general "reposition on any
+// scroll" branch must not come back on spec. There are two ways a call site meets the contract:
+//   • ITS TRIGGER LIVES IN FIXED CHROME, which no scroller can move — the top bar's mode selector
+//     and preset switcher.
+//   • ITS TRIGGER LIVES INSIDE A SCROLL REGION, AND THIS COMPONENT HOLDS THAT REGION STILL for as
+//     long as the panel is open (the hold effect near the bottom of the component) — the ⚙ panel's
+//     "Open in" (round 23, Q8), the first call site of this kind, written and tested against that
+//     real case as this paragraph used to require of whoever came first. Holding the region still
+//     was chosen over following the trigger for three reasons: it cannot jitter, because nothing is
+//     re-measured; it stops an iOS momentum glide that was already running when the menu opened (a
+//     tap does reach a trigger on an INNER scroller that is still coasting — see the round-13 note
+//     below — and following that glide is exactly the per-frame re-measure refused above); and it
+//     keeps the trigger from sliding out from under its own panel and behind the region's clipped
+//     edge, which following it could not prevent.
 //
 // ⚠ IT ALSO DEPENDS ON html / body / #root DECLARING NO CONTAINING BLOCK. A transform, filter,
 // backdrop-filter, will-change, contain or perspective on any of those three would turn the
@@ -293,7 +303,14 @@ export default function CustomSelect({
   const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (open) {
       if (e.key === 'Escape') {
+        // ★ THIS ESCAPE BELONGS TO THE MENU AND TO NOTHING UNDER IT — stopped here, so it never
+        // reaches App's document-level Escape (which closes the ⚙ panel). Before round 23 no open
+        // select sat inside the ⚙ panel, so one press closing both never came up; with "Open in"
+        // in there it would take the whole panel down with the menu. React's stopPropagation stops
+        // the native event at the root, before the document sees it — the app's dismissal ladder,
+        // one press per layer, innermost first.
         e.preventDefault()
+        e.stopPropagation()
         closeAndFocus()
       } else if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -425,6 +442,52 @@ export default function CustomSelect({
     // measurePanel automatically, making this exactly correct at runtime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+  // ★ HOLD THE TRIGGER'S SCROLL REGION STILL WHILE THE PANEL IS OPEN — the second way to meet the
+  // caller contract at the top of this file; holdScrollRegion (module scope, below the component)
+  // does the work and argues the method. For the top bar's two selects there is no scroll region
+  // around the trigger and it does nothing at all. A layout effect, so the hold is in place in the
+  // same frame the panel first paints.
+  useLayoutEffect(() => {
+    if (!open) return
+    return holdScrollRegion(ref.current)
+    // The ancestor chain is fixed for a mounted select; `open` is the whole trigger for this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+  // ★ A LONG LIST SCROLLS INSIDE THE PANEL (round 23, Q8 — presets are unlimited, so the preset
+  // lists can be any length). The panel is capped at the space between its top and the bottom of
+  // the viewable area (the maxHeight on the panel below), and its OPTIONS scroll in an inner region
+  // (`listRef`) — inner so that the region's edge fades (the app's shared recipe,
+  // components/scrollRegion) mask only the options, never the panel's frosted glass, which a mask
+  // on the panel itself would dissolve at the edges. Two things keep the right option in view:
+  //   • ON OPEN, THE SELECTED OPTION IS CENTRED in the region, so a list opened on its 25th entry
+  //     shows the ✓ rather than the top of the list;
+  //   • AS THE KEYBOARD CURSOR MOVES, the active option is scrolled just far enough to be whole.
+  // Both are plain scrollTop arithmetic on the region, NOT scrollIntoView: scrollIntoView scrolls
+  // every scrollable ancestor too, and this panel is portaled into #root — the call could scroll
+  // #root or the page behind a fixed menu. The options are measured by offsetTop against the region
+  // (it is `relative`, so it is their offsetParent). In a list short enough to fit, both are no-ops:
+  // the browser clamps scrollTop to what the region can actually scroll.
+  const listRef = useRef<HTMLDivElement>(null)
+  const panelShown = open && panelPos !== null
+  const { scrolledFromTop, atBottom } = useScrollEdgeState(listRef, panelShown)
+  useLayoutEffect(() => {
+    if (!panelShown) return
+    const list = listRef.current
+    const opt = selectedIdx >= 0 ? list?.children[selectedIdx] : null
+    if (!list || !(opt instanceof HTMLElement)) return
+    list.scrollTop = opt.offsetTop - (list.clientHeight - opt.offsetHeight) / 2
+    // On OPEN only: a later re-measure (rotation, --bar-h) must not yank the list back to the ✓.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelShown])
+  useLayoutEffect(() => {
+    if (!panelShown || activeIdx < 0) return
+    const list = listRef.current
+    const opt = list?.children[activeIdx]
+    if (!list || !(opt instanceof HTMLElement)) return
+    if (opt.offsetTop < list.scrollTop) list.scrollTop = opt.offsetTop
+    else if (opt.offsetTop + opt.offsetHeight > list.scrollTop + list.clientHeight)
+      list.scrollTop = opt.offsetTop + opt.offsetHeight - list.clientHeight
+  }, [panelShown, activeIdx])
   return (
     <div ref={ref} className="relative">
       <button
@@ -537,10 +600,9 @@ export default function CustomSelect({
             role="listbox"
             data-select-group={pressDrag || undefined}
             aria-label={ariaLabel}
-            // p-1 + the options' rounded-xl keep the drag-ring CONCENTRIC: the 12px inner radius
-            // plus the 4px inset sits inside the 16px outer radius, so the ring is never clipped
-            // by overflow-hidden and all four corners of the first/last options stay round.
-            className="rounded-2xl overflow-hidden p-1"
+            // The options' scroll region inside carries the p-1 (below); this box is the frosted
+            // frame, a flex column so that region can shrink to the maxHeight and scroll.
+            className="rounded-2xl overflow-hidden flex flex-col"
             // position:FIXED (Q8, round 11) — the panel is pinned to the viewport, not to whatever
             // #root's positioning happens to make its containing block. #root is fixed in app mode
             // and static in guide mode, which is what made the same absolute panel obey two
@@ -563,39 +625,55 @@ export default function CustomSelect({
               // does. The 90vw clamp applies to both.
               width: dropdownWidth === 'match-trigger' ? `${panelPos.width}px` : 'max-content',
               maxWidth: '90vw',
+              // Round 23 (Q8): never taller than the room between the panel's top and the bottom of
+              // the viewable area, less the same 1rem cushion (and bottom safe area) the ⚙ panel
+              // keeps — a longer list scrolls inside (listRef, above). CSS rather than a measured
+              // number, so it stays true as the viewport changes without a re-measure.
+              maxHeight: `calc(100dvh - ${panelPos.top}px - 1rem - env(safe-area-inset-bottom))`,
             }}
           >
-            {options.map((opt, i) => (
-              <button
-                id={optionId(i)}
-                role="option"
-                aria-selected={opt.value === value}
-                key={opt.value}
-                type="button"
-                onPointerEnter={(e) => {
-                  if (e.pointerType === 'mouse') setActiveIdx(i)
-                }}
-                onClick={() => {
-                  onChange(opt.value)
-                  closeAndFocus()
-                }}
-                className={`${OPTION_ROW_BOX} ${i === activeIdx ? 'bg-black/10' : 'cs-option-press'}`}
-                style={{ color: '#1a1a1a', whiteSpace: 'nowrap' }}
-              >
-                <span
-                  style={{
-                    display: 'inline-block',
-                    // The reserved check column stays a fixed 14px so row indents never shift,
-                    // but the ✓ glyph scales WITH the row's text tier (1em, so ~15px today) —
-                    // a hardcoded 14px check would read wrong the moment the tier moves.
-                    width: '14px',
-                    color: '#1a1a1a',
-                    fontSize: '1em',
+            {/* THE OPTIONS' SCROLL REGION. p-1 + the options' rounded-xl keep the drag-ring
+                CONCENTRIC: the 12px inner radius plus the 4px inset sits inside the panel's 16px
+                outer radius, so the ring is never clipped and all four corners of the first/last
+                options stay round. data-drag-scroll makes it lib/pointerGestures' auto-scroll target,
+                so a press-drag down a long top-bar list scrolls it at the edge the way the ⚙ panel
+                does. overscroll-contain keeps a fling that hits the end from scrolling the page. */}
+            <div
+              ref={listRef}
+              data-drag-scroll
+              className={`relative min-h-0 overflow-y-auto overscroll-contain p-1${scrollFadeClass(scrolledFromTop, atBottom)}`}
+            >
+              {options.map((opt, i) => (
+                <button
+                  id={optionId(i)}
+                  role="option"
+                  aria-selected={opt.value === value}
+                  key={opt.value}
+                  type="button"
+                  onPointerEnter={(e) => {
+                    if (e.pointerType === 'mouse') setActiveIdx(i)
                   }}
+                  onClick={() => {
+                    onChange(opt.value)
+                    closeAndFocus()
+                  }}
+                  className={`${OPTION_ROW_BOX} ${i === activeIdx ? 'bg-black/10' : 'cs-option-press'}`}
+                  style={{ color: '#1a1a1a', whiteSpace: 'nowrap' }}
                 >
-                  {opt.value === value ? '✓' : ''}
-                </span>
-                {/* min-w-0 flex-1 — Q6, added for the preset switcher's flexible name cell, and
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      // The reserved check column stays a fixed 14px so row indents never shift,
+                      // but the ✓ glyph scales WITH the row's text tier (1em, so ~15px today) —
+                      // a hardcoded 14px check would read wrong the moment the tier moves.
+                      width: '14px',
+                      color: '#1a1a1a',
+                      fontSize: '1em',
+                    }}
+                  >
+                    {opt.value === value ? '✓' : ''}
+                  </span>
+                  {/* min-w-0 flex-1 — Q6, added for the preset switcher's flexible name cell, and
                     harmless for every other caller (the mode selector's plain-text labels draw
                     identically inside a wider invisible box). This span is a FLEX ITEM of the row
                     above (blockified by being a direct child of `flex items-center gap-2.5`), so
@@ -609,13 +687,48 @@ export default function CustomSelect({
                     button is the same width (`w-full` of one shared panel), so flex-1 stretches
                     every row's label cell to that same shared width regardless of that row's own
                     text length — a hardcoded per-row width is no longer what aligns them. */}
-                <span className="min-w-0 flex-1">{opt.label}</span>
-              </button>
-            ))}
+                  <span className="min-w-0 flex-1">{opt.label}</span>
+                </button>
+              ))}
+            </div>
           </div>,
           // #root is the app's mount node — always present once the app has rendered.
           document.getElementById('root')!,
         )}
     </div>
   )
+}
+
+// holdScrollRegion — freeze the nearest scroll region around `from` (a computed overflow-y of auto
+// or scroll, stopping short of <body>: the document is never a menu's to freeze) and return the
+// function that lets it go, restoring the element's own inline values exactly. No region → a no-op.
+//   • overflow-y:hidden, NOT a listener that undoes scrolls: hidden is still a scroll container, so
+//     scrollTop is kept exactly and nothing jumps, but no wheel, drag, key or momentum can move it.
+//     Undoing a scroll after it lands would paint the moved frame first — a flicker per wheel tick.
+//   • ⚠ A CLASSIC SCROLLBAR (desktop Windows) takes width from the region, and hiding the overflow
+//     would give that width back — the region's whole content, the trigger included, would shift
+//     sideways by a scrollbar's width under an open menu. So when the region has one (offsetWidth
+//     beyond clientWidth and its borders), scrollbar-gutter:stable keeps the space reserved while
+//     the bar itself is gone. Overlay scrollbars (iOS, macOS, Android) take no width, so there is
+//     nothing to reserve and the gutter is left alone.
+function holdScrollRegion(from: Element | null): (() => void) | undefined {
+  let el = from?.parentElement ?? null
+  while (el && el !== document.body) {
+    const { overflowY } = getComputedStyle(el)
+    if (overflowY === 'auto' || overflowY === 'scroll') break
+    el = el.parentElement
+  }
+  if (!el || el === document.body) return undefined
+  const region = el
+  const cs = getComputedStyle(region)
+  const borders = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0)
+  const classicBar = region.offsetWidth - region.clientWidth - borders > 0
+  const prevOverflowY = region.style.overflowY
+  const prevGutter = region.style.scrollbarGutter
+  region.style.overflowY = 'hidden'
+  if (classicBar) region.style.scrollbarGutter = 'stable'
+  return () => {
+    region.style.overflowY = prevOverflowY
+    region.style.scrollbarGutter = prevGutter
+  }
 }

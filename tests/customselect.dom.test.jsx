@@ -435,3 +435,136 @@ describe('CustomSelect — Q10 width props', () => {
     expect(screen.getByRole('button', { name: /^Test,/ }).style.minWidth).toBe('')
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ROUND 23, Q8 — A LONG LIST, AND A TRIGGER INSIDE A SCROLL REGION (the ⚙ panel's "Open in").
+// Presets are unlimited, so the preset lists can be any length, and "Open in" is the first call site
+// whose trigger a scroller could move. jsdom lays nothing out, so what is pinned here is the
+// structure and the arithmetic; whether it LOOKS right is checked in a real browser and on device.
+describe('CustomSelect — long lists, and a trigger inside a scroll region', () => {
+  const MANY = Array.from({ length: 30 }, (_, i) => ({ value: String(i), label: `Preset ${i}` }))
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const mountIn = (wrapper, props = {}) => {
+    const root = document.createElement('div')
+    root.id = 'root'
+    document.body.appendChild(root)
+    const r = render(
+      <CustomSelect value="25" onChange={() => {}} options={MANY} ariaLabel="Test" {...props} />,
+      wrapper ? { container: document.body.appendChild(wrapper) } : undefined,
+    )
+    return { ...r, trigger: screen.getByRole('button', { name: /^Test,/ }) }
+  }
+  const listRegion = () => screen.getByRole('listbox').querySelector('[data-drag-scroll]')
+
+  it('the panel is capped to the room below it, and its options scroll in an inner region', () => {
+    const { trigger } = mountIn()
+    fireEvent.click(trigger)
+    const panel = screen.getByRole('listbox')
+    // (jsdom rewrites calc() expressions in its own way, so only the ingredients are asserted here;
+    // the real browser's result is checked on screen.)
+    expect(panel.style.maxHeight).toContain('100dvh')
+    expect(panel.style.maxHeight).toContain('safe-area-inset-bottom')
+    const region = listRegion()
+    // The options live in the region (not in the frosted frame, which a fade mask would dissolve).
+    expect(region.querySelectorAll('[role="option"]')).toHaveLength(30)
+    expect(region.className).toMatch(/overflow-y-auto/)
+    expect(region.className).toMatch(/overscroll-contain/)
+    expect(panel.className).not.toMatch(/fade-scroll/)
+  })
+
+  it('opens with the SELECTED option centred in the region, not at the top of the list', () => {
+    // Fabricated geometry: 40px options, a 200px region.
+    const offsetTop = vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get')
+    const offsetHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+    offsetTop.mockImplementation(function () {
+      const i = [...(this.parentElement?.children ?? [])].indexOf(this)
+      return this.getAttribute('role') === 'option' ? i * 40 : 0
+    })
+    offsetHeight.mockImplementation(function () {
+      return this.getAttribute('role') === 'option' ? 40 : 0
+    })
+    clientHeight.mockImplementation(function () {
+      return this.hasAttribute('data-drag-scroll') ? 200 : 0
+    })
+    try {
+      const { trigger } = mountIn()
+      fireEvent.click(trigger)
+      // Option 25 sits at 1000px; centred in 200px of region → scrollTop 1000 − 80 = 920.
+      expect(listRegion().scrollTop).toBe(920)
+      // The keyboard cursor pulls the region only as far as it must: Down from 25 to 26 (1040 …
+      // 1080) needs the bottom edge at 1080, so scrollTop 880 already shows it — no move.
+      fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+      expect(listRegion().scrollTop).toBe(920)
+      fireEvent.keyDown(trigger, { key: 'Home' }) // option 0 at the top → scrolled right up to it
+      expect(listRegion().scrollTop).toBe(0)
+      fireEvent.keyDown(trigger, { key: 'End' }) // option 29 (1160 … 1200) → its bottom at the edge
+      expect(listRegion().scrollTop).toBe(1000)
+    } finally {
+      offsetTop.mockRestore()
+      offsetHeight.mockRestore()
+      clientHeight.mockRestore()
+    }
+  })
+
+  // ★ THE CALLER CONTRACT'S SECOND ROUTE: a trigger inside a scroll region holds that region still
+  // for exactly as long as the menu is open, and hands back its own inline values afterwards.
+  it('holds the scroll region around the trigger still while open, and lets it go on close', () => {
+    const region = document.createElement('div')
+    region.style.overflowY = 'auto'
+    region.style.scrollbarGutter = ''
+    const { trigger } = mountIn(region)
+    expect(region.style.overflowY).toBe('auto')
+    fireEvent.click(trigger)
+    expect(region.style.overflowY).toBe('hidden')
+    // jsdom has no scrollbars (offsetWidth === clientWidth), so there is no gutter to reserve.
+    expect(region.style.scrollbarGutter).toBe('')
+    fireEvent.click(trigger) // close
+    expect(region.style.overflowY).toBe('auto')
+    region.remove()
+  })
+
+  it('reserves the gutter when the region has a classic scrollbar, so nothing shifts sideways', () => {
+    const region = document.createElement('div')
+    region.style.overflowY = 'scroll'
+    Object.defineProperty(region, 'offsetWidth', { configurable: true, value: 317 })
+    Object.defineProperty(region, 'clientWidth', { configurable: true, value: 300 })
+    const { trigger } = mountIn(region)
+    fireEvent.click(trigger)
+    expect(region.style.overflowY).toBe('hidden')
+    expect(region.style.scrollbarGutter).toBe('stable')
+    fireEvent.keyDown(trigger, { key: 'Escape' })
+    expect(region.style.overflowY).toBe('scroll')
+    expect(region.style.scrollbarGutter).toBe('')
+    region.remove()
+  })
+
+  it('a trigger with no scroll region around it (the top bar) touches nothing', () => {
+    const { trigger } = mountIn()
+    const before = document.body.getAttribute('style')
+    fireEvent.click(trigger)
+    expect(document.body.getAttribute('style')).toBe(before)
+  })
+
+  // The dismissal ladder: one Escape closes the menu and NOTHING under it (the ⚙ panel's own Escape
+  // is a document-level listener, which this press must never reach).
+  it('Escape closes the menu and stops there — a document listener never hears it', () => {
+    const heard = vi.fn()
+    document.addEventListener('keydown', heard)
+    try {
+      const { trigger } = mountIn()
+      fireEvent.click(trigger)
+      fireEvent.keyDown(trigger, { key: 'Escape' })
+      expect(screen.queryByRole('listbox')).toBeNull()
+      expect(heard).not.toHaveBeenCalled()
+      // Closed, an Escape on the trigger is not the menu's to keep: it reaches the document.
+      fireEvent.keyDown(trigger, { key: 'Escape' })
+      expect(heard).toHaveBeenCalledTimes(1)
+    } finally {
+      document.removeEventListener('keydown', heard)
+    }
+  })
+})
