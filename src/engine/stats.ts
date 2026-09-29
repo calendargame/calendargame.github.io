@@ -34,9 +34,51 @@ export const calcAvg = (t: number[]): number | null =>
 // "Last" — the newest solve's time. That is the pool's final entry only because the engine keeps the
 // pool in PLAY ORDER through every toggle (gameReducer's poolSlot; engine/invariants holds it there).
 export const calcLast = (t: number[]): number | null => (t.length ? t[t.length - 1] : null)
+// Median — SELECTED, not sorted (round 23 Q3). Every solve time is kept now, so a casual mode's pool
+// grows without bound, and the casual stat strip computes this on EVERY render, not only when a time
+// is added: sorting a copy of a 100,000-time pool cost ~50-60 ms a render in Chromium. Selecting the
+// middle element is linear (~1-2 ms there) and returns the very same doubles the sort did, so the
+// result is bit-identical — tests/engine/stats holds it to the sort on hundreds of random pools.
+// It works on a Float64Array COPY: the pool itself is in play order and "Last" reads its end.
 export const calcMed = (t: number[]): number | null => {
   if (!t.length) return null
-  const s = [...t].sort((a, b) => a - b)
-  const m = Math.floor(s.length / 2)
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+  const a = Float64Array.from(t)
+  const k = a.length >> 1
+  const upper = selectInPlace(a, k)
+  if (a.length % 2) return upper
+  // selectInPlace leaves everything below index k at or under a[k], so the lower middle is their max.
+  let lower = a[0]
+  for (let i = 1; i < k; i++) if (a[i] > lower) lower = a[i]
+  return (lower + upper) / 2
+}
+
+// Hoare selection: rearranges `a` so that a[k] is the value a full ascending sort would put there,
+// with every a[i<k] <= a[k] <= every a[i>k], and returns it. Median-of-three pivot, so sorted,
+// reversed and duplicate-heavy pools (all ordinary for solve times) stay linear.
+function selectInPlace(a: Float64Array, k: number): number {
+  let lo = 0
+  let hi = a.length - 1
+  while (lo < hi) {
+    const x = a[lo]
+    const y = a[(lo + hi) >> 1]
+    const z = a[hi]
+    const pivot = x < y ? (y < z ? y : x < z ? z : x) : x < z ? x : y < z ? z : y
+    let i = lo
+    let j = hi
+    while (i <= j) {
+      while (a[i] < pivot) i++
+      while (a[j] > pivot) j--
+      if (i <= j) {
+        const tmp = a[i]
+        a[i] = a[j]
+        a[j] = tmp
+        i++
+        j--
+      }
+    }
+    if (k <= j) hi = j
+    else if (k >= i) lo = i
+    else break
+  }
+  return a[k]
 }
