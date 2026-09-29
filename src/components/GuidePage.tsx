@@ -10,7 +10,7 @@ import {
 import Expander from './Expander.jsx'
 import { Kbd, SectionLabel, SECTION_LABEL_CLASS } from './primitives.jsx'
 import { DAY, DAY_LETTER } from '../lib/format.js'
-import { DOT_CELLS, DOT_GRID_SIZE, type DotCell } from '../lib/dotLayout.js'
+import { DOT_CELLS, DOT_GRID_SIZE, DIAGONAL_DOT_SCALE, type DotCell } from '../lib/dotLayout.js'
 import { selectionSuppressesToggle } from '../lib/selectionGuard.js'
 import { useSettings } from '../store/settings.js'
 import {
@@ -215,24 +215,29 @@ function UL({ children }: { children: ReactNode }) {
 // words below already name all three) while making the answer to "which dot is which"
 // ambiguous, which is the one thing the diagram is for. Changing the setting redraws this
 // picture, which is its own documentation.
-// THE FRAME NEVER CHANGES — viewBox, dot size, labels-below-dots — only the lattice inside it.
-// Standard and 90° are the 3×3: grid cell (r,c) → centre (x = 30+(c-1)*60, y = 28+(r-1)*62).
-// 45° is the 5×5 lattice (DOT_GRID_SIZE), and the same frame cut into HALF steps (30 × 31) —
-// which is exactly where the turned layout's points fall. Its seven dots sit on a
-// checkerboard, so a dot's nearest neighbour in its OWN column is two rows (62) down, the
-// same room the 3×3 gives each label; the diagonal neighbours are 30 across, clear of a
-// three-letter label either side.
+// THE FRAME NEVER CHANGES — viewBox, dot size, labels-below-dots, and the middle cell at (90, 90)
+// — only the lattice around it. Standard and 90° are the 3×3, 60 across and 62 down between
+// neighbours: cell (r,c) → (x = 30+(c-1)*60, y = 28+(r-1)*62). 45° is the 5×5 lattice
+// (DOT_GRID_SIZE), drawn the way the real input draws it: the 3×3's spacing turned and scaled by
+// DIAGONAL_DOT_SCALE, so a lattice step is that spacing × k/√2 (≈34 × 35). Its seven dots sit on a
+// checkerboard, so a dot's nearest neighbour in its OWN column is two steps (~70) down — more room
+// than the 3×3 gives a label — and a diagonal neighbour sits ~34 across, clear of a three-letter
+// label either side; the outermost dots and the bottom label still fit the 180 × 192 frame.
 //   ⚠ A STORE SELECTOR, where every other consumer of this setting takes a prop. It is
 //     forced rather than chosen: GuidePage's entire signature is `visible` +
 //     `scrollerRef`, so a prop would mean opening a settings pipeline through the guide
 //     for one decorative SVG at the bottom of it. Selecting here also keeps the
 //     subscription at the leaf — the guide itself does not re-render on a change.
-// Each rotation's grid → its step between neighbouring cells (x, y). The 5×5 steps are the 3×3's
-// halved, so both grids span the same frame.
+// Each rotation's grid → its step between neighbouring cells (x, y), per the note above; the 5×5's
+// rounded to hundredths so the SVG carries short coordinates.
+const DIAGONAL_STEP = (standardStep: number) =>
+  Math.round(((standardStep * DIAGONAL_DOT_SCALE) / Math.SQRT2) * 100) / 100
 const DIAGRAM_STEP: Record<3 | 5, { x: number; y: number }> = {
   3: { x: 60, y: 62 },
-  5: { x: 30, y: 31 },
+  5: { x: DIAGONAL_STEP(60), y: DIAGONAL_STEP(62) },
 }
+// The diagram's middle cell — (2,2) on the 3×3, (3,3) on the 5×5 — sits here on every grid.
+const DIAGRAM_CENTRE = { x: 90, y: 90 }
 // A cell's position in words, per grid. The 3×3's centre reads "centre" and every other filled
 // cell is row-column ("top-left", "middle-right", …). The 5×5's seven lie on the turned H: the
 // four tips of the diamond read as plain compass words ("top", "left", …) and the in-between cells
@@ -254,8 +259,12 @@ function DotDiagram() {
   const DOT_CELL = DOT_CELLS[dotRotation]
   const size = DOT_GRID_SIZE[dotRotation]
   const step = DIAGRAM_STEP[size]
-  const dotX = (cell: DotCell) => 30 + (cell.c - 1) * step.x
-  const dotY = (cell: DotCell) => 28 + (cell.r - 1) * step.y
+  const mid = (size + 1) / 2
+  // Hundredths again, so float residue (90 − 2 × 33.94 = 22.120000000000005) never reaches the SVG.
+  const at = (centre: number, offset: number, stepLen: number) =>
+    Math.round((centre + offset * stepLen) * 100) / 100
+  const dotX = (cell: DotCell) => at(DIAGRAM_CENTRE.x, cell.c - mid, step.x)
+  const dotY = (cell: DotCell) => at(DIAGRAM_CENTRE.y, cell.r - mid, step.y)
   const ariaLabel = `Dots layout: ${DAY.map((day, i) => ({ day, cell: DOT_CELL[i] }))
     .sort((a, b) => a.cell.r - b.cell.r || a.cell.c - b.cell.c)
     .map(({ day, cell }) => `${day} ${posName(cell, size)}`)
@@ -1899,8 +1908,8 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          Sunday stays in the centre every way, and the dots keep their tap-and-slide behaviour and
-          their keyboard numbers unchanged — only where each one sits on screen moves. Each dot
+          Sunday stays in the centre in all three, and the dots keep their tap-and-slide behaviour
+          and their keyboard numbers unchanged — only where each one sits on screen moves. Each dot
           still answers to a touch anywhere in its own share of the space, up to halfway to its
           neighbours; the two empty gaps and the space around the pattern stay dead, so sliding off
           onto them still cancels a press. Rotate Dots is locked whenever there are no dots to turn:

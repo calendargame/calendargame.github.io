@@ -157,8 +157,11 @@ describe('index.css — the 45° lattice is one scoped override; Standard and 90
 
   it('45° declares a 5×5 lattice, shrunk by the SAME scale lib/dotLayout gives the mark', () => {
     const d = decls(D45)
-    expect(d).toMatch(/grid-template-columns:repeat\(5,1fr\)/)
-    expect(d).toMatch(/grid-template-rows:repeat\(5,1fr\)/)
+    // minmax(0,…), not a bare 1fr: a 45° dot is ~1.018 tracks across, and a bare fr track floors
+    // at its content — the rows grew to fit the dots, which stretched the cluster ~4px taller than
+    // wide (measured in a real browser before this was fixed).
+    expect(d).toMatch(/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/)
+    expect(d).toMatch(/grid-template-rows:repeat\(5,minmax\(0,1fr\)\)/)
     // The one number CSS cannot import — checked against DIAGONAL_DOT_SCALE, as --answer-gap is
     // checked against ANSWER_GRID_GAP.
     expect(Number(/--dot-scale:([\d.]+)/.exec(d)?.[1])).toBe(DIAGONAL_DOT_SCALE)

@@ -41,7 +41,7 @@ import { DOT_MARK_ROTATION, type DotRotation } from '../lib/dotLayout.js'
 //   is untouched (24×26 here; the ~1px each side the turned glyph overhangs is inside the flex
 //   row's own gap, and `shrink-0` keeps the title from moving either way). That ~1px holds at 45°
 //   only BECAUSE of the 0.8 scale DOT_MARK_ROTATION adds there (the input's own 45° scale): turned
-//   alone, the circled Saturday and the bottom-right Monday dot swing out ~3px past the box —
+//   alone, the circled Saturday and the bottom-right Monday dot swing out ~3.5px past the box —
 //   measured from the coordinates below about the box centre (251,252), scaled they clear it by
 //   under a pixel each side.
 export default function W5Logo({

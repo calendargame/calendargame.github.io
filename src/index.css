@@ -737,7 +737,9 @@ button:focus,select:focus{outline:none}
        resolves against the same grid area the inline-size's does, so both sides of that sum are
        one length.
      • THE DOT is --dot-frac of its TURNED cell, so √2 × --dot-frac of a lattice track (≈1.018 — a
-       hair wider than its track; place-items:center overflows it evenly both ways).
+       hair wider than its track; place-items:center overflows it evenly both ways). Which is why
+       the tracks are minmax(0,1fr), not a bare 1fr: a bare fr track floors at its content, so the
+       rows grew to the dots and stretched the cluster ~4px taller than wide.
      • ITS HIT AREA is its turned cell — the base ::after (border box ÷ --dot-frac is exactly that
        cell's side) rotated 45°, a diamond. Neighbouring diamonds meet edge to edge on the midline
        between two dots, which is the dot rule above verbatim, turned; the two empty cells' diamonds
@@ -750,7 +752,7 @@ button:focus,select:focus{outline:none}
        inside it (~6px on a phone), room for the 2px drag ring. (clip-path rather than overflow:clip for reach — Safari
        gained overflow:clip only in 16 — and rather than overflow:hidden, which would make the
        cluster a scroll container.) */
-.dot-cluster[data-dot-rotation="ccw45"]{--dot-scale:.8;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);padding:calc(min(var(--ans-h),100%) * (1 - 5 * var(--dot-scale) / (3 * 1.41421356)) / 2);clip-path:inset(0)}
+.dot-cluster[data-dot-rotation="ccw45"]{--dot-scale:.8;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(5,minmax(0,1fr));padding:calc(min(var(--ans-h),100%) * (1 - 5 * var(--dot-scale) / (3 * 1.41421356)) / 2);clip-path:inset(0)}
 .dot-cluster[data-dot-rotation="ccw45"] .dot-btn{inline-size:calc(var(--dot-frac) * 1.41421356 * 100%)}
 .dot-cluster[data-dot-rotation="ccw45"] .dot-btn::after{transform:translate(-50%,-50%) rotate(45deg)}
 /* Q8 — the ⚙ gear "modified" indicator: a flush inside-bottom 2px violet bar shown while any

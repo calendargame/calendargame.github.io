@@ -67,13 +67,15 @@ const CANONICAL = {
 }
 // Which two cells are unoccupied in each rotation — the dead cells a press slides onto to cancel.
 const EMPTY = { standard: ['1,2', '3,2'], ccw45: ['2,2', '4,4'], ccw90: ['2,1', '2,3'] }
-// Each rotation's grid size, and the diagram's step between neighbouring cells on it — the 5×5 is
-// the 3×3's frame cut into half steps.
+// Each rotation's grid size, and the diagram's step between neighbouring cells on it, about a middle
+// cell drawn at (90, 90). The 5×5's steps are the 3×3's (60 × 62) turned and scaled by the 45°
+// layout's 0.8 — × 0.8/√2, to hundredths — so the diagram is drawn in the input's own proportions.
 const GRID = {
   standard: { size: 3, x: 60, y: 62 },
-  ccw45: { size: 5, x: 30, y: 31 },
+  ccw45: { size: 5, x: 33.94, y: 35.07 },
   ccw90: { size: 3, x: 60, y: 62 },
 }
+const MID = { 3: 2, 5: 3 }
 // What a screen reader announces, pinned verbatim per rotation. Derivable from the cells + DAY,
 // but asserted as a literal so a bug in the derivation AND the data can't cancel out.
 const SPOKEN = {
@@ -145,10 +147,11 @@ describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
           // order is INVARIANT under the turn — only the drawn position moves — which is the
           // diagram's half of the same promise the real input makes about children[idx].
           expect(text.textContent).toBe(DAY[i].slice(0, 3))
-          // Position derived from the shared grid cell: x = 30+(c-1)*stepX, y = 28+(r-1)*stepY.
+          // Position derived from the shared grid cell, about the middle cell at (90, 90) — for the
+          // 3×3 that is x = 30+(c-1)*60, y = 28+(r-1)*62, the diagram's original formula.
           const { r, c } = CANONICAL[rotation][i]
-          expect(circle.getAttribute('cx')).toBe(String(30 + (c - 1) * stepX))
-          expect(circle.getAttribute('cy')).toBe(String(28 + (r - 1) * stepY))
+          expect(Number(circle.getAttribute('cx'))).toBeCloseTo(90 + (c - MID[size]) * stepX, 2)
+          expect(Number(circle.getAttribute('cy'))).toBeCloseTo(90 + (r - MID[size]) * stepY, 2)
           // The label sits centred just below its dot.
           expect(text.getAttribute('x')).toBe(circle.getAttribute('cx'))
           expect(text.getAttribute('y')).toBe(String(Number(circle.getAttribute('cy')) + 27))
@@ -211,11 +214,10 @@ describe('DotDiagram / DOT_CELLS / DAY consistency', () => {
     useSettings.getState().setDotRotation('ccw45')
     const svg = renderDiagram()
     const circles = Array.from(svg.querySelectorAll('circle'))
-    expect(circles.map((c) => ({ cx: c.getAttribute('cx'), cy: c.getAttribute('cy') }))).toEqual(
-      CANONICAL.ccw45.map(({ r, c }) => ({
-        cx: String(30 + (c - 1) * 30),
-        cy: String(28 + (r - 1) * 31),
-      })),
-    )
+    circles.forEach((circle, i) => {
+      const { r, c } = CANONICAL.ccw45[i]
+      expect(Number(circle.getAttribute('cx'))).toBeCloseTo(90 + (c - 3) * 33.94, 2)
+      expect(Number(circle.getAttribute('cy'))).toBeCloseTo(90 + (r - 3) * 35.07, 2)
+    })
   })
 })
