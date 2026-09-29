@@ -786,6 +786,14 @@ export default function GuidePage({
             then, so they settle wherever the bottom of the page allows.
           </li>
           <li>
+            While you read down a long section, its title stays pinned just under the bar at the
+            top, so you can always see which section you&apos;re in and tap it closed from anywhere
+            in it. Opening a section doesn&apos;t pin it — the title only pins, and picks up a soft
+            shadow, once the text starts scrolling underneath it, and it lets go again when you
+            scroll back up. Closing a section from its pinned title leaves the title right where it
+            is while the section folds away below it.
+          </li>
+          <li>
             The guide holds its place while you're in the app: switch to a mode, play, and come back
             and the same section is still open at the same point on the page. Only a fresh start —
             closing the app and launching it again, reloading it, or a Full Reset — returns it to
