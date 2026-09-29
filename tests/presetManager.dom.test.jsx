@@ -89,8 +89,8 @@ const queryConfirmCard = () => screen.queryByRole('dialog', { name: CONFIRM_TITL
 // the box is the row's only element the app names.
 const nameBoxes = () => within(card()).getAllByRole('textbox', { name: 'Preset name' })
 const listedNames = () => nameBoxes().map((el) => el.value)
-// The row div this file queries by — the name box's OWN parent, i.e. the inner flex row (checkmark,
-// name box, amnesic marker, handle, ✕). The OUTER div one level up is components/PresetManager's own
+// The row div this file queries by — the name box's OWN parent, i.e. the inner grid row (✕, name
+// box, current-preset marker, amnesic marker, grip — in that order since Q7, round 23). The OUTER div one level up is components/PresetManager's own
 // ref target for measuring the row's real position and applying its live drag transform — nothing in
 // this file needs that one, since jsdom cannot lay it out anyway (the pointer-wiring cases below stub
 // getBoundingClientRect directly on it, reached via `rowOf(name).parentElement`).
@@ -502,6 +502,59 @@ describe('reordering', () => {
       })
       reorderHandle('Preset 1').dispatchEvent(evt)
       expect(evt.defaultPrevented).toBe(true)
+    })
+  })
+
+  // ★ Q7, round 23 — THE ROW'S LAYOUT IS THE iPHONE REORDER-LIST CONVENTION, and the order is the
+  // point: the grip is grabbed over and over, the ✕ is destructive (and deletes an untouched preset
+  // without asking), so they sit at opposite ends — ✕ at the LEFT, grip at the RIGHT, the name and
+  // its two markers between them.
+  describe('the row layout', () => {
+    it('reads ✕, name, ✓, A, grip — left to right', () => {
+      let guestId
+      act(() => {
+        guestId = createPreset('Guest').id
+      })
+      openManager()
+      // After the mount, for the reason the listing case above gives (the cold-open reseed).
+      act(() => setPresetAmnesic(guestId, true))
+      const kids = [...rowOf('Preset 1').children]
+      expect(kids[0]).toBe(rowButton('Preset 1', 'delete'))
+      expect(kids[1]).toBe(nameBoxes()[0])
+      expect(kids[2].textContent).toBe('✓Current preset')
+      expect(kids[3].textContent).toBe('') // Preset 1 is not amnesic; the slot is still reserved
+      expect(kids[4]).toBe(reorderHandle('Preset 1'))
+      const guest = [...rowOf('Guest').children]
+      expect(guest[2].textContent).toBe('') // not the current preset; the slot is still reserved
+      expect(guest[3].textContent).toBe('AAmnesic')
+      expect(guest[4]).toBe(reorderHandle('Guest'))
+    })
+
+    it('the ✕ keeps its button chrome; the grip is bare — no border, no fill', () => {
+      openManager()
+      expect(rowButton('Preset 1', 'delete').className).toMatch(/(^|\s)border(\s|$)/)
+      expect(rowButton('Preset 1', 'delete').className).toMatch(/surface-toggle/)
+      const grip = reorderHandle('Preset 1').className
+      expect(grip).not.toMatch(/(^|\s)border(\s|$)/)
+      expect(grip).not.toMatch(/surface-/)
+      // …but it is still a control: a focus ring for the keyboard route, a grab cursor for a mouse.
+      expect(grip).toMatch(/focus-ring/)
+      expect(grip).toMatch(/cursor-grab/)
+    })
+
+    it('the width-cap note sits under the NAME, in the row`s own grid, not under the ✕', () => {
+      presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((c) => ({
+        text: c.slice(0, 3),
+        capped: true,
+      }))
+      openManager()
+      const box = nameBoxes()[0]
+      act(() => {
+        fireEvent.focus(box)
+        fireEvent.change(box, { target: { value: 'Weekend' } })
+      })
+      const note = within(rowOf('Wee')).getByText("That's as long as this name can display.")
+      expect(note.className).toMatch(/col-start-2/)
     })
   })
 

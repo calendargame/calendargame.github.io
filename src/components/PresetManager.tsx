@@ -242,25 +242,36 @@ function ReorderHandleIcon() {
   )
 }
 
-// A row's small square controls — the handle and ✕, now two rather than the original three.
-// `shrink-0` because the NAME is the thing that gives way when the card is narrow — a control that
-// shrank to a sliver would be the wrong casualty. The surface is `surface-toggle`, the same no-fill
-// interactive tier Manage Presets and the View/Clear Saved Defaults pair wear (it was the modal
-// Cancel buttons' tier too until Q2 removed every one of them): neither of these two is a
-// destructive act on its
-// own (the ✕ only OPENS the confirmation, exactly as the footer's "Clear Saved Defaults" link opens
-// its own; the handle's two actions are a reorder, not a delete), so neither wears the rose fill.
-// The handle wears this SAME token rather than inventing its own sizing, for the visual consistency
-// the ✕ beside it already relies on — even though the handle is a role="button" div and not a
-// <button>, matching classNames is what makes the row still read as one control tier.
-// ⚠ TOUCH SIZE IS A DEVICE-ONLY QUESTION. At the card's ~288px of content these land near 30×26px,
-// which is the ⚙ panel's existing control tier (its On/Off switches are px-3 py-1.5 text-xs) and
-// not a new, smaller one — but jsdom lays nothing out, so only the owner's iPhone can say whether
-// two of them side by side are comfortable, and whether the handle is easy to grab precisely rather
-// than easy to miss. If either is not, the fix is a taller row (py-2) or a wider handle, not a
-// narrower name cell.
-const ROW_BTN_CLASS =
+// ── THE ROW, LEFT TO RIGHT (Q7, round 23): ✕ · name · ✓ · A · grip ─────────────────────────────
+//
+// ★ THE iPHONE REORDER-LIST CONVENTION, AND THE REASON IS A MIS-TAP, NOT LOOKS. The grip and the ✕
+// used to sit side by side at the right edge. The grip is the control a thumb reaches for over and
+// over; the ✕ is the destructive one, and since round 22 (Q1) a preset that holds nothing deletes on
+// the spot with no question to catch a slip. A frequently-grabbed handle beside a destructive button
+// is how a reorder becomes a delete. So they are now at opposite ends — the ✕ at the LEFT edge, the
+// grip at the RIGHT edge where the thumb already is — with the name between them and the two
+// markers after the name.
+//
+// THE ✕ KEEPS ITS BUTTON CHROME (the owner's ask): a boxed control says "tap". `shrink-0` because
+// the NAME is the thing that gives way when the card is narrow — a control that shrank to a sliver
+// would be the wrong casualty. The surface is `surface-toggle`, the same no-fill interactive tier
+// Manage Presets and the View/Clear Saved Defaults pair wear: pressing it does not always delete (a
+// preset that holds anything asks first), and the rose fill is kept for the button that commits a
+// deletion — the confirmation's own Delete.
+// ⚠ TOUCH SIZE IS A DEVICE-ONLY QUESTION. At the card's ~288px of content it lands near 30×26px, the
+// ⚙ panel's existing control tier (its On/Off switches are px-3 py-1.5 text-xs) and not a new,
+// smaller one — but jsdom lays nothing out, so only the owner's iPhone can say whether it is
+// comfortable.
+const DELETE_BTN_CLASS =
   'shrink-0 px-2 py-1.5 rounded-xl text-xs border surface-toggle text-(--tx-100-80)'
+// THE GRIP HAS NO BUTTON CHROME AT ALL — no border, no fill — the other half of the owner's call: a
+// bare ≡ says "drag", where a boxed one reads as one more thing to tap. What it keeps is everything
+// a control needs that is not decoration: a hit area wider and taller than its 14px glyph
+// (`self-stretch` takes the row's full height, px-3 gives it ~38px of width), a focus ring for the
+// keyboard route (the grip is Tab-reachable and takes ↑/↓), and a grab cursor for a mouse. The glyph
+// is quieter than the text (--tx-200-80) because it is furniture until it is held.
+const GRIP_CLASS =
+  'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab focus:outline-hidden focus-ring'
 
 // THREE PROPS. The first two are the same one fact: which preset the delete confirmation is asking
 // about, or null while the list is showing. Nothing in this card dismisses itself — round 21 (Q5) removed
@@ -802,8 +813,15 @@ export default function PresetManager({
               drag && drag.id !== p.id ? 'transition-transform duration-150 ease-out' : undefined
             }
           >
+            {/* THE ROW IS A GRID, NOT A FLEX ROW (Q7, round 23) — five columns, ✕ · name · ✓ · A ·
+              grip (the order is argued at DELETE_BTN_CLASS above), and a SECOND ROW that only the
+              width-cap note ever occupies, placed under the name box in the name's own column. As a
+              flex row the note had to live outside it with a hand-tuned indent that matched the ✓
+              slot which used to sit in front of the name; now the ✕ is in front, a width no fixed
+              indent can know, so the grid does the lining up instead. `items-center` works per row
+              track, so the note appearing never moves the controls above it. */}
             <div
-              className={`flex items-center gap-1 rounded-xl ${
+              className={`grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-x-1 rounded-xl ${
                 // THE LIFT while THIS row is the one being dragged (Q7, round 23): index.css's
                 // .row-lifted — the card's own fill, so the rows sliding underneath do not show
                 // through the gaps between its controls, and ONE soft all-round shadow. It sits on
@@ -815,25 +833,21 @@ export default function PresetManager({
                 drag?.id === p.id ? 'row-lifted' : ''
               }`}
             >
-              {/* THE CURRENT-PRESET MARK, in a reserved fixed-width slot so every name box starts at
-                the same x whether the row is marked or not — the same reason CustomSelect gives its
-                ✓ column a width of its own. aria-hidden + an sr-only word, the idiom every quiet
-                marker in this app uses (the switcher's "A", the footer's Changelog dot), because a
-                bare ✓ is a glyph rather than an accessible name. */}
-              <span className="w-3 shrink-0 text-center text-xs text-(--tx-200-80)">
-                {p.id === activeId && (
-                  <>
-                    <span aria-hidden="true">✓</span>
-                    <span className="sr-only">Current preset</span>
-                  </>
-                )}
-              </span>
+              <button
+                type="button"
+                aria-label={`Delete ${p.name}`}
+                aria-disabled={!canDelete || undefined}
+                onClick={() => pressDelete(p.id)}
+                className={`${DELETE_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
+              >
+                {DELETE_GLYPH}
+              </button>
               {/* THE NAME, AS A TEXT BOX — the rename IS the field, with no edit mode to enter and no
                 pencil to find.
                 ⚠ IT NAMES ITSELF "Preset name" AND NOTHING MORE, deliberately. A textbox's VALUE is
                 read out with it, so the row's own name is already spoken and a label carrying it as
                 well ("Name of Weekend") would say it twice and would change under the typing. The
-                three BUTTONS beside it have no value to be read, which is why they name the preset
+                two controls beside it have no value to be read, which is why they name the preset
                 and this does not.
                 ⚠ SELECT-ALL ON ENTRY COMES FOR FREE and must not be added here: lib/textEntry
                 installs it once, at the document, precisely so that the seventh box in the app —
@@ -875,17 +889,30 @@ export default function PresetManager({
                     discardRename(e.currentTarget)
                   }
                 }}
-                className="min-w-0 flex-1 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs focus:outline-hidden focus-ring"
+                className="min-w-0 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs focus:outline-hidden focus-ring"
               />
+              {/* THE CURRENT-PRESET MARK, after the name, in a reserved fixed-width slot so every
+                name box ends at the same x whether the row is marked or not — the same reason
+                CustomSelect gives its ✓ column a width of its own. aria-hidden + an sr-only word,
+                the idiom every quiet marker in this app uses (the switcher's "A", the footer's
+                Changelog dot), because a bare ✓ is a glyph rather than an accessible name. */}
+              <span className="w-3 text-center text-xs text-(--tx-200-80)">
+                {p.id === activeId && (
+                  <>
+                    <span aria-hidden="true">✓</span>
+                    <span className="sr-only">Current preset</span>
+                  </>
+                )}
+              </span>
               {/* The amnesic marker, the SAME letter the switcher shows and in a reserved slot for
-                the same reason the ✓ above is: every row's buttons line up whether or not the row
-                is marked. It is read-only here — Amnesic is flipped in ⚙ → Stats, and only for the
-                preset you are on — so this is purely the answer to "which of these forget", which
-                is worth knowing at the moment you are deciding what to delete.
+                the same reason the ✓ beside it is: every row's name box and grip line up whether or
+                not the row is marked. It is read-only here — Amnesic is flipped in ⚙ → Stats, and
+                only for the preset you are on — so this is purely the answer to "which of these
+                forget", which is worth knowing at the moment you are deciding what to delete.
                 ⚠ DIMMED BY OPACITY, NEVER TINTED, and inheriting currentColor: components/
                 PresetSwitcher argues it (a themed colour token would read correctly in one of the
                 two places this letter appears and be invisible in the other). */}
-              <span className="w-3 shrink-0 text-center">
+              <span className="w-3 text-center">
                 {p.amnesic && (
                   <>
                     <span aria-hidden="true" className="text-[0.8em] font-semibold opacity-70">
@@ -895,30 +922,28 @@ export default function PresetManager({
                   </>
                 )}
               </span>
-              {/* THE REORDER HANDLE — one control that is both a pointer/touch drag (pointerdown
-                → pointermove → pointerup/cancel, wired to lib/presetReorder's pure arithmetic
-                above) AND a keyboard reorder action (ArrowUp/ArrowDown), replacing the two ↑/↓
-                buttons this round removed. No disabled visual at either end — matching the design
-                decision recorded above the handlers: movePreset already no-ops there silently.
-                ⚠ A DIV WITH role="button", NOT A <button> — deliberately, and it is not merely a
-                visual-tier choice (ROW_BTN_CLASS's own comment covers that half). lib/
-                pointerGestures' global press-drag controller latches onto ANY element a bare
-                `closest('button')` finds — that is literally its TARGET_SELECTOR — so a real
-                <button> here would ALSO be swept into that separate, document-level gesture
-                system on every press, two independent pointer-capture mechanisms reacting to the
-                same pointerdown. A div the tag-name selector cannot match is invisible to that
-                system by construction, the same way withheld controls elsewhere in this app are
-                kept out of it by a selector rather than by coordination (see that file's own
-                gestureTarget comment). The accessible name carries the CURRENT POSITION so a
-                screen reader announces a new value after a keyboard move — this app uses no
-                aria-live (SettingsPanel's Check-for-updates button argues why), so a changed name
-                on a still-FOCUSED element is what gets announced, which is exactly what point 4 of
-                the brief that built this exists to prove rather than assume. */}
+              {/* THE REORDER GRIP — one control that is both a pointer/touch drag (pointerdown →
+                pointermove → pointerup/cancel, wired to lib/presetReorder's pure arithmetic above)
+                AND a keyboard reorder action (ArrowUp/ArrowDown). No disabled visual at either end
+                — matching the design decision recorded above the handlers: movePreset already
+                no-ops there silently.
+                ⚠ A DIV WITH role="button", NOT A <button> — deliberately, and it is not a visual
+                choice (GRIP_CLASS covers that half). lib/pointerGestures' global press-drag
+                controller latches onto ANY element a bare `closest('button')` finds — that is
+                literally its TARGET_SELECTOR — so a real <button> here would ALSO be swept into that
+                separate, document-level gesture system on every press, two independent
+                pointer-capture mechanisms reacting to the same pointerdown. A div the tag-name
+                selector cannot match is invisible to that system by construction, the same way
+                withheld controls elsewhere in this app are kept out of it by a selector rather than
+                by coordination (see that file's own gestureTarget comment). The accessible name
+                carries the CURRENT POSITION so a screen reader announces a new value after a
+                keyboard move — this app uses no aria-live (SettingsPanel's Check-for-updates button
+                argues why), so a changed name on a still-FOCUSED element is what gets announced. */}
               <div
                 role="button"
                 tabIndex={0}
                 aria-label={`Reorder ${p.name}, position ${i + 1} of ${presets.length}`}
-                className={ROW_BTN_CLASS}
+                className={GRIP_CLASS}
                 style={{ touchAction: 'none' }}
                 onPointerDown={beginDrag(p, i)}
                 onPointerMove={onDragMove}
@@ -928,28 +953,21 @@ export default function PresetManager({
               >
                 <ReorderHandleIcon />
               </div>
-              <button
-                type="button"
-                aria-label={`Delete ${p.name}`}
-                aria-disabled={!canDelete || undefined}
-                onClick={() => pressDelete(p.id)}
-                className={`${ROW_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
-              >
-                {DELETE_GLYPH}
-              </button>
+              {/* THE WIDTH-CAP NOTE — WIDTH LANGUAGE, NEVER A CHARACTER COUNT, because a character
+                count is no longer the true reason a keystroke stopped landing (lib/presetNameWidth,
+                and the ★★ note above this component). Shown only for the row currently being typed
+                into, only while its most recent keystroke actually had to be trimmed — it disappears
+                the moment a backspace brings the candidate back under budget, on the same `capped`
+                flag that trim reports. It takes the grid's second row, starting under the name box
+                (column 2) and running to the row's end. Same visual tier as the "cannot be deleted"
+                note below, for the same reason: a small fact about why a control just did what it
+                did. */}
+              {editing?.id === p.id && nameWidthCapped && (
+                <div className="col-start-2 col-span-4 pl-1 pt-1 text-[11px] text-(--tx-300-60)">
+                  That&apos;s as long as this name can display.
+                </div>
+              )}
             </div>
-            {/* THE WIDTH-CAP NOTE — WIDTH LANGUAGE, NEVER A CHARACTER COUNT, because a character
-              count is no longer the true reason a keystroke stopped landing (lib/presetNameWidth,
-              and the ★★ note above this component). Shown only for the row currently being typed
-              into, only while its most recent keystroke actually had to be trimmed — it disappears
-              the moment a backspace brings the candidate back under budget, on the same `capped`
-              flag that trim reports. Same visual tier as the "cannot be deleted" note below, for
-              the same reason: a small fact about why a control just did what it did. */}
-            {editing?.id === p.id && nameWidthCapped && (
-              <div className="pl-4 pt-1 text-[11px] text-(--tx-300-60)">
-                That&apos;s as long as this name can display.
-              </div>
-            )}
           </div>
         ))}
       </div>

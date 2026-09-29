@@ -1059,17 +1059,22 @@ export default function GuidePage({
             goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot; and so on.
           </li>
           <li>
-            <b>Order</b> — drag a row by the handle beside it (the three small bars) to move it, or
-            select the handle and press the up/down arrow keys. That order is the order the top-left
-            list shows them in, and nothing else: moving a preset changes no stats and no settings.
+            <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to
+            move it; hold it near the top or bottom of the list and the list scrolls to bring the
+            rest to you. Or select the grip and press the up/down arrow keys. That order is the
+            order the top-left list shows them in, and nothing else: moving a preset changes no
+            stats and no settings.
           </li>
           <li>
-            <b>Delete</b> — the ✕ asks first, in the same popup, and names what is about to go. Back
-            out of the question and you are on the list again, with the popup still open. A preset
-            that is still completely untouched goes straight away, with nothing to ask. See below.
+            <b>Delete</b> — the ✕ at the left-hand end of each row, kept well away from the grip so
+            a drag never lands on it. It asks first, in the same popup, and names what is about to
+            go. Back out of the question and you are on the list again, with the popup still open. A
+            preset that is still completely untouched goes straight away, with nothing to ask. See
+            below.
           </li>
           <li>
-            A <b>✓</b> marks the preset you are on, and the same <b>A</b> marks the amnesic ones.
+            After each name, a <b>✓</b> marks the preset you are on, and the same <b>A</b> marks the
+            amnesic ones.
           </li>
         </UL>
         <Subhead>Deleting is permanent</Subhead>
@@ -1716,10 +1721,10 @@ export default function GuidePage({
             three buttons at the foot of the ⚙ menu and the Clear Saved Defaults link under them,
             Show Codes, every locked picker, the Amnesic switch while Save Stats is off, a timer
             value you can&apos;t type into right now, and — in Manage Presets — <b>✕</b> when only
-            one preset is left. The reorder handle beside each row never greys out; it has no end it
-            cannot move toward. The rest of the game&apos;s buttons — Reveal, Override / Undo,{' '}
-            <b>&lt;</b> and <b>&gt;</b> — are only dimmed, so they still read as ordinary buttons
-            even when pressing one would do nothing.
+            one preset is left. The reorder grip at the end of each row never greys out; it has no
+            end it cannot move toward. The rest of the game&apos;s buttons — Reveal, Override /
+            Undo, <b>&lt;</b> and <b>&gt;</b> — are only dimmed, so they still read as ordinary
+            buttons even when pressing one would do nothing.
           </li>
         </UL>
       </GuideSection>
