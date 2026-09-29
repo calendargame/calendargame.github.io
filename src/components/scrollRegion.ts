@@ -14,10 +14,13 @@ import type { RefObject } from 'react'
 //   2. The EDGE FADES. The fade-scroll-* masks (index.css) — top/bottom feathers that appear
 //      exactly when content extends past that edge — driven by useScrollEdgeState below.
 //
-// SCROLLER_CORE_CLASS exists for the ONE scroller that is not an inner region: the app's main
-// container (main.tsx appScrollRef / #appScroll), which fills the viewport, so its scrollbar
-// already paints at the screen edge past the content wrapper's own px-4 — it takes the core
-// without the lane (its fades still come from scrollFadeClass). Since round 13 that container is
+// SCROLLER_CORE_CLASS exists for the scrollers that need no lane of their own. The app's main
+// container (main.tsx appScrollRef / #appScroll) fills the viewport, so its scrollbar already
+// paints at the screen edge past the content wrapper's own px-4 — it takes the core without the
+// lane (its fades still come from scrollFadeClass). And since round 23 (Q8) the option list inside
+// a dropdown's panel (components/CustomSelect): every option row carries its own 1rem of side
+// padding, so the text already sits clear of an overlay scrollbar, and a lane on top would also
+// widen the panel away from the hidden width-mirror that must match it to the pixel. Since round 13 that container is
 // the WHOLE app: How to Play used to scroll the document instead and was exempt from this file
 // entirely, and it is now governed code like everything else. tests/scrollRegionGuard.test.js
 // fails the suite on any raw vertical-overflow literal outside this file, so every scroll region
@@ -260,4 +263,42 @@ export function useScrollEdgeState<T extends HTMLElement>(
     }
   }, [ref, active, topShadeRef, bottomShadeRef])
   return { scrolledFromTop, atBottom }
+}
+
+// holdScrollRegion (round 23, Q8) — freeze the nearest scroll region around `from` (a computed overflow-y of auto
+// or scroll, stopping short of <body>: the document is never a menu's to freeze) and return the
+// function that lets it go, restoring the element's own inline values exactly. No region → a no-op.
+// Its one caller is components/CustomSelect, which holds the region around a trigger still while
+// that trigger's panel is open (its caller contract says why). It lives HERE because freezing a
+// scroller is scroller machinery, and this file is the one place allowed to touch a scroller's
+// overflow (tests/scrollRegionGuard).
+//   • overflow-y:hidden, NOT a listener that undoes scrolls: hidden is still a scroll container, so
+//     scrollTop is kept exactly and nothing jumps, but no wheel, drag, key or momentum can move it.
+//     Undoing a scroll after it lands would paint the moved frame first — a flicker per wheel tick.
+//   • ⚠ A CLASSIC SCROLLBAR (desktop Windows) takes width from the region, and hiding the overflow
+//     would give that width back — the region's whole content, the trigger included, would shift
+//     sideways by a scrollbar's width under an open menu. So when the region has one (offsetWidth
+//     beyond clientWidth and its borders), scrollbar-gutter:stable keeps the space reserved while
+//     the bar itself is gone. Overlay scrollbars (iOS, macOS, Android) take no width, so there is
+//     nothing to reserve and the gutter is left alone.
+export function holdScrollRegion(from: Element | null): (() => void) | undefined {
+  let el = from?.parentElement ?? null
+  while (el && el !== document.body) {
+    const { overflowY } = getComputedStyle(el)
+    if (overflowY === 'auto' || overflowY === 'scroll') break
+    el = el.parentElement
+  }
+  if (!el || el === document.body) return undefined
+  const region = el
+  const cs = getComputedStyle(region)
+  const borders = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0)
+  const classicBar = region.offsetWidth - region.clientWidth - borders > 0
+  const prevOverflowY = region.style.overflowY
+  const prevGutter = region.style.scrollbarGutter
+  region.style.overflowY = 'hidden'
+  if (classicBar) region.style.scrollbarGutter = 'stable'
+  return () => {
+    region.style.overflowY = prevOverflowY
+    region.style.scrollbarGutter = prevGutter
+  }
 }

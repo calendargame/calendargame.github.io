@@ -9,7 +9,12 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useBackButton } from './useBackButton.js'
-import { scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
+import {
+  SCROLLER_CORE_CLASS,
+  holdScrollRegion,
+  scrollFadeClass,
+  useScrollEdgeState,
+} from './scrollRegion.js'
 
 // CustomSelect — the app's custom dropdown, replacing the native <select>.
 //
@@ -28,7 +33,7 @@ import { scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 //   • ITS TRIGGER LIVES IN FIXED CHROME, which no scroller can move — the top bar's mode selector
 //     and preset switcher.
 //   • ITS TRIGGER LIVES INSIDE A SCROLL REGION, AND THIS COMPONENT HOLDS THAT REGION STILL for as
-//     long as the panel is open (the hold effect near the bottom of the component) — the ⚙ panel's
+//     long as the panel is open (components/scrollRegion's holdScrollRegion) — the ⚙ panel's
 //     "Open in" (round 23, Q8), the first call site of this kind, written and tested against that
 //     real case as this paragraph used to require of whoever came first. Holding the region still
 //     was chosen over following the trigger for three reasons: it cannot jitter, because nothing is
@@ -443,8 +448,8 @@ export default function CustomSelect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
   // ★ HOLD THE TRIGGER'S SCROLL REGION STILL WHILE THE PANEL IS OPEN — the second way to meet the
-  // caller contract at the top of this file; holdScrollRegion (module scope, below the component)
-  // does the work and argues the method. For the top bar's two selects there is no scroll region
+  // caller contract at the top of this file; components/scrollRegion's holdScrollRegion does the
+  // work and argues the method. For the top bar's two selects there is no scroll region
   // around the trigger and it does nothing at all. A layout effect, so the hold is in place in the
   // same frame the panel first paints.
   useLayoutEffect(() => {
@@ -637,11 +642,12 @@ export default function CustomSelect({
                 outer radius, so the ring is never clipped and all four corners of the first/last
                 options stay round. data-drag-scroll makes it lib/pointerGestures' auto-scroll target,
                 so a press-drag down a long top-bar list scrolls it at the edge the way the ⚙ panel
-                does. overscroll-contain keeps a fling that hits the end from scrolling the page. */}
+                does. SCROLLER_CORE_CLASS (components/scrollRegion, which says why this list takes no lane)
+                includes overscroll-contain, so a fling that hits the end does not scroll the page. */}
             <div
               ref={listRef}
               data-drag-scroll
-              className={`relative min-h-0 overflow-y-auto overscroll-contain p-1${scrollFadeClass(scrolledFromTop, atBottom)}`}
+              className={`relative min-h-0 ${SCROLLER_CORE_CLASS} p-1 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
             >
               {options.map((opt, i) => (
                 <button
@@ -697,38 +703,4 @@ export default function CustomSelect({
         )}
     </div>
   )
-}
-
-// holdScrollRegion — freeze the nearest scroll region around `from` (a computed overflow-y of auto
-// or scroll, stopping short of <body>: the document is never a menu's to freeze) and return the
-// function that lets it go, restoring the element's own inline values exactly. No region → a no-op.
-//   • overflow-y:hidden, NOT a listener that undoes scrolls: hidden is still a scroll container, so
-//     scrollTop is kept exactly and nothing jumps, but no wheel, drag, key or momentum can move it.
-//     Undoing a scroll after it lands would paint the moved frame first — a flicker per wheel tick.
-//   • ⚠ A CLASSIC SCROLLBAR (desktop Windows) takes width from the region, and hiding the overflow
-//     would give that width back — the region's whole content, the trigger included, would shift
-//     sideways by a scrollbar's width under an open menu. So when the region has one (offsetWidth
-//     beyond clientWidth and its borders), scrollbar-gutter:stable keeps the space reserved while
-//     the bar itself is gone. Overlay scrollbars (iOS, macOS, Android) take no width, so there is
-//     nothing to reserve and the gutter is left alone.
-function holdScrollRegion(from: Element | null): (() => void) | undefined {
-  let el = from?.parentElement ?? null
-  while (el && el !== document.body) {
-    const { overflowY } = getComputedStyle(el)
-    if (overflowY === 'auto' || overflowY === 'scroll') break
-    el = el.parentElement
-  }
-  if (!el || el === document.body) return undefined
-  const region = el
-  const cs = getComputedStyle(region)
-  const borders = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0)
-  const classicBar = region.offsetWidth - region.clientWidth - borders > 0
-  const prevOverflowY = region.style.overflowY
-  const prevGutter = region.style.scrollbarGutter
-  region.style.overflowY = 'hidden'
-  if (classicBar) region.style.scrollbarGutter = 'stable'
-  return () => {
-    region.style.overflowY = prevOverflowY
-    region.style.scrollbarGutter = prevGutter
-  }
 }
