@@ -415,6 +415,32 @@ input,textarea{user-select:text;-webkit-user-select:text}
    the `@layer components{` opening brace, with the ★★ block that explains why a registration
    inside a layer loses its @supports fallback. Its syntax/inherits/initial-value are unchanged. */
 #appScroll{--seat-top:calc(var(--bar-h) + var(--guide-panel-gap));scroll-padding-top:var(--seat-top)}
+/* .guide-head — a How-to-Play section header, which PINS under the fixed bar while its own
+   section's content scrolls beneath it (Q9, round 23; components/GuidePage). Every header carries
+   it, open or not, so the header is the same element in both states and nothing about it changes
+   on a toggle; only the open section has any room to stick in, because a sticky box is held inside
+   its parent (the section's wrapper) and a closed wrapper is exactly as tall as its header.
+     • top:0 IS the bar's underside. A sticky box pins inside its scroller's scrollport MINUS the
+       scroller's padding, and #appScroll's padding-top is exactly --bar-h (the inline style in
+       main.tsx that starts every screen below the fixed bar) — so a `top:var(--bar-h)` here would
+       count the bar twice and pin a whole bar-height too low (measured, round 23). Pinning at the
+       bar rather than at --seat-top is deliberate: the seat is where a tapped header comes to REST,
+       one panel gap below the bar, and pinning there would leave that gap as a strip of scrolling
+       text between the bar and the header. So a resting header rides up that one gap with the page
+       and only then pins — the moment content starts to pass under it.
+     • the fill is the panel's own (--panel-bg) composited over the page (--bg1), which is exactly
+       what the wrapper shows behind a transparent header at rest — no visible change there — but
+       OPAQUE, so text scrolling under a pinned header cannot show through it.
+     • z-index:1 lifts it over the guide's fixed top feather (.doc-fade-top, later in the DOM): a
+       pinned header sits wholly inside that strip, which would otherwise wash its title out.
+     • --shade:0 is its resting shadow strength, overriding @property's initial 1 (which is for a
+       boundary with no writer at all). GuidePage writes the live value onto the OPEN section's
+       header only, so the elev-shadow-down it carries appears only once content is actually under
+       it and ramps in over --fade-h like every other boundary shadow; a closed header never has
+       content under it and rests at 0.
+   The wrapper's rounded corners still clip it, via overflow:clip there — hidden would make the
+   wrapper a scroll container of its own, and a sticky box sticks to its NEAREST scroll container. */
+.guide-head{position:sticky;top:0;z-index:1;background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1);--shade:0}
 /* --shade — how strongly a boundary asserts itself, 0…1 (round 10 item B). It is the scroller's
    distance from that edge, measured in px and divided by --fade-h (the same feather depth the
    masks use — the app's one "you are near a boundary" ramp, so the shadow and the fade speak

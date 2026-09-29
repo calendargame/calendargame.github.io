@@ -19,6 +19,7 @@ import {
   accordionScrollTarget,
   accordionToggleMs,
 } from '../lib/accordionMotion.js'
+import { edgeShade, observeScrollExtent, readShadeRampPx, writeShade } from './scrollRegion.js'
 
 // GuidePage / GuideSection — the How-to-Play tab: an accordion of documentation
 // sections (each a GuideSection wrapping an Expander) covering every observable
@@ -45,7 +46,7 @@ import {
 // no documented behavior was dropped. GuideSection is exported named; GuidePage is
 // the default export.
 
-// DOM ids for a section's two landmarks. panelDomId is first an accessibility
+// DOM ids for a section's landmarks. panelDomId is first an accessibility
 // contract — the header button's aria-controls points at the panel body, which
 // carries the id — and the coordinator leans on the same ids to re-derive every
 // element it needs at tap time (the wrapper for geometry, the body for heights)
@@ -55,6 +56,28 @@ import {
 // the number of sections.
 const sectionDomId = (id: string) => `guide-sec-${id}`
 const panelDomId = (id: string) => `guide-panel-${id}`
+// …and the header button, which since round 23 (Q9) can PIN under the bar: the pin tracker and
+// the collapse-in-place both measure it against its wrapper, and both find it from the open id.
+const headerDomId = (id: string) => `guide-head-${id}`
+
+// headerPinDepth — how far a section's header has been carried DOWN its own wrapper by the sticky
+// pin, in px: 0 at its natural spot (the section's top edge, just inside the border), growing as
+// content scrolls up under a pinned header. It is the one measure of "pinned" this file uses, and
+// it is deliberately the header's displacement rather than a comparison against a pin line: a
+// sticky box is displaced from its in-flow spot exactly when it is stuck, so this is 0 on every
+// frame where nothing is under the header — the resting seat a tap glides a header to included —
+// with no line to read, no token to parse and no tolerance to tune. clientTop is the wrapper's top
+// border, which sits between the wrapper's edge and the header's natural spot. Clamped at 0
+// because a fractional layout can leave a −0.x residue at rest.
+function headerPinDepth(id: string): number {
+  const wrapper = document.getElementById(sectionDomId(id))
+  const header = document.getElementById(headerDomId(id))
+  if (!wrapper || !header) return 0
+  return Math.max(
+    0,
+    header.getBoundingClientRect().top - wrapper.getBoundingClientRect().top - wrapper.clientTop,
+  )
+}
 
 // startScrollWriter — the coordinator's per-frame scroll driver, pointed at the element
 // the guide scrolls. Runs the SAME clock and curve as the panel transitions: durationMs
@@ -127,9 +150,14 @@ export function GuideSection({
   const motionVar =
     durationMs == null ? undefined : ({ '--expander-ms': `${durationMs}ms` } as CSSProperties)
   return (
-    <div id={sectionDomId(id)} className="rounded-2xl panel overflow-hidden">
+    // overflow-clip, not overflow-hidden: both round the corners off the header's opaque fill, but
+    // `hidden` would also make this wrapper a scroll container, and the header's sticky pin
+    // (.guide-head, index.css) answers to its NEAREST scroll container — it would pin against this
+    // unscrolling box, i.e. never. `clip` clips without becoming one, so the pin reaches #appScroll.
+    <div id={sectionDomId(id)} className="rounded-2xl panel overflow-clip">
       <button
         type="button"
+        id={headerDomId(id)}
         aria-expanded={isOpen}
         aria-controls={panelDomId(id)}
         style={motionVar}
@@ -141,7 +169,9 @@ export function GuideSection({
           if (selectionSuppressesToggle(window.getSelection(), e.currentTarget)) return
           onToggle(id)
         }}
-        className="w-full text-left px-4 py-3 flex items-center justify-between"
+        // guide-head is the sticky pin and its opaque fill; elev-shadow-down is the pinned look,
+        // held at --shade 0 until GuidePage's pin tracker says content is under it (Q9, round 23).
+        className="guide-head elev-shadow-down w-full text-left px-4 py-3 flex items-center justify-between"
       >
         <span className="text-sm font-semibold text-(--tx-50) select-text">{title}</span>
         <span
@@ -375,10 +405,55 @@ export default function GuidePage({
   // pre-multiplies the writer's duration exactly as the panels' CSS calc does, so Reduce
   // Motion (scale 0) jumps instantly to the correct end state (jsdom's empty var read is
   // NaN → treated as 1, animate).
+  // THE PIN TRACKER (Q9, round 23) — writes the open section's header its pinned look: the --shade
+  // its elev-shadow-down reads, ramped from 0 over --fade-h by how far content has scrolled under
+  // it (headerPinDepth). That is the owner's rule made literal: OPENING a section never pins it —
+  // the glide seats the header at its natural spot, where the depth is 0 — and the shadow appears
+  // only once content really is under the header, going again as you scroll back up. The ramp is
+  // the one every boundary shadow in the app uses (components/scrollRegion), so the header and the
+  // bar above it speak the same language.
+  // It re-reads on the scroller's scroll AND on any change to its extent (observeScrollExtent):
+  // the depth also moves without a scroll event whenever layout above the header changes — the
+  // panel above it collapsing as this one opens, above all. Both write paint only (the shade),
+  // which is the contract observeScrollExtent's callback must keep.
+  // A LAYOUT effect for the same reason as useScrollEdgeState: evaluated after paint, a return to a
+  // guide left mid-section would show one frame of an unshadowed pinned header. Only the OPEN
+  // header is tracked — a closed one has no room to pin in (index.css .guide-head) — and the
+  // cleanup rests the header it wrote to at 0, so a section that closes or loses the screen never
+  // keeps a stale shadow. Off-screen there is nothing to track: a hidden guide cannot scroll.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    const header = visible && open ? document.getElementById(headerDomId(open)) : null
+    if (!open || !scroller || !header) return
+    const rampPx = readShadeRampPx()
+    const evaluate = () => writeShade(header, edgeShade(headerPinDepth(open), 0, rampPx))
+    evaluate()
+    scroller.addEventListener('scroll', evaluate, { passive: true })
+    const stopExtent = observeScrollExtent(scroller, evaluate)
+    return () => {
+      scroller.removeEventListener('scroll', evaluate)
+      stopExtent()
+      writeShade(header, 0)
+    }
+  }, [visible, open, scrollerRef])
   const toggle = useCallback(
     (id: string) => {
       cancelScrollWriter()
       const opens = open !== id
+      // COLLAPSING FROM A PINNED HEADER (Q9, round 23). The header is pinned under the bar with the
+      // section's top edge scrolled away above it, and the collapse is about to shrink that section
+      // to just the header — at its natural spot, i.e. up there under the bar, taking the header the
+      // reader just tapped out from under their finger and dropping them among whatever sections
+      // follow. So the scroller first moves back by exactly the pin depth, which puts the header's
+      // natural spot where the pinned header already IS: nothing on screen moves in this step, and
+      // the header stays put while its panel folds away beneath it. It happens HERE, synchronously in
+      // the tap and before the state flip, so this write and the collapse's first frame paint
+      // together — no frame of either without the other — and before everything below reads
+      // scrollTop, so the coordinator plans the rest of the motion (the end-of-page clamp, if the
+      // collapse shortens the page past the reader) from the corrected position. A close of an
+      // UNPINNED section, and every open, have a depth of 0 and skip it.
+      const pinDepth = opens ? 0 : headerPinDepth(id)
+      if (pinDepth > 0 && scrollerRef.current) scrollerRef.current.scrollTop -= pinDepth
       const tapped = document.getElementById(sectionDomId(id))
       const closingExpander = open
         ? (document.getElementById(panelDomId(open))?.closest<HTMLElement>('.expander') ?? null)
