@@ -1124,9 +1124,11 @@ export default function GuidePage({
             dash in a time box only ever means nothing has been recorded there yet.
           </li>
           <li>
-            Saved solve times keep a rolling window of the most recent 1000 (older ones roll off so
-            saved progress stays small), so after a lot of practice Mean and Median reflect your
-            recent 1000 rather than all-time. Within a single visit, every solve still counts.
+            <b>Every solve time is kept</b>, so in Classic, Flash and Deduction the Mean and Median
+            are all-time numbers — every timed solve in that mode since you last reset its stats —
+            and closing or reloading the app never changes them. (Earlier versions of the app kept
+            only the newest 1000 saved times in each mode; if you had played more than that, the
+            older ones were already gone and can&apos;t be counted.)
           </li>
           <li>
             <b>Formatting (WCA speedcubing convention)</b> — single times (Last, and each solve and
@@ -2291,7 +2293,13 @@ export default function GuidePage({
             median.
           </li>
         </UL>
-        <p>Saved Mean and Median use a rolling window of your most recent 1000 solves.</p>
+        <p>
+          If this device ever runs out of room for the app&apos;s saved data, a popup tells you so.
+          You can keep playing — nothing already saved is lost, but new answers and changes are only
+          kept until you close the app. Deleting a preset you no longer use, or using Reset Stats in
+          a mode whose history you don&apos;t need, makes room, and everything on screen is then
+          saved again by itself.
+        </p>
         <p>
           <b>Lookup history</b> — the dates you&apos;ve looked up — is saved on this device too, the
           same way and through the same visits, but it is not part of the per-preset list above: it
