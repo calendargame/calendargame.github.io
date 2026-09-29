@@ -504,61 +504,60 @@ import BlitzMode from './modes/BlitzMode.jsx'
 
       const activeTheme=useSystem?(systemIsDark?darkTheme:lightTheme):manualTheme;
       useEffect(()=>{const mq=window.matchMedia("(prefers-color-scheme: dark)");const h=(e: MediaQueryListEvent)=>setSystemIsDark(e.matches);mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);},[]);
-      // ★★ THE STATUS BAR UNDER A MODAL (round 21 Q8; reworked round 22 Q7) — the app's ONE account of
-      // how the phone's status-bar strip gets its colour. index.css's layout note points here rather
+      // ★★ THE STATUS BAR UNDER A MODAL (round 21 Q8; round 22 Q7; round 23 Q1) — the app's ONE account
+      // of how the phone's status-bar strip gets its colour. index.css's layout note points here rather
       // than keeping a second version; there used to be two, and they contradicted each other.
       // THE DEFECT: a modal's scrim (`fixed inset-0 z-[60] bg-black/40`) dims the whole page but not
       // the status bar (clock/wifi/battery), which the browser paints itself, so a bright theme-coloured
-      // strip sits above 40%-darker content. The owner still saw it after round 21 shipped the
-      // theme-color fix — in the INSTALLED home-screen app on his iPhone.
-      // WHAT IS SOURCED (researched round 22 — read these before touching this again):
-      //   • Safari 26+ does not consult <meta name="theme-color"> at all: the top tint derives from the
-      //     page itself (Apple Developer Forums thread 801239; WebKit bug 301756). Apple never
-      //     documented theme-color for home-screen apps in any iOS version — so round 21's premise,
-      //     "iOS tints the status bar from theme-color", was never established, which is why its fix
-      //     changed a string and nothing on the owner's phone.
-      //   • WebKit bug 309956 (filed against iOS 26.3; reproduced by an Apple WebKit engineer):
-      //     changing <body>'s background-color at runtime DOES re-tint the status bar in standalone
-      //     (home-screen) mode — the bug being filed is that it fails in Safari TABS.
-      //   • Why BODY and not <html> is the lever: WebKit composes the "document background colour"
-      //     (LocalFrameView::documentBackgroundColor, read in WebKit's main branch, 2026-09-16) as
-      //     base, then html, then BODY on top, source-over — so an opaque body colour is the result
-      //     even though <html> carries a background of its own. (That this function is what the
-      //     standalone tint reads is the natural reading of 309956, but it is NOT verified in
-      //     WebKit's source.)
-      // WHAT IS NOT VERIFIED: that this fixes the owner's phone. Nobody has seen it work on an
-      // installed iOS app yet — that check is the next step, not a formality. If it fails, suspect
-      // first that the standalone tint samples the topmost FIXED element's background instead (the
-      // top bar, which sits UNDER the scrim at its own undimmed --bg1); and do not re-add a claim
-      // here that has not been seen on a device.
-      // SO THE THEME EFFECT BELOW WRITES BOTH SIGNALS while a modal is up, each for the platforms that
-      // read it, and neither is redundant:
-      //   • <body> background → the scrimmed colour. The iOS 26 standalone lever above.
-      //     ⚠ IT IS VISUALLY INERT IN THIS APP, which is the only reason it is safe — every claim
-      //     below was checked against the code, and tests/statusBarScrim pins the write itself:
-      //       – body's colour never reaches the CANVAS: CSS propagates body's background to the canvas
-      //         only when <html>'s is transparent, and <html> always has its own — index.html's
-      //         <style> html{background:#0d1117}, its boot script's inline stamp (with the same
-      //         fallback), and this effect's re-stamp below;
-      //       – body's OWN box paints nothing: its every child is out of flow (#root and #boot are
-      //         position:fixed, the icon-warming <img> is position:absolute, the scripts are
-      //         display:none, and every portal targets #root), preflight zeroes its margin and nothing
-      //         gives it a height, so it is a zero-height box under html,body{overflow:hidden} — and
-      //         overscroll-behavior:none leaves no rubber band to uncover anything;
-      //       – no frame can flash it: body carries no transition, and a modal cannot exist while
-      //         #boot's opaque z-100 splash is still up, nor paint over it.
-      //   • <meta name="theme-color"> → the scrimmed colour. Still live, not a leftover: Android Chrome
-      //     tints its browser chrome and its installed-app status bar from it, and Safari 15–18 read
-      //     it in browser tabs. Only Safari 26+ has stopped listening.
+      // strip sits above 40%-darker content — seen by the owner in the INSTALLED home-screen app on his
+      // iPhone.
+      // THREE ATTEMPTS, IN ORDER — read all three before trying a fourth:
+      //   1. Round 21 — <meta name="theme-color"> → the scrimmed colour. Changed nothing on the
+      //      owner's phone. Researched afterwards (round 22): Safari 26+ does not consult theme-color
+      //      at all — the top tint derives from the page itself (Apple Developer Forums thread 801239;
+      //      WebKit bug 301756) — and Apple never documented theme-color for home-screen apps in any
+      //      iOS version, so the premise was never established. The write STAYS (below), on its own
+      //      merits: Android Chrome tints its browser chrome and its installed-app status bar from it,
+      //      and Safari 15–18 read it in browser tabs.
+      //   2. Round 22 — <body>'s inline background-color → the scrimmed colour, on the strength of
+      //      WebKit bug 309956 (runtime body-background changes re-tint the standalone status bar) and
+      //      WebKit composing its "document background colour" html-then-body. Confirmed INERT on the
+      //      owner's installed app (2026-09-23) and DELETED in round 23 — its write, its test cases and
+      //      its containingBlockGuard allowlist entry all went with it.
+      //   3. Round 23 (THIS ONE) — <html>'s background → the scrimmed colour. ★ THE EVIDENCE it rests on,
+      //      answered by the owner on the installed app: CHANGING THE THEME IN ⚙ RE-TINTS THE STATUS BAR
+      //      LIVE. So a live channel exists and the earlier attempts fed it the wrong signal. The one
+      //      thing a theme change did that the modal path did not was re-stamp <html>'s background —
+      //      the modal path deliberately kept <html> on plain --tc — and <html> paints the CANVAS,
+      //      which body's background can never reach past (html always carries its own), which is
+      //      exactly why attempt 2 was inert.
+      // WHAT IS NOT VERIFIED: that attempt 3 fixes the owner's phone. A theme change also repaints
+      // everything else on screen, so the evidence narrows the channel without proving it is <html>.
+      // If this fails too, the next candidate is the fixed top bar's own background (the topmost
+      // fixed element at the status bar's edge, which sits UNDER the scrim at its undimmed --bg1). Do
+      // not re-add a claim here that has not been seen on a device.
+      // ⚠ WHY DIMMING <html> IS INVISIBLE, which it was NOT until this same change: the canvas used to
+      // BE the page background — #root was transparent and body's own box is empty (every child out of
+      // flow, zero height), so the canvas <html> paints was what showed behind the whole app, and
+      // dimming it under a scrim would have doubled the dim across the screen (tc × 0.6 × 0.6 — on the
+      // light themes, plainly visible). index.css now paints the page background on #root itself
+      // (`#root{…background:var(--bg1)}`; --bg1 equals --tc in every theme), and #root is
+      // position:fixed over the whole layout viewport (no viewport-fit=cover, so no safe-area strip
+      // falls outside it). So the canvas sits BEHIND an opaque #root and shows nowhere in normal use:
+      // html,body{overflow:hidden;overscroll-behavior:none} leaves no rubber band to uncover it, and a
+      // modal cannot exist while #boot's opaque z-100 splash is still up. And anywhere it could ever
+      // peek out with a modal up, it wears scrimTheme(tc) — exactly what the scrim over the page
+      // background composites to — so it would read as more scrim, not as a seam.
       // ★ THE SIGNAL is the [data-settings-modal] marker every modal scrim carries — SettingsPanel's
       // popups, ConfirmModal and RunBreakdown — and every one mounts the SAME way:
       // `createPortal(<scrim …>, document.getElementById('root'))`, so each scrim is a DIRECT CHILD
       // of #root. A MutationObserver on #root with childList (no subtree) therefore sees every open and
       // close while firing only when #root's own child list changes — modal/dropdown/mode-screen
-      // churn, not per-frame gameplay mutations. ⚠ IF A FUTURE MODAL PORTALS ELSEWHERE OR WRAPS ITS
-      // SCRIM, widen this to subtree:true (or move it to document.body). Falls back to document.body
-      // when #root is somehow absent (it is in index.html and the test harness, so this is
-      // belt-and-braces).
+      // churn, not per-frame gameplay mutations. It re-queries the WHOLE document on every change, so
+      // stacked modals (a ConfirmModal over a ⚙ popup) keep the dim until the LAST one closes.
+      // ⚠ IF A FUTURE MODAL PORTALS ELSEWHERE OR WRAPS ITS SCRIM, widen this to subtree:true (or move
+      // it to document.body). Falls back to document.body when #root is somehow absent (it is in
+      // index.html and the test harness, so this is belt-and-braces).
       const [anyModalOpen,setAnyModalOpen]=useState(false);
       useEffect(()=>{
         const host=document.getElementById('root')||document.body;
@@ -571,24 +570,21 @@ import BlitzMode from './modes/BlitzMode.jsx'
       useEffect(()=>{
         document.documentElement.setAttribute("data-theme",activeTheme);
         const tc=getComputedStyle(document.documentElement).getPropertyValue("--tc").trim();
+        // tc is '' before the stylesheet applies (tests/dev first pass) → leave both boot stamps as
+        // index.html's boot script wrote them.
+        if(!tc)return;
+        // Both status-bar signals — the scrimmed colour while any modal is up, plain --tc otherwise
+        // (the ★★ note above says which platform reads which). ONE value, computed from the CURRENT
+        // theme on every pass: the effect keys on activeTheme as well as anyModalOpen, so a theme
+        // change under an open popup (Use System Settings following the OS at sunset) re-dims to the
+        // new theme rather than restoring or keeping the old one.
+        // <html>'s stamp also has a job of its own: index.html's boot script stamped the saved theme's
+        // colour on it so no pre-stylesheet frame ever paints white, and without this re-stamp a
+        // runtime theme switch would leave the canvas at the stale boot colour.
+        const statusTint=anyModalOpen?scrimTheme(tc):tc;
         const meta=document.querySelector("meta[name='theme-color']");
-        // While any modal is up, both status-bar signals carry the scrimmed colour (see the ★★ note
-        // above for which platform reads which); plain --tc otherwise.
-        if(meta&&tc)(meta as HTMLMetaElement).content=anyModalOpen?scrimTheme(tc):tc;
-        // ⚠ CLEARED WITH '' — NEVER WRITTEN BACK AS --tc. Removing the inline value hands body back to
-        // index.css's `body{background:var(--bg1)}`, which keeps following the theme on its own; a
-        // written-back colour would pin body to whichever theme was active when the modal closed. The
-        // `tc` term keeps the pre-stylesheet pass (tc is '') on the stylesheet too.
-        document.body.style.backgroundColor=anyModalOpen&&tc?scrimTheme(tc):'';
-        // Keep <html>'s background in step too: index.html's boot script stamped the saved theme's
-        // color on it so no pre-stylesheet frame ever paints white — without a re-stamp a runtime
-        // theme switch would leave the document canvas (what iOS shows on overscroll) at the stale
-        // boot color. tc is '' before the stylesheet applies (tests/dev first pass) → keep the stamp.
-        // ⚠ THIS STAYS ON PLAIN --tc always — only <body> and the <meta> follow the modal. <html>'s
-        // background IS what paints behind the whole app (body's box is empty — see the ★★ note), and
-        // the scrim already darkens it; dimming it too would double the dim across the screen. The
-        // status bar is the reported seam; this is deliberately not over-reached.
-        if(tc)document.documentElement.style.background=tc;
+        if(meta)(meta as HTMLMetaElement).content=statusTint;
+        document.documentElement.style.background=statusTint;
       },[activeTheme,anyModalOpen]);
       // Q11 portrait lock, the non-Android half: the manifest's orientation:'portrait'
       // (vite.config.js webManifest) hard-locks installs only on Android, so on every platform

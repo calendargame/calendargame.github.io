@@ -122,7 +122,7 @@
    BYTE-IDENTICAL to its own --panel-bg, so hovering a history row would have produced literally
    no change (composite delta 0,0,0). It is now .12, and here is the whole derivation, measured
    rather than asserted.
-   HOW THE NUMBERS ARE TAKEN. A row is a `.panel` inside a `.panel` on `body{background:var(--bg1)}`,
+   HOW THE NUMBERS ARE TAKEN. A row is a `.panel` inside a `.panel` on #root's `background:var(--bg1)`,
    so the fill you actually see is alpha-composited twice; every figure below is that final sRGB
    colour, as MAX-CHANNEL delta / EUCLIDEAN delta. What the app ships today:
        theme      resting→hover   resting→selected   hover sits this far along
@@ -212,7 +212,7 @@
 :root{--bar-h:57px}
 html,body{overflow:hidden;overscroll-behavior:none}
 html{touch-action:manipulation}
-body{background:var(--bg1);color:var(--body-color)}
+body{color:var(--body-color)}
 /* #root fills the VISIBLE viewport via dvh (the dynamic viewport height), NOT the large layout
    viewport. This is what makes overflow scrollable in a phone browser: when the bottom toolbar is
    showing it shrinks the visible area, so content that would sit behind the toolbar instead overflows
@@ -221,7 +221,14 @@ body{background:var(--bg1);color:var(--body-color)}
    for browsers without dvh (they keep the prior large-viewport behavior). The text itself is still
    sized to the full screen via vh (see the fluid font-size below), so the toolbar never shrinks text
    — it only adds scroll, which is the intended behavior. */
-#root{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;overflow:hidden}
+/* ★ #root PAINTS THE PAGE BACKGROUND (round 23 Q1), not body and not the canvas. It used to be
+   body{background:var(--bg1)} — dead in practice (body's box is zero-height and <html>'s own background
+   stops it reaching the canvas), so the colour behind the whole app was really <html>'s inline --tc
+   stamp. Moving it here puts an opaque layer between the app and the canvas, which is what lets App's
+   theme effect dim <html>'s background under a modal (the status-bar signal) without dimming the page
+   twice. --bg1 equals --tc in every theme, so nothing on screen changes. The full account is the ★★
+   status-bar note above App's theme effect in src/main.tsx. */
+#root{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;overflow:hidden;background:var(--bg1)}
 /* THE THREE CLAMPS ABOVE ARE NOW PERMANENT, AND THAT IS THE POINT (round 13). Rounds 7–12
    carried a release beside them — <html data-doc-scroll>, stamped by App for the whole of guide
    mode, which unclamped html/body/#root so the DOCUMENT scrolled How to Play. It bought exactly
