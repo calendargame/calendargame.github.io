@@ -17,7 +17,7 @@ import {
   forgetOldestCards,
 } from '../../src/engine/gameReducer.js'
 import { isDeepStrictEqual } from 'node:util'
-import { parkedText, restoreParked } from '../../src/store/sessionHistory.js'
+import { parkedText, restoreParked } from '../../src/engine/parkedHistory.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { computeStreaks } from '../../src/engine/streak.js'
 import { computeHasCredit } from '../../src/engine/answerButtons.js'
@@ -674,7 +674,7 @@ export function freshCov() {
     retoggle: 0, //    the same card pressed three times running (consecutive presses hit one card)
     hydrated: 0, //    sequences seeded with a prior-session baseline (the hydration net)
     timedOutBehind: 0, // a timed-out card was the one the button would otherwise mean (history tail / browsed)
-    reloads: 0, //     parked + restored mid-sequence (store/sessionHistory's reload round trip)
+    reloads: 0, //     parked + restored mid-sequence (engine/parkedHistory's reload round trip)
     reloadsDeep: 0, // …while browsed back, i.e. with the live card parked as the isLive forward entry
     forgotten: 0, //   …after forgetting some of the oldest cards (forgetOldestCards, the size budget)
   }
@@ -725,7 +725,7 @@ export function runSequence(seed, steps, cov, profile) {
 
   for (let i = 0; i < steps; i++) {
     // THE RELOAD (round 23 Q11): with prob pReload, the state goes through exactly what a reload does
-    // to a casual mode — parked as the app parks it (store/sessionHistory's parkedText, the times left
+    // to a casual mode — parked as the app parks it (engine/parkedHistory's parkedText, the times left
     // out), JSON and all, then restored over its own stats as the app restores it (restoreParked: the
     // one engine restore door, then the stats-agree and invariant checks). A reachable state must
     // come back, and come back EXACTLY; the oracle and the reference model then carry on against the
