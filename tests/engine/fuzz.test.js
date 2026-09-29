@@ -244,4 +244,32 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
     },
     T,
   )
+  // ── The reload round trip (round 23 Q11: store/sessionHistory) ──
+  // Parked and restored mid-play, the state must come back exactly — and play on under the exact
+  // oracle and the reference model as if nothing happened. Coverage proves reloads landed while
+  // browsed back (the live card parked in the forward stack) and, in the second, after forgetting
+  // the oldest cards the way the size budget does.
+  it(
+    'reload-ref — a reload mid-play restores the exact state, and the model agrees afterwards',
+    () => {
+      const cov = runFuzzProfile('reload-ref')
+      expect(cov.reloads).toBeGreaterThan(1000)
+      expect(cov.reloadsDeep).toBeGreaterThan(0)
+      expect(cov.refChecks).toBeGreaterThan(0)
+      expect(cov.toggleBack).toBeGreaterThan(0)
+      expect(cov.hydrated).toBeGreaterThan(0)
+    },
+    T,
+  )
+  it(
+    'reload-trim — forgetting the oldest cards keeps every score exact and every invariant',
+    () => {
+      const cov = runFuzzProfile('reload-trim')
+      expect(cov.forgotten).toBeGreaterThan(500)
+      expect(cov.reloadsDeep).toBeGreaterThan(0)
+      expect(cov.override).toBeGreaterThan(0)
+      expect(cov.hydrated).toBeGreaterThan(0)
+    },
+    T,
+  )
 })

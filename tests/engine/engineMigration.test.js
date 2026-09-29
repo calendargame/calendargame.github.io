@@ -457,7 +457,7 @@ describe('restoreParkedEngine — the one door a parked blob comes through', () 
     expect(restoreParkedEngine(make(), false, 'aox')).toBe(null)
     expect(captureError).toHaveBeenCalledTimes(1)
     expect(vi.mocked(captureError).mock.calls[0][1]).toMatchObject({
-      where: 'restore-parked-round',
+      where: 'restore-parked-engine',
       mode: 'aox',
     })
   })

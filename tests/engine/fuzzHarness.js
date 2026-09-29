@@ -14,7 +14,10 @@ import {
   overrideTarget,
   overridePlan,
   liveCredited,
+  forgetOldestCards,
 } from '../../src/engine/gameReducer.js'
+import { isDeepStrictEqual } from 'node:util'
+import { parkedText, restoreParked } from '../../src/store/sessionHistory.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { computeStreaks } from '../../src/engine/streak.js'
 import { computeHasCredit } from '../../src/engine/answerButtons.js'
@@ -491,6 +494,72 @@ export const PROFILES = {
     pComplete: 0.35,
     pHold: 0.35,
   },
+  // ── The reload round trip (round 23 Q11) ──
+  // A casual mode's history is parked when the page hides and restored on the reload (store/
+  // sessionHistory). These profiles reload mid-play, often, on the casual surface (no RESET_ROUND and
+  // no timeouts: Classic/Flash/Deduction never send them), hydrated half the time — and demand the
+  // restored state be the state parked, under the exact oracle and, in the first, the independent
+  // reference model too. The second forgets the oldest cards before some reloads, as the size budget
+  // does, over long sequences where the history is deep enough to cut.
+  'reload-ref': {
+    name: 'reload-ref',
+    seedBase: 12_000_000,
+    seqs: 2500,
+    steps: 300,
+    strongOracle: true,
+    pHydrate: 0.5,
+    referenceModel: true,
+    pReload: 0.08,
+    weights: {
+      ANSWER: 5,
+      OVERRIDE: 5,
+      BACK: 3,
+      FORWARD: 2,
+      NEW: 3,
+      REVEAL: 2,
+      SHOW_CODES_OPEN: 2,
+      SHOW_CODES_CLOSE: 1,
+      RESET: 1,
+      REGEN: 1,
+    },
+    pJulian: 0.3,
+    pSaveStats: 0.85,
+    pTracking: 0.6,
+    pTimingOff: 0.5,
+    pSolveTime: 0.6,
+    pAnswerCorrect: 0.55,
+    pComplete: 0,
+    pHold: 0,
+  },
+  'reload-trim': {
+    name: 'reload-trim',
+    seedBase: 13_000_000,
+    seqs: 1200,
+    steps: 500,
+    strongOracle: true,
+    pHydrate: 0.5,
+    pReload: 0.05,
+    pTrim: 0.5,
+    weights: {
+      ANSWER: 5,
+      NEW: 3,
+      OVERRIDE: 4,
+      BACK: 3,
+      FORWARD: 2,
+      REVEAL: 1,
+      SHOW_CODES_OPEN: 1,
+      SHOW_CODES_CLOSE: 1,
+      REGEN: 1,
+    },
+    pJulian: 0.3,
+    pSaveStats: 0.9,
+    pTracking: 0.6,
+    pTimingOff: 0.4,
+    pSolveTime: 0.6,
+    pAnswerCorrect: 0.6,
+    pComplete: 0,
+    pHold: 0,
+  },
 }
 
 // Weighted pick of one action kind.
@@ -605,6 +674,9 @@ export function freshCov() {
     retoggle: 0, //    the same card pressed three times running (consecutive presses hit one card)
     hydrated: 0, //    sequences seeded with a prior-session baseline (the hydration net)
     timedOutBehind: 0, // a timed-out card was the one the button would otherwise mean (history tail / browsed)
+    reloads: 0, //     parked + restored mid-sequence (store/sessionHistory's reload round trip)
+    reloadsDeep: 0, // …while browsed back, i.e. with the live card parked as the isLive forward entry
+    forgotten: 0, //   …after forgetting some of the oldest cards (forgetOldestCards, the size budget)
   }
 }
 
@@ -652,6 +724,42 @@ export function runSequence(seed, steps, cov, profile) {
   let pressRun = 0
 
   for (let i = 0; i < steps; i++) {
+    // THE RELOAD (round 23 Q11): with prob pReload, the state goes through exactly what a reload does
+    // to a casual mode — parked as the app parks it (store/sessionHistory's parkedText, the times left
+    // out), JSON and all, then restored over its own stats as the app restores it (restoreParked: the
+    // one engine restore door, then the stats-agree and invariant checks). A reachable state must
+    // come back, and come back EXACTLY; the oracle and the reference model then carry on against the
+    // restored state as if nothing happened, which is the claim. With prob pTrim it first forgets
+    // some of its oldest cards, as the size budget does — the forgotten credits join the oracle's
+    // prior history, which is precisely what the engine claims forgetting them means (the reference
+    // model keeps every question it saw, so the trimming profile runs without one).
+    if (profile.pReload && chance(rnd, profile.pReload)) {
+      if (profile.pTrim && state.stack.length && chance(rnd, profile.pTrim)) {
+        const k = 1 + Math.floor(rnd() * state.stack.length)
+        priorHistory = [...priorHistory, ...state.stack.slice(0, k).map((e) => !!e.hasCredit)]
+        state = forgetOldestCards(state, k)
+        cov.forgotten++
+      }
+      const back = restoreParked(JSON.parse(parkedText(state)), state.stats, useJulian, 'classic')
+      const same = back && isDeepStrictEqual(back.engine, JSON.parse(JSON.stringify(state)))
+      if (!same)
+        return {
+          ok: false,
+          profile: profile.name,
+          seed,
+          step: i,
+          violations: [
+            back ? 'RELOAD: the restored state differs' : 'RELOAD: refused a real state',
+          ],
+          action: 'RELOAD',
+          prevStats: state.stats,
+          nowStats: back?.engine.stats,
+          recent,
+        }
+      state = back.engine
+      cov.reloads++
+      if (state.backDepth > 0) cov.reloadsDeep++
+    }
     const saveStats = chance(rnd, profile.pSaveStats)
     const tracking = chance(rnd, profile.pTracking)
     const timingOff = chance(rnd, profile.pTimingOff)

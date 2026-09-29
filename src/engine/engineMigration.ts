@@ -1,12 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────
 // engine/engineMigration.ts — a parked engine state from an OLDER build, brought forward.
 //
-// store/sessionRound parks whole engine states (an ended Blitz round / MoX run) in sessionStorage,
-// and a reload keeps them — so the first build with round 23's per-card Override record meets
-// states written by the builds before it, and must load them rather than crash or mis-score.
-// This is the ONE door they come through: `restoreParkedEngine` below, which each timed mode calls
-// on its parked snapshot at mount, BEFORE anything reads it — so the screen's own fields and its
-// engine are kept or dropped together, never one without the other.
+// Two stores park whole engine states in sessionStorage, and a reload keeps them: store/sessionRound
+// (an ended Blitz round / MoX run) and store/sessionHistory (a casual mode's history, round 23 Q11).
+// So the first build with round 23's per-card Override record meets states written by the builds
+// before it, and must load them rather than crash or mis-score. This is the ONE door every parked
+// engine comes through: `restoreParkedEngine` below, which each timed mode calls on its parked
+// snapshot at mount and store/sessionHistory calls for the casual modes, BEFORE anything reads it —
+// so the screen's own fields and its engine are kept or dropped together, never one without the other.
+// (A casual history is only ever written by builds that already have today's shape — the store is
+// newer than the per-card record — so for it the migration is the idempotent pass-through below;
+// what it needs from this door is the shape check and the catch.)
 //
 // TWO LEGACY SHAPES, both from the one-override-per-question engine:
 //   • v2.25.0 — history entries carry `overrideUsed` (the per-question lock) and a `capsule`
@@ -259,7 +263,9 @@ function migrateShape(blob: unknown, useJulian: boolean): GameState {
 // ★ THE RESTORE DOOR — a parked blob in, today's engine state out, or null when the blob cannot be
 // one. Null means "nothing is parked": the caller drops its WHOLE snapshot (its own fields ride on
 // this engine, so a fresh engine under a restored "ended" screen would be a state no play reaches)
-// and the mode comes up fresh, and its mirror effect then discards the slot on its first run.
+// and the mode comes up fresh — and the slot goes the way its store retires any other (a timed
+// mode's mirror effect discards it on its first run; a casual history's is replaced or discarded the
+// next time that screen parks or unmounts, store/sessionHistory).
 //
 // ⚠ WHY A BLOB CAN BE UNREADABLE AT ALL. sessionStorage is per ORIGIN, and the live site and the
 // staging build share one (calendargame.app/test_version/) — so a build this one has never heard of
@@ -279,8 +285,8 @@ export function restoreParkedEngine(
   mode: string,
 ): GameState | null {
   const reject = (reason: string, error?: unknown): null => {
-    captureError(error ?? new Error(`Unreadable parked round: ${reason}`), {
-      where: 'restore-parked-round',
+    captureError(error ?? new Error(`Unreadable parked engine: ${reason}`), {
+      where: 'restore-parked-engine',
       mode,
       reason,
     })

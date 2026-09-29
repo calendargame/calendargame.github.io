@@ -680,6 +680,45 @@ const withStreaks = (s: GameState): GameState => {
   }
 }
 
+// ── FORGETTING THE OLDEST CARDS (round 23 Q11) ──────────────────────────────────────────────────
+// Drop the `k` oldest cards of the history — the front of `stack` — and fold them into the state's
+// carried-in baselines, exactly as a hydrated start or RESET_ROUND carries what no card names any
+// more. store/sessionHistory is the caller: a history too long for its share of sessionStorage is
+// parked with its oldest cards forgotten rather than not parked at all.
+// ★ NOTHING THE PLAYER CAN SEE MOVES, and no later press can tell the difference, because each of
+// the four things those cards were holding moves into the baseline built for it:
+//   • the card ledger — `played` still counts them, so `historyBase` takes them;
+//   • the times ledger — the seconds they name are still in the pool, at its FRONT (the pool is in
+//     play order and these are the first cards), so they become carried-in: `timesBase` takes them;
+//   • the streak — the recompute after a toggle reads the carry as leading credits, so the new carry
+//     is the trailing run of (old carry + these cards' credits): a toggle on the oldest card left
+//     still joins, or breaks, exactly the run it did before;
+//   • the best — the longest run inside the forgotten part is a floor no recompute may drop below.
+// Only `stack` is ever cut: its cards are all history (the live card is never in it), and they are
+// the oldest in play. The browsed card and everything ahead of it are untouched, so the one visible
+// change is that Back stops sooner. `stats` itself is not touched at all.
+// engine/invariants holds every result to the same ledgers, and tests/engine's reload fuzz folds the
+// forgotten cards into its oracle's prior history and checks the scores stay exact.
+export function forgetOldestCards(s: GameState, k: number): GameState {
+  const n = Math.min(Math.max(0, Math.floor(k)), s.stack.length)
+  if (n === 0) return s
+  const seq = Array.from({ length: s.streakCarry }, () => true)
+  let timed = 0
+  for (let i = 0; i < n; i++) {
+    seq.push(!!s.stack[i].hasCredit)
+    if (s.stack[i].solveTime != null) timed++
+  }
+  const { curStreak, bestStreak } = computeStreaks(seq)
+  return {
+    ...s,
+    stack: s.stack.slice(n),
+    historyBase: s.historyBase + n,
+    timesBase: s.timesBase + timed,
+    streakCarry: curStreak,
+    bestFloor: Math.max(s.bestFloor, bestStreak),
+  }
+}
+
 // pushAndNext (Classic): push the just-finished question to history (only when it was
 // answered AND Save Stats is on for it), then load nextDate and clear per-question state.
 const advance = (
