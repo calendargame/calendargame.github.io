@@ -1,13 +1,16 @@
 // ClassicMode — the untimed weekday screen. Extracted verbatim from main.tsx (Q1 phase 1); it was
 // already a module-level sibling of App taking everything through props, so nothing about its
 // behaviour changes by living here.
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { ModeProps, GenDate, FmtDate } from './modeTypes.js'
 import {
   useButtonFlash,
   useStatsHideToggles,
   engineFresh,
   useResetStatsConfirm,
+  useMountedDataId,
+  readParkedHistory,
+  useParkedHistory,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
@@ -56,7 +59,12 @@ function ClassicMode({
   const scoringOff = useModePrefs((s) => s.classicScoringOff),
     setScoringOff = useModePrefs((s) => s.setClassicScoringOff) // persisted; scoring shown by default
   // Lifetime stats persist across reloads (Stage D1): hydrate from saved progress on mount,
-  // then mirror every stats change back to the store (which caps the solve-times window).
+  // then mirror every stats change back to the store.
+  // …and so does the HISTORY behind them, across a reload only (round 23 Q11): what this screen parked
+  // when the page hid comes back as the engine's first state (modes/modeHooks' readParkedHistory),
+  // read once, keyed by the stats copy this screen is mounted on; useParkedHistory below parks it.
+  const dataId = useMountedDataId()
+  const [parked] = useState(() => readParkedHistory(dataId, 'classic', useJulian))
   const eng = useGameEngine({
     label: 'classic',
     genDate,
@@ -66,8 +74,10 @@ function ClassicMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.classic,
+    getInitialState: () => parked?.engine ?? null,
   })
   const { state, correct, overrideAvail, overridden } = eng
+  useParkedHistory(dataId, 'classic', state)
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.

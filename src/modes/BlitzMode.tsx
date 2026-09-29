@@ -4,7 +4,7 @@
 // props, so nothing about its behaviour changes by living here.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
-import { useButtonFlash } from './modeHooks.js'
+import { useButtonFlash, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS } from '../components/controlClasses.js'
 import {
@@ -39,8 +39,6 @@ import {
   showCodesPenalizes,
 } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
-import { usePresets } from '../store/presets.js'
-import { activeDataId } from '../store/amnesic.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/engineMigration.js'
@@ -156,13 +154,9 @@ function BlitzMode({
     setAllowMistakes = useModePrefs((s) => s.setBlitzAllowMistakes) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.blitzTimingOff),
     setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the timing trio, the engine clock never stops (no arm/reset)
-  // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON — store/amnesic's activeDataId ("1:saved" /
-  // "1:session"), read ONCE at mount and never again. Every parked-round read, write and discard
-  // below uses it, so a round is only ever parked against — and restored against — the copy it was
-  // PLAYED on (round 23 Q2). Fixed for the life of the mount is exactly right, not a shortcut: any
-  // change of copy (a preset switch, an Amnesic toggle) remounts this screen (src/main.tsx's
-  // subscription on activeDataId), so a mount's engine never belongs to any other copy.
-  const [dataId] = useState(() => activeDataId(usePresets.getState()))
+  // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — every parked-round read, write and
+  // discard below uses it (modes/modeHooks' useMountedDataId argues why, round 23 Q2).
+  const dataId = useMountedDataId()
   // Round-21 Q11 — the ended round this (stats copy, mode) parked before its last unmount, read
   // EXACTLY ONCE at mount. On a preset switch or an Amnesic toggle the always-mounted screens remount
   // (src/main.tsx remountScreens) and the registry ALREADY names the INCOMING copy by the time this

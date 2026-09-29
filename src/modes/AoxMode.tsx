@@ -26,7 +26,7 @@
 // bump. (Pinned by tests/moxRename.dom — a Best recorded under the old label is still found.)
 import { useEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
-import { FLASH_MS, useButtonFlash } from './modeHooks.js'
+import { FLASH_MS, useButtonFlash, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { NUM_INPUT_CLASS, RESET_BTN_CLASS } from '../components/controlClasses.js'
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
@@ -49,8 +49,6 @@ import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard, questionIdAfterReset } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
-import { usePresets } from '../store/presets.js'
-import { activeDataId } from '../store/amnesic.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/engineMigration.js'
@@ -110,9 +108,9 @@ function AoxMode({
     setOneByOne = useModePrefs((s) => s.setAoxOneByOne) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
     setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
-  // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — see the same line in modes/BlitzMode
+  // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — see modes/modeHooks' useMountedDataId
   // for why a round is parked and restored ONLY against the copy it was played on (round 23 Q2).
-  const [dataId] = useState(() => activeDataId(usePresets.getState()))
+  const dataId = useMountedDataId()
   // Round-21 Q11 — the ended run this (stats copy, mode) parked before its last unmount, read EXACTLY
   // ONCE at mount. On a preset switch or an Amnesic toggle the always-mounted screens remount
   // (src/main.tsx remountScreens) and the registry ALREADY names the INCOMING copy by then — the

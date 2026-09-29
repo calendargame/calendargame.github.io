@@ -6,7 +6,19 @@ import { useEffect, useRef, useState } from 'react'
 import type { GameState } from '../engine/gameReducer.js'
 import type { GameEngine, FlashState } from './modeTypes.js'
 import { calcLast, calcAvg, calcMed } from '../engine/stats.js'
+import { fittedParkedText, restoreParkedText } from '../engine/parkedHistory.js'
+import type { RestoredHistory } from '../engine/parkedHistory.js'
 import { fmtAccuracyPct, truncTime, fmtTime } from '../lib/modeFormat.js'
+import { usePresets } from '../store/presets.js'
+import { activeDataId } from '../store/amnesic.js'
+import { useProgress } from '../store/progress.js'
+import {
+  SLOT_BUDGET,
+  readSessionHistory,
+  writeSessionHistory,
+  discardSessionHistory,
+} from '../store/sessionHistory.js'
+import type { HistorySilo } from '../store/sessionHistory.js'
 
 // Timing constants. The codes panel's own timings (its slide duration and the CODES_CLOSE_MS
 // freeze window derived from it) live in src/lib/accordionMotion.js and are consumed entirely
@@ -29,8 +41,8 @@ export function useButtonFlash() {
   }
   return { flash, setFlash, setFlashWithTimeout }
 }
-// The engine-state half of a mode's freshness check (stats all zero, no history, no live-question
-// flags set) — identical across modes. Each mode ANDs its own fields (toggles/timers/bests) on top.
+// The engine-state half of a mode's freshness check (stats all zero, and engineUntouched below) —
+// identical across modes. Each mode ANDs its own fields (toggles/timers/bests) on top.
 export function engineFresh(s: GameState) {
   return (
     s.stats.played === 0 &&
@@ -38,14 +50,21 @@ export function engineFresh(s: GameState) {
     s.stats.streak === 0 &&
     s.stats.best === 0 &&
     s.stats.times.length === 0 &&
+    engineUntouched(s)
+  )
+}
+// Nothing played on this engine since it was made, whatever stats it hydrated: no history, and a live
+// question nobody has touched (no flags set, nothing on the card: never wrong, never overridden — the
+// round 23 Q6 record that replaced the four flags the old Override machinery kept here). Such an engine
+// has nothing a reload could bring back, so useParkedHistory parks nothing for it.
+function engineUntouched(s: GameState) {
+  return (
     s.stack.length === 0 &&
     s.forwardStack.length === 0 &&
     s.backDepth === 0 &&
     s.locked === false &&
     s.revealed === false &&
     s.countedWrong === false &&
-    // Nothing on the card: never wrong, never overridden (round 23 Q6 — one record replaced the
-    // four flags the old Override machinery kept here).
     s.card.wrongTime === null &&
     s.card.answered === null &&
     s.calcOpen === false &&
@@ -215,3 +234,79 @@ export function useChangeEffect(deps: React.DependencyList, fn: () => void) {
 // components/useSettingsCloseEffect in round 11 (Q7), when App became a caller too: it was never
 // mode-specific, and a hook App depends on cannot live in the directory the phase-1 split exists to
 // push mode-screen code INTO. The five screens import it from there.
+
+// ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON — store/amnesic's activeDataId ("1:saved" /
+// "1:session"), read ONCE at mount and never again. Every parked round (store/sessionRound) and
+// parked history (store/sessionHistory) a screen reads, writes or discards is keyed by it, so a round
+// or a history is only ever parked against — and restored against — the copy it was PLAYED on
+// (round 23 Q2). Fixed for the life of the mount is exactly right, not a shortcut: any change of copy
+// (a preset switch, an Amnesic toggle) remounts every mode screen (src/main.tsx's subscription on
+// activeDataId), so a mount's engine never belongs to any other copy.
+export function useMountedDataId(): string {
+  const [dataId] = useState(() => activeDataId(usePresets.getState()))
+  return dataId
+}
+
+// ── A CASUAL MODE'S HISTORY ACROSS A RELOAD (round 23 Q11) ────────────────────────────────────────
+// The two halves a Classic / Flash / Deduction engine needs: the read at mount and the park while
+// mounted. The whole design — when it is written, when it is retired, what comes back, the size
+// budgets — is argued in store/sessionHistory (the storage) and engine/parkedHistory (the engine).
+
+/**
+ * This (stats copy, silo)'s parked history, restored over the silo's SAVED stats — the very stats the
+ * engine would otherwise hydrate from (getInitialStats) — or null to start from those stats as
+ * before. Read ONCE, in a screen's useState initializer, before its engine (useGameEngine's
+ * getInitialState) and any of its own fields the snapshot carries.
+ */
+export function readParkedHistory(
+  dataId: string,
+  silo: HistorySilo,
+  useJulian: boolean,
+): RestoredHistory | null {
+  return restoreParkedText(
+    readSessionHistory(dataId, silo),
+    useProgress.getState().stats[silo],
+    useJulian,
+    silo,
+  )
+}
+
+/**
+ * Park this engine (and the screen's own fields, `ui`) whenever the page is hidden — `pagehide`, which
+ * every reload fires, and `visibilitychange` → hidden, which a backgrounded tab the browser may later
+ * discard fired on its way out — and throw the park away when the screen unmounts, which a reload
+ * never does and every other departure (a preset switch, an Amnesic toggle, Full Reset, a crash)
+ * does. An untouched engine parks nothing: its stats are saved already, there is no history to bring
+ * back, and the reload's new question is as good as the one it replaces.
+ * The latest state is held in a ref written after every commit, so the listeners — registered once
+ * per mount — park what was last on screen, never a render that did not commit.
+ */
+export function useParkedHistory(
+  dataId: string,
+  silo: HistorySilo,
+  state: GameState,
+  ui?: unknown,
+): void {
+  const latest = useRef({ state, ui })
+  useEffect(() => {
+    latest.current = { state, ui }
+  })
+  useEffect(() => {
+    const park = () => {
+      const { state: s, ui: u } = latest.current
+      const text = engineUntouched(s) ? null : fittedParkedText(s, u, SLOT_BUDGET)
+      if (text === null) discardSessionHistory(dataId, silo)
+      else writeSessionHistory(dataId, silo, text)
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') park()
+    }
+    window.addEventListener('pagehide', park)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('pagehide', park)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      discardSessionHistory(dataId, silo)
+    }
+  }, [dataId, silo])
+}

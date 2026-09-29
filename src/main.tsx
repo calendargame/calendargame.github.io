@@ -43,6 +43,7 @@ import { openBrowsingSession } from './store/browsingSession.js'
 import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/settings.js'
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
 import { discardSessionRounds } from './store/sessionRound.js'
+import { discardSessionHistories } from './store/sessionHistory.js'
 import { useModePrefs } from './store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, storedAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
 import { useProgress } from './store/progress.js'
@@ -1932,6 +1933,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // Reset button never reaches here: it drives the mode's own idle transition, whose mirror
         // effect discards the park itself.
         discardSessionRounds(usePresets.getState().activeId);
+        // …and this preset's casual histories parked for a reload (round 23 Q11, store/sessionHistory),
+        // for the same reason: the remount below is of the SAME stats copy, and its new screens read
+        // their parked history in the render that comes before the old screens' unmount would have
+        // discarded it. (The progress reset above already makes any such history disagree with the
+        // saved stats, which refuses it — but a card answered with Save Stats off is parked over stats
+        // of zero, which a reset leaves matching, and a Full Reset must not rest on that.)
+        discardSessionHistories(usePresets.getState().activeId);
         // How to Play is in the six for its ONE piece of state, the open panel: it used to be
         // conditionally rendered, so leaving it dropped that for free — now that it stays mounted
         // (Q6, round 9), a reset that left a panel hanging open would not be the launch state.

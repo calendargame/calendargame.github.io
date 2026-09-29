@@ -9,6 +9,9 @@ import {
   useChangeEffect,
   engineFresh,
   useResetStatsConfirm,
+  useMountedDataId,
+  readParkedHistory,
+  useParkedHistory,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import {
@@ -109,6 +112,12 @@ function DeductionMode({
 
   // Lifetime stats persist per sub-mode (Stage D1): each silo hydrates from its own saved slice
   // on mount and mirrors changes back to the store.
+  // …and each silo's HISTORY survives a reload (round 23 Q11): parked per silo when the page hides
+  // (useParkedHistory below), read back once here, keyed by the stats copy this screen is mounted on.
+  const dataId = useMountedDataId()
+  const [parkedDay] = useState(() => readParkedHistory(dataId, 'dedDay', useJulian))
+  const [parkedMonth] = useState(() => readParkedHistory(dataId, 'dedMonth', useJulian))
+  const [parkedYear] = useState(() => readParkedHistory(dataId, 'dedYear', useJulian))
   const dayEng = useGameEngine({
     label: 'dedDay',
     genDate: genDay,
@@ -118,6 +127,7 @@ function DeductionMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.dedDay,
+    getInitialState: () => parkedDay?.engine ?? null,
   })
   const monthEng = useGameEngine({
     label: 'dedMonth',
@@ -128,6 +138,7 @@ function DeductionMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.dedMonth,
+    getInitialState: () => parkedMonth?.engine ?? null,
   })
   const yearEng = useGameEngine({
     label: 'dedYear',
@@ -138,7 +149,11 @@ function DeductionMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.dedYear,
+    getInitialState: () => parkedYear?.engine ?? null,
   })
+  useParkedHistory(dataId, 'dedDay', dayEng.state)
+  useParkedHistory(dataId, 'dedMonth', monthEng.state)
+  useParkedHistory(dataId, 'dedYear', yearEng.state)
   const eng = dedType === 'month' ? monthEng : dedType === 'year' ? yearEng : dayEng
   const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only

@@ -8,6 +8,9 @@ import {
   useStatsHideToggles,
   engineFresh,
   useResetStatsConfirm,
+  useMountedDataId,
+  readParkedHistory,
+  useParkedHistory,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS, RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
@@ -25,6 +28,16 @@ import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard, overrideAdvances } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/useBackButton.js'
+
+// Flash's own half of its parked history (round 23 Q11): the one field that decides how the engine's
+// live card is DRAWN. Read back through parkedShowsDate, which accepts nothing but a real `true` — the
+// snapshot may have been written by a build this one has never seen (live and staging share the
+// origin), and the safe reading of anything else is the idle screen's.
+interface FlashParkedUi {
+  showTimerDate: boolean
+}
+const parkedShowsDate = (ui: unknown): boolean =>
+  typeof ui === 'object' && ui !== null && (ui as Partial<FlashParkedUi>).showTimerDate === true
 
 // ============================================================
 // FlashMode — the Flash game mode on the shared engine (mode-untangle Step 2).
@@ -57,9 +70,18 @@ function FlashMode({
   clockPaused,
   onFreshChange,
 }: ModeProps & { genDate: GenDate; fmtDate: FmtDate }) {
+  // The history this screen parked before a reload (round 23 Q11 — modes/modeHooks'
+  // readParkedHistory), read once, keyed by the stats copy this screen is mounted on. It carries the
+  // engine AND the one field of Flash's own that says what the engine's live card looks like on
+  // screen — `showTimerDate`, whether its date is shown (after a Reveal, or a Show Codes that froze a
+  // flash) — so a revealed card does not come back with its answer lit and its date a dash.
+  // A flash that was RUNNING is not restored, exactly as leaving the mode stops one (onHide below):
+  // the screen comes back idle over the same engine, and Begin moves on as it would have then.
+  const dataId = useMountedDataId()
+  const [parked] = useState(() => readParkedHistory(dataId, 'flash', useJulian))
   const [active, setActive] = useState(false)
   const [flashPhase, setFlashPhase] = useState('dash') // dash (idle) | show (revealing) | hide ("…")
-  const [showTimerDate, setShowTimerDate] = useState(false) // keep the date visible after Reveal
+  const [showTimerDate, setShowTimerDate] = useState(() => parkedShowsDate(parked?.ui)) // keep the date visible after Reveal
   const flashMs = useModePrefs((s) => s.flashMs),
     setFlashMs = useModePrefs((s) => s.setFlashMs) // persisted (mode-prefs store)
   // Idle countdown label starts at the persisted speed, not a hardcoded 500 (which showed a
@@ -83,8 +105,10 @@ function FlashMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.flash,
+    getInitialState: () => parked?.engine ?? null,
   })
   const { state, correct, overrideAvail, overridden } = eng
+  useParkedHistory(dataId, 'flash', state, { showTimerDate } satisfies FlashParkedUi)
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.

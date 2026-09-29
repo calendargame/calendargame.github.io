@@ -47,12 +47,14 @@ export interface UseGameEngineOptions {
   // lazy reducer init (where genDate is already read), so the store access stays out of render and
   // the engine never re-hydrates mid-session. Omitted ⇒ blank stats (timed modes; post-Full-Reset remount).
   getInitialStats?: () => Stats
-  // Round-21 Q11: seed the reducer with a PARKED round instead of a fresh question. A GETTER, read
-  // ONCE inside the lazy init — the timed modes (Blitz / MoX) pass one that returns their ended
-  // round's engine state from store/sessionRound, keyed by the ACTIVE preset, so the remount a
-  // preset switch causes lands the incoming preset's OWN ended round back on screen. Returns null
-  // (or is omitted) ⇒ a fresh question, exactly as before. When it returns a state, genDate is not
-  // called and getInitialStats is ignored — the parked state already carries its stats.
+  // Seed the reducer with a PARKED engine instead of a fresh question. A GETTER, read ONCE inside the
+  // lazy init. Two kinds of screen pass one: the timed modes (Blitz / MoX, round-21 Q11) return their
+  // ENDED round from store/sessionRound, so the remount a preset switch causes lands the incoming
+  // copy's own ended round back on screen; the casual modes (Classic / Flash / Deduction, round 23
+  // Q11) return the history they parked before a reload (modes/modeHooks' readParkedHistory). Returns
+  // null (or is omitted) ⇒ a fresh question, exactly as before. When it returns a state, genDate is not
+  // called and getInitialStats is ignored — the parked state already carries its stats (a casual
+  // history is only accepted when they ARE the saved stats getInitialStats would have read).
   // ⚠ A GameState, already brought forward: the raw blob (which an older or unknown build may have
   // written) goes through engine/engineMigration's restoreParkedEngine in the MODE, at its parked
   // read, because only the mode can drop its own half of the snapshot along with an unreadable engine.

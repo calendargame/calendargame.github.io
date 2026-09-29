@@ -12,6 +12,11 @@ import { isAmnesic, discardSessionStats, readSessionStats, dataIdOf } from './am
 import { storageSpaceFreed } from './storageHealth.js'
 import { discardSessionMode } from './sessionMode.js'
 import { discardSessionRounds, discardSessionRoundsOf, hasSessionRound } from './sessionRound.js'
+import {
+  discardSessionHistories,
+  discardSessionHistoriesOf,
+  hasSessionHistory,
+} from './sessionHistory.js'
 import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults } from './progress.js'
@@ -149,6 +154,10 @@ const clearPresetStorage = (presetId: number) => {
   // copy, mode) for this id. discardSessionRounds clears both copies' modes in one call — same house
   // rule, same "harmless leftover but remove it anyway" reasoning as the page entry above.
   discardSessionRounds(presetId)
+  // …and the FIFTH: a casual mode's history parked for a reload (round 23 Q11, store/sessionHistory),
+  // one sessionStorage entry per (stats copy, silo). The screens' own unmount already retires the
+  // active preset's; this is the same house rule for any that outlived theirs.
+  discardSessionHistories(presetId)
   // Deleting a preset is the likeliest way a player makes room after the storage-full notice, and
   // this is the moment the room appears — so anything a full device refused is re-saved now, not at
   // the player's next change (store/storageHealth).
@@ -307,7 +316,9 @@ const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
  * store/sessionMode records which of the seven pages a preset was last showing THIS session — which
  * every visit writes, and which a full app close throws away on its own. Counting it would mean any
  * preset you had so much as looked at could never be deleted without a question, for a value no
- * player can miss. Every other entry in that function IS counted.
+ * player can miss. Every other entry in that function IS counted — the parked casual history
+ * (store/sessionHistory) only for a preset other than the active one, whose screens `screensFresh`
+ * below already speaks for (see the note at its check).
  *
  * ★★ `screensFresh` — THE ONE THING NO STORE AND NO KEY HOLDS: WHAT IS ON THE ACTIVE PRESET'S
  * SCREENS RIGHT NOW. A Blitz round or MoX run IN PROGRESS is written nowhere at all (store/
@@ -338,9 +349,15 @@ export function isPresetFactory(presetId: number, screensFresh: boolean): boolea
   // …the amnesic session copy of the stats, the second of the progress store's two areas (above).
   if (!payloadIsFactory(readSessionStats(presetId), makeProgressDefaults())) return false
   // …and a parked ended Blitz round or MoX run (store/sessionRound), which is a RESULT still on
-  // screen rather than a stored setting — the one piece of per-preset data that lives in neither a
-  // store nor a namespaced key.
-  return !hasSessionRound(presetId)
+  // screen rather than a stored setting — per-preset data that lives in neither a store nor a
+  // namespaced key.
+  if (hasSessionRound(presetId)) return false
+  // …and, for a preset that is NOT on screen, a casual history parked for a reload (round 23 Q11,
+  // store/sessionHistory), which comes back the next time that copy's screens mount. The active
+  // preset's is skipped rather than counted: it is only ever an older copy of what its screens are
+  // holding right now, which `screensFresh` above already judged — counting it too would keep asking
+  // after a Reset Stats had cleared the very history it describes.
+  return isActive || !hasSessionHistory(presetId)
 }
 
 /** The preset the app is currently reading and writing. */
@@ -588,6 +605,8 @@ export function setPresetAmnesic(id: number, amnesic: boolean): boolean {
   // find the last guest's round. The SAVED copy's parked rounds are untouched — turning Amnesic off
   // brings your own finished round back exactly as you left it (store/sessionRound's header).
   discardSessionRoundsOf(dataIdOf(id, true))
+  // …and, for the same reason, any casual history parked against that session copy (round 23 Q11).
+  discardSessionHistoriesOf(dataIdOf(id, true))
   // Only the ACTIVE preset has anything loaded to reload. Flipping the flag on a preset you are not
   // on changes nothing on screen and nothing in memory — it just decides where that preset's stats
   // will be read from the next time it is opened, which is exactly what deletePreset's `wasActive`
