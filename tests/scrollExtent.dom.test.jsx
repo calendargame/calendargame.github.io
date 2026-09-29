@@ -229,14 +229,13 @@ describe('the resting states — nothing to scroll means nothing to signal', () 
   })
 
   it('Lookup with ONE entry: the list exists and has nothing to scroll', () => {
-    // The content-level neighbour of the empty state pinned in scrollRegion.dom. Empty renders no
-    // <ul> at all (the null-scroller path); one entry renders a real scroller that is simply not
-    // overflowing — a different code path to the same required answer, and the state every fresh
-    // install is in right after its first lookup.
+    // Empty renders no <ul> at all (the null-scroller path); one entry renders a real scroller that
+    // is simply not overflowing — the state every fresh install is in right after its first
+    // lookup. Since round 23 (Q10) the list has no boundary surfaces to rest, so the required
+    // answer is the list's own: no fade at either edge.
     const { container } = render(<LookupCard history={[{ id: 'e0', y: 1592, m: 3, d: 1 }]} />)
     expect(container.querySelectorAll('ul li')).toHaveLength(1)
-    for (const sel of ['.lookup-history-header', '.lookup-method-section'])
-      expect(shade(container.querySelector(sel))).toBe('0.000')
+    expect(container.querySelector('ul').className).not.toContain('fade-scroll')
   })
 })
 

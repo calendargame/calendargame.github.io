@@ -3092,13 +3092,15 @@ export default function GuidePage({
           </li>
           <li>Supports years 1–10000.</li>
           <li>
-            Show Codes is available for all results and stays open as you browse your history.
-          </li>
-          <li>
             The answer sits on three fixed lines below the input — the date, then its weekday — and
             always keeps its space, so nothing on the page shifts as answers come and go. With
             nothing to report — before your first lookup, or after Clear — it simply invites you to
             enter a date.
+          </li>
+          <li>
+            Show Codes sits directly under the answer — the same button the game modes have under
+            their controls. It is available for all results and stays open as you browse your
+            history; while it is open, the history panel below gives up the room it needs.
           </li>
           <li>
             <b>Dates before the Gregorian switch have two weekdays, and Lookup shows both.</b> On or
@@ -3117,8 +3119,9 @@ export default function GuidePage({
           <li>
             The history panel keeps your 100 most recent lookups: each new one goes on top, and once
             the list is full the oldest drops off the bottom on its own. From the second entry
-            onwards the number saved is shown beside the History heading. The panel scrolls within
-            its own box whenever the list is taller than the room available.
+            onwards the number saved is shown beside the History heading. The list scrolls within
+            its own box whenever it is taller than the room available, and softly fades out at the
+            top or bottom edge wherever there are more entries that way.
           </li>
           <li>
             History rows say the same thing in short, so each stays on one line: "J: Sat · G: Wed"

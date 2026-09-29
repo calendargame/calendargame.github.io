@@ -144,8 +144,9 @@ const codesUseJulian = (date: CodeDate | null, useJulian: boolean): boolean => {
 }
 
 // LookupCard — the Lookup-mode card: a numeric date input (format follows the
-// active dateFormat), a three-line answer slot, a history list that scrolls once it
-// runs out of screen (with edge-fade indicators), and the shared Show Codes panel.
+// active dateFormat), a three-line answer slot with the shared Show Codes panel right
+// under it, and a history list that scrolls once it runs out of screen (with
+// edge-fade indicators).
 // All state is lifted to the parent and passed via props/callbacks, so this
 // component is presentational + input-parsing only, and it OWNS no rendered text:
 // labels and weekdays are all derived from the stored {y,m,d} against the live
@@ -185,23 +186,23 @@ export default function LookupCard({
   const ssid =
     typeof onSelectedHistoryIdChange === 'function' ? onSelectedHistoryIdChange : () => {}
   const cov = !!calcOpen
-  // Lookup history scroll-state — the shared useScrollEdgeState (components/scrollRegion,
-  // the settings-recipe edge listener). This region has BOTH boundary surfaces, one per edge,
-  // and hands the hook a ref to each: the History header above the list and the Show Codes
-  // section below it. Their shadows are continuous (--shade, round 10 item B) — the hook writes
-  // each element's strength from the list's distance to that edge — so neither is derived from a
-  // flag at the JSX any more. The two returned flags now drive ONE thing each:
+  // Lookup history scroll-state — the shared useScrollEdgeState (components/scrollRegion, the
+  // settings-recipe edge listener). Its two flags drive the list's own fade masks and nothing
+  // else:
   //   lookupHistoryScrolledFromTop → the list's top fade mask
   //   lookupHistoryAtBottom        → the list's bottom fade mask
-  // `history` stands in as the hook's active key: the <ul> only exists with entries, so a
-  // history change re-attaches the listener to a freshly (re)mounted list; the hook's
-  // ResizeObserver covers the list being resized under the user — which now happens on every
-  // screen-size change too, since the list's height is measured rather than capped.
+  // ★ NO BOUNDARY SURFACES (round 23, Q10). The list used to be framed: a divider line and a
+  // progressive shadow under the History heading, and another pair above Show Codes, which sat at
+  // the panel's foot — the hook wrote each one's --shade. No other main page walls its scroller off
+  // like that, and the fades already say "there is more this way", so both lines and both shadows
+  // are gone, and Show Codes moved up under the answer it explains (see the first panel below).
+  // `history` stands in as the hook's active key: the <ul> only exists with entries, so a history
+  // change re-attaches the listener to a freshly (re)mounted list; the hook's extent observer
+  // covers the list being resized under the user — a screen-size change, or Show Codes opening in
+  // the panel above and taking the list's room.
   const lookupHistoryRef = React.useRef<HTMLUListElement>(null)
-  const historyHeaderRef = React.useRef<HTMLDivElement>(null)
-  const methodSectionRef = React.useRef<HTMLDivElement>(null)
   const { scrolledFromTop: lookupHistoryScrolledFromTop, atBottom: lookupHistoryAtBottom } =
-    useScrollEdgeState(lookupHistoryRef, history, historyHeaderRef, methodSectionRef)
+    useScrollEdgeState(lookupHistoryRef, history)
   // Codes-open is purely global state — it stays as-is when the user clicks through
   // history entries, only changing on (1) a manual toggle, (2) a brand-new lookup
   // via runLookup, or (3) MethodBreakdownSection's auto-close when the displayed
@@ -601,6 +602,21 @@ export default function LookupCard({
             lo || LOOKUP_HINT
           )}
         </div>
+        {/* Show Codes, DIRECTLY UNDER THE ANSWER IT EXPLAINS (round 23, Q10) — the same full-width
+            button and the same thin inset panel every game mode puts under its controls, where it
+            used to sit walled off at the foot of the history panel. This card is shrink-0, so
+            opening the codes grows it and the history panel below gives up the room (it is the
+            column's min-h-0 flex child, and its list scrolls). lookup-method-section is a stable
+            NAME only, not a style hook: it is what the tests select the section by. */}
+        <MethodBreakdownSection
+          date={cdv}
+          className="lookup-method-section"
+          contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5"
+          open={cov}
+          onOpenChange={sco}
+          useJulian={codesUseJulian(cdv, useJulian)}
+          displayedFormat={dateFormat}
+        />
         <p className="text-xs text-(--tx-100-90)">
           Format: <b>{inputMeta.label}</b>
           <br />
@@ -610,7 +626,8 @@ export default function LookupCard({
       {/* The history panel takes its natural height and SHRINKS to fit when the column runs out
           of room (min-h-0 lets it; the <ul> inside absorbs the shrink and scrolls) — it does not
           grow, so with one entry the card still hugs its content instead of stretching to the
-          bottom of the screen. space-y-4 → gap-4 now that it's a flex column. */}
+          bottom of the screen. Opening Show Codes in the card above is one of the things that
+          takes that room. space-y-4 → gap-4 now that it's a flex column. */}
       <div className="rounded-2xl panel py-4 gap-4 flex flex-col min-h-0">
         {/* History panel on the shared scroll-region recipe (Q5 round-7,
             components/scrollRegion): the panel owns py-4 only, and every child carries its
@@ -618,29 +635,23 @@ export default function LookupCard({
             the scroller, the text-free lane the iOS scrollbar paints in. Content widths are
             unchanged; the pre-Q5 p-4 parent plus -mx-4 counter-margins on the header and
             method section produced the same geometry with the lane OUTSIDE the scroller. */}
-        {/* History header: with the panel padding vertical-only, the header's own px-4 spans
-            the full panel width, so its divider line cuts edge-to-edge on its own.
-            elev-shadow-down + the divider line together signal "fixed header above content
-            scrolling below" — same pattern as the popover sticky footer's elev-shadow-up. The
-            class is UNCONDITIONAL: strength comes from the --shade the edge hook writes onto
-            this element, so there is no toggle and no transition (round 10 item B). The
-            lookup-history-header class survives as the stable name for this boundary surface —
-            it is what the tests select — and no longer as a CSS transition hook.
+        {/* The History heading row: a PLAIN heading since round 23 (Q10) — no divider line and no
+            shadow under it; the list's own top fade is what marks content scrolled past it, as on
+            every other page. The panel padding is vertical-only, so the row carries its own px-4,
+            and the panel's gap-4 alone spaces it from the list. lookup-history-header is a stable
+            NAME only, not a style hook: it is what the tests select this row by.
             THE COUNT is INSIDE the History span, not a third flex child: the row is
             justify-between, so a third child would redistribute the whole header. As inline text
             at the row's own 11px tier it shares the line box the header already had, and
             whitespace-nowrap is what keeps that true at every width — a wrap is the one way this
-            could grow the header, and a header that changes height under a shadow it casts onto
-            the list below is exactly the reflow worth designing out (the same by-construction rule
+            could grow the header, and a heading that changes height shoves the whole list below it
+            down, exactly the reflow worth designing out (the same by-construction rule
             the history rows below follow). It appears from the SECOND entry on (a "(1)" beside
             a list you can see has one row is noise) and stops at the cap, where it simply reads
             (100). Dimmer than the label it follows — --tx-300-60 is the footnote tier, a step down
             from the header's own --tx-200-70 in every theme — so it reads as a detail about the
             heading rather than part of it. */}
-        <div
-          ref={historyHeaderRef}
-          className="lookup-history-header elev-shadow-down shrink-0 px-4 pb-3 border-b border-(--bd-500-40) flex items-center justify-between text-[11px] uppercase tracking-wide text-(--tx-200-70)"
-        >
+        <div className="lookup-history-header shrink-0 px-4 flex items-center justify-between text-[11px] uppercase tracking-wide text-(--tx-200-70)">
           <span className="whitespace-nowrap">
             History
             {entries.length > 1 && (
@@ -653,8 +664,8 @@ export default function LookupCard({
             </button>
           )}
         </div>
-        {/* The list is the part that gives: it takes the room the header and the method section
-            below it don't need, and scrolls past that. It used to carry a fixed 440-pixel
+        {/* The list is the part that gives: it takes the room the heading above it doesn't need,
+            and scrolls past that. It used to carry a fixed 440-pixel
             max-height — one number, too tall on a small phone and leaving screen unused on a big
             one, and the fluid-root font system had no way to scale it. Measured layout replaces
             it; tests/heightGuard.test.js keeps pixel heights from creeping back. */}
@@ -697,22 +708,6 @@ export default function LookupCard({
         ) : (
           <p className="px-4 text-sm text-(--tx-200-70)">No lookups yet</p>
         )}
-        {/* MethodBreakdownSection wrapper: its px-4 spans the vertical-only-padded panel
-            full-width, so the existing border-t divider cuts edge-to-edge on its own.
-            elev-shadow-up signals "fixed footer below content scrolling above" — unconditional
-            like the header's, and driven by the same hook writing --shade onto this element
-            through the ref below. lookup-method-section is the boundary surface's stable name
-            (the tests select it), no longer a transition hook. */}
-        <MethodBreakdownSection
-          ref={methodSectionRef}
-          date={cdv}
-          className="lookup-method-section elev-shadow-up shrink-0 px-4 pt-4 border-t border-(--bd-500-40)"
-          contentClassName="mt-3 rounded-2xl panel px-4 pt-[3px] pb-1.5"
-          open={cov}
-          onOpenChange={sco}
-          useJulian={codesUseJulian(cdv, useJulian)}
-          displayedFormat={dateFormat}
-        />
       </div>
     </div>
   )

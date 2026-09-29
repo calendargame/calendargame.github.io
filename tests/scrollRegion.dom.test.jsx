@@ -62,7 +62,7 @@ describe('Lookup history on the shared scroll-region recipe (round-7 Q5)', () =>
   // room the header and method section leave and scrolls past that, at any screen height. The
   // shrink chain is what makes that work, and every link is a class — jsdom lays nothing out, so
   // the classes are the contract. (tests/heightGuard.test.js bans the pixel cap coming back.)
-  it('the column can shrink end to end: list gives, header and method section hold', () => {
+  it('the column can shrink end to end: list gives, the heading and the top card hold', () => {
     const { container } = render(<LookupCard history={[entry(0)]} />)
     const list = container.querySelector('ul')
     expect(list.className).toContain('flex-auto') // takes what's left
@@ -71,21 +71,24 @@ describe('Lookup history on the shared scroll-region recipe (round-7 Q5)', () =>
     expect(panel.className).toContain('flex flex-col')
     expect(panel.className).toContain('min-h-0') // the panel shrinks; it does NOT grow
     expect(panel.className.split(/\s+/)).not.toContain('flex-auto')
-    for (const sel of ['.lookup-history-header', '.lookup-method-section'])
-      expect(container.querySelector(sel).className).toContain('shrink-0')
+    expect(container.querySelector('.lookup-history-header').className).toContain('shrink-0')
     const root = panel.parentElement
     expect(root.className).toContain('flex flex-col')
     expect(root.className).toContain('min-h-0')
     expect(root.className.split(/\s+/)).not.toContain('mt-1') // would no longer margin-collapse
+    // Since round 23 (Q10) Show Codes lives in the TOP card, which holds its size: opening the codes
+    // grows that card, and the history panel below is what gives the room back.
+    const topCard = root.firstElementChild
+    expect(topCard).not.toBe(panel)
+    expect(topCard.className).toContain('shrink-0')
+    expect(topCard.contains(container.querySelector('.lookup-method-section'))).toBe(true)
   })
 
-  it('header and method section carry their own px-4 — full-width dividers with no -mx-4 counter-margins', () => {
+  it('the heading carries its own px-4 lane, with no -mx-4 counter-margin', () => {
     const { container } = render(<LookupCard history={[entry(0)]} />)
-    for (const sel of ['.lookup-history-header', '.lookup-method-section']) {
-      const el = container.querySelector(sel)
-      expect(el.className).toContain('px-4')
-      expect(el.className).not.toContain('-mx-4')
-    }
+    const el = container.querySelector('.lookup-history-header')
+    expect(el.className).toContain('px-4')
+    expect(el.className).not.toContain('-mx-4')
   })
 
   it('the empty state keeps the lane padding too', () => {
@@ -153,56 +156,57 @@ describe('the edge arithmetic — ONE owner for both indicator languages (round 
   })
 })
 
-describe('Lookup’s two boundary surfaces ramp with the list (round 10 item B)', () => {
-  afterEach(() => {
-    cleanup()
-    document.documentElement.style.removeProperty('--fade-h')
+describe('Lookup’s history list is unframed — its fades alone mark scrolling (round 23, Q10)', () => {
+  afterEach(cleanup)
+
+  // The list used to be walled off: a divider line + a progressive shadow under the History heading,
+  // and another pair above Show Codes at the panel's foot. No other main page frames its scroller
+  // like that, and the list's own fades already say "there is more this way", so both are gone.
+  const FRAME = ['elev-shadow-down', 'elev-shadow-up', 'border-b', 'border-t']
+
+  it('the History heading is a plain row: no divider line, no shadow, nothing written to it', () => {
+    const { container } = render(
+      <LookupCard history={Array.from({ length: 12 }, (_, i) => entry(i))} />,
+    )
+    const heading = container.querySelector('.lookup-history-header')
+    for (const cls of FRAME) expect(heading.className.split(/\s+/)).not.toContain(cls)
+    expect(heading.style.getPropertyValue('--shade')).toBe('')
+    // …and nothing ANYWHERE in the history panel is a boundary surface any more.
+    const panel = container.querySelector('ul').parentElement
+    for (const el of panel.querySelectorAll('*'))
+      expect(el.style.getPropertyValue('--shade')).toBe('')
   })
 
-  const shade = (el) => Number(el.style.getPropertyValue('--shade'))
+  it('Show Codes sits in the top card directly under the answer, not at the history panel’s foot', () => {
+    const { container } = render(<LookupCard history={[entry(0)]} />)
+    const codes = container.querySelector('.lookup-method-section')
+    // Its wrapper is a bare name: the full-width button and thin panel the game modes use, no frame.
+    expect(codes.className).toBe('lookup-method-section')
+    // Directly after the answer slot (the text that invites you to enter a date).
+    expect(codes.previousElementSibling.textContent).toBe('Enter a date to see its weekday.')
+    expect(container.querySelector('ul').parentElement.contains(codes)).toBe(false)
+  })
 
-  it('writes each surface’s strength from the list, and toggles no class doing it', () => {
-    // index.css is not loaded in jsdom, so the ramp distance the writer reads is stood up by hand
-    // at its real value.
-    document.documentElement.style.setProperty('--fade-h', '24px')
+  it('the list still fades at whichever edge has more, as a state class', () => {
     const { container } = render(
       <LookupCard history={Array.from({ length: 12 }, (_, i) => entry(i))} />,
     )
     const list = container.querySelector('ul')
-    const header = container.querySelector('.lookup-history-header')
-    const method = container.querySelector('.lookup-method-section')
-    // Both shadow classes are UNCONDITIONAL: the class says "this is a boundary", --shade says how
-    // strongly it is asserting itself. Captured here and compared again at the end — a class that
-    // never changes is a boolean that no longer exists.
-    expect(header.className).toContain('elev-shadow-down')
-    expect(method.className).toContain('elev-shadow-up')
-    const classes = [header.className, method.className]
-    // A list with nothing to scroll rests at 0 on both edges (jsdom's zero geometry).
-    expect([shade(header), shade(method)]).toEqual([0, 0])
     Object.defineProperties(list, {
       scrollHeight: { configurable: true, get: () => 900 },
       clientHeight: { configurable: true, get: () => 300 },
     })
-    list.scrollTop = 12 // half the top ramp; 588px still below
+    list.scrollTop = 12
     act(() => {
       fireEvent.scroll(list)
     })
-    expect(shade(header)).toBe(0.5)
-    expect(shade(method)).toBe(1)
-    list.scrollTop = 900 - 300 - 12 // 12px from the end → (12 − 4) / (24 − 4)
+    expect(list.className).toContain('fade-scroll-both')
+    list.scrollTop = 900 - 300 - 3 // inside the dead band: arrived at the bottom
     act(() => {
       fireEvent.scroll(list)
     })
-    expect(shade(method)).toBe(0.4)
-    expect(list.className).toContain('fade-scroll-both') // the mask is still a state class
-    list.scrollTop = 900 - 300 - 3 // inside the dead band: arrived, by both readings
-    act(() => {
-      fireEvent.scroll(list)
-    })
-    expect(shade(method)).toBe(0)
     expect(list.className).toContain('fade-scroll-top')
     expect(list.className).not.toContain('fade-scroll-both')
-    expect([header.className, method.className]).toEqual(classes)
   })
 })
 
@@ -218,26 +222,6 @@ describe('Lookup date input on the interactive-border rule (round-7 Q7)', () => 
     const input = container.querySelector('input')
     expect(input.className).toContain('border surface-tray')
     expect(input.className).not.toContain('panel')
-  })
-
-  it('rests both Lookup boundaries at 0 when there is no history — no <ul>, so no scroller', () => {
-    // ROUND-10 SHIP-BLOCKER, caught in review. The History header and the Show Codes section
-    // render unconditionally and carry their shadow class unconditionally — but the <ul> they
-    // bracket only exists once there is at least one entry. The hook used to bail on a null
-    // scroller ref without writing anything, leaving --shade at @property's initial-value of 1:
-    // a full-strength 50%-black shadow above AND below an empty "No lookups yet" panel, on every
-    // cold start of a fresh install. It self-healed after the first lookup, which is exactly why
-    // an on-device pass would miss it. `history` defaults to [] and an empty array is TRUTHY, so
-    // the `active` guard never fired either.
-    // The suite was green over a live bug because every other case here renders 12 entries.
-    document.documentElement.style.setProperty('--fade-h', '24px')
-    const { container } = render(<LookupCard history={[]} />)
-    expect(container.querySelector('ul')).toBeNull() // the precondition, stated
-    for (const sel of ['.lookup-history-header', '.lookup-method-section']) {
-      const el = container.querySelector(sel)
-      // Written, not merely absent: an empty string would inherit the initial-value of 1.
-      expect(el.style.getPropertyValue('--shade')).toBe('0.000')
-    }
   })
 
   it('states its text tier out loud — the page’s primary entry field, not a compact stepper', () => {

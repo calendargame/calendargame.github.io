@@ -199,7 +199,7 @@ export function observeScrollExtent(el: HTMLElement, onChange: () => void): () =
 // indicators.
 // A scroll listener tracks the user; observeScrollExtent above tracks everything else the answer
 // depends on — the region's own box AND its content (the history list gaining its tenth entry
-// mid-view, the Show Codes section opening under it and taking the list's height with it).
+// mid-view, or Show Codes opening in the card above it and taking the list's height with it).
 // A LAYOUT effect, matching the app-scroller effect in main.tsx that already argues the point:
 // evaluated after paint, a region would show one frame with no fade and no boundary shadow before
 // the indicators arrive. That frame is cheap to avoid and it is the frame the eye lands on when a
@@ -220,12 +220,13 @@ export function useScrollEdgeState<T extends HTMLElement>(
     // cleanup reset the surfaces it actually wrote to, which is the rule react-hooks enforces.
     //
     // ⚠ CAPTURED BEFORE THE GUARDS, and the no-scroller path RESTS THEM AT 0. A boundary surface
-    // exists whether or not there is a scroller to track: Lookup renders its History header and
-    // its Show Codes section unconditionally, but the <ul> they bracket only exists once there is
-    // at least one entry. Bailing without writing left `--shade` at @property's initial-value of
-    // 1 — a full-strength 50%-black shadow above and below an empty "No lookups yet" panel, on
-    // every cold start of a fresh install, self-healing after the first lookup so a casual pass
-    // misses it. The initial-value of 1 is there for a boundary with NO writer at all (so an
+    // can exist whether or not there is a scroller to track. The case that taught this was Lookup's
+    // old framed history list (round 10): its heading and its Show Codes section were surfaces that
+    // rendered unconditionally around a <ul> that only exists once there is at least one entry, and
+    // bailing without writing left `--shade` at @property's initial-value of 1 — a full-strength
+    // 50%-black shadow above and below an empty "No lookups yet" panel, on every cold start of a
+    // fresh install, self-healing after the first lookup so a casual pass missed it. (Round 23
+    // took that frame away; the rule belongs to the hook, not to one host, so it stays.) The initial-value of 1 is there for a boundary with NO writer at all (so an
     // engine without @property degrades to the old always-on look, never to a missing shadow) —
     // NOT for one whose writer simply has nothing to measure. This is the rule scrollEdgeGaps
     // already states: nothing to scroll means no edges to signal, so both gaps collapse to 0.
