@@ -1,6 +1,7 @@
 import {
   useState,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   type CSSProperties,
@@ -13,6 +14,7 @@ import { DAY, DAY_LETTER } from '../lib/format.js'
 import { DOT_CELLS, DOT_GRID_SIZE, DIAGONAL_DOT_SCALE, type DotCell } from '../lib/dotLayout.js'
 import { selectionSuppressesToggle } from '../lib/selectionGuard.js'
 import { useSettings } from '../store/settings.js'
+import { readGuidePlace, writeGuidePlace, discardGuidePlace } from '../store/sessionGuide.js'
 import {
   ACCORDION_EASE_CSS,
   accordionEase,
@@ -334,14 +336,45 @@ function DotDiagram() {
 // every other screen (round 13). Passed as a REF rather than an element because App fills it on
 // mount, so a value read during render would be null on the first pass — and because the
 // coordinator reads it at tap time, when "current" is the only honest answer.
+// `readingOffset` is how far down the reader is, for the place this screen parks for a reload
+// (round 23 Q11, below). App owns that number — it is what App restores on the way back into the
+// guide (main.tsx's guideScrollYRef) — so App answers it: live while the guide is on screen,
+// remembered while it is not. A function, asked at the moment the page hides, for the same reason
+// scrollerRef is a ref.
 export default function GuidePage({
   visible,
   scrollerRef,
+  readingOffset,
 }: {
   visible: boolean
   scrollerRef: RefObject<HTMLDivElement | null>
+  readingOffset: () => number
 }) {
-  const [open, setOpen] = useState<string | null>(null)
+  // The open section — seeded from the place parked before a reload (store/sessionGuide), so a reload
+  // reopens the section the reader had open; App seeds the offset from the same place. Read once.
+  const [open, setOpen] = useState<string | null>(() => readGuidePlace()?.open ?? null)
+  // THE PLACE, PARKED FOR A RELOAD (round 23 Q11 — store/sessionGuide argues the lifecycle): the open
+  // section and the reading offset, written when the page hides (`pagehide`, which every reload fires,
+  // and `visibilitychange` → hidden) and discarded when this screen unmounts, which a reload never
+  // does. The listeners are registered once per mount and read the latest open section through a ref
+  // written after every commit, so they park what was on screen, never an uncommitted render.
+  const openRef = useRef(open)
+  useEffect(() => {
+    openRef.current = open
+  })
+  useEffect(() => {
+    const park = () => writeGuidePlace({ open: openRef.current, y: readingOffset() })
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') park()
+    }
+    window.addEventListener('pagehide', park)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('pagehide', park)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      discardGuidePlace()
+    }
+  }, [readingOffset])
   // The shared per-toggle motion clock (ms), stamped onto every section (see GuideSection).
   // null until the first toggle — pre-toggle renders never animate, so the sections simply
   // fall back to the CSS default duration.

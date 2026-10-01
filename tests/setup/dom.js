@@ -28,6 +28,7 @@ import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistor
 import { discardAllSessionModes } from '../../src/store/sessionMode.js'
 import { discardAllSessionRounds } from '../../src/store/sessionRound.js'
 import { discardAllSessionHistories } from '../../src/store/sessionHistory.js'
+import { discardGuidePlace } from '../../src/store/sessionGuide.js'
 import { forgetBrowsingSession } from '../../src/store/browsingSession.js'
 import { forgetStorageHealth } from '../../src/store/storageHealth.js'
 import { useUserDefaults } from '../../src/store/userDefaults.js'
@@ -117,6 +118,8 @@ beforeEach(() => {
   // hides and read back by a screen's mount: a test that hides the page would otherwise hand its
   // history to the next test's first mount. Cleared the same way, before every test.
   discardAllSessionHistories()
+  // …and How to Play's place parked for a reload (store/sessionGuide, round 23 Q11) — same leak.
+  discardGuidePlace()
   // The BROWSING-SESSION MARKER (store/browsingSession, round 23 Q2) is what tells a genuine cold open
   // from a reload — it survives a reload and not a close. The harness has no close event, so without
   // this every test after the first in a worker would boot as a "reload" and the Amnesic cold-open

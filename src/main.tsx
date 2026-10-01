@@ -44,6 +44,7 @@ import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/setti
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
 import { discardSessionRounds } from './store/sessionRound.js'
 import { discardSessionHistories } from './store/sessionHistory.js'
+import { readGuidePlace, discardGuidePlace } from './store/sessionGuide.js'
 import { useModePrefs } from './store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, storedAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
 import { useProgress } from './store/progress.js'
@@ -745,10 +746,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const [appScrolledFromTop,setAppScrolledFromTop]=useState(false);
       // The guide's reading position, in the scroll container's own scrollTop units — the app's
       // ONLY per-mode scroll memory (the game modes always open at their own top; only the guide is
-      // a reading page). A ref because nothing renders from it, and deliberately NOT persisted
-      // anywhere: a refresh or a cold start opens Classic with a fresh ref and a fresh GuidePage,
-      // which is the whole of "a new launch starts at the top with every panel closed".
-      const guideScrollYRef=useRef(0);
+      // a reading page). A ref because nothing renders from it. It SEEDS from the place the guide
+      // parked before a reload (round 23 Q11, store/sessionGuide — GuidePage parks it when the page
+      // hides, through readGuideOffset below), so a reload lands the reader where they were; a real
+      // close clears sessionStorage, so a cold start still opens at the top with every panel closed.
+      // Read once, in an initializer: the boot effect that restores the session page (possibly the
+      // guide) runs after this, and the mode-switch layout effect below writes this value.
+      const [parkedGuideY]=useState(()=>readGuidePlace()?.y??0);
+      const guideScrollYRef=useRef(parkedGuideY);
       // saveReadingPosRef — how switchMode below takes that reading, and the answer to "what
       // replaces the attribute test?". It holds a closure, installed by the scroll-ownership effect
       // for exactly as long as the guide is the screen on show, that copies the live scroller's
@@ -838,6 +843,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
         saveReadingPosRef.current=()=>{guideScrollYRef.current=el.scrollTop;};
         return()=>{saveReadingPosRef.current=null;};
       },[mode,syncBarHeight]);
+      // The reading offset as of NOW, for GuidePage to park when the page hides (round 23 Q11): the
+      // live scroller's while the guide is on screen (taken through the same closure switchMode uses,
+      // so it is the one place that reads it), the remembered one while it is not.
+      const readGuideOffset=useCallback(()=>{saveReadingPosRef.current?.();return guideScrollYRef.current;},[]);
       // App-wide scroll-state tracking. ONE scroller, one listener, one evaluate() — since round 13
       // there is no second sourcing path to keep honest. It was two: the clamped container via its
       // own scroll event, and the guide's DOCUMENT via window scroll/resize reading
@@ -1586,6 +1595,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
         setDeductionResetKey(k=>k+1);
         setGuideResetKey(k=>k+1);
         guideScrollYRef.current=0;
+        // …and the guide's place parked for a reload (store/sessionGuide), for the same reason: the
+        // remounted GuidePage reads it while rendering, before the old one's unmount could discard it.
+        discardGuidePlace();
       },[]);
       // ★★ THE PRESET SWITCH'S REMOUNT, WIRED TO THE FACT RATHER THAN TO THE CALLER. Anything that
       // changes which DATA the app is reading — store/presetControl's switchPreset, deleting the
@@ -2420,7 +2432,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               so App — which owns the container — passes it down. The ref itself, not its current
               value: App's own layout effects and GuidePage's toggle read it at different moments,
               and a value read at render time would be null on the first pass. */}
-          <ModeErrorBoundary key={"guide-"+guideResetKey} mode="How to Play" active={mode==="guide"}><GuidePage visible={mode==="guide"} scrollerRef={appScrollRef}/></ModeErrorBoundary>
+          <ModeErrorBoundary key={"guide-"+guideResetKey} mode="How to Play" active={mode==="guide"}><GuidePage visible={mode==="guide"} scrollerRef={appScrollRef} readingOffset={readGuideOffset}/></ModeErrorBoundary>
         </div>
         </div>
         {/* The guide's two soft edges — ⚠ KEPT ACROSS ROUND 13, and the reason changed. They exist

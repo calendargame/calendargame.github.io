@@ -35,6 +35,7 @@ import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { usePresets, makePresetRegistryDefaults } from '../src/store/presets.js'
 import { createPreset, switchPreset } from '../src/store/presetControl.js'
+import { forgetBrowsingSession } from '../src/store/browsingSession.js'
 import { installGuideScroller } from './helpers/guideScroller.jsx'
 import { installResizeObserver } from './helpers/scrollGeometry.js'
 
@@ -177,22 +178,28 @@ describe('the guide remembers where you were reading', () => {
     expect(header.getAttribute('aria-expanded')).toBe('true')
   })
 
-  it('opens at the top on a FRESH app instance, whatever the scroller was left holding', () => {
-    // Nothing here is enforced by a guard: the app never stores which mode you were in, the
-    // reading position lives in a per-instance ref, and the open panel lives in GuidePage's own
-    // state — so a refresh, a cold start or an update reload gets all three back at launch values.
-    // The scroller is deliberately left sitting at 400 when the second instance takes it over (a
-    // reload's history scroll restoration does exactly that), so "opens at the top" has to be an
-    // act rather than an accident.
+  it('opens at the top after a REAL CLOSE, whatever the scroller was left holding', () => {
+    // A real close is the one departure that forgets the guide's place: the reading offset and the
+    // open panel live in memory (a per-instance ref, GuidePage's own state) and, across a reload
+    // only, in sessionStorage (store/sessionGuide, round 23 Q11) — which the browser throws away on
+    // a close. So the close is modelled as exactly that: the page hides (parking the place, as a
+    // close does), then sessionStorage is gone and the browsing session forgotten.
+    // The scroller is deliberately left sitting at 400 when the second instance takes it over (the
+    // platform's own scroll restoration can hand one back), so "opens at the top" has to be an act
+    // rather than an accident.
     const first = mountApp()
     pressKey('H')
     const g = installGuide(first.container)
     g.setContent(3000)
     g.scrollTo(400)
     tap(first.container, 'overview')
-    pressKey('K') // this instance now remembers 400
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'))
+    })
     first.unmount()
     document.getElementById('root').remove()
+    sessionStorage.clear()
+    forgetBrowsingSession()
     const { container } = mountApp()
     g.retarget(container)
     g.setPos(400)
@@ -201,6 +208,52 @@ describe('the guide remembers where you were reading', () => {
     const headers = [...container.querySelectorAll('[aria-controls^="guide-panel-"]')]
     expect(headers.length).toBeGreaterThan(1)
     expect(headers.every((h) => h.getAttribute('aria-expanded') === 'false')).toBe(true)
+  })
+
+  it('a RELOAD keeps the place — the open section, and the offset written back on arrival', () => {
+    // Round 23 Q11: "only truly closing the app starts fresh". A reload fires pagehide and then the
+    // page simply stops — React runs no cleanup — so the model below keeps sessionStorage exactly as
+    // the page left it at pagehide, and mounts again. The session page brings the reader straight
+    // back into the guide.
+    // ⚠ The restore is observed as a WRITE, on a fresh element: the scroller model cannot be
+    // installed on a tree that does not exist yet, and carrying the old model's offset across
+    // (retarget) would read 640 whether or not the app wrote it. So every scrollTop write the new
+    // instance makes is recorded from the moment it mounts.
+    const first = mountApp()
+    pressKey('H')
+    const g = installGuide(first.container)
+    g.setContent(3000)
+    tap(first.container, 'overview')
+    g.scrollTo(640)
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'))
+    })
+    const atPagehide = Array.from({ length: sessionStorage.length }, (_, i) => {
+      const k = sessionStorage.key(i)
+      return [k, sessionStorage.getItem(k)]
+    })
+    g.restore()
+    guide = null
+    first.unmount()
+    document.getElementById('root').remove()
+    sessionStorage.clear()
+    for (const [k, v] of atPagehide) sessionStorage.setItem(k, v)
+    const writes = []
+    Object.defineProperty(HTMLDivElement.prototype, 'scrollTop', {
+      configurable: true,
+      get: () => 0,
+      set(v) {
+        if (this.style.paddingTop === 'var(--bar-h)') writes.push(v)
+      },
+    })
+    try {
+      const { container } = mountApp()
+      expect(writes.at(-1)).toBe(640)
+      const header = container.querySelector('#guide-sec-overview button')
+      expect(header.getAttribute('aria-expanded')).toBe('true')
+    } finally {
+      delete HTMLDivElement.prototype.scrollTop
+    }
   })
 
   it('gives the game modes no scroll memory — each one opens at its own top', () => {
@@ -265,6 +318,26 @@ describe('a preset switch opens the incoming guide at the top', () => {
     expect(g.pos()).toBe(600)
     open(2) // → preset 2, which also resolves to the guide
     expect(g.pos()).toBe(0)
+  })
+
+  it('does not hand the incoming guide a place parked by an earlier hide', () => {
+    // The place is parked for a reload whenever the page hides (store/sessionGuide), so one can be
+    // standing when a switch happens. The switch remounts the guide, and the NEW guide reads its
+    // place while it renders — before the old one's unmount cleanup runs — so the park has to be
+    // thrown away by the remount itself (main.tsx's remountScreens), or preset 2 opens preset 1's
+    // section.
+    const { container } = mountApp()
+    act(() => createPreset('Two'))
+    pressKey('H')
+    tap(container, 'overview')
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'))
+    })
+    open(2)
+    pressKey('H')
+    expect(
+      container.querySelector('#guide-sec-overview button').getAttribute('aria-expanded'),
+    ).toBe('false')
   })
 
   it('does not leak preset 1’s offset into a later in-preset return to the guide', () => {

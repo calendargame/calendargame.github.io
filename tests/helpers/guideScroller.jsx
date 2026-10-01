@@ -42,7 +42,7 @@
 // the top, and the net would catch it. (It was true of the document scroller too — a re-clamped
 // document collapsed to a screenful and clamped its offset the same way — so this survived the
 // move as an argument, not just as code.)
-import { useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import { act, render } from '@testing-library/react'
 import GuidePage from '../../src/components/GuidePage.jsx'
 import { SCROLLER_CORE_CLASS } from '../../src/components/scrollRegion.js'
@@ -239,10 +239,12 @@ export function installGuideScroller(container) {
 // being hidden is a MODE question, and mode belongs to App — tests/guideScroll.dom asks it there.
 function GuideHarness() {
   const scrollerRef = useRef(null)
+  // App's readGuideOffset, minus the mode it tracks: this harness's guide is always on screen.
+  const readingOffset = useCallback(() => scrollerRef.current?.scrollTop ?? 0, [])
   return (
     <div ref={scrollerRef} id="appScroll" className={`absolute inset-0 ${SCROLLER_CORE_CLASS}`}>
       <div className="mx-auto px-4 w-full max-w-[30rem] min-h-full flex flex-col pb-3">
-        <GuidePage visible scrollerRef={scrollerRef} />
+        <GuidePage visible scrollerRef={scrollerRef} readingOffset={readingOffset} />
       </div>
     </div>
   )
