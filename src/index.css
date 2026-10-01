@@ -11,7 +11,7 @@
    source: src ts/tsx + index.html. v4's default auto-detection scans every non-gitignored
    text file in the repo — including PROJECT.md and the planning docs at the root, whose
    prose mentions of class names were silently emitting dead utilities into the shipped
-   bundle (a retired purple tier kept resurfacing that way). Q16's guard test bans raw
+   bundle (a retired purple tier kept resurfacing that way). The theme guard test bans raw
    purple/white-alpha literals in exactly this same file set (tests/themeGuard.test.js),
    so scan scope and guard scope agree: what the guard can't see can't reach the CSS.
    Keep the two lists in lockstep if app source ever grows a new location. */
@@ -97,7 +97,7 @@
 
 @layer components{
 /* ----- custom app CSS (moved verbatim from index.html \3c style>) ----- */
-/* Q16 — the text/rule color ramp (replaces the retired enumerated light-theme override
+/* The text/rule color ramp (replaces the retired enumerated light-theme override
    block that force-remapped raw Tailwind classes with !important). Every raw Tailwind
    purple / white-alpha color utility in the app was migrated onto these vars via the v4
    var shorthand — text-(--tx-100-80), bg-(--bg-500-20), … — and tests/themeGuard.test.js
@@ -160,7 +160,7 @@
    looking the same way and WERE dead — zero consumers in src/ or this file — and are gone.
    --tc looks dead from CSS alone and is NOT: src/main.tsx reads it off the documentElement on
    every theme switch to drive the theme-color meta tag and <html>'s background stamp.)
-   --nbtn-bg (Q4 round-8) is the NEUTRAL solid button fill: the app's one non-brand solid, worn by
+   --nbtn-bg (round 8) is the NEUTRAL solid button fill: the app's one non-brand solid, worn by
    Lookup's Clear button beside the btn-solid Lookup. It was a raw zinc utility in the className —
    the last raw colour utility outside the ramp — so no theme could ever reach it. Only the dark
    row below defines it (zinc-700's exact value), so every theme renders EXACTLY as it does today;
@@ -326,13 +326,13 @@ input,textarea{user-select:text;-webkit-user-select:text}
    Where both apply (e.g., bar at scroll's top edge), both stack: shadow says
    "I'm a layered surface," fade says "and there's content extending under me."
    The scroll-REGION recipe that pairs these fades with the px-4 scrollbar lane is
-   tokenized in components/scrollRegion.ts (Q5 round-7) — new inner scrollers take
+   tokenized in components/scrollRegion.ts (round 7) — new inner scrollers take
    SCROLL_REGION_CLASS + scrollFadeClass + useScrollEdgeState from there, and
    tests/scrollRegionGuard.test.js fails the suite on any scroller built outside it. */
 /* ONE feather depth for every edge fade in the app — the container masks below AND the
-   guide's fixed doc-fade strips further down. Tokenized in Q6 (round 8) so no fade site can
+   guide's fixed doc-fade strips further down. Tokenized in round 8 so no fade site can
    carry a hardcoded twin that drifts from the rest. It is deliberately NOT part of the guide's
-   reading line any more (--seat-top below derives from the panel gap instead, Q5 round 9):
+   reading line any more (--seat-top below derives from the panel gap instead, round 9):
    --fade-h is shared with the settings popover, the changelog and the Lookup scrollers, so it
    can never be retuned to serve the accordion alone. */
 :root{--fade-h:24px}
@@ -381,7 +381,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
    guide on the same fluid rem scale as every other gap in the app (index.css already reads
    --spacing directly for .svalue-input). 0.5rem = 8.46px at the owner's 16.92px fluid root. */
 :root{--guide-panel-gap:calc(var(--spacing) * 2)}
-/* --seat-top — the guide's READING LINE, defined once (Q6 round 8; re-derived Q5 round 9). The
+/* --seat-top — the guide's READING LINE, defined once (round 8; re-derived round 9). The
    fixed bar owns viewport y 0…--bar-h, so any panel edge at or above --bar-h is hidden by it.
    Seating the TAPPED panel at --bar-h + --guide-panel-gap therefore lands the BOTTOM edge of the
    panel above it exactly on the bar's underside: the reader sees the tapped panel and no sliver
@@ -389,7 +389,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
 
    Round 8 seated at --bar-h + --fade-h instead, on the theory that the line should clear the top
    feather. It overshot by --fade-h − --guide-panel-gap = 24 − 8.46 = 15.5px, and that is exactly
-   how much of the previous panel stayed in frame (the owner's Q5 report). Neither of the two
+   how much of the previous panel stayed in frame (the owner's report). Neither of the two
    obvious repairs is available: widening every panel gap to the feather's depth would add ~357px
    (~30%) to the guide, and --fade-h is shared with the settings popover, the changelog and the
    Lookup scrollers so it cannot shrink. Accepted consequence: the tapped panel's top corners now
@@ -567,7 +567,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
    must not brighten as one block on hover; its unselected segments carry their own per-target
    hover (hover:bg-(--stgl-hov)) instead. */
 .surface-tray{background:var(--stgl-bg);border-color:var(--sbtn-bd)}
-/* .svalue-input — the tap-to-type edit box inside SliderValueEditor's readout cell (Q4 round-8).
+/* .svalue-input — the tap-to-type edit box inside SliderValueEditor's readout cell (round 8).
    The box is OUT OF FLOW (absolutely positioned over the cell), so it can never size that cell:
    the always-mounted invisible strut is the only in-flow child and sizes it alone, in BOTH states.
    The box is then inset OUTWARD by exactly its own chrome — margin-inline −(pad + border),
@@ -612,7 +612,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
 @media (hover: hover){
   .surface-button:hover{background:var(--sbtn-hov)}
   .surface-toggle:hover{background:var(--stgl-hov)}
-  /* ⚠ THE :not() PAIR IS NOT DECORATION (round 15, B7). Until B7 every withheld .btn-solid also
+  /* ⚠ THE :not() PAIR IS NOT DECORATION (round 15). Until then every withheld .btn-solid also
      wore pointer-events-none, so it could not be hovered and a bare .btn-solid:hover was safe. The
      ⚙ footer's three buttons dropped pointer-events-none — that is what lets the not-allowed cursor
      in the rule below actually paint, since a pointer-events:none element is never hit-tested — so
@@ -651,7 +651,7 @@ button:focus,select:focus{outline:none}
 .btn-wrong-persist{background:rgba(185,28,28,.95)}
 .btn-wrong-dim{background:rgba(185,28,28,.32)}
 .btn-correct-persist{background:rgba(21,128,61,.95)}
-/* Q4 drag-to-select: answer grids are "selection groups" — touch-action:none so a drag across the grid
+/* Drag-to-select: answer grids are "selection groups" — touch-action:none so a drag across the grid
    selects the option under your finger instead of scrolling the page. .drag-target is toggled (by the
    pointer controller, lib/pointerGestures) on the option currently under your finger during a drag —
    only once you've dragged OFF the pressed option (a plain tap never flashes it; nextHilite) — a
@@ -659,7 +659,7 @@ button:focus,select:focus{outline:none}
    lift — it read too loud, and inverted on the light themes where brightening a light button makes it
    LESS visible) so it reads as the pending choice before you release. */
 [data-answer-grid]{touch-action:none}
-/* C2 press-drag menus: the two bar [data-select-trigger] buttons (the ⚙ gear + the mode selector) are
+/* Press-drag menus: the two bar [data-select-trigger] buttons (the ⚙ gear + the mode selector) are
    press-drag-into-menu gestures, never scroll starts — touch-action:none (mirroring the answer grids
    above) so the browser can't claim the touch for panning and pointercancel the gesture mid-drag.
    ⚠ KEEP IT, THOUGH ITS ORIGINAL REASON IS GONE (round 13). It was written for guide mode, where
@@ -796,7 +796,7 @@ button:focus,select:focus{outline:none}
 .dot-btn{--hit-bd:1px;position:relative;inline-size:calc(var(--dot-frac) * 100%);aspect-ratio:1;border-radius:50%;border-width:var(--hit-bd);border-style:solid}
 .dot-btn::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);inline-size:calc((100% + 2 * var(--hit-bd)) / var(--dot-frac));aspect-ratio:1}
 .dot-btn.drag-target{outline:none;box-shadow:0 0 0 2px var(--drag-ring)}
-/* ⚠ THE 45° LATTICE (Rotate Dots → 45° CCW, round-23 Q6). The Standard layout turned an eighth-turn
+/* ⚠ THE 45° LATTICE (Rotate Dots → 45° CCW, round 23). The Standard layout turned an eighth-turn
    and scaled by --dot-scale — dots, spacing AND hit areas together, so it is the same shape, only
    smaller (lib/dotLayout's DIAGONAL_DOT_SCALE argues the number; tests/dotRotation.dom checks the
    two copies agree). Turned 45°, the 3×3's cells land on a 5×5 lattice, on a checkerboard (DOT_CELLS'
@@ -826,7 +826,7 @@ button:focus,select:focus{outline:none}
 .dot-cluster[data-dot-rotation="ccw45"]{--dot-scale:.8;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(5,minmax(0,1fr));padding:calc(min(var(--ans-h),100%) * (1 - 5 * var(--dot-scale) / (3 * 1.41421356)) / 2);clip-path:inset(0)}
 .dot-cluster[data-dot-rotation="ccw45"] .dot-btn{inline-size:calc(var(--dot-frac) * 1.41421356 * 100%)}
 .dot-cluster[data-dot-rotation="ccw45"] .dot-btn::after{transform:translate(-50%,-50%) rotate(45deg)}
-/* Q8 — the ⚙ gear "modified" indicator: a flush inside-bottom 2px violet bar shown while any
+/* The ⚙ gear "modified" indicator: a flush inside-bottom 2px violet bar shown while any
    CURRENTLY-IN-EFFECT menu setting, or any of the four capturable mode-screen prefs (Flash speed,
    both Blitz timers, AoX run length), diverges from the user's saved defaults (the factory launch
    values when none are saved — store/userDefaults). ⚠ "in effect" is load-bearing, not filler: it
@@ -846,8 +846,8 @@ button:focus,select:focus{outline:none}
 .gear-modified{position:relative}
 .gear-modified::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;border-radius:9999px;background:rgba(167,139,250,.85)}
 [data-theme="light"] .gear-modified::after,[data-theme="parchment"] .gear-modified::after{background:rgba(124,58,237,.75)}
-/* Q6, re-cut in round-8 Q7 — the update-signal dot: the two-stage breadcrumb to the changelog after
-   a new build lands. The Q2 build-stamp detection lights the GEAR flag on any build change; the
+/* The update-signal dot (re-cut in round 8): the two-stage breadcrumb to the changelog after
+   a new build lands. The build-stamp detection lights the GEAR flag on any build change; the
    CHANGELOG flag is gated on the newest entry having actually changed (2026-08-10). Worn by the closed ⚙ gear
    (cleared on opening Settings) and by the ⚙ footer's Changelog link (cleared on its first tap).
    Light blue — deliberately outside the violet "customized" and rose "destructive" families: it
@@ -879,16 +879,16 @@ button:focus,select:focus{outline:none}
 /* The in-flow marker, for text links: margin-inline-start is the gap from the last glyph, in em
    again so the gap tracks the type it trails. */
 [data-update-dot="inline"]{display:inline-block;margin-inline-start:.3em}
-/* Q3 boot Updating overlay — the full-screen "Updating…" screen (shown by Settings → Check for updates
-   once its check has FOUND a newer build — round-11 Q7; never on a press with nothing to get —
+/* The boot Updating overlay — the full-screen "Updating…" screen (shown by Settings → Check for updates
+   once its check has FOUND a newer build — round 11; never on a press with nothing to get —
    and by the auto-update-on-open boot check when a freshly-deployed version is waiting; the LOADING
    splash is separate — index.html's body-level #boot, inline-styled there and removed by App's
    dismissBootSplash once it's been visible ≥0.5s and the real stylesheet has applied).
    Theme-aware bg (--bg1); logo lavender on dark themes, brand-purple on the light themes for contrast. The
    trace is currently STATIC — fully drawn, stroke dimmed 0.7 (the dash-sweep flow is parked behind
-   BOOT_TRACE_ANIMATED in src/components/BootOverlay.tsx; Backlog B2 revisits it); "Updating" has a
+   BOOT_TRACE_ANIMATED in src/components/BootOverlay.tsx; the backlog's trace-animation item revisits it); "Updating" has a
    sequential three-dot pulse. Mirrors the approved mockup + index.html's static boot (Loading) splash.
-   The Q11 rotate-back overlay (src/components/RotateOverlay.tsx) reuses this whole frame —
+   The rotate-back overlay (src/components/RotateOverlay.tsx) reuses this whole frame —
    .boot-overlay/.boot-mark/.boot-glow — with its own .rotate-caption line (same recipe as
    .boot-updating, shared below) so the portrait-lock screen speaks the same visual language. */
 .boot-overlay{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:var(--bg1);color:#c4b5fd}
@@ -904,7 +904,7 @@ button:focus,select:focus{outline:none}
    driver deliberately ignores the setting (see src/components/BootOverlay.tsx). ⚠ The trace is
    parked static behind BOOT_TRACE_ANIMATED today, so under Reduce Motion this screen is now
    entirely still. That is the setting doing exactly what it was asked to do on a screen that lasts
-   a second or two, and B2 restores the functional motion when it re-enables the trace.
+   a second or two, and that backlog item restores the functional motion when it re-enables the trace.
    AT --motion-scale:0 the animation's active duration is 0 and animation-fill-mode is the default
    `none`, so NO keyframe style is applied and each dot rests at its own opacity — 1, fully lit,
    since nothing here declares a resting opacity. That is the right still frame: three solid dots.
@@ -953,12 +953,12 @@ button:focus,select:focus{outline:none}
    does walk its controls. The one control there with no surface of its own
    draws a real ring — .kbd-ring, above — and the guide's "Where it falls
    short" list states the rest.)
-   ⚠ ONE EXCEPTION since round-9 (Q2): the ⚙ Settings pickers now implement
+   ⚠ ONE EXCEPTION since round-9: the ⚙ Settings pickers now implement
    the radiogroup keyboard contract (components/PillGroup), so once focus is
    inside a group — placed by a click or an AT activation, since Tab still
    can't get there — the arrows walk it from pill to pill with nothing drawn
    to say where it is. Whether those pills should show a ring is a real open
-   question, not an oversight: Q2's brief was ZERO visual change, and a ring
+   question, not an oversight: that round's brief was ZERO visual change, and a ring
    is a visual change. */
 .bar{height:6px;border-radius:6px;overflow:hidden;background:var(--bar-bg);border:1px solid var(--bar-bd)}
 /* The fill is full-width (width:100% set inline) and animated with transform:scaleX(1->0),
@@ -966,7 +966,7 @@ button:focus,select:focus{outline:none}
    weak devices. transform-origin:left makes it empty from the right (matching the old
    width animation); will-change promotes the layer up front to avoid a start-of-animation hitch. */
 .bar>span{display:block;height:100%;transform-origin:left;will-change:transform;background:linear-gradient(90deg,#a855f7,#7c3aed)}
-/* Fluid type + spacing (C3): ONE fluid root font-size scales every rem-based size at once — Tailwind's
+/* Fluid type + spacing: ONE fluid root font-size scales every rem-based size at once — Tailwind's
    text-*, p-*, gap-*, etc. are rem, and the column max-width is set in rem too — so the whole app grows
    / shrinks proportionally with the viewport. The preferred size is min(width-term, height-term): the
    width term scales with viewport WIDTH, but min() caps it by viewport HEIGHT (the vh term) so a wide-but-SHORT
@@ -983,12 +983,12 @@ button:focus,select:focus{outline:none}
    short windows) scroll-on-overflow is the universal fallback (the shared #appScroll container — EVERY
    mode scrolls when content exceeds it), so a game page is never cut off, only scrolled as a last resort. */
 html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
-/* Reduced-motion groundwork (C2): decorative-motion durations multiply by --motion-scale, which
+/* Reduced-motion groundwork: decorative-motion durations multiply by --motion-scale, which
    drops to 0 under the OS "Reduce Motion" setting, making them instant. Functional motion — the
    .bar countdown (transform:scaleX, set inline in JS) and the color flashes (.flash-*, which are
    state feedback, not movement) — is deliberately NOT scaled, so it's unchanged. Future decorative
    animations should multiply their duration by var(--motion-scale) to respect the setting for free.
-   ★ THE CONSUMER LIST IS NOW COMPLETE (round 16), and it was not before: C2 shipped the token with
+   ★ THE CONSUMER LIST IS NOW COMPLETE (round 16), and it was not before: the token first shipped with
    only TWO readers, so four decorative animations quietly ignored the setting for four rounds. All
    six are now here, and this is the whole list — the guide's Accessibility section states it in
    plain words, so a new consumer (or a lost one) means editing that prose in the same change:
@@ -1004,18 +1004,18 @@ html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
    before this stylesheet exists, so the token could not reach it anyway. */
 :root{--motion-scale:1}
 @media (prefers-reduced-motion: reduce){:root{--motion-scale:0}}
-/* Accordion slide (Q4): the grid-template-rows 0fr→1fr idiom. The wrapper (components/Expander) is
+/* Accordion slide: the grid-template-rows 0fr→1fr idiom. The wrapper (components/Expander) is
    a one-row grid whose track tweens 0fr⇄1fr via .expander-open, so the browser animates the TRUE
    content height — open and close both travel the full distance in the same uniform duration,
    killing the old measured max-height cap's timing flaws (short panels finishing early; closing
    dead-time while the unused cap headroom collapsed) and its retina measurement-rounding clip risk.
    The column is minmax(0,1fr), not the implicit auto — auto floors the track at the content's
-   min-content width and could push it past the container (the Q10 bare-1fr lesson, main.tsx);
+   min-content width and could push it past the container (the bare-1fr lesson, main.tsx);
    minmax(0,1fr) reproduces block-child sizing exactly. The row div needs min-height:0 (so the track
    can shrink below the content's min-height) and overflow:hidden (clips while the track is smaller
    than the content — during motion and at closed rest; at open rest the track equals the content by
    layout, so nothing clips). Duration multiplies by --motion-scale (above): Reduce Motion snaps
-   instantly. Q8 (round 7) split the duration into the --expander-ms var, which every Expander now
+   instantly. Round 7 split the duration into the --expander-ms var, which every Expander now
    stamps inline: the guide's motion coordinator (GuidePage) a distance-scaled per-toggle value, the
    codes panels (MethodBreakdown) the ACCORDION_MS_FLOOR that formula bottoms out at anyway. So the
    .24s fallback here is DEFENCE, not a live path — but it is REQUIRED, because with --expander-ms

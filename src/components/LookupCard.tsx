@@ -14,7 +14,7 @@ import type { FormatId } from '../lib/format.js'
 // is derived from those inputs by entryLabel/entryReadings below, against the LIVE Date Format. The
 // store also guarantees the date is REAL (normalizeLookupEntries), which is what lets the readings
 // treat "this calendar has no such date" as a fact about the calendar rather than about the data.
-// ⚠ `history` ARRIVES ALREADY MERGED (Q1, round 20): the caller combines the shared permanent list
+// ⚠ `history` ARRIVES ALREADY MERGED (round 20): the caller combines the shared permanent list
 // with this browsing session's amnesic-suppressed overflow (store/lookupHistory's `mergeForDisplay`)
 // before it ever reaches this component, so nothing here needs to know two buckets exist.
 import type { LookupEntry } from '../store/lookupHistory.js'
@@ -549,7 +549,7 @@ export default function LookupCard({
     <div className="flex flex-col gap-4 flex-auto min-h-0">
       <div className="rounded-2xl panel p-4 space-y-4 shrink-0">
         <div className="flex flex-wrap items-stretch gap-2">
-          {/* The date input wears the site-wide interactive-border rule (Q7 round-7): inputs are
+          {/* The date input wears the site-wide interactive-border rule (round 7): inputs are
               controls you act on, so it carries border surface-tray — the sbtn-bd tier its
               Lookup/Clear button neighbors share — never the container .panel it once borrowed
               (geometry unchanged: .panel's own 1px border became the explicit border token).
@@ -557,7 +557,7 @@ export default function LookupCard({
               text-entry field, a size up from the compact text-sm steppers elsewhere, and it kept
               that size only by inheriting the root font. Same rendered size as before (1rem /
               line-height 1.5 is exactly what it inherited) — now it can't drift by accident.
-              appearance-none (Q4 round-8) is the same kind of statement for behaviour: the box
+              appearance-none (round 8) is the same kind of statement for behaviour: the box
               declares its own border, background and radius, so appearance:auto would be a false
               declaration that also leaves iOS's native inner shadow and focus treatment live. */}
           {/* ★ THE ESCAPE CONTRACT, AND THE GAP IT CLOSED (round 17 — the owner's call). This box
@@ -611,7 +611,7 @@ export default function LookupCard({
             Lookup
           </button>
           {/* Clear is the row's NEUTRAL solid, deliberately not the brand fill Lookup wears. The
-              grey now comes from --nbtn-bg (Q4 round-8, index.css) instead of a raw zinc utility,
+              grey now comes from --nbtn-bg (round 8, index.css) instead of a raw zinc utility,
               so a theme can reach it; text-white stays because this fill is a raw colour, not one
               of the theme-aware surfaces that set their own text colour. (Naming the retired
               utility in prose would re-emit its dead rule — the v4 scanner reads comments too.) */}
@@ -693,13 +693,13 @@ export default function LookupCard({
           bottom of the screen. Opening Show Codes in the card above is one of the things that
           takes that room. space-y-4 → gap-4 now that it's a flex column. */}
       <div className="rounded-2xl panel py-4 gap-4 flex flex-col min-h-0">
-        {/* History panel on the shared scroll-region recipe (Q5 round-7,
+        {/* History panel on the shared scroll-region recipe (round 7,
             components/scrollRegion): the panel owns py-4 only, and every child carries its
             own px-4 — for the scrolling <ul> below that puts the 1rem right padding INSIDE
             the scroller, the text-free lane the iOS scrollbar paints in. Content widths are
-            unchanged; the pre-Q5 p-4 parent plus -mx-4 counter-margins on the header and
+            unchanged; the older p-4 parent plus -mx-4 counter-margins on the header and
             method section produced the same geometry with the lane OUTSIDE the scroller. */}
-        {/* The History heading row: a PLAIN heading since round 23 (Q10) — no divider line and no
+        {/* The History heading row: a PLAIN heading since round 23 — no divider line and no
             shadow under it; the list's own top fade is what marks content scrolled past it, as on
             every other page. The panel padding is vertical-only, so the row carries its own px-4,
             and the panel's gap-4 alone spaces it from the list. lookup-history-header is a stable

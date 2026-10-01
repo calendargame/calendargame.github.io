@@ -1,5 +1,5 @@
 // lib/presetReorder.ts — the PURE decision logic behind dragging a preset row into a new position
-// (components/PresetManager's reorder handle, Q7 round 20, replacing the ↑/↓ buttons). Split from
+// (components/PresetManager's reorder handle, round 20, replacing the ↑/↓ buttons). Split from
 // the DOM/pointer wiring for the same reason lib/presetNameWidth splits its measurement from its
 // decision: jsdom has no layout engine (getBoundingClientRect reports 0 for every element), so any
 // claim about "which slot is the pointer over right now" has to be provably correct against

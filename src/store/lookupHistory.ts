@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { guardedStorage } from './storageHealth.js'
 import { dimEither } from '../lib/calendar.js'
 
-// store/lookupHistory.ts — Lookup's saved history, SHARED across every preset (Q1, round 20).
+// store/lookupHistory.ts — Lookup's saved history, SHARED across every preset (round 20).
 //
 // WHY THIS IS ITS OWN FILE, NOT PART OF store/progress ANY MORE. Every other silo store/progress
 // holds — stats, all-time bests — answers "how did THIS PRESET do", so it is right that switching
@@ -50,7 +50,7 @@ import { dimEither } from '../lib/calendar.js'
 //     this folder is: state plus setters, with the app owning the one piece of cross-store business
 //     logic ("is the active preset amnesic right now") the way it already does for Full Reset.
 
-// A saved Lookup history entry — moved verbatim from store/progress (Stage D1 → Q1, round 20),
+// A saved Lookup history entry — moved verbatim from store/progress (Stage D1 → round 20),
 // unchanged: {id, y, m, d, isGap?} and nothing else. It carries only what the user supplied — the
 // parsed date, a stable id for selection, and the Oct 5–14, 1582 gap marker. Everything the card
 // SHOWS — the formatted label, the weekday(s) — is derived from y/m/d against the LIVE Date Format

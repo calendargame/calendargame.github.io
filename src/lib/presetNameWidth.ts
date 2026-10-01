@@ -1,6 +1,6 @@
 import { PRESET_NAME_COL, PRESET_NAME_CELL_SELECTOR } from '../components/PresetSwitcher.jsx'
 
-// lib/presetNameWidth.ts — THE LIVE, PIXEL-WIDTH CAP on a preset name AS IT IS TYPED (Q6, round
+// lib/presetNameWidth.ts — THE LIVE, PIXEL-WIDTH CAP on a preset name AS IT IS TYPED (round
 // 20), replacing the fixed MAX_PRESET_NAME=12 character cap that used to be the only thing
 // stopping a keystroke in the rename field (components/PresetManager).
 //

@@ -12,7 +12,7 @@ import { switchPreset } from '../store/presetControl.js'
 // `pressDrag` and inherits that gesture, its keyboard model, its Android-Back handling and its
 // portaled panel wholesale.
 // ⚠ WHY REUSE IS A HARD REQUIREMENT RATHER THAN A PREFERENCE, and it is the most expensive lesson
-// in this component's history: that gesture FAILED TWICE on the owner's iPhone (round 11, Q8 cases
+// in this component's history: that gesture FAILED TWICE on the owner's iPhone (round 11 cases
 // A and B) while passing in Chromium every time, and was cured in round 12 only by DELETING the
 // close-on-scroll logic outright — the platform reason is written out at the top of CustomSelect.
 // A second control with its own gesture would be a second chance to re-derive that bug. Nothing in
@@ -53,10 +53,10 @@ import { switchPreset } from '../store/presetControl.js'
 // the widest label. For a fixed list of seven mode names that is exactly right — the control is as
 // wide as it needs to be and never moves. For PRESET names, sizing to content is wrong from BOTH
 // directions: the names are PLAYER-TYPED, so a shrink-to-fit trigger would resize itself under the
-// player's thumb on every rename, and (before round 20 Q6) a long enough name would permanently
+// player's thumb on every rename, and (before round 20) a long enough name would permanently
 // widen the top bar for as long as that preset existed.
 //
-// ★★ Q6 CHANGED WHO GIVES, AND PRESET_NAME_COL WITH IT. Rounds 18-19 fixed the width this cell
+// ★★ ROUND 20 CHANGED WHO GIVES, AND PRESET_NAME_COL WITH IT. Rounds 18-19 fixed the width this cell
 // bore so it could never widen the bar; round 20 gave this control FIRST CLAIM on the bar's own
 // slack instead — main.tsx's row puts `flex-1 min-w-0` on THIS control alone, and every other
 // control keeps `shrink-0` (see the budget block above the bar's markup there for the arithmetic
@@ -75,7 +75,7 @@ import { switchPreset } from '../store/presetControl.js'
 //   the same fill by construction — see that file's option-row rendering for the fix and why it
 //   was needed to keep the amnesic marker's column alignment once this cell stopped being a fixed
 //   constant.
-//   THE FLOOR STAYS as the TRIGGER-GRID floor and a defensive one. Since Q10 (round 21) the
+//   THE FLOOR STAYS as the TRIGGER-GRID floor and a defensive one. Since round 21 the
 //   portaled panel is `dropdownWidth="match-trigger"` — it takes this trigger's live rendered
 //   width, not `max-content` — so a menu row now DOES have something to fill (the label cell is
 //   `flex-1` of a `w-full` row of a panel sized to the trigger), and PRESET_NAME_COL rarely binds
@@ -88,7 +88,7 @@ import { switchPreset } from '../store/presetControl.js'
 //   instead — the same PRESET_NAME_COL floor is roomier in the dropdown's larger text tier than
 //   in the trigger's `text-sm` automatically, with no second constant.
 //
-// ⚠ NOTE WHAT IS *STILL NOT CONSTRAINED* BY THE BAR: the portaled dropdown panel. Since Q10 it is
+// ⚠ NOTE WHAT IS *STILL NOT CONSTRAINED* BY THE BAR: the portaled dropdown panel. Since round 21 it is
 // `width:<this trigger's live px>` rather than `width:max-content`, but it is still an overlay
 // (`position:fixed`, `maxWidth:90vw`) that answers to the viewport, not to the bar — and the width
 // it now copies is one the bar already handed the trigger, so nothing it does can widen the bar.
@@ -130,14 +130,14 @@ import { switchPreset } from '../store/presetControl.js'
 // the bar and be invisible on the panel in the three dark themes. Inheriting `currentColor` and
 // dimming with opacity is the one treatment that is right in both places.
 
-// ★ THE FLOOR OF A PRESET NAME'S CELL — pre-Q6 this was the ONLY number the whole control was
-// measured from (the trigger's exact width, and MAX_PRESET_NAME derived from it); post-Q6 the
+// ★ THE FLOOR OF A PRESET NAME'S CELL — before round 20 this was the ONLY number the whole control was
+// measured from (the trigger's exact width, and MAX_PRESET_NAME derived from it); since then the
 // trigger's width is no longer this file's to state at all — it is whatever main.tsx's row does
 // not spend on the logo, the mode selector, the gear and their gaps, and THAT arithmetic now lives
 // at the budget block above the bar's markup in src/main.tsx, measured in a real layout engine the
 // same way this constant always was.
 //   WHAT'S LEFT HERE IS JUST THE FLOOR: 4.5em. It was 6em (the old fixed width) through round 20,
-// but Q10 (round 21) widened the mode selector to match its own dropdown and that +34.72px came
+// but round 21 widened the mode selector to match its own dropdown and that +34.72px came
 // straight out of THIS control's flex-1 share — the switcher's trigger is ~105px at 360×800 now,
 // not ~140px. A 6em floor (~82px at text-sm) then exceeded the trigger's usable inner width once
 // px-2.5 + pr-6 (the chevron lane) were taken out (~69px), so a near-floor name overflowed UNDER
@@ -164,7 +164,7 @@ export const PRESET_NAME_COL = '4.5em'
 export const PRESET_NAME_CELL_SELECTOR = '[data-select-trigger] [data-preset-name-cell]'
 
 // ★ ONE PRESET'S ROW, AS EVERY PRESET LIST IN THE APP DRAWS IT — this switcher's, and since round 23
-// (Q8) the ⚙ panel's "Open in" dropdown, which is the SAME control showing the SAME list (the
+// the ⚙ panel's "Open in" dropdown, which is the SAME control showing the SAME list (the
 // owner's "learn it once"). Exported rather than copied so the two can never drift: a name that
 // truncates here and overflows there, or an amnesic "A" that one list forgets, would be exactly the
 // kind of disagreement this file's history keeps paying for.
@@ -266,7 +266,7 @@ export default function PresetSwitcher({
       ariaLabel="Preset"
       showChevron
       pressDrag
-      // Q10: the portaled menu takes THIS trigger's live width instead of shrink-wrapping to the
+      // The portaled menu takes THIS trigger's live width instead of shrink-wrapping to the
       // widest preset name. The trigger already fills the row's leftover space (w-full inside
       // main.tsx's flex-1 min-w-0), so the menu now fills it too — no more a narrow dropdown under
       // a wide trigger, and still nothing that can widen the bar (the panel answers to the
@@ -281,7 +281,7 @@ export default function PresetSwitcher({
       // the ⚠⚠ note above records the same correction). The chevron is `absolute right-2` in both, so
       // 1.5rem of right padding leaves it ~9px of clearance and nothing else needs to know.
       // (`px-2.5` then `pr-6`: Tailwind emits pr-* after px-*, so the later rule wins.)
-      // ⚠⚠ `w-full min-w-0` IS THE Q6 ADDITION, AND IT IS THE WHOLE MECHANISM — everything the
+      // ⚠⚠ `w-full min-w-0` IS ROUND 20'S ADDITION, AND IT IS THE WHOLE MECHANISM — everything the
       // ⚠⚠ block above this file's PRESET_NAME_CELL_SELECTOR export says about "an upstream size
       // to fill" starts HERE. `w-full` gives this trigger a DEFINITE width (100% of CustomSelect's
       // own wrapper div, which itself defaults to 100% of main.tsx's `flex-1 min-w-0` row item —

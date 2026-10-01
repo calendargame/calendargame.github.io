@@ -30,16 +30,16 @@ import {
 // with the ⚙ panel's "Open in" list open, one Escape or one tap outside closes the list and leaves
 // the panel, and a second closes the panel.
 //
-// ⚠ CALLER CONTRACT (Q8, round 11; widened by Q8, round 23) — THE TRIGGER MUST NOT MOVE WHILE THE
+// ⚠ CALLER CONTRACT (round 11; widened by round 23) — THE TRIGGER MUST NOT MOVE WHILE THE
 // PANEL IS OPEN. The panel is position:fixed and is measured from the trigger's viewport rect on
 // open; nothing re-measures it while a scroller moves, by design — re-measuring mid-scroll is
-// exactly what produced the momentum jitter round 11's Q8 removed, and a general "reposition on any
+// exactly what produced the momentum jitter round 11 removed, and a general "reposition on any
 // scroll" branch must not come back on spec. There are two ways a call site meets the contract:
 //   • ITS TRIGGER LIVES IN FIXED CHROME, which no scroller can move — the top bar's mode selector
 //     and preset switcher.
 //   • ITS TRIGGER LIVES INSIDE A SCROLL REGION, AND THIS COMPONENT HOLDS THAT REGION STILL for as
 //     long as the panel is open (components/scrollRegion's holdScrollRegion) — the ⚙ panel's
-//     "Open in" (round 23, Q8), the first call site of this kind, written and tested against that
+//     "Open in" (round 23), the first call site of this kind, written and tested against that
 //     real case as this paragraph used to require of whoever came first. Holding the region still
 //     was chosen over following the trigger for three reasons: it cannot jitter, because nothing is
 //     re-measured; it stops an iOS momentum glide that was already running when the menu opened (a
@@ -84,12 +84,15 @@ import {
 // is the dismiss rule itself: it was the right call for its own reasons, and re-deriving a timing
 // rule on top of a platform that never needed one is not on the table.
 //
-// The panel always opens DOWNWARD. The auto-flip-up branch was deleted in round 11 (Q8): at the
-// only call site the space above is structurally negative (measured −45px against a 325px panel —
-// the trigger is IN the bar the flip measured its ceiling from), so the branch could not run, and
-// once the panel is fixed its `bottom` offset would have had to be re-derived against a different
-// box — an untestable edit to unreachable code. A future call site that genuinely needs to flip
-// should have it written against that case.
+// The panel always opens DOWNWARD. The auto-flip-up branch was deleted in round 11: at what was
+// then the only call site, the mode selector, the space above is structurally negative (measured
+// −45px against a 325px panel — the trigger is IN the bar the flip measured its ceiling from), so
+// the branch could not run, and once the panel is fixed its `bottom` offset would have had to be
+// re-derived against a different box — an untestable edit to unreachable code. There are three
+// call sites now — the mode selector and the preset switcher in the bar, and "Open in" at the top
+// of the ⚙ panel — and none has room above it either; a long list scrolls inside the panel instead
+// (the maxHeight on the panel below). A future call site that genuinely needs to flip should have
+// it written against that case.
 //
 // ⚠ STABILITY NOTE: the portal positioning (measurePanel) was tuned against iOS Safari over
 // several attempts and is QA-confirmed working. It looks like ordinary geometry but is
@@ -152,7 +155,7 @@ export default function CustomSelect({
   ariaLabel?: string
   wrapperRef?: RefObject<HTMLDivElement | null>
   showChevron?: boolean
-  // Q10: how the PORTALED PANEL is sized. 'content' (default) — width:max-content, the panel is as
+  // How the PORTALED PANEL is sized. 'content' (default) — width:max-content, the panel is as
   // wide as its widest option; this is the mode selector, and it must stay this way (its dropdown's
   // rendered width is not allowed to change). 'match-trigger' — the panel takes the trigger
   // wrapper's live rendered width instead (measured on open, re-measured on resize / visualViewport
@@ -160,7 +163,7 @@ export default function CustomSelect({
   // fills the row's leftover space (main.tsx: flex-1 min-w-0), so the menu now fills it too rather
   // than shrink-wrapping to the widest preset name. maxWidth:90vw stays as a clamp for both.
   dropdownWidth?: 'content' | 'match-trigger'
-  // Q10: widen the trigger BUTTON to exactly its own dropdown's outer width, WITHOUT changing the
+  // Widen the trigger BUTTON to exactly its own dropdown's outer width, WITHOUT changing the
   // dropdown. The mode selector wants this: its dropdown rows use a bigger text tier and more
   // padding than the trigger, so "both size to content" would never make them equal. A hidden
   // mirror of the panel (rendered below, out of flow, aria-hidden) is measured and its width
@@ -168,7 +171,7 @@ export default function CustomSelect({
   // pin the trigger to it" the panel already does for its own position. The preset switcher does
   // NOT set this: its trigger sizing (w-full, filling flex-1) is owned by main.tsx's row.
   triggerMatchesDropdown?: boolean
-  // Q5: enable press-drag-select (the mode selector). The trigger toggles on POINTERDOWN (so a press can
+  // Enable press-drag-select (the mode selector). The trigger toggles on POINTERDOWN (so a press can
   // drag straight into the just-opened menu and release on an option to pick it — handled by the global
   // pointer controller, lib/pointerGestures: the data-select-trigger marker starts the gesture and the
   // trigger's aria-controls={listboxId} pairs it with the portaled listbox, resolved live by id);
@@ -217,7 +220,7 @@ export default function CustomSelect({
   // portal.
   const panelRef = useRef<HTMLDivElement>(null)
   const [panelPos, setPanelPos] = useState<PanelPos | null>(null)
-  // Q10 (triggerMatchesDropdown only): measureRef points at the hidden panel-mirror rendered below;
+  // triggerMatchesDropdown only: measureRef points at the hidden panel-mirror rendered below;
   // triggerMinWidth is its measured outer width, applied as the trigger's min-width so the trigger
   // ends up exactly as wide as the real dropdown. null until measured (and in jsdom, which reports
   // 0 for everything — the trigger then just keeps its natural width, which is all a layout-free
@@ -282,7 +285,7 @@ export default function CustomSelect({
     // reading — already viewport-relative — IS its containing-block coordinate, at every scroll
     // offset and in both modes. Round 4 added a ± window.scrollY here to cancel a drift that
     // existed only because the panel was position:absolute while guide mode makes #root static,
-    // moving its containing block from the viewport to the document; Q8 removed the cause instead
+    // moving its containing block from the viewport to the document; round 11 removed the cause instead
     // of the symptom. Measured both ways: the absolute panel drifted 1:1 with the page (−394px at
     // 400 scrolled, −1494px at 1500) and needed a reposition per scroll event, while the fixed one
     // holds its exact 6px gap at every offset with ZERO reposition calls — and app mode is
@@ -406,7 +409,7 @@ export default function CustomSelect({
   // While open: what RE-MEASURES the panel — and that is now this effect's whole job. Nothing here
   // dismisses (see the dismiss-rule note on the component), and NO SCROLL OF ANY KIND IS SUBSCRIBED
   // TO, which is the point twice over: dismissal is gone, and re-measuring per scroll event through
-  // momentum is the jitter round 5 chased and Q8 deleted. The panel does not need it — it is
+  // momentum is the jitter round 5 chased and round 11 deleted. The panel does not need it — it is
   // position:fixed under a trigger that lives in fixed chrome, so a moving page moves neither.
   //
   // The three things that DO move the trigger, none of them a page scroll: window resize
@@ -461,7 +464,7 @@ export default function CustomSelect({
     // The ancestor chain is fixed for a mounted select; `open` is the whole trigger for this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
-  // ★ A LONG LIST SCROLLS INSIDE THE PANEL (round 23, Q8 — presets are unlimited, so the preset
+  // ★ A LONG LIST SCROLLS INSIDE THE PANEL (round 23 — presets are unlimited, so the preset
   // lists can be any length). The panel is capped at the space between its top and the bottom of
   // the viewable area (the maxHeight on the panel below), and its OPTIONS scroll in an inner region
   // (`listRef`) — inner so that the region's edge fades (the app's shared recipe,
@@ -505,7 +508,7 @@ export default function CustomSelect({
         onPointerDown={
           pressDrag
             ? (e) => {
-                // Mirror the pointer controller's latch (Q5 rework): only the primary pointer's
+                // Mirror the pointer controller's latch: only the primary pointer's
                 // left/first contact toggles — a second finger or a right-click must not flip the
                 // menu mid-gesture.
                 if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return
@@ -516,7 +519,7 @@ export default function CustomSelect({
         onKeyDown={handleTriggerKeyDown}
         data-select-trigger={pressDrag || undefined}
         className={className}
-        // Q10: pin the trigger to its dropdown's measured outer width (triggerMatchesDropdown). Both
+        // Pin the trigger to its dropdown's measured outer width (triggerMatchesDropdown). Both
         // this button and the mirror are border-box, so the mirror's rect width IS the min-width the
         // trigger needs; its natural content is narrower, so it settles at exactly that.
         style={
@@ -550,7 +553,7 @@ export default function CustomSelect({
           ))}
         </span>
       </button>
-      {/* Q10: the hidden width-mirror (triggerMatchesDropdown only). A faithful, out-of-flow copy
+      {/* The hidden width-mirror (triggerMatchesDropdown only). A faithful, out-of-flow copy
           of the portaled panel — same p-1, same OPTION_ROW_BOX rows, same width:max-content /
           maxWidth:90vw — so its rendered outer width equals the real dropdown's. It carries no
           role and is aria-hidden + visibility:hidden + pointer-events:none, so it is invisible to
@@ -611,7 +614,7 @@ export default function CustomSelect({
             // The options' scroll region inside carries the p-1 (below); this box is the frosted
             // frame, a flex column so that region can shrink to the maxHeight and scroll.
             className="rounded-2xl overflow-hidden flex flex-col"
-            // position:FIXED (Q8, round 11) — the panel is pinned to the viewport, not to whatever
+            // position:FIXED (round 11) — the panel is pinned to the viewport, not to whatever
             // #root's positioning happens to make its containing block. #root is fixed in app mode
             // and static in guide mode, which is what made the same absolute panel obey two
             // different origins; fixed answers to the viewport in both, so the measurement above
@@ -627,13 +630,13 @@ export default function CustomSelect({
               WebkitBackdropFilter: 'blur(28px) saturate(120%)',
               backdropFilter: 'blur(28px) saturate(120%)',
               boxShadow: '0 6px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.05)',
-              // Q10: 'content' (mode selector, default) keeps the historical max-content sizing
+              // 'content' (mode selector, default) keeps the historical max-content sizing
               // untouched; 'match-trigger' (preset switcher) takes the trigger wrapper's live
               // width measured in measurePanel, so the menu fills the same row space the trigger
               // does. The 90vw clamp applies to both.
               width: dropdownWidth === 'match-trigger' ? `${panelPos.width}px` : 'max-content',
               maxWidth: '90vw',
-              // Round 23 (Q8): never taller than the room between the panel's top and the bottom of
+              // Round 23: never taller than the room between the panel's top and the bottom of
               // the viewable area, less the same 1rem cushion (and bottom safe area) the ⚙ panel
               // keeps — a longer list scrolls inside (listRef, above). CSS rather than a measured
               // number, so it stays true as the viewport changes without a re-measure.
@@ -682,7 +685,7 @@ export default function CustomSelect({
                   >
                     {opt.value === value ? '✓' : ''}
                   </span>
-                  {/* min-w-0 flex-1 — Q6, added for the preset switcher's flexible name cell, and
+                  {/* min-w-0 flex-1 — added for the preset switcher's flexible name cell, and
                     harmless for every other caller (the mode selector's plain-text labels draw
                     identically inside a wider invisible box). This span is a FLEX ITEM of the row
                     above (blockified by being a direct child of `flex items-center gap-2.5`), so

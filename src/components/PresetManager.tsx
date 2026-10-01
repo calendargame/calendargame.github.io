@@ -91,7 +91,7 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // player out of the round they are in. The new row appears at the foot of the list; the switcher in
 // the top bar is how you go to it.
 //
-// ★★ RENAMING IS CAPPED AT THE INPUT, AND — SINCE Q6, ROUND 20 — BY WIDTH RATHER THAN BY COUNT.
+// ★★ RENAMING IS CAPPED AT THE INPUT, AND — SINCE ROUND 20 — BY WIDTH RATHER THAN BY COUNT.
 // It used to be a character count, twice over (a `maxLength` for the browser's own enforcement,
 // plus a `slice` in onChange for the paste-shaped write maxLength does not cover). That worked only
 // because the switcher's display cell was ALSO a fixed count of characters; once the cell became
@@ -111,7 +111,7 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // it. Layering them is the same "no one cut alone covers every case" reasoning this field always
 // used, just with a different pair of cuts.
 //
-// ★★ MOVING IS A DEDICATED DRAG HANDLE, AS OF Q7 ROUND 20 — REPLACING THE ↑/↓ PAIR THIS COMMENT
+// ★★ MOVING IS A DEDICATED DRAG HANDLE, AS OF ROUND 20 — REPLACING THE ↑/↓ PAIR THIS COMMENT
 // USED TO ARGUE AGAINST A DRAG FOR. The owner's call, made explicit rather than re-litigated here:
 // no arrow buttons, one control that is both a pointer/touch drag and a keyboard reorder action.
 // The two prior pointer gestures that passed in Chromium and failed on the owner's iPhone (round
@@ -154,7 +154,7 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // why that single primitive is enough for both.
 //
 // ★ DELETING IS PERMANENT AND THE CARD SAYS SO IN THOSE WORDS — WHEN THERE IS SOMETHING TO SAY IT
-// ABOUT. Since Q1 the question is SKIPPED for a preset that is still bit-identical to a new one:
+// ABOUT. The question is SKIPPED for a preset that is still bit-identical to a new one:
 // every ⚙ setting at its factory value, no stats or bests, no saved defaults, no parked round.
 // Nothing is permanent about deleting a preset that holds nothing, so the confirmation would be a
 // tap spent on a non-decision. The test is store/presetControl's isPresetFactory — deliberately
@@ -186,7 +186,7 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // aria-label, and an aria-label REPLACES an element's content for a screen reader, so the glyph is
 // already unspoken. (That is the opposite of the ✓ and A markers below, which are bare spans with
 // no name of their own and therefore do need hiding plus an sr-only word.)
-// ⚠ TWO OF THE ORIGINAL THREE ARE GONE, AS OF Q7 ROUND 20: MOVE_UP ('↑') and MOVE_DOWN ('↓') named
+// ⚠ TWO OF THE ORIGINAL THREE ARE GONE, AS OF ROUND 20: MOVE_UP ('↑') and MOVE_DOWN ('↓') named
 // the old reorder buttons this round removed. The SAME reasoning that put them here — name a glyph
 // rather than write it inline, once a row is dense enough for a bare character to read as
 // decoration — is why the handle that replaced them gets a name too (ReorderHandleIcon below); it
@@ -419,7 +419,7 @@ export default function PresetManager({
   // three are needed and why it is aria-disabled rather than `disabled`).
   const canDelete = presets.length > 1
   // ★ THE DELETE ITSELF, WITH EXACTLY TWO WAYS IN — the confirmation's Delete button, and the ✕ on a
-  // preset that holds nothing (Q1, below). Both land here, so "the skip does everything the
+  // preset that holds nothing (below). Both land here, so "the skip does everything the
   // confirmation did" is true by construction rather than by a reader comparing two handlers.
   // Clearing the pending id is a provable no-op on the skip route (the ✕ exists only in the LIST
   // view, which only renders while nothing is pending) — it is here because deleting and leaving no
@@ -432,7 +432,7 @@ export default function PresetManager({
     if (pendingDelete) removePreset(pendingDelete.id)
     else setPendingDeleteId(null)
   }
-  // ★★ THE ✕: ASK, UNLESS THERE IS NOTHING TO ASK ABOUT (Q1, the owner's words — "if it's completely
+  // ★★ THE ✕: ASK, UNLESS THERE IS NOTHING TO ASK ABOUT (the owner's words — "if it's completely
   // factory with no stats or anything, like as if you pressed clear saved defaults then full reset,
   // then we don't need a confirmation when deleting that preset"). A preset whose four stores are
   // all still at their factory values, with no parked round and no amnesic session behind it — and,
@@ -477,10 +477,10 @@ export default function PresetManager({
   // at rest and one that might disagree with the others. Every row's transform and every pointer
   // handler below reads this one value directly rather than juggling several booleans.
   //
-  // ★★ EVERY VERTICAL NUMBER IN IT IS IN THE LIST'S CONTENT COORDINATES (Q7, round 23) — 0 at the
+  // ★★ EVERY VERTICAL NUMBER IN IT IS IN THE LIST'S CONTENT COORDINATES (round 23) — 0 at the
   // top of the scrollable content, not of the screen — except the two pointer readings, which are
   // viewport y because that is what a pointer event reports. It used to be viewport y throughout,
-  // which was only correct while the list could not scroll mid-drag. Unlimited presets (Q8) make a
+  // which was only correct while the list could not scroll mid-drag. Unlimited presets make a
   // list taller than its region the ordinary case, and the drag now scrolls it (the edge auto-scroll
   // below), so "where is the row" has to be measured against the content, which is what the row's
   // own transform is relative to. `startScrollTop` is what turns a pointer delta into a content
@@ -1006,7 +1006,7 @@ export default function PresetManager({
       <div className="px-4 pt-1">
         {/* NEW PRESET is the constructive act, so it wears btn-solid — the same violet fill Save
             Defaults and every Begin button wear, and the same reason rose is left to the two
-            destructive controls. It fills the row: round 21 (Q5) removed the standalone Close
+            destructive controls. It fills the row: round 21 removed the standalone Close
             beside it — the scrim tap, Escape and Android Back already dismiss the whole card, and
             the owner wanted the real estate back. */}
         <button

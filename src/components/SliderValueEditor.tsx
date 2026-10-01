@@ -23,7 +23,7 @@ import { commitSliderText } from '../lib/sliderValue.js'
 //     exception left to name: these readouts, both ⚙ Year Range boxes, the Save Defaults popup's N
 //     field, the AoX screen's run length, and the Lookup date box.
 //
-// Width + zero shift (Q4 round-8): the cell is a `relative inline-block` whose ONLY in-flow child
+// Width + zero shift (round 8): the cell is a `relative inline-block` whose ONLY in-flow child
 // is an always-mounted invisible block strut holding `widest`, so the cell locks to the widest
 // POSSIBLE readout measured in the device's OWN font — identical across sites and constant at
 // runtime (Round-4's hand-measured arbitrary width was Segoe UI's 3.18em; iOS's SF Pro renders
@@ -33,7 +33,7 @@ import { commitSliderText } from '../lib/sliderValue.js'
 // Only classes something still wears are named. BOTH live controls are taken OUT of flow on top
 // of that strut, so neither can ever contribute to the cell's size:
 //   • the display button is `absolute inset-0` — its border box is the strut box exactly. Its
-//     `accent` (dirty) variant (Q5 round-6) wears the btn-solid pill via px-1 -mx-1, the
+//     `accent` (dirty) variant (round 6) wears the btn-solid pill via px-1 -mx-1, the
 //     footer-link ring idiom: the fill bleeds 4px past the digits while the padding cancels back
 //     to a CONTENT box equal to the strut, so the digits themselves never move.
 //   • the edit input is `.svalue-input` (index.css, beside .surface-tray) — the same idiom on both
@@ -48,12 +48,12 @@ import { commitSliderText } from '../lib/sliderValue.js'
 //
 // The user always types SECONDS — Flash converts ×1000 to ms via fromText; milliseconds are never
 // exposed (the readout label is already seconds everywhere). The ONE non-seconds site is the
-// defaults manager's AoX run-length row (Q5 round-6), which types a plain count: it passes
+// defaults manager's AoX run-length row (round 6), which types a plain count: it passes
 // `editLabel` to replace the default "(seconds)"-suffixed input name. `disabled` mirrors the
 // slider's own condition (mid-round lock); pointer-events-none + the aria flag rather than the
 // disabled attribute so the readout keeps its exact resting look (the plain span never dimmed).
 // The input wears `surface-tray` (stgl-bg + sbtn-bd — the interactive-control surface every
-// editable box shares, Q7 round-7; the display state stays borderless bare text) for its colours;
+// editable box shares, round 7; the display state stays borderless bare text) for its colours;
 // .svalue-input owns the geometry.
 export default function SliderValueEditor({
   value,
@@ -76,7 +76,7 @@ export default function SliderValueEditor({
   max: number
   snap: number // the typed-value snap grid, internal units (100ms / 5s / 0.5s)
   disabled?: boolean
-  accent?: boolean // dirty state (the defaults cards, Q5 round-6): the readout wears the btn-solid pill
+  accent?: boolean // dirty state (the defaults cards, round 6): the readout wears the btn-solid pill
   inputMode: 'decimal' | 'numeric'
   label: string // accessible name base, e.g. "Flash speed"
   editLabel?: string // input accessible name override for non-seconds values (defaults to `${label} (seconds)`)

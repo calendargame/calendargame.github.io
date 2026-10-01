@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { flushSync } from 'react-dom'
 
-// The site-wide scroll-region treatment (round-7 Q5) — the ⚙ Settings recipe, extracted here so
+// The site-wide scroll-region treatment (round 7) — the ⚙ Settings recipe, extracted here so
 // no scroll region can quietly diverge from it again (settings, the changelog popup, and the
 // Lookup history list each once carried their own copy of parts of it, and each drifted). There
 // is deliberately NO scrollbar CSS anywhere — the treatment is two halves, applied together:
@@ -18,7 +18,7 @@ import { flushSync } from 'react-dom'
 // SCROLLER_CORE_CLASS exists for the scrollers that need no lane of their own. The app's main
 // container (main.tsx appScrollRef / #appScroll) fills the viewport, so its scrollbar already
 // paints at the screen edge past the content wrapper's own px-4 — it takes the core without the
-// lane (its fades still come from scrollFadeClass). And since round 23 (Q8) the option list inside
+// lane (its fades still come from scrollFadeClass). And since round 23 the option list inside
 // a dropdown's panel (components/CustomSelect): every option row carries its own 1rem of side
 // padding, so the text already sits clear of an overlay scrollbar, and a lane on top would also
 // widen the panel away from the hidden width-mirror that must match it to the pixel. Since round 13 that container is
@@ -119,7 +119,7 @@ export function writeShade(el: HTMLElement | null | undefined, shade: number): v
   if (el.style.getPropertyValue('--shade') !== next) el.style.setProperty('--shade', next)
 }
 
-// ── Watching the SCROLL EXTENT, not the scroller's box (round 11 Q4) ─────────────────────────
+// ── Watching the SCROLL EXTENT, not the scroller's box (round 11) ─────────────────────────
 // The edge answer is a function of THREE numbers — scrollTop, scrollHeight, clientHeight — and
 // the platform only gives an event for the first. A scroll listener therefore covers exactly one
 // third of the question, and the other two thirds change silently: a panel opens, a list gains a
@@ -267,7 +267,7 @@ export function useScrollEdgeState<T extends HTMLElement>(
   return { scrolledFromTop, atBottom }
 }
 
-// holdScrollRegion (round 23, Q8) — freeze the nearest scroll region around `from` (a computed overflow-y of auto
+// holdScrollRegion (round 23) — freeze the nearest scroll region around `from` (a computed overflow-y of auto
 // or scroll, stopping short of <body>: the document is never a menu's to freeze) and return the
 // function that lets it go, restoring the element's own inline values exactly. No region → a no-op.
 // Its one caller is components/CustomSelect, which holds the region around a trigger still while

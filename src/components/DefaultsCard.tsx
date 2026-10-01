@@ -1,6 +1,6 @@
 // DefaultsCard — the Save/View saved-defaults popup body: a read-only view of the stored
 // per-mode defaults, or an editable manager with dirty-row highlighting. Extracted verbatim from
-// main.tsx (Q1 phase 1), together with NUM_INPUT_DIRTY_CLASS, which exists only for this card
+// main.tsx (the main.tsx split), together with NUM_INPUT_DIRTY_CLASS, which exists only for this card
 // (it was deliberately defined beside it rather than with the other input tokens).
 //
 // ── THE HEIGHT CAP, and the measurement that earned it ───────────────────────────────────────
@@ -11,7 +11,7 @@
 // floor at a viewport height of ~615px, and BELOW THAT THE CARD CANNOT GET ANY SMALLER. Measured
 // in Chromium: the tallest configuration (the manager with an edit pending — the restricted-write
 // note plus the Save row) is pinned at 269.5px for every viewport shorter than that. (That figure
-// was measured while the row also held a Cancel BESIDE Save; Q2 removed it, and the row's HEIGHT is
+// was measured while the row also held a Cancel BESIDE Save; that button is gone, and the row's HEIGHT is
 // untouched by that — two `flex-1` buttons and one `w-full` button are the same single line of the
 // same control tier — so the cap and every measurement below stand exactly as taken.)
 // The scrim is `fixed inset-0 flex items-center`, inside `#root{overflow:hidden}`, so there is no
@@ -41,13 +41,13 @@
 //     whole treatment renders exactly the card that shipped before it.
 //
 // ── THE TWO CALLERS, AND THE ONE FLAG BETWEEN THEM ─────────────────────────────────────
-// This is the ONE shared defaults card (Q5 round-6): the Save Defaults popup and the
+// This is the ONE shared defaults card (round 6): the Save Defaults popup and the
 // defaults manager both render THIS dialog card, so there are never two styles editing the
 // same four values. Parameterized by seed source alone — the Save card seeds `prefs`/`seed`
 // from the LIVE stores at open, the manager from the SAVED/effective defaults — plus the one
 // `manage` flag covering every deliberate difference between the two:
 //   • the AoX row: the Save card keeps its visible input box (the shared NUM_INPUT_CLASS
-//     idiom, Q18); the manager renders the row like the Blitz timer readouts instead — a
+//     idiom); the manager renders the row like the Blitz timer readouts instead — a
 //     plain tap-to-type SliderValueEditor value with its own widest-string strut "1000",
 //     no box (min/max/snap 2–1000/1 mirror the normalizeAoxN clamp; junk/empty reverts,
 //     the editor's contract, rather than the box's junk→10 fallback);
@@ -113,7 +113,7 @@ function DefaultsCard({
   const dirtyQ = prefs.blitzQSec !== seed.blitzQSec
   const dirty = dirtyAox || dirtyFlash || dirtyBlitz || dirtyQ
   const commitAoxN = () => setPrefs((p) => ({ ...p, aoxN: normalizeAoxN(p.aoxN) }))
-  // WHAT ESCAPE IN THE N FIELD REVERTS TO (round 15, B6): the value the field held when the
+  // WHAT ESCAPE IN THE N FIELD REVERTS TO (round 15): the value the field held when the
   // keyboard entered it. A ref, not state — it is written on focus and read on one keypress, and
   // nothing renders it. See the long note at the input for why it has to be remembered at all.
   const aoxNAtFocusRef = useRef(prefs.aoxN)
@@ -152,7 +152,7 @@ function DefaultsCard({
       >
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-(--tx-200-80) shrink-0">MoX Run Length</span>
-          {/* ★ ESCAPE DISCARDS — round 15 (B6). It used to normalize-COMMIT, which made this the
+          {/* ★ ESCAPE DISCARDS — round 15. It used to normalize-COMMIT, which made this the
                 only field in the popup where Escape kept the edit: the tap-to-type readouts beside
                 the three sliders (SliderValueEditor, the `manage` branch below) have reverted
                 WITHOUT committing since round 2, and the ⚙ Year Range boxes since round 14. Escape

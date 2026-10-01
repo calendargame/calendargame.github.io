@@ -59,7 +59,7 @@ const isLiveRepo = (repository) => (repository || '').endsWith('/calendargame.gi
 // the manual beacon into the built index.html. The token is PUBLIC (it ships in the page HTML for
 // every visitor), so it's fine in source. Remove this plugin + its conditional below to drop analytics.
 // ⚠ The token below must be the value from Cloudflare's "Enable with JS Snippet installation" snippet —
-// NOT the dashboard site ID (the /web-analytics/edit/<id> value). Using the site ID was the original B1
+// NOT the dashboard site ID (the /web-analytics/edit/<id> value). Using the site ID was the original
 // bug: beacons sent fine but Cloudflare silently dropped them all (zero data). Fixed 2026-06-06.
 const cfWebAnalytics = () => ({
   name: 'cf-web-analytics-beacon',
@@ -189,7 +189,7 @@ const distFiles = (dir, prefix = '') =>
     )
     .sort()
 
-// buildIdentity (Q7, round 11) — gives every build an identity the running app can compare against
+// buildIdentity (round 11) — gives every build an identity the running app can compare against
 // the deployed one, which is what makes "Check for updates" a check instead of an unconditional
 // reload. src/lib/updateCheck.ts carries the full reasoning for the design; the mechanics here:
 //
@@ -216,7 +216,7 @@ const distFiles = (dir, prefix = '') =>
 // function of the id — so two builds are byte-identical if and only if their ids match, which is
 // the property the whole feature rests on.
 //
-// ⚠ WHAT THE AUTO-STAMP (Q1, round 16) CHANGED, and it is worth knowing: the deploy stamp is now
+// ⚠ WHAT THE AUTO-STAMP (round 16) CHANGED, and it is worth knowing: the deploy stamp is now
 // the build clock, so it is inside the main bundle and different for every build. Two builds of the
 // SAME COMMIT are therefore no longer byte-identical and no longer share an id — verified, twice in
 // a row, ids 65bdb2bc… then 38f41c4a…. The property above is untouched (the outputs genuinely do
@@ -312,7 +312,7 @@ const precacheIntegrity = () => {
   }
 }
 
-// ── THE DEPLOY STAMP (round 16, Q1) ───────────────────────────────────────────────────────────
+// ── THE DEPLOY STAMP (round 16) ───────────────────────────────────────────────────────────
 // src/deployStamp.ts used to carry a hand-typed date that somebody bumped before every push, which
 // made it a GUESS at when the deploy would land rather than a record of when it did (round 14
 // stamped 2:00 AM and went live later than that). BUILD_TIME is the real thing: the clock at the
@@ -373,7 +373,7 @@ const DEV_BUILD_NUMBER = 0
 const buildNumber = () =>
   readBuildNumber((args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }))
 
-// changelogStamp (Q1 half 2) — the other half of taking the stamp out of human hands. Automating
+// changelogStamp — the other half of taking the stamp out of human hands. Automating
 // only the stamp would replace a step somebody remembers with a divergence nobody watches, so the
 // build now FAILS unless the newest entry in src/changelog.ts is dated the same PACIFIC calendar day
 // BUILD_TIME lands on. The conversion and the wording live in scripts/changelogStamp.mjs (pure +
@@ -430,7 +430,7 @@ export const webManifest = {
   theme_color: '#0d1117',
   background_color: '#0d1117',
   display: 'standalone',
-  // The portrait lock's Android half (Q11): a manifest orientation hard-locks every Android
+  // The portrait lock's Android half: a manifest orientation hard-locks every Android
   // INSTALL to portrait at the OS level (it only binds in the installed standalone context —
   // browser tabs rotate freely everywhere). iOS parses + ignores the key (harmless); there the
   // in-app rotate-back overlay takes over (main.tsx RotateOverlay). The manifest revision
@@ -453,7 +453,7 @@ export default defineConfig(({ command, mode }) => ({
   // Dev/preview serve from '/'. A production `vite build` derives its base from the repo it builds
   // in (see pagesBase above): '/' for the live org page, '/<repo>/' for the staging project repo.
   base: command === 'build' ? pagesBase(process.env.GITHUB_REPOSITORY) : '/',
-  // Sentry tree-shaking flags (Current Work C1): compile OUT debug logging and all performance-
+  // Sentry tree-shaking flags: compile OUT debug logging and all performance-
   // tracing code paths from the lazy error-reporting chunk (we use Sentry for errors only — see
   // src/observability/). This + the static named imports in src/observability/sentryClient.ts keep
   // Session Replay (rrweb), Tracing, and Profiling out of the bundle. The string 'false' is inserted
@@ -461,7 +461,7 @@ export default defineConfig(({ command, mode }) => ({
   define: {
     __SENTRY_DEBUG__: 'false',
     __SENTRY_TRACING__: 'false',
-    // The deploy stamp (Q1, round 16 — see BUILD_TIME / DEV_BUILD_TS above). A real `vite build`
+    // The deploy stamp (round 16 — see BUILD_TIME / DEV_BUILD_TS above). A real `vite build`
     // gets the instant it started; dev and Vitest get the frozen sentinel. JSON.stringify because
     // `define` substitutes RAW EXPRESSION TEXT, so the quotes have to be part of the value.
     // Base-independent by construction: this is a timestamp, not a URL, so the live '/' build and
@@ -492,7 +492,7 @@ export default defineConfig(({ command, mode }) => ({
     babel({ presets: [reactCompilerPreset()] }),
     // PWA (Stage D3): installable + fully offline. vite-plugin-pwa generates the web app
     // manifest + a Workbox service worker that precaches the whole build (so the app runs
-    // with no network). registerType 'prompt' + injectRegister null (Q3): a newly-deployed SW
+    // with no network). registerType 'prompt' + injectRegister null: a newly-deployed SW
     // INSTALLS but WAITS — it does NOT silently activate + reload mid-session. We register the SW
     // ourselves with a direct navigator.serviceWorker.register() (src/sw.ts — the plugin's
     // virtual:pwa-register client helper, and the workbox-window chunk behind it, were dropped in

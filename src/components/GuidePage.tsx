@@ -27,7 +27,7 @@ import { edgeShade, observeScrollExtent, readShadeRampPx, writeShade } from './s
 // GuidePage / GuideSection — the How-to-Play tab: an accordion of documentation
 // sections (each a GuideSection wrapping an Expander) covering every observable
 // behavior on the site. GuideSection is the reusable open/close row; GuidePage
-// lays them out with Divider separators and owns the toggle coordinator (Q8):
+// lays them out with Divider separators and owns the toggle coordinator:
 // per toggle it measures both affected panels, computes one distance-scaled
 // duration for the shared clock, and — when the layout change would carry the
 // tapped section off-screen or clamp the shrinking scroll range — drives the
@@ -59,7 +59,7 @@ import { edgeShade, observeScrollExtent, readShadeRampPx, writeShade } from './s
 // the number of sections.
 const sectionDomId = (id: string) => `guide-sec-${id}`
 const panelDomId = (id: string) => `guide-panel-${id}`
-// …and the header button, which since round 23 (Q9) can PIN under the bar: the pin tracker and
+// …and the header button, which since round 23 can PIN under the bar: the pin tracker and
 // the collapse-in-place both measure it against its wrapper, and both find it from the open id.
 const headerDomId = (id: string) => `guide-head-${id}`
 
@@ -142,7 +142,7 @@ export function GuideSection({
   durationMs?: number | null
 }) {
   const isOpen = openId === id
-  // The per-toggle motion clock (Q8): GuidePage's coordinator computes ONE duration per
+  // The per-toggle motion clock: GuidePage's coordinator computes ONE duration per
   // toggle — d(max of the two panels' travels, lib/accordionMotion) — and hands the same
   // value to every section, so the closing and the opening panel of an accordion switch
   // tween on one shared clock (only the two toggled panels actually animate). It reaches
@@ -173,7 +173,7 @@ export function GuideSection({
           onToggle(id)
         }}
         // guide-head is the sticky pin and its opaque fill; elev-shadow-down is the pinned look,
-        // held at --shade 0 until GuidePage's pin tracker says content is under it (Q9, round 23).
+        // held at --shade 0 until GuidePage's pin tracker says content is under it (round 23).
         className="guide-head elev-shadow-down w-full text-left px-4 py-3 flex items-center justify-between"
       >
         <span className="text-sm font-semibold text-(--tx-50) select-text">{title}</span>
@@ -218,7 +218,7 @@ function Divider({ label }: { label: string }) {
 }
 // Lead — a one-line summary at the top of a GuideSection, so the section's gist is
 // scannable before the details. Slightly brighter than body text — the same --tx-50
-// ramp tier the section titles use (Q16, index.css), which every theme defines, so
+// ramp tier the section titles use (index.css), which every theme defines, so
 // it stays legible on light/parchment by construction.
 function Lead({ children }: { children: ReactNode }) {
   return <p className="text-(--tx-50)">{children}</p>
@@ -231,7 +231,7 @@ function Subhead({ children }: { children: ReactNode }) {
 }
 // Bulleted list helper — scannable detail with theme-legible bullets: the markers use
 // the per-theme --mut-color var directly (the Tailwind v4 var shorthand — the precedent
-// the Q16 text/rule ramp generalized app-wide), so they stay visible on every theme.
+// the text/rule ramp generalized app-wide), so they stay visible on every theme.
 function UL({ children }: { children: ReactNode }) {
   return <ul className="list-disc pl-5 space-y-1 marker:text-(--mut-color)">{children}</ul>
 }
@@ -257,8 +257,8 @@ function UL({ children }: { children: ReactNode }) {
 // than the 3×3 gives a label — and a diagonal neighbour sits ~34 across, clear of a three-letter
 // label either side; the outermost dots and the bottom label still fit the 180 × 192 frame.
 //   ⚠ A STORE SELECTOR, where every other consumer of this setting takes a prop. It is
-//     forced rather than chosen: GuidePage's entire signature is `visible` +
-//     `scrollerRef`, so a prop would mean opening a settings pipeline through the guide
+//     forced rather than chosen: GuidePage's props are all about scrolling (`visible`,
+//     `scrollerRef`, `readingOffset`), so a prop would mean opening a settings pipeline through the guide
 //     for one decorative SVG at the bottom of it. Selecting here also keeps the
 //     subscription at the leaf — the guide itself does not re-render on a change.
 // Each rotation's grid → its step between neighbouring cells (x, y), per the note above; the 5×5's
@@ -338,7 +338,7 @@ function DotDiagram() {
 // mount, so a value read during render would be null on the first pass — and because the
 // coordinator reads it at tap time, when "current" is the only honest answer.
 // `readingOffset` is how far down the reader is, for the place this screen parks for a reload
-// (round 23 Q11, below). App owns that number — it is what App restores on the way back into the
+// (round 23, below). App owns that number — it is what App restores on the way back into the
 // guide (main.tsx's guideScrollYRef) — so App answers it: live while the guide is on screen,
 // remembered while it is not. A function, asked at the moment the page hides, for the same reason
 // scrollerRef is a ref.
@@ -421,7 +421,7 @@ export default function GuidePage({
       cancelScrollWriter()
     }
   }, [visible, cancelScrollWriter])
-  // The toggle coordinator (Q8) — hooked into the single toggle callback, never pointer
+  // The toggle coordinator — hooked into the single toggle callback, never pointer
   // events. Everything is measured at tap time, pre-animation: the closing panel's
   // RENDERED height (its grid track — a mid-flight re-toggle reads the interpolated
   // value, so the retarget stays exact), the opening panel's remaining travel (the body's
@@ -433,7 +433,7 @@ export default function GuidePage({
   // pre-multiplies the writer's duration exactly as the panels' CSS calc does, so Reduce
   // Motion (scale 0) jumps instantly to the correct end state (jsdom's empty var read is
   // NaN → treated as 1, animate).
-  // THE PIN TRACKER (Q9, round 23) — writes the open section's header its pinned look: the --shade
+  // THE PIN TRACKER (round 23) — writes the open section's header its pinned look: the --shade
   // its elev-shadow-down reads, ramped from 0 over --fade-h by how far content has scrolled under
   // it (headerPinDepth). That is the owner's rule made literal: OPENING a section never pins it —
   // the glide seats the header at its natural spot, where the depth is 0 — and the shadow appears
@@ -468,7 +468,7 @@ export default function GuidePage({
     (id: string) => {
       cancelScrollWriter()
       const opens = open !== id
-      // COLLAPSING FROM A PINNED HEADER (Q9, round 23). The header is pinned under the bar with the
+      // COLLAPSING FROM A PINNED HEADER (round 23). The header is pinned under the bar with the
       // section's top edge scrolled away above it, and the collapse is about to shrink that section
       // to just the header — at its natural spot, i.e. up there under the bar, taking the header the
       // reader just tapped out from under their finger and dropping them among whatever sections
@@ -1088,10 +1088,10 @@ export default function GuidePage({
           confirmation's two views, the withheld ✕ on a last preset); what a switch actually swaps =
           store/presetControl's PER_PRESET_STORES, all four of them; what a delete actually removes =
           its clearPresetStorage, which is derived from store/presets' PRESET_STORE_KEYS; which
-          presets skip the confirmation entirely (Q1) = that file's isPresetFactory, whose comment
+          presets skip the confirmation entirely = that file's isPresetFactory, whose comment
           also argues the one entry of clearPresetStorage it deliberately does not count; the screen
           clear = main.tsx's registry subscription calling remountScreens; the live typing cap that
-          replaced the old fixed character count (Q6, round 20) = lib/presetNameWidth, measured
+          replaced the old fixed character count (round 20) = lib/presetNameWidth, measured
           against components/PresetSwitcher's own rendered cell; store/presets' MAX_PRESET_NAME is
           now a separate, more generous backstop for a name this app never watched get typed. */}
       <GuideSection
@@ -1642,7 +1642,7 @@ export default function GuidePage({
           </li>
         </UL>
       </GuideSection>
-      {/* ACCESSIBILITY (B4) — its own section, deliberately, rather than more bullets under
+      {/* ACCESSIBILITY — its own section, deliberately, rather than more bullets under
           Keyboard Input. The URL is printed in the book, so readers arrive cold with no way to
           discover what is supported by poking at it; a titled row in the accordion is findable and
           a bullet buried in another section's Notes is not. It leans on Keyboard Input above for
@@ -1661,11 +1661,11 @@ export default function GuidePage({
           keyboard genuinely cannot open the preset list, and that is a thing the code does not do
           rather than a thing not yet written about; the named groups = PillGroup's role/aria-label (every
           picker passes a `label`; the Theme block's name follows Use System Settings, which is why
-          the wording is "the setting you're changing" and not a fixed list); the four switches +
+          the wording is "the setting you're changing" and not a fixed list); the five switches +
           both year boxes = their aria-labels in components/SettingsPanel; the gear = its computed
           aria-label in main.tsx; the dots = WeekdayAnswer's per-dot aria-label; the stats strip's
           two words = the sr-only spans StatPanel renders — "Off" beside an `off` cell's value, and
-          "Stats are not being saved" at the top of the strip when `dimmed` (C1, round 16; both
+          "Stats are not being saved" at the top of the strip when `dimmed` (round 16; both
           pinned in tests/statBoxSignals.dom). ⚠ THAT BULLET NAMES BOTH ON PURPOSE: the round-16
           review found the dim was the one signal of the three with no non-visual form, while the
           blank had one, and the section may not claim coverage it only gives to two of three. If

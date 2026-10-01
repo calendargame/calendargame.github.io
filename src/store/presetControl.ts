@@ -45,7 +45,7 @@ import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 // ⚠ THIS FILE IS THE PROGRAMMATIC API THE UI GROUP DRIVES. There is deliberately no UI, no top bar
 // and no settings-panel wiring here — `switchPreset(id)` is the whole call a CustomSelect needs.
 //
-// ★ AND ONE QUESTION, NOT A SEVENTH OPERATION: `isPresetFactory(id, …)` (round 22, Q1) asks whether a
+// ★ AND ONE QUESTION, NOT A SEVENTH OPERATION: `isPresetFactory(id, …)` (round 22) asks whether a
 // preset holds anything a player could miss, so the delete flow can skip its confirmation for one
 // that holds nothing. It reads the same four stores and the same key machinery the operations
 // write through — which is precisely why it belongs here and not in the component that asks it: an
@@ -174,7 +174,7 @@ const clearPresetStorage = (presetId: number) => {
   // nothing left to ask.
   discardSessionStats(presetId)
   // …and the THIRD place a preset can have written this session: its current-page entry
-  // (round-21 Q3), in sessionStorage keyed by this id. Ids are never reused so a leftover entry is
+  // (round 21), in sessionStorage keyed by this id. Ids are never reused so a leftover entry is
   // harmless, but "remove exactly its keys" is the house rule.
   discardSessionMode(presetId)
   // …and the FOURTH: its parked ended round/run (store/sessionRound), one sessionStorage entry per (stats
@@ -463,7 +463,7 @@ export function createPreset(name?: string): Preset {
 }
 
 /**
- * Set the app-GLOBAL "open in" pin (round-21 Q3) — 'last' (open in whatever preset was active last
+ * Set the app-GLOBAL "open in" pin (round 21) — 'last' (open in whatever preset was active last
  * time) or a specific preset id. Returns false when there is nothing to do (the value is already
  * what was asked for, or a numeric id that names no preset).
  *

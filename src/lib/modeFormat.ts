@@ -1,6 +1,6 @@
 // The small shared presentation helpers the mode screens and App both use: the date-format roll,
-// the touch probe, and the time / accuracy formatters. Extracted verbatim from main.tsx (Q1 phase
-// 1) so the five mode screens can move into their own modules.
+// the touch probe, and the time / accuracy formatters. Extracted verbatim from main.tsx (the
+// main.tsx split) so the five mode screens can move into their own modules.
 import type { FormatId } from './format.js'
 import { SOLVE_TIME_UNITS_PER_SECOND } from '../engine/stats.js'
 
@@ -43,7 +43,7 @@ export const SLIDER_READOUT_WIDEST = fmtBlitzT(175) /* "2m 55s" */
 // for `t >= 60` as well, so a 62-second solve and an empty stat box drew the same picture — while
 // StatPanel's three-signal contract (see the header there, and tests/statBoxSignals.dom.test.jsx)
 // documents the dash as "there is no data YET, but there could be". Two facts, one glyph: exactly
-// the collapse C1 spent a round pulling apart everywhere else on that strip. And a long solve is
+// the collapse round 16 pulled apart everywhere else on that strip. And a long solve is
 // the one a player most wants to see. A third "too long to count" state was designed and REJECTED —
 // one rule with no exception beats a good exception.
 //

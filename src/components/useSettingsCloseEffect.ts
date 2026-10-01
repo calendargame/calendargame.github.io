@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef } from 'react'
 // useSettingsCloseEffect — "run fn once when the ⚙ Settings popover CLOSES, iff these values
 // changed while it was open".
 //
-// It lived in modes/modeHooks until round 11 (Q7), because the five mode screens were its only
+// It lived in modes/modeHooks until round 11, because the five mode screens were its only
 // callers. They are not any more: App itself uses it to end the Check-for-updates interaction on
 // close. So it moved OUT of src/modes/, which exists to hold what belongs to a mode SCREEN — App
 // reaching down into that directory would have inverted the layering the phase-1 split created,
@@ -19,7 +19,7 @@ import { useLayoutEffect, useRef } from 'react'
 // (Values that change OUTSIDE the popover must keep modeHooks' useChangeEffect — they would never
 // see an open→close transition coincide with their change.)
 //
-// Both effects below are LAYOUT effects (round-8 Q9, and they must stay together): the close-fired
+// Both effects below are LAYOUT effects (round 8, and they must stay together): the close-fired
 // reset/regen has to commit in the SAME paint as the popover close — as passive effects they ran a
 // frame later, so the closing popover uncovered the still-green grid for one frame before the reset
 // landed. Same-kind effects run in declaration order, so the fnRef updater stays ahead of the
