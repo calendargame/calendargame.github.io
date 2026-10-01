@@ -116,6 +116,29 @@ describe('Lookup answer slot — always rendered, constant height (round-8 Q2 / 
     expect(node.className).toContain('text-(--tx-200-70)') // hint tone, not answer tone
   })
 
+  // ★ THE ORDER OF THE FIRST CARD, top to bottom: the input row, the note saying what the box takes,
+  // the answer, Show Codes. The note belongs to the input, so it sits under it — not at the foot of
+  // the card, where an open codes panel carried it far from the box it describes. And the answer
+  // sits on top of the button that explains it: its text is at the FOOT of the fixed three-line
+  // slot, so an ordinary two-line answer leaves its spare row above the date, not as a blank line
+  // between the weekday and Show Codes.
+  it('reads input, format note, answer, Show Codes — and the answer sits at the foot of its slot', () => {
+    const { container } = render(<Host dateFormat="numeric-mdy" />)
+    const card = container.querySelector('.lookup-method-section').parentElement
+    const [inputRow, note, answer, codes] = card.children
+    expect(card.children).toHaveLength(4)
+    expect(inputRow.querySelector('input')).not.toBeNull()
+    expect(note.textContent).toBe('Format: m/d/yAD dates only, 1–10000')
+    expect(answer).toBe(slot(container))
+    expect(codes.className).toContain('lookup-method-section')
+    // Bottom-aligned rows in a three-line box: flex column, packed to the end.
+    for (const cls of ['min-h-15', 'flex', 'flex-col', 'justify-end'])
+      expect(answer.className.split(' ')).toContain(cls)
+    lookup(container, '7/4/1776')
+    expect(lines(container)).toEqual(['7/4/1776', 'Thursday']) // two rows; the third is spare
+    expect(slot(container).className.split(' ')).toContain('justify-end')
+  })
+
   it('an answer replaces the hint and takes the brighter answer tone', () => {
     const { container } = render(<Host dateFormat="numeric-mdy" />)
     lookup(container, '7/4/1776')

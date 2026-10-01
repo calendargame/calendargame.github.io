@@ -3186,12 +3186,15 @@ export default function GuidePage({
             written the new way, and if nothing is selected the box is emptied instead, since
             half-typed text in the old format would no longer read.
           </li>
-          <li>Supports years 1–10000.</li>
           <li>
-            The answer sits on three fixed lines below the input — the date, then its weekday — and
-            always keeps its space, so nothing on the page shifts as answers come and go. With
-            nothing to report — before your first lookup, or after Clear — it simply invites you to
-            enter a date.
+            Supports years 1–10000. The note under the box says which order to type the date in.
+          </li>
+          <li>
+            The answer has three fixed lines under that note — the date, then its weekday — and
+            always keeps its space, so nothing on the page shifts as answers come and go. It sits at
+            the foot of that space, directly on top of Show Codes: an answer that needs only two
+            lines leaves the spare one above it. With nothing to report — before your first lookup,
+            or after Clear — it simply invites you to enter a date.
           </li>
           <li>
             Show Codes sits directly under the answer — the same button the game modes have under

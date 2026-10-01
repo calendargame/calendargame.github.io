@@ -144,9 +144,9 @@ const codesUseJulian = (date: CodeDate | null, useJulian: boolean): boolean => {
 }
 
 // LookupCard — the Lookup-mode card: a numeric date input (format follows the
-// active dateFormat), a three-line answer slot with the shared Show Codes panel right
-// under it, and a history list that scrolls once it runs out of screen (with
-// edge-fade indicators).
+// active dateFormat) with the note saying what it takes, a three-line answer slot
+// with the shared Show Codes panel right under it, and a history list that scrolls
+// once it runs out of screen (with edge-fade indicators).
 // All state is lifted to the parent and passed via props/callbacks, so this
 // component is presentational + input-parsing only, and it OWNS no rendered text:
 // labels and weekdays are all derived from the stored {y,m,d} against the live
@@ -549,10 +549,20 @@ export default function LookupCard({
             Clear
           </button>
         </div>
-        {/* The answer slot is ALWAYS rendered, at a constant THREE-line height, so the card below it
-            never jumps. Three EXPLICIT ROWS, not a sentence that happens to wrap: row 1 is always
-            the formatted date, rows 2–3 the reading(s) — one for a post-reform date (the third row
-            stays empty), one per calendar for an ambiguous one. The old two-line reserve held a
+        {/* What the box takes, DIRECTLY UNDER THE BOX IT DESCRIBES. It belongs to the input — it is
+            the answer to "how do I type this?" — so it stays with it, above the answer, rather than
+            at the foot of the card, where Show Codes opening under the answer carried it a whole
+            codes panel away from the box. */}
+        <p className="text-xs text-(--tx-100-90)">
+          Format: <b>{inputMeta.label}</b>
+          <br />
+          AD dates only, 1–10000
+        </p>
+        {/* The answer slot is ALWAYS rendered, at a constant THREE-line height, so nothing under it
+            ever jumps — not Show Codes, and not the history list (which would otherwise shift under
+            the very row being tapped whenever the answer changed length). Three EXPLICIT ROWS, not a
+            sentence that happens to wrap: the formatted date, then the reading(s) — one for a
+            post-reform date, one per calendar for an ambiguous one. The old two-line reserve held a
             sentence whose line count depended on the font, the width, the month name and the
             weekday length, so it survived by tuning; rows make the height a property of the
             structure instead. Measured at 375px, where the slot is 310px wide: the longest line
@@ -560,12 +570,16 @@ export default function LookupCard({
             wrap on any phone this app supports, and the gap message below is the same two lines it
             has always been. min-h-15 (3.75rem) is three text-sm line boxes and, being a scale
             utility, tracks the fluid root font instead of freezing a pixel height.
-            TOP-ALIGNED, never centred: the date and the first reading then land in the same place
-            every time and only the unused third row varies. Centring would drift the whole block
-            with its content — exactly the instability round 8 removed. Errors and the empty-state
+            ★ BOTTOM-ALIGNED: the text sits at the FOOT of the slot, on top of Show Codes, and the
+            rows it does not need are left above it. Show Codes explains the answer, so the two
+            belong together — top-aligned, an ordinary two-line answer left its spare third row as a
+            blank line between the weekday and the button that explains it. The weekday (the last
+            row, the thing that was asked for) lands in the same place every time, and the spare
+            space reads as the break between the input above and the answer below. Never CENTRED:
+            that would drift both ends of the block with its content. Errors and the empty-state
             hint are plain text in the same slot; the hint takes the dimmer tone. */}
         <div
-          className={`text-sm min-h-15 ${selectedEntry || lo ? 'text-(--tx-100-90)' : 'text-(--tx-200-70)'}`}
+          className={`text-sm min-h-15 flex flex-col justify-end ${selectedEntry || lo ? 'text-(--tx-100-90)' : 'text-(--tx-200-70)'}`}
         >
           {selectedEntry ? (
             <>
@@ -579,10 +593,10 @@ export default function LookupCard({
               )}
             </>
           ) : (
-            lo || LOOKUP_HINT
+            <div>{lo || LOOKUP_HINT}</div>
           )}
         </div>
-        {/* Show Codes, DIRECTLY UNDER THE ANSWER IT EXPLAINS (round 23, Q10) — the same full-width
+        {/* Show Codes, DIRECTLY UNDER THE ANSWER IT EXPLAINS — the same full-width
             button and the same thin inset panel every game mode puts under its controls, where it
             used to sit walled off at the foot of the history panel. This card is shrink-0, so
             opening the codes grows it and the history panel below gives up the room (it is the
@@ -597,11 +611,6 @@ export default function LookupCard({
           useJulian={codesUseJulian(cdv, useJulian)}
           displayedFormat={dateFormat}
         />
-        <p className="text-xs text-(--tx-100-90)">
-          Format: <b>{inputMeta.label}</b>
-          <br />
-          AD dates only, 1–10000
-        </p>
       </div>
       {/* The history panel takes its natural height and SHRINKS to fit when the column runs out
           of room (min-h-0 lets it; the <ul> inside absorbs the shrink and scrolls) — it does not
