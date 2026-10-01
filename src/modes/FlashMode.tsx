@@ -28,7 +28,7 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { creditsLiveCard, overrideAdvances } from '../engine/gameReducer.js'
+import { creditsLiveCard, overrideAdvances, regenReplaces } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/overlayStack.js'
 import { parkedFlag } from '../engine/parkedHistory.js'
 
@@ -69,7 +69,8 @@ function FlashMode({
   // screen — `showTimerDate`, whether its date is shown (after a Reveal, or a Show Codes that froze a
   // flash) — so a revealed card does not come back with its answer lit and its date a dash. (Read
   // through parkedFlag, which accepts nothing but a real `true`; the safe reading of anything else is
-  // the idle screen's.)
+  // the idle screen's. And it comes back only beside a question it can belong to — see where
+  // `showTimerDate` is declared, below the engine.)
   // A flash that was RUNNING is not restored, exactly as leaving the mode stops one (onHide below):
   // the screen comes back idle over the same engine, and Begin moves on as it would have then.
   const dataId = useMountedDataId()
@@ -88,7 +89,6 @@ function FlashMode({
   const [parked] = useState(() => readParkedHistory(dataId, 'flash', useJulian))
   const [active, setActive] = useState(false)
   const [flashPhase, setFlashPhase] = useState('dash') // dash (idle) | show (revealing) | hide ("…")
-  const [showTimerDate, setShowTimerDate] = useState(() => parkedFlag(parked?.ui, 'showTimerDate')) // keep the date visible after Reveal
   const flashMs = useModePrefs((s) => s.flashMs),
     setFlashMs = useModePrefs((s) => s.setFlashMs) // persisted (mode-prefs store)
   // Idle countdown label starts at the persisted speed, not a hardcoded 500 (which showed a
@@ -120,6 +120,19 @@ function FlashMode({
       }),
   })
   const { state, correct, overrideAvail, overridden } = eng
+  // Keep the live question's date visible after a Reveal, or a Show Codes that froze its flash.
+  // ★ IT BELONGS TO THAT ONE QUESTION, and the idle screen must never show a date that was not
+  // flashed. So a parked `true` comes back only over a question the engine keeps because it has been
+  // USED (regenReplaces — a Reveal and a Show Codes are both a use, and nothing else ever sets this).
+  // Over a waiting question nobody has used the flag is dropped whatever the slot says: that
+  // question's date has never been on screen, and showing it would hand the player the answer's
+  // date for free — and let Reveal count a miss against a question they were never asked. (The slot
+  // may hold anything a build on this origin wrote; and the restore may itself have just replaced
+  // the question — modeHooks' restoredEngine.) Read off the engine's FIRST state, which is why this
+  // is declared below the engine.
+  const [showTimerDate, setShowTimerDate] = useState(
+    () => parkedFlag(parked?.ui, 'showTimerDate') && !regenReplaces(state),
+  )
   useParkedHistory(
     dataId,
     'flash',
@@ -312,11 +325,16 @@ function FlashMode({
   // ── Override ⇄ Undo (round 23: one permanent per-card toggle) ──
   // ★ ONLY A JUDGEMENT ON THE LIVE QUESTION ENDS THE FLASH, because only that takes the question
   // away: crediting the flashed question moves play on to a fresh date, so the reveal window the
-  // player was in belongs to a question that is no longer on screen. A press on any OTHER card —
-  // the one behind this one, or one browsed to — leaves the live question exactly where it was,
-  // mid-flash, and the flash must keep running: it is that question's reveal window, and stopping
-  // it would blank a date the player is still answering (and hand them the un-flashed date for
-  // free on the next press). Its Undo needs nothing here either — the flash never stopped.
+  // player was in belongs to a question that is no longer on screen. EVERYTHING of that question's
+  // goes with it, whether or not its flash was still running: after a Reveal or a Show Codes the
+  // flash is already frozen (`active` is false) with the date left showing and the countdown pinned
+  // where it stopped — and a teardown that ran only for a running flash left that "date shown" in
+  // force over the fresh question, which the idle screen then displayed without ever flashing it.
+  // A press on any OTHER card — the one behind this one, or one browsed to — leaves the live question
+  // exactly where it was, mid-flash, and the flash must keep running: it is that question's reveal
+  // window, and stopping it would blank a date the player is still answering (and hand them the
+  // un-flashed date for free on the next press). Its Undo needs nothing here either — the flash
+  // never stopped.
   // A press that credits the live question also pulses green on the correct button (the engine's
   // creditsLiveCard, as in every mode).
   const onOverride = () => {
@@ -331,8 +349,9 @@ function FlashMode({
     const advanced = overrideAdvances(plan, false)
     if (creditsLiveCard(plan)) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override()
-    if (advanced && active) {
+    if (advanced) {
       setActive(false)
+      setShowTimerDate(false)
       stopFlash()
     }
   }

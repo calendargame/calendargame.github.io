@@ -554,6 +554,54 @@ describe('Flash and Deduction', () => {
     },
   )
 
+  // The idle Flash screen never shows a date that was not flashed — and coming back is no way round
+  // it. Reveal froze the flash with the date showing; Override credited that card and moved play on.
+  it.each(WAYS_BACK)(
+    'Flash, %s: after Reveal then Override the screen comes back on the idle dash',
+    (_, comeBack) => {
+      press('F')
+      tap(ctrl('Begin'))
+      tap(ctrl('Reveal'))
+      tap(ctrl('Override'))
+      expect(() => readDate()).toThrow() // the idle dash
+      comeBack()
+      expect(ctrl('Begin')).toBeInTheDocument()
+      expect(() => readDate()).toThrow() // …still: no date, the same one or another
+      expect(statValue('Score')).toBe('1/1')
+    },
+  )
+
+  // …and the restore does not take a parked "the date is showing" on trust. That flag belongs to
+  // the one question it was parked beside, and it is honoured only over a question the engine keeps
+  // because it has been used (a Reveal, a Show Codes). Over a waiting question nobody has used —
+  // which is what an older build on this origin parked after Reveal then Override — it is dropped.
+  it.each([
+    ['timing shown (the waiting question is redrawn)', false],
+    ['timing hidden (the same waiting question returns)', true],
+  ])(
+    'Flash, a reload, %s: a parked "date showing" over an unused question shows no date',
+    (_, timingOff) => {
+      act(() => useModePrefs.getState().setFlashTimingOff(timingOff))
+      press('F')
+      tap(ctrl('Begin'))
+      tap(ctrl(dayName(readDate()))) // 1/1 — idle again, over a fresh question that was never flashed
+      app = reloadApp(app, () => {
+        const [key] = historyKeys().filter((k) => k.endsWith(':flash'))
+        const parked = sessionStorage.getItem(key)
+        expect(parked).toContain('"ui":{"showTimerDate":false}')
+        sessionStorage.setItem(
+          key,
+          parked.replace('"ui":{"showTimerDate":false}', '"ui":{"showTimerDate":true}'),
+        )
+      })
+      expect(ctrl('Begin')).toBeInTheDocument()
+      expect(() => readDate()).toThrow() // the idle dash, not a date nobody was shown
+      expect(revealed()).toBe(true) // …and no Reveal on offer to count a miss against it
+      expect(statValue('Score')).toBe('1/1')
+      expect(canGo('ArrowLeft')).toBe(true) // the history itself came back
+    },
+  )
+
   it('Flash: a flash still running is not restored — the screen comes back idle', () => {
     press('F')
     tap(ctrl('Begin'))

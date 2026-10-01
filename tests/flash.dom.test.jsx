@@ -576,6 +576,57 @@ describe('Flash — Override ⇄ Undo', () => {
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(dateDisplayText()).toBe('—')
   })
+
+  // ★ THE IDLE SCREEN NEVER SHOWS A DATE THAT WAS NOT FLASHED. Reveal and Show Codes both FREEZE a
+  // running flash — it stops being live, and the date is left showing. An Override pressed then
+  // credits that question and moves play on, and the teardown for it used to run only for a flash
+  // still live: the "date left showing" stayed in force, so the idle screen displayed the NEXT
+  // question's date without ever flashing it (Begin then flashed a different one), offered Reveal on
+  // it — a miss counted against a question nobody had been asked — and kept the countdown pinned
+  // where the frozen flash had stopped.
+  it.each([
+    ['Reveal', () => press('Reveal')],
+    ['Show Codes, left open', () => press('Show Codes')],
+    [
+      'Show Codes, closed again',
+      () => {
+        press('Show Codes')
+        press('Hide Codes')
+      },
+    ],
+    [
+      'Reveal after the window ran out',
+      () => {
+        wait(2500) // the date has hidden to "…"; Reveal brings it back, frozen
+        press('Reveal')
+      },
+    ],
+  ])('%s, then Override: back to the idle dash — no date that was never flashed', (_, freeze) => {
+    mountApp()
+    switchToFlash()
+    const atRest = flashCountdownText()
+    press('Begin')
+    wait(700) // part-way through the window, so a frozen countdown is not the resting one
+    const flashed = dateDisplayText()
+    freeze()
+    expect(dateDisplayText()).toBe(flashed) // frozen: the flashed date stays shown
+    expect(ctrl('Begin')).toBeInTheDocument() // …and the flash is no longer live
+    expect(statValue('Score')).toBe('0/1')
+    press('Override') // credits it and moves play on to a question nobody has seen
+    expect(statValue('Score')).toBe('1/1')
+    expect(dateDisplayText()).toBe('—') // the fresh question's date is NOT on screen
+    expect(ctrl('Show Codes')).toBeInTheDocument() // no codes panel left open over it either
+    expect(isDisabled(ctrl('Reveal'))).toBe(true) // nothing on screen to reveal
+    expect(isDisabled(ctrl('Show Codes'))).toBe(true)
+    expect(flashCountdownText()).toBe(atRest) // the countdown is back at rest, not frozen mid-flash
+    wait(3000)
+    expect(dateDisplayText()).toBe('—')
+    // Begin flashes the question it draws, and that is the first date shown since the Override.
+    press('Begin')
+    expect(dateDisplayText()).toMatch(/^-?\d+-\d+-\d+$/)
+    expect(dateDisplayText()).not.toBe(flashed)
+    expect(statValue('Score')).toBe('1/1')
+  })
 })
 
 // ── What belongs to the waiting question goes when the question goes — and only then ────────────
