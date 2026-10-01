@@ -35,7 +35,7 @@ import {
 import { openBrowsingSession, forgetBrowsingSession } from '../src/store/browsingSession.js'
 import { writeSessionMode } from '../src/store/sessionMode.js'
 import { writeSessionRound } from '../src/store/sessionRound.js'
-import { useSettings } from '../src/store/settings.js'
+import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress } from '../src/store/progress.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
@@ -692,6 +692,13 @@ describe('is a preset factory-fresh', () => {
 
   const other = (name) => createPreset(name).id
   const envelope = (state, version = 1) => JSON.stringify({ state, version })
+  // The settings store's own saved-shape version, asked of the store rather than typed here.
+  const CURRENT_SETTINGS_VERSION = useSettings.persist.getOptions().version
+  // Every setting at its factory value, spelled the way the build before this one saved them: no
+  // `dotRotation` key (that build had never heard of it).
+  const SETTINGS_DEFAULTS_BEFORE_ROTATION = Object.fromEntries(
+    Object.entries(SETTINGS_DEFAULTS).filter(([key]) => key !== 'dotRotation'),
+  )
 
   // ── Must read as FACTORY ────────────────────────────────────────────────────────────────────
 
@@ -834,10 +841,65 @@ describe('is a preset factory-fresh', () => {
     expect(isPresetFactory(guest, true)).toBe(false)
   })
 
-  // ⚠ A PAYLOAD THIS BUILD CANNOT READ IN TODAY'S SHAPE ASKS FIRST, which is how the check stays
-  // safe across versions with no version test in it at all: an older build's field survives the
-  // merge as a key the defaults do not have. The corrupt cases are the same rule — nothing that
-  // cannot be understood is allowed to mean "empty".
+  // ★ A SAVED COPY IS JUDGED IN TODAY'S SHAPE — after the store's OWN migration, the one opening
+  // the preset would run. A preset you are not on keeps the shape of the build that last saved it,
+  // so every preset made before Rotate Dots became a three-way setting still holds
+  // `rotateDots: false`. Compared unmigrated, that one leftover key made an untouched preset read
+  // as "holds something", and deleting it asked a question it never used to.
+  it('an untouched preset saved by the previous build (rotateDots: false) is still factory', () => {
+    const id = other('From 2.26')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, id),
+      envelope({ ...SETTINGS_DEFAULTS_BEFORE_ROTATION, rotateDots: false }, 3),
+    )
+    expect(isPresetFactory(id, true)).toBe(true)
+    // …and the original two-way picker's upright value, from the build before that.
+    const older = other('From 2.23')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, older),
+      envelope({ dotOrientation: 'columns' }, 1),
+    )
+    expect(isPresetFactory(older, true)).toBe(true)
+  })
+
+  it('…but the same old shape holding a TURNED layout is a setting off its default', () => {
+    const id = other('Turned')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, id),
+      envelope({ rotateDots: true }, 3),
+    )
+    expect(isPresetFactory(id, true)).toBe(false)
+  })
+
+  // ⚠ WHAT THE MIGRATION DOES NOT EXCUSE. A key no version of the store knows is still a key the
+  // defaults do not have; and a copy this build cannot vouch for — written by a NEWER build, or
+  // carrying no version at all — asks, even when every value in it reads as factory. (The store's
+  // migrate would squeeze a newer shape into one this build can draw, by dropping what it does not
+  // recognise; "I dropped it" is not "it was empty".)
+  it('a stray key, a newer build`s copy and an unversioned copy all ask', () => {
+    const stray = other('Stray')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, stray),
+      envelope({ rotateDots: false }, CURRENT_SETTINGS_VERSION),
+    )
+    expect(isPresetFactory(stray, true)).toBe(false)
+    const newer = other('Newer')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, newer),
+      envelope({}, CURRENT_SETTINGS_VERSION + 1),
+    )
+    expect(isPresetFactory(newer, true)).toBe(false)
+    const unversioned = other('Unversioned')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.settings, unversioned),
+      JSON.stringify({ state: {} }),
+    )
+    expect(isPresetFactory(unversioned, true)).toBe(false)
+  })
+
+  // ⚠ A PAYLOAD THIS BUILD CANNOT ACCOUNT FOR ASKS FIRST: an older build's field that still means
+  // something after the migration (the original picker's 'rows' is a turned layout), and the
+  // corrupt cases — nothing that cannot be understood is allowed to mean "empty".
   it('an old-shape or unreadable payload is never called factory', () => {
     const old = other('Old build')
     localStorage.setItem(

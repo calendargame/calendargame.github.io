@@ -62,14 +62,19 @@ import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 type PresetStore<T> = {
   // Optional BY NECESSITY rather than by taste: zustand's type says `persist` is always there, and
   // in a browser that refuses localStorage it is genuinely undefined (argued below).
-  persist?: { rehydrate: () => void | Promise<void> }
+  persist?: {
+    rehydrate: () => void | Promise<void>
+    // The store's own saved-shape version and its own `migrate` — read back from the store rather
+    // than imported, so judging an old payload (isPresetFactory) runs the ONE migration there is.
+    getOptions: () => { version?: number; migrate?: (state: unknown, version: number) => unknown }
+  }
   getState: () => T
   setState: (partial: Partial<T>) => void
 }
 
 // ★ ONE ENTRY PER PER-PRESET STORE, HOLDING EVERY FACT THIS FILE NEEDS ABOUT IT — where its saved
-// copy lives, how to point it at a different preset, what it holds when it has no saved copy, and
-// what it is holding right now. TWO WALKERS read this list (reloadPresetStores just below and
+// copy lives, how to point it at a different preset, what it holds when it has no saved copy, what
+// it is holding right now, and how to read a saved copy an older build wrote. TWO WALKERS read this list (reloadPresetStores just below and
 // isPresetFactory further down), and they read the SAME list on purpose: a fifth per-preset store
 // added later is reloaded AND judged by the act of being listed here, where two parallel lists would
 // let it become reloadable but un-checkable — a preset holding real data that the delete flow would
@@ -89,6 +94,23 @@ const presetStore = <T extends object>(
   },
   makeDefaults: () => makeDefaults() as Record<string, unknown>,
   readLive: () => store.getState() as Record<string, unknown>,
+  // ★ A SAVED COPY, IN TODAY'S SHAPE — what this preset would actually open holding. zustand runs a
+  // store's `migrate` on a saved copy whose version differs, and only for the preset being OPENED;
+  // every other preset's keys stay in whatever shape the build that last saved them wrote. So a
+  // saved copy from an OLDER version is passed through that same `migrate` here, the store's own.
+  // ⚠ null MEANS "THIS BUILD CANNOT VOUCH FOR IT", and isPresetFactory reads null as "ask": a copy
+  // with no version, one from a NEWER build (its `migrate` would also run on that, but only to
+  // squeeze a shape this build has never seen into one it can draw — which can drop a choice the
+  // player really made), a migration that hands back a promise, or anything that is not an object.
+  upgradeSaved: (state: unknown, version: unknown): Record<string, unknown> | null => {
+    if (!state || typeof state !== 'object' || typeof version !== 'number') return null
+    const options = store.persist?.getOptions()
+    const current = options?.version ?? 0
+    if (version > current) return null
+    const upgraded = version < current && options?.migrate ? options.migrate(state, version) : state
+    if (!upgraded || typeof upgraded !== 'object' || upgraded instanceof Promise) return null
+    return upgraded as Record<string, unknown>
+  },
 })
 
 // ★ ORDERED, AND THE ORDER IS A REQUIREMENT, NOT A LIST. store/progress' `migrate` reads
@@ -97,10 +119,13 @@ const presetStore = <T extends object>(
 // would be re-keyed under the preset you just LEFT — a best that then belongs to no configuration
 // the player can reach. `Object.values(...)` over a record would have gotten this right by luck
 // and lost it the first time someone reordered the record.
+// Named on its own because its saved copy can sit in TWO storage areas (an Amnesic preset's session
+// stats are a second payload of this same store — isPresetFactory reads both).
+const PROGRESS_STORE = presetStore(PRESET_STORE_KEYS.progress, useProgress, makeProgressDefaults)
 const PER_PRESET_STORES = [
   presetStore(PRESET_STORE_KEYS.settings, useSettings, () => ({ ...SETTINGS_DEFAULTS })),
   presetStore(PRESET_STORE_KEYS.modePrefs, useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
-  presetStore(PRESET_STORE_KEYS.progress, useProgress, makeProgressDefaults),
+  PROGRESS_STORE,
   presetStore(PRESET_STORE_KEYS.userDefaults, useUserDefaults, makeUserDefaultsDefaults),
 ]
 
@@ -234,30 +259,39 @@ const sameJson = (a: unknown, b: unknown): boolean => {
 
 // Does one SAVED payload hold nothing but that store's factory values?
 //
-// ★ IT MIRRORS mergeOverDefaults, WHICH IS WHAT MAKES IT THE RIGHT COMPARISON: hydration is
-// `{...defaults, ...persisted}`, so that composition IS what this preset would open holding, and
-// comparing it to the defaults asks exactly "would opening this preset show anything but a fresh
-// one". An absent key therefore means the factory value, for free, with no key list to maintain.
-// ⚠ AND AN **EXTRA** KEY IS A DIVERGENCE, which is the second reason the merge shape was chosen
-// over a per-key loop, and it is the line that makes this safe across VERSIONS with no version
-// check at all. A payload written by an older build carries fields this shape no longer has — a
-// pre-Q3 `dotOrientation` or a pre-round-23 `rotateDots` (store/settings' migrateDotRotation), an
-// old `lookupHistory` on a progress payload (store/progress' v4) — and each of them survives the
-// spread as a key the defaults do not have, so the counts differ and the answer is "not factory". That is a FALSE NEGATIVE by construction:
-// every payload this file cannot read in today's shape asks first. Re-deriving each store's
-// `migrate` here to judge such a payload precisely would be a second copy of the one thing that
-// must never have two versions.
+// ★ IT MIRRORS HYDRATION, WHICH IS WHAT MAKES IT THE RIGHT COMPARISON. Opening a preset runs the
+// store's `migrate` on a saved copy from an older version and then merges the result over the
+// defaults (`{...defaults, ...persisted}`, store/presets' mergeOverDefaults) — so that composition
+// IS what this preset would open holding, and comparing it to the defaults asks exactly "would
+// opening this preset show anything but a fresh one". An absent key therefore means the factory
+// value, for free, with no key list to maintain.
+// ★ THE MIGRATION IS THE STORE'S OWN (`upgradeSaved`, in the store table above), never a second
+// copy of it written here. It matters because a preset you are not on keeps the shape of the build
+// that last saved it: every preset that existed before Rotate Dots became a three-way setting still
+// holds `rotateDots: false` in its settings, and compared UNMIGRATED that one leftover key made an
+// untouched preset read as "holds something" — so deleting it asked a question it never used to.
+// ⚠ AND AN **EXTRA** KEY, AFTER THE MIGRATION, IS STILL A DIVERGENCE. A field no version of the
+// store knows (an old `lookupHistory` on a progress payload, which that store's migrate leaves in
+// place) survives the spread as a key the defaults do not have, so the counts differ and the answer
+// is "not factory" — a FALSE NEGATIVE by construction: whatever this file cannot account for asks
+// first. The same goes for a payload `upgradeSaved` will not vouch for (no version, a newer
+// build's).
 // ⚠ AN UNPARSEABLE OR MIS-SHAPED ENVELOPE IS ALSO "NOT FACTORY". A truncated or tampered payload
 // cannot be trusted to say the preset is empty, and store/amnesic's seedFromParked already treats
-// the same corruption the same way.
-const payloadIsFactory = <T extends object>(raw: string | null, defaults: T): boolean => {
+// the same corruption the same way. A `migrate` that throws lands in the same catch.
+const payloadIsFactory = (
+  raw: string | null,
+  entry: (typeof PER_PRESET_STORES)[number],
+): boolean => {
   if (raw === null) return true
   try {
     const envelope: unknown = JSON.parse(raw)
-    const state =
-      envelope && typeof envelope === 'object' ? (envelope as { state?: unknown }).state : null
-    if (!state || typeof state !== 'object') return false
-    return sameJson({ ...defaults, ...(state as Record<string, unknown>) }, defaults)
+    if (!envelope || typeof envelope !== 'object') return false
+    const { state, version } = envelope as { state?: unknown; version?: unknown }
+    const saved = entry.upgradeSaved(state, version)
+    if (saved === null) return false
+    const defaults = entry.makeDefaults()
+    return sameJson({ ...defaults, ...saved }, defaults)
   } catch {
     return false
   }
@@ -347,12 +381,11 @@ export function isPresetFactory(presetId: number, screensFresh: boolean): boolea
   const isActive = usePresets.getState().activeId === presetId
   if (isActive && !screensFresh) return false
   for (const entry of PER_PRESET_STORES) {
-    if (!payloadIsFactory(readPresetPayload(entry.key, presetId), entry.makeDefaults()))
-      return false
+    if (!payloadIsFactory(readPresetPayload(entry.key, presetId), entry)) return false
     if (isActive && !liveIsFactory(entry)) return false
   }
   // …the amnesic session copy of the stats, the second of the progress store's two areas (above).
-  if (!payloadIsFactory(readSessionStats(presetId), makeProgressDefaults())) return false
+  if (!payloadIsFactory(readSessionStats(presetId), PROGRESS_STORE)) return false
   // …and a parked ended Blitz round or MoX run (store/sessionRound), which is a RESULT still on
   // screen rather than a stored setting — per-preset data that lives in neither a store nor a
   // namespaced key.
