@@ -14,6 +14,7 @@ import {
   holdScrollRegion,
   scrollFadeClass,
   useScrollEdgeState,
+  scrollBandIntoView,
 } from './scrollRegion.js'
 
 // CustomSelect — the app's custom dropdown, replacing the native <select>.
@@ -328,8 +329,6 @@ export default function CustomSelect({
     if (open) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        // First arrow      } else if (e.key === 'ArrowDown') {
-        e.preventDefault()
         // First arrow (from the no-cursor -1 state) steps ONE option from the selected one — Down lands
         // just below the ✓, Up just above (owner's call 2026-06-06; previously the first arrow landed on
         // the selected option itself). Clamped at the ends; subsequent arrows keep moving.
@@ -472,7 +471,9 @@ export default function CustomSelect({
   // on the panel itself would dissolve at the edges. Two things keep the right option in view:
   //   • ON OPEN, THE SELECTED OPTION IS CENTRED in the region, so a list opened on its 25th entry
   //     shows the ✓ rather than the top of the list;
-  //   • AS THE KEYBOARD CURSOR MOVES, the active option is scrolled just far enough to be whole.
+  //   • AS THE KEYBOARD CURSOR MOVES, the active option is scrolled just far enough to be whole and
+  //     clear of the region's edge fades (components/scrollRegion's scrollBandIntoView — a cursor
+  //     row stopped flush against the edge sat inside the fade, half dissolved).
   // Both are plain scrollTop arithmetic on the region, NOT scrollIntoView: scrollIntoView scrolls
   // every scrollable ancestor too, and this panel is portaled into #root — the call could scroll
   // #root or the page behind a fixed menu. The options are measured by offsetTop against the region
@@ -495,9 +496,7 @@ export default function CustomSelect({
     const list = listRef.current
     const opt = list?.children[activeIdx]
     if (!list || !(opt instanceof HTMLElement)) return
-    if (opt.offsetTop < list.scrollTop) list.scrollTop = opt.offsetTop
-    else if (opt.offsetTop + opt.offsetHeight > list.scrollTop + list.clientHeight)
-      list.scrollTop = opt.offsetTop + opt.offsetHeight - list.clientHeight
+    scrollBandIntoView(list, opt.offsetTop, opt.offsetHeight)
   }, [panelShown, activeIdx])
   return (
     <div ref={ref} className="relative">

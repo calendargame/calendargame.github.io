@@ -331,12 +331,25 @@ export function holdScrollRegion(from: Element | null): (() => void) | undefined
 //     does a list that is not displayed) it draws EVERY row: correct, and only as slow as the list
 //     is long.
 //
-// `revealIndex` / `revealKey` — the row that must be in view, and its identity (Lookup's selected
-// row and its id). Whenever either changes the list scrolls the least it has to for that row to be
-// whole and clear of the edge fades: arrowing through the history walks the list with the
-// selection, and a new lookup (added at the top) brings the top into view. The first reveal after
-// the list mounts CENTRES the row instead — that is coming back to Lookup, or a reload, with a row
-// already selected somewhere far down a long list.
+// `revealIndex` / `revealKey` — the row the list is asked to show, and its identity (Lookup's
+// selected row and its id).
+//
+// ★ WHAT MOVES THE LIST, AND WHAT DOES NOT — one rule, in three parts:
+//   • A CHANGE OF WHICH ROW IS WANTED scrolls the least it has to for that row to be whole and clear
+//     of the edge fades (scrollBandIntoView): arrowing through the history walks the list with the
+//     selection, and a new lookup (added at the top) brings the top into view. The first reveal
+//     after the list mounts CENTRES the row instead — that is coming back to Lookup, or a reload,
+//     with a row already selected somewhere far down a long list.
+//   • A SCROLL IS THE PLAYER'S. Nothing brings the wanted row back once they have scrolled away
+//     from it — not until they pick another.
+//   • A CHANGE OF GEOMETRY (the list's box resized — Show Codes opening in the card above takes its
+//     room — or the rows themselves changing size with the font) KEEPS WHAT THE PLAYER WAS LOOKING
+//     AT: the row at the top of the view stays at the top, and the wanted row is brought back into
+//     view IF it was whole in view before the change. So opening Show Codes on the selected row does
+//     not push that row out of sight; and a row the player had scrolled away from stays away.
+//     (It used to answer every geometry change by revealing the wanted row — which threw a player who
+//     had scrolled down the list back to the selection — while a shrinking box, which changes no
+//     row's size, revealed nothing and let the selected row slide out under the fold.)
 const WINDOW_FIRST_BATCH = 60
 // At least this many rows are kept drawn beyond each edge of the viewport, and never less than one
 // viewport's worth: a fling scrolls on the compositor ahead of the next render, and the rows it
@@ -355,6 +368,27 @@ export interface RowWindow {
 // What was measured. `pitch` is the distance from one row's top to the next row's; 0 means there was
 // nothing to measure against (see above), and every row is drawn.
 type RowMetrics = { rowHeight: number; pitch: number }
+// The geometry and the position as last seen — what a geometry change is compared against, because
+// by the time the browser reports a resize the old numbers are gone from the element.
+type RowView = RowMetrics & { clientHeight: number; scrollTop: number }
+
+/**
+ * Scroll `el` the least it has to for the band of its content from `top` to `top + height` (content
+ * coordinates) to be whole in view AND clear of the edge fades — a row sitting at the very edge is
+ * half-dissolved by the fade there. At either end of the content the browser's own clamp wins: there
+ * is nothing further to scroll to, and no fade at that edge to clear. Plain scrollTop arithmetic,
+ * never scrollIntoView, which scrolls every scrollable ancestor as well.
+ * The one "bring this row into view" for every list in the app: Lookup's history (below), a
+ * dropdown's keyboard cursor (components/CustomSelect) and a preset row moved or annotated in
+ * Manage Presets (components/PresetManager).
+ */
+export function scrollBandIntoView(el: HTMLElement, top: number, height: number): void {
+  // No fade depth to read where no stylesheet is served.
+  const margin = readShadeRampPx() || 0
+  if (top - margin < el.scrollTop) el.scrollTop = top - margin
+  else if (top + height + margin > el.scrollTop + el.clientHeight)
+    el.scrollTop = top + height + margin - el.clientHeight
+}
 
 export function useWindowedRows<T extends HTMLElement>(
   ref: RefObject<T | null>,
@@ -368,13 +402,25 @@ export function useWindowedRows<T extends HTMLElement>(
   // The effect's own "re-read the scroll position now", for the reveal below: a programmatic
   // scroll reports itself a frame late, and the rows it lands on must be drawn in the same frame.
   const syncRef = useRef<() => void>(() => {})
+  // The wanted row, readable by the measuring effect (which re-runs only with the list's length).
+  const revealIndexRef = useRef(revealIndex)
+  useLayoutEffect(() => {
+    revealIndexRef.current = revealIndex
+  })
+  const seenRef = useRef<RowView | null>(null)
 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     let pitch = 0
+    let rowHeight = 0
+    // Note the position (and the geometry it was read under) for the next geometry change.
+    const see = () => {
+      seenRef.current = { rowHeight, pitch, clientHeight: el.clientHeight, scrollTop: el.scrollTop }
+    }
     const sync = () => {
       if (pitch <= 0) return
+      see()
       const first = Math.floor(Math.max(el.scrollTop, 0) / pitch)
       const rows = Math.ceil(el.clientHeight / pitch)
       setView((prev) => (prev.first === first && prev.rows === rows ? prev : { first, rows }))
@@ -382,10 +428,32 @@ export function useWindowedRows<T extends HTMLElement>(
     const measure = () => {
       const [a, b] = el.querySelectorAll<HTMLElement>('[data-row]')
       const top = a?.getBoundingClientRect()
-      const rowHeight = top?.height ?? 0
+      rowHeight = top?.height ?? 0
       // Two drawn rows are always neighbours, so the difference of their tops IS the pitch.
       pitch = a && b ? b.getBoundingClientRect().top - top!.top : 0
       if (!(pitch > 0)) pitch = 0
+      // ★ THE GEOMETRY CHANGED UNDER A LIST THAT WAS ALREADY ON SCREEN (the third part of the rule
+      // at the top of this section).
+      const was = seenRef.current
+      if (
+        was &&
+        was.pitch > 0 &&
+        pitch > 0 &&
+        (was.pitch !== pitch || was.rowHeight !== rowHeight || was.clientHeight !== el.clientHeight)
+      ) {
+        // The row at the top of the view stays at the top: the same number of rows scrolled past,
+        // at the rows' new size. (A box that only changed height needs nothing — scrollTop held.)
+        if (was.pitch !== pitch) el.scrollTop = (was.scrollTop / was.pitch) * pitch
+        // …and the wanted row stays in view if it was whole in view.
+        const wanted = revealIndexRef.current
+        const wasTop = wanted * was.pitch
+        if (
+          wanted >= 0 &&
+          wasTop >= was.scrollTop &&
+          wasTop + was.rowHeight <= was.scrollTop + was.clientHeight
+        )
+          scrollBandIntoView(el, wanted * pitch, rowHeight)
+      }
       const next = { rowHeight, pitch }
       setMetrics((prev) =>
         prev && prev.rowHeight === next.rowHeight && prev.pitch === next.pitch ? prev : next,
@@ -414,26 +482,21 @@ export function useWindowedRows<T extends HTMLElement>(
 
   const pitch = metrics?.pitch ?? 0
   const rowHeight = metrics?.rowHeight ?? 0
-  const mounted = useRef(false)
+  // Which row was last revealed (null: none yet, i.e. the list has just mounted). The reveal below
+  // answers a CHANGE of the wanted row; this is how it tells that from the geometry it also has to
+  // read (and so re-runs for).
+  const revealedRef = useRef<{ index: number; key: unknown } | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
     if (!el || pitch <= 0) return
-    const first = !mounted.current
-    mounted.current = true
+    const last = revealedRef.current
+    if (last && last.index === revealIndex && last.key === revealKey) return
+    revealedRef.current = { index: revealIndex, key: revealKey }
     if (revealIndex < 0) return
     const top = revealIndex * pitch
-    if (first) el.scrollTop = top - (el.clientHeight - rowHeight) / 2
-    else {
-      // Clear of the edge fades, not merely inside the box: a row at the very edge is half-dissolved
-      // by the fade there. (No fade depth to read where no stylesheet is served.)
-      const margin = readShadeRampPx() || 0
-      if (top - margin < el.scrollTop) el.scrollTop = top - margin
-      else if (top + rowHeight + margin > el.scrollTop + el.clientHeight)
-        el.scrollTop = top + rowHeight + margin - el.clientHeight
-    }
+    if (last === null) el.scrollTop = top - (el.clientHeight - rowHeight) / 2
+    else scrollBandIntoView(el, top, rowHeight)
     syncRef.current()
-    // The reveal answers a change of WHICH row is wanted (or the geometry becoming known) — not
-    // every scroll, which is the user's.
   }, [ref, revealIndex, revealKey, pitch, rowHeight])
 
   if (metrics === null)

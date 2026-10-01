@@ -19,6 +19,7 @@ import * as React from 'react'
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import LookupCard from '../src/components/LookupCard.jsx'
 import { addLookupEntry } from '../src/store/lookupHistory.js'
+import { installResizeObserver } from './helpers/scrollGeometry.js'
 
 const ROW = 32 //    a row's height, px
 const PITCH = 40 //  from one row's top to the next row's (the row + its 8px gap)
@@ -79,21 +80,33 @@ const selectedRow = () =>
   drawn().find((li) => li.querySelector('button').className.includes('bg-(--hist-sel)'))
 
 let layout = true
+// The geometry the mocks report — the three constants above, until a test changes one to model the
+// list being resized or its rows changing size (and then delivers the resize: `resized`).
+let geo = { row: ROW, pitch: PITCH, view: VIEW }
+let observer
+const resized = (change) =>
+  act(() => {
+    geo = { ...geo, ...change }
+    observer.resize(list())
+  })
 beforeEach(() => {
   layout = true
+  geo = { row: ROW, pitch: PITCH, view: VIEW }
+  observer = installResizeObserver()
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
     const row = layout && this.dataset?.row !== undefined ? Number(this.dataset.row) : null
-    const top = row === null ? 0 : row * PITCH
-    const height = row === null ? 0 : ROW
+    const top = row === null ? 0 : row * geo.pitch
+    const height = row === null ? 0 : geo.row
     return { top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top }
   })
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
-    return layout && this.tagName === 'UL' ? VIEW : 0
+    return layout && this.tagName === 'UL' ? geo.view : 0
   })
 })
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  observer.restore()
 })
 
 describe('a history of 5,000 draws a window of rows, not 5,000', () => {
@@ -200,6 +213,68 @@ describe('the selected row, when it is not where the list happens to be scrolled
     )
     expect(list().scrollTop).toBe(80000)
     expect(selectedRow()?.dataset.row).toBe('2004')
+  })
+})
+
+// ── The list's geometry changing under the player ────────────────────────────────────────────────
+// Show Codes opening in the card above takes the list's room; a rotation changes the font, and so
+// the rows. ONE rule for both (components/scrollRegion's useWindowedRows): what the player was
+// looking at stays — the row at the top of the view stays at the top, and the selected row is
+// brought back into view only if it was whole in view before. It used to answer a change of row
+// size by jumping to the selected row wherever the player had scrolled, and a change of box size by
+// doing nothing, which let the selected row slide out under the fold.
+describe('the geometry changes under the list', () => {
+  const pickRow = (n) =>
+    act(() =>
+      fireEvent.click(
+        drawn()
+          .find((li) => li.dataset.row === String(n))
+          .querySelector('button'),
+      ),
+    )
+  // Is row `n` whole inside the list's box right now?
+  const wholeInView = (n) =>
+    n * geo.pitch >= list().scrollTop && n * geo.pitch + geo.row <= list().scrollTop + geo.view
+
+  it('the list shrinking (Show Codes opening) keeps a selected row that was in view, in view', () => {
+    render(<Host />)
+    pickRow(8) // near the foot of a ten-row view
+    expect(list().scrollTop).toBe(0)
+    resized({ view: 160 }) // four rows of room left
+    expect(wholeInView(8)).toBe(true)
+    expect(list().scrollTop).toBe(8 * PITCH + ROW - 160) // scrolled only as far as it had to
+    resized({ view: VIEW }) // the codes close again: nothing needs to move
+    expect(list().scrollTop).toBe(8 * PITCH + ROW - 160)
+  })
+
+  it('the list shrinking does not bring back a selected row the player had scrolled away from', () => {
+    render(<Host />)
+    pickRow(2)
+    scrollTo(2000) // fifty rows down: row 2 is long gone
+    resized({ view: 160 })
+    expect(list().scrollTop).toBe(2000)
+  })
+
+  it('the rows changing size keeps the row at the top of the view at the top', () => {
+    render(<Host />)
+    pickRow(2)
+    scrollTo(50 * PITCH) // row 50 at the top of the view; the selected row 2 scrolled away
+    resized({ pitch: 50, row: 40 }) // a bigger font
+    expect(list().scrollTop).toBe(50 * 50) // row 50 is still the first row — not a jump back to row 2
+  })
+
+  it('the rows changing size keeps a selected row that was in view, in view', () => {
+    render(<Host />)
+    pickRow(9) // the last row whole in a ten-row view
+    resized({ pitch: 50, row: 40 }) // eight rows fit now: row 9 would be below the fold
+    expect(wholeInView(9)).toBe(true)
+  })
+
+  it('a resize that changes nothing moves nothing', () => {
+    render(<Host initialSelected="h3000" />)
+    scrollTo(0)
+    resized({})
+    expect(list().scrollTop).toBe(0)
   })
 })
 

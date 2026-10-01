@@ -514,6 +514,43 @@ describe('CustomSelect — long lists, and a trigger inside a scroll region', ()
     }
   })
 
+  // The region's edges are FADED (the app's shared recipe), so a cursor row stopped flush against an
+  // edge sits inside the fade, half dissolved. The cursor is kept clear of it by the fade's own
+  // depth — the same margin Lookup's history uses (components/scrollRegion's scrollBandIntoView).
+  // jsdom serves no stylesheet, so the depth is given here the way index.css gives it: --fade-h.
+  it('the keyboard cursor stops clear of the edge fades, not flush against the edge', () => {
+    const offsetTop = vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get')
+    const offsetHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+    offsetTop.mockImplementation(function () {
+      const i = [...(this.parentElement?.children ?? [])].indexOf(this)
+      return this.getAttribute('role') === 'option' ? i * 40 : 0
+    })
+    offsetHeight.mockImplementation(function () {
+      return this.getAttribute('role') === 'option' ? 40 : 0
+    })
+    clientHeight.mockImplementation(function () {
+      return this.hasAttribute('data-drag-scroll') ? 200 : 0
+    })
+    document.documentElement.style.setProperty('--fade-h', '24px')
+    try {
+      const { trigger } = mountIn()
+      fireEvent.click(trigger) // option 25 centred: scrollTop 920, the view is 920 … 1120
+      fireEvent.keyDown(trigger, { key: 'ArrowDown' }) // 26: 1040 … 1080, well inside
+      expect(listRegion().scrollTop).toBe(920)
+      fireEvent.keyDown(trigger, { key: 'ArrowDown' }) // 27: 1080 … 1120 — flush with the bottom edge
+      expect(listRegion().scrollTop).toBe(1120 + 24 - 200) // lifted clear of the bottom fade
+      for (let i = 0; i < 4; i++) fireEvent.keyDown(trigger, { key: 'ArrowUp' }) // back up to 23
+      // 23: 920 … 960. The view is 944 … 1144, so it is cut by the top edge → 24px of clearance.
+      expect(listRegion().scrollTop).toBe(920 - 24)
+    } finally {
+      document.documentElement.style.removeProperty('--fade-h')
+      offsetTop.mockRestore()
+      offsetHeight.mockRestore()
+      clientHeight.mockRestore()
+    }
+  })
+
   // ★ THE CALLER CONTRACT'S SECOND ROUTE: a trigger inside a scroll region holds that region still
   // for exactly as long as the menu is open, and hands back its own inline values afterwards.
   it('holds the scroll region around the trigger still while open, and lets it go on close', () => {
