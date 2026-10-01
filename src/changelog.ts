@@ -85,6 +85,36 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-01',
+    items: [
+      'Rotate Dots, in ⚙ Settings → Display, now has three choices: Standard, 45° CCW and 90° CCW. At 45° the dots are a little smaller so the turned pattern fits; Standard and 90° are exactly as they were. Your choice carries over to your saved defaults and to every preset.',
+      'Every solve time is now kept, so Mean and Median cover all of your times instead of only the newest 1,000. Times an earlier version had already dropped can’t be brought back.',
+      'Lookup history is now unlimited instead of stopping at the newest 100, and the list stays smooth however long it grows.',
+      'Only really closing the app starts things fresh now. A reload keeps your Back and Forward history in Classic, Flash and Deduction, your place in How to Play, and whatever is on screen in Lookup. A Blitz round or MoX run still in progress is the exception: a reload ends it.',
+      'Switching presets no longer clears anything either. Each preset keeps its own Back and Forward history for when you return, and How to Play and Lookup stay exactly as you left them. The same goes for turning Amnesic on or off.',
+      'When you come back to a date you hadn’t answered — after a reload, a preset switch or a guest — you get a new date if a time could still be recorded for it, so a time can never be set on a date you’d already seen. With timing stats hidden or Save Stats off, the same date is waiting for you.',
+      'A guest playing in Amnesic can no longer change your bests. Your finished Blitz round or MoX run is put aside while they play and comes back when Amnesic goes off — unless a setting it was played under was changed, in which case it isn’t brought back and its bests stay as they were.',
+      'Whether a Blitz round or MoX run counts is now decided once, by Save Stats at the moment it first ends. A practice round can never be recorded afterwards, and a recorded one stays recorded.',
+      'In Blitz, the ★ next to a best now means what it means in MoX: the round on screen set it. It stays while that round is on screen, including after a preset switch or a reload, and goes if an Override takes the best away.',
+      'In MoX with One-by-One on, the next date now always waits for Continue, and the clock starts when you press it.',
+      '⚙ Settings → Open in is now a dropdown, the same as the preset picker at the top, so it stays one row however many presets you have. It also now applies only when the app is freshly opened — a reload keeps you on the preset you were on.',
+      'In ⚙ Settings → Manage Presets, each row is now ✕ on the left, then the name, with a plain ≡ grip on the right. A row you drag can no longer slide off the list or show a white band, and holding it near the top or bottom scrolls a long list for you.',
+      'In How to Play, the title of the section you’re reading now stays pinned under the top bar as you scroll through it.',
+      'Lookup lost its two dividing lines, and Show Codes now sits directly under the answer.',
+      'Popups now stack properly. Esc, Back or a tap outside closes only the one on top — including a dropdown list inside ⚙ Settings, which used to take the whole menu with it — and the page behind is dimmed once however many are open.',
+      'If your device runs out of storage, the app now tells you with a “Your progress isn’t being saved” popup and carries on. Your newest answers are kept until you close or reload the app, are saved by themselves as soon as there is room, and Check for updates waits until then.',
+      'Another attempt at dimming the iPhone status bar along with the rest of the screen when a popup opens in the app installed on your home screen.',
+      'How to Play has been checked line by line against the app again, and the Amnesic, Saved Progress, Lookup and keyboard sections were corrected.',
+      'Fixed: Last could show a time a hundredth of a second faster than the one you actually got.',
+      'Fixed: in Deduction, turning timing stats back on gave a new puzzle only in the sub-mode on screen. All three now get one.',
+      'Fixed: changing a date setting during a live flash in Flash swapped the date underneath it.',
+      'Fixed: a best of 0, or an empty MoX best, could be left behind after an Override took a first score back, keeping Full Reset lit.',
+      'Fixed: the run breakdown in Blitz and MoX could reopen by itself when you left the mode and came back.',
+      'Fixed: in Lookup, a date the app refused left the previous date’s codes open under the error, and the arrow keys could change Lookup behind an open popup.',
+      'Fixed: pressing a popup’s button with a mouse, sliding off to cancel and letting go on the dimmed area closed the popup.',
+    ],
+  },
+  {
     date: '2026-09-23',
     items: [
       'Override is now a switch you can flip as often as you like, in every mode. After you override a date the button reads Undo — press it and that date goes back to exactly how you answered it, red highlights and all, with your score, streak and times following. Every date you’ve played remembers this for as long as it’s in your history, so you can browse back to one and flip it again.',
@@ -209,19 +239,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       'The mode menu no longer closes itself when the page scrolls — including a scroll that was already gliding when you opened it. Choosing a mode, tapping the page, pressing Esc or going Back all still close it.',
       'After an update, the brief "Updating" screen now always plays out fully, and the launch straight afterwards goes in without the usual opening pause.',
       'Fixed: a press on the settings gear or the mode menu button that the browser interrupts no longer opens the menu and shuts it again straight away.',
-    ],
-  },
-  {
-    date: '2026-08-02',
-    items: [
-      'Dates on or before October 4, 1582 can be read in two calendars, and Lookup now shows both — "Julian: Saturday" above "Gregorian: Wednesday" — instead of one chosen for you. The answer sits on three fixed lines: the date, then its reading or readings.',
-      'February 29 of a year like 1500 is a real Julian date and no Gregorian date at all. Lookup now accepts it and answers "Gregorian: Does Not Exist", and Show Codes works through the calendar the date actually has.',
-      'History rows say the same thing in short, so each stays on one line: "J: Sat · G: Wed" for an early date, and just the weekday on its own for every other one. Tap a row to see it spelled out in full above.',
-      'The Julian Calendar setting no longer changes any Lookup answer. It only picks which calendar Show Codes teaches.',
-      'Check for updates now really checks. The link reads "Checking…" while it looks, then answers "Up to date" or "No connection" in the same spot, and installs something only when there genuinely is a new version — so a press with nothing to get no longer throws away the copy that lets the app work offline.',
-      'Opening the mode menu just after flicking the page no longer closes it again straight away: a scroll that was already gliding is left to finish, while a scroll you start with the menu open still closes it.',
-      'Going back to the app from another page no longer sends How to Play to the top. A fresh launch, a reload and a Full Reset still start there.',
-      'Fixed: the fades and shadows at the edges of a scrolling area now keep up when content grows or shrinks under them — opening Show Codes in Lookup, or a How to Play section — instead of holding the old answer until you next scroll.',
     ],
   },
 ]
