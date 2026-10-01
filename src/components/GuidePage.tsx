@@ -748,10 +748,12 @@ export default function GuidePage({
             press: nothing moves, and nothing changes size.
           </li>
           <li>
-            The space <i>around</i> the answer grid stays dead on purpose, and so do the two unused
-            spots in the seven-dot layout (top-middle and bottom-middle). That is where a press goes
-            to be cancelled: slide onto any of them — or onto an option you have already tried — and
-            lifting your finger does nothing.
+            The space <i>around</i> the answer grid stays dead on purpose, and so do the two spots
+            in the seven-dot layout that have no dot. Where those are turns with the layout:
+            top-middle and bottom-middle in the standard one, upper-left and lower-right at 45°, and
+            middle-left and middle-right at 90°. That is where a press goes to be cancelled: slide
+            onto any of them — or onto an option you have already tried — and lifting your finger
+            does nothing.
           </li>
           <li>
             On the weekday answer grid you can slide between options: press one, drag to the option
@@ -994,12 +996,13 @@ export default function GuidePage({
             switching presets sets it aside and it is there when you switch back; and turning
             Amnesic on sets yours aside for the guest and gives it back when Amnesic goes off (the
             guest&apos;s own is discarded with the rest of their session). After a very long sitting
-            — a thousand dates or more in one mode — only the most recent of them may come back
-            (about three thousand in Classic and Flash, one to two thousand in Deduction); your
-            scores and the date numbers are unaffected. A Blitz round or MoX run that has{' '}
-            <i>ended</i> comes back the same ways, with every date&apos;s Override state — unless a
-            setting it was played under was changed in the meantime, in which case it is not brought
-            back (the bests it set are kept).
+            — getting on for a thousand dates or more in one mode — only the most recent of them may
+            come back: about three thousand in Classic and Flash, about two thousand in
+            Deduction&apos;s Day and Year puzzles, and a little under a thousand in its Month
+            puzzle. Your scores and the date numbers are unaffected. A Blitz round or MoX run that
+            has <i>ended</i> comes back the same ways, with every date&apos;s Override state —
+            unless a setting it was played under was changed in the meantime, in which case it is
+            not brought back (the bests it set are kept).
           </li>
         </UL>
         <p>Override in the run modes:</p>
@@ -2503,10 +2506,13 @@ export default function GuidePage({
         </UL>
         <p>
           If this device ever runs out of room for the app&apos;s saved data, a popup tells you so.
-          You can keep playing — nothing already saved is lost, but new answers and changes are only
-          kept until you close the app. Deleting a preset you no longer use, or using Reset Stats in
-          a mode whose history you don&apos;t need, makes room, and everything on screen is then
-          saved again by itself.
+          You can keep playing — nothing already saved is lost, and your newest answers and changes
+          are held exactly where they belong, so switching presets and back, or turning Amnesic on
+          and off, still shows them. But they are only held until you close or reload the app.
+          Deleting a preset you no longer use, or using Reset Stats in a mode whose history you
+          don&apos;t need, makes room, and everything that couldn&apos;t be saved is then saved by
+          itself. While anything is waiting like that, <b>Check for updates</b> won&apos;t reload
+          the app, because a reload would lose it.
         </p>
         <p>
           <b>Lookup history</b> — the dates you&apos;ve looked up — is saved on this device too, the
@@ -2695,7 +2701,7 @@ export default function GuidePage({
         </p>
         <UL>
           <li>Random Format off, Written MDY</li>
-          <li>Input on Buttons</li>
+          <li>Input on Buttons, Rotate Dots on Standard</li>
           <li>Default Mode back to Classic</li>
           <li>Julian on, Julian Chance Random</li>
           <li>Year range 1–10000</li>

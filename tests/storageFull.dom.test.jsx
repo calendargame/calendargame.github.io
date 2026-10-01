@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// STORAGE FULL IS NEVER SILENT (round 23 Q3).
+// STORAGE FULL IS NEVER SILENT.
 //
 // Every solve time is kept now, so the saved data grows with play, and a device's storage for this
 // site is finite (~5 MB in Chromium and Safari). When the browser refuses a save it throws a
@@ -74,6 +74,12 @@ describe('storage full — play goes on, and the player is told', () => {
     expect(notice()).not.toBeNull()
     expect(notice().textContent).toMatch(/Manage Presets/)
     expect(notice().textContent).toMatch(/Reset Stats/)
+    // The copy promises only what store/storageHealth does. What could not be saved is held in
+    // memory, so it is lost when the page goes away — a RELOAD as much as a close — and the way to
+    // Manage Presets is through the ⚙ menu's Global section.
+    expect(notice().textContent).toMatch(/only kept until you close or reload the app/)
+    expect(notice().textContent).toMatch(/⚙ → Global → Manage Presets/)
+    expect(notice().textContent).toMatch(/everything that couldn.t be saved is saved by itself/)
     // Dismissed the way every info popup here is: a tap on the scrim.
     act(() => {
       fireEvent.click(notice().closest('[data-settings-modal]'))
