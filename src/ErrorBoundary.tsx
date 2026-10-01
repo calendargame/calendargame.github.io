@@ -82,7 +82,8 @@ interface ModeErrorBoundaryProps {
   active?: boolean
   mode?: string
   // Called once when this mode's screen crashes — for anything the screen kept that would come back
-  // at its next mount and crash it again (a casual mode's parked history; src/main.tsx).
+  // at its next mount and crash it again (a casual mode's parked history, a timed mode's parked
+  // round, Lookup's screen, the guide's place; src/main.tsx).
   onCrash?: () => void
 }
 

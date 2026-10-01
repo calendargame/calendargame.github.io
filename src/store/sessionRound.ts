@@ -44,6 +44,9 @@
 //     its remount (src/main.tsx — the remounted screens would otherwise read the parked blob back),
 //     and discardSessionRounds does the same when a preset is deleted (store/presetControl's
 //     clearPresetStorage).
+//   • A screen that CRASHES drops the round parked for the copy it is on (src/main.tsx, through its
+//     error boundary) — the crashed screen's own mirror effect is gone, and a round that broke its
+//     screen once must not be restored into it again by the error card's Reload.
 //   • A PARKED ROUND CARRIES THE CONFIGURATION IT WAS PLAYED UNDER, and the mode restores it only
 //     over exactly that configuration (modes/BlitzMode's roundConfig, modes/AoxMode's RunConfig):
 //     the settings are shared by a preset's two copies, so a guest can change them under a parked

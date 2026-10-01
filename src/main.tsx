@@ -42,7 +42,7 @@ import { setPresetAmnesic, commitOpenedPreset } from './store/presetControl.js'
 import { openBrowsingSession } from './store/browsingSession.js'
 import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/settings.js'
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
-import { discardSessionRounds } from './store/sessionRound.js'
+import { discardSessionRounds, discardSessionRound } from './store/sessionRound.js'
 import { discardSessionHistories, discardSessionHistory } from './store/sessionHistory.js'
 import type { HistorySilo } from './store/sessionHistory.js'
 import { parkCasualHistories } from './modes/modeHooks.js'
@@ -251,6 +251,18 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const forgetClassicHistory=forgetCrashedHistory('classic');
     const forgetFlashHistory=forgetCrashedHistory('flash');
     const forgetDeductionHistory=forgetCrashedHistory('dedDay','dedMonth','dedYear');
+    // …AND A TIMED MODE SCREEN FORGETS ITS PARKED ROUND, for the same reason (store/sessionRound): an
+    // ended Blitz round / MoX run is restored at the screen's next mount and outlives a reload. Its
+    // engine comes back through the restore door (engine/parkedEngine), but the screen's own half of
+    // the snapshot is read as it was written — and a screen that crashes while restoring one never
+    // reaches the effect that would have retired the slot, so without this the Reload restored the
+    // same round and crashed again. The Bests the round set were saved when it ended and are untouched.
+    const forgetCrashedRound=(mode: 'blitz'|'aox')=>()=>discardSessionRound(activeDataId(usePresets.getState()),mode);
+    const forgetBlitzRound=forgetCrashedRound('blitz');
+    const forgetMoxRun=forgetCrashedRound('aox');
+    // (How to Play's parked place is dropped the same way, by its boundary below: discardGuidePlace.
+    // The guide discards its own place when it UNMOUNTS — store/sessionGuide — but a guide that
+    // crashes on its first render was never mounted, so nothing of its own ever runs.)
 
     // The boot effects' shared "has the real stylesheet applied?" check: true once the preload-swapped
     // CSS link (vite.config.js bootCssPreload) has stamped __cssReady, or when no preload link exists
@@ -2449,7 +2461,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               BOUNDARY now (not the inner component) so Full Reset remounts boundary+component
               together (clearing any caught error AND resetting the component's state). The
               always-mounted modes pass `active` so a hidden mode's crash paints nothing. */}
-          <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="MoX" active={mode==="aox"}>
+          <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="MoX" active={mode==="aox"} onCrash={forgetMoxRun}>
             <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"classic-"+classicResetKey} mode="Classic" active={mode==="classic"} onCrash={forgetClassicHistory}>
@@ -2458,7 +2470,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           <ModeErrorBoundary key={"flash-"+flashResetKey} mode="Flash" active={mode==="flash"} onCrash={forgetFlashHistory}>
             <FlashMode visible={mode==="flash"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
           </ModeErrorBoundary>
-          <ModeErrorBoundary key={"blitz-"+blitzResetKey} mode="Blitz" active={mode==="blitz"}>
+          <ModeErrorBoundary key={"blitz-"+blitzResetKey} mode="Blitz" active={mode==="blitz"} onCrash={forgetBlitzRound}>
             <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"deduction-"+deductionResetKey} mode="Deduction" active={mode==="deduction"} onCrash={forgetDeductionHistory}>
@@ -2489,7 +2501,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               so App — which owns the container — passes it down. The ref itself, not its current
               value: App's own layout effects and GuidePage's toggle read it at different moments,
               and a value read at render time would be null on the first pass. */}
-          <ModeErrorBoundary key={"guide-"+guideResetKey} mode="How to Play" active={mode==="guide"}><GuidePage visible={mode==="guide"} scrollerRef={appScrollRef} readingOffset={readGuideOffset}/></ModeErrorBoundary>
+          <ModeErrorBoundary key={"guide-"+guideResetKey} mode="How to Play" active={mode==="guide"} onCrash={discardGuidePlace}><GuidePage visible={mode==="guide"} scrollerRef={appScrollRef} readingOffset={readGuideOffset}/></ModeErrorBoundary>
         </div>
         </div>
         {/* The guide's two soft edges — ⚠ KEPT ACROSS ROUND 13, and the reason changed. They exist

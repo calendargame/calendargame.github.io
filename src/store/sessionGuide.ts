@@ -16,7 +16,9 @@
 //     readGuideOffset, the one place that knows it — live while the guide is on screen, remembered
 //     while it is not).
 //   • RETIRED WHEN THE GUIDE UNMOUNTS — which a reload never does, and a crash onto the error card
-//     does (so a place that somehow broke the guide cannot come back and break it again).
+//     does (so a place that somehow broke the guide cannot come back and break it again). A guide
+//     that crashes on its very FIRST render never mounted, so it has no unmount: its error boundary
+//     discards the place for it (src/main.tsx, ModeErrorBoundary's onCrash).
 //   • AND DISCARDED BY main.tsx's remountScreens, the preset switch's and Full Reset's shared
 //     remount, which has always thrown the guide's place away ("captured against a panel that is
 //     about to be closed"). It must be discarded THERE, before the remount renders: the new GuidePage
