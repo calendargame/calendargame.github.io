@@ -24,7 +24,9 @@ import { useSettings } from './settings.js'
 //     now owns them (and their types).
 //
 // WHAT DOES *NOT* PERSIST (intentionally — mid-run/round state is discarded):
-//   • The engine's live question, history stacks, locked/revealed flags, etc.
+//   • The engine's live question, history stacks, locked/revealed flags, etc. — never HERE. (A
+//     casual mode's are kept across a RELOAD only, in sessionStorage: store/sessionHistory, round 23
+//     Q11. A real close still discards them.)
 //   • Blitz/AoX engine stats — those are per-round/run scores, not lifetime totals;
 //     only their bests above persist.
 //   • The "new best ★" markers and the override-rollback refs — ephemeral per-session

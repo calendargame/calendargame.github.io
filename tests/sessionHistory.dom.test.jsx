@@ -320,8 +320,8 @@ describe('Flash and Deduction', () => {
   })
 })
 
-describe('Blitz — the owner kept a reload clearing a round still in progress', () => {
-  it('a round in progress is gone after the reload; the mode is idle', () => {
+describe('Blitz and MoX — the owner kept a reload clearing a round or run still in progress', () => {
+  it('a Blitz round in progress is gone after the reload; the mode is idle', () => {
     press('B')
     tap(ctrl('Begin'))
     tap(ctrl(dayName(readDate())))
@@ -329,6 +329,26 @@ describe('Blitz — the owner kept a reload clearing a round still in progress',
     app = reloadApp(app)
     expect(ctrl('Begin')).toBeInTheDocument()
     expect(statValue('Score')).toBe('0/0')
+    expect(canGo('ArrowLeft')).toBe(false)
+  })
+
+  it('a MoX run in progress is gone after the reload; the mode is idle', () => {
+    press('A')
+    tap(ctrl('Begin'))
+    tap(ctrl(dayName(readDate())))
+    expect(queryCtrl('Begin')).toBeNull()
+    app = reloadApp(app)
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(canGo('ArrowLeft')).toBe(false)
+  })
+
+  it('neither timed mode ever writes a parked history', () => {
+    press('B')
+    tap(ctrl('Begin'))
+    tap(ctrl(dayName(readDate())))
+    hide()
+    const keys = Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i))
+    expect(keys.filter((k) => k.startsWith('cg-history-v1:'))).toEqual([])
   })
 })
 

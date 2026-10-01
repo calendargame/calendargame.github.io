@@ -222,6 +222,8 @@ export interface GameState {
   // path, which already continues the hydrated streak. Both seed at initEngine (0 for a blank/timed
   // start → no behavior change), survive every transition (spread), re-zero on RESET (a fresh
   // initEngine), and RE-BASE on RESET_ROUND, which wipes the history behind the stats it keeps.
+  // (A casual history restored after a reload — engine/parkedHistory — comes back with the baselines
+  // it was parked with, and forgetOldestCards moves all four of these bases the same way.)
   bestFloor: number
   streakCarry: number
   // ── The card ledger (what the Q# badge counts) ──────────────────────────────────────────────

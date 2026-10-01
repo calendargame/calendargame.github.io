@@ -35,8 +35,9 @@
 // SLOT_BUDGET (so two long histories — say two Deduction sub-types — can both be kept):
 //   • a history longer than its slot budget is parked with its OLDEST cards forgotten (engine/
 //     parkedHistory's fittedParkedText — the scores, the badge numbers and every remaining card's
-//     Override stay exact; Back just stops sooner). At ~140 characters a card that is still ~3,500
-//     Classic cards, or roughly two hours of non-stop play;
+//     Override stay exact; Back just stops sooner). Measured: a weekday card is ~165 characters, so
+//     that is still ~3,000 Classic or Flash cards; a Deduction puzzle carries its options, so Day and
+//     Year keep ~2,000 and Month (the largest, ~520) ~950 — an hour or more of non-stop play each;
 //   • if all of them together would pass the total budget, the OTHER screens' parked histories are
 //     dropped, longest first, until this one fits — the screen being parked is the one in use;
 //   • a write the browser refuses anyway removes the slot, so an older parked copy can never come

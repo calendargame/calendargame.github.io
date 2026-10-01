@@ -828,10 +828,11 @@ export default function GuidePage({
           </li>
           <li>
             The guide holds its place while you're in the app: switch to a mode, play, and come back
-            and the same section is still open at the same point on the page. Only a fresh start —
-            closing the app and launching it again, reloading it, or a Full Reset — returns it to
-            the top with every section closed. Switching to another app and back is not a fresh
-            start: that keeps your place, here as everywhere else.
+            and the same section is still open at the same point on the page. A reload — pulling
+            down to refresh, or the app updating itself — keeps it too. Only a fresh start — closing
+            the app and launching it again, switching presets, or a Full Reset — returns it to the
+            top with every section closed. Switching to another app and back is not a fresh start:
+            that keeps your place, here as everywhere else.
           </li>
           <li>
             Text around the app can't be selected or highlighted, so presses and drags always
@@ -895,7 +896,7 @@ export default function GuidePage({
           <li>
             <b>Back (&lt;)</b> — return to the previous date. The answer is shown and the card is
             locked; no stat penalty. You can go back through everything you have played this visit
-            in Classic, Flash, and Deduction (a preset switch or a reload starts that over); in
+            in Classic, Flash, and Deduction (a reload keeps it; a preset switch starts it over); in
             Blitz and MoX, through the current round or run once it has ended.
           </li>
           <li>
@@ -992,11 +993,14 @@ export default function GuidePage({
             Stats; the Reset button in Flash, Blitz and MoX; or Begin in Blitz and MoX), a Full
             Reset, and closing the app. In Blitz and MoX, also changing a setting the round or run
             depends on (it resets when you close the ⚙ menu) and leaving the mode while a round or
-            run is still going. In Classic, Flash and Deduction the history belongs to this visit,
-            so switching presets or reloading the app starts it over (your stats are kept). A Blitz
-            round or MoX run that has <i>ended</i>
-            is the one thing that comes back after a preset switch or a reload, and it brings every
-            date&apos;s Override state with it.
+            run is still going. In Classic, Flash and Deduction the history belongs to this visit: a
+            reload keeps it, every date&apos;s Override state included, and switching presets or
+            turning Amnesic on or off starts it over (your stats are kept). After a very long
+            sitting — a thousand dates or more in one mode — a reload may bring back only the most
+            recent of them (about three thousand in Classic and Flash, one to two thousand in
+            Deduction); your scores and the date numbers are unaffected. A Blitz round or MoX run
+            that has <i>ended</i> comes back after a reload too, and is the one thing that also
+            comes back after a preset switch, with every date&apos;s Override state.
           </li>
         </UL>
         <p>Override in the run modes:</p>
@@ -2405,7 +2409,8 @@ export default function GuidePage({
         <p>
           The stats last for the browsing session, and it is the browser that decides when one ends.
           A refresh or a reload does not end it — come straight back and the session is still going,
-          with Amnesic still on and any finished round still on screen. Closing the app does.
+          with Amnesic still on, any finished round still on screen and the dates you played still
+          there to browse back through. Closing the app does.
         </p>
         <p>
           On a phone there is no way to tell that apart from the inside. An app the system shuts
@@ -2480,8 +2485,10 @@ export default function GuidePage({
         <Subhead>Kept for the visit only (cleared when you fully close the app)</Subhead>
         <p>
           A reload — pulling down to refresh, or the app updating itself — is not a close: each
-          preset&apos;s page and any ended round or run are still there afterward. A round or run
-          still in progress is not; a reload stops it, just as a preset switch does.
+          preset&apos;s page, any ended round or run, your Back / Forward history in Classic, Flash
+          and Deduction, and your place in this guide are all still there afterward. A round or run
+          still in progress is not; a reload stops it, just as a preset switch does — and a Flash
+          date that was still showing goes back to Begin, as it does when you leave the mode.
         </p>
         <UL>
           <li>
@@ -2497,6 +2504,16 @@ export default function GuidePage({
             the page above; only a fresh close of the app, or a manual Reset, clears it. A run still{' '}
             <i>in progress</i> is discarded on a preset switch. Either way, only a Best it already
             recorded persists.
+          </li>
+          <li>
+            <b>The dates you can browse back through</b> in Classic, Flash and Deduction, each with
+            how you answered it and whether it is overridden. A reload keeps them; a preset switch,
+            turning Amnesic on or off, a Reset or a Full Reset starts the history over. The stats
+            those dates earned are saved separately and are not affected.
+          </li>
+          <li>
+            <b>Your place in this guide</b> — the open section and how far down you had read. A
+            reload keeps it; a preset switch or a Full Reset closes it back to the top.
           </li>
         </UL>
         <p>

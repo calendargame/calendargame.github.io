@@ -7,11 +7,12 @@
 // a finished round stays, and a guest's Amnesic preset stays Amnesic with its session stats.
 //
 // WHY A MARKER IS NEEDED AT ALL. Almost everything session-lived in this app is already right about
-// reloads for free, because it lives in sessionStorage (store/sessionMode, store/sessionRound, the
-// Amnesic session stats, the session Lookup overflow): a reload keeps sessionStorage and a real close
-// clears it, and nothing has to notice either. The one thing that has to ACT on a cold open is the
-// Amnesic reseed (src/main.tsx — guest mode reverts to each preset's saved default on the next open),
-// and a boot effect cannot tell a reload from a cold open by itself: both mount <App/> from scratch.
+// reloads for free, because it lives in sessionStorage (store/sessionMode, store/sessionRound,
+// store/sessionHistory, store/sessionGuide, the Amnesic session stats, the session Lookup overflow):
+// a reload keeps sessionStorage and a real close clears it, and nothing has to notice either. The one
+// thing that has to ACT on a cold open is the Amnesic reseed (src/main.tsx — guest mode reverts to
+// each preset's saved default on the next open), and a boot effect cannot tell a reload from a cold
+// open by itself: both mount <App/> from scratch.
 // Round 21 ran the reseed on every mount and called a reload "a reopen"; the owner reversed that.
 // So the question is asked of sessionStorage itself: the marker below is written on the first boot of
 // a session and survives every reload of it, so its ABSENCE is exactly "the browser started a new
