@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { guardedSetItem, guardedStorage, registerPersistFlush } from './storageHealth.js'
+import { guardedStorage, readItem, writeItem, removeItem } from './storageHealth.js'
 
 // store/presets.ts — THE PRESET REGISTRY, and the storage layer every per-preset store sits on.
 //
@@ -55,7 +55,7 @@ import { guardedSetItem, guardedStorage, registerPersistFlush } from './storageH
 // version (it would sweep up anything that happened to match); deriving them from this record is
 // exact, and a fifth per-preset store added later becomes deletable by the act of being listed.
 // ⚠ The `-v1` in these strings is the ORIGINAL key version and is frozen history — the live shape
-// version is each store's own `version` option (progress is on 4). Do not "tidy" them.
+// version is each store's own `version` option. Do not "tidy" them.
 export const PRESET_STORE_KEYS = {
   settings: 'cg-settings-v1',
   modePrefs: 'cg-modeprefs-v1',
@@ -308,8 +308,8 @@ export const usePresets = create<PresetRegistryState>()(
       // ⚠ The default storage, NOT the scoped adapter below. The registry says which preset you are
       // on; scoping it to a preset would make that question unanswerable.
       name: PRESET_REGISTRY_KEY,
-      // zustand's default localStorage, with its writes guarded (store/storageHealth): a refused save
-      // must never throw out of applyRegistry.
+      // zustand's default localStorage, behind store/storageHealth: a refused save must never throw
+      // out of applyRegistry, and is held for this key until it fits.
       storage: createJSONStorage(guardedStorage(() => window.localStorage)),
       version: 1,
       partialize: (state) =>
@@ -335,8 +335,6 @@ export const usePresets = create<PresetRegistryState>()(
     },
   ),
 )
-// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
-registerPersistFlush(PRESET_REGISTRY_KEY, () => usePresets.setState({}))
 
 // ── Where a per-preset store actually reads and writes ────────────────────────────────────────
 //
@@ -380,11 +378,13 @@ export const presetScopedStorage = <T>() =>
     const ls = window.localStorage
     const scoped = (name: string) => presetKey(name, usePresets.getState().activeId)
     return {
-      getItem: (name) => ls.getItem(scoped(name)),
-      // Guarded (store/storageHealth): a save the device refuses becomes the storage-full notice,
-      // never a throw out of the store's setter.
-      setItem: (name, value) => guardedSetItem(name, () => ls.setItem(scoped(name), value)),
-      removeItem: (name) => ls.removeItem(scoped(name)),
+      // Through store/storageHealth, all three: a save the device refuses becomes the storage-full
+      // notice instead of a throw out of the store's setter, and is held for THIS preset's key — so
+      // a read of that key (the switch back to this preset) returns it, and its retry can only ever
+      // land here.
+      getItem: (name) => readItem(ls, scoped(name)),
+      setItem: (name, value) => writeItem(ls, scoped(name), value),
+      removeItem: (name) => removeItem(ls, scoped(name)),
     }
   })
 

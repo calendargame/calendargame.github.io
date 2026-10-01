@@ -9,7 +9,7 @@ import {
 } from './presets.js'
 import type { Preset } from './presets.js'
 import { isAmnesic, discardSessionStats, readSessionStats, dataIdOf } from './amnesic.js'
-import { storageSpaceFreed } from './storageHealth.js'
+import { readItem, removeItem, storageSpaceFreed } from './storageHealth.js'
 import { discardSessionMode } from './sessionMode.js'
 import { discardSessionRounds, discardSessionRoundsOf, hasSessionRound } from './sessionRound.js'
 import {
@@ -133,10 +133,12 @@ const reloadPresetStores = () => {
 // rather than by scanning localStorage for a pattern, so it cannot sweep up a neighbour, and so a
 // fifth per-preset store becomes deletable by the act of being listed there.
 // Swallows a refusing localStorage: there is nothing to delete in a browser that has stored nothing.
+// Through store/storageHealth's removeItem, so a save the device REFUSED for one of these keys is
+// forgotten with the key — a deleted preset must not be written back out when room appears.
 const clearPresetStorage = (presetId: number) => {
   try {
     for (const baseKey of Object.values(PRESET_STORE_KEYS))
-      window.localStorage.removeItem(presetKey(baseKey, presetId))
+      removeItem(window.localStorage, presetKey(baseKey, presetId))
   } catch {
     /* storage refused — nothing was ever written, so nothing is left behind */
   }
@@ -168,9 +170,11 @@ const clearPresetStorage = (presetId: number) => {
 // written, or a browser that refuses localStorage, which is the same answer: nothing is there).
 // The single place this file composes a namespaced key for a READ, so presetStorageInUse and
 // isPresetFactory below cannot come to disagree about which key a preset's data is under.
+// Read through store/storageHealth: a preset whose newest save the device refused holds that save
+// as far as this page is concerned, and "is it factory-fresh?" must not answer from the older copy.
 const readPresetPayload = (baseKey: string, presetId: number): string | null => {
   try {
-    return window.localStorage.getItem(presetKey(baseKey, presetId))
+    return readItem(window.localStorage, presetKey(baseKey, presetId))
   } catch {
     return null
   }
@@ -542,6 +546,12 @@ export function movePreset(id: number, delta: number): boolean {
  * store considers the old preset active — then the four reloads. One synchronous turn, so nothing
  * can write in between: there is no window in which a store is pointed at one preset while holding
  * another's.
+ * ⚠ THAT WINDOW WAS ONCE OPENED FROM INSIDE THIS VERY TURN, by the storage-full retry: the registry
+ * write succeeding re-saved "whatever each refused store holds now" through that store's adapter —
+ * which already pointed at the INCOMING preset while the stores still held the OUTGOING one. A
+ * refused save is now held under its own destination key and retried to that key only
+ * (store/storageHealth), so nothing in this turn can write one preset's values under another's; and
+ * the reloads below read the outgoing preset's held values back when the player returns to it.
  */
 export function switchPreset(id: number): boolean {
   const reg = usePresets.getState()
@@ -583,7 +593,8 @@ export function switchPreset(id: number): boolean {
  *
  * ⚠ IT REHYDRATES ALL FOUR STORES, not just progress. Only progress can have moved, so the other
  * three re-read the values they already hold — a genuine no-op, since every one of them writes
- * synchronously on every set and none of them has an unsaved in-memory state to lose. It is
+ * synchronously on every set, and a save the device refused is read back from where
+ * store/storageHealth holds it, so none of them has an in-memory state to lose. It is
  * reloadPresetStores for the same reason switchPreset uses it: ONE reload path means a fifth
  * per-preset store added later is covered by being listed there, and there is no second, narrower
  * copy for a future change to forget to widen.

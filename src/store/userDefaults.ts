@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { registerPersistFlush } from './storageHealth.js'
 import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
+import { readItem } from './storageHealth.js'
 import { SETTINGS_DEFAULTS, migrateDotRotation } from './settings.js'
 import type { SettingsValues, LegacyDotFields } from './settings.js'
 import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
@@ -110,7 +110,7 @@ export const effectiveAmnesicDefault = (saved: SavedDefaults | null): boolean =>
 // covers it too — no special case, and no divergence from effectiveAmnesicDefault(saved) for it.
 export const storedAmnesicDefault = (presetId: number): boolean => {
   try {
-    const raw = window.localStorage.getItem(presetKey(PRESET_STORE_KEYS.userDefaults, presetId))
+    const raw = readItem(window.localStorage, presetKey(PRESET_STORE_KEYS.userDefaults, presetId))
     if (raw === null) return effectiveAmnesicDefault(null)
     const envelope: unknown = JSON.parse(raw)
     const state =
@@ -224,5 +224,3 @@ export const useUserDefaults = create<UserDefaultsState>()(
     },
   ),
 )
-// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
-registerPersistFlush(PRESET_STORE_KEYS.userDefaults, () => useUserDefaults.setState({}))

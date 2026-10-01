@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { registerPersistFlush } from './storageHealth.js'
 import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
+import { readItem } from './storageHealth.js'
 import type { FormatId } from '../lib/format.js'
 import { isDotRotation, type DotRotation } from '../lib/dotLayout.js'
 
@@ -294,8 +294,6 @@ export const useSettings = create<SettingsState>()(
     },
   ),
 )
-// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
-registerPersistFlush(PRESET_STORE_KEYS.settings, () => useSettings.setState({}))
 
 // ★ THE defaultMode OF ANY PRESET, read straight off ITS namespaced settings key rather than
 // through the live store (which is only ever the ACTIVE preset's — persist scopes it via
@@ -304,7 +302,8 @@ registerPersistFlush(PRESET_STORE_KEYS.settings, () => useSettings.setState({}))
 // writes the registry (firing main.tsx's remount subscription) BEFORE it rehydrates the four
 // per-preset stores, so at the instant the subscription reads the incoming preset's opening page
 // the live useSettings still holds the OUTGOING preset's values. This reads the incoming preset's
-// own payload off disk instead. main.tsx's cold-open effect uses it too, for one code path.
+// own payload instead (through store/storageHealth, so a save the device refused still counts).
+// main.tsx's cold-open effect uses it too, for one code path.
 //
 // Reads the persist envelope directly — the same `{ state: {...} }` shape store/presets'
 // readStoredRegistry and store/userDefaults' storedAmnesicDefault parse. Only `state.defaultMode`
@@ -315,7 +314,7 @@ registerPersistFlush(PRESET_STORE_KEYS.settings, () => useSettings.setState({}))
 // covers it too — no special case.
 export const readStoredDefaultMode = (presetId: number): DefaultMode => {
   try {
-    const raw = window.localStorage.getItem(presetKey(PRESET_STORE_KEYS.settings, presetId))
+    const raw = readItem(window.localStorage, presetKey(PRESET_STORE_KEYS.settings, presetId))
     if (raw === null) return 'classic'
     const envelope: unknown = JSON.parse(raw)
     const state =

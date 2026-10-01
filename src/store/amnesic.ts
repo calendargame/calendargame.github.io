@@ -1,6 +1,6 @@
 import { createJSONStorage } from 'zustand/middleware'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from './presets.js'
-import { guardedSetItem } from './storageHealth.js'
+import { readItem, writeItem, removeItem } from './storageHealth.js'
 import type { PresetRegistryValues } from './presets.js'
 import type { ProgressValues } from './progress.js'
 
@@ -55,9 +55,10 @@ import type { ProgressValues } from './progress.js'
 //
 // CLEARS (this list) — score, accuracy, streak and the solve times (`stats`, the five lifetime
 // silos); and the ALL-TIME BESTS (blitzBest, suddenBest, suddenAmBest, aoxBest). The browsable
-// question history is not named because it is not saved by anyone: it is engine state inside the
-// always-mounted mode screens, and the remount that accompanies every amnesic change throws it away
-// with everything else those screens hold.
+// question history is not named because it is not part of the saved progress: it is engine state
+// inside the always-mounted mode screens, kept for the browsing session only and per stats copy
+// (store/sessionHistory) — a guest's history lives and dies with the guest's session copy, and your
+// own comes back with your own stats when the guest is done.
 //
 // KEEPS (everything not named here) — which is, today, the whole of the other three per-preset
 // stores: every ⚙ setting including theme, the per-mode setup, and the saved personal defaults.
@@ -157,10 +158,13 @@ const openSessionStorage = (): Storage | null => {
  * directions — see presetControl's setPresetAmnesic, where the two directions are argued) and when
  * a preset is deleted.
  * Swallows a refusing sessionStorage: nothing was ever written there, so nothing is left behind.
+ * Through store/storageHealth's removeItem, so a session save the device REFUSED is forgotten with
+ * the copy it was for — a guest's unsaved numbers must not be written out after the guest is gone.
  */
 export function discardSessionStats(presetId: number): void {
   try {
-    openSessionStorage()?.removeItem(statsKey(presetId))
+    const ss = openSessionStorage()
+    if (ss) removeItem(ss, statsKey(presetId))
   } catch {
     /* storage refused — the session copy only ever lived in memory */
   }
@@ -183,7 +187,8 @@ export function discardSessionStats(presetId: number): void {
  */
 export function readSessionStats(presetId: number): string | null {
   try {
-    return openSessionStorage()?.getItem(statsKey(presetId)) ?? null
+    const ss = openSessionStorage()
+    return ss ? readItem(ss, statsKey(presetId)) : null
   } catch {
     /* storage refused — the session copy only ever lived in memory */
     return null
@@ -215,7 +220,7 @@ export function readSessionStats(presetId: number): string | null {
  */
 export function discardParkedStats(presetId: number): void {
   try {
-    window.localStorage.removeItem(statsKey(presetId))
+    removeItem(window.localStorage, statsKey(presetId))
   } catch {
     /* storage refused — there is no parked copy to remove */
   }
@@ -286,28 +291,29 @@ export const presetStatsStorage = <T>() =>
       return { key: presetKey(name, reg.activeId), amnesic: selectAmnesic(reg) }
     }
     return {
+      // Every access goes through store/storageHealth, in BOTH areas: sessionStorage has an
+      // allowance of its own, and a refusal there is the same promise broken — the guest's session
+      // stops being kept. A refused save is held for the exact (area, key) it was for, so the two
+      // copies stay apart even while neither can be written: the permanent copy's held value can
+      // only ever be read back as, and retried to, the permanent copy.
       getItem: (name) => {
         const { key, amnesic } = target(name)
-        const parked = ls.getItem(key)
+        const parked = readItem(ls, key)
         if (!amnesic) return parked
         // The session copy once it exists; the seed derived from the parked copy until then. Note
         // that `parked` is read either way and is never written — an amnesic preset can SEE its
         // permanent payload (that is how the kept keys get their values) and can never alter it.
-        return ss?.getItem(key) ?? seedFromParked(parked)
+        return (ss && readItem(ss, key)) ?? seedFromParked(parked)
       },
       setItem: (name, value) => {
         const { key, amnesic } = target(name)
-        // Guarded (store/storageHealth) in BOTH areas: sessionStorage has an allowance of its own,
-        // and a refusal there is the same promise broken — the guest's session stops being kept.
-        guardedSetItem(name, () => {
-          if (amnesic) ss?.setItem(key, value)
-          else ls.setItem(key, value)
-        })
+        if (!amnesic) writeItem(ls, key, value)
+        else if (ss) writeItem(ss, key, value)
       },
       removeItem: (name) => {
         const { key, amnesic } = target(name)
-        if (amnesic) ss?.removeItem(key)
-        else ls.removeItem(key)
+        if (!amnesic) removeItem(ls, key)
+        else if (ss) removeItem(ss, key)
       },
     }
   })

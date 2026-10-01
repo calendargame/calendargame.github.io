@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { registerPersistFlush } from './storageHealth.js'
 import type { Stats } from '../engine/gameReducer.js'
 import { captureError } from '../observability/sentry.js'
 import { checkStatsInvariants } from '../engine/invariants.js'
@@ -294,5 +293,3 @@ export const useProgress = create<ProgressState>()(
     },
   ),
 )
-// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
-registerPersistFlush(PRESET_STORE_KEYS.progress, () => useProgress.setState({}))

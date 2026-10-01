@@ -1,17 +1,34 @@
 // store/storageHealth — the rules of a refused save, in isolation (the player-visible half is
-// tests/storageFull.dom, on the real <App/>).
+// tests/storageFull.dom, on the real <App/>; the cross-preset half is tests/storageFullPresets.dom).
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   isQuotaError,
-  guardedSetItem,
-  registerPersistFlush,
+  writeItem,
+  readItem,
+  removeItem,
   storageSpaceFreed,
+  showStorageNotice,
   forgetStorageHealth,
   useStorageHealth,
 } from '../src/store/storageHealth.js'
 
-const quota = () => {
-  throw new DOMException('full', 'QuotaExceededError')
+// A storage area with a switch: while `full`, every setItem is refused the way a browser refuses it.
+function makeArea() {
+  const items = new Map()
+  const area = {
+    full: false,
+    error: null,
+    writes: [],
+    getItem: (k) => (items.has(k) ? items.get(k) : null),
+    setItem: (k, v) => {
+      if (area.error) throw area.error
+      if (area.full) throw new DOMException('full', 'QuotaExceededError')
+      area.writes.push(k)
+      items.set(k, v)
+    },
+    removeItem: (k) => items.delete(k),
+  }
+  return area
 }
 
 describe('storageHealth', () => {
@@ -25,41 +42,88 @@ describe('storageHealth', () => {
   })
 
   it('a refusal is caught and opens the notice; any OTHER storage error still throws', () => {
-    expect(() => guardedSetItem('a', quota)).not.toThrow()
+    const area = makeArea()
+    area.full = true
+    expect(() => writeItem(area, 'a', '1')).not.toThrow()
     expect(useStorageHealth.getState()).toMatchObject({ unsaved: true, noticeOpen: true })
-    const insecure = () => {
-      throw new DOMException('no', 'SecurityError')
-    }
-    expect(() => guardedSetItem('b', insecure)).toThrow('no')
+    area.error = new DOMException('no', 'SecurityError')
+    expect(() => writeItem(area, 'b', '1')).toThrow('no')
   })
 
   it('one notice per episode: a dismissed notice stays down while the device stays full', () => {
-    guardedSetItem('a', quota)
+    const area = makeArea()
+    area.full = true
+    writeItem(area, 'a', '1')
     useStorageHealth.getState().dismissStorageNotice()
-    guardedSetItem('a', quota)
-    guardedSetItem('b', quota)
+    writeItem(area, 'a', '2')
+    writeItem(area, 'b', '1')
     expect(useStorageHealth.getState()).toMatchObject({ unsaved: true, noticeOpen: false })
+    // …and the app can put it back up when it has to refuse something because of it.
+    showStorageNotice()
+    expect(useStorageHealth.getState().noticeOpen).toBe(true)
   })
 
-  it('a write that fits re-saves every other unsaved store, and the episode ends when all have', () => {
-    let room = false
-    const saved = []
-    registerPersistFlush('a', () => guardedSetItem('a', () => (room ? saved.push('a') : quota())))
-    guardedSetItem('a', quota)
-    room = true
-    guardedSetItem('b', () => saved.push('b'))
-    expect(saved).toEqual(['b', 'a'])
+  it('a refused value is what its place reads as — the newest one, and only for that place', () => {
+    const local = makeArea()
+    const session = makeArea()
+    writeItem(local, 'k', 'old')
+    local.full = true
+    writeItem(local, 'k', 'new')
+    writeItem(local, 'k', 'newest')
+    expect(local.getItem('k')).toBe('old') // the device still holds the older copy
+    expect(readItem(local, 'k')).toBe('newest')
+    expect(readItem(local, 'other')).toBe(null)
+    expect(readItem(session, 'k')).toBe(null) // the same key in the OTHER area is another place
+  })
+
+  it('a write that fits saves every held value to ITS OWN place, and the episode ends when all have', () => {
+    const local = makeArea()
+    const session = makeArea()
+    local.full = true
+    session.full = true
+    writeItem(local, 'a', 'A')
+    writeItem(session, 'a', 'guest')
+    local.full = false
+    session.full = false
+    writeItem(local, 'b', 'B')
+    expect(local.writes).toEqual(['b', 'a'])
+    expect(local.getItem('a')).toBe('A')
+    expect(session.getItem('a')).toBe('guest')
     expect(useStorageHealth.getState().unsaved).toBe(false)
   })
 
-  it('freed space re-saves at once; a re-save that still does not fit keeps the episode open', () => {
-    let room = false
-    registerPersistFlush('c', () => guardedSetItem('c', () => (room ? undefined : quota())))
-    guardedSetItem('c', quota)
+  it('freed space retries at once; a retry that still does not fit keeps the episode open', () => {
+    const area = makeArea()
+    area.full = true
+    writeItem(area, 'c', 'C')
     storageSpaceFreed()
     expect(useStorageHealth.getState().unsaved).toBe(true)
-    room = true
+    area.full = false
     storageSpaceFreed()
+    expect(area.getItem('c')).toBe('C')
     expect(useStorageHealth.getState().unsaved).toBe(false)
+  })
+
+  it('removing a place forgets what was held for it — it is never written back out', () => {
+    const area = makeArea()
+    area.full = true
+    writeItem(area, 'gone', 'x')
+    removeItem(area, 'gone')
+    expect(readItem(area, 'gone')).toBe(null)
+    expect(useStorageHealth.getState().unsaved).toBe(false)
+    area.full = false
+    storageSpaceFreed()
+    expect(area.getItem('gone')).toBe(null)
+  })
+
+  it('a later save that fits supersedes the held one', () => {
+    const area = makeArea()
+    area.full = true
+    writeItem(area, 'k', 'refused')
+    area.full = false
+    writeItem(area, 'k', 'fits')
+    expect(area.getItem('k')).toBe('fits')
+    expect(area.writes).toEqual(['k'])
+    expect(readItem(area, 'k')).toBe('fits')
   })
 })

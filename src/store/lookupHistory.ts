@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { guardedStorage, registerPersistFlush } from './storageHealth.js'
+import { guardedStorage } from './storageHealth.js'
 import { dimEither } from '../lib/calendar.js'
 
 // store/lookupHistory.ts — Lookup's saved history, SHARED across every preset (Q1, round 20).
@@ -173,7 +173,7 @@ export const useLookupHistory = create<LookupHistoryState>()(
     }),
     {
       name: LOOKUP_HISTORY_KEY,
-      // zustand's default localStorage, writes guarded (store/storageHealth).
+      // zustand's default localStorage, behind store/storageHealth (a refused save is held, not thrown).
       storage: createJSONStorage(guardedStorage(() => window.localStorage)),
       version: 1, // a brand-new key: there is no older shape of THIS key to migrate from — see the
       // file header for why the old store/progress field is not copied forward.
@@ -192,8 +192,6 @@ export const useLookupHistory = create<LookupHistoryState>()(
     },
   ),
 )
-// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
-registerPersistFlush(LOOKUP_HISTORY_KEY, () => useLookupHistory.setState({}))
 
 // ── The session-only overflow (Amnesic suppression) ──────────────────────────────────────────
 //
@@ -231,5 +229,3 @@ export const useLookupSession = create<LookupSessionState>()(
     },
   ),
 )
-// Registered so a save the device refused can be re-made from what this store holds (store/storageHealth).
-registerPersistFlush(LOOKUP_SESSION_KEY, () => useLookupSession.setState({}))
