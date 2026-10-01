@@ -20,6 +20,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { mountApp, openSettings, closeSettings, resetAppState } from './helpers/settingsPanel.jsx'
 import { BUILD_ID_META, UPDATE_CHECK_LABEL, CHECK_PARAM } from '../src/lib/updateCheck.js'
+import { useSettings } from '../src/store/settings.js'
+import { useStorageHealth } from '../src/store/storageHealth.js'
 
 // The applier reports a failed update() to Sentry, so what it does NOT report is testable too — see
 // the abandonment pair at the end. Mocked (rather than spied) because the real module buffers into a
@@ -334,6 +336,43 @@ describe('Check for updates (Q7 — check, then apply)', () => {
       // The boot this reload causes skips the splash's artificial hold: the user just watched ≥1s
       // of Updating.
       expect(sessionStorage.getItem('cg-skip-boot-hold')).toBe('1')
+    })
+
+    it('is HELD while a save the device refused is unsaved — the reload would lose it', async () => {
+      // Every route out of the applier reloads the page, and a refused save lives only in this
+      // page's memory (store/storageHealth). So the update waits, and the player is told why.
+      const realSetItem = Storage.prototype.setItem
+      let full = true
+      const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
+        if (full && key === 'cg-settings-v1')
+          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+        return realSetItem.call(this, key, value)
+      })
+      const postMessage = vi.fn()
+      installServiceWorker({ waiting: { postMessage }, installing: null, update: vi.fn() })
+      mountApp()
+      act(() => useSettings.getState().setMinY(1600)) // refused: the device is full
+      expect(useStorageHealth.getState().unsaved).toBe(true)
+      act(() => useStorageHealth.getState().dismissStorageNotice())
+      openSettings()
+      await press()
+      expect(postMessage).not.toHaveBeenCalled()
+      expect(updatingOverlay()).toBe(null)
+      expect(label()).toBe('Check for updates') // back at rest: nothing was applied
+      expect(useStorageHealth.getState().noticeOpen).toBe(true) // …and the reason is on screen
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(UPDATE_HANDOFF_MS + MIN_UPDATING_MS)
+      })
+      expect(reload).not.toHaveBeenCalled()
+      // Room again, and the held save goes through: the same press now applies the update.
+      full = false
+      act(() => useSettings.getState().setMaxY(2100))
+      expect(useStorageHealth.getState().unsaved).toBe(false)
+      act(() => useStorageHealth.getState().dismissStorageNotice())
+      await press()
+      expect(postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' })
+      expect(updatingOverlay()).not.toBe(null)
+      spy.mockRestore()
     })
 
     it('fetches + installs a new worker when none is waiting yet', async () => {

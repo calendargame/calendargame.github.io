@@ -21,12 +21,15 @@ import { useSettingsCloseEffect } from './useSettingsCloseEffect.js'
 //     Updating overlay (setUpdating), claims the overlay through to a navigation
 //     (updateReloadPendingRef, shared with the Q2 build-change flash), and drives the reload gate /
 //     forceReloadLatest — all App-and-module-scope machinery this hook has no business owning. From
-//     here it is simply "there is something to get; take it from here", and it is TERMINAL: every
-//     route out of it navigates, so nothing below runs afterwards and `updateCheck` is deliberately
-//     left reading 'checking' underneath the full-screen overlay.
+//     here it is simply "there is something to get; take it from here". It answers whether it TOOK
+//     the update. When it did it is TERMINAL: every route out of it navigates, so nothing below runs
+//     afterwards and `updateCheck` is deliberately left reading 'checking' underneath the full-screen
+//     overlay. When it DECLINED (a save the device refused is unsaved, and a reload would lose it —
+//     App says why on screen) the button simply goes back to rest: nothing was applied, and the same
+//     press finds the same update once the reason is gone.
 //
 // STATE MACHINE: idle → checking → (current | offline) → idle after UPDATE_RESULT_MS, or → the
-// applier when there is something to get. A press during a RESULT starts another check (the result
+// applier when there is something to get (→ idle if it declines). A press during a RESULT starts another check (the result
 // is information, not a mode you have to dismiss); a press during 'checking' cannot happen — the
 // button is disabled — and is refused anyway so a synthetic click cannot start a second in-flight
 // check.
@@ -45,7 +48,8 @@ export function useUpdateCheck(
   // App's applier. Expected to be referentially stable (a useCallback with no deps in main.tsx);
   // it is an honest dependency of onCheckUpdates below rather than a ref, so an unstable one only
   // costs the button a new onClick identity per render — never a stale applier.
-  applyUpdate: (reg: ServiceWorkerRegistration | null) => void,
+  // Returns whether it took the update (true ⇒ a navigation is coming).
+  applyUpdate: (reg: ServiceWorkerRegistration | null) => boolean,
 ): { updateCheck: UpdateCheckState; onCheckUpdates: () => void } {
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckState>('idle')
   const updateResultTimerRef = useRef<number | undefined>(undefined)
@@ -81,7 +85,7 @@ export function useUpdateCheck(
       })
       if (controller.signal.aborted) return
       if (verdict === 'update') {
-        applyUpdate(reg)
+        if (!applyUpdate(reg)) setUpdateCheck('idle')
         return
       }
       setUpdateCheck(verdict)

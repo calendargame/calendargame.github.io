@@ -44,6 +44,7 @@ import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/setti
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
 import { discardSessionRounds } from './store/sessionRound.js'
 import { discardSessionHistories } from './store/sessionHistory.js'
+import { useStorageHealth, showStorageNotice } from './store/storageHealth.js'
 import { readGuidePlace, discardGuidePlace } from './store/sessionGuide.js'
 import { useModePrefs } from './store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, storedAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
@@ -1046,7 +1047,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //   • THE APPLIER — applyUpdate, right here, because it is App's machinery end to end:
       //     setUpdating (the Updating overlay), updateReloadPendingRef (shared with the Q2
       //     build-change flash below), makeUpdateReloadGate, markSkipBootHold and forceReloadLatest.
-      //     It is TERMINAL: every route out of it navigates.
+      //     Once it TAKES an update it is terminal: every route out of it navigates. (It declines
+      //     one while a save is unsaved — see the ★ note at its definition.)
       //
       // The applier reuses the auto-update path wholesale: SKIP_WAITING to the waiting worker, one
       // reload through makeUpdateReloadGate so the MIN_UPDATING_MS visible hold is honoured and the
@@ -1067,12 +1069,24 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // does re-download). What no client-side button can cure is an edge serving wrong bytes for a
       // correct revision: the check's own fetch would be served the same stale bytes and say "up to
       // date". That is a server-side problem and belongs to the deploy, not to this button.
-      const applyUpdate=useCallback((reg: ServiceWorkerRegistration|null)=>{
+      // ★ IT IS HELD WHILE A SAVE IS UNSAVED. Every route out of this applier RELOADS the page, and
+      // a save the device refused lives only in this page's memory (store/storageHealth) — so applying
+      // an update then would throw the player's newest answers away, by the app's own hand, under a
+      // notice that told them the answers were being kept. The applier declines instead (returns
+      // false — nothing is raised, nothing navigates) and puts that notice back up, which is where
+      // the reason and the remedy are. The update is not lost: it is still there for the next press
+      // once there is room, and a waiting worker is applied by the next real open of the app anyway.
+      // ⚠ The automatic update AT OPEN (the effect below) is deliberately NOT held: it reloads behind
+      // the Updating screen within about a second of launch, before any answer can exist, so the only
+      // thing a refusal can be holding by then is a boot-time re-save of what the device already has.
+      // Holding there would leave a full device unable to update at all.
+      const applyUpdate=useCallback((reg: ServiceWorkerRegistration|null): boolean=>{
+        if(useStorageHealth.getState().unsaved){showStorageNotice();return false;}
         updateReloadPendingRef.current=true; // the overlay is owned through to a navigation now
         setUpdating(true);
         // No service worker at all (unsupported, blocked, or a registration that failed — the state
         // Q10a now reports): there is nothing to hand off to, so the hammer IS the update path.
-        if(!reg){window.setTimeout(forceReloadLatest,MIN_UPDATING_MS);return;}
+        if(!reg){window.setTimeout(forceReloadLatest,MIN_UPDATING_MS);return true;}
         // `settled` = this applier is FINISHED — it has either navigated (the gate's reload) or given
         // up (the handoff deadline below, which hands over to forceReloadLatest). Nothing it started
         // still matters after that, and one thing actively harms: reg.update() may still be in flight
@@ -1099,6 +1113,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           if(installing)installing.addEventListener('statechange',()=>{if(installing.state==='installed')handOff(reg.waiting??installing);});
         }).catch(err=>{if(!settled)captureError(err,{where:'update-apply'});});
         window.setTimeout(()=>{if(settled)return;settled=true;navigator.serviceWorker.removeEventListener('controllerchange',onControllerChange);gate.cancel();forceReloadLatest();},UPDATE_HANDOFF_MS);
+        return true;
       },[]);
       // The button's state machine + its abort-on-close (components/useUpdateCheck). The two values
       // it returns are the Check-for-updates control's whole surface: `updateCheck` IS the label and
