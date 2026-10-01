@@ -462,6 +462,9 @@ describe('the settings panel — what a close applies (group 10)', () => {
   })
 
   it('Save Stats turned ON keeps a question already answered wrong — it records no time either way', () => {
+    // Julian off, so correctDayName's Gregorian weekday is the app's own answer for every year the
+    // factory range can draw — otherwise the "wrong" button below is sometimes the right one.
+    useSettings.getState().setUseJulian(false)
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setSaveStats(false)
     useModePrefs.getState().setClassicTimingOff(false)
