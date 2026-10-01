@@ -16,8 +16,10 @@ import { usePopupLayer } from './overlayStack.js'
 // WHAT IT OWNS, so that no popup can skip a term or grow its own version of one:
 //   • THE STACK ENTRY (components/overlayStack). Escape and Android Back close the TOP popup only,
 //     through `onDismiss`; a popup under another one is left exactly as it was.
-//   • THE SCRIM TAP. A tap on the scrim itself (never one that started on the card) is `onDismiss`
-//     too — and the top scrim covers the whole screen, so the popup under it cannot be tapped.
+//   • THE SCRIM TAP. A tap on the scrim itself is `onDismiss` too — and the top scrim covers the
+//     whole screen, so the popup under it cannot be tapped. A tap is a press that both STARTS and
+//     ENDS on the scrim: a press that started on the card and was let go over the dim (a text
+//     selection dragged out of a box, a button press slid off to cancel it) closes nothing.
 //   • ONE DIM, HOWEVER MANY POPUPS ARE OPEN. Only the top popup's scrim paints it, so it always sits
 //     directly under the card in front: the page is darkened once, and a popup that has another
 //     over it is darkened with the page — it reads as waiting, not as a second live card. It is also
@@ -49,6 +51,12 @@ export default function Popup({
 }) {
   const scrimRef = useRef<HTMLDivElement | null>(null)
   const top = usePopupLayer(onDismiss, id)
+  // Did the press now in progress start on the CARD? The click that ends a press is reported on the
+  // nearest element containing both ends of it — so a press that began on the card and was released
+  // over the dim arrives as a click on the scrim, indistinguishable from a tap there by its target
+  // alone. The press's own start is what tells them apart, so it is noted as the press goes down
+  // and read (and cleared) by the click.
+  const pressBeganOnCardRef = useRef(false)
   // Hand focus back on close. Declared after the stack entry on purpose: registering takes the
   // keyboard down first, so what is remembered here is never a text box.
   useLayoutEffect(() => {
@@ -70,8 +78,13 @@ export default function Popup({
       data-settings-modal
       role="presentation"
       className={top ? `${MODAL_SCRIM_CLASS} ${MODAL_DIM_CLASS}` : MODAL_SCRIM_CLASS}
+      onPointerDown={(e) => {
+        pressBeganOnCardRef.current = e.target !== e.currentTarget
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onDismiss()
+        const beganOnCard = pressBeganOnCardRef.current
+        pressBeganOnCardRef.current = false
+        if (e.target === e.currentTarget && !beganOnCard) onDismiss()
       }}
       onKeyDown={trapModalTab}
     >

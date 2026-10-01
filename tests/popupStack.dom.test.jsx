@@ -141,6 +141,45 @@ describe('two popups at once — the storage-full notice over Manage Presets', (
   })
 })
 
+// ── A tap outside is a press that starts AND ends on the dim ─────────────────────────────────────
+// A click is reported on the nearest element holding both ends of the press, so a press that began
+// on the card and was let go over the dim — a selection dragged out of a text box, a button press
+// slid off to cancel it — arrives as a click on the scrim. It used to close the popup.
+describe('a press that starts on the card and ends on the dim closes nothing', () => {
+  const pressOn = (el) => act(() => fireEvent.pointerDown(el))
+  const releaseOn = (el) => act(() => fireEvent.click(el))
+
+  it('the popup stays; a real tap on the dim afterwards closes it', () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    const scrim = scrims()[0]
+    pressOn(modalCard('changelog')) // the press goes down on the card…
+    releaseOn(scrim) // …and comes up over the dim: the click lands on the scrim
+    expect(queryModalCard('changelog')).not.toBeNull()
+    tap(scrim) // down and up on the dim
+    expect(queryModalCard('changelog')).toBeNull()
+  })
+
+  it('a press on a control inside the card, released on the dim, is the same', () => {
+    mountApp()
+    openSettings()
+    openModal('presets')
+    pressOn(screen.getByRole('textbox', { name: 'Preset name' }))
+    releaseOn(scrims()[0])
+    expect(queryModalCard('presets')).not.toBeNull()
+  })
+
+  it('an abandoned press on the card does not disarm the next tap on the dim', () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    pressOn(modalCard('changelog')) // a press that never became a click (a scroll, a cancel)
+    tap(scrims()[0])
+    expect(queryModalCard('changelog')).toBeNull()
+  })
+})
+
 describe('focus goes into a popup and comes back out', () => {
   it('closing a popup returns the keyboard to the control that opened it', () => {
     mountApp()
