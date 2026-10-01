@@ -284,6 +284,42 @@ describe('the run breakdown — MoX', () => {
     // without the visibility gate this card would be left floating over Classic.
     switchTo('K')
     expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
+    // …and it stays closed on the way back. The flag used to be masked while the screen was away
+    // rather than put down, so coming back to MoX reopened the breakdown by itself.
+    switchTo('A')
+    expect(ctrl('Reset')).toBeInTheDocument() // the ended run is still there
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
+    tapStat('Score') // …and it opens again when asked
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).not.toBeNull()
+  })
+
+  it('Blitz: leaving with the round breakdown up and coming back does not reopen it', () => {
+    mountApp()
+    switchTo('B')
+    act(() => {
+      useModePrefs.getState().setBlitzSec(10)
+      useModePrefs.getState().setBlitzAllowMistakes(false) // one wrong answer ends the round
+    })
+    click('Begin')
+    tick(2000)
+    answerWrong()
+    tapStat('Score')
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).not.toBeNull()
+    switchTo('K')
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).toBeNull()
+    switchTo('B')
+    expect(ctrl('Reset')).toBeInTheDocument() // the ended round is still there
+    expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).toBeNull()
+  })
+
+  it('turning Save Stats off and on again does not bring a closed breakdown back', () => {
+    finishedMo2()
+    tapStat('Score')
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).not.toBeNull()
+    act(() => useSettings.getState().setSaveStats(false)) // the strip dims: no breakdown to show
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
+    act(() => useSettings.getState().setSaveStats(true))
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
   })
 
   it('Reset takes it away with the run', () => {

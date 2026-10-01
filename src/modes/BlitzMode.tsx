@@ -577,16 +577,9 @@ function BlitzMode({
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
-    // ⚠ THE BREAKDOWN BELONGS TO THE ROUND THAT ENDED, and this is the one door that puts an ENDED
-    // round back on the clock (AoX's override-resume is the same door in that mode, with the same
-    // line). `breakdownShown` ANDs the flag with availability, so the popup is already off the
-    // screen the instant the round is live again — but the FLAG would survive, and the next time
-    // this round ended the breakdown would spring open with nobody having asked for it. Belt and
-    // braces: the only route into this state with the popup up was App's keyboard handler walking
-    // the DOM for [data-key="O"] and finding Override through the scrim, which the same change
-    // closed (src/main.tsx, the modal gate on its Category 1 and 2). This line is what makes it not
-    // matter.
-    setBreakdownOpen(false)
+    // (The breakdown, if it was open, goes with the ending: its flag is put down the moment the
+    // round is no longer over — the guard beside `breakdownAvail`. The only route here with the popup
+    // up was App's keyboard handler finding Override through the scrim, which is closed too.)
     setEndKind(null) // live again: nothing ended, and nothing to charge a gap against
     endedAtRef.current = null
     armClock(remain)
@@ -700,7 +693,6 @@ function BlitzMode({
     setTimerDone(false)
     setEndKind(null) //  no round, so no end
     endedAtRef.current = null
-    setBreakdownOpen(false) //  the breakdown belongs to the round being cleared
     setShowTimerDate(false)
     stopRound()
     resetTimerBars()
@@ -974,7 +966,10 @@ function BlitzMode({
   // the panel is up) would leave this card floating over a different mode. Gating availability on
   // `visible` unmounts it with the screen it belongs to, which also pops its overlay registration.
   const breakdownAvail = timerDone && saveStats && visible
-  const breakdownShown = breakdownOpen && breakdownAvail
+  // The open flag never outlives what justified it — put down, not masked, the moment the breakdown
+  // stops being available (modes/AoxMode argues it at the twin of this line: leaving the screen with
+  // the popup up and coming back used to reopen it).
+  if (breakdownOpen && !breakdownAvail) setBreakdownOpen(false)
   const statsArr = [
     { label: 'Score', value: `${S.good}/${S.played}`, fn: null },
     { label: 'Accuracy', value: fmtAccuracyPct(S.good, S.played), fn: null },
@@ -1001,7 +996,7 @@ function BlitzMode({
         activateLabel={perQ ? 'Show run breakdown' : 'Show round breakdown'}
       />
       {/* Mounted only while up — see the component header, and the twin site in modes/AoxMode. */}
-      {breakdownShown && (
+      {breakdownOpen && (
         <RunBreakdown
           onClose={() => setBreakdownOpen(false)}
           data={buildRunBreakdown(state, useJulian)}

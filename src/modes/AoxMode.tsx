@@ -500,7 +500,15 @@ function AoxMode({
   // the panel is up) would leave this card floating over a different mode. Gating availability on
   // `visible` unmounts it with the screen it belongs to, which also pops its overlay registration.
   const breakdownAvail = isLocked && saveStats && visible
-  const breakdownShown = breakdownOpen && breakdownAvail
+  // ★ THE OPEN FLAG NEVER OUTLIVES WHAT JUSTIFIED IT. The moment the breakdown stops being
+  // available — the screen left with a mode key, the run reset, resumed by an Override, Save Stats
+  // turned off — the flag is put down, not merely masked. Masked, it survived: leave MoX with the
+  // popup up, come back, and the breakdown sprang open again with nobody having asked for it.
+  // React's "adjust state when a prop changes" — compare-and-set during render, as
+  // modeHooks' confirm popups do, so the popup is gone in the same commit and no later one can
+  // find the flag still set. It converges: once false the guard is false. This is the ONE place the
+  // flag is cleared without the player closing the popup, so no handler has to remember to.
+  if (breakdownOpen && !breakdownAvail) setBreakdownOpen(false)
 
   // Handlers.
   const begin = () => {
@@ -630,17 +638,8 @@ function AoxMode({
     // The green pulse on a press that credits the live card, held or not (the engine's creditsLiveCard).
     if (creditsLiveCard(plan)) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override({ hold }) // any Best impact reconciles in the effect above
-    if (fails) {
-      setRunPhase('failed')
-    } else if (resumes) {
-      setRunPhase('running')
-      // ⚠ THE BREAKDOWN BELONGS TO THE RUN THAT ENDED, and this is the one door that puts an ENDED run
-      // back on the clock (Blitz's resumeRound is the same door in that mode, with the same line).
-      // `breakdownShown` ANDs the flag with availability, so the popup is already gone from the screen
-      // the instant the run is live again — but the FLAG would survive, and the next time this run
-      // completed the breakdown would spring open with nobody having asked for it.
-      setBreakdownOpen(false)
-    }
+    if (fails) setRunPhase('failed')
+    else if (resumes) setRunPhase('running')
   }
   const reset = () => {
     cancelRevealAdvance()
@@ -651,7 +650,6 @@ function AoxMode({
     recordedRef.current = null // no run, so no verdict: it belonged to the run being cleared
     setRunId(null) // no run on screen — and so no ★: a best is marked only while its run is up
     setRun(null)
-    setBreakdownOpen(false) //  the breakdown belongs to the run being cleared
   }
   // Leaving the mode mid-run ABANDONS the run — the same Reset the button gives (which also cancels
   // a pending reveal auto-advance and clears the run's verdict). An ENDED run survives the detour.
@@ -885,11 +883,9 @@ function AoxMode({
           header), so the walk over the run's history costs nothing on any other render. `data` is
           rebuilt on each render while it IS up, which is what keeps it live: an Override on an
           ended run moves the mean, and the rows move with it because they ARE the mean's parts.
-          ⚠ `breakdownShown` and not `breakdownOpen`: the flag is ANDed with availability so the
-          panel cannot outlive the state that justified it. Nothing behind a full-screen scrim is
-          reachable, so in practice the run cannot change underneath it — this is the guard for the
-          paths that do not go through a tap (a remount, a future opener). */}
-      {breakdownShown && (
+          The flag is put down the moment the breakdown stops being available (the guard beside
+          `breakdownAvail`), so the panel cannot outlive the state that justified it. */}
+      {breakdownOpen && (
         <RunBreakdown
           onClose={() => setBreakdownOpen(false)}
           data={buildRunBreakdown(state, useJulian)}
