@@ -56,7 +56,7 @@ export interface UseGameEngineOptions {
   // called and getInitialStats is ignored — the parked state already carries its stats (a casual
   // history is only accepted when they ARE the saved stats getInitialStats would have read).
   // ⚠ A GameState, already brought forward: the raw blob (which an older or unknown build may have
-  // written) goes through engine/engineMigration's restoreParkedEngine in the MODE, at its parked
+  // written) goes through engine/parkedEngine's restoreParkedEngine in the MODE, at its parked
   // read, because only the mode can drop its own half of the snapshot along with an unreadable engine.
   getInitialState?: () => GameState | null
 }

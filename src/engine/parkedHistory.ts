@@ -2,10 +2,10 @@
 // engine/parkedHistory.ts — what a casual mode's PARKED HISTORY is, and what comes back from one
 // (round 23 Q11).
 //
-// store/sessionHistory keeps a Classic / Flash / Deduction engine in sessionStorage across a reload
-// and never looks inside it; this file is the other half — the text that is parked, and the state that
-// is accepted on the way back. (The same split as store/sessionRound and engine/engineMigration for
-// the timed modes' parked rounds.) modes/modeHooks' useParkedHistory joins the two.
+// store/sessionHistory keeps a Classic / Flash / Deduction engine in sessionStorage for the browsing
+// session and never looks inside it; this file is the other half — the text that is parked, and the
+// state that is accepted on the way back. (The same split as store/sessionRound and the mode screens
+// for the timed modes' parked rounds.) modes/modeHooks joins the two.
 //
 // ★ THE TIMES ARE NOT PARKED. They are already saved, in full, in the stats (every solve is kept since
 // round 23 Q3) — tens of thousands of numbers for a long-time player — and the pool is exactly the
@@ -14,21 +14,20 @@
 //
 // ★ WHAT COMES BACK — NOTHING THAT CANNOT BE CHECKED. A parked history is a claim about the stats
 // underneath it, and those stats live somewhere else (store/progress, localStorage — or the session
-// copy for an Amnesic preset). So restoreParked takes the engine through the ONE engine restore door
-// (engine/engineMigration's restoreParkedEngine: the shape check, the migration, the catch) and then
-// accepts it ONLY if it is exactly the state those stats support:
+// copy for an Amnesic preset). So restoreParked accepts a history ONLY if it is exactly the state
+// those stats support:
 //   • its counts — played, good, streak, best, timesLost — equal the saved ones, and
-//   • it satisfies every engine invariant (engine/invariants — the card ledger, the times ledger in
-//     play order, every per-card Override record) against the saved TIMES.
-// Anything else comes up fresh from the saved stats, exactly as a mount did before Q11. The counts can
-// disagree for honest reasons — the save refused the last write (store/storageHealth), live and
-// staging were both open in this tab, another tab moved a shared preset on — so that is not reported;
-// an unreadable blob or an invariant break is, because no honest path makes one.
+//   • it comes through the ONE engine restore door (engine/parkedEngine's restoreParkedEngine) with
+//     the saved TIMES in place: the shape check, and every engine invariant (engine/invariants — the
+//     card ledger, the times ledger in play order, every per-card Override record).
+// Anything else comes up fresh from the saved stats, exactly as a mount with nothing parked does. The
+// counts can disagree for honest reasons — live and staging were both open in this tab, another tab
+// moved a shared preset on — so that is checked FIRST and is not reported; an unreadable blob or an
+// invariant break is, because no honest path makes one.
 // ─────────────────────────────────────────────────────────────────────────
 import { forgetOldestCards } from './gameReducer.js'
 import type { GameState, Stats } from './gameReducer.js'
-import { restoreParkedEngine } from './engineMigration.js'
-import { checkGameInvariants } from './invariants.js'
+import { restoreParkedEngine } from './parkedEngine.js'
 import { captureError } from '../observability/sentry.js'
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
@@ -85,16 +84,13 @@ export function restoreParked(
   silo: string,
 ): RestoredHistory | null {
   const blob = isObj(parked) ? parked.engine : undefined
-  // The saved pool goes back in before the door, which checks the stats' shape like every other field.
-  const engine = restoreParkedEngine(
-    isObj(blob) && isObj(blob.stats)
-      ? { ...blob, stats: { ...blob.stats, times: stats.times } }
-      : blob,
-    useJulian,
-    silo,
-  )
-  if (!engine) return null
-  const s = engine.stats
+  if (!isObj(blob) || !isObj(blob.stats)) {
+    restoreParkedEngine(blob, useJulian, silo) // not a parked engine at all: the door says why
+    return null
+  }
+  // The counts first, straight off the blob (a bare comparison is safe on anything): saved stats that
+  // have moved on are an honest disagreement, and must not reach the door to be reported as a break.
+  const s = blob.stats
   if (
     s.played !== stats.played ||
     s.good !== stats.good ||
@@ -103,16 +99,13 @@ export function restoreParked(
     s.timesLost !== stats.timesLost
   )
     return null
-  const broken = checkGameInvariants(engine, useJulian)
-  if (broken.length) {
-    captureError(new Error('Parked history breaks an engine invariant'), {
-      where: 'restore-parked-history',
-      mode: silo,
-      violations: broken,
-    })
-    return null
-  }
-  return { engine, ui: isObj(parked) ? parked.ui : undefined }
+  // The saved pool goes back in before the door, which holds the times ledger to it.
+  const engine = restoreParkedEngine(
+    { ...blob, stats: { ...blob.stats, times: stats.times } },
+    useJulian,
+    silo,
+  )
+  return engine && { engine, ui: isObj(parked) ? parked.ui : undefined }
 }
 
 /**

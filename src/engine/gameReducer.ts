@@ -143,8 +143,7 @@ export interface CardMeta {
 // (AnsweredState.live), where the Undo puts it back. (An un-credited O only ever comes from a
 // credited A, and a credited live card can never have paid the codes penalty — SHOW_CODES is
 // read-only on one — so there is no penalty to carry there either.)
-// ONE definition, read by the reducer that writes these flags, by engine/engineMigration that
-// normalises an older build's overridden live card to them, and by engine/invariants, which holds
+// ONE definition, read by the reducer that writes these flags and by engine/invariants, which holds
 // every overridden live card to them.
 export const overriddenLiveFlags = (credits: boolean): LiveFlags =>
   credits
@@ -329,7 +328,7 @@ export const correctIndexOf = (e: Question, useJulian: boolean): number => {
 
 // Build a single-entry answer map. (A computed-key object literal would widen its value to
 // `string`, which isn't assignable to Btns, so we assign through a typed local.)
-export const oneBtn = (idx: number, s: ButtonState): Btns => {
+const oneBtn = (idx: number, s: ButtonState): Btns => {
   const b: Btns = {}
   b[idx] = s
   return b
@@ -361,7 +360,7 @@ const stripEntryMeta = ({
 
 const blankStats = (): Stats => ({ played: 0, good: 0, streak: 0, best: 0, times: [] })
 // A card nobody has answered or overridden — every fresh question starts with one.
-export const blankCard = (): CardMeta => ({ wrongTime: null, answered: null })
+const blankCard = (): CardMeta => ({ wrongTime: null, answered: null })
 // The `questionId` a RESET leaves behind — the one spelling of that bump, shared by the RESET case
 // below and by MoX's Begin, which has to name the run's FIRST question before the reset it dispatches
 // has rendered (modes/AoxMode's One-by-One `revealedQ`: Begin reveals the first date, and only a

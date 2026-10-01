@@ -51,7 +51,7 @@ import { creditsLiveCard, questionIdAfterReset } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
-import { restoreParkedEngine } from '../engine/engineMigration.js'
+import { restoreParkedEngine } from '../engine/parkedEngine.js'
 import { useBackButton } from '../components/useBackButton.js'
 
 // Round-21 Q11 — the shape AoxMode parks in store/sessionRound for an ENDED run (done | failed). It
@@ -119,7 +119,7 @@ function AoxMode({
   // contamination guard. Factored into one read so the initializers below don't each
   // hit sessionStorage. The engine inside goes through the one restore door here, before any
   // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
-  // engine/engineMigration's restoreParkedEngine), so the screen never shows an ended run over a
+  // engine/parkedEngine's restoreParkedEngine), so the screen never shows an ended run over a
   // fresh engine.
   const [parkedRun] = useState<AoxRunSnapshot | null>(() => {
     const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(dataId, 'aox')

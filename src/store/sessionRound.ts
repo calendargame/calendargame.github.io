@@ -100,7 +100,7 @@ const discardPrefixed = (prefix: string): void => {
  * A snapshot as it comes OUT of storage: the mode's own shape, except that its `engine` is whatever
  * JSON the build that parked it wrote — this build's, an older one's, or one this build has never
  * seen (live and staging share the origin) — until the mode has put it through
- * engine/engineMigration's restoreParkedEngine.
+ * engine/parkedEngine's restoreParkedEngine.
  */
 export type ParkedSnapshot<T extends { engine: unknown }> = Omit<T, 'engine'> & { engine: unknown }
 

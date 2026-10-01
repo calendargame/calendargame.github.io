@@ -8,7 +8,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useGameEngine } from '../../src/engine/useGameEngine.js'
 import { gameReducer, initEngine } from '../../src/engine/gameReducer.js'
-import { restoreParkedEngine } from '../../src/engine/engineMigration.js'
+import { restoreParkedEngine } from '../../src/engine/parkedEngine.js'
 import { wday } from '../../src/lib/calendar.js'
 
 // A deterministic genDate (fixed Gregorian date — value doesn't matter for these checks).
@@ -178,14 +178,13 @@ describe('useGameEngine — Override ⇄ Undo', () => {
     expect(JSON.stringify(result.current.state.stats.times)).toBe('[3.4567]')
   })
 
-  // THE ONE RESTORE DOOR: every parked blob comes through engine/engineMigration, so a round parked
-  // by an older build (here v2.25.0's shape: a history entry locked by `overrideUsed` + its capsule,
-  // and the dead top-level flags) mounts healthy, scored and TOGGLEABLE. The migration's own exact
-  // per-shape expectations live in engine/engineMigration.test.js; this asserts the door is wired.
-  // The door is engine/engineMigration's restoreParkedEngine, which the timed modes call at their
-  // parked read; the hook seeds from whatever it returns.
-  it('a legacy parked blob comes through the restore door and is toggleable', () => {
-    const scored = gameReducer(initEngine(genDate()), {
+  // THE ONE RESTORE DOOR: every parked blob comes through engine/parkedEngine's restoreParkedEngine,
+  // which the timed modes call at their parked read (and engine/parkedHistory for the casual ones);
+  // the hook seeds from whatever it returns. The door's own rules live in engine/parkedEngine.test.js;
+  // this asserts the hook is wired to it: a parked state mounts as the engine's first state, scored
+  // and toggleable, and a blob the door refuses mounts a fresh question instead.
+  it('a parked state comes through the restore door and is the first state — still toggleable', () => {
+    let scored = gameReducer(initEngine(genDate()), {
       type: 'ANSWER',
       idx: W,
       useJulian: false,
@@ -194,47 +193,32 @@ describe('useGameEngine — Override ⇄ Undo', () => {
       saveStats: true,
       nextDate: genDate(),
     })
-    // Hand-built v2.25.0: the wrong card was overridden to a credit and play moved on, so the entry
-    // carries hasCredit + overrideUsed + a capsule, and the fresh live card carries the dead flags.
-    // ⚠ `card` is dropped deliberately — the old shape has no such key, and its presence is exactly
-    // what tells the migration a blob is already current (so leaving it in would test nothing).
-    const { card: _drop, ...base } = scored
-    const legacy = {
-      ...base,
-      stats: { played: 1, good: 1, streak: 1, best: 1, times: [1] },
-      stack: [
-        {
-          ...genDate(),
-          btns: { [C]: 'correct' },
-          hasCredit: true,
-          solveTime: 1,
-          overrideUsed: true,
-          capsule: { snapshot: { contributedTime: null }, wrongTime: 1 },
-        },
-      ],
-      persistBtns: {},
-      locked: false,
-      revealed: false,
-      countedWrong: false,
-      saveStatsThisQ: null,
-      liveSolveTime: null,
-      wrongTime: null,
-      overrideUsedThisQ: false,
-      prevStatsSnapshot: null,
-      canOverrideCorrect: false,
-      pendingWrongOverride: null,
-      undoCapsule: null,
-    }
+    scored = gameReducer(scored, {
+      type: 'OVERRIDE',
+      useJulian: false,
+      tracking: true,
+      nextDate: genDate(),
+    }) // the wrong card credited: play moved on, and the card behind it reads Undo
+    const blob = JSON.parse(JSON.stringify(scored))
     const { result } = renderHook(() =>
-      useGameEngine({ ...opts, getInitialState: () => restoreParkedEngine(legacy, false, 'test') }),
+      useGameEngine({ ...opts, getInitialState: () => restoreParkedEngine(blob, false, 'test') }),
     )
-    const s = result.current.state
-    expect(s.card).toEqual({ wrongTime: null, answered: null }) // today's shape, not the old flags
-    expect(s.stack[0].meta.answered).not.toBe(null) // …and the card comes back OVERRIDDEN
-    expect(s.stats).toMatchObject({ played: 1, good: 1 })
-    expect(result.current.overridden).toBe(true) // the button reads Undo on it, years later
+    expect(result.current.state).toEqual(blob)
+    expect(result.current.state.stats).toMatchObject({ played: 1, good: 1 })
+    expect(result.current.overridden).toBe(true)
     act(() => result.current.override())
     expect(result.current.state.stats).toMatchObject({ played: 1, good: 0 })
     expect(result.current.overridden).toBe(false)
+  })
+
+  it('a blob the door refuses mounts a fresh question', () => {
+    const { result } = renderHook(() =>
+      useGameEngine({
+        ...opts,
+        getInitialState: () => restoreParkedEngine({ stack: 'nope' }, false, 'test'),
+      }),
+    )
+    expect(result.current.state.stats).toMatchObject({ played: 0, good: 0 })
+    expect(result.current.state.stack).toEqual([])
   })
 })

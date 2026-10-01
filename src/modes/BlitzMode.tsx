@@ -41,7 +41,7 @@ import {
 import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
-import { restoreParkedEngine } from '../engine/engineMigration.js'
+import { restoreParkedEngine } from '../engine/parkedEngine.js'
 import { useBackButton } from '../components/useBackButton.js'
 
 // The Best records that stood BEFORE the current round (snapshotted at Begin) — the reconcile
@@ -82,9 +82,7 @@ function fileBest<T extends BlitzBest | SuddenBest>(
 // that drops the round's score could leave a fabricated Best standing, or wipe a legitimate one —
 // and `currentRoundId` is also what keeps the restored round's ★ lit (it is read off the ids).
 // `remain` is the round's clock as it stopped — what an Override that rescues the restored round
-// resumes from (Per Round) and what its readout shows. OPTIONAL because a blob parked by an earlier
-// build has none; such a round restores with the configured round length, which is what every build
-// before this one showed on that readout anyway.
+// resumes from (Per Round) and what its readout shows.
 // WHY A ROUND ENDED — the one fact that decides whether it can come back, and what its clock does
 // while it waits (round 23 Q6):
 //   'clock'  — the countdown expired on a card the player had not already burned. Never resumable:
@@ -107,13 +105,12 @@ interface BlitzRoundSnapshot {
   active: boolean
   currentRoundId: number | null
   prevRoundBest: PrevRoundBest
-  remain?: number
+  remain: number
   // Why this round ended, and — for a 'toggle' end only — the WALL-CLOCK instant it ended at, so the
   // charge for the gap survives the remount a preset switch causes (every performance.now()-based
-  // stamp restarts there; Date.now() does not). Both OPTIONAL because a blob parked by an earlier
-  // build has neither: such a round is read as the end it would have been then (see `parkedEndKind`).
-  endKind?: EndKind
-  endedAt?: number | null
+  // stamp restarts there; Date.now() does not).
+  endKind: EndKind
+  endedAt: number | null
 }
 
 // ============================================================
@@ -166,7 +163,7 @@ function BlitzMode({
   // saved copy is unreachable while preset 2, or preset 1's guest session, is up). Factored into one read so the six initializers below don't
   // each call sessionStorage. The engine inside goes through the one restore door here, before any
   // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
-  // engine/engineMigration's restoreParkedEngine), so the screen never shows an "ended" round over a
+  // engine/parkedEngine's restoreParkedEngine), so the screen never shows an "ended" round over a
   // fresh engine.
   const [parkedRound] = useState<BlitzRoundSnapshot | null>(() => {
     const snap = readSessionRound<ParkedSnapshot<BlitzRoundSnapshot>>(dataId, 'blitz')
@@ -177,19 +174,8 @@ function BlitzMode({
   // from the blob for symmetry rather than assumed.
   const [active, setActive] = useState(parkedRound?.active ?? false)
   const [timerDone, setTimerDone] = useState(parkedRound?.timerDone ?? false)
-  // Why the round on screen ended (null while there is no ended round). ⚠ THE MIGRATION LINE: a round
-  // parked by a build before this one carries no `endKind`, and the honest reading of such a blob is
-  // the rule that build itself applied — `resumableEnd = timerDone && countedWrong`, i.e. a burned
-  // live card meant "a player action ended this" and anything else meant the clock. A 'toggle' end
-  // could not exist then, so no old blob can need it. (It reads the MIGRATED engine, and that is the
-  // same bit: the migration rewrites a live card's flags only when an old Override left that card
-  // overridden in place, and the one shipped older build — v2.25.0 — never held an Override on a
-  // Blitz card; its every live-card credit advanced.)
-  const [endKind, setEndKind] = useState<EndKind | null>(
-    !parkedRound?.timerDone
-      ? null
-      : (parkedRound.endKind ?? (parkedRound.engine.countedWrong ? 'answer' : 'clock')),
-  )
+  // Why the round on screen ended (null while there is no ended round).
+  const [endKind, setEndKind] = useState<EndKind | null>(parkedRound?.endKind ?? null)
   // The wall-clock instant a 'toggle' end happened — what `remainNow` charges the gap against. A ref,
   // not state: nothing renders from it directly (the drain effect below paints from remainNow), and it
   // must be readable by the press that resumes without waiting for a re-render.
@@ -795,7 +781,9 @@ function BlitzMode({
   // effect's CLEANUP, and React runs every cleanup of a commit before any effect body, so this body —
   // re-run because `clockPaused` changed in the same commit — always parks the moved stamp.
   useEffect(() => {
-    if (timerDone)
+    // (`endKind` is set by the same call that sets `timerDone` — settleEnded — so the two tests are
+    // one fact; naming both is what lets the snapshot's `endKind` be the plain type.)
+    if (timerDone && endKind)
       writeSessionRound(dataId, 'blitz', {
         engine: state,
         timerDone,
@@ -806,9 +794,9 @@ function BlitzMode({
         remain: clockRemainRef.current,
         // WHY this round ended, and — for a 'toggle' end — the wall-clock instant it did, so the
         // charge for the gap keeps running across the switch instead of resetting to free.
-        endKind: endKind ?? undefined,
+        endKind,
         endedAt: endedAtRef.current,
-      })
+      } satisfies BlitzRoundSnapshot)
     else discardSessionRound(dataId, 'blitz')
   }, [timerDone, active, showTimerDate, state, endKind, clockPaused, roundId, dataId])
 

@@ -1,7 +1,7 @@
 // parkedHistory — round 23 Q11: what a casual mode's parked history IS and what comes back from one
 // (engine/parkedHistory). Pinned here on its own: the parked text (the engine, without the saved
-// times), the restore (only through the one engine restore door, and only the exact state the saved
-// stats support), what it refuses and reports, and the budget cut — the oldest cards forgotten, every
+// times), the restore (only the exact state the saved stats support, and only through the one engine
+// restore door — engine/parkedEngine), what it refuses and reports, and the budget cut — the oldest cards forgotten, every
 // score and number exact. The storage half is tests/sessionHistory, the screens' wiring
 // tests/sessionHistory.dom, and the round trip over millions of reachable states tests/engine/fuzz
 // (reload-ref / reload-trim).
@@ -75,8 +75,9 @@ describe('restore: only the state the saved stats support', () => {
     expect(restoreParkedText(parkedText(s), other, false, 'classic')).toBe(null)
     expect(captureError).toHaveBeenCalledTimes(1)
     expect(vi.mocked(captureError).mock.calls[0][1]).toMatchObject({
-      where: 'restore-parked-history',
+      where: 'restore-parked-engine',
       mode: 'classic',
+      reason: 'breaks an engine invariant',
     })
   })
   it('a tampered ledger → null, and reported', () => {
