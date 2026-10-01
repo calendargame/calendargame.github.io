@@ -825,11 +825,12 @@ export default function GuidePage({
           </li>
           <li>
             The guide holds its place while you're in the app: switch to a mode, play, and come back
-            and the same section is still open at the same point on the page. A reload — pulling
-            down to refresh, or the app updating itself — keeps it too. Only a fresh start — closing
-            the app and launching it again, switching presets, or a Full Reset — returns it to the
-            top with every section closed. Switching to another app and back is not a fresh start:
-            that keeps your place, here as everywhere else.
+            and the same section is still open at the same point on the page. Switching presets,
+            turning Amnesic on or off, and deleting a preset keep it too — the guide isn't any one
+            preset's — and so does a reload (reloading the page, or the app updating itself). Only a
+            fresh start — closing the app and launching it again, or a Full Reset — returns it to
+            the top with every section closed. Switching to another app and back is not a fresh
+            start: that keeps your place, here as everywhere else.
           </li>
           <li>
             Text around the app can't be selected or highlighted, so presses and drags always
@@ -2581,13 +2582,17 @@ export default function GuidePage({
           </li>
           <li>
             <b>What is on the Lookup page</b> — the date in the box, the answer or message under it,
-            the history row you had selected, and whether Show Codes is open. A reload keeps them; a
-            preset switch or a Full Reset clears them, as Clear does. (The history list itself is
-            saved — see above.)
+            the history row you had selected, and whether Show Codes is open. A reload keeps them,
+            and so does a preset switch, an Amnesic toggle, or deleting a preset: like the history
+            list under it, the Lookup page is not any one preset&apos;s. If the preset you switch to
+            uses a different Date Format, the page follows it exactly as it does when you change the
+            setting yourself (see <b>Lookup</b>). A Full Reset clears the page, as Clear does. (The
+            history list itself is saved — see above.)
           </li>
           <li>
             <b>Your place in this guide</b> — the open section and how far down you had read. A
-            reload keeps it; a preset switch or a Full Reset closes it back to the top.
+            reload keeps it, and so does a preset switch, an Amnesic toggle, or deleting a preset; a
+            Full Reset closes it back to the top.
           </li>
         </UL>
         <p>
@@ -3263,7 +3268,9 @@ export default function GuidePage({
           <li>
             A reload keeps the page as you had it — the date in the box, its answer, the selected
             row (scrolled back into view, wherever in the list it is) and Show Codes open or closed.
-            Closing the app starts it empty again; the history list stays either way.
+            So does switching presets, turning Amnesic on or off, or deleting a preset: the page,
+            like its history list, is the same one in every preset. Closing the app or a Full Reset
+            starts it empty again; closing the app leaves the history list as it was.
           </li>
           <li>
             Nothing in Lookup is frozen at the moment you look it up: the answer and every history

@@ -2,8 +2,8 @@
 // only.
 //
 // THE PROBLEM. A preset switch bumps every mode screen's remount key (src/main.tsx's
-// remountScreens, fired from the registry subscription), unmounting and remounting the six
-// always-mounted screens so their engine + component state re-hydrates from the INCOMING preset's
+// remountScreens, fired from the registry subscription), unmounting and remounting the five
+// always-mounted mode screens so their engine + component state re-hydrates from the INCOMING preset's
 // stores — the mechanism that stops one preset's stats leaking into another (store/presetControl's
 // switchPreset argues the "500-cards-becomes-4" bug in full). That remount is load-bearing and is
 // NOT touched here. Its side effect, before this file, was that an ENDED Blitz round / MoX run — which

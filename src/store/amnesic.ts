@@ -105,7 +105,7 @@ export const selectAmnesic = (reg: PresetRegistryValues): boolean => isAmnesic(r
 
 /**
  * ★★ THE IDENTITY OF THE DATA THE APP IS READING — which preset, and which of that preset's two
- * storage areas its stats live in. src/main.tsx remounts the six always-mounted screens whenever
+ * storage areas its stats live in. src/main.tsx remounts the five always-mounted mode screens whenever
  * THIS changes, and that is the whole of the remount rule.
  *
  * WHY IT IS ONE VALUE AND NOT TWO COMPARISONS. Before amnesic, the subscription compared `activeId`

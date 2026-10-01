@@ -659,19 +659,24 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const resetProgress=useProgress(s=>s.resetProgress);   // Full Reset wipes saved progress too (Stage D1)
       const resetModePrefs=useModePrefs(s=>s.resetModePrefs);   // Full Reset restores the per-mode setup too
       // ★ LOOKUP'S SCREEN — the text in the box, the message shown, the date Show Codes explains, the
-      // selected history row and whether Show Codes is open — SURVIVES A RELOAD (store/sessionLookup):
-      // each of the five seeds from what the last page of this browsing session left, and the effect
-      // below mirrors every change back. A real close starts them empty (sessionStorage is gone), and
-      // so does everything that resets them here — Clear, a preset switch, Full Reset.
+      // selected history row, whether Show Codes is open, and the Date Format the box's text was
+      // written in — SURVIVES A RELOAD (store/sessionLookup): each seeds from what the last page of
+      // this browsing session left, and the effect below mirrors every change back. A real close
+      // starts them empty (sessionStorage is gone), and so do the two things that reset them here —
+      // Clear and Full Reset. ★ A PRESET SWITCH DOES NOT: the history list is shared by every preset,
+      // so the screen above it is the app's, not a preset's (store/sessionLookup argues it). The one
+      // thing a preset can change under it is the Date Format, which is what the sixth value is for:
+      // LookupCard compares it with the live format and applies its one format-change rule.
       const [keptLookup]=useState(readLookupScreen);
       const [lookupInput,setLookupInput]=useState(keptLookup.input);
       const [lookupOutput,setLookupOutput]=useState(keptLookup.output);
       const [lookupCalcDate,setLookupCalcDate]=useState<CodeDate | null>(keptLookup.calcDate);
       const [lookupSelectedHistoryId,setLookupSelectedHistoryId]=useState<string | null>(keptLookup.selectedId);
       const [lookupCalcOpen,setLookupCalcOpen]=useState(keptLookup.calcOpen);
+      const [lookupInputFormat,setLookupInputFormat]=useState<string | null>(keptLookup.format);
       useEffect(()=>{
-        writeLookupScreen({input:lookupInput,output:lookupOutput,calcDate:lookupCalcDate,selectedId:lookupSelectedHistoryId,calcOpen:lookupCalcOpen});
-      },[lookupInput,lookupOutput,lookupCalcDate,lookupSelectedHistoryId,lookupCalcOpen]);
+        writeLookupScreen({input:lookupInput,output:lookupOutput,calcDate:lookupCalcDate,selectedId:lookupSelectedHistoryId,calcOpen:lookupCalcOpen,format:lookupInputFormat});
+      },[lookupInput,lookupOutput,lookupCalcDate,lookupSelectedHistoryId,lookupCalcOpen,lookupInputFormat]);
       // #6 — removed prevLookupCalcKeyRef and its effect; lookup Show Codes now only closes
       // when runLookup() fires a new result or the user manually closes it.
       // Bar height tracking. The htp-sticky-bar is position:fixed (chrome-style fixed
@@ -1638,50 +1643,48 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // the always-mounted screens so that panel, and the reading position, survive a detour into
       // a game mode; Full Reset is the one thing that must still close it).
       const [guideResetKey,setGuideResetKey]=useState(0);
-      // ★★ THROW AWAY EVERYTHING THE SIX ALWAYS-MOUNTED SCREENS ARE HOLDING. Bumping the six keys
-      // above remounts them, so every useState/useRef in each one runs its initializer again and
-      // re-reads the stores as they are NOW. The two App-owned transients that belong to those
-      // screens rather than to App go with them: Lookup's five (its history lives in
-      // store/lookupHistory, so lookupSelectedHistoryId names an entry in whatever the store held a
-      // moment ago — and the copy of the five kept for a reload, store/sessionLookup, follows them
-      // through the mirror effect beside their declarations) and the guide's saved reading offset
-      // (captured against a panel that is about to be closed).
+      // ★★ THROW AWAY EVERYTHING THE FIVE MODE SCREENS ARE HOLDING. Bumping the five keys above
+      // remounts them, so every useState/useRef in each one runs its initializer again and re-reads
+      // the stores as they are NOW.
       // ⚠ TWO CALLERS, AND THAT IS THE WHOLE POINT OF EXTRACTING IT. Full Reset has always done
-      // this; a PRESET SWITCH is structurally a second Full Reset and must do exactly the same
-      // discard, or the outgoing preset's run keeps playing on the incoming preset's data — the
-      // 500-cards-becomes-4 bug (store/presetControl's switchPreset argues it in full). A second
-      // hand-written copy of the six bumps is one forgotten line away from that bug, silently, on
-      // whichever screen was missed.
+      // this; a PRESET SWITCH is structurally a second Full Reset of the mode screens and must do
+      // exactly the same discard, or the outgoing preset's run keeps playing on the incoming preset's
+      // data — the 500-cards-becomes-4 bug (store/presetControl's switchPreset argues it in full). A
+      // second hand-written copy of the five bumps is one forgotten line away from that bug, silently,
+      // on whichever screen was missed.
+      // ★ THE FIVE, AND ONLY THE FIVE: the screens that hold a preset's DATA. The other two screens
+      // hold none, so a preset switch leaves them exactly as they are — the owner's rule is that only
+      // a real close starts fresh:
+      //   • HOW TO PLAY reads no saved data at all. Its open section, its reading offset
+      //     (guideScrollYRef) and the place parked for a reload (store/sessionGuide) are the reader's,
+      //     whichever preset is open.
+      //   • LOOKUP's history is shared by every preset (store/lookupHistory), so the row selected in
+      //     it — and the box, the answer and the codes that follow from the selection — still name
+      //     what they named a moment ago.
+      // Full Reset is what returns those two to their launch state, and does it itself (fullReset).
       // ⚠ WHAT IT DELIBERATELY DOES **NOT** TOUCH: the settings/progress/modePrefs stores (Full
       // Reset resets those separately and BEFORE calling here, so the modes re-hydrate from the
       // emptied store; a switch must not, or it would wipe the preset it just opened).
       // ⚠ THE CURRENT PAGE IS NO LONGER LEFT ALONE ON A PRESET SWITCH (round 21). It used to be —
       // "no store has ever held a last mode" — but the page is now a per-preset, session-lived fact
       // (store/sessionMode). remountScreens itself still does not set it; the registry subscription
-      // just below does, right after calling this, so the switch's remount and its page change land
+      // just below does, right before calling this, so the switch's remount and its page change land
       // in the same commit. A Full Reset (the other caller) sets the page separately, to "classic".
-      // useCallback with an empty dep list: every setter it closes over is a useState setter or a
-      // ref, all stable for the life of the mount, so the registry subscription below can hold this
-      // identity without re-subscribing on every render.
+      // useCallback with an empty dep list: every setter it closes over is a useState setter, stable
+      // for the life of the mount, so the registry subscription below can hold this identity without
+      // re-subscribing on every render.
       const remountScreens=useCallback(()=>{
-        setLookupInput("");setLookupOutput("");
-        setLookupCalcDate(null);setLookupSelectedHistoryId(null);setLookupCalcOpen(false);
         setAoxResetKey(k=>k+1);
         setClassicResetKey(k=>k+1);
         setFlashResetKey(k=>k+1);
         setBlitzResetKey(k=>k+1);
         setDeductionResetKey(k=>k+1);
-        setGuideResetKey(k=>k+1);
-        guideScrollYRef.current=0;
-        // …and the guide's place parked for a reload (store/sessionGuide), for the same reason: the
-        // remounted GuidePage reads it while rendering, before the old one's unmount could discard it.
-        discardGuidePlace();
       },[]);
       // ★★ THE PRESET SWITCH'S REMOUNT, WIRED TO THE FACT RATHER THAN TO THE CALLER. Anything that
       // changes which DATA the app is reading — store/presetControl's switchPreset, deleting the
       // preset you are on, making the preset you are on amnesic, or whatever a later group adds —
       // lands here, because the one thing all of them have in common is that the bytes underneath
-      // these six screens were swapped. presetControl therefore takes no remount callback: there is
+      // the five mode screens were swapped. presetControl therefore takes no remount callback: there is
       // nothing for a call site to forget.
       // ⚠ store.subscribe, NOT a useEffect on the value, and the difference is load-bearing. zustand
       // runs subscribers SYNCHRONOUSLY inside the set, i.e. BEFORE switchPreset rehydrates the four
@@ -1716,16 +1719,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // records the resolved page under the now-active preset's id. There is no data-contamination
       // risk in setting the page — it is a screen selector, not stats — so doing it here in the
       // synchronous subscription (one commit, no flash of the old page) is safe.
-      // ⚠ A1 (round 21): switchMode runs BEFORE remountScreens, and an explicit scroller reset runs
-      // after — the same order fullReset uses (switchMode … remountScreens … scrollTop=0), for the
-      // same reason. On the way out of the guide switchMode runs saveReadingPosRef, which copies the
-      // OUTGOING preset's live guide offset into guideScrollYRef; remountScreens then zeroes it, so
-      // whichever runs last wins — with remountScreens first, a later in-preset return to How to Play
-      // opened where the preset you LEFT was scrolled. The scrollTop=0 covers the one case
-      // remountScreens cannot: both presets resolving to the guide, where `mode` never changes and
-      // the scroll-ownership layout effect never re-runs to seat the incoming reader at the top. Both
-      // extra lines are gated on a real active-preset change, so a bare Amnesic toggle of the preset
-      // you are already on is untouched.
+      // ★ THE GUIDE'S PLACE IS NOT THE PRESET'S, so nothing here resets it. On the way out of the guide
+      // switchMode takes the live reading offset into guideScrollYRef, as on any page change, and the
+      // scroll-ownership effect puts it back whenever the guide is next on show — in whichever
+      // preset. A switch between two presets that are BOTH on the guide changes no page at all, and
+      // the reader stays exactly where they were.
+      // ⚠ THE EXPLICIT scrollTop=0 IS FOR A GAME SCREEN THAT STAYS ON SHOW: both presets resolving to
+      // the same mode, where `mode` never changes and the scroll-ownership layout effect — which
+      // seats every game screen at its own top — never re-runs for the remounted screen. Gated on a
+      // real active-preset change, so a bare Amnesic toggle of the preset you are already on is
+      // untouched; and never on the guide, whose offset is the reader's.
       // ★ AND THE CASUAL HISTORIES ARE PARKED FIRST (parkCasualHistories; store/sessionHistory argues
       // the lifecycle). This is the one moment that can be done right: the outgoing screens are still
       // mounted, each still holding the stats copy it was mounted on, so each parks under ITS OWN
@@ -1738,7 +1741,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         parkCasualHistories();
         if(s.activeId!==prev.activeId)switchMode(readSessionMode(s.activeId)??readStoredDefaultMode(s.activeId));
         remountScreens();
-        if(s.activeId!==prev.activeId&&appScrollRef.current)appScrollRef.current.scrollTop=0;
+        if(s.activeId!==prev.activeId&&modeRef.current!=='guide'&&appScrollRef.current)appScrollRef.current.scrollTop=0;
       }),[remountScreens,switchMode]);
       // …and the same park when the PAGE is going away or to the background — a reload, the app's
       // own update reload, a tab the browser may discard (lib/pageHidden).
@@ -1764,7 +1767,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚠ setPresetAmnesic NO-OPS when the flag already equals the default (its own guard returns
       // before any registry write), so a preset already at its default causes no applyRegistry, no
       // discard and no remount. When it DOES flip the active preset, the subscription registered just
-      // above catches the activeDataId change and remounts the six screens — which is why this effect
+      // above catches the activeDataId change and remounts the mode screens — which is why this effect
       // sits AFTER that subscription in source order. (On a genuine cold open there is no session copy
       // left to discard anyway: the browser cleared sessionStorage when it closed the session.)
       // ★ …AND THE PRESET THIS OPEN LANDED IN IS WRITTEN DOWN FIRST (commitOpenedPreset): the "Open in"
@@ -1998,13 +2001,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // Deduction sub-type, Allow Mistakes, One-by-One, show/hide toggles) stays factory. A no-op
         // when nothing is saved (defPrefs = the factory values).
         applyModePrefs(defPrefs);
-        // Remount all six always-mounted screens → their internal state resets to launch defaults,
-        // and the transients that belong to them go too (Lookup's five UI fields — its saved HISTORY
-        // is untouched, on purpose, same as resetProgress above — and the guide's saved reading
-        // offset, which switchMode at the top of this function already captured on the way out of
-        // the guide, so this clears it AFTER the capture rather than instead of it). ★ THE SAME CALL
-        // A PRESET SWITCH MAKES; see remountScreens, which is shared precisely so the two can never
-        // drift apart.
+        // Remount the five mode screens → their internal state resets to launch defaults. ★ THE SAME
+        // CALL A PRESET SWITCH MAKES; see remountScreens, which is shared precisely so the two can
+        // never drift apart. (The two screens that hold no preset data — How to Play and Lookup — are
+        // returned to launch state after it, below: a Full Reset is the one thing that does.)
         // …and this preset's PARKED ended round/run (round 21, store/sessionRound). Full Reset is
         // a manual reset — the owner's rule is "only a manual Reset or a full app close clears an
         // ended round" — so it must clear the park BEFORE the remount below, or the timed screens'
@@ -2027,10 +2027,23 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // nothing can bring back what this just cleared. (resetSettings above may have flipped
         // Amnesic, which parks the outgoing screens; that is before this line, and under it.)
         discardSessionHistories(usePresets.getState().activeId);
-        // How to Play is in the six for its ONE piece of state, the open panel: it used to be
-        // conditionally rendered, so leaving it dropped that for free — now that it stays mounted
-        // (round 9), a reset that left a panel hanging open would not be the launch state.
         remountScreens();
+        // …AND THE TWO APP-WIDE SCREENS, which only a Full Reset returns to their launch state:
+        //   • Lookup's six on-screen values (the history list they sit over was cleared above, by
+        //     clearLookupHistory); the copy kept for a reload (store/sessionLookup) follows them
+        //     through the mirror effect beside their declarations.
+        //   • How to Play: remounted for its ONE piece of state, the open panel (it stays mounted
+        //     since round 9, so a reset that left a panel hanging open would not be the launch
+        //     state); its reading offset, which switchMode at the top of this function already
+        //     captured on the way out of the guide — so this clears it AFTER the capture rather than
+        //     instead of it; and the place parked for a reload (store/sessionGuide), which the
+        //     remounted GuidePage would otherwise read while rendering, before the old one's unmount
+        //     could discard it.
+        setLookupInput("");setLookupOutput("");
+        setLookupCalcDate(null);setLookupSelectedHistoryId(null);setLookupCalcOpen(false);setLookupInputFormat(null);
+        setGuideResetKey(k=>k+1);
+        guideScrollYRef.current=0;
+        discardGuidePlace();
         // App container to the top, synchronously — the scroll-ownership effect would do it one
         // commit later, and this avoids the flash in between.
         if(appScrollRef.current)appScrollRef.current.scrollTop=0;
@@ -2484,7 +2497,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               very bug the list's old fixed 440-pixel cap existed to prevent). height:0 adds nothing,
               the parent stays at its min-height (one screenful), and flex-auto grows this back to
               fill it. Rests on the same definite-height #root the clamped scroller already needs. */}
-          {mode==="lookup"&&(<ModeErrorBoundary mode="Lookup" active={true} onCrash={discardLookupScreen}><div className="mt-5 flex flex-col flex-auto h-0 min-h-0"><LookupCard history={displayLookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div></ModeErrorBoundary>)}
+          {mode==="lookup"&&(<ModeErrorBoundary mode="Lookup" active={true} onCrash={discardLookupScreen}><div className="mt-5 flex flex-col flex-auto h-0 min-h-0"><LookupCard history={displayLookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} inputFormat={lookupInputFormat} onInputFormatChange={setLookupInputFormat} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div></ModeErrorBoundary>)}
           {/* How to Play is always-mounted like the five game modes (round 9), and for the same
               reason they are: leaving a screen must not destroy what you had set up on it. It used
               to be conditionally rendered, which is why a detour into a game mode closed whichever

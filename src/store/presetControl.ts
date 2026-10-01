@@ -32,8 +32,8 @@ import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 // only the first half" impossible to write by accident. It is also what keeps the dependency graph one-way: presets.ts knows nothing
 // about the four data stores, this file imports all of them, and nothing imports this file back.
 //
-// ⚠ THERE IS A THIRD PART, AND IT IS DELIBERATELY NOT HERE: remounting the six always-mounted
-// screens. It cannot live in a store file — it is React state in src/main.tsx — and it is not an
+// ⚠ THERE IS A THIRD PART, AND IT IS DELIBERATELY NOT HERE: remounting the five always-mounted
+// mode screens. It cannot live in a store file — it is React state in src/main.tsx — and it is not an
 // argument to these functions either. main.tsx SUBSCRIBES to the registry and remounts whenever
 // store/amnesic's `activeDataId` changes — "which preset, and which of its two storage areas its
 // stats live in" — so every path into that hazard is covered by construction rather than by a
@@ -577,7 +577,7 @@ export function movePreset(id: number, delta: number): boolean {
  * REQUIRED parameter — `switchPreset(id, remountScreens)` — reasoning that TypeScript can refuse a
  * call that forgets it where a comment cannot. Two things beat that:
  *   • it enforces PRESENCE, not correctness. `switchPreset(id, () => {})` type-checks, and so does
- *     a callback that bumps five of the six keys — which is the actual failure, silently, on one
+ *     a callback that bumps four of the five keys — which is the actual failure, silently, on one
  *     screen. Meanwhile deletePreset has to demand the same callback and then ignore it whenever
  *     the preset being deleted is not the active one, which teaches a reader it is optional.
  *   • it makes the remount a DUTY re-derived at every call site — a future deep link, a multi-tab
@@ -589,7 +589,7 @@ export function movePreset(id: number, delta: number): boolean {
  * setPresetAmnesic, and anything added later — is covered by construction, and the UI group's
  * switcher is a one-liner: `switchPreset(id)`.
  *   ⚠ A SUBSCRIPTION, NOT AN EFFECT, AND THAT IS THE LOAD-BEARING PART. zustand runs subscribers
- *     SYNCHRONOUSLY inside the `applyRegistry` set below, so the six remount-key bumps are already
+ *     SYNCHRONOUSLY inside the `applyRegistry` set below, so the five remount-key bumps are already
  *     scheduled before the four rehydrations run and React commits the whole thing at once: the
  *     screens come back ALREADY holding the incoming preset. An effect keyed on activeId would
  *     leave one commit in which the stores hold the new preset while the screens still hold the

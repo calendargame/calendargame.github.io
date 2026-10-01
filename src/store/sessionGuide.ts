@@ -19,10 +19,13 @@
 //     does (so a place that somehow broke the guide cannot come back and break it again). A guide
 //     that crashes on its very FIRST render never mounted, so it has no unmount: its error boundary
 //     discards the place for it (src/main.tsx, ModeErrorBoundary's onCrash).
-//   • AND DISCARDED BY main.tsx's remountScreens, the preset switch's and Full Reset's shared
-//     remount, which has always thrown the guide's place away ("captured against a panel that is
-//     about to be closed"). It must be discarded THERE, before the remount renders: the new GuidePage
-//     reads its place during that render, before the old one's unmount cleanup would run.
+//   • AND DISCARDED BY FULL RESET (src/main.tsx's fullReset), which returns the guide to its launch
+//     state — the top, every section closed — by remounting it. It must be discarded THERE, before
+//     the remount renders: the new GuidePage reads its place during that render, before the old
+//     one's unmount cleanup would run.
+// ★ A PRESET SWITCH DOES NOT TOUCH IT. The guide is not a preset's: it reads no saved data, so a
+// preset switch, an Amnesic toggle and deleting the preset you are on leave it mounted, with its
+// open section and its reading offset exactly where they were.
 //
 // ONE SMALL JSON VALUE under one key; `cg-guide-place-v1` is new, so no older build on this shared
 // origin reads it. Anything unreadable in it — a build this one has never seen, a hand-edited value —
@@ -65,7 +68,7 @@ export function writeGuidePlace(place: GuidePlace): void {
 }
 
 /**
- * Forget the guide's place: the guide unmounted, or the screens are about to be remounted. Also what
+ * Forget the guide's place: the guide unmounted, or Full Reset is about to remount it. Also what
  * tests/setup/dom.js calls before every test — the harness has no "close the browser" event.
  */
 export function discardGuidePlace(): void {

@@ -52,6 +52,9 @@ function Host({ dateFormat = 'written-mdy', useJulian = false, initialHistory = 
   const [calcDate, setCalcDate] = React.useState(null)
   const [selectedId, setSelectedId] = React.useState(null)
   const [calcOpen, setCalcOpen] = React.useState(false)
+  // The Date Format the box's text was written in: the card's format-change rule compares it with
+  // the live one, and the caller keeps it because it has to outlive the card (store/sessionLookup).
+  const [inputFormat, setInputFormat] = React.useState(null)
   const fmtDate = React.useCallback((y, m, d) => fmt(y, m, d, dateFormat), [dateFormat])
   return (
     <>
@@ -77,6 +80,8 @@ function Host({ dateFormat = 'written-mdy', useJulian = false, initialHistory = 
         onSelectedHistoryIdChange={setSelectedId}
         calcOpen={calcOpen}
         onCalcOpenChange={setCalcOpen}
+        inputFormat={inputFormat}
+        onInputFormatChange={setInputFormat}
         fmtDate={fmtDate}
         dateFormat={dateFormat}
         useJulian={useJulian}

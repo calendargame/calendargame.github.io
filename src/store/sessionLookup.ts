@@ -4,23 +4,31 @@
 // HISTORY LIST is saved for good (store/lookupHistory). What the player had on the screen above it —
 // the text in the date box, the answer or message being shown, which history row is selected, and
 // whether Show Codes is open — was plain App state, so a reload (pull-to-refresh, the app's own
-// update reload) emptied the box and closed the codes under them. This keeps those five values for
-// the browsing session; a real close clears them (the browser drops sessionStorage).
+// update reload) emptied the box and closed the codes under them. This keeps those values for the
+// browsing session; a real close clears them (the browser drops sessionStorage).
+//
+// ★ IT BELONGS TO THE APP, NOT TO A PRESET. The history list is shared by every preset, so what is
+// selected in it — and the box, the answer and the codes that follow from the selection — is too:
+// a preset switch, an Amnesic toggle and deleting the preset you are on all leave it exactly as it
+// was. What a preset CAN change under it is the Date Format the box is typed in, which is why the
+// format the text was written in is kept beside it (`format`): components/LookupCard compares that
+// with the live one and applies its one format-change rule, whether the format changed with the
+// card on screen or while it was away.
 //
 // ★ WRITTEN ON EVERY CHANGE, NOT WHEN THE PAGE HIDES. The whole value is a few dozen characters, so
 // there is nothing to save by waiting — and writing as it changes means it does not depend on the
 // page being told it is going away. (The casual modes' histories and the guide's place do wait for
 // that, because theirs are large or change every frame: store/sessionHistory, store/sessionGuide.)
-// src/main.tsx owns the five values and mirrors them here in one effect; so everything that resets
-// them — Clear, a preset switch, Full Reset (remountScreens) — clears this with them, with nothing
-// to remember.
+// src/main.tsx owns the values and mirrors them here in one effect; so the two things that reset
+// them — Clear and Full Reset — clear this with them, with nothing to remember.
 //
 // ONE SMALL JSON VALUE under one key; `cg-lookup-screen-v1` is new, so no older build on this shared
 // origin reads it. It is read back through a full shape check: anything unreadable — a build this
 // one has never seen, a hand-edited value — reads as "nothing kept", and Lookup opens empty as it
 // always did. (A selected row that is no longer in the history list is dropped by LookupCard's own
-// orphaned-selection cleanup.) Every access is try/catch-wrapped: locked-down browsing throws on the
-// property access, where the screen is simply not kept.
+// orphaned-selection cleanup; a format this build does not know simply differs from the live one,
+// which is the format-change rule's case.) Every access is try/catch-wrapped: locked-down browsing
+// throws on the property access, where the screen is simply not kept.
 const KEY = 'cg-lookup-screen-v1'
 
 // The date Show Codes explains (the y/m/d a code panel reads — components/MethodBreakdown's CodeDate).
@@ -37,6 +45,8 @@ export interface LookupScreen {
   calcDate: ShownDate | null //     the date Show Codes explains
   selectedId: string | null //      the selected history row
   calcOpen: boolean //              is Show Codes open
+  format: string | null //          the Date Format the box's text was written in — null until the
+  //                                card has been on screen (there is no text to belong to one)
 }
 
 /** Lookup as it launches: nothing typed, nothing shown, nothing selected, the codes closed. */
@@ -46,6 +56,7 @@ export const EMPTY_LOOKUP_SCREEN: LookupScreen = {
   calcDate: null,
   selectedId: null,
   calcOpen: false,
+  format: null,
 }
 
 const isShownDate = (v: unknown): v is ShownDate => {
@@ -69,13 +80,14 @@ export function readLookupScreen(): LookupScreen {
     if (raw === null) return EMPTY_LOOKUP_SCREEN
     const v: unknown = JSON.parse(raw)
     if (typeof v !== 'object' || v === null) return EMPTY_LOOKUP_SCREEN
-    const { input, output, calcDate, selectedId, calcOpen } = v as Record<string, unknown>
+    const { input, output, calcDate, selectedId, calcOpen, format } = v as Record<string, unknown>
     if (
       typeof input !== 'string' ||
       typeof output !== 'string' ||
       !(calcDate === null || isShownDate(calcDate)) ||
       !(selectedId === null || typeof selectedId === 'string') ||
-      typeof calcOpen !== 'boolean'
+      typeof calcOpen !== 'boolean' ||
+      !(format === null || typeof format === 'string')
     )
       return EMPTY_LOOKUP_SCREEN
     return {
@@ -84,13 +96,17 @@ export function readLookupScreen(): LookupScreen {
       calcDate: calcDate && { y: calcDate.y, m: calcDate.m, d: calcDate.d },
       selectedId,
       calcOpen,
+      format,
     }
   } catch {
     return EMPTY_LOOKUP_SCREEN
   }
 }
 
-/** Keep Lookup's screen for the reload that may follow. The launch screen keeps nothing. */
+/**
+ * Keep Lookup's screen for the reload that may follow. The launch screen keeps nothing — whatever
+ * format it was last shown in: with nothing in the box there is no text for a format to belong to.
+ */
 export function writeLookupScreen(s: LookupScreen): void {
   const launch =
     s.input === '' && s.output === '' && s.calcDate === null && s.selectedId === null && !s.calcOpen

@@ -34,6 +34,11 @@ interface LookupCardProps {
   onSelectedHistoryIdChange?: (id: string | null) => void
   calcOpen?: boolean
   onCalcOpenChange?: (open: boolean) => void
+  // The Date Format the box's text was last written in (null: none yet), and its setter — kept by
+  // the caller with the rest of the screen, because it has to outlive this card (see the
+  // format-change rule in the component).
+  inputFormat?: string | null
+  onInputFormatChange?: (format: FormatId) => void
   fmtDate?: (y: number, m: number, d: number) => string
   dateFormat?: FormatId
   useJulian?: boolean
@@ -264,6 +269,8 @@ export default function LookupCard({
   onSelectedHistoryIdChange,
   calcOpen = false,
   onCalcOpenChange,
+  inputFormat = null,
+  onInputFormatChange,
   fmtDate,
   dateFormat = 'written-mdy',
   useJulian = false,
@@ -335,11 +342,18 @@ export default function LookupCard({
   // always NUMERIC and its separator and field order just changed. With nothing selected there is
   // no date to rewrite, so the box is cleared instead — half-typed text in the old format would
   // no longer parse — along with any error message, which names the old format and is now wrong.
-  // A ref, not a dep, so the initial mount doesn't wipe an input the user arrived with.
-  const prevFormatRef = React.useRef(dateFormat)
+  // ★ "CHANGED" MEANS: THE LIVE FORMAT IS NOT THE ONE THE BOX'S TEXT WAS WRITTEN IN (`inputFormat`,
+  // which the caller keeps with the rest of the screen). So the rule is ONE rule for every way the
+  // two can come to differ — the setting changed with this card on screen, or while it was away
+  // (another page, and the card remounts), or the player opened another PRESET with its own Date
+  // Format (the screen is the app's, not a preset's — store/sessionLookup). It used to remember the
+  // format in a ref of its own, seeded at mount, so a card that came back under a different format
+  // kept old-format text in the box, where it no longer parsed. The first time the card is ever on
+  // screen there is no text yet (`inputFormat` null): the format is noted and nothing is touched.
   React.useEffect(() => {
-    if (prevFormatRef.current === dateFormat) return
-    prevFormatRef.current = dateFormat
+    if (inputFormat === dateFormat) return
+    onInputFormatChange?.(dateFormat)
+    if (inputFormat === null) return
     const selected = entries.find((e) => e.id === sid)
     if (selected) {
       writeInput(fmt(selected.y, selected.m, selected.d, numericFmtForInput))
@@ -347,10 +361,9 @@ export default function LookupCard({
     }
     writeInput('')
     slo('')
-    // Fire on dateFormat change only (the prevFormatRef guard also skips the initial mount). The
-    // setters are re-created each render; excluding them keeps this from running every render,
-    // and `entries`/`sid` are read at fire time on purpose — they are inputs to the rewrite, not
-    // triggers for it.
+    // Fire at mount and on a dateFormat change. The setters are re-created each render; excluding
+    // them keeps this from running every render, and `entries`/`sid`/`inputFormat` are read at fire
+    // time on purpose — they are inputs to the rewrite, not triggers for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFormat])
   function runLookup() {

@@ -296,8 +296,8 @@ export type PresetRegistryState = PresetRegistryValues & {
   // ⚠⚠ NOT FOR APP CODE. Replaces the whole registry value. Its callers are store/presetControl —
   // which pairs every call with the storage work the change implies — and the test suite. Reaching
   // for it from a component is the 500-cards-becomes-4 bug with extra steps.
-  // ⚠ IT IS OBSERVED. src/main.tsx subscribes to this store and remounts the six always-mounted
-  // screens whenever this call changes `activeId`, synchronously, inside the set below. That is
+  // ⚠ IT IS OBSERVED. src/main.tsx subscribes to this store and remounts the five always-mounted
+  // mode screens whenever this call changes `activeId`, synchronously, inside the set below. That is
   // what makes the remount a consequence of the switch rather than a duty of whoever called it —
   // so a future operation that moves the active preset is covered without doing anything.
   applyRegistry: (next: PresetRegistryValues) => void
@@ -374,7 +374,7 @@ export const usePresets = create<PresetRegistryState>()(
 // preset automatically; but its in-memory state is still the OLD preset's until something reloads
 // it. That is why presetControl.switchPreset rehydrates all four synchronously in the same tick
 // (nothing can write in between — this is one JS turn), and why src/main.tsx SUBSCRIBES to the
-// registry below and remounts the six always-mounted screens whenever `activeId` changes: those
+// registry below and remounts the five always-mounted mode screens whenever `activeId` changes: those
 // screens hold gameplay state of their own that no store reload can reach, and without the remount
 // the next answered question writes the old preset's stats into the new preset. That was PROVEN
 // against the real stores: a device with 500 cards ended up with 4.

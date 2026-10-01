@@ -34,7 +34,12 @@ import { dirname, join } from 'node:path'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { usePresets, makePresetRegistryDefaults } from '../src/store/presets.js'
-import { createPreset, switchPreset } from '../src/store/presetControl.js'
+import {
+  createPreset,
+  switchPreset,
+  deletePreset,
+  setPresetAmnesic,
+} from '../src/store/presetControl.js'
 import { forgetBrowsingSession } from '../src/store/browsingSession.js'
 import { installGuideScroller } from './helpers/guideScroller.jsx'
 import { installResizeObserver } from './helpers/scrollGeometry.js'
@@ -362,42 +367,82 @@ describe('the guide remembers where you were reading', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-// A PRESET SWITCH IS A FRESH CONTEXT — the incoming preset's How to Play opens at its own top, and
-// the outgoing preset's live reading offset must not leak across (round-21 A1). The switch
-// subscription in main.tsx runs switchMode + remountScreens + a scroller reset in the same order
-// fullReset uses; get that order wrong and switchMode's saveReadingPosRef read (taken on the way
-// out of the guide) lands AFTER remountScreens has zeroed the saved offset.
+// THE GUIDE'S PLACE IS THE READER'S, NOT A PRESET'S. How to Play reads no saved data, so nothing that
+// swaps the data underneath the mode screens — a preset switch, an Amnesic toggle, deleting the
+// preset you are on — may move the reader or close the section they had open ("only a real close
+// starts fresh"; Full Reset, below, is the one thing that returns the guide to its launch state).
+// Until this was decided a switch remounted the guide with the mode screens and opened it at the
+// top with every section closed.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe('a preset switch opens the incoming guide at the top', () => {
+describe('the guide keeps its place when the data underneath is swapped', () => {
   beforeEach(() => {
     usePresets.setState(makePresetRegistryDefaults())
   })
   const open = (id) => act(() => switchPreset(id))
+  const overviewOpen = (container) =>
+    container.querySelector('#guide-sec-overview button').getAttribute('aria-expanded')
+  // In the guide, a section open, scrolled down.
+  const reading = (container) => {
+    pressKey('H')
+    tap(container, 'overview')
+    const g = installGuide(container)
+    g.setContent(3000)
+    g.scrollTo(600)
+    return g
+  }
 
-  it('both presets resolve to the guide — the switch does not carry preset 1’s scroll across', () => {
-    // Here `mode` never changes across the switch (guide → guide), so the scroll-ownership layout
-    // effect never re-runs: only remountScreens' zero + the subscription's explicit scroller reset
-    // put the incoming reader at the top.
+  it('a switch between two presets that are both on the guide leaves the reader where they were', () => {
     const { container } = mountApp()
     act(() => createPreset('Two'))
     open(2)
     pressKey('H') // preset 2's session page is now the guide
     open(1)
-    pressKey('H') // preset 1's too
-    const g = installGuide(container)
-    g.setContent(3000)
-    g.scrollTo(600)
+    const g = reading(container) // preset 1's too
+    open(2) // → preset 2, which also resolves to the guide: no page change at all
     expect(g.pos()).toBe(600)
-    open(2) // → preset 2, which also resolves to the guide
-    expect(g.pos()).toBe(0)
+    expect(overviewOpen(container)).toBe('true')
   })
 
-  it('does not hand the incoming guide a place parked by an earlier hide', () => {
-    // The place is parked for a reload whenever the page hides (store/sessionGuide), so one can be
-    // standing when a switch happens. The switch remounts the guide, and the NEW guide reads its
-    // place while it renders — before the old one's unmount cleanup runs — so the park has to be
-    // thrown away by the remount itself (main.tsx's remountScreens), or preset 2 opens preset 1's
-    // section.
+  it('a switch that leaves the guide brings the same place back on the next visit, in either preset', () => {
+    const { container } = mountApp()
+    act(() => createPreset('Two'))
+    const g = reading(container)
+    open(2) // → preset 2, first visit → Classic (the guide is left behind)
+    expect(g.pos()).toBe(0) // a game screen, at its own top
+    pressKey('H') // into the guide, from preset 2
+    expect(g.pos()).toBe(600)
+    expect(overviewOpen(container)).toBe('true')
+    open(1) // preset 1's session page is the guide
+    expect(g.pos()).toBe(600)
+    expect(overviewOpen(container)).toBe('true')
+  })
+
+  it('an Amnesic toggle of the preset you are on leaves the guide alone', () => {
+    const { container } = mountApp()
+    const g = reading(container)
+    act(() => setPresetAmnesic(1, true))
+    expect(g.pos()).toBe(600)
+    expect(overviewOpen(container)).toBe('true')
+    act(() => setPresetAmnesic(1, false))
+    expect(g.pos()).toBe(600)
+    expect(overviewOpen(container)).toBe('true')
+  })
+
+  it('deleting the preset you are on leaves the guide alone', () => {
+    const { container } = mountApp()
+    let two
+    act(() => void (two = createPreset('Two')))
+    open(two.id)
+    pressKey('H') // preset 2 → guide
+    open(1)
+    const g = reading(container) // preset 1 → guide
+    open(two.id)
+    act(() => deletePreset(two.id)) // …and the app lands back in preset 1, on the guide
+    expect(g.pos()).toBe(600)
+    expect(overviewOpen(container)).toBe('true')
+  })
+
+  it('a place parked by an earlier hide survives a switch too — it is still the reader’s place', () => {
     const { container } = mountApp()
     act(() => createPreset('Two'))
     pressKey('H')
@@ -405,23 +450,21 @@ describe('a preset switch opens the incoming guide at the top', () => {
     act(() => {
       window.dispatchEvent(new Event('pagehide'))
     })
+    const parked = sessionStorage.getItem('cg-guide-place-v1')
+    expect(parked).not.toBe(null)
     open(2)
+    expect(sessionStorage.getItem('cg-guide-place-v1')).toBe(parked)
     pressKey('H')
-    expect(
-      container.querySelector('#guide-sec-overview button').getAttribute('aria-expanded'),
-    ).toBe('false')
+    expect(overviewOpen(container)).toBe('true')
   })
 
-  it('does not leak preset 1’s offset into a later in-preset return to the guide', () => {
-    const { container } = mountApp()
+  it('a game screen that stays on show across a switch still opens at its own top', () => {
+    const { container } = mountApp() // Classic in both presets
     act(() => createPreset('Two'))
-    pressKey('H') // preset 1 → guide, session page recorded
-    const g = installGuide(container)
-    g.setContent(3000)
-    g.scrollTo(600)
-    open(2) // → preset 2, first visit → Classic (the guide is left behind)
-    pressKey('H') // first time INTO preset 2's guide this session
-    expect(g.pos()).toBe(0) // its own top, not preset 1's 600
+    const el = scrollContainer(container)
+    el.scrollTop = 90
+    open(2)
+    expect(el.scrollTop).toBe(0)
   })
 })
 
