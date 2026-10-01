@@ -166,9 +166,30 @@ describe('index.css — .guide-head', () => {
     expect(rule).toMatch(/(^|;)top:0(;|$)/)
   })
 
-  it('is opaque — the panel’s fill over the page — and lifted over the top feather', () => {
+  it('is opaque — the panel’s fill over the page', () => {
     expect(rule).toContain('background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1)')
-    expect(rule).toContain('z-index:1')
+  })
+
+  // ★ WHICH HEADER MAY SIT ABOVE WHICH FEATHER. The guide's two edge fades are fixed strips that
+  // come after the page in the DOM, so they paint over anything that is not lifted.
+  //   • a CLOSED header is page content: under both strips, so its title feathers at the top and
+  //     bottom edges like the panel border beside it. (Lifting every header left each title
+  //     running full-strength to the edge and stopping dead.)
+  //   • the OPEN header is the one that pins, and a pinned header sits inside the top strip — so it
+  //     alone is lifted over that one…
+  //   • …and nothing is lifted over the BOTTOM strip, where nothing ever pins.
+  it('lifts ONLY the open header over the top feather, and nothing over the bottom one', () => {
+    expect(rule).not.toContain('z-index')
+    const openRule = cssCode.match(/\.guide-head\[aria-expanded="true"\]\{([^}]*)\}/)?.[1]
+    expect(openRule).toBe('z-index:1')
+    const top = cssCode.match(/\.doc-fade-top\{([^}]*)\}/)?.[1]
+    const bottom = cssCode.match(/\.doc-fade-bottom\{([^}]*)\}/)?.[1]
+    expect(top).not.toContain('z-index')
+    expect(bottom).toContain('z-index:2')
+    // …and the header that carries aria-expanded IS the .guide-head element, so the selector lands.
+    const { container } = mount()
+    for (const head of container.querySelectorAll('.guide-head'))
+      expect(head.hasAttribute('aria-expanded')).toBe(true)
   })
 
   it('rests shadowless — --shade:0 overrides @property’s visible default', () => {
