@@ -600,7 +600,7 @@ function AoxMode({
   //     after it completed), and taking the held solve's credit from one of those leaves a run that
   //     still stands — nothing to hand back, so it stays done. (It used to go 'running' for one commit
   //     and be completed again by the effect above: a second "completion" of a run that never
-  //     stopped standing, which that effect would have judged afresh.)
+  //     stopped standing.)
   //   • a press on a HISTORY card of a done run changes no phase at all: the run is over, and the only
   //     thing that reacts is reconcileAoxStanding, which raises or restores the Best from the floor.
   // preRunBestRef, recordedRef and `runId` are NEVER written here — only begin() and reset() write
