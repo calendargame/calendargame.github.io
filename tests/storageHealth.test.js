@@ -7,6 +7,7 @@ import {
   readItem,
   removeItem,
   storageSpaceFreed,
+  placeChangedElsewhere,
   showStorageNotice,
   forgetStorageHealth,
   useStorageHealth,
@@ -125,5 +126,38 @@ describe('storageHealth', () => {
     expect(area.getItem('k')).toBe('fits')
     expect(area.writes).toEqual(['k'])
     expect(readItem(area, 'k')).toBe('fits')
+  })
+
+  // Another tab saving to (or deleting) a place this page holds a refused save for: the held save is
+  // an OLDER one by then, so it is dropped rather than written over what came after it.
+  it('another tab changing a place forgets what was held for it — and only for it', () => {
+    const area = makeArea()
+    area.full = true
+    writeItem(area, 'theirs', 'mine, refused')
+    writeItem(area, 'untouched', 'also refused')
+    area.full = false
+    area.setItem('theirs', 'the other tab, later') // the other tab's save lands on the device
+    area.writes.length = 0
+    placeChangedElsewhere(area, 'theirs')
+    expect(readItem(area, 'theirs')).toBe('the other tab, later')
+    expect(useStorageHealth.getState().unsaved).toBe(true) // 'untouched' is still held
+    storageSpaceFreed()
+    expect(area.writes).toEqual(['untouched']) // …and it alone is written out
+    expect(area.getItem('theirs')).toBe('the other tab, later')
+    expect(useStorageHealth.getState().unsaved).toBe(false)
+  })
+
+  it('another tab clearing the whole area forgets everything held for that area', () => {
+    const local = makeArea()
+    const session = makeArea()
+    local.full = session.full = true
+    writeItem(local, 'a', '1')
+    writeItem(local, 'b', '2')
+    writeItem(session, 'c', '3')
+    placeChangedElsewhere(local, null)
+    local.full = session.full = false
+    storageSpaceFreed()
+    expect(local.writes).toEqual([])
+    expect(session.writes).toEqual(['c'])
   })
 })

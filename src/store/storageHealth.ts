@@ -21,6 +21,9 @@ import type { StateStorage } from 'zustand/middleware'
 //     every held value, each to its own place and nowhere else;
 //   • REMOVING a place forgets what was held for it: a deleted preset's keys, a guest session being
 //     thrown away. A held value can never bring back something the player deleted;
+//   • ANOTHER TAB changing a place forgets what was held for it too (placeChangedElsewhere): the
+//     held value stands in for what that place would hold if the save had fit, and a save that had
+//     fit would have been replaced by the other tab's later one;
 //   • the first refusal of an episode opens components/StorageFullNotice, which tells the player
 //     what happened and how to make room; it does not reopen on every answer while the device stays
 //     full.
@@ -139,6 +142,30 @@ export function removeItem(storage: Storage, key: string): void {
   storage.removeItem(key)
   settle()
 }
+
+/**
+ * ★ ANOTHER TAB JUST CHANGED (storage, key) — or cleared the whole area (`key` null). Whatever this
+ * page was holding for that place is forgotten.
+ * WHY. A held value is this page's save, DELAYED: it goes out at the next retry, which can be long
+ * after it was made. If another tab (or the other site on this origin — live and staging share
+ * these keys) has saved to the same place in the meantime, the retry would put an OLDER save over a
+ * newer one; if the other tab DELETED the place — a preset removed there — the retry would bring it
+ * back. Neither can happen to a save that fit: it would simply have been replaced, or removed, by
+ * what came after it. Dropping the held value makes a refused save behave exactly like that.
+ * It does not make two open tabs agree with each other — each still plays on from what it loaded,
+ * and its NEXT save is its own; that is the same last-save-wins as on a device with room.
+ */
+export function placeChangedElsewhere(storage: Storage, key: string | null): void {
+  if (key === null) held.delete(storage)
+  else release(storage, key)
+  settle()
+}
+// The browser's own report of it: a `storage` event, which fires in every OTHER same-origin page when
+// one changes localStorage (never in the page that made the change).
+if (typeof window !== 'undefined')
+  window.addEventListener('storage', (e) => {
+    if (e.storageArea) placeChangedElsewhere(e.storageArea, e.key)
+  })
 
 /**
  * The app itself just FREED space (a preset's keys were removed) — save anything held now, rather

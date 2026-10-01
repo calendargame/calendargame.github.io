@@ -120,4 +120,29 @@ describe('storage full — play goes on, and the player is told', () => {
     expect(JSON.parse(localStorage.getItem(progressKey)).state.stats.classic.good).toBe(1)
     expect(useStorageHealth.getState().unsaved).toBe(false)
   })
+
+  // Two tabs. This one holds a save the device refused; the other tab then saves to the same place.
+  // The browser tells this page with a `storage` event, and the held save — an older one by now —
+  // is dropped instead of being written over the newer data at the next retry.
+  it("a save another tab made to the same place is not overwritten by this page's older, refused one", () => {
+    mountApp()
+    fillStorageFor(progressKey)
+    answerCorrect() // progress refused, and held
+    expect(useStorageHealth.getState().unsaved).toBe(true)
+    const theirs = JSON.stringify({ state: { from: 'the other tab' }, version: 0 })
+    realSetItem.call(localStorage, progressKey, theirs) // the other tab's save lands on the device
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: progressKey,
+          newValue: theirs,
+          storageArea: localStorage,
+        }),
+      )
+    })
+    expect(useStorageHealth.getState().unsaved).toBe(false)
+    makeRoom()
+    act(() => useSettings.getState().setMinY(1600)) // a save that fits: every held value is retried
+    expect(localStorage.getItem(progressKey)).toBe(theirs)
+  })
 })
