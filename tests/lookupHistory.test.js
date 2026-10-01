@@ -102,7 +102,7 @@ describe('lookupHistory — mergeForDisplay', () => {
   })
 })
 
-// ── the lookup-history normalizer: shape + validation (Q2; moved here verbatim, round 20) ────
+// ── the lookup-history normalizer: shape + validation (moved here verbatim, round 20) ────
 // label/weekday/result were snapshots of how the date read at lookup time; the card derives all
 // three now, so the stored copies were not merely redundant but WRONG after a Date Format change.
 // The VALIDATION half matters just as much: LookupCard carries no per-field guards any more, so an

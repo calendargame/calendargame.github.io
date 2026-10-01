@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────
-// tests/engine/referenceModel.js — the fully-INDEPENDENT reference score model (C2 Part 3).
+// tests/engine/referenceModel.js — the fully-INDEPENDENT reference score model.
 //
 // A second, separately-written implementation of the game's SCORING CONTRACT that replays the same
 // action stream as the reducer and computes the expected stats from its own per-question ledger —

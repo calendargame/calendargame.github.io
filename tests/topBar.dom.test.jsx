@@ -187,7 +187,7 @@ describe('the width cuts that paid for the fourth control', () => {
     const mode = modeTrigger().className.split(/\s+/)
     expect(mode).toContain('pr-6')
     expect(mode).not.toContain('pr-9')
-    // ONE gap-1.5 now, on the row itself — Q6 flattened two nested shrink-0 groups (each with
+    // ONE gap-1.5 now, on the row itself — round 20 flattened two nested shrink-0 groups (each with
     // their own gap-1.5) into one flat row, so there is only the one flex container left to carry
     // it. The four children are single-purpose wrapper elements now, not multi-child flex rows of
     // their own, so none of THEM needs a gap class any more.
@@ -196,7 +196,7 @@ describe('the width cuts that paid for the fourth control', () => {
 
   it("keeps the logo, mode selector and gear content-sized — only the switcher's wrapper grows", () => {
     mountApp()
-    // Q6's invariant, replacing the old "neither group may shrink" one: the bar's failure mode is
+    // Round 20's invariant, replacing the old "neither group may shrink" one: the bar's failure mode is
     // still deliberately "spill", not "squash" for three of the four controls — a truncated mode
     // name or a clipped gear would be worse than an overflow nobody can hit. What changed is WHICH
     // element absorbs the bar's slack: not a `justify-between` gap between two groups any more, but
@@ -229,7 +229,7 @@ describe('the width cuts that paid for the fourth control', () => {
     const mirror = modeWrap.querySelector('div[aria-hidden="true"][style*="visibility: hidden"]')
     expect(mirror).not.toBeNull()
     tap(modeTrigger())
-    // The mode dropdown is NOT resized by Q10 — it stays width:max-content (dropdownWidth 'content').
+    // The mode dropdown is NOT resized by round 21 — it stays width:max-content (dropdownWidth 'content').
     expect(screen.getByRole('listbox', { name: 'Mode' }).style.width).toBe('max-content')
   })
 

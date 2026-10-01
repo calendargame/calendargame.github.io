@@ -5,7 +5,7 @@
 //
 // ★ Round 21 REMOVED THE HIDDEN STATIC TWINS. They existed only because Full Reset's caption
 // swapped to "Confirm?" while the two-tap arm was live, which would have shrunk a live measurement
-// mid-arm and jiggled the row. Q7 replaced that arm with a ConfirmModal, so every caption in the
+// mid-arm and jiggled the row. Round 21 replaced that arm with a ConfirmModal, so every caption in the
 // trio is static text now — fitFooterBtns measures the live [data-fitlabel] spans directly, after
 // resetting each button's inline fontSize to '' so a re-run of the dep-less effect reads the true
 // natural width instead of compounding the previous pass's shrink (12·s, 12·s², … → the floor).
@@ -41,7 +41,7 @@ let btnWidth = 50 // trio-button content width the mocks report; tests vary it t
 // needs. See the comment there for why a store poke will not do.
 const pill = (group, label) => within(picker(group)).getByRole('radio', { name: label })
 
-describe('footer-button auto-fit wiring (Round-2, twin-free since Q7)', () => {
+describe('footer-button auto-fit wiring (Round-2, twin-free since round 21)', () => {
   beforeEach(() => {
     resetAppState()
     btnWidth = 50
@@ -91,7 +91,7 @@ describe('footer-button auto-fit wiring (Round-2, twin-free since Q7)', () => {
       expect(el.className).toContain('text-xs')
       expect(el.className).not.toContain('text-sm')
     }
-    // The measurement twins are gone — Q7 froze every caption, so there is nothing to swap.
+    // The measurement twins are gone — round 21 froze every caption, so there is nothing to swap.
     expect(document.querySelectorAll('[data-fittwin]')).toHaveLength(0)
   })
 

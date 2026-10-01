@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 //
-// Blitz mode — characterization tests (Stage C, Step 6, Step 3) + the C3a sub-mode suite.
+// Blitz mode — characterization tests (Stage C, Step 6, Step 3) + the Per Question + Allow Mistakes sub-mode suite.
 // Blitz runs a countdown (Per Round, 60s) or per-question (Per Question, 10s) timer, with
-// Best Score / Best Streak records. Per Question splits by Allow Mistakes (C3a): AM off is
+// Best Score / Best Streak records. Per Question splits by Allow Mistakes: AM off is
 // sudden death (a wrong ends the round, score-only Best); AM on keeps the round going — the
 // question clock keeps draining while you retry, and only a correct answer advances with a
 // fresh clock (score+streak Best, its own silo). The characterization batches lock the
-// original behavior; the C3a describe below pins the new sub-mode.
+// original behavior; the "Per Question + Allow Mistakes" describe below pins the new sub-mode.
 //
 // Fake timers keep the rAF countdown frozen for the answer-behavior tests (the 60s drain is
 // impractical to sit through). The fake-timer clock DOES drive requestAnimationFrame and
-// performance.now in lockstep, so the C3a expiry tests fast-forward the per-question clock
+// performance.now in lockstep, so the per-question expiry tests fast-forward the per-question clock
 // deliberately with vi.advanceTimersByTime (qSec=1 via the modePrefs store).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
@@ -53,7 +53,7 @@ const correctName = ({ y, m, d }) => DAY[wday(y, m, d)]
 const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
 const wrongName2 = ({ y, m, d }) => DAY[(wday(y, m, d) + 2) % 7] // a SECOND distinct wrong day
 // Fast-forward the faked clock (rAF frames + performance.now advance in lockstep) inside act,
-// so the countdown loop's state updates are flushed. Used by the C3a expiry tests.
+// so the countdown loop's state updates are flushed. Used by the per-question expiry tests.
 const tick = (ms) =>
   act(() => {
     vi.advanceTimersByTime(ms)
@@ -137,7 +137,7 @@ function clickStat(label) {
 function statIsToggle(label) {
   return requireStatCell(label).tagName === 'BUTTON'
 }
-// Whether a stat cell with this label is rendered at all (visible) — for the C3a
+// Whether a stat cell with this label is rendered at all (visible) — for the Allow Mistakes
 // streak-visibility pins (per-Q sudden death hides Streak; per-Q + AM shows it).
 function hasStat(label) {
   return statCell(label) !== null
@@ -259,7 +259,7 @@ describe('Blitz — characterization (batch 2: Per Question / sudden death)', ()
     mountApp()
     switchToBlitz()
     clickText('Per Round') // toggle to Per Question (button shows the current mode)
-    clickText('Allow Mistakes') // off → sudden death (independent toggles since C3a — no auto-off)
+    clickText('Allow Mistakes') // off → sudden death (independent toggles — no auto-off)
     begin()
     click(correctName(readDate())) // 1/1, next question
     expect(statValue('Score')).toBe('1/1')
@@ -377,12 +377,12 @@ describe('Blitz — bug fixes (override-to-wrong + Show Codes end the round)', (
   })
 })
 
-// C2 fuzz/read pass (2026-06-08): the Best Score/Streak rollback dropped the Best below a PREVIOUS
+// Fuzz/read pass (2026-06-08): the Best Score/Streak rollback dropped the Best below a PREVIOUS
 // round's score. The reconcile tracks only ONE best record + its round id, and on rollback set
 // Best = the (overridden-down) current round's good — with no memory of the earlier round that the
 // record had overwritten. AoX's rollback snapshots + restores the PRIOR best (correct); Blitz lacked
 // that snapshot. Same "restore from a stale/absent snapshot" family as the engine bugs.
-describe('Blitz — Best Score cross-round rollback (C2)', () => {
+describe('Blitz — Best Score cross-round rollback', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -425,14 +425,14 @@ describe('Blitz — Best Score cross-round rollback (C2)', () => {
   })
 })
 
-// ── C2 fix: leaving Blitz mid-round ABANDONS the round (the hidden countdown must not keep
+// ── Fix: leaving Blitz mid-round ABANDONS the round (the hidden countdown must not keep
 // draining). The original App discarded an active round on switch-away (blitzLeavingMidRound →
 // stacks unsaved, snap nulled, arm() on return); AoX resets a hidden running run and Flash stops a
 // live flash the same way — but the Blitz migration carried no visibility teardown, so the rAF
 // countdown kept running behind display:none: a per-question timeout would count a phantom MISS in
 // absentia, and the round would end + reconcile a Best for play the user walked away from. The
 // ENDED (timerDone) state still survives a detour, exactly like AoX's done run.
-describe('Blitz — C2 fix (mode switch mid-round abandons the round)', () => {
+describe('Blitz — fix (mode switch mid-round abandons the round)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -482,13 +482,13 @@ describe('Blitz — C2 fix (mode switch mid-round abandons the round)', () => {
   })
 })
 
-// ── C2 Q2-A: a misclick-ended round is RESUMABLE via Override (regression fix). The pre-rewrite
+// ── A misclick-ended round is RESUMABLE via Override (regression fix). The pre-rewrite
 // app resumed the round when you overrode the mistake — Per Round continued the countdown where it
 // stopped, Per Question started a fresh per-question timer — and reverted the Best the interrupted
 // round had provisionally saved ("bests not save yet"). The Blitz mode-untangle dropped this: a
 // mistake ended the round, the Best saved, and Override credited the point but the round stayed
 // DEAD (a new date loaded that you couldn't play). Restored here.
-describe('Blitz — C2 Q2-A (Override resumes a misclick-ended round)', () => {
+describe('Blitz — Override resumes a misclick-ended round', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -530,7 +530,7 @@ describe('Blitz — C2 Q2-A (Override resumes a misclick-ended round)', () => {
     mountApp()
     switchToBlitz()
     clickText('Per Round') // → Per Question
-    clickText('Allow Mistakes') // off → sudden death (independent toggles since C3a — no auto-off)
+    clickText('Allow Mistakes') // off → sudden death (independent toggles — no auto-off)
     begin()
     click(correctName(readDate())) // 1/1, next question
     click(wrongName(readDate())) // sudden-death miss → round ends 1/2
@@ -544,10 +544,10 @@ describe('Blitz — C2 Q2-A (Override resumes a misclick-ended round)', () => {
   })
 })
 
-// ── C2 (uniform override): a round ended by a deliberate Reveal or Show Codes is ALSO resumable via
+// ── Uniform override: a round ended by a deliberate Reveal or Show Codes is ALSO resumable via
 // Override (not just a misclick) — owner's call that Override should behave the same everywhere. The
 // round continues and the interrupted round's provisional Best is reverted ("bests not updated").
-describe('Blitz — C2 (Reveal / Show Codes then Override resumes the round)', () => {
+describe('Blitz — Reveal / Show Codes then Override resumes the round', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -597,10 +597,10 @@ describe('Blitz — C2 (Reveal / Show Codes then Override resumes the round)', (
   })
 })
 
-// ── C2 Q2-B: in PRACTICE MODE (Save Stats off) a misclick-ended round is STILL rescuable via
+// ── In PRACTICE MODE (Save Stats off) a misclick-ended round is STILL rescuable via
 // Override (the off-gate used to hide Override entirely). Blitz now always-tracks internally — Save
 // Stats off only dims the display + records no Best — so the rescue credit stays integrity-safe.
-describe('Blitz — C2 Q2-B (Save Stats off: misclick rescue, no Best recorded)', () => {
+describe('Blitz — Save Stats off: misclick rescue, no Best recorded', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -771,7 +771,7 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
 // that changes a running/ended round's timer reconciles it on the popover close — exactly the Q2 rule,
 // now triggered by the timer dep the close-effect gained. Uses a FACTORY panel so Reset Settings
 // touches ONLY the timer, isolating the mode-screen-pref path from the ⚙-panel path Q2 already covers.
-// (round 6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
+// (round 6 = "extend Reset Settings"; distinct from the Session-11 change that added Save Defaults.)
 describe('Blitz — round 6 (Reset Settings restoring the round timer reconciles the round)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -819,7 +819,7 @@ describe('Blitz — round 6 (Reset Settings restoring the round timer reconciles
   })
 })
 
-// ── C3a (Q15): the Per Question + Allow Mistakes sub-mode ─────────────────────────────────────────
+// ── The Per Question + Allow Mistakes sub-mode ─────────────────────────────────────────
 // The two Blitz switches are now fully independent (the old auto-off exclusion died): per-Q + AM is
 // a real fourth combination — a wrong answer marks the miss, breaks the streak, and leaves the SAME
 // question on screen with its clock still draining; only a correct answer (or an in-round Override
@@ -827,7 +827,7 @@ describe('Blitz — round 6 (Reset Settings restoring the round timer reconciles
 // clock expires. Its Best is score+streak (the BlitzBest shape) in its OWN silo (suddenAmBest),
 // separate from sudden death's score-only record at the same config. The expiry tests set qSec=1
 // (the slider min) via the modePrefs store and drive the faked rAF clock with tick().
-describe('Blitz — Per Question + Allow Mistakes (C3a)', () => {
+describe('Blitz — Per Question + Allow Mistakes', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -1097,11 +1097,11 @@ describe('Blitz — Per Question + Allow Mistakes (C3a)', () => {
   })
 })
 
-// ── C3a freshness: the new map joins Blitz's fully-reset report, and Full Reset wipes it ─────────
+// ── Freshness: the Per Question + Allow Mistakes map joins Blitz's fully-reset report, and Full Reset wipes it ─────────
 // Pristine settings here (no per-test overrides) so App's isFullyReset can actually be true: the
 // Full Reset footer button is dimmed exactly when EVERYTHING is at launch state, so a lone
 // suddenAmBest record must light it, and resetProgress (what Full Reset runs) must re-dim it.
-describe('Blitz — C3a freshness (suddenAmBest blocks fully-reset until wiped)', () => {
+describe('Blitz — freshness (suddenAmBest blocks fully-reset until wiped)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -1137,7 +1137,7 @@ describe('Blitz — C3a freshness (suddenAmBest blocks fully-reset until wiped)'
 // untoggleable. One toggle per mode (blitzTimingOff), shared across Per Round / Per Question, and
 // excluded from the defaults system (verified in tests/saveDefaults.dom.test.jsx).
 //
-// ⚠ RE-BLESSED for C1 (round 16, the stat-box redesign — approved by the owner as a settled design).
+// ⚠ RE-BLESSED in round 16 (the stat-box redesign — approved by the owner as a settled design).
 // A group YOU turned off now renders its value cells BLANK, not as an em dash. The dash was moved to
 // mean one thing only — "no data yet, but there could be" — so that a shown-but-empty stat and a
 // stat you hid stop reading identically. Save Stats off is the third signal: dim, whole strip. Every
@@ -1180,7 +1180,7 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     expect(statValue('Score')).toBe('1/1')
     clickStat('Mean') // hide the timing trio
-    // BLANK — C1's "you turned these off, and they ARE still recording" signal.
+    // BLANK — the "you turned these off, and they ARE still recording" signal.
     expect(statValue('Last')).toBe('')
     expect(statValue('Mean')).toBe('')
     expect(statValue('Median')).toBe('')
@@ -1200,7 +1200,7 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     begin()
     click(correctName(readDate())) // solve #1 immediate → 0.00s
     clickStat('Last') // hide
-    expect(statValue('Last')).toBe('') // blank, not a dash (C1)
+    expect(statValue('Last')).toBe('') // blank, not a dash
     tick(4000)
     click(correctName(readDate())) // solve #2 recorded WHILE hidden (~4.00s)
     expect(statValue('Score')).toBe('2/2') // the round kept running
@@ -1220,7 +1220,7 @@ describe('Blitz — Q8 visual-only timing hide', () => {
     tick(500)
     click(correctName(readDate()))
     clickStat('Mean') // hide in Per Round
-    expect(statValue('Mean')).toBe('') // blank, not a dash (C1)
+    expect(statValue('Mean')).toBe('') // blank, not a dash
     clickText('Reset') // idle unlocks the sub-mode switch
     act(() => fireEvent.click(ctrl('Per Round'))) // → Per Question
     begin()
@@ -1269,7 +1269,7 @@ describe('Blitz — Q8 visual-only timing hide', () => {
   })
 
   // Per Question, ended by a question clock — the other end of the same `timerDone` flag. Allow
-  // Mistakes is left at its default (on), so Streak renders here too (C3a).
+  // Mistakes is left at its default (on), so Streak renders here too.
   it('an ended Per Question round shows its times through the hide toggle, and the trio goes inert', () => {
     act(() => useModePrefs.getState().setBlitzTimingOff(true)) // hidden BEFORE the round
     mountApp()

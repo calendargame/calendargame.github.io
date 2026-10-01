@@ -75,7 +75,7 @@ describe('settings store', () => {
     }
   })
 
-  it('applySettings applies a full 14-value snapshot in one shot (Q7 — Reset Settings → saved defaults)', () => {
+  it('applySettings applies a full 14-value snapshot in one shot (Reset Settings → saved defaults)', () => {
     const snapshot = { ...SETTINGS_DEFAULTS, leapChance: '75', minY: 1600, useJulian: false }
     useSettings.getState().applySettings(snapshot)
     const s = useSettings.getState()

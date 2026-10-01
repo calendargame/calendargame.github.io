@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Q9 — error reporting must never start on a LOCALLY-SERVED build.
+// Error reporting must never start on a LOCALLY-SERVED build.
 //
 // `vite preview` (and any headless run pointed at it) serves a real production bundle, so
 // import.meta.env.PROD is TRUE there and main.tsx's build-time gate lets it through. It then
@@ -72,7 +72,7 @@ afterEach(() => {
   Object.defineProperty(window, 'location', { configurable: true, value: origLocation })
 })
 
-describe('observability start gate (Q9)', () => {
+describe('observability start gate', () => {
   for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
     it(`refuses to start on ${hostname} — no SDK chunk, no global handlers`, async () => {
       await initFreshOn(hostname)

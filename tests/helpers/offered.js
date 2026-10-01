@@ -12,7 +12,7 @@
 // "does this className contain a token", and the day the app withholds a control some other way
 // this file changes and nothing else does.
 //
-// ★ THAT DAY WAS ROUND 15 (B7), AND THIS IS THE ONLY FILE IT TOUCHED — which is the whole return on
+// ★ THAT DAY WAS ROUND 15, AND THIS IS THE ONLY FILE IT TOUCHED — which is the whole return on
 // the abstraction. The ⚙ footer's three buttons now withhold with `aria-disabled` and DROP
 // pointer-events-none (a pointer-events:none element cannot be hovered, so the not-allowed cursor
 // they now carry could never have painted). Two spellings are live at once and the app is honest

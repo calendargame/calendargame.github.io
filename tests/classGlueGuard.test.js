@@ -1,4 +1,4 @@
-// tests/classGlueGuard.test.js — Q6's root-cause kill for the glued-class bug class.
+// tests/classGlueGuard.test.js — round 7's root-cause kill for the glued-class bug class.
 // History: two shipped incidents, both from a class token glued directly to a template-literal
 // `${` inside a className. Tailwind v4's source scanner tokenizes raw text, so a glued site
 // reads as one candidate (`pt-5${mode…`, `max-h-[440px]${lookup…`) — not a valid utility, so
@@ -61,7 +61,7 @@ const violations = scanned.flatMap((file) =>
     ),
 )
 
-describe('class glue guard (Q6) — no class token may touch a `${` on a className/_CLASS line', () => {
+describe('class glue guard — no class token may touch a `${` on a className/_CLASS line', () => {
   it('scans the real tree (main.tsx and index.html both present — the guard cannot go blind)', () => {
     const names = scanned.map((f) => relative(root, f).replace(/\\/g, '/'))
     expect(names).toContain('src/main.tsx')

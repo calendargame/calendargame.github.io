@@ -12,7 +12,7 @@
 // ⚠ BLANK MEANS HIDDEN AND NOTHING MORE, and the shorthand it replaced ("you turned these off; they
 // ARE still recording") was wrong twice over. Whether hiding also PAUSES is the caller's business,
 // not the panel's: the scoring trio keeps recording in every mode and the timing trio keeps
-// recording in Blitz/AoX (visual-only, Q8), but hiding timing in Classic/Deduction/Flash stops the
+// recording in Blitz/AoX (visual-only), but hiding timing in Classic/Deduction/Flash stops the
 // clock outright and re-enabling after answering costs a full reset. And it is not always the
 // user's own doing — Classic and Deduction SHIP with timing hidden, which is the launch case pinned
 // further down. Only the first of those halves is exercised by the RECORDING case below (the
@@ -114,7 +114,7 @@ const withData = (over = {}) => [
   { label: 'Median', value: '—', fn: () => {}, ...over.timing },
 ]
 
-describe('StatPanel — the three signals (C1)', () => {
+describe('StatPanel — the three signals', () => {
   afterEach(cleanup)
 
   it('group on with data: the values, plain — no dim on the strip and none on any cell', () => {
@@ -198,7 +198,7 @@ describe('StatPanel — the three signals (C1)', () => {
     expect(valueCellOf('Score').className).toBe(filled) // same box, blank or not
   })
 
-  // ⚠ THE SAME CASE FOR THE DIM, which C1 promoted to a signal with a meaning of its own and which
+  // ⚠ THE SAME CASE FOR THE DIM, which round 16 promoted to a signal with a meaning of its own and which
   // the round-16 review found was the one of the three left with NO non-visual form: blank had its
   // word, dim had only an opacity, so Save Stats off and a strip with no data yet both announced as
   // six dashes and a screen-reader user could not tell them apart. The line is on the STRIP, not on
@@ -312,7 +312,7 @@ function toggleSaveStats() {
   })
 }
 
-describe('Classic — your toggle and Save Stats are two separate signals (C1, the root-cause fix)', () => {
+describe('Classic — your toggle and Save Stats are two separate signals (the root-cause fix)', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
@@ -429,7 +429,7 @@ describe('Classic — your toggle and Save Stats are two separate signals (C1, t
     expect(enableResetDialog()).toBeInTheDocument()
     // The strip is still six plain cells — no merged warning button smuggled back in.
     expect(cells()).toHaveLength(6)
-    // Dismissing leaves everything: still hidden, stats intact. Q2 took the Cancel button off every
+    // Dismissing leaves everything: still hidden, stats intact. Round 22 took the Cancel button off every
     // ConfirmModal, so the stand-in is one of the three routes the component owns — here the scrim
     // tap, since this popup is reached by tapping a stat box and a finger is the likeliest way out.
     expect(within(enableResetDialog()).getAllByRole('button')).toHaveLength(1) // the confirm, alone

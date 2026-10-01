@@ -907,7 +907,7 @@ describe('index.css — the feather token and the reading line it is NOT derived
 
   it('keeps ONE home for the panel gap — the token the guide lays out with and the seat derives from', () => {
     // The gap the reader sees and the gap the scroll math assumes are the same declaration. A
-    // literal space-y-2 back on the guide's section list would silently restore the Q5 bug the next
+    // literal space-y-2 back on the guide's section list would silently restore that bug the next
     // time either number moved.
     expect(css).toContain(':root{--guide-panel-gap:calc(var(--spacing) * 2)}')
     const guideSource = readFileSync(

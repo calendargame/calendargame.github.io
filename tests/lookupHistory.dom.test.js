@@ -241,7 +241,7 @@ describe('shared across every preset', () => {
 describe('Full Reset clears it too', () => {
   beforeEach(() => resetAppState())
 
-  // ⚠ THE OWNER'S EXPLICIT CALL, overriding an earlier draft of Q1 that left Full Reset unable to
+  // ⚠ THE OWNER'S EXPLICIT CALL, overriding an earlier draft that left Full Reset unable to
   // reach this list at all (the reasoning at the time: it is shared, and Full Reset is otherwise a
   // strictly per-preset operation). He corrected it: there is only ONE copy of this list, so Full
   // Reset — pressed from ANY preset — clears the one copy there is. main.tsx's fullReset calls

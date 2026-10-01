@@ -10,7 +10,7 @@ import {
 import { SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 
-// userDefaults.test.js — the saved-personal-defaults store (Session 11, Q7 "Save Defaults")
+// userDefaults.test.js — the saved-personal-defaults store (Session 11, "Save Defaults")
 // and its pure helpers. Mirrors settings.test.js/modePrefs.test.js: locks the pure state
 // contract (snapshot round-trip, null = factory semantics, the effective-defaults fallbacks,
 // the aoxN normalization every comparison must route through). Persistence (localStorage

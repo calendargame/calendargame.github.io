@@ -451,11 +451,11 @@ describe('the round breakdown — Blitz', () => {
   })
 
   // ★★ A2 (round 21). G is Category 3 — it does not reach into the page, it REPLACES the screen, so
-  // it was left live while a modal is up. That was harmless until Q7 gave the per-mode Reset arms
+  // it was left live while a modal is up. That was harmless until round 21 gave the per-mode Reset arms
   // and this breakdown a real z-60 scrim: opening the panel now slides it in UNDERNEATH that scrim,
   // dimmed and reachable only by the controls the finger cannot get to. So G alone bails while a
   // NON-panel [data-settings-modal] is present (the mode letters still switch away, taking the popup
-  // with them — proved above). This is also the C1 case the owner leaned toward closing this way.
+  // with them — proved above). This is also the case the owner leaned toward closing this way.
   it('G does not slide the settings panel in under the breakdown’s scrim', () => {
     mountApp()
     switchTo('B')

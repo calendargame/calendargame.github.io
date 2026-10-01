@@ -8,7 +8,7 @@
 // the LIFO Back stack, the status-bar scrim) are covered by the settings + mode suites, which
 // reach this component through their real call sites.
 //
-// ★ SINCE Q2 THE CARD HAS EXACTLY ONE BUTTON — the confirm. The Cancel button went app-wide on the
+// ★ SINCE ROUND 22 THE CARD HAS EXACTLY ONE BUTTON — the confirm. The Cancel button went app-wide on the
 // owner's rule that tapping outside or pressing Escape already says the same thing, so what used to
 // be "Cancel does the cancelling" is now three claims: the count is one, the scrim tap and Escape
 // still reach onCancel, and the Tab trap's one-control branch is what this markup actually hits.
@@ -64,11 +64,11 @@ describe('ConfirmModal', () => {
     expect(document.activeElement).toBe(screen.getByRole('dialog'))
   })
 
-  // ★ Q2: ONE BUTTON ON THE CARD. The Cancel button is gone app-wide (the owner: "you can just tap
+  // ★ ONE BUTTON ON THE CARD. The Cancel button is gone app-wide (the owner: "you can just tap
   // outside or press esc so it's just a noise button") — so this asserts the COUNT, not merely the
   // absence of a caption. A card that grew any second control would fail here, which is the claim
   // the trap case below then rests on (trapModalTab's one-control branch).
-  it('carries exactly ONE button — the confirm — and no Cancel (Q2)', () => {
+  it('carries exactly ONE button — the confirm — and no Cancel', () => {
     const { onConfirm } = mount({ confirmLabel: 'Reset' })
     const dialog = screen.getByRole('dialog')
     const buttons = within(dialog).getAllByRole('button')

@@ -52,7 +52,7 @@ describe('modePrefs store', () => {
     expect(r.classicTimingOff).toBe(MODE_PREFS_DEFAULTS.classicTimingOff)
   })
 
-  it('applyPrefs overlays only the given keys, leaving the rest untouched (Q7 — Full Reset → saved defaults)', () => {
+  it('applyPrefs overlays only the given keys, leaving the rest untouched (Full Reset → saved defaults)', () => {
     useModePrefs.getState().setBlitzPerQ(true) // a non-capturable value that must survive
     useModePrefs.getState().applyPrefs({ flashMs: 800, blitzSec: 90, blitzQSec: 10, aoxN: '25' })
     const s = useModePrefs.getState()

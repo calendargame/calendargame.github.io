@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// THE GUIDE'S ACCESSIBILITY SECTION, PINNED TO THE FACTS IT CLAIMS (B4).
+// THE GUIDE'S ACCESSIBILITY SECTION, PINNED TO THE FACTS IT CLAIMS.
 //
 // ★ WHY THIS FILE EXISTS AT ALL, and it is not "coverage". Every other claim the How-to-Play guide
 // makes describes behaviour the suite already drives, so a change that falsified one would go red

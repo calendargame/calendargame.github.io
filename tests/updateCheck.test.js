@@ -131,7 +131,7 @@ describe('checkForUpdate', () => {
   const base = { url: '/build-id.txt?cg=1', ownId: OWN, hasWaitingWorker: false }
 
   it('a worker already WAITING is an update on its own — and asks the network nothing', async () => {
-    // Reproduced during the Q7 research: with a worker already parked, a fresh registration.update()
+    // Reproduced during round 11's research: with a worker already parked, a fresh registration.update()
     // reports nothing new. The parked worker IS the downloaded update, so it is checked first and
     // the network is never consulted — this branch must not depend on a connection.
     const fetchImpl = okFetch(OWN)

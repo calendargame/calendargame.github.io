@@ -4,7 +4,7 @@
 // reconcileBlitzBest / reconcileSuddenBest are the exact functions BlitzMode's `timerDone` effect calls,
 // so this drives the real wrapper logic — no model, no drift — without the cost of rendering <App/>.
 //
-// ★ ROUND 23 Q4: THE RECORD IS REBUILT FROM THE PRE-ROUND RECORD ON EVERY CALL (like MoX's
+// ★ ROUND 23: THE RECORD IS REBUILT FROM THE PRE-ROUND RECORD ON EVERY CALL (like MoX's
 // reconcileAoxStanding), and the oracle now checks WHO holds each field, not just the value. The old
 // fold took the CURRENT record plus a numeric floor, and when an Override pulled a round back below
 // the record it stood on the floor's VALUE with the ROUND'S id — so an earlier round's score came back
@@ -57,12 +57,12 @@ describe('blitzBest — reconcile unit cases', () => {
     expect(reconcileBlitzBest(undefined, 3, 3, 11)).toBeDefined()
     expect(reconcileBlitzBest(undefined, 0, 0, 11)).toBeUndefined()
   })
-  it('rolls back NO further than the record that stood before the round (the C2 fix)', () => {
+  it('rolls back NO further than the record that stood before the round (the cross-round rollback fix)', () => {
     const pre = { score: 2, streak: 2, scoreRoundId: 10, streakRoundId: 10 }
     expect(reconcileBlitzBest(pre, 3, 3, 11)).toMatchObject({ score: 3, scoreRoundId: 11 })
     expect(reconcileBlitzBest(pre, 0, 0, 11)).toEqual(pre)
   })
-  it('★ a rollback hands the record BACK to the round that set it (the Q4 id bug)', () => {
+  it('★ a rollback hands the record BACK to the round that set it (the round-id bug)', () => {
     // Round 10 set 5/5. Round 11 reached 6/6, then an Override pulled it to 4/4. The old fold left
     // { score: 5, scoreRoundId: 11 } — round 10's score credited to round 11.
     const pre = { score: 5, streak: 5, scoreRoundId: 10, streakRoundId: 10 }
@@ -175,7 +175,7 @@ describe('blitzBest — fuzz vs the independent max-round oracle (value AND hold
     for (let seed = 1; seed <= 200; seed++) runSuddenSession(seed, 12)
   })
 
-  // The RESUME-REVERT composite (Session-7 Q2-A): a round can provisionally END (the timerDone effect
+  // The RESUME-REVERT composite (Session 7): a round can provisionally END (the timerDone effect
   // reconciles a Best), then an Override credits the resolved question and RESUMES the round —
   // BlitzMode's resumeRound REVERTS the Best to the pre-round record (prevRoundBestRef), and the round
   // plays on to a higher peak before it RE-ends and reconciles again. Oracle: the record == the one
@@ -217,13 +217,13 @@ describe('blitzBest — fuzz vs the independent max-round oracle (value AND hold
   })
 })
 
-// ── C3a (Q15): the per-Q + Allow Mistakes map (suddenAmBest) reuses reconcileBlitzBest UNCHANGED ──
+// ── The per-Q + Allow Mistakes map (suddenAmBest) reuses reconcileBlitzBest UNCHANGED ──
 // These sessions model the sub-mode's event stream — a clean correct credits good and extends the
 // streak, a wrong breaks the streak and burns the question (the retry-correct advances WITHOUT
 // credit), a question-clock expiry ends the round — so good and the streak high-water move
 // INDEPENDENTLY, unlike the all-correct per-round model above where best === good. The two fields
 // have independent oracles (value and holder each), so a per-field regression breaks its own.
-describe('blitzBest — per-Q + Allow Mistakes fuzz (C3a): two independent oracles', () => {
+describe('blitzBest — per-Q + Allow Mistakes fuzz: two independent oracles', () => {
   function runPerQAmSession(seed, rounds) {
     const rnd = mulberry32(seed)
     let best

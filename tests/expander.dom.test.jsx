@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
-// Q4 — the accordion's grid-template-rows migration; round 7 — the motion clock split;
+// Round 6 — the accordion's grid-template-rows migration; round 7 — the motion clock split;
 // Round 8 — one duration for every accordion in the app.
 // The Expander slides open/closed by tweening its one grid row 0fr⇄1fr (index.css .expander
-// rules), replacing the old measured max-height clamp. Q8 moved the duration onto the
+// rules), replacing the old measured max-height clamp. Round 7 moved the duration onto the
 // --expander-ms var and unified the easing on the Material standard curve
-// (ACCORDION_EASE_CSS, lib/accordionMotion). Q5 finished the job: BOTH consumers now state
+// (ACCORDION_EASE_CSS, lib/accordionMotion). Round 8 finished the job: BOTH consumers now state
 // their duration — the guide's coordinator a distance-scaled per-toggle value, the codes
 // panel the ACCORDION_MS_FLOOR that formula returns at its size — so the CSS fallback is
 // defence only (it must still exist: an unset var makes the calc() invalid and the
@@ -108,7 +108,7 @@ describe('Expander structure (grid wrapper + row)', () => {
   })
 })
 
-describe('Expander durationMs prop (Q8 — the per-toggle --expander-ms clock)', () => {
+describe('Expander durationMs prop (the per-toggle --expander-ms clock)', () => {
   it('stamps the inline --expander-ms var when given', () => {
     const { container } = render(
       <Expander open durationMs={350}>
@@ -118,7 +118,7 @@ describe('Expander durationMs prop (Q8 — the per-toggle --expander-ms clock)',
     expect(container.firstElementChild.style.getPropertyValue('--expander-ms')).toBe('350ms')
   })
   it('leaves the var unset without the prop, so the CSS fallback governs', () => {
-    // No production call site takes this branch any more (Q5 — both state their duration), but
+    // No production call site takes this branch any more (both state their duration), but
     // the component must keep working without the prop or the fallback would be untestable.
     const { container } = render(
       <Expander open>
@@ -153,7 +153,7 @@ describe('index.css expander rules (the styles the structure above keys into)', 
   // that file because the file is the mechanism inventory, not the mechanism it inventoried.
 })
 
-describe('cross-module timing contracts (Q5 — ACCORDION_MS_FLOOR is the one number)', () => {
+describe('cross-module timing contracts (ACCORDION_MS_FLOOR is the one number)', () => {
   // The CSS-declared fallback slide duration in ms — the --expander-ms fallback parsed out of
   // the .expander rule itself. Belt-and-braces in production (both consumers stamp the var),
   // but it is what a panel would run at if one ever stopped, so it must mirror the JS law.
@@ -230,7 +230,7 @@ describe('GuideSection wiring into the Expander', () => {
   })
 })
 
-describe('GuideSection accordion contract (Q8 — aria + coordinator landmarks)', () => {
+describe('GuideSection accordion contract (aria + coordinator landmarks)', () => {
   it('the header button announces state and points at the panel body it controls', () => {
     const { container } = render(
       <GuideSection id="overview" title="Section" openId={null} onToggle={() => {}}>
@@ -270,7 +270,7 @@ describe('GuideSection accordion contract (Q8 — aria + coordinator landmarks)'
   })
 })
 
-describe('GuidePage toggle coordinator (Q8 — the shared clock, exclusive open)', () => {
+describe('GuidePage toggle coordinator (the shared clock, exclusive open)', () => {
   // ⚠ THE MOUNT IS PART OF THE TEST. The coordinator's second half — read the scroller, measure it,
   // ask lib/accordionMotion for a target — runs on every tap, after the state flip that these two
   // cases assert. Mount the guide without its scroller and the tap still opens the panel and then
@@ -305,13 +305,13 @@ describe('GuidePage toggle coordinator (Q8 — the shared clock, exclusive open)
   })
 })
 
-describe('MethodBreakdownSection wiring into the Expander (Q5 — the codes panel)', () => {
+describe('MethodBreakdownSection wiring into the Expander (the codes panel)', () => {
   const DATE = { y: 2024, m: 3, d: 15 }
   const mount = (date = DATE) =>
     render(<MethodBreakdownSection date={date} className="" contentClassName="codes-body" />)
 
   it('states its duration: ACCORDION_MS_FLOOR, the same clock the guide bottoms out at', () => {
-    // Not the CSS fallback by omission (that was the pre-Q5 coincidence of 280ms vs 240ms) —
+    // Not the CSS fallback by omission (that was the earlier coincidence of 280ms vs 240ms) —
     // the codes panel opts in, so the agreement with CODES_CLOSE_MS is derived, not hoped for.
     const { container } = mount()
     expect(container.querySelector('.expander').style.getPropertyValue('--expander-ms')).toBe(

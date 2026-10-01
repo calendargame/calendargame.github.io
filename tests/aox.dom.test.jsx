@@ -504,7 +504,7 @@ describe('AoX — characterization (batch 6: Reveal + Show Codes)', () => {
     expect(ctrl('Hide Codes')).toBeInTheDocument() // panel open
   })
 
-  // C2 Q4 + the reveal-flash refinement: Reveal with Allow Mistakes ON (and One-by-One OFF) counts a
+  // The reveal-flash refinement: Reveal with Allow Mistakes ON (and One-by-One OFF) counts a
   // miss, FLASHES the answer briefly, then AUTO-ADVANCES — no pause/Next button (the run flows
   // date-to-date on its own). Before the fix a revealed question was a locked dead-end.
   it('Reveal (Allow Mistakes on, One-by-One off) counts a miss, flashes the answer, then auto-advances', () => {
@@ -577,7 +577,7 @@ describe('AoX — characterization (batch 6: Reveal + Show Codes)', () => {
 // phantom Q(N+1). Before the fix, the Override credit always advanced, so an Ao10 completed via
 // Reveal+Override showed Q11 (owner-reported). A normal final correct answer uses `complete` to stay
 // put; this gives the Override-completion the same behavior.
-describe('AoX — bug fix (Override-completed run stays on the Nth question, C2)', () => {
+describe('AoX — bug fix (Override-completed run stays on the Nth question)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -694,11 +694,11 @@ describe('AoX — reveal-flash race (Override during the flash cancels the pendi
   })
 })
 
-// ── Batch 6b: C2 Q2-B — practice mode (Save Stats off) lets Override rescue a misclick-ended run ──
+// ── Batch 6b: practice mode (Save Stats off) lets Override rescue a misclick-ended run ──
 // AoX already always-tracks internally, so the off-gate on Override was the only thing stopping a
 // fat-finger rescue in practice mode. Now Override is available specifically to continue a run a
 // misclick ended (Allow Mistakes off), even with stats hidden.
-describe('AoX — C2 Q2-B (Save Stats off: Override rescues a misclick-failed run)', () => {
+describe('AoX — Save Stats off: Override rescues a misclick-failed run', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -761,13 +761,13 @@ describe('AoX — bug #2 fix (override-to-wrong fails the run, Allow Mistakes of
   })
 })
 
-// ── Batch 8: bug fix — Show Codes on a COMPLETED run is review-only (C2) ─────────
+// ── Batch 8: bug fix — Show Codes on a COMPLETED run is review-only ─────────
 // A completing solve credits good but stays on the question (locked, reversible). Opening Show Codes
 // to review the method on the FINISHED run must NOT burn it. The reducer's SHOW_CODES penalty assumed
 // an unanswered live question; a completing solve is already-answered-correct, so reviewing its codes
 // is read-only. Before the fix, opening the codes turned a finished 2/2 run into 2/3 with the streak
 // reset to 0/2 (a phantom played) — found by the aox-strong strong-oracle fuzz profile.
-describe('AoX — bug fix (Show Codes on a completed run is review-only, C2)', () => {
+describe('AoX — bug fix (Show Codes on a completed run is review-only)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -796,7 +796,7 @@ describe('AoX — bug fix (Show Codes on a completed run is review-only, C2)', (
   })
 })
 
-// ── Batch 9: bug fix — a post-completion Override reconciles the Best (C2, AoX run layer) ───────
+// ── Batch 9: bug fix — a post-completion Override reconciles the Best (AoX run layer) ───────
 // A completed run records its Best, but its history stays browsable and overridable — and a
 // back-browse Override (the browsed target) can retract one of the run's n credited solves. Before the fix, only
 // the LIVE-edge reversal of the completing solve rolled the Best back (rollbackBest was gated on
@@ -805,7 +805,7 @@ describe('AoX — bug fix (Show Codes on a completed run is review-only, C2)', (
 // "stale-or-absent snapshot" family). The fix reconciles the Best continuously while the run's
 // stats change post-completion, exactly like Blitz's timerDone effect: still standing (good ≥ n) →
 // the pre-run record improved by the standing avg/med; no longer standing → the pre-run record.
-describe('AoX — bug fix (post-completion Override reconciles the Best, C2)', () => {
+describe('AoX — bug fix (post-completion Override reconciles the Best)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -893,11 +893,11 @@ describe('AoX — bug fix (post-completion Override reconciles the Best, C2)', (
   })
 })
 
-// ── C2: the mode-switch contract (characterization — completes the cross-mode net) ──────────────
+// ── The mode-switch contract (characterization — completes the cross-mode net) ──────────────
 // Every timer mode tears down a RUNNING round/run when you leave it (the original App's rule;
 // Blitz's missing teardown was fixed this pass) while an ENDED one survives the detour. Pin AoX's
 // half: a running run resets to idle on switch-away; a done run (and its recorded Best) survives.
-describe('AoX — C2: mode switch mid-run resets, done state survives', () => {
+describe('AoX — mode switch mid-run resets, done state survives', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -1158,7 +1158,7 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
 // changes a running/ended run's N reconciles it on the popover close — AoX's existing settings-close
 // reset rule, now triggered by the aoxN dep the close-effect gained. Uses a FACTORY panel so Reset
 // Settings touches ONLY the run length, isolating the mode-screen-pref path from the ⚙-panel path.
-// (round 6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
+// (round 6 = "extend Reset Settings"; distinct from the Session-11 change that added Save Defaults.)
 describe('AoX — round 6 (Reset Settings restoring the run length reconciles the run)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -1200,7 +1200,7 @@ describe('AoX — round 6 (Reset Settings restoring the run length reconciles th
 // failed — always shows its times, and its strip's one gesture is the breakdown. The pref (aoxTimingOff) is excluded from the defaults system (verified in
 // tests/saveDefaults.dom.test.jsx).
 //
-// ⚠ RE-BLESSED for C1 (round 16, the stat-box redesign — approved by the owner as a settled design).
+// ⚠ RE-BLESSED in round 16 (the stat-box redesign — approved by the owner as a settled design).
 // A group YOU turned off now renders its value cells BLANK, not as an em dash. The dash was moved to
 // mean one thing only — "no data yet, but there could be" — so that a shown-but-empty stat and a
 // stat you hid stop reading identically. Save Stats off is the third signal: dim, whole strip, which
@@ -1228,7 +1228,7 @@ describe('AoX — Q8 visual-only timing hide', () => {
     answerCorrect() // one solve; run still going
     expect(statValue('Mean')).toMatch(/^\d+\.\d{2}s$/)
     clickStat('Mean') // hide the timing trio
-    // BLANK — C1's "you turned these off, and they ARE still recording" signal.
+    // BLANK — the "you turned these off, and they ARE still recording" signal.
     expect(statValue('Last')).toBe('')
     expect(statValue('Mean')).toBe('')
     expect(statValue('Median')).toBe('')
@@ -1248,7 +1248,7 @@ describe('AoX — Q8 visual-only timing hide', () => {
     click('Begin')
     answerCorrect() // solve #1 immediate → 0.00s
     clickStat('Last') // hide
-    expect(statValue('Last')).toBe('') // blank, not a dash (C1)
+    expect(statValue('Last')).toBe('') // blank, not a dash
     tick(4000)
     answerCorrect() // solve #2 recorded WHILE hidden (~4.00s)
     expect(statValue('Score')).toBe('2/2') // the run kept going
@@ -1268,7 +1268,7 @@ describe('AoX — Q8 visual-only timing hide', () => {
     setN(2)
     click('Begin')
     answerCorrect() // 1/2 → running, trio suppressed
-    expect(statValue('Mean')).toBe('') // blank, not a dash (C1)
+    expect(statValue('Mean')).toBe('') // blank, not a dash
     answerCorrect() // 2/2 → run completes
     expect(statValue('Score')).toBe('2/2')
     // The completed run reveals its result regardless of the hide toggle (the average is the point).

@@ -5,7 +5,7 @@
 // "<preset>:saved" / "<preset>:session"); an in-progress one is not.
 //
 // ★★ WHY THIS IS NOT A STORE-LEVEL TEST, same reason as tests/presetSwitch.dom. store/sessionRound
-// has its own unit coverage for the map read/write/discard. The behaviour Q11 adds lives in the two
+// has its own unit coverage for the map read/write/discard. The behaviour round 21 added lives in the two
 // always-mounted mode screens: a preset switch bumps their remount key, and on the remount they must
 // re-hydrate an ended round from the incoming preset's sessionStorage slot — while an in-progress one
 // stays discarded, because the remount is the fix for the cross-preset stats-contamination bug and
@@ -92,7 +92,7 @@ function finishBlitzRound(nCorrect) {
   tap(ctrl('Reveal'))
 }
 
-describe('Q11 — a finished Blitz round survives a preset round-trip', () => {
+describe('a finished Blitz round survives a preset round-trip', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()
@@ -220,7 +220,7 @@ describe('Q11 — a finished Blitz round survives a preset round-trip', () => {
   })
 })
 
-describe('Q11 — a finished MoX run survives a preset round-trip', () => {
+describe('a finished MoX run survives a preset round-trip', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()
@@ -281,7 +281,7 @@ describe('Q11 — a finished MoX run survives a preset round-trip', () => {
 })
 
 // ── Composed: a Best-key setting change on a RESTORED ended round (round-21 R2) ────────────────
-// The one composed scenario the Q11 suite otherwise skips: restore an ended round/run through a
+// The one composed scenario this suite otherwise skips: restore an ended round/run through a
 // preset round-trip, THEN move a Best-key setting (Julian here — the range stays all-Gregorian so
 // no question changes, only the Best KEY does), THEN close the ⚙ panel.
 //
@@ -293,13 +293,13 @@ describe('Q11 — a finished MoX run survives a preset round-trip', () => {
 // or prevBestSnapRef, so a rehydrated ended round resets identically to a natively-ended one.
 // (Until round 23 the Blitz reconcile effect had the LIVE `blitzBk` in its deps, so the key flip wrote
 // a second entry under the new key mirroring the round's own result before the reset flushed — a
-// round filed under a config it was never played on. Q2 files every round under its own keys; the
+// round filed under a config it was never played on. Round 23 files every round under its own keys; the
 // native case pinning that is in tests/blitz.dom.)
 // ⚠ ROUND IDS ARE NEVER-REPEATING since round 23 (engine/roundId), so the two paths' rounds carry
 // DIFFERENT ids by design. Each side's ids are canonicalized to the order they first appear, which
 // keeps the claim exact — the same keys, the same values, and the same "which fields share a
 // round" — without pretending two different rounds had the same id.
-describe('Q11 composed — a Best-key change after a restored round lands where a native one does', () => {
+describe('composed — a Best-key change after a restored round lands where a native one does', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()
@@ -402,7 +402,7 @@ describe('Q11 composed — a Best-key change after a restored round lands where 
 // tests/presetSwitch.dom owns the "answering straight after a switch writes to the INCOMING preset
 // only" case (the 500-cards-becomes-4 property). This is a lightweight restatement in this file's
 // terms, so a change here that weakened the remount would fail without needing the other file open.
-describe('Q11 wiring does not weaken the remount that isolates presets', () => {
+describe('the parked-round wiring does not weaken the remount that isolates presets', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()

@@ -1,4 +1,4 @@
-// Regression tests for the score-integrity bugs the C2 fuzz survey found + fixed (2026-06-06).
+// Regression tests for the score-integrity bugs the fuzz survey found + fixed (2026-06-06).
 // Each is a focused, app-reachable sequence that produced an IMPOSSIBLE score (streak/best > good)
 // before the fix — and slipped past the earlier good≤played checks. The fuzz (tests/engine/fuzz) is
 // the broad net; these pin the exact scenarios so a future regression names itself.
@@ -51,7 +51,7 @@ const answerComplete = (s, idx) =>
 const override = (s, nextDate, extra = {}) =>
   gameReducer(s, { type: 'OVERRIDE', ...ctx, tracking: false, nextDate, ...extra })
 
-describe('score-integrity regressions (C2 fuzz fixes, 2026-06-06)', () => {
+describe('score-integrity regressions (fuzz fixes, 2026-06-06)', () => {
   it('a Reveal-miss is NOT recorded in history as a credit', () => {
     // Reveal (give up) then New: good stayed 0, so the pushed entry must NOT be a credit.
     const s = neu(reveal(initEngine(D1)), D2)
@@ -92,7 +92,7 @@ describe('score-integrity regressions (C2 fuzz fixes, 2026-06-06)', () => {
   })
 })
 
-// Three more app-reachable score-integrity bugs the C1 expanded fuzz (new weighting profiles) found
+// Three more app-reachable score-integrity bugs the expanded fuzz (new weighting profiles) found
 // + fixed (2026-06-07). Two are one family — a reversed first-try-correct removed its solve time by a
 // stale ABSOLUTE index (`timesLen`), which a prior reversal had shifted, stranding a time
 // (times.length > good); fixed then by removing the time by VALUE, and since round 23 by removing it
@@ -100,7 +100,7 @@ describe('score-integrity regressions (C2 fuzz fixes, 2026-06-06)', () => {
 // cards at the moment of the press and so cannot go stale the way a stored index did. The
 // third is Path 4 restoring `good` from a stale snapshot, clobbering a credit earned since (streak/
 // best > good); fixed by incrementing the live `good` (and the now-dead snapshot was removed).
-describe('score-integrity regressions (C1 expanded-fuzz fixes, 2026-06-07)', () => {
+describe('score-integrity regressions (expanded-fuzz fixes, 2026-06-07)', () => {
   it('two back-browse Path-1 reversals never strand a solve time (times.length ≤ good)', () => {
     let s = initEngine(D1)
     s = answerTimed(s, cOf(D1), 1.5, D2) // Q1 correct, records 1.5 → good 1, times [1.5]
@@ -169,7 +169,7 @@ describe('score-integrity regressions (C1 expanded-fuzz fixes, 2026-06-07)', () 
   })
 })
 
-// The C1 DEEPER-fuzz fix (2026-06-08): an EXACT score oracle (good == reconstructed credits, plus
+// The DEEPER-fuzz fix (2026-06-08): an EXACT score oracle (good == reconstructed credits, plus
 // best + clean-edge streak — not just the inequalities) on the Classic/Deduction fuzz surface caught
 // a streak bug the inequalities couldn't: a back-browse Override credits an OLDER entry while a
 // more-recent LIVE question is a scored MISS — but the streak recompute (streaksFromStacks) EXCLUDES
@@ -178,7 +178,7 @@ describe('score-integrity regressions (C1 expanded-fuzz fixes, 2026-06-07)', () 
 // answer's Math.max. Fixed in gameReducer Path 1 by folding the live question's true contribution
 // (a scored miss → trailing 0, a scored live credit → +1) into the recompute — since round 23 that
 // fold is part of the one credit sequence every toggle recomputes from (gameReducer creditSequence).
-describe('score-integrity regressions (C1 deeper-fuzz fix, 2026-06-08)', () => {
+describe('score-integrity regressions (deeper-fuzz fix, 2026-06-08)', () => {
   it('a back-browse Override does not count the streak past a more-recent live MISS', () => {
     let s = initEngine(D1)
     s = answerAt(s, wOf(D1), D2) // Q1 wrong (creditable later) → played 1, good 0
@@ -206,7 +206,7 @@ describe('score-integrity regressions (C1 deeper-fuzz fix, 2026-06-08)', () => {
   })
 })
 
-// The C2 fuzz fix (2026-06-08): opening Show Codes on a HELD completing (AoX) solve must be a read-only
+// The fuzz fix of 2026-06-08: opening Show Codes on a HELD completing (AoX) solve must be a read-only
 // review, not a burn. A completing solve credits good but stays on the question (locked + reversible);
 // the SHOW_CODES penalty assumed an UNANSWERED live question, so it counted a
 // phantom played + reset the streak + cleared the credit flag while good kept the credit — desyncing
@@ -214,7 +214,7 @@ describe('score-integrity regressions (C1 deeper-fuzz fix, 2026-06-08)', () => {
 // the credited solve as a miss. Found by the new aox-strong strong-oracle profile (the EXACT oracle,
 // extended to the AoX-complete surface). Fixed in gameReducer SHOW_CODES (penalty-free on a credited
 // live card — liveCredited, which replaced the old canOverrideCorrect flag — like the back-browse review).
-describe('score-integrity regressions (C2 fuzz fix — Show Codes on a held complete, 2026-06-08)', () => {
+describe('score-integrity regressions (fuzz fix — Show Codes on a held complete, 2026-06-08)', () => {
   it('Show Codes on a held completing solve does not burn it (good stays a real credit)', () => {
     let s = initEngine(D1)
     s = answerComplete(s, C) // D1 first-try correct, HELD as a completing solve → good 1, reversible
@@ -240,13 +240,13 @@ describe('score-integrity regressions (C2 fuzz fix — Show Codes on a held comp
   })
 })
 
-// Two more C2 fuzz fixes (2026-06-08), found by the new timed-strong strong-oracle profile — the
+// Two more fuzz fixes (2026-06-08), found by the new timed-strong strong-oracle profile — the
 // Blitz timeout surface (LOCK_REVEAL = per-round timeout, no stat; TIMEOUT_MISS = per-question miss).
 // Both are the recurring family: a question that LOOKS answered (a synthesized 'correct' grid) but was
 // never PLAYED leaks into the credit history and desyncs the streak from `good`. Pinned at the engine
 // level — both require a countdown to expire, impractical to drive through the rAF timer in jsdom;
 // the reducer drives the exact reachable action sequence (the strong oracle confirms full consistency).
-describe('score-integrity regressions (C2 timed-mode fuzz fixes, 2026-06-08)', () => {
+describe('score-integrity regressions (timed-mode fuzz fixes, 2026-06-08)', () => {
   const lockReveal = (s) => gameReducer(s, { type: 'LOCK_REVEAL', useJulian: false })
   const timeoutMiss = (s) =>
     gameReducer(s, { type: 'TIMEOUT_MISS', useJulian: false, saveStats: true })
@@ -301,7 +301,7 @@ describe('score-integrity regressions (C2 timed-mode fuzz fixes, 2026-06-08)', (
   })
 })
 
-describe('score-integrity regressions (C2 Session-6 — TIMEOUT_MISS engine-consistency guards)', () => {
+describe('score-integrity regressions (Session 6 — TIMEOUT_MISS engine-consistency guards)', () => {
   const timeoutMiss = (s) => gameReducer(s, { type: 'TIMEOUT_MISS', ...ctx })
 
   it('TIMEOUT_MISS on a LOCKED question is a no-op (the question is already resolved)', () => {

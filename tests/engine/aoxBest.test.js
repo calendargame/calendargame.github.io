@@ -1,4 +1,4 @@
-// tests/engine/aoxBest.test.js — C2 Part 1: the AoX Best Mean/Median reconcile (the COMPONENT
+// tests/engine/aoxBest.test.js — the AoX Best Mean/Median reconcile (the COMPONENT
 // wrapper layer the pure-reducer fuzz never sees), tested directly + fuzzed against an independent
 // oracle.
 //
@@ -279,7 +279,7 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
       recordRemoved: false,
     }
     for (let seed = 1; seed <= 400; seed++) runSession(seed, 12, coverage)
-    // The sessions actually exercised the C2 corners (no vacuous pass):
+    // The sessions actually exercised the rollback corners (no vacuous pass):
     expect(coverage.retractBelowN).toBe(true) // a recorded run dropped below n credits
     expect(coverage.floorRestore).toBe(true) // …and the write restored a NON-EMPTY earlier floor
     expect(coverage.recordRemoved).toBe(true) // …or, with no earlier record, removed the run's own

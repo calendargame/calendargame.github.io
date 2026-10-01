@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
-// tests/dateGen.dom.test.jsx — C2 Part 3: fuzz the REAL date/puzzle generators across ALL settings.
+// tests/dateGen.dom.test.jsx — fuzz the REAL date/puzzle generators across ALL settings.
 //
 // The engine fuzz feeds the reducer pre-made random dates, so it never exercises the actual generators
 // (randomDate + makeDedPuzzle) or the date-generation settings (calendar system, leap / Jan-Feb /
 // Julian chances, year range, random-format, and Deduction's ab-Cross / Jul-Cross / 1582-only toggles).
-// Those settings don't touch SCORING, but C2 wants that proven: drive the generators across the whole
+// Those settings don't touch SCORING, but that has to be proven: drive the generators across the whole
 // settings space and assert every output is a REAL, ANSWERABLE question — valid y/m/d for its calendar
 // (not a dropped 1582 gap day), a correct shown weekday, and an answer that is actually among the
 // options. A generator that ever produced a malformed or unanswerable question would desync the engine
@@ -95,7 +95,7 @@ const pick = (rnd, arr) => arr[Math.floor(rnd() * arr.length)]
 // called for an unbuildable range in normal play" (src/lib/dedPuzzle.ts) — so on an unbuildable
 // range it just exhausts its 3000-attempt bound and returns null.
 //
-// ⚠ WHY THE FUZZ MUST RESPECT THIS (Q11, the intermittent-failure root cause). Without it, a third
+// ⚠ WHY THE FUZZ MUST RESPECT THIS (the intermittent-failure root cause). Without it, a third
 // of the draws asked Year for ranges the app forbids: 7,351 of 60,000 calls returned null, and
 // those calls alone burned 96.7% of the test's runtime — while asserting NOTHING, because
 // checkPuzzle(null) returns [] by design. The test therefore cost ~4s of pure CPU for ~0.14s of
@@ -116,7 +116,7 @@ const yearSubPossible = (lo, hi, useJulian) => {
   return (has1582 && has1583) || (has1581 && has1582)
 }
 
-describe('date-generation fuzz — every setting yields a real, answerable question (C2 Part 3)', () => {
+describe('date-generation fuzz — every setting yields a real, answerable question', () => {
   it('randomDate produces only real, answerable weekday questions across all settings', () => {
     const rnd = mulberry32(12345)
     const dateRng = mulberry32(67890)
@@ -195,7 +195,7 @@ describe('date-generation fuzz — every setting yields a real, answerable quest
   })
 
   // The other side of the yearSubPossible contract, pinned directly instead of being hammered by the
-  // fuzz above (Q11 — that was 96.7% of that test's runtime for zero assertions). When the app WOULD
+  // fuzz above (that was 96.7% of that test's runtime for zero assertions). When the app WOULD
   // have disabled the Year chip, makeDedPuzzle must fail CLEANLY: null, never a malformed or
   // unanswerable puzzle. A bounded sample is the right shape — the outcome is structural, not
   // probabilistic, so each configuration is exhausted-and-null on every attempt.

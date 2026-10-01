@@ -150,7 +150,7 @@ describe('averageRowHeight(slotMidpoints)', () => {
   })
 })
 
-// ── Q7, round 23: where the dragged row may be DRAWN ─────────────────────────────────────────────
+// ── Round 23: where the dragged row may be DRAWN ─────────────────────────────────────────────
 describe('clampDragCenter(centerY, slotMidpoints, visibleTop, visibleBottom, halfRow)', () => {
   // Five 40px rows, centers 20 … 180, in content coordinates.
   const slots = [20, 60, 100, 140, 180]

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// pointerGestures (Q4 + Q5) — the pure decisions + latch/suppression contracts behind press-drag-release
+// pointerGestures — the pure decisions + latch/suppression contracts behind press-drag-release
 // input. resolveRelease / resolveTriggerRelease / nextHilite / menuFor / bandDirection / scrollDelta are
 // pure (or layout-free DOM reads) and tested directly; the controller's pointer latch, click suppression
 // and group-drag hilite are tested by installing it and dispatching synthetic pointer events with a
@@ -90,7 +90,7 @@ describe('pointerGestures.nextHilite — the group ring appears only after leavi
   })
 })
 
-// ── resolveTriggerRelease — the press-drag MENU release decision (Q5 rework). Uses real (layout-free)
+// ── resolveTriggerRelease — the press-drag MENU release decision. Uses real (layout-free)
 // jsdom elements: the decision reads contains/hasAttribute/closest, which all work without layout.
 const domEl = (tag, attrs = {}, parent = null) => {
   const node = document.createElement(tag)
@@ -171,8 +171,8 @@ describe('pointerGestures.resolveTriggerRelease — press-drag menu release', ()
 
 // ── gestureTarget — the announced-unavailable filter (round 15). Every target this controller
 // resolves goes through it: the button a press latches onto, the member the ring is drawn on, and the
-// member a release acts on. Until B7 the filter was implicit — every withheld control also wore
-// pointer-events-none, so elementFromPoint and pointerdown both walked past it — and B7 removing that
+// member a release acts on. Until round 15 the filter was implicit — every withheld control also wore
+// pointer-events-none, so elementFromPoint and pointerdown both walked past it — and round 15 removing that
 // block from the ⚙ footer's three buttons is what made the rule need saying out loud.
 describe('pointerGestures.gestureTarget — an announced-unavailable control is not a target', () => {
   it('an ordinary element passes through unchanged', () => {
@@ -433,10 +433,10 @@ describe('pointerGestures controller — pointer latch + click suppression', () 
     document.removeEventListener('drag-dismiss', dismiss)
   })
 
-  it('trigger flow: a WITHHELD member is never ringed and never activated — the ⚙ footer regression B7 opened', () => {
+  it('trigger flow: a WITHHELD member is never ringed and never activated — the ⚙ footer regression round 15 opened', () => {
     // The gesture is the app's signature one: press the ⚙ gear, drag into the panel, release on a
     // control. The panel's footer holds three buttons that go aria-disabled when the app has nothing
-    // to save / reset / clear. B7 took pointer-events-none off them so the not-allowed cursor could
+    // to save / reset / clear. Round 15 took pointer-events-none off them so the not-allowed cursor could
     // paint — and pointer-events-none was the only thing keeping them out of this controller, so the
     // ring started appearing on a greyed-out button that then did nothing on release. A ring is a
     // promise that a release will act; this asserts the promise is never made.

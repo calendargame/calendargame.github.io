@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The codes panel's FREEZE STATE MACHINE (components/MethodBreakdown) — Q5, round 11.
+// The codes panel's FREEZE STATE MACHINE (components/MethodBreakdown) — round 11.
 //
 // MethodBreakdownSection holds the four inputs its body reads (date, format, cellDates, Julian)
 // steady for CODES_CLOSE_MS after the panel starts closing, so the contents cannot change while
@@ -10,7 +10,7 @@
 // the DATE GOING AWAY.
 //
 // A date going away is a close like any other (the panel's `open` folds in hasDate), and until
-// Q5 the freeze effect opened with `if (!date) return`. That skipped the close path: React ran
+// round 11 the freeze effect opened with `if (!date) return`. That skipped the close path: React ran
 // the previous run's cleanup, clearing the pending release timer, and armed nothing in its
 // place, so the panel stayed flagged as closing and the frozen snapshot stayed at the date that
 // had already gone away until the next open overwrote it. It was never VISIBLE, because a

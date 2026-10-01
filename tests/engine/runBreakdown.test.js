@@ -139,7 +139,7 @@ describe('runBreakdown — the marks a card that earned nothing carries', () => 
 })
 
 // The case names keep the old five-path names (the Override has been ONE per-card toggle since round
-// 23 Q6 — see gameReducer): Path 1 = the browsed card, Paths 2/3 = the live card, Paths 4/5 = the card
+// 23 — see gameReducer): Path 1 = the browsed card, Paths 2/3 = the live card, Paths 4/5 = the card
 // just behind a fresh live one.
 describe('runBreakdown — Override moves the time and the row together (every target)', () => {
   it('PATH 3: crediting the live wrong gives that card the wrong answer’s time', () => {

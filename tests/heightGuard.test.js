@@ -1,4 +1,4 @@
-// tests/heightGuard.test.js — no hard-coded PIXEL HEIGHTS in the UI tree (Q2).
+// tests/heightGuard.test.js — no hard-coded PIXEL HEIGHTS in the UI tree.
 // Why this is a build-failing rule and not a style preference: this app sizes itself with ONE
 // fluid root font (index.css: html{font-size:clamp(…,1.95vh,…)}), so every rem-based height —
 // padding, line boxes, panels, the whole vertical rhythm — shrinks together to fit a short screen
@@ -51,7 +51,7 @@ const violations = scanned.flatMap((file) =>
     ),
 )
 
-describe('height guard (Q2) — the fluid-root system cannot shrink a pixel height', () => {
+describe('height guard — the fluid-root system cannot shrink a pixel height', () => {
   it('scans the real tree (main.tsx and LookupCard.tsx both present — the guard cannot go blind)', () => {
     const names = scanned.map((f) => relative(root, f).replace(/\\/g, '/'))
     expect(names).toContain('src/main.tsx')

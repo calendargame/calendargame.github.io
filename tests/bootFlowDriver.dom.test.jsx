@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // BootOverlay's trace — the STATIC contract (Round 3, owner call: the erase/redraw flow sweep is
-// parked behind BOOT_TRACE_ANIMATED=false in main.tsx; Backlog B2 revisits it). These pins prove
+// parked behind BOOT_TRACE_ANIMATED=false in main.tsx; a backlog item revisits it). These pins prove
 // the rAF driver is INERT and the trace renders as a plain fully-drawn crisp stroke: no rAF
 // scheduled, no blur-mask machinery rendered, no mask attribute on the visible path, no inline
 // dash styles written. Plus the shared DIM contract of the glyph (matches the icon master — the

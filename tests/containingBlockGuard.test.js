@@ -6,7 +6,7 @@
 // CONTAINING BLOCK for fixed descendants. transform, filter, backdrop-filter, will-change, contain
 // and perspective all do exactly that: put any one of them on <html>, <body> or #root and the
 // panel silently starts answering to a scrolling box instead of the viewport, i.e. it drifts with
-// the page again — the Round-4 report Q8 root-caused, back with no code change to blame.
+// the page again — the Round-4 report that round 11 root-caused, back with no code change to blame.
 //
 // That is an invisible dependency, so it gets a visible test. This scans the two places those
 // three elements can be styled — src/index.css and index.html (its inline <style> plus the class
@@ -114,7 +114,7 @@ const inlineWrites = [
   )
   .filter((w) => !ALLOWED_INLINE_PROPS.some((p) => w.endsWith(`— ${p}`)))
 
-describe('containing-block guard (Q8) — nothing may make html/body/#root the fixed panel’s viewport', () => {
+describe('containing-block guard — nothing may make html/body/#root the fixed panel’s viewport', () => {
   it('sees the real rules for all three elements (the scanner cannot go blind)', () => {
     const hit = (sel) => rules(css).some(({ selectors }) => selectors.includes(sel))
     expect(hit('html')).toBe(true) // the overflow clamp (html,body{…})

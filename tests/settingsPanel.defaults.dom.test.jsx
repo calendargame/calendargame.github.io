@@ -48,7 +48,7 @@
 // ⚠ WHAT IS NOT HERE, deliberately: the footer row's caption auto-fit. The fit is a no-op at
 // width 0 (jsdom lays nothing out), so the only honest coverage is the mocked-measurement wiring
 // in tests/footerFit.dom plus a device check. This file asserts only that all three captions are
-// static text (Q7 froze the last one — no more "Confirm?" swap) and claims nothing about pixels.
+// static text (round 21 froze the last one — no more "Confirm?" swap) and claims nothing about pixels.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
@@ -121,7 +121,7 @@ const saveCardAoxBox = () =>
   within(modalCard('save')).getByRole('textbox', { name: 'MoX Run Length' })
 // The card's DIRTY-ROW accent — the visible "you changed this one" treatment, which is the only
 // readout the Save card's clean/edited state has (the manager also republishes it by growing its
-// Save button, the one control either card has since Q2). Same category as isDimmed: a paint the
+// Save button, the one control either card has since round 22). Same category as isDimmed: a paint the
 // user meets, named in one place.
 const rowMarkedEdited = (el) => el.className.includes('btn-solid')
 // Drag a card's slider to a value — a `change`, which is what a controlled range input sees.
@@ -455,7 +455,7 @@ describe('⚙ Full Reset — reach, outcomes and the confirmation popup (net gro
     // Reset asks a wider question than "has anything changed": a played Classic question is enough
     // to offer it in a state the other three offers read as pristine. Deliberately not a panel value
     // — that would light the other three and the guard under test would never bite.
-    // ⚠ USED TO BE A SEEDED LOOKUP, still WOULD work (Q1, round 20 moved lookupHistory out of the
+    // ⚠ USED TO BE A SEEDED LOOKUP, still WOULD work (round 20 moved lookupHistory out of the
     // progress store, but the owner's later call kept it inside Full Reset's reach — see main.tsx's
     // isFullyReset, which reads `displayLookupHistory` again). Switched to a played Classic question
     // during the move and left that way rather than reverted: a mode-store freshness flag
@@ -549,7 +549,7 @@ describe('⚙ Full Reset — reach, outcomes and the confirmation popup (net gro
     fireFullReset()
     expect(statValue('Score')).toBe('0/0') // the screen came back at launch state
     expect(useProgress.getState().blitzBest).toEqual({})
-    // ★ LOOKUP HISTORY IS WIPED TOO (Q1, round 20 — the owner's explicit call, overriding an earlier
+    // ★ LOOKUP HISTORY IS WIPED TOO (round 20 — the owner's explicit call, overriding an earlier
     // draft of this whole feature that would have left it standing). It left the progress store for
     // its own global one, but Full Reset — unlike every OTHER button in this panel, which only ever
     // reaches the preset it was pressed in — still reaches this ONE shared list, precisely because
@@ -603,7 +603,7 @@ describe('⚙ Full Reset — reach, outcomes and the confirmation popup (net gro
     expect(useSettings.getState().leapChance).toBe('75')
   })
 
-  // Q2 removed the Cancel button from every ConfirmModal — the confirm is the card's only control
+  // Round 22 removed the Cancel button from every ConfirmModal — the confirm is the card's only control
   // now — so "back out of it" is a dismiss route. The scrim tap is used here because it is the one
   // route that also asserts the panel behind the popup survives a finger landing outside the card.
   it('a scrim tap closes the popup and changes nothing; the confirm button fires the reset and closes the panel', () => {
@@ -674,7 +674,7 @@ describe('⚙ Reset Settings — the confirmation popup (net group 8b)', () => {
     expect(useSettings.getState().leapChance).toBe(SETTINGS_DEFAULTS.leapChance)
   })
 
-  // The popup's ONLY button is the confirm (Q2), so backing out is a dismiss — Escape here, the
+  // The popup's ONLY button is the confirm, so backing out is a dismiss — Escape here, the
   // keyboard's route, where the Full Reset case above takes the scrim.
   it('dismissing it restores nothing, and the card carries no second button to do it with', () => {
     act(() => useSettings.getState().setLeapChance('75'))
@@ -821,7 +821,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
       ),
     ).toBeInTheDocument()
     dragSlider('manage', 'Flash Speed', 1200)
-    // Q2: what a dirty row grows is SAVE ALONE — the Cancel that used to come with it is gone
+    // What a dirty row grows is SAVE ALONE — the Cancel that used to come with it is gone
     // app-wide, so this asserts the pair did not merely shrink by one caption but became one button.
     expect(modalButtons('manage')).toContain('Save')
     expect(modalButtons('manage')).not.toContain('Cancel')

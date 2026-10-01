@@ -56,7 +56,7 @@ import { hasSessionRound } from '../src/store/sessionRound.js'
 
 // The mock: onChange's ONE call into lib/presetNameWidth, controllable per test. Defaults to
 // "everything fits, unchanged" (the shape every case that is not ABOUT the cap wants), so cases
-// which do not mention it at all keep typing exactly what they type — the pre-Q6 behaviour, and
+// which do not mention it at all keep typing exactly what they type — the behaviour before the live width cap, and
 // the same reason a mock with a sane default beats a mock every case must configure.
 const presetNameWidth = vi.hoisted(() => ({
   capCandidateToSwitcherWidth: vi.fn((candidate) => ({ text: candidate, capped: false })),
@@ -92,7 +92,7 @@ const queryConfirmCard = () => screen.queryByRole('dialog', { name: CONFIRM_TITL
 const nameBoxes = () => within(card()).getAllByRole('textbox', { name: 'Preset name' })
 const listedNames = () => nameBoxes().map((el) => el.value)
 // The row div this file queries by — the name box's OWN parent, i.e. the inner grid row (✕, name
-// box, current-preset marker, amnesic marker, grip — in that order since Q7, round 23). The OUTER div one level up is components/PresetManager's own
+// box, current-preset marker, amnesic marker, grip — in that order since round 23). The OUTER div one level up is components/PresetManager's own
 // ref target for measuring the row's real position and applying its live drag transform — nothing in
 // this file needs that one, since jsdom cannot lay it out anyway (the pointer-wiring cases below stub
 // getBoundingClientRect directly on it, reached via `rowOf(name).parentElement`).
@@ -731,7 +731,7 @@ describe('reordering', () => {
       expect(listedNames()).toEqual(['Timed', 'Preset 1'])
     })
 
-    // ★ Q7, round 23 — THE DRAGGED ROW STAYS INSIDE THE LIST. The owner's screenshots showed it
+    // ★ ROUND 23 — THE DRAGGED ROW STAYS INSIDE THE LIST. The owner's screenshots showed it
     // sliding up over the popup's description and down past the list's foot. The row is drawn at
     // most as far as the first / last slot, however far the finger goes.
     const transformOf = (name) => rowOf(name).parentElement.style.transform
@@ -839,7 +839,7 @@ describe('reordering', () => {
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('deleting', () => {
-  // ⚠⚠ THE SETTINGS PAYLOAD IS DELIBERATELY NOT `{}` ANY MORE (Q1), AND EVERY CASE IN THIS BLOCK
+  // ⚠⚠ THE SETTINGS PAYLOAD IS DELIBERATELY NOT `{}` ANY MORE, AND EVERY CASE IN THIS BLOCK
   // DEPENDS ON THAT. An empty state merges to exactly the factory values (store/presets'
   // mergeOverDefaults), so four empty payloads describe a preset that is still FACTORY-FRESH — and
   // its ✕ now deletes on the spot with no question to assert anything about. One ⚙ setting off its
@@ -871,7 +871,7 @@ describe('deleting', () => {
     return id
   }
 
-  it('asks first, IN THE SAME DIALOG, with ONE button and no Cancel (Q2)', () => {
+  it('asks first, IN THE SAME DIALOG, with ONE button and no Cancel', () => {
     createUsedPreset('Timed')
     openManager()
     tap(rowButton('Timed', 'delete'))
@@ -884,7 +884,7 @@ describe('deleting', () => {
     // …and the card that is up has taken the keyboard, which is the term that would silently break
     // if focus had been left to the caller's open-only effect.
     expect(document.activeElement).toBe(confirmCard())
-    // Q2: the question's only control is the destructive one. Asserted as a COUNT, because the claim
+    // The question's only control is the destructive one. Asserted as a COUNT, because the claim
     // that replaced Cancel is "every dismiss route comes back here" (the three ladder cases below),
     // and that claim is only honest if there is no second button quietly doing it instead.
     const buttons = within(confirmCard()).getAllByRole('button')
@@ -892,10 +892,10 @@ describe('deleting', () => {
     expect(within(confirmCard()).queryByRole('button', { name: 'Cancel' })).toBeNull()
   })
 
-  // ── ⚠⚠ THE DISMISSAL LADDER (Q2) — the three cases the Cancel button's removal RESTS on ────────
+  // ── ⚠⚠ THE DISMISSAL LADDER — the three cases the Cancel button's removal RESTS on ────────
   //
   // Cancel was the one in the app that was not merely a third spelling of a dismiss: it returned to
-  // the LIST, where a dismiss closed the whole card. So Q2 could not just delete it — every dismiss
+  // the LIST, where a dismiss closed the whole card. So round 22 could not just delete it — every dismiss
   // route had to learn the step it used to buy, or there would be no way out of the question but
   // destroying the card and re-opening it. Each route is asserted separately and each is asserted
   // TWICE OVER (the step back, then the close), because a ladder that only ever took the first step
@@ -954,7 +954,7 @@ describe('deleting', () => {
   })
 
   // ⚠⚠ CLOSING EVERYTHING AT ONCE MUST UNWIND EXACTLY WHAT WAS PUSHED (round 22's fixer, F14). With
-  // the delete question up, three Back entries are registered — 'settings', 'presets' and Q2's
+  // the delete question up, three Back entries are registered — 'settings', 'presets' and the delete question's own
   // 'presets-delete' — and G (or a mode letter) closes the whole ⚙ panel in one commit. Each close
   // used to call history.back() on its own under ONE shared "that was us" flag; in Chromium (measured
   // in a real browser) all three traversals ran, the second popstate was taken for a real Back, and
@@ -1035,7 +1035,7 @@ describe('deleting', () => {
     expect(within(confirmCard()).queryByText(/You are on this preset/)).toBeNull()
   })
 
-  // ── Q1: THE QUESTION IS SKIPPED FOR A PRESET THAT HOLDS NOTHING ─────────────────────────────
+  // ── THE QUESTION IS SKIPPED FOR A PRESET THAT HOLDS NOTHING ─────────────────────────────
   //
   // ★ WHAT MAKES THIS GROUP WORTH HAVING RATHER THAN LEAVING IT TO THE STORE'S OWN UNIT CASES
   // (tests/presets.dom, which owns isPresetFactory's judgement in every shape): these say the ✕

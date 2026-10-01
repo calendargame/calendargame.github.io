@@ -1,11 +1,11 @@
-// StatPanel value auto-fit math (Q3). The pure scale function is unit-tested here; the wiring (measure
+// StatPanel value auto-fit math. The pure scale function is unit-tested here; the wiring (measure
 // each box + apply the font-size) is verified on-device — jsdom has no layout engine, so element widths
 // are 0 there (fitScale then returns 1, a no-op, so the stat values still render at the base size, which
 // the per-mode DOM tests already exercise via statValue()).
 import { describe, it, expect } from 'vitest'
 import { fitScale, sharedFitScale } from '../src/lib/statFit.js'
 
-describe('StatPanel.fitScale — value auto-fit (Q3)', () => {
+describe('StatPanel.fitScale — value auto-fit', () => {
   it('returns 1 (no shrink) when the value already fits', () => {
     expect(fitScale(40, 60)).toBe(1)
     expect(fitScale(60, 60)).toBe(1)

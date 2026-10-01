@@ -32,7 +32,7 @@ import {
 const open = (id) => act(() => switchPreset(id))
 const setDefault = (mode) => act(() => useSettings.getState().setDefaultMode(mode))
 
-describe('Q3 — a preset opens on its Default Mode', () => {
+describe('a preset opens on its Default Mode', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()

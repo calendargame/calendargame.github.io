@@ -244,7 +244,7 @@ describe('the registry', () => {
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // THE "OPEN IN" PIN (round 21) — an app-global registry field: which preset a fresh app open
-// lands in. 'last' (the default, and every pre-Q3 build's behaviour) = the persisted activeId as-is;
+// lands in. 'last' (the default, and the behaviour of every build before the pin) = the persisted activeId as-is;
 // a preset id = that preset, whatever was active last time. Applied by usePresets' hydrate `merge`.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('the "open in" pin', () => {
@@ -252,7 +252,7 @@ describe('the "open in" pin', () => {
 
   it('defaults to "last" and normalizes a garbage or dangling value back to it', () => {
     expect(makePresetRegistryDefaults().openInPreset).toBe('last')
-    // An id that names no preset, a string, the absent key of a pre-Q3 payload — all collapse to 'last'.
+    // An id that names no preset, a string, the absent key of a payload from before the pin — all collapse to 'last'.
     expect(normalizeRegistry({ presets: [{ id: 1, name: 'A' }], activeId: 1 }).openInPreset).toBe(
       'last',
     )
@@ -297,7 +297,7 @@ describe('the "open in" pin', () => {
     expect(fresh.usePresets.getState().activeId).toBe(2)
     expect(fresh.usePresets.getState().openInPreset).toBe(2)
 
-    // Clear the pin — a cold start then honours whatever was active last (the pre-Q3 behaviour).
+    // Clear the pin — a cold start then honours whatever was active last (the behaviour before the pin existed).
     fresh.control.setOpenInPreset('last')
     fresh.control.switchPreset(1)
     fresh = await reopenApp()

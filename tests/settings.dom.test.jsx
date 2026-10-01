@@ -442,7 +442,7 @@ describe('Settings — THE PICKER RULE', () => {
   // The lock is published five ways and expectLock (imported from the panel helper) reads all
   // five: the dim on the GROUP (so the housing greys as one piece rather than five separately-
   // dimmed buttons, which is what changed in round-9), the GROUP's own aria-disabled, then
-  // aria-disabled on every segment, PillTray's onChange guard behind them, and — the Q2 addition —
+  // aria-disabled on every segment, PillTray's onChange guard behind them, and — the round 9 addition —
   // no tab stop at all, since pointer-events-none locks out pointers and nothing else. All five
   // come from ONE `disabled` on the PillGroup, so they cannot drift apart; asserting them together
   // is what proves that.
@@ -999,8 +999,8 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     }
   })
 
-  // ★★ THE PANEL'S HEADING HIERARCHY IS THREE TIERS, AND THEY MUST BE MUTUALLY UNMISTAKABLE (Q4,
-  // round 22). Before Q4 there were two: "Global" and "Per-preset" were drawn as plain left-aligned
+  // ★★ THE PANEL'S HEADING HIERARCHY IS THREE TIERS, AND THEY MUST BE MUTUALLY UNMISTAKABLE (round
+  // 22). Before it there were two: "Global" and "Per-preset" were drawn as plain left-aligned
   // SectionLabels — the SAME rank as the Display / Dates / Stats headers nested inside them — above
   // an identical section divider, so the panel read as five peer sections when it is really two
   // groups with three categories in the second.
@@ -1085,7 +1085,7 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
   it('moved no class on any housing, locked or not', () => {
     mountPanel()
     const cls = (name) => screen.getByRole('radiogroup', { name }).className
-    // ⚠ Round-10 retarget, NOT a loosening: Q2's gate was "the keyboard pass moves no pixel", and
+    // ⚠ Round-10 retarget, NOT a loosening: round 9's gate was "the keyboard pass moves no pixel", and
     // it still holds — this string changed because the OWNER separately reverted Date Format to
     // one row (round-10), which is a deliberate visual change with its own test above. The pin
     // stays exact so a future keyboard/lock change still cannot move it by accident.
@@ -1100,14 +1100,14 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expect(cls('Julian Chance')).toBe('opacity-60 pointer-events-none')
   })
 
-  // ★ THE ⚙ FOOTER'S THREE BUTTONS — NEW IN ROUND 15 (B7), and the honest note is that this gate
-  // did NOT cover them before. B7 was expected to force a re-blessing here and could not, because
+  // ★ THE ⚙ FOOTER'S THREE BUTTONS — NEW IN ROUND 15, and the honest note is that this gate
+  // did NOT cover them before. That round was expected to force a re-blessing here and could not, because
   // nothing in this describe had ever named a footer class string: the owner's zero-pixel rule was
   // being enforced over the pickers, the theme rows and the panel's layout, and the one row that
   // was about to change its look was outside it. So this is the gate catching up, not a drift being
   // blessed — and from here a future edit to the footer's treatment cannot be silent.
   //
-  // ★ WHAT CHANGED, AND THAT THE OWNER APPROVED IT. Until B7 a withheld footer button wore
+  // ★ WHAT CHANGED, AND THAT THE OWNER APPROVED IT. Until round 15 a withheld footer button wore
   // `opacity-60 pointer-events-none`. It now wears `opacity-60 cursor-not-allowed` and carries
   // aria-disabled. pointer-events-none had to GO for the cursor to exist at all — a
   // pointer-events:none element is never hit-tested, so a cursor declared on it can never paint —

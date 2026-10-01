@@ -126,7 +126,7 @@ describe('the register module failing to load (main.tsx → sw-module-import)', 
   it('reports it, once, and the app boots anyway', async () => {
     // The chunk is one of two INDEPENDENT ways to end up with no service worker (the other is
     // register() itself failing, inside sw.ts). It is not a crash: the app runs perfectly well
-    // without a worker — it just has no offline copy and no update path, and before Q10a nothing
+    // without a worker — it just has no offline copy and no update path, and before round 11 nothing
     // anywhere said so.
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,

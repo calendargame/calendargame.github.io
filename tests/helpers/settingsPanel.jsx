@@ -872,10 +872,10 @@ export function offers() {
 // and the only useful question is whether the parts agree: the class DRAWS it unavailable, the
 // aria-disabled ANNOUNCES it unavailable, and the handler guard makes it INERT. Asked one facet at
 // a time, "greyed and unpressable but announced to a screen reader as an ordinary live button"
-// passes every assertion and is precisely the defect B7 was opened for.
+// passes every assertion and is precisely the defect round 15 was fixing.
 //
 // ⚠ `tabStop` IS EXPECTED TRUE IN BOTH STATES, and that is the decision rather than an oversight.
-// B7 chose aria-disabled over a real `disabled` so a keyboard user can still REACH the button and
+// Round 15 chose aria-disabled over a real `disabled` so a keyboard user can still REACH the button and
 // be told why it does nothing. A `disabled` would report tabStop false here, which is why the facet
 // is in the tuple: it is the one that tells the two spellings apart.
 export function footerOfferState(name) {
@@ -1272,9 +1272,9 @@ export const makeSaveable = () =>
 
 // EVERY WAY A MODAL GOES AWAY, and the group asserts they are not interchangeable: four of them
 // DISCARD pending edits and one of them (`save`) commits.
-//   dismiss — Escape, which since Q2 is what "the modal's own dismiss" MEANS: no modal in the app
+//   dismiss — Escape, which since round 22 is what "the modal's own dismiss" MEANS: no modal in the app
 //             carries a dismiss BUTTON any more. Round 21 took the standalone Close off the
-//             Changelog and the resting defaults manager; Q2 took Cancel off the confirms and off a
+//             Changelog and the resting defaults manager; round 22 took Cancel off the confirms and off a
 //             dirty manager, on the owner's rule that tapping outside or pressing Escape already
 //             says it. The route is kept as its own name rather than folded into `escape` because
 //             the cases that travel it mean "the user dismissed this", and a modal that ever grows
@@ -1302,7 +1302,7 @@ const MODAL_CLOSE_ROUTES = {
     if (btn)
       throw new Error(
         `closeModal(${key}, 'dismiss'): this modal has grown a "${btn.textContent.trim()}" button. ` +
-          'Round 21 removed every standalone Close and Q2 every Cancel — a dismiss is the scrim ' +
+          'Round 21 removed every standalone Close and round 22 every Cancel — a dismiss is the scrim ' +
           'tap, Escape or Back. If the button is intended, teach this route about it.',
       )
     return act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
@@ -1325,7 +1325,7 @@ export function closeModal(key, via = 'dismiss') {
 
 // A modal's own controls, by accessible name in DOM order — which IS the read-only/dirty state the
 // two DefaultsCard modals publish: NO buttons at rest (since round 21), 'Save' alone once a row is
-// edited (Q2 removed the 'Cancel' that used to come with it). The Save Defaults card, being an
+// edited (round 22 removed the 'Cancel' that used to come with it). The Save Defaults card, being an
 // action card, always shows that lone 'Save'; a ConfirmModal always shows its lone confirm.
 export const modalButtons = (key) =>
   within(modalCard(key))

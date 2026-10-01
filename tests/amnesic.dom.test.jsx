@@ -87,7 +87,7 @@ const setAmnesic = (on, id = usePresets.getState().activeId) => act(() => setPre
 
 // Put real, distinguishable stats in every one of the five persisted progress values, through the
 // store's own setters — a payload the app never wrote would be no evidence about what it saves.
-// ⚠ LOOKUP HISTORY IS DELIBERATELY NOT SEEDED HERE (Q1, round 20; used to be a sixth call). It left
+// ⚠ LOOKUP HISTORY IS DELIBERATELY NOT SEEDED HERE (round 20; used to be a sixth call). It left
 // `progress` for its own global store, and this file's whole claim — "while Amnesic is on, nothing
 // writes THIS PRESET'S permanent stats" — has nothing left to say about a value that was never this
 // preset's to begin with. Its own suppression mechanism (a session-only entry never joining the
@@ -525,7 +525,7 @@ describe('the Amnesic switch in the ⚙ panel', () => {
   // ★★ IT LIGHTS THE GEAR, AND THIS CASE IS THE DELIBERATE REVERSAL OF THE ONE THAT STOOD HERE.
   // The old case asserted the opposite — "never lights the gear" — from the true premise that the
   // flag is a property of the PRESET rather than a ⚙ setting. The conclusion was a BUG (round-22
-  // Q5): the gear's bar, Reset Settings' dim and Save Defaults' dim are ONE expression (main.tsx's
+  // 22): the gear's bar, Reset Settings' dim and Save Defaults' dim are ONE expression (main.tsx's
   // settingsAtDefaults), so leaving Amnesic out of it left Save Defaults dimmed and INERT whenever
   // Amnesic was the only thing a player had changed — making "Amnesic: on" impossible to save as a
   // default at all, even though the popup's commit had captured it since round 20. Every offer

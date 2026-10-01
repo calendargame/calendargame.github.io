@@ -9,7 +9,7 @@
 // piling up here. That retired the render-time slice, and with it the separate changelogLimit.dom
 // file which mocked a larger data set behind that slice — the popup can no longer discard
 // anything, so the cap can no longer be a rendering question. The two light-blue dots are the persisted
-// breadcrumb to the popup. ⚠ THE TWO NO LONGER FIRE TOGETHER (2026-08-10): the Q2 build-stamp
+// breadcrumb to the popup. ⚠ THE TWO NO LONGER FIRE TOGETHER (2026-08-10): the build-stamp
 // detection marks the GEAR flag on every build change (including one the real Updating flow just
 // bridged — only the SCREEN is suppressed then), but marks the CHANGELOG flag only when the newest
 // entry has actually changed since this device last looked. The cases that discriminate are below,

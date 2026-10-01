@@ -127,7 +127,7 @@ describe('answer hit areas — the rendered grid and its padding describe one sh
     const dead = grid.children[DAY.indexOf(wrong)]
     // "Dead" here is the app's own sense of it, and worth being exact about: an already-answered
     // weekday option deliberately stays HIT-TESTABLE — it still highlights as you drag across it
-    // (Q4), and WeekdayAnswer's onClick guard is what refuses the re-answer. So it is a live target
+    // and WeekdayAnswer's onClick guard is what refuses the re-answer. So it is a live target
     // that does nothing on release: precisely the thing the owner slides onto to cancel.
     expect(dead.className).toContain('btn-wrong-persist')
     expect(dead.className).not.toContain('pointer-events-none')

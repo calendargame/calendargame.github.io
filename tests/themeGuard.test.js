@@ -1,8 +1,8 @@
-// tests/themeGuard.test.js — Q16's root-cause kill for the light-theme legibility bug class.
+// tests/themeGuard.test.js — the root-cause kill for the light-theme legibility bug class.
 // History: three shipped incidents (the "#8" timestamp, the HTP Lead/markers, the ★ star)
 // each came from a raw Tailwind purple text utility that dark themes render fine but
 // light/parchment washed out, patched one class at a time in an enumerated index.css
-// override block. Q16 retired that block: every purple / white-alpha color literal moved
+// override block. That block is retired: every purple / white-alpha color literal moved
 // onto the per-theme text/rule ramp vars (index.css :root/parchment/light rows, applied
 // via the v4 var shorthand). This guard makes the bug UNSHIPPABLE: any raw purple-family
 // shade token or white-alpha text token anywhere in src ts/tsx or index.html — className,
@@ -46,7 +46,7 @@ const violations = scanned.flatMap((file) =>
     ),
 )
 
-describe('theme guard (Q16) — raw purple / white-alpha color literals are banned in src + index.html', () => {
+describe('theme guard — raw purple / white-alpha color literals are banned in src + index.html', () => {
   it('scans the real tree (main.tsx and index.html both present — the guard cannot go blind)', () => {
     const names = scanned.map((f) => relative(root, f).replace(/\\/g, '/'))
     expect(names).toContain('src/main.tsx')

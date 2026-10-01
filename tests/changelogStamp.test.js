@@ -1,6 +1,6 @@
 // tests/changelogStamp.test.js — the deploy stamp and the changelog date, pinned (round 16).
 //
-// THE CLASS: two facts about one deploy kept in step by memory. Q1 half 1 took the stamp out of
+// THE CLASS: two facts about one deploy kept in step by memory. The first half of round 16's change took the stamp out of
 // human hands (vite.config.js injects the build clock as __BUILD_TS__), which on its own would have
 // left the changelog date as a chore nobody was prompted for any more. Half 2 is the guard —
 // scripts/changelogStamp.mjs, wired as a build-FAILING vite plugin — that makes the newest entry's

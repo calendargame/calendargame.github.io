@@ -355,7 +355,7 @@ describe('the three resets clear exactly what they clear', () => {
     expect(back.stats.flash.played).toBe(0)
     expect(back.aoxBest).toEqual({})
     expect(fresh.modePrefs.getState().blitzPerQ).toBe(false) // Full Reset DOES cover this one
-    // Lookup history is not re-asserted here (Q1, round 20 moved it out of `progress`, so it is no
+    // Lookup history is not re-asserted here (round 20 moved it out of `progress`, so it is no
     // longer this file's subject) — but it IS still cleared by this same tap, through a genuine cold
     // start exactly like the assertions above; tests/lookupHistory.dom owns proving it, to keep this
     // file's scope to the four stores it is actually about.

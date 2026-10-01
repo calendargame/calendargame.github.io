@@ -165,7 +165,7 @@ describe('Android-like (navigator.standalone undefined) — entries pushed', () 
   })
 
   // ⚠⚠ SEVERAL OVERLAYS CLOSING IN ONE COMMIT (round 22's fixer). G or a mode letter shuts the ⚙
-  // panel with everything open inside it — up to three entries since Q2. One back() per close under
+  // panel with everything open inside it — up to three entries since round 22. One back() per close under
   // one shared flag is what Chromium turned into a FOURTH traversal off the app's own first entry
   // (all three run there, and the second popstate was taken for a real Back), while jsdom coalesces
   // them into one. So the closes of one commit unwind as ONE history.go(-n): a single traversal and a
@@ -248,7 +248,7 @@ describe('iOS standalone (navigator.standalone === true) — history never writt
     expect(goSpy).not.toHaveBeenCalled()
   })
 
-  it('a stale marker popstate still bounces (the dead-entry bounce is ungated on purpose — self-heals pre-Q3 leftovers)', async () => {
+  it('a stale marker popstate still bounces (the dead-entry bounce is ungated on purpose — self-heals leftovers from older builds)', async () => {
     setStandalone(true)
     await freshUseBackButton()
     act(() =>

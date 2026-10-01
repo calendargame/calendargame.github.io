@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────
-// tests/engine/fuzz.test.js — the C2 fuzz / bug survey, EXPANDED in C1 (the giant bug pass).
+// tests/engine/fuzz.test.js — the fuzz / bug survey of June 2026, EXPANDED in the giant bug pass.
 //
 // Drives the shared game reducer through MILLIONS of random-but-valid action sequences, covering
 // every mode's action pattern and every settings toggle mid-play, and after EVERY action asserts
@@ -14,18 +14,18 @@
 // This file just runs each profile and asserts profile-specific COVERAGE (so a profile can never pass
 // by silently never reaching its target corner).
 //
-// ── WEIGHTING PROFILES (C1) ──
+// ── WEIGHTING PROFILES ──
 // The original survey used ONE uniform action distribution, which under-samples the rare COMPOUND
-// sequences where the C2 score bugs lived. So the survey runs WEIGHTED profiles, each a weighted
+// sequences where the first score bugs lived. So the survey runs WEIGHTED profiles, each a weighted
 // action table + flag probabilities, sharing one runSequence:
 //   • uniform           — the original even distribution (broad, unbiased corpus).
 //   • override-heavy     — biases OVERRIDE + the actions that make cards to toggle + BACK → every
 //                          card the button can point at (browsed, live, retro), both directions.
 //   • aox-complete-heavy — biases ANSWER.complete + OVERRIDE.hold → the AoX run-completion corner.
 //   • reveal-heavy       — biases the "clean correct on the grid WITHOUT credit" seeds → the false-
-//                          credit family the C2 fuzz first caught.
+//                          credit family the first fuzz caught.
 //
-// ── STRONG oracle + extra profiles + a sweep knob (C1 deeper pass, EXTENDED in C2) ──
+// ── STRONG oracle + extra profiles + a sweep knob (the deeper pass, since extended) ──
 // The checks above are INEQUALITIES (good≤played, streak/best/times≤good): they catch IMPOSSIBLE
 // states but not "merely WRONG" ones. So the strongOracle profiles add an EXACT oracle
 // (checkStrongScoreOracle): good must EQUAL the reconstructed credit count (an independent cross-check
@@ -34,12 +34,12 @@
 //   • deep-history   — long (600-step) sequences over DEEP stacks under the strong oracle.
 //   • times-churn    — heavy solve-time + tracking churn → hammers the times pool (its play order —
 //                      gameReducer.poolSlot — held exactly by the invariants' times ledger).
-//   • aox-strong (C2 Part 1) — the AoX `complete` (held completing solve) surface. The oracle now
+//   • aox-strong — the AoX `complete` (held completing solve) surface. The oracle now
 //     folds the HELD live credit (a clean credit on the live grid) and the back-browsed isLive forward
 //     entry into the reconstruction, so the exact check runs where it previously couldn't. Still
 //     excludes RESET_ROUND (keeps stats while wiping history) and the timeouts — unreachable in real
 //     AoX play.
-//   • timed-strong (C2 Part 1) — the Blitz timeout surface (LOCK_REVEAL / TIMEOUT_MISS, gated to the
+//   • timed-strong — the Blitz timeout surface (LOCK_REVEAL / TIMEOUT_MISS, gated to the
 //     active live edge so they stay oracle-safe). Flash's scoring surface IS Classic's, so it's
 //     already covered by classic-strict et al.; this adds exact coverage of the two timeout actions.
 // Sweep knob: `FUZZ_SCALE=N npx vitest run tests/engine/fuzz.test.js` multiplies every profile's
@@ -56,7 +56,7 @@ import { runFuzzProfile, SCALE } from './fuzzHarness.js'
 // FUZZ_SCALE big-sweep doesn't trip it. A sweep can also pass `--testTimeout=…`.
 const T = 30000 * SCALE
 
-describe('fuzz / bug survey — engine invariants hold across random play (C1/C2)', () => {
+describe('fuzz / bug survey — engine invariants hold across random play', () => {
   // The broad, unbiased baseline — no invariant may ever break across the whole action space.
   it(
     'uniform — survives a large unbiased corpus with ZERO invariant violations',
@@ -151,7 +151,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
 
   // AoX-strong — the AoX `complete` (held completing solve) surface under the EXACT oracle, now
   // EXTENDED to fold the held live credit (a clean credit on the live grid) and the isLive forward
-  // entry into the reconstruction (C2 Part 1). This is the surface the old oracle couldn't run on.
+  // entry into the reconstruction. This is the surface the old oracle couldn't run on.
   it(
     'aox-strong — survives held-completing-solve play under the EXACT score oracle',
     () => {
@@ -168,7 +168,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
   )
 
   // Timed-strong — the Blitz timeout surface (LOCK_REVEAL / TIMEOUT_MISS, gated to the active live
-  // edge) under the EXACT oracle (C2 Part 1). Confirms the timeout actions never desync good/best/
+  // edge) under the EXACT oracle. Confirms the timeout actions never desync good/best/
   // streak alongside the override/history machinery.
   it(
     'timed-strong — survives timed-mode timeout play under the EXACT score oracle',
@@ -183,7 +183,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
     T,
   )
 
-  // ── The fully-INDEPENDENT reference model (C2 Part 3) ──
+  // ── The fully-INDEPENDENT reference model ──
   // A second, separately-written implementation of the scoring contract (referenceModel.js) runs in
   // lockstep and is compared field-by-field after EVERY action — played/good/times/best + clean-edge
   // streak. Unlike the strong oracle (which reconstructs good from the reducer's own hasCredit

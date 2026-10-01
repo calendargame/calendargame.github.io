@@ -591,7 +591,7 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
   it('a press-drag release on any footer control acts without dismissing the panel', () => {
     const cases = [
       ['Save Defaults', () => `save popup ${queryModalCard('save') !== null}`, 'save popup true'],
-      // Reset Settings and Full Reset each open a confirmation popup on the drag-release (Q7 round
+      // Reset Settings and Full Reset each open a confirmation popup on the drag-release (round
       // 21) — the panel has to stay up behind them, which is the whole claim of this case.
       [
         'Reset Settings',

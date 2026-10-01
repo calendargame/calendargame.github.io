@@ -2,7 +2,7 @@
 //
 // lookupCard.dom.test.jsx — LookupCard's BEHAVIOUR (round 8, extended by round 11). The
 // component had no behaviour test at all before round 8: scrollRegion.dom pins its geometry
-// classes, lookupHistory.* pins the saved shape (progress.* did, before Q1/round 20 moved it out),
+// classes, lookupHistory.* pins the saved shape (progress.* did, before round 20 moved it out),
 // but nothing described what the card actually does when you type into it.
 //
 // Three contracts are locked here.
@@ -21,8 +21,8 @@
 //    made in, so the same date read two different ways on one screen. The regression pin is in the
 //    "derived, not stored" block — an entry saved under one format renders in the format live NOW.
 //
-// 3. A date before the Gregorian reform is AMBIGUOUS, and the card shows BOTH calendars (round-11
-//    Q2). That is what makes contract 2 possible for the Julian setting too: with no calendar
+// 3. A date before the Gregorian reform is AMBIGUOUS, and the card shows BOTH calendars (round
+//    11). That is what makes contract 2 possible for the Julian setting too: with no calendar
 //    chosen there is nothing per-entry to freeze, so a stored date can never be re-read later as a
 //    different — or an impossible — one. The bug it fixes: an entry created with Julian on was
 //    re-derived as a valid GREGORIAN date once Julian was turned off, so February 29 of a
@@ -427,7 +427,7 @@ describe('Lookup — a pre-reform date shows BOTH calendars (round 11)', () => {
 // — a real lookup must still light Full Reset, through the OTHER Lookup terms (history, input,
 // selection, calcDate) — and it fails if a later change ever writes the hint string into that
 // state, which would unlock Full Reset on an untouched app. Pristine settings, no overrides, so
-// isFullyReset can actually be true. Mirrors the C3a freshness pin in blitz.dom.
+// isFullyReset can actually be true. Mirrors the suddenAmBest freshness pin in blitz.dom.
 const mountApp = () => {
   const root = document.createElement('div')
   root.id = 'root'

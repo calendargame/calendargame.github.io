@@ -6,7 +6,7 @@
 // in changelog.dom; the settings popover was already the reference. What's left is Lookup's
 // GEOMETRY: the history panel owns py-4 only while every child carries its own px-4, so the
 // list's 1rem right padding sits INSIDE the scroller (the text-free lane the iOS scrollbar
-// paints in) and the header/method dividers cut edge-to-edge without the pre-Q5 -mx-4
+// paints in) and the header/method dividers cut edge-to-edge without the older -mx-4
 // counter-margins. Content widths are unchanged by construction — only the paint lane moved.
 // Round 8 then took the list's fixed pixel cap away and let the column measure itself, so
 // the shrink chain is pinned here too. Also here, because this is the file that renders
@@ -217,7 +217,7 @@ describe('Lookup date input on the interactive-border rule (round 7)', () => {
     // The rule's Lookup site, mirroring the aox.dom and saveDefaults pins: inputs are controls,
     // so the typed date box carries the same sbtn-bd border tier as the Lookup/Clear buttons
     // beside it — not the fainter container .panel it once borrowed. (Added by the round-7
-    // fixer: the Q7 input inventory missed this box.)
+    // fixer: the round-7 input inventory missed this box.)
     const { container } = render(<LookupCard history={[]} />)
     const input = container.querySelector('input')
     expect(input.className).toContain('border surface-tray')
@@ -306,7 +306,7 @@ describe('the shared defaults card caps itself against a short viewport (round 1
   it('the chrome the bug put off-screen is OUTSIDE the scroller and holds its size', () => {
     // The whole point of the cap: the button row went past the fold with no way to reach it, so it
     // may never become scroll-to-reach either. Same for the title that names the dialog. (That row
-    // was Cancel + Save when the bug was measured; Q2 removed every Cancel in the app, so Save is
+    // was Cancel + Save when the bug was measured; round 22 removed every Cancel in the app, so Save is
     // the whole row now — the claim is about WHERE the row lives, which is unchanged.)
     const { container } = render(defaultsCard())
     const scroller = scrollerOf(container)

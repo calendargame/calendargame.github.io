@@ -231,7 +231,7 @@ describe('the amnesic marker', () => {
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('the control must not size itself to its longest option', () => {
   it('gives every option the SAME MINIMUM-width name cell — a floor, not a fixed width any more', () => {
-    // Q6, round 20: the cell used to be exactly PRESET_NAME_COL wide (a `width` style); now it is
+    // Round 20: the cell used to be exactly PRESET_NAME_COL wide (a `width` style); now it is
     // AT LEAST that wide (a `minWidth` style), and the actual width — how much wider — is jsdom's
     // to not know, since it has no layout engine (main.tsx's budget block and
     // components/PresetSwitcher's own comments are where that arithmetic lives now). What this
@@ -286,7 +286,7 @@ describe('the control must not size itself to its longest option', () => {
   })
 
   it("the store's own ceiling still bounds a name this control never watched get typed", () => {
-    // Post-Q6, MAX_PRESET_NAME no longer promises "fits the cell without truncating" — the LIVE
+    // Since round 20, MAX_PRESET_NAME no longer promises "fits the cell without truncating" — the LIVE
     // typing-time cap (lib/presetNameWidth, exercised against components/PresetManager's rename
     // field) is what makes that promise now, for names typed through the app. What MAX_PRESET_NAME
     // still guarantees is the coarser one: nothing reaching this control's `options` array, however

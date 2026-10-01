@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// ROUND 11 Q4 — the two fade/shadow freezes, and the fixture gap underneath them.
+// ROUND 11 — the two fade/shadow freezes, and the fixture gap underneath them.
 //
 // THE BUGS. Every scroll indicator answers one question — "how far is this scroller from each of
 // its edges" — from three numbers: scrollTop, scrollHeight, clientHeight. The platform gives an

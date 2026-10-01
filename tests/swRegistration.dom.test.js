@@ -108,7 +108,7 @@ describe('service-worker registration (src/sw.ts)', () => {
   it('reports a REJECTED registration exactly once, as sw-register', async () => {
     // A 404 on sw.js, a blocked worker, an unsupported scope. The app is left with no offline copy,
     // no update path, and "Check for updates" with nothing to apply through — rare, always
-    // actionable, and (before Q10a) completely invisible.
+    // actionable, and (before round 11) completely invisible.
     const error = new Error('Failed to register a ServiceWorker: 404')
     await loadSwWith(async () => {
       throw error

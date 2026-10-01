@@ -4,7 +4,7 @@
 // The VERSION-GATED migration (`migrate`) runs once per upgrade and only where a read cannot
 // reconstruct the information — today just the v1 → v2 aoxBest key rewrite. (The lookup-history
 // screen this file used to also prove — an UNCONDITIONAL `merge` step, since every load reads the
-// same untrusted localStorage a stale one does — left with the field itself in Q1, round 20; it is
+// same untrusted localStorage a stale one does — left with the field itself in round 20; it is
 // tests/lookupHistory.dom's claim now, against store/lookupHistory's own key.)
 // The pure rewrites are unit-tested in progress.test.js (Node); this file proves the wiring, via
 // useProgress.persist.rehydrate() — the same zustand entry point a real reload takes.
@@ -68,7 +68,7 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     expect(s.aoxBest).toEqual({ [newKey]: rec })
   })
 
-  // ── lookupHistory LEFT THE SHAPE (Q1, round 20 — v3 → v4) ────────────────────────────────────
+  // ── lookupHistory LEFT THE SHAPE (round 20 — v3 → v4) ────────────────────────────────────
   // The four cases that used to stand here proved the OLD lookup-history migration/screening — a
   // v2 payload losing its rendered fields, a corrupt entry refused, a wrong-typed field landing as
   // []. That behaviour still exists, just for a different key now (store/lookupHistory's own
@@ -85,7 +85,7 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
         ...makeProgressDefaults(),
         aoxBest: { '10|false|numeric-ymd|random|random|random|1583-10000|true': rec },
         // The pre-move shape, rendered fields and all — exactly what a device that last saved
-        // before Q1/round 20 still has sitting in its 'cg-progress-v1' payload.
+        // before round 20 still has sitting in its 'cg-progress-v1' payload.
         lookupHistory: [
           { id: 'e1', y: 1776, m: 7, d: 4, label: 'July 4, 1776', weekday: 'Thursday' },
         ],
@@ -109,7 +109,7 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     expect(saved).not.toHaveProperty('lookupHistory')
   })
 
-  // C3a no-migration pin: suddenAmBest was ADDED as a fresh key space (v2 stayed v2). A payload
+  // The no-migration pin: suddenAmBest was ADDED as a fresh key space (v2 stayed v2). A payload
   // saved before it existed simply lacks the key — zustand's shallow merge must leave the default
   // {} standing, with every pre-existing silo untouched. If this ever fails, a real migration
   // became necessary.
@@ -128,7 +128,7 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
         '10|numeric-ymd|random|random|random|1583-10000|true': { score: 2, roundId: 1 },
       },
     }
-    delete state.suddenAmBest // the pre-C3a payload shape
+    delete state.suddenAmBest // the payload shape from before suddenAmBest existed
     localStorage.setItem('cg-progress-v1', JSON.stringify({ state, version: 2 }))
     await useProgress.persist.rehydrate()
     const s = useProgress.getState()
@@ -138,9 +138,9 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
   })
 
   // The write-path twin of the pin above: partialize must persist every data silo — including
-  // suddenAmBest (C3a) — and never a setter function. (Asserted here rather than in the Node file:
+  // suddenAmBest — and never a setter function. (Asserted here rather than in the Node file:
   // zustand only attaches the .persist API when a storage exists, i.e. under jsdom.)
-  it('partialize persists every data value — including suddenAmBest (C3a) — and no setters', () => {
+  it('partialize persists every data value — including suddenAmBest — and no setters', () => {
     const out = useProgress.persist.getOptions().partialize(useProgress.getState())
     expect(Object.keys(out).sort()).toEqual([
       'aoxBest',
@@ -153,13 +153,13 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
   })
 })
 
-// ── C2 Part 4: the save/rehydrate ROUND-TRIP fuzz + corruption tolerance ─────────────────────────
+// ── The save/rehydrate ROUND-TRIP fuzz + corruption tolerance ─────────────────────────
 // The persisted progress store is the only place saved stats can silently corrupt across sessions.
 // Two nets: (1) a round-trip fuzz — random valid progress states written as a stored envelope must
 // rehydrate EXACTLY (no field lost, re-keyed, capped, or coerced); (2) corruption tolerance — a
 // damaged payload (truncated JSON, wrong shapes, impossible scores) must never crash hydration (the
 // app must still boot; the rehydrate tripwire reports impossible saved scores instead of throwing).
-describe('progress store — save/rehydrate round-trip fuzz + corruption tolerance (C2)', () => {
+describe('progress store — save/rehydrate round-trip fuzz + corruption tolerance', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()

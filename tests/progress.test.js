@@ -9,7 +9,7 @@ import { useProgress, makeProgressDefaults, migrateAoxBestKeys } from '../src/st
 // FRESH defaults (no aliasing). Persistence (localStorage) is verified in-browser,
 // like the settings store, since jsdom/node storage timing differs from the runtime.
 // ⚠ Lookup history (setLookupHistory, normalizeLookupEntries) left this store for its own —
-// store/lookupHistory — in Q1, round 20; tests/lookupHistory.test.js and .dom.test.js own its
+// store/lookupHistory — in round 20; tests/lookupHistory.test.js and .dom.test.js own its
 // contract now, unit and persisted halves alike, the same split this file keeps for its own values.
 
 const blank = { played: 0, good: 0, streak: 0, best: 0, times: [] }
@@ -63,7 +63,7 @@ describe('progress store', () => {
     expect(useProgress.getState().blitzBest.k1.score).toBe(7)
     useProgress.getState().setSuddenBest((p) => ({ ...p, k2: { score: 3, roundId: 2 } }))
     expect(useProgress.getState().suddenBest.k2.score).toBe(3)
-    // The per-Q + Allow Mistakes map (C3a) — BlitzBest-shaped, its own silo.
+    // The per-Q + Allow Mistakes map — BlitzBest-shaped, its own silo.
     useProgress
       .getState()
       .setSuddenAmBest({ k4: { score: 6, streak: 4, scoreRoundId: 3, streakRoundId: 3 } })
@@ -96,7 +96,7 @@ describe('progress store', () => {
   })
 })
 
-// ── v1 → v2 migration: AoX Best keys gain the julianChance dimension (C2) ────────
+// ── v1 → v2 migration: AoX Best keys gain the julianChance dimension ────────
 // The original AoX key omitted julianChance (Blitz/Sudden include it; How-to-Play documents it as a
 // bucket dimension), so v2 inserts it. The pure rewrite is unit-tested here; the full
 // localStorage → rehydrate path is covered in progress.dom.test.js (needs jsdom storage).

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Save Defaults (Q7) + the gear "modified" indicator (Q8) — App-level behavior tests.
+// Save Defaults + the gear "modified" indicator — App-level behavior tests.
 //
 // Drives the real <App/> like a user: the ⚙ footer's Save Defaults button opens a centered
 // confirmation popup (portaled to #root, rendering the shared DefaultsCard — round 6) whose
@@ -59,7 +59,7 @@ const popupTitle = () => screen.queryByText('Save current settings as your defau
 const nField = () => screen.getByRole('textbox', { name: 'MoX Run Length' })
 const flashSlider = () => screen.getByRole('slider', { name: 'Flash Speed' })
 
-describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
+describe('Save Defaults + gear indicator', () => {
   beforeEach(() => {
     resetAppState() // all four persisted singletons + localStorage, back to a clean baseline
   })
@@ -147,7 +147,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     openPopup()
     act(() => fireEvent.click(btn('Save'))) // saved.flashMs = 800; the ⚙ panel captured at its factory values
     // Return the pref to factory: the PANEL now matches the saved defaults but the pref does not —
-    // exactly the case that used to strand the gear (before Q7 Reset Settings watched the panel alone).
+    // exactly the case that used to strand the gear (before round 6 Reset Settings watched the panel alone).
     act(() => useModePrefs.getState().setFlashMs(2000))
     expect(gearIndicator().name).toBe('Settings (modified)')
     expect(isOffered(footerButton('Reset Settings'))).toBe(true) // OFFERED even though the panel sits at defaults
@@ -185,10 +185,10 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(useUserDefaults.getState().saved).not.toBeNull() // Full Reset never clears the snapshot
   })
 
-  // Q8: the Blitz/AoX visual-only timing toggles (blitzTimingOff/aoxTimingOff) are NON-capturable —
+  // The Blitz/AoX visual-only timing toggles (blitzTimingOff/aoxTimingOff) are NON-capturable —
   // same family as Per Round / Allow Mistakes / the Deduction sub-type. Save Defaults never records
   // them, the gear "modified" bar never lights for them, and Full Reset returns them to factory.
-  it('Q8: the Blitz/AoX visual timing toggles are excluded from Save Defaults and the gear bar, and reset by Full Reset', () => {
+  it('the Blitz/AoX visual timing toggles are excluded from Save Defaults and the gear bar, and reset by Full Reset', () => {
     const p = useModePrefs.getState()
     p.setBlitzTimingOff(true)
     p.setAoxTimingOff(true)
@@ -244,7 +244,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
   // Owner's explicit, confirmed decision (flagged as a real tradeoff, reaffirmed anyway): Save
   // Defaults captures whether the active preset is Amnesic at the moment of saving; Reset Settings
   // and Full Reset both restore it.
-  // ⚠ ROUND-22 Q5 CHANGED WHAT THIS BLOCK CAN ASSUME. Amnesic used to be invisible to the gear's
+  // ⚠ ROUND 22 CHANGED WHAT THIS BLOCK CAN ASSUME. Amnesic used to be invisible to the gear's
   // "modified" bar, so every case here had to arrange a SEPARATE divergence (makeSaveable) to get
   // the button it presses offered at all — and that workaround was quietly standing on the bug: the
   // capture below was UNREACHABLE for an Amnesic-only change, because Save Defaults was dimmed and
@@ -267,13 +267,13 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(useUserDefaults.getState().saved.amnesic).toBe(true)
   })
 
-  // ★★ THE Q5 BUG, AS THE USER MET IT: turn Amnesic on, change NOTHING else, and Save Defaults sat
+  // ★★ THE BUG, AS THE USER MET IT: turn Amnesic on, change NOTHING else, and Save Defaults sat
   // dimmed and did nothing — so "Amnesic: on" could never become part of your defaults unless you
   // happened to move some other setting in the same visit. Both halves are asserted, because the
   // dim and the inertness were two separate consequences of one missing comparison: the button is
   // offered, AND pressing it actually opens the popup (openSaveDefaults early-returns on the same
   // boolean that dims it, so a fix to only one of them would leave the feature just as unreachable).
-  it('an Amnesic-only change can be saved as a default, with nothing else touched (Q5)', () => {
+  it('an Amnesic-only change can be saved as a default, with nothing else touched', () => {
     mountApp()
     openSettings()
     expect(isOffered(footerButton('Save Defaults'))).toBe(false)
@@ -354,7 +354,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(selectAmnesic(usePresets.getState())).toBe(true)
   })
 
-  // Q2 removed the popup's Cancel button app-wide (the owner: a dismiss already says it), so the
+  // Round 22 removed the popup's Cancel button app-wide (the owner: a dismiss already says it), so the
   // discard is now made by dismissing — Escape here, the route a keyboard reaches. What is asserted
   // is unchanged: leaving without Save persists nothing and never touches the live stores.
   it('dismissing the popup discards edits; Save persists the EDITED values; live stores stay untouched', () => {
@@ -517,7 +517,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     makeSaveable() // round 14 (D7): a dimmed Save Defaults no longer opens its popup — see the helper
     openPopup()
     const dialog = modalCard('Save current settings as your defaults?')
-    // An action card even while clean — the manager at rest has no button row at all. Since Q2 that
+    // An action card even while clean — the manager at rest has no button row at all. Since round 22 that
     // row is Save ALONE: no Cancel anywhere in the app, and never the pre-round-21 Close either.
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()

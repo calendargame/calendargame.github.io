@@ -36,7 +36,7 @@ const NEWER_ID = 'f762bedd56f680561b8a8a1232c1fe1a'
 const MIN_UPDATING_MS = 1000
 const UPDATE_HANDOFF_MS = 8000
 
-describe('Check for updates (Q7 — check, then apply)', () => {
+describe('Check for updates (check, then apply)', () => {
   let reload, unregister, cacheDelete, swListeners, origLocation, buildMeta
 
   // The running build's identity, exactly as vite.config.js's buildIdentity plugin injects it.
@@ -391,7 +391,7 @@ describe('Check for updates (Q7 — check, then apply)', () => {
     })
 
     it('falls back to the HAMMER when there is no registration to hand off to', async () => {
-      // Q10a's state: registration failed, so the app is running with no service worker. Having
+      // The reported-failure state: registration failed, so the app is running with no service worker. Having
       // promised an update, the button must produce one — and clearing the caches is the only way
       // left. These are tests/forceReload.dom.test.jsx's original assertions, on their new route.
       localStorage.setItem('cg-preserve-probe', 'kept') // a neutral key the app never touches

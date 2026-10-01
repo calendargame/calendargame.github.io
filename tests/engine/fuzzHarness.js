@@ -314,7 +314,7 @@ export const PROFILES = {
     pComplete: 0,
     pHold: 0,
   },
-  // ── AoX-complete strong-oracle profile (C2 Part 1) ──
+  // ── AoX-complete strong-oracle profile ──
   // Exercises the AoX action surface — first-try corrects HELD as completing solves (`complete`),
   // the Override on them (taking the held credit away, and crediting a burned card with `hold` —
   // MoX's completing solve via Override), back-browsing AWAY from a held credit, and Show
@@ -352,7 +352,7 @@ export const PROFILES = {
     pComplete: 0.5,
     pHold: 0.4,
   },
-  // ── Timed-mode strong-oracle profile (C2 Part 1) ──
+  // ── Timed-mode strong-oracle profile ──
   // The Blitz per-round / per-question surface = the Classic engine PLUS the two timeout actions
   // (LOCK_REVEAL = per-round timeout, no stat; TIMEOUT_MISS = per-question miss). Those are gated to
   // the active live edge (see runSequence), so the EXACT oracle stays valid. No `complete` (Blitz/Flash
@@ -390,7 +390,7 @@ export const PROFILES = {
     pComplete: 0,
     pHold: 0,
   },
-  // ── referenceModel profiles (C2 Part 3) ──
+  // ── referenceModel profiles ──
   // Run the fully-INDEPENDENT reference score model (referenceModel.js) in lockstep with the
   // reducer — a second implementation of the scoring contract compared field-by-field after every
   // action (played/good/times/best + clean-edge streak; `played` has no other exact oracle). The
@@ -594,7 +594,7 @@ function pickKind(rnd, weights) {
 //     base walk excludes it (filter !isLive) and we fold its true contribution back in at the newest
 //     slot via liveCredit — 'credit' → a credit, 'miss' → a played non-credit, null → not played.
 // This widens the exact oracle from the no-complete Classic/Deduction surface onto the AoX-complete
-// reducer surface (C2 Part 1). It stays OFF for the RESET_ROUND profiles — RESET_ROUND keeps stats
+// reducer surface. It stays OFF for the RESET_ROUND profiles — RESET_ROUND keeps stats
 // while wiping the history (good != reconstructed by design).
 //
 // liveCredit / heldLiveCredit are re-implemented here (NOT imported from the reducer's liveCredited /
@@ -724,7 +724,7 @@ export function runSequence(seed, steps, cov, profile) {
     cov.hydrated++
   }
   let state = initEngine(randDate(rnd), initialStats)
-  // The independent reference model (C2 Part 3) — replays the same action stream and is compared
+  // The independent reference model — replays the same action stream and is compared
   // field-by-field after every action. Seeded with the only display facts it consumes: whether the
   // initial question is a Deduction puzzle (and, per ANSWER, whether the click was correct), plus the
   // hydrated baseline above (folded into its derived stats, never browsed/overridden).

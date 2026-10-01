@@ -545,14 +545,14 @@ describe('Deduction — characterization (batch 6: 1582 special cases)', () => {
   })
 })
 
-// ── C2: deep cross-silo independence — full MID-STATE survives a silo round-trip ─────────────────
+// ── Deep cross-silo independence — full MID-STATE survives a silo round-trip ─────────────────
 // Batch 5 pins independent STATS; this pins the rest of a silo's state machine: an armed Override
 // (countedWrong), the wrong-mark on the grid, a back-browse position, and an OPEN codes panel must
 // all survive switching to another silo, playing there, and returning — and the armed Override must
 // still fire correctly afterwards. The silos are separate engine instances by construction; the
 // realistic leak vectors are the SHARED chrome (the one flash pulse, the toggles, the active-eng
 // wiring), so the assertion drives exactly that seam.
-describe('Deduction — C2: a silo round-trip preserves browse + armed-override + codes state', () => {
+describe('Deduction — a silo round-trip preserves browse + armed-override + codes state', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()

@@ -1,4 +1,4 @@
-// The PWA web app manifest's portrait lock (Q11): `orientation: 'portrait'` hard-locks every
+// The PWA web app manifest's portrait lock: `orientation: 'portrait'` hard-locks every
 // ANDROID install to portrait at the OS level (iOS parses + ignores the key; the in-app
 // rotate-back overlay covers those platforms — see main.tsx RotateOverlay). vite-plugin-pwa
 // JSON-serializes vite.config.js's exported webManifest entries as-is into the built
@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest'
 import { webManifest } from '../vite.config.js'
 
 describe('PWA web manifest (vite.config.js webManifest)', () => {
-  it('locks orientation to portrait — the Android half of the Q11 portrait lock', () => {
+  it('locks orientation to portrait — the Android half of the portrait lock', () => {
     expect(webManifest.orientation).toBe('portrait')
     // The exact byte sequence the built manifest.webmanifest ships (JSON.stringify emits
     // no spaces) — the regression pin the spec demands.

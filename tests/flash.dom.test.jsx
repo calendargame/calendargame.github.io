@@ -347,7 +347,7 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
   })
 })
 
-// ── Bug fix (C2): back-browsing must show the browsed date + its review tools ────────────────────
+// ── Bug fix: back-browsing must show the browsed date + its review tools ────────────────────
 // Flash hides the LIVE date outside a flash (the memory-game premise), but the same gate
 // (shouldShowTimerDate) also swallowed BACK-BROWSED entries: after a round ended by answering,
 // browsing back showed "—" with Reveal AND Show Codes disabled — the grid's green/red marks were
@@ -356,7 +356,7 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
 // the previous date. The answer is shown…", listing Flash by name). A browsed entry is resolved
 // history — never a peek — so browsing now shows the date and enables the read-only review tools,
 // matching Classic.
-describe('Flash — bug fix (back-browse shows the browsed date, C2)', () => {
+describe('Flash — bug fix (back-browse shows the browsed date)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -410,11 +410,11 @@ describe('Flash — bug fix (back-browse shows the browsed date, C2)', () => {
   })
 })
 
-// ── C2: the mode-switch contract (characterization — completes the cross-mode net) ──────────────
+// ── The mode-switch contract (characterization — completes the cross-mode net) ──────────────
 // Flash's half of the rule every timer mode follows: leaving the mode stops a LIVE flash (the
 // useStatsHideToggles onHide teardown) — no hidden timer keeps running; you return to the idle
 // dash with your lifetime stats intact.
-describe('Flash — C2: mode switch mid-flash stops the flash', () => {
+describe('Flash — mode switch mid-flash stops the flash', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -453,7 +453,7 @@ describe('Flash — C2: mode switch mid-flash stops the flash', () => {
 // ── round 6: Reset Settings now restores the Flash speed too, straight into the store — which
 // bypasses the slider's onChange sync of the idle countdown label (a local mirror of flashMs). An
 // effect keyed on flashMs re-seeds that label at rest, so a store-driven reset shows the right number.
-// (round 6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
+// (round 6 = "extend Reset Settings"; distinct from the Session-11 change that added Save Defaults.)
 describe('Flash — round 6 (Reset Settings restoring the Flash speed re-syncs the idle countdown)', () => {
   beforeEach(() => {
     vi.useFakeTimers()

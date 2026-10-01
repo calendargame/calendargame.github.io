@@ -4,7 +4,7 @@
 // stats, and a reload is the SAME session everywhere (only a real close of the app starts fresh).
 //
 // ★ THE BUG THESE CASES WERE WRITTEN AGAINST (all reproduced on v2.26.0 by the investigation that
-// queued Q2 — 14 of its 19 probes failed): a Blitz round / MoX run that ENDED while the preset was
+// queued this fix — 14 of its 19 probes failed): a Blitz round / MoX run that ENDED while the preset was
 // Amnesic was parked in store/sessionRound under "<preset>:<mode>" only. Turning Amnesic OFF remounts
 // the screens against the PERMANENT stats, and the remount restored the guest's round and reconciled
 // it into the permanent Bests — replacing a best, LOWERING one (round ids collided at 1), or ERASING
@@ -588,7 +588,7 @@ describe('a reload is the same session; only a real close starts fresh', () => {
   })
 })
 
-describe('round ids are never reused across screen loads (Q4 prerequisite)', () => {
+describe('round ids are never reused across screen loads (what the ★ rule rests on)', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)
   it('a best score and a best streak set on two different loads read "Different Rounds"', () => {

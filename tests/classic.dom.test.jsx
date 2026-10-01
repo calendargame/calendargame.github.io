@@ -631,7 +631,7 @@ describe('Classic — Save Stats / Override availability (fix 2026-06-06)', () =
 // (`!state.revealed`), so opening codes on a browsed ANSWERED/correct entry fell through and
 // armed countedWrong — which then let Override credit the card as a live one (good+1) instead of the
 // legitimate browsed flip, over-crediting to an impossible 2/1 (good > played). The fix makes Show Codes
-// penalty-free for ANY browsed entry. Surfaced by the C3 all-modes score-integrity survey.
+// penalty-free for ANY browsed entry. Surfaced by the all-modes score-integrity survey.
 describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-06)', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -683,7 +683,7 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
   })
 
   // Scenario 1: first-try correct → back → the press flips it to a miss → forward → it reads Undo.
-  it('S1: correct → back → Override (flip to a miss) → forward → the button reads Undo for it', () => {
+  it('Scenario 1: correct → back → Override (flip to a miss) → forward → the button reads Undo for it', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(correctName(q1))) // 1/1 → advance
@@ -698,7 +698,7 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
 
   // Scenario 2 (the reported BUG): wrong→right → back → credit it → forward → a second press must
   // take the credit BACK, not add another one (the old engine's 2/1).
-  it('S2: wrong→right → back → Override → forward → the next press undoes it (never 2/1)', () => {
+  it('Scenario 2: wrong→right → back → Override → forward → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1
@@ -714,7 +714,7 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
   })
 
   // Scenario 3 (the same BUG by the New route).
-  it('S3: wrong → New → back → Override → forward → the next press undoes it (never 2/1)', () => {
+  it('Scenario 3: wrong → New → back → Override → forward → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1))) // 0/1
@@ -729,7 +729,7 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
   })
 
   // Scenario 4: wrong→right → back → credit → New.
-  it('S4: wrong→right → back → Override → New → the next press undoes it (never 2/1)', () => {
+  it('Scenario 4: wrong→right → back → Override → New → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1)))
@@ -744,7 +744,7 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
   })
 
   // Scenario 5: wrong → New → back → credit → New.
-  it('S5: wrong → New → back → Override → New → the next press undoes it (never 2/1)', () => {
+  it('Scenario 5: wrong → New → back → Override → New → the next press undoes it (never 2/1)', () => {
     mountApp()
     const q1 = pressNewAndRead()
     fireEvent.click(dayBtn(wrongName(q1)))
@@ -804,7 +804,7 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
 })
 
 // ── Back-browse Override must not count the streak past a live MISS (deliberate fix, 2026-06-08) ──
-// Found by the C1 deeper-fuzz strong oracle and verified here END-TO-END through the real <App/> with
+// Found by the deeper-fuzz strong oracle and verified here END-TO-END through the real <App/> with
 // actual button clicks (proving it's a reachable user sequence, not just an engine artifact): burn the
 // LIVE question (a scored miss), then Back to an earlier wrong and Override it to credit. The streak
 // recompute EXCLUDED the live question, so it counted PAST the live miss — the Streak read 1/1 instead

@@ -433,10 +433,10 @@ describe('gameReducer — RESET_ROUND', () => {
   })
 })
 
-// Q9: gridEpoch — the grid-remount key. The UI keys every answer grid on it, so a bump REMOUNTS
+// gridEpoch — the grid-remount key. The UI keys every answer grid on it, so a bump REMOUNTS
 // the grid and the cleared colors snap to idle (no green fade). It must bump on the TWO resets
 // ONLY: a bump on advance / REGEN_DATE would remount mid-flash and restart the keyframes.
-describe('gameReducer — gridEpoch (Q9: bumps on the two resets only)', () => {
+describe('gameReducer — gridEpoch (bumps on the two resets only)', () => {
   it('starts at 0', () => {
     expect(initEngine(DATE).gridEpoch).toBe(0)
   })

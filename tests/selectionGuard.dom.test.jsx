@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Q8 — How-to-Play text selection. The guide's section bodies and header titles are
+// How-to-Play text selection. The guide's section bodies and header titles are
 // selectable (`select-text`, the index.css allow-list), which creates one hazard: the
 // title span lives inside the header <button>, so a desktop drag-select across a title
 // fires the button's click on mouse-up and would collapse the panel out from under the

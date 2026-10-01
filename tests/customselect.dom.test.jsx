@@ -266,7 +266,7 @@ describe('CustomSelect — the fixed portal panel (position, what closes it, --b
     expect(optionCount()).toBe(3)
     // Move the trigger's rect first, so a re-measure would be visible in the assertions below: the
     // panel must neither close NOR reposition on any of this. (Re-measuring per scroll event
-    // through momentum is the jitter Q8 removed; nothing re-armed it.)
+    // through momentum is the jitter round 11 removed; nothing re-armed it.)
     mockRect(movedTriggerRect)
     // Every shape of scroll the app can see, with the menu open on a page that was standing still:
     // iOS's status-bar tap to the top and an ordinary page scroll (fired at the Document), the
@@ -357,14 +357,14 @@ describe('CustomSelect — the fixed portal panel (position, what closes it, --b
   })
 })
 
-// ── Q10: dropdownWidth + triggerMatchesDropdown ─────────────────────────────────────────────────
+// ── dropdownWidth + triggerMatchesDropdown ─────────────────────────────────────────────────
 //
 // Two opposite width behaviours the one shared component now has to carry, so the mode selector's
 // trigger can match its own (unchanged) dropdown while the preset switcher's dropdown matches its
 // (space-filling) trigger. jsdom lays out nothing and reports every rect as 0, so what is pinned
 // here is the WIRING — which style each prop produces — not the pixel result (that is verified in a
 // real browser and recorded at src/main.tsx's budget block).
-describe('CustomSelect — Q10 width props', () => {
+describe('CustomSelect — width props', () => {
   let rectSpy
   afterEach(() => {
     rectSpy?.mockRestore()
@@ -441,7 +441,7 @@ describe('CustomSelect — Q10 width props', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// ROUND 23, Q8 — A LONG LIST, AND A TRIGGER INSIDE A SCROLL REGION (the ⚙ panel's "Open in").
+// ROUND 23 — A LONG LIST, AND A TRIGGER INSIDE A SCROLL REGION (the ⚙ panel's "Open in").
 // Presets are unlimited, so the preset lists can be any length, and "Open in" is the first call site
 // whose trigger a scroller could move. jsdom lays nothing out, so what is pinned here is the
 // structure and the arithmetic; whether it LOOKS right is checked in a real browser and on device.

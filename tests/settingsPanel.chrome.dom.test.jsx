@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// THE SETTINGS PANEL'S CHROME — groups 11 and 12 of the Q1 behaviour net (_settings_net_spec.md).
+// THE SETTINGS PANEL'S CHROME — groups 11 and 12 of the settings-panel behaviour net (_settings_net_spec.md).
 //
 // This file is written against the CURRENT app, BEFORE the Settings panel is extracted out of
 // App, so that the same text stays true on both sides of the move. That is the whole point: the
