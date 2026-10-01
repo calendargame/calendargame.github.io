@@ -1,12 +1,12 @@
-// changelog.ts — the plain-words changelog (round-6 Q6): what each deploy changed, written for
+// changelog.ts — the plain-words changelog (round 6): what each deploy changed, written for
 // players, never developers. Hand-maintained: every deploy adds its lines here, a standing part
 // of the deploy ritual.
 //
-// THE CHARTER (round-8 Q8; the two ordering rules amended round-11 Q6) — this array is exactly
+// THE CHARTER (round 8; the two ordering rules amended in round 11) — this array is exactly
 // what ships and exactly what the popup draws:
 //   • Newest first. Entry dates are the deploy's Pacific calendar date in ISO form (YYYY-MM-DD);
 //     the popup renders them through the user's Date Format setting, so never encode a format here.
-//     ★ THE NEWEST ENTRY'S DATE IS NOW ENFORCED BY THE BUILD (round 16, Q1). The deploy stamp is
+//     ★ THE NEWEST ENTRY'S DATE IS NOW ENFORCED BY THE BUILD (round 16). The deploy stamp is
 //     taken from the clock at build time (src/deployStamp.ts), and scripts/changelogStamp.mjs —
 //     wired first in vite.config.js's plugin array — FAILS the build unless the entry at the top of
 //     this array is dated that stamp's PACIFIC day. So a deploy cannot ship without a changelog
@@ -17,12 +17,12 @@
 //     stay unique, which is also the popup's per-entry React-key contract (key={en.date});
 //     changelog.dom.test pins the uniqueness.
 //   • ORDER WITHIN A DAY: MOST NOTICEABLE FIRST, related lines kept adjacent, `Fixed:` lines
-//     last. Already the de-facto pattern (the 7/26 entry ends on one), written down in round-11
-//     Q6. The entry is read top-down by someone who has just been handed the update, so the line
+//     last. Already the de-facto pattern (the 7/26 entry ends on one), written down in round
+//     11. The entry is read top-down by someone who has just been handed the update, so the line
 //     likeliest to be why they opened it leads; a fix nobody was waiting for closes.
 //   • A SECOND DEPLOY ON THE SAME DAY RESTATES THAT DAY'S NET EFFECT VERSUS PRODUCTION — it does
-//     not prepend a second log. (The charter said "prepend, newest lines first" until round-11
-//     Q6; the practice on 2026-07-28 was already better and is what got codified.) A player only
+//     not prepend a second log. (The charter said "prepend, newest lines first" until round
+//     11; the practice on 2026-07-28 was already better and is what got codified.) A player only
 //     ever sees the difference from the version they last had, so an intermediate state nobody
 //     ran is not a change: MERGE a correction into the line it corrects, and DELETE outright a
 //     line describing something the later deploy reverted. Worked example, 2026-07-28: round
@@ -69,8 +69,8 @@
 // the history is this array plus whatever has already aged out into the archive.
 //
 // Alongside the data live the two update-signal dot flags — the breadcrumb that leads a player here
-// after an update. ⚠ THEY NO LONGER FIRE TOGETHER (2026-08-10): the build-change detection (the Q2
-// effect in main.tsx) marks the GEAR dot on every build change, but marks the CHANGELOG dot only
+// after an update. ⚠ THEY NO LONGER FIRE TOGETHER (2026-08-10): the build-change detection (in
+// main.tsx) marks the GEAR dot on every build change, but marks the CHANGELOG dot only
 // when the newest entry here has actually changed since this device last looked — see
 // CHANGELOG_SEEN_KEY at the bottom of this file for why, and for the migration case. Opening ⚙
 // Settings clears the gear button's dot; the first tap on the Changelog link clears the link's own.
