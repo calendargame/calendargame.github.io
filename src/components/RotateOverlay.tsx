@@ -1,6 +1,6 @@
 import W5Logo from './W5Logo.jsx'
 
-// RotateOverlay (Q11) — the full-screen "rotate back to portrait" screen for the platforms the
+// RotateOverlay — the full-screen "rotate back to portrait" screen for the platforms the
 // manifest's orientation:'portrait' can't hard-lock (iOS parses + ignores the key; locked
 // Android installs never rotate, so they never see this). Rendered by App while
 // landscapeBlocked (touch device + CSS landscape + short viewport — the gate lives in App so

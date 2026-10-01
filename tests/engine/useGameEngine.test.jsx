@@ -57,7 +57,7 @@ describe('useGameEngine', () => {
   })
 })
 
-// ── Override ⇄ Undo — the hook's half (round 23 Q6: one permanent per-card toggle) ───────────────
+// ── Override ⇄ Undo — the hook's half (round 23: one permanent per-card toggle) ───────────────
 describe('useGameEngine — Override ⇄ Undo', () => {
   afterEach(() => vi.restoreAllMocks())
 
@@ -161,7 +161,7 @@ describe('useGameEngine — Override ⇄ Undo', () => {
     expect(result.current.state.stats.times.at(-1)).toBe(22)
   })
 
-  // ★ A SOLVE TIME IS RECORDED ON THE 0.1 ms GRID (round 23 Q3). performance.now() is already
+  // ★ A SOLVE TIME IS RECORDED ON THE 0.1 ms GRID (round 23). performance.now() is already
   // clamped to 0.1 ms in Chrome (1 ms in Safari), but the SUBTRACTION of two such readings is not:
   // 126913.4 − 123456.7 is 3456.699999999997 in floating point, which printed into the save as
   // 3.456699999999997 — 17 characters of float noise per time. Every solve time is kept now, so the

@@ -16,7 +16,7 @@
 //     false-fire (if a check fired during correct play, the fuzz would catch it first).
 //
 // Why these specific invariants:
-//   • Score integrity (the C3 work): `good` can never exceed `played`; a run of credits
+//   • Score integrity: `good` can never exceed `played`; a run of credits
 //     (`streak`, `best`) can never exceed the total credits (`good`); counts are
 //     non-negative integers; `times` are finite, non-negative, and never outnumber the
 //     credits that produced them — counting, for a save an old build trimmed, the times it

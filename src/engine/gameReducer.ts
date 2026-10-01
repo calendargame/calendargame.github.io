@@ -192,7 +192,7 @@ export interface Stats {
 export interface GameState {
   date: Question //                 current question {y,m,d,_fmt,_jul} (or a Deduction puzzle)
   questionId: number //             bumps on every advance / RESET — the hook resets the solve-timer on this, NOT on raw date changes (Back/Forward change date but must not reset the timer; no Override ever moves it backwards)
-  gridEpoch: number //              bumps ONLY on RESET / RESET_ROUND — the UI keys the answer grids on it, so every reset REMOUNTS them and the cleared colors SNAP to idle (a remounted element never CSS-transitions from its predecessor's state; .surface-button's hover transition would otherwise fade the green away, Q9). NOT bumped on advance / REGEN_DATE: a remount there would restart in-flight flash keyframes
+  gridEpoch: number //              bumps ONLY on RESET / RESET_ROUND — the UI keys the answer grids on it, so every reset REMOUNTS them and the cleared colors SNAP to idle (a remounted element never CSS-transitions from its predecessor's state; .surface-button's hover transition would otherwise fade the green away). NOT bumped on advance / REGEN_DATE: a remount there would restart in-flight flash keyframes
   persistBtns: Btns //              answer-grid state {idx: 'correct'|'wrong-latest'|'wrong-prev'|'override-wrong'}
   stats: Stats //                   {played,good,streak,best,times}
   stack: StackEntry[] //            back-history (oldest→newest)
@@ -423,7 +423,7 @@ export const cardNumber = (state: GameState): number => state.historyBase + stat
 // shape (a lone green, both flags clear). Callers: advance() stamping `hasCredit` onto the entry it
 // pushes, liveCredited below, the streak recompute folding the parked live card, and
 // engine/runBreakdown reading the same card for the run breakdown's rows. (Family of bugs found by the
-// C2 fuzz survey, 2026-06-06; extracted to one function when the breakdown became a caller and a
+// fuzz survey of 2026-06-06; extracted to one function when the breakdown became a caller and a
 // further copy was the alternative.)
 export const earnedCredit = (
   btns: Btns | null | undefined,
@@ -739,7 +739,7 @@ const advance = (
   // question (saveStatsThisQ stays null) purely to display it; that question wasn't played, so pushing
   // it would add a PHANTOM history entry — a miss that desyncs the streak/credit reconstruction from
   // `good`. `saved` (the live/frozen Save-Stats) wrongly falls back to the live setting when
-  // saveStatsThisQ is null, so it can't gate this alone. (C2 fuzz fix, found by the timed-strong
+  // saveStatsThisQ is null, so it can't gate this alone. (Fuzz fix, found by the timed-strong
   // strong-oracle profile.)
   const scored = state.saveStatsThisQ !== null
   let stack = state.stack
@@ -932,7 +932,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //   • a CREDITED live card (liveCredited — AoX's held completing solve, or a crediting Override
       //     that held): an already-answered-CORRECT question. Burning it would count a phantom played +
       //     reset the streak while `good` keeps the credit. Only the run modes ever leave a credited
-      //     card at the live edge (the one-question-loop modes advance on a correct). (C2 fuzz fix,
+      //     card at the live edge (the one-question-loop modes advance on a correct). (Fuzz fix,
       //     aox-strong profile.)
       //   • already REVEALED (revealed) — the answer is on screen: a wrong-then-Reveal, a Blitz
       //     per-round timeout (LOCK_REVEAL), a per-question TIMEOUT_MISS, or a live card an Override
@@ -940,7 +940,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     (firstPenalty=!countedWrong&&!revealed is already false), but it STILL re-set
       //     saveStatsThisQ — which on a never-played LOCK_REVEAL'd question makes it look "scored" so
       //     a later advance pushes it as a PHANTOM history miss (a good/streak desync). A read-only
-      //     review keeps saveStatsThisQ untouched. (C2 fuzz fix, timed-strong profile.)
+      //     review keeps saveStatsThisQ untouched. (Fuzz fix, timed-strong profile.)
       if (!showCodesPenalizes(state)) return { ...state, calcOpen: true }
       const correct = correctIndexOf(state.date, useJulian)
       const effective = effectiveSaveStats(state, saveStats)
@@ -978,7 +978,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...initEngine(regen ? nextDate : state.date),
         questionId: questionIdAfterReset(state),
-        // initEngine re-zeroes gridEpoch — carry the bump instead, so the reset remounts the grids (Q9).
+        // initEngine re-zeroes gridEpoch — carry the bump instead, so the reset remounts the grids.
         gridEpoch: state.gridEpoch + 1,
       }
     }
@@ -1057,7 +1057,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const { useJulian, saveStats } = action
       // A locked question is already resolved — a timeout on it must be a no-op, exactly like
       // ANSWER's locked guard. Unreachable in the app (the round ends with the timeout), but the
-      // engine must not rely on the component to forbid an invalid move. (C2 Session-6 hardening,
+      // engine must not rely on the component to forbid an invalid move. (Session-6 hardening,
       // same class as the TIMEOUT_MISS lock fix.)
       if (state.locked) return state
       const correct = correctIndexOf(state.date, useJulian)
@@ -1075,7 +1075,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...(state.countedWrong ? {} : { card: { ...state.card, timedOut: true as const } }),
         persistBtns: mkBtnsWithCorrect(state.persistBtns, correct),
         // The answer is shown → mark revealed (like LOCK_REVEAL), so if this question were ever
-        // advanced into history its 'correct' grid isn't mistaken for an earned credit. (C2 fuzz
+        // advanced into history its 'correct' grid isn't mistaken for an earned credit. (Fuzz
         // fix, 2026-06-06 — keeps the revealed-gate in advance() exhaustive.)
         revealed: true,
         // LOCK the grid too — a per-question timeout ENDS the round, so the question is resolved and
@@ -1083,7 +1083,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         // not, leaving an unlocked-but-revealed question that the reducer would let ANSWER credit good
         // while pushing it to history as a (revealed) non-credit — a good>credits desync. The Blitz
         // component already disables the grid post-round, so this only closes the engine's own
-        // consistency gap (the engine must not rely on the component to forbid an invalid move). (C2
+        // consistency gap (the engine must not rely on the component to forbid an invalid move). (A
         // fuzz fix, found by the timed-strong strong-oracle profile.)
         locked: true,
       }
@@ -1097,7 +1097,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         persistBtns: {},
-        gridEpoch: state.gridEpoch + 1, // remount the grids — the cleared colors snap, not fade (Q9)
+        gridEpoch: state.gridEpoch + 1, // remount the grids — the cleared colors snap, not fade
         stack: [],
         forwardStack: [],
         backDepth: 0,

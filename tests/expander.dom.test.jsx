@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// Q4 — the accordion's grid-template-rows migration; Q8 (round 7) — the motion clock split;
-// Q5 (round 8) — one duration for every accordion in the app.
+// Q4 — the accordion's grid-template-rows migration; round 7 — the motion clock split;
+// Round 8 — one duration for every accordion in the app.
 // The Expander slides open/closed by tweening its one grid row 0fr⇄1fr (index.css .expander
 // rules), replacing the old measured max-height clamp. Q8 moved the duration onto the
 // --expander-ms var and unified the easing on the Material standard curve
@@ -260,7 +260,7 @@ describe('GuideSection accordion contract (Q8 — aria + coordinator landmarks)'
     )
     const wrapper = container.firstElementChild
     expect(wrapper.id).toBe('guide-sec-overview')
-    // Q6 (round 8) deleted the scroll-mt that used to sit here. It never had a consumer:
+    // Round 8 deleted the scroll-mt that used to sit here. It never had a consumer:
     // nothing in src/ calls scrollIntoView, there is no fragment navigation, and native
     // focus scrolling targets the focused HEADER BUTTON, not this wrapper. The reading
     // line is declared once, as scroll-padding-top on the app's one scrollport

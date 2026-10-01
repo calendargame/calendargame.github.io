@@ -1,4 +1,4 @@
-// lib/statFit.ts — pure fit math for StatPanel's value auto-fit (Q3).
+// lib/statFit.ts — pure fit math for StatPanel's value auto-fit.
 //
 // Kept in its own module so the component file only exports components (the react-refresh rule), and so
 // the math is trivially unit-testable apart from the DOM wiring (StatPanel measures each value box and

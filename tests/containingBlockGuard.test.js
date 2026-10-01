@@ -1,4 +1,4 @@
-// tests/containingBlockGuard.test.js — Q8 round-11's silent-dependency guard.
+// tests/containingBlockGuard.test.js — round 11's silent-dependency guard.
 //
 // The mode selector's dropdown panel is position:FIXED (components/CustomSelect), which is what
 // makes its position scroll-independent in both the clamped modes and the guide's document scroll.
@@ -88,7 +88,7 @@ const rootChainClasses = [
 // another containing-block trigger), pin the WHOLE SET of inline style properties the app ever
 // writes to <html> / <body>: two, both harmless. Anything new has to come here and be justified.
 //   • background — <html>'s theme stamp (index.html's boot script, App's theme effect), which App
-//                  also dims to the scrimmed colour while a modal is up (round 23 Q1, the
+//                  also dims to the scrimmed colour while a modal is up (round 23, the
 //                  status-bar signal argued at App's theme effect).
 //   • --bar-h    — the top bar's measured height, a custom property on <html>.
 const ALLOWED_INLINE_PROPS = ['background', '--bar-h']

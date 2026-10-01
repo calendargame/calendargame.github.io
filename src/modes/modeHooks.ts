@@ -24,7 +24,7 @@ import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 
 // Timing constants. The codes panel's own timings (its slide duration and the CODES_CLOSE_MS
 // freeze window derived from it) live in src/lib/accordionMotion.js and are consumed entirely
-// inside components/MethodBreakdown — nothing in this file needs them (Q5, round 8).
+// inside components/MethodBreakdown — nothing in this file needs them (round 8).
 export const FLASH_MS = 550 // green/red button flash duration (ms)
 // Button-pulse flash (the green/red pulse on an answered option) — transient UI, not engine
 // state. Every mode component owns one; this hook is the single copy. Latest-timeout pattern
@@ -77,7 +77,7 @@ function engineUntouched(s: GameState) {
 // show/hide toggles, the "Enable and Reset Stats?" desync case, and the 6-box stats array for
 // <StatPanel>. Re-enabling timing follows App's original rule: OFF→just hide; ON with no
 // desync→regen the live date; ON with a desync (stats moved while hidden)→confirm→full reset. That
-// last branch was a two-tap arm rendered INSIDE <StatPanel>; Q7 (round 21) made it the shared
+// last branch was a two-tap arm rendered INSIDE <StatPanel>; round 21 made it the shared
 // ConfirmModal, opened from the mode component — this hook now just owns the open flag and the
 // confirm/cancel handlers. Both toggles (`timingOff` + `scoringOff`) are owned by the component and
 // persisted in the mode-prefs store, so they're passed in with their setters (timingOff also feeds
@@ -163,7 +163,7 @@ export function useStatsHideToggles({
   const sLast = calcLast(S.times),
     sAvg = calcAvg(S.times),
     sMed = calcMed(S.times)
-  // ★ `off` is YOUR toggle and NOTHING ELSE (C1, round 16) — so scoringOff / timingOff go through
+  // ★ `off` is YOUR toggle and NOTHING ELSE (round 16) — so scoringOff / timingOff go through
   // untouched. The two used to be wrapped as `scoringOff || !saveStats` and `timingOff || !saveStats`,
   // which folded two unrelated facts into one bit: turning Save Stats off then struck through and
   // dashed EVERY box, so your per-group choices disappeared underneath the global one. They were
@@ -186,7 +186,7 @@ export function useStatsHideToggles({
   return { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset }
 }
 
-// "Reset Stats" confirm for the casual modes (Classic / Flash / Deduction). Q7 (round 21) replaced
+// "Reset Stats" confirm for the casual modes (Classic / Flash / Deduction). Round 21 replaced
 // the two-tap in-place arm — button flips to "Reset Stats?" in rose, 3s window, click-outside
 // disarm — with the shared ConfirmModal, opened from the mode component. `onResetTap` opens the
 // popup; `confirmReset` runs `resetFn` (Classic/Deduction = eng.resetStats; Flash passes its own

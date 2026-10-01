@@ -75,7 +75,7 @@ const correctName = ({ y, m, d }) => DAY[wday(y, m, d)]
 const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
 const dayBtn = (name) => screen.getByRole('button', { name })
 const ctrl = (name) => screen.getByRole('button', { name })
-// Q7 round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
+// Round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
 const fireResetSettings = () => {
   act(() => fireEvent.click(ctrl('Reset Settings')))
   act(() =>
@@ -100,7 +100,7 @@ function statCell(label) {
 }
 // ⚠ Reads the value through its OWN marker, [data-statval] — the auto-fit target StatPanel puts on
 // the value span — and NOT "the cell's last span". A cell can carry a trailing screen-reader-only
-// span (the "Off" that names a blanked group, C1 round 16), and last-span would read that instead of
+// span (the "Off" that names a blanked group, round 16), and last-span would read that instead of
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 const statValue = (label) => statCell(label).querySelector('[data-statval]').textContent.trim()
 
@@ -450,11 +450,11 @@ describe('Flash — C2: mode switch mid-flash stops the flash', () => {
   })
 })
 
-// ── Q7 round-6: Reset Settings now restores the Flash speed too, straight into the store — which
+// ── round 6: Reset Settings now restores the Flash speed too, straight into the store — which
 // bypasses the slider's onChange sync of the idle countdown label (a local mirror of flashMs). An
 // effect keyed on flashMs re-seeds that label at rest, so a store-driven reset shows the right number.
-// (Q7 round-6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
-describe('Flash — Q7 round-6 (Reset Settings restoring the Flash speed re-syncs the idle countdown)', () => {
+// (round 6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
+describe('Flash — round 6 (Reset Settings restoring the Flash speed re-syncs the idle countdown)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -485,7 +485,7 @@ describe('Flash — Q7 round-6 (Reset Settings restoring the Flash speed re-sync
   })
 })
 
-// ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ───────────────────────────────
+// ── Override ⇄ Undo (round 23: one permanent per-card toggle) ───────────────────────────────
 // ★ ONLY A JUDGEMENT ON THE LIVE QUESTION ENDS THE FLASH, because only that takes the question away:
 // crediting the flashed question moves play on, so the reveal window belonged to a card that is no
 // longer on screen. A press on ANY other card — the one behind it, or one browsed to — leaves the

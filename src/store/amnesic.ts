@@ -66,7 +66,7 @@ import type { ProgressValues } from './progress.js'
 // PROGRESS store, so the other three cannot be reached from here at all. The split is STATS, NOT
 // CONFIGURATION — an amnesic preset stays itself across a close and only forgets how you did.
 //
-// ⚠ LOOKUP HISTORY USED TO BE A THIRD CLEARS ENTRY AND NO LONGER CAN BE (Q1, round 20) — it left
+// ⚠ LOOKUP HISTORY USED TO BE A THIRD CLEARS ENTRY AND NO LONGER CAN BE (round 20) — it left
 // store/progress entirely (see store/lookupHistory), which means it left what THIS LIST is even
 // capable of describing: `keyof ProgressValues` cannot name a field that is not part of
 // ProgressValues, so leaving it here would have failed to compile the moment the move landed. That
@@ -125,8 +125,8 @@ export const activeDataId = (reg: PresetRegistryValues): string =>
  * The spelling of one stats copy's identity — "<presetId>:saved" or "<presetId>:session" — for ANY
  * preset, not just the active one. activeDataId above is this for the preset you are on; the other
  * caller is store/presetControl's setPresetAmnesic, which has to name a preset's SESSION copy to
- * discard the rounds parked against it (store/sessionRound keys parked rounds by this id, round 23
- * Q2). One spelling, stated once, so the key a round is parked under and the key that throws it away
+ * discard the rounds parked against it (store/sessionRound keys parked rounds by this id, round
+ * 23). One spelling, stated once, so the key a round is parked under and the key that throws it away
  * can never drift apart.
  */
 export const dataIdOf = (presetId: number, amnesic: boolean): string =>

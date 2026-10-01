@@ -243,7 +243,7 @@ describe('the registry', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// THE "OPEN IN" PIN (round-21 Q3) — an app-global registry field: which preset a fresh app open
+// THE "OPEN IN" PIN (round 21) — an app-global registry field: which preset a fresh app open
 // lands in. 'last' (the default, and every pre-Q3 build's behaviour) = the persisted activeId as-is;
 // a preset id = that preset, whatever was active last time. Applied by usePresets' hydrate `merge`.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -671,7 +671,7 @@ describe('deleting a preset', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// ★★ IS A PRESET FACTORY-FRESH? (round 22, Q1) — the question components/PresetManager's ✕ asks
+// ★★ IS A PRESET FACTORY-FRESH? (round 22) — the question components/PresetManager's ✕ asks
 // before deciding whether to show its confirmation at all.
 //
 // ⚠⚠ THE ASYMMETRY IS THE WHOLE SUBJECT, so it is what this block is organised around rather than
@@ -834,7 +834,7 @@ describe('is a preset factory-fresh', () => {
     expect(isPresetFactory(id, true)).toBe(false)
     // …and the prefix scan is per preset: a neighbour's parked round says nothing about this one.
     expect(isPresetFactory(other('Clean'), true)).toBe(true)
-    // A round parked on the preset's GUEST (Amnesic session) copy counts as well (round 23 Q2 keys
+    // A round parked on the preset's GUEST (Amnesic session) copy counts as well (round 23 keys
     // parked rounds by stats copy — the scan covers both of a preset's copies).
     const guest = other('Guest')
     writeSessionRound(`${guest}:session`, 'aox', { score: 3 })

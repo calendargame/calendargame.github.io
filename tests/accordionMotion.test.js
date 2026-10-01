@@ -1,5 +1,5 @@
 // tests/accordionMotion.test.js — the pure math behind the HTP accordion motion
-// coordinator (Q8, round 7): the distance-scaled duration formula and its clamps, the
+// coordinator (round 7): the distance-scaled duration formula and its clamps, the
 // twin-toggle shared clock, the numeric twin of the Material standard easing curve, and
 // the scroll-target rules (the opened-header-lands-above-the-reading-line rule, the
 // shrinking-max-scroll clamp rule, the whole-pixel ceil, the sub-pixel epsilon, and the null
@@ -12,7 +12,7 @@
 // panel gap (--seat-top = --bar-h + --guide-panel-gap). On the owner's device that is
 // 57 + 8.46 = 65.46px — 0.5rem at his 16.92px fluid root — rounded to 65 here so the fixture
 // arithmetic reads cleanly; accordionScrollTarget is linear in seatTop, so the fraction
-// proves nothing the round number doesn't. Q5 (round 9) moved the line off --bar-h + --fade-h
+// proves nothing the round number doesn't. Round 9 moved the line off --bar-h + --fade-h
 // (81): the feather is 15.5px deeper than the panel gap, and that is exactly how much of the
 // previous panel it left showing above the tapped one.
 import { describe, it, expect } from 'vitest'

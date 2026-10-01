@@ -1,4 +1,4 @@
-// tests/precacheIntegrity.test.js — the round-7 bug CLASS, pinned (Q10b, round 11).
+// tests/precacheIntegrity.test.js — the round-7 bug CLASS, pinned (round 11).
 //
 // The class: an asset whose precache revision does not track its shipped bytes. Workbox re-downloads
 // a precached file only when its REVISION changes, never on content, so such a file is frozen in

@@ -45,7 +45,7 @@ const codesTextFor = (date) => {
   return text
 }
 
-describe('codes panel — the freeze releases when the date goes away (Q5, round 11)', () => {
+describe('codes panel — the freeze releases when the date goes away (round 11)', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => {
     vi.runOnlyPendingTimers()

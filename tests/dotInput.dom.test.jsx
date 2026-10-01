@@ -40,7 +40,7 @@ function dayState(name) {
 }
 // ⚠ Reads the value through its OWN marker, [data-statval] — the auto-fit target StatPanel puts on
 // the value span — and NOT "the cell's last span". A cell can carry a trailing screen-reader-only
-// span (the "Off" that names a blanked group, C1 round 16), and last-span would read that instead of
+// span (the "Off" that names a blanked group, round 16), and last-span would read that instead of
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 function statValue(label) {
   const btn = screen

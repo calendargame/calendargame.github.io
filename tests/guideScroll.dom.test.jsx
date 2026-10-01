@@ -181,7 +181,7 @@ describe('the guide remembers where you were reading', () => {
   it('opens at the top after a REAL CLOSE, whatever the scroller was left holding', () => {
     // A real close is the one departure that forgets the guide's place: the reading offset and the
     // open panel live in memory (a per-instance ref, GuidePage's own state) and, across a reload
-    // only, in sessionStorage (store/sessionGuide, round 23 Q11) — which the browser throws away on
+    // only, in sessionStorage (store/sessionGuide, round 23) — which the browser throws away on
     // a close. So the close is modelled as exactly that: the page hides (parking the place, as a
     // close does), then sessionStorage is gone and the browsing session forgotten.
     // The scroller is deliberately left sitting at 400 when the second instance takes it over (the
@@ -211,7 +211,7 @@ describe('the guide remembers where you were reading', () => {
   })
 
   it('a RELOAD keeps the place — the open section, and the offset written back on arrival', () => {
-    // Round 23 Q11: "only truly closing the app starts fresh". A reload fires pagehide and then the
+    // Round 23: "only truly closing the app starts fresh". A reload fires pagehide and then the
     // page simply stops — React runs no cleanup — so the model below keeps sessionStorage exactly as
     // the page left it at pagehide, and mounts again. The session page brings the reader straight
     // back into the guide.
@@ -436,7 +436,7 @@ describe('Full Reset returns the guide to a launch state', () => {
   const fullReset = (container) => {
     const bar = container.querySelector('.htp-sticky-bar')
     act(() => fireEvent.click(within(bar).getByRole('button', { name: /^Settings/ })))
-    // Q7 round 21: the footer button opens a ConfirmModal; its own "Full Reset" button confirms
+    // Round 21: the footer button opens a ConfirmModal; its own "Full Reset" button confirms
     // (resolved within the dialog so it never collides with the footer button of the same name).
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Full Reset' })))
     act(() =>
@@ -475,8 +475,8 @@ describe('Full Reset returns the guide to a launch state', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-// RESUME. Round 8 Q6 deleted a visibilitychange→scroll-reset that threw the reader back to the top
-// of How to Play on every app switch; round 11 Q3 found the same mistake surviving in a second
+// RESUME. Round 8 deleted a visibilitychange→scroll-reset that threw the reader back to the top
+// of How to Play on every app switch; round 11 found the same mistake surviving in a second
 // event, because a BFCache restore reaches the app through `pageshow` wearing a navigation's
 // clothes. Both halves are held from both sides here.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -774,7 +774,7 @@ describe('tapping a section carries the reading position with it', () => {
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // THE EDGE INDICATORS. Round 10 item B made them PROGRESSIVE — a continuous 0…1 --shade per
 // boundary instead of a class toggled by a boolean and cross-faded by a CSS transition — and
-// round 11 Q4 made them answer to content changes no scroll event reports. jsdom paints nothing,
+// Round 11 made them answer to content changes no scroll event reports. jsdom paints nothing,
 // but it can prove the number that reaches each surface.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 describe('the guide’s edges track the reading position and the content', () => {

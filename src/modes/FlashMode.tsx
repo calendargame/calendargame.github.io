@@ -173,7 +173,7 @@ function FlashMode({
   }
   // Keep the idle countdown label + bar in step with a store-driven flashMs change that BYPASSES
   // the slider's onChange sync — Reset Settings restoring the saved/factory Flash speed while Flash
-  // sits idle (round-6 Q7). flashRemainMs is a local mirror seeded from flashMs; a live flash owns it via
+  // sits idle (round 6). flashRemainMs is a local mirror seeded from flashMs; a live flash owns it via
   // the rAF countdown (and stopFlash re-seeds it on teardown), so this only re-seeds at rest. Keyed
   // on flashMs alone — the slider path already synced, so a re-sync there is an idempotent no-op.
   //
@@ -309,7 +309,7 @@ function FlashMode({
     if (open && active) freezeFlash()
     eng.showCodes(open)
   }
-  // ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ──
+  // ── Override ⇄ Undo (round 23: one permanent per-card toggle) ──
   // ★ ONLY A JUDGEMENT ON THE LIVE QUESTION ENDS THE FLASH, because only that takes the question
   // away: crediting the flashed question moves play on to a fresh date, so the reveal window the
   // player was in belongs to a question that is no longer on screen. A press on any OTHER card —

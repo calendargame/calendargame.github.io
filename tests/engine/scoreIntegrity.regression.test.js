@@ -9,7 +9,7 @@
 // history then counted those false credits. Fixed in gameReducer.advance (hasCredit gated on
 // !revealed && !countedWrong) + Path 2's best/btns revert + TIMEOUT_MISS marking revealed.
 //
-// ⚠ "PATH 1…5" BELOW ARE HISTORICAL NAMES. Until round 23 Q6 the Override was five hand-written
+// ⚠ "PATH 1…5" BELOW ARE HISTORICAL NAMES. Until round 23 the Override was five hand-written
 // paths; it is now ONE per-card toggle (gameReducer's OVERRIDE, targeted by overrideTarget). Each
 // regression keeps the name of the path it was found in because that is how the bug was reported,
 // and each still drives the same sequence against the toggle: Path 1 is today's 'browsed' target,
@@ -47,7 +47,7 @@ const answerComplete = (s, idx) =>
     nextDate: D2,
     complete: true,
   })
-// The one button (round 23 Q6: a per-card toggle — no direction, no timing flag; see gameReducer).
+// The one button (round 23: a per-card toggle — no direction, no timing flag; see gameReducer).
 const override = (s, nextDate, extra = {}) =>
   gameReducer(s, { type: 'OVERRIDE', ...ctx, tracking: false, nextDate, ...extra })
 
@@ -330,7 +330,7 @@ describe('score-integrity regressions (C2 Session-6 — TIMEOUT_MISS engine-cons
 // The Session-6 flip-flop, which the independent reference model caught (ref-full seed 10000013):
 // a held completing solve overridden to a miss, advanced past, then overridden AGAIN back to a
 // credit. Under the old one-override-per-question contract that second credit was a bug and was
-// blocked. Round 23 Q6 made it the SPECIFIED behaviour — the owner's rule is that every card can be
+// blocked. Round 23 made it the SPECIFIED behaviour — the owner's rule is that every card can be
 // toggled back, forever — and what makes it safe is that the second press is no longer a new
 // credit at all: it is the card returning to the state it was answered in, with that state's OWN
 // time (not its wrongTime, which a held first-try solve never had). This pins exactly that.

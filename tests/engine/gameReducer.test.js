@@ -197,7 +197,7 @@ describe('gameReducer — RESET', () => {
 })
 
 // ── OVERRIDE: which card the button points at, and a FIRST press on each ───────────────────────
-// Round 23 Q6 replaced the five hand-written Override paths with one per-card toggle. A first press
+// Round 23 replaced the five hand-written Override paths with one per-card toggle. A first press
 // is still what those paths did, target by target — pinned here with the old paths' own numbers so
 // the equivalence is checked rather than argued. The two deliberate differences are pinned too:
 // the old Path 4 (credit the previous wrong) no longer moves play on, and the old Path 2 (take a
@@ -588,7 +588,7 @@ describe('gameReducer — historyBase / cardNumber (the Q# badge)', () => {
   })
 })
 
-// ── Override ⇄ Undo: a PERMANENT two-state toggle on every scored card (round 23 Q6) ────────────
+// ── Override ⇄ Undo: a PERMANENT two-state toggle on every scored card (round 23) ────────────
 // The owner's rule: everything reads either Override or Undo — no locked Override any more — and a
 // card remembers how you answered it, so an Undo reached by browsing back (or after a preset
 // switch) shows your ORIGINAL red highlights. Every scored card holds two fixed states, A (as

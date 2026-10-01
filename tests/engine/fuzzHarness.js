@@ -457,7 +457,7 @@ export const PROFILES = {
     pComplete: 0.35,
     pHold: 0.35,
   },
-  // ── Override ⇄ Undo toggle churn (round 23 Q6) ──
+  // ── Override ⇄ Undo toggle churn (round 23) ──
   // The button is a permanent per-card toggle, so OVERRIDE dominates the stream — every press lands
   // on the card the button points at, flipping it one way or the other — with enough Back / Forward
   // between presses to toggle cards deep in the history, and enough ANSWER / NEW / REVEAL / Show
@@ -738,7 +738,7 @@ export function runSequence(seed, steps, cov, profile) {
   let pressRun = 0
 
   for (let i = 0; i < steps; i++) {
-    // THE RELOAD (round 23 Q11): with prob pReload, the state goes through exactly what a reload does
+    // THE RELOAD (round 23): with prob pReload, the state goes through exactly what a reload does
     // to a casual mode — parked as the app parks it (engine/parkedHistory's parkedText, the times left
     // out), JSON and all, then restored over its own stats as the app restores it (restoreParked: the
     // one engine restore door, then the stats-agree and invariant checks). A reachable state must

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // lookupHistory.dom.test.js — store/lookupHistory against REAL (jsdom) storage, end to end, and
-// the app-level consequences of Q1 (round 20): Lookup history left store/progress to become ONE
+// the app-level consequences of round 20: Lookup history left store/progress to become ONE
 // list shared by every preset, with a session-only overflow for lookups made while the active
 // preset is Amnesic. This file is the "tests/lookupHistory.dom" this round's other files (progress,
 // amnesic, persistence, settingsPanel.defaults) point readers at.

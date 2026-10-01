@@ -13,7 +13,7 @@
 // BUILDS the turned arrays by mapping the standard one, so a test that re-derived them the same way
 // would agree with a wrong rotation just as happily as with a right one.
 //
-// The store field driving this is `dotRotation` (round-23 Q6), set here through setDotRotation.
+// The store field driving this is `dotRotation` (round 23), set here through setDotRotation.
 // UNLIKE the title-bar mark (tests/dotRotation.dom), this diagram is NOT gated on inputStyle — see
 // the standalone case at the foot of this file for why, and GuidePage's own header comment for the
 // fuller argument (it documents what the chosen rotation looks like, regardless of the player's

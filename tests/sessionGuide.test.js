@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// sessionGuide — round 23 Q11: How to Play's place (open section + reading offset), parked in
+// sessionGuide — round 23: How to Play's place (open section + reading offset), parked in
 // sessionStorage for a reload (store/sessionGuide). Pins the store alone: what it keeps, that the
 // launch place keeps nothing, and that anything unreadable reads as "no place" rather than throwing.
 // The screen's wiring — parked on pagehide, restored on the reload, cleared by a real close and by a

@@ -231,7 +231,7 @@ describe('the resting states — nothing to scroll means nothing to signal', () 
   it('Lookup with ONE entry: the list exists and has nothing to scroll', () => {
     // Empty renders no <ul> at all (the null-scroller path); one entry renders a real scroller that
     // is simply not overflowing — the state every fresh install is in right after its first
-    // lookup. Since round 23 (Q10) the list has no boundary surfaces to rest, so the required
+    // lookup. Since round 23 the list has no boundary surfaces to rest, so the required
     // answer is the list's own: no fade at either edge.
     const { container } = render(<LookupCard history={[{ id: 'e0', y: 1592, m: 3, d: 1 }]} />)
     expect(container.querySelectorAll('ul li')).toHaveLength(1)
@@ -257,7 +257,7 @@ function mountApp() {
 const scrollContainer = (container) =>
   [...container.querySelectorAll('div')].find((d) => d.style.paddingTop === 'var(--bar-h)')
 
-describe('the app scroller — content changes with no scroll event (round 11 Q4)', () => {
+describe('the app scroller — content changes with no scroll event (round 11)', () => {
   let ro
   beforeEach(() => {
     localStorage.clear()

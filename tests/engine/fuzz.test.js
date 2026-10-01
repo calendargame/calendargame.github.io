@@ -220,7 +220,7 @@ describe('fuzz / bug survey — engine invariants hold across random play (C1/C2
     T,
   )
 
-  // ── Override ⇄ Undo, the permanent per-card toggle (round 23 Q6) ──
+  // ── Override ⇄ Undo, the permanent per-card toggle (round 23) ──
   // Presses dominate the stream, under the exact oracle AND the reference model — whose toggle is
   // one bit on a question it stores as-answered, where the reducer rewrites two materialised states —
   // so the two routes to every position are independent. The harness also asserts, every step, that

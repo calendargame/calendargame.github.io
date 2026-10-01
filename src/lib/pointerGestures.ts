@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────
-// lib/pointerGestures.ts — the global press-drag-release input controller (Q4 + Q5).
+// lib/pointerGestures.ts — the global press-drag-release input controller.
 //
 // Makes button activation RELEASE-based instead of press-based, with three behaviours:
 //
@@ -15,7 +15,7 @@
 //     sliding to the right one. Outside a group, dragging onto another button never activates it — the
 //     gesture belongs to the button you pressed.
 //
-//   • PRESS-DRAG MENU (Q5 + C2): a press on a [data-select-trigger] (the mode selector, or the ⚙ Settings
+//   • PRESS-DRAG MENU: a press on a [data-select-trigger] (the mode selector, or the ⚙ Settings
 //     button) whose own pointerdown opens a menu — you can drag straight into the menu and release on an
 //     option to pick it, in one gesture. The trigger NAMES its menu via aria-controls, resolved live by
 //     id (menuFor) since the menu mounts a React render after pointerdown; a press that CLOSED the menu
@@ -71,12 +71,12 @@ const WITHHELD_SELECTOR = '[aria-disabled="true"]' // …and what a gesture must
 // ⚠ WHY IT HAD TO BECOME EXPLICIT. Until round 15 every withheld control in the app also wore
 // `pointer-events-none`, and THAT is what kept them out of this file: a pointer-events:none element is
 // never returned by elementFromPoint and never targeted by a pointerdown, so `closest('button')` walked
-// straight past it. B7 removed the pointer block from the ⚙ footer's three buttons (so the not-allowed
+// straight past it. Round 15 removed the pointer block from the ⚙ footer's three buttons (so the not-allowed
 // cursor could paint at all — see controlClasses' NOT_OFFERED_BTN_CLASS), and with it went the only
 // thing keeping them out: a press-drag from the ⚙ gear into the panel started drawing the drag ring on
 // a greyed-out Save Defaults / Reset Settings / Full Reset, which then did nothing on release. A ring
 // is a promise that a release will act; drawing one on a control the app has just announced as
-// unavailable is the UI lying about what pressing will do — the very defect B7 was opened to fix, one
+// unavailable is the UI lying about what pressing will do — the very defect that change was made to fix, one
 // channel over. So the invariant moves off a CSS side effect and into the controller, where it is
 // stated once and cannot be undone by a className.
 //
@@ -85,7 +85,7 @@ const WITHHELD_SELECTOR = '[aria-disabled="true"]' // …and what a gesture must
 // pickers (PillGroup's LOCK_CLASS on the container, PillTray's segments inside it), SliderValueEditor's
 // accented readout, and MethodBreakdown's Show Codes. The ⚙ footer's three buttons are the only
 // hit-testable aria-disabled controls in the app, so this predicate changes the behaviour of exactly
-// those three, and changes it back to what it was before B7.
+// those three, and changes it back to what it was before round 15.
 //
 // Exported for the unit net: jsdom has no layout, so elementFromPoint never fires there and the full
 // gesture cannot be driven — the predicate is the testable seam (tests/pointerGestures).
@@ -158,7 +158,7 @@ export function menuFor(trigger: Element | null): Element | null {
   return (id && document.getElementById(id)) || null
 }
 
-// EDGE AUTO-SCROLL math (C2) — pure + unit-tested. Speed is px/SECOND (frame-rate independent: 60Hz and
+// EDGE AUTO-SCROLL math — pure + unit-tested. Speed is px/SECOND (frame-rate independent: 60Hz and
 // a 120Hz iPhone scroll at the same speed), applied per rAF frame as MAX_SPEED · ramp · dt. The ramp
 // rises linearly from 0 at EDGE px inside the scroller's edge to 1 at (or past) the edge itself; dt is
 // clamped so a janky/suspended frame can't teleport the scroll.
@@ -282,7 +282,7 @@ export function installPointerGestures(): () => void {
   // click delay: it persists until the click consumes it (onClick) or the next gesture clears it
   // (onDown), with a generous fallback timer only for the no-click case (a mouse drag-off fires none) so
   // a much-later real click on the same button isn't swallowed. (A 0ms tick lost this race — held-then-
-  // dragged taps and the mode-selector re-toggle leaked through. Q5 fix.)
+  // dragged taps and the mode-selector re-toggle leaked through.)
   const armSuppress = (el: Element) => {
     suppressEl = el
     if (clearTimer) clearTimeout(clearTimer)

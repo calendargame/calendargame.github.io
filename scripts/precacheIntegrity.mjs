@@ -1,4 +1,4 @@
-// scripts/precacheIntegrity.mjs — the round-7 class, closed at BUILD TIME (Q10b, round 11).
+// scripts/precacheIntegrity.mjs — the round-7 class, closed at BUILD TIME (round 11).
 //
 // THE CLASS: an asset whose precache REVISION does not track its shipped BYTES. Workbox decides
 // whether a client must re-download a precached file by comparing revisions, never by comparing
@@ -6,7 +6,7 @@
 // that already has the old copy. It stays cached forever. Round 7 shipped exactly that (the gray
 // staging icons inherited the purple source files' md5), and NOTHING anywhere caught it: before
 // this module, `grep -rniE "precache|revision" tests/ scripts/ .github/` returned nothing at all.
-// It is also the one class the Q7 update DETECTOR is blind to by construction — the detector can
+// It is also the one class the update DETECTOR is blind to by construction — the detector can
 // see that the deploy differs, but the applier hands the stale revision straight back — which is
 // why this guard is what makes that feature honest rather than merely confident.
 //

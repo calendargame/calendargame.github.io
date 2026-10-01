@@ -1,9 +1,9 @@
 // scripts/changelogStamp.mjs — the deploy stamp and the changelog date, made unable to disagree
-// (round 16, Q1 half 2).
+// (round 16, the second half of its deploy-stamp change).
 //
 // THE CLASS: two facts about the same deploy, written down in two places, kept in step by memory.
 // src/deployStamp.ts says WHEN the build shipped; the newest entry in src/changelog.ts says WHICH
-// PACIFIC DAY shipped it. Half 1 of Q1 took the stamp out of human hands — it is now the build
+// PACIFIC DAY shipped it. The first half took the stamp out of human hands — it is now the build
 // machine's own clock — which removes one of the two chores and, on its own, makes the situation
 // WORSE: the surviving half is a step somebody used to remember beside a step nobody has to, and a
 // divergence between them would now happen silently. So the two halves only make sense together.

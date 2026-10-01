@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// sessionRound.dom — round-21 Q11: an ENDED timed round/run is re-shown after a preset switch and
-// return, restored from sessionStorage keyed by the NOW-ACTIVE preset's stats copy (round 23 Q2 —
+// sessionRound.dom — round 21: an ENDED timed round/run is re-shown after a preset switch and
+// return, restored from sessionStorage keyed by the NOW-ACTIVE preset's stats copy (round 23 —
 // "<preset>:saved" / "<preset>:session"); an in-progress one is not.
 //
 // ★★ WHY THIS IS NOT A STORE-LEVEL TEST, same reason as tests/presetSwitch.dom. store/sessionRound
@@ -295,7 +295,7 @@ describe('Q11 — a finished MoX run survives a preset round-trip', () => {
 // a second entry under the new key mirroring the round's own result before the reset flushed — a
 // round filed under a config it was never played on. Q2 files every round under its own keys; the
 // native case pinning that is in tests/blitz.dom.)
-// ⚠ ROUND IDS ARE NEVER-REPEATING since round 23 Q4 (engine/roundId), so the two paths' rounds carry
+// ⚠ ROUND IDS ARE NEVER-REPEATING since round 23 (engine/roundId), so the two paths' rounds carry
 // DIFFERENT ids by design. Each side's ids are canonicalized to the order they first appear, which
 // keeps the claim exact — the same keys, the same values, and the same "which fields share a
 // round" — without pretending two different rounds had the same id.
@@ -428,13 +428,13 @@ describe('Q11 wiring does not weaken the remount that isolates presets', () => {
   })
 })
 
-// ── Override ⇄ Undo across a preset round-trip (round 23 Q6) ───────────────────────────────────
+// ── Override ⇄ Undo across a preset round-trip (round 23) ───────────────────────────────────
 // ★ THE OWNER'S SENTENCE, END TO END: "if you get smth wrong then override then later come back to
 // that question by browsing or FROM ANOTHER PRESET or smth and undo there it shows your original red
 // highlight(s)." Nothing here has to be rebuilt or stripped on the way through: the whole record is
 // one bit and one stashed grid PER CARD inside the parked engine state, so it rides along with the
 // round and the button reads it again on the other side.
-describe('Round 23 Q6 — an overridden card comes back overridden, and still toggles', () => {
+describe('Round 23 — an overridden card comes back overridden, and still toggles', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()
@@ -566,7 +566,7 @@ describe('a restored Blitz round resumes with the time it had left', () => {
     expect(readout()).toBe('15s') // …and it is genuinely draining from there
     // Pressing again takes that card's credit back, which is a miss on a sudden-death round — so the
     // round ends again, and it ends with the clock it HAS, not the clock it had before the resume:
-    // those ten seconds were real play. (Round 23 Q6 — a round only ever keeps the time it did not use.)
+    // those ten seconds were real play. (Round 23 — a round only ever keeps the time it did not use.)
     tap(ctrl('Undo'))
     expect(ctrl('Reset')).toBeInTheDocument()
     expect(readout()).toBe('15s')

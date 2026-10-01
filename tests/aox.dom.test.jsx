@@ -34,7 +34,7 @@ function isHidden(el) {
   return false
 }
 const ctrl = (name) => screen.getByRole('button', { name })
-// Q7 round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
+// Round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
 const fireResetSettings = () => {
   act(() => fireEvent.click(ctrl('Reset Settings')))
   act(() =>
@@ -89,7 +89,7 @@ function answerWrong() {
 // Stat value by visible label span (other modes' strips are display:none).
 // ⚠ Reads the value through its OWN marker, [data-statval] — the auto-fit target StatPanel puts on
 // the value span — and NOT "the cell's last span". A cell can carry a trailing screen-reader-only
-// span (the "Off" that names a blanked group, C1 round 16), and last-span would read that instead of
+// span (the "Off" that names a blanked group, round 16), and last-span would read that instead of
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 function statValue(label) {
   const labelSpan = Array.from(document.querySelectorAll('span')).find(
@@ -1044,7 +1044,7 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
   const nField = () => screen.getByRole('textbox', { name: 'MoX run length' })
 
   it('rejects non-digits outright, normalize-commits on blur/Enter, and DISCARDS on Escape', () => {
-    // ⚠ RE-BLESSED (round 15, B6) — the Escape leg at the foot of this case asserted the opposite
+    // ⚠ RE-BLESSED (round 15) — the Escape leg at the foot of this case asserted the opposite
     // until now: "Escape commits the clamped current value too", so typing 1 and pressing Escape
     // left the field on 2. That was the app's own comment as well, and it made this the last field
     // where Escape KEPT an edit — the ⚙ Year Range boxes discard (round 14) and the tap-to-type
@@ -1143,7 +1143,7 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
     expect(gear().getAttribute('aria-controls')).toBeNull()
   })
 
-  it('the box wears the shared interactive surface (border surface-tray), never the container panel (Q7 round-7)', () => {
+  it('the box wears the shared interactive surface (border surface-tray), never the container panel (round 7)', () => {
     // The site-wide interactive-border rule: inputs are controls, so the box carries the same
     // sbtn-bd border tier as its Allow Mistakes / One-by-One neighbors — NUM_INPUT_CLASS's
     // shared token, asserted here on the mode-screen site.
@@ -1154,12 +1154,12 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
   })
 })
 
-// ── Q7 round-6: Reset Settings now restores the MoX run length too, so a Reset Settings that
+// ── round 6: Reset Settings now restores the MoX run length too, so a Reset Settings that
 // changes a running/ended run's N reconciles it on the popover close — AoX's existing settings-close
 // reset rule, now triggered by the aoxN dep the close-effect gained. Uses a FACTORY panel so Reset
 // Settings touches ONLY the run length, isolating the mode-screen-pref path from the ⚙-panel path.
-// (Q7 round-6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
-describe('AoX — Q7 round-6 (Reset Settings restoring the run length reconciles the run)', () => {
+// (round 6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
+describe('AoX — round 6 (Reset Settings restoring the run length reconciles the run)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -1314,11 +1314,11 @@ describe('AoX — Q8 visual-only timing hide', () => {
   })
 })
 
-// ── Q4 round-8 / Q5 round-8: Show Codes is ONE button in six places ───────────
+// ── round 8 / round 8: Show Codes is ONE button in six places ───────────
 // AoX used to render its own Show Codes button + Expander instead of a MethodBreakdownSection
 // (it froze the displayed date itself), so its copy of the button was a hand-duplicated string
 // — and it had already drifted, losing the aria-disabled and cursor-not-allowed the other five
-// carried. Q4 (round 8) pulled both back onto the shared class consts; Q5 (round 8) deleted the
+// carried. Round 8 pulled both back onto the shared class consts; round 8 deleted the
 // duplicate outright, so all six toggles are now literally the same component. The class also
 // carries `border border-transparent`: it is a solid fill measured against controls that all
 // carry a 1px border, and a border counts toward rendered height, so without it the button sat
@@ -1388,7 +1388,7 @@ describe('AoX — round-8: the Show Codes button is shared with the other five s
   })
 })
 
-// ── Q3 round-9: the run-length row equalizes by STRETCHING ──────────────────────────────────
+// ── round 9: the run-length row equalizes by STRETCHING ──────────────────────────────────
 // These are CLASS-CONTRACT tests, not height tests — jsdom has no layout engine, so it can no more
 // measure the defect than it could have measured the two rounds of "prove the heights match" fixes
 // that preceded this one. What they pin is the RULE that replaced those attempts:
@@ -1403,7 +1403,7 @@ describe('AoX — round-8: the Show Codes button is shared with the other five s
 // The direction doesn't matter to the fix: on the owner's iPhone the input is the taller one, so the
 // buttons grow and the input keeps its natural height, but stretch equalizes either way.
 const cls = (el) => (el.getAttribute('class') || '').split(/\s+/).filter(Boolean)
-describe('AoX — Q3 round-9 (the run-length row equalizes by stretch, not by matched heights)', () => {
+describe('AoX — round 9 (the run-length row equalizes by stretch, not by matched heights)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -1448,7 +1448,7 @@ describe('AoX — Q3 round-9 (the run-length row equalizes by stretch, not by ma
   })
 })
 
-// ── App-wide guard for the same defect class (Q3 round-9) ───────────────────────────────────────
+// ── App-wide guard for the same defect class (round 9) ───────────────────────────────────────
 // Structural, not AoX-specific: ANY flex row that puts an in-flow text <input> in one item and a
 // <button> in another must not be items-center, for exactly the reason above. It lives here because
 // this is where the bug and its history are documented, and it runs over the mounted <App/>, which
@@ -1467,7 +1467,7 @@ describe('AoX — Q3 round-9 (the run-length row equalizes by stretch, not by ma
 //   • <input type="range"> is exempt: index.css gives the slider a real declared height.
 // Verified non-vacuous: it scans ~50 items-center rows and finds none, and re-introducing
 // items-center on the AoX row makes it fail with that row named.
-describe('app-wide — no items-center flex row mixes an <input> with a <button> (Q3 round-9)', () => {
+describe('app-wide — no items-center flex row mixes an <input> with a <button> (round 9)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -1537,7 +1537,7 @@ describe('app-wide — no items-center flex row mixes an <input> with a <button>
 // user's personal defaults leaves the reset exactly one thing to do (Input, a panel setting AoX
 // does not read), which is the state in which "Reset Settings leaves the run alone" is falsifiable.
 // ⚠ And aoxN stays at its factory '10' throughout that case for the same reason: it IS one of the
-// nine (round-6 Q7), and the describe above already pins what a Reset Settings that MOVES it does.
+// nine (round 6), and the describe above already pins what a Reset Settings that MOVES it does.
 describe('AoX — the settings net: an in-progress run vs Reset Settings and Save Stats', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -1718,7 +1718,7 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
   })
 })
 
-// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
+// ── Override ⇄ Undo (round 23) ─────────────────────────────────────────────────────────────
 // Where Override used to go inert after use it reads Undo, and Undo puts back exactly what the
 // Override changed — in MoX that includes the RUN'S PHASE (an Override can fail a run, resume a
 // failed one, or complete one), and a reveal auto-advance the Override cancelled.

@@ -27,7 +27,7 @@
 //     picks when the OS decides, exactly one pick across both rows when it doesn't.
 //   • Flipping Use System Settings OFF seeds the manual theme from what is ALREADY on screen, so
 //     the switch never jumps the user to a different look (the round-8 bug).
-//   • THE KEYBOARD CONTRACT that role="radiogroup" promises, added in round-9 (Q2) and owned by
+//   • THE KEYBOARD CONTRACT that role="radiogroup" promises, added in round 9 and owned by
 //     PillGroup (components/PillGroup): each group is ONE tab stop — the selected pill — with
 //     Right/Down, Left/Up, Home and End moving the choice WITHIN it and wrapping, and a locked
 //     group inert (no tab stop, no arrow handling — pointer-events-none stops only pointers).
@@ -125,9 +125,9 @@ const isTraySegment = (b) =>
 // buttons until round-9; the housing meant nothing while that was true. Turning Use System OFF
 // swaps 'Dark theme' + 'Light theme' for the single 'Theme' group that spans both rows.
 const PICKERS = [
-  // The Per-preset "Default Mode" joined the panel in round-21 Q3 as two stacked trays, one
+  // The Per-preset "Default Mode" joined the panel in round 21 as two stacked trays, one
   // radiogroup — the Date Format shape — so pills('Default Mode') spans both. (The Global "Open in"
-  // arrived beside it as a tray too, and left this list in round 23, Q8: presets are unlimited, so
+  // arrived beside it as a tray too, and left this list in round 23: presets are unlimited, so
   // it is the panel's one DROPDOWN now — pinned in the listbox-trigger test below.)
   'Default Mode',
   'Date Format',
@@ -657,7 +657,7 @@ describe('Settings → Display — radio semantics and the retired theme dropdow
   })
 
   // The theme CustomSelects are gone. Every dropdown in the app lives in the BAR except ONE: the
-  // Global "Open in", a dropdown since round 23 (Q8) because presets are unlimited and a tray grows
+  // Global "Open in", a dropdown since round 23 because presets are unlimited and a tray grows
   // a segment per preset — THE PICKER RULE's single, named exception. So the claim is exact: the
   // bar's two, and "Open in" inside the panel, and nothing else anywhere.
   it('the panel holds exactly one dropdown, "Open in"; the bar owns the other two', () => {
@@ -679,7 +679,7 @@ describe('Settings → Display — radio semantics and the retired theme dropdow
   })
 })
 
-// ── Part H: the KEYBOARD CONTRACT role="radiogroup" promises (round-9 Q2) ────────────────────
+// ── Part H: the KEYBOARD CONTRACT role="radiogroup" promises (round 9) ────────────────────
 // Round-8 announced the convention; this is the half that keeps it. Everything here is invisible
 // — no pixel moves — so unlike the rest of this file there is no on-device pass to fall back on:
 // the owner's phone has no keyboard. These tests are the whole verification.
@@ -1142,7 +1142,7 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expect(foot('Full Reset').className).toBe(ROSE)
     for (const label of ['Save Defaults', 'Reset Settings', 'Full Reset'])
       expect(foot(label).getAttribute('aria-disabled'), label).toBeNull()
-    // Q7 round 21: the two-tap arm is gone — pressing Full Reset opens a ConfirmModal and the
+    // Round 21: the two-tap arm is gone — pressing Full Reset opens a ConfirmModal and the
     // footer button's own class string does not change (no more "Confirm?" caption, no armed ring).
     // The popup's own confirm button carries the same accessible name, so scope past it to the
     // footer button by the panel's published id.

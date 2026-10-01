@@ -1,5 +1,5 @@
 // Scroll-geometry FIXTURES — the states jsdom cannot produce on its own and the suite has never
-// rendered (round 11 Q4).
+// rendered (round 11).
 //
 // WHY THIS FILE EXISTS. Every scroll indicator in the app — the two mask fades, the bar's boundary
 // shadow, the guide's doc-fade strips, Lookup's header/footer shadows — is a function of three
@@ -10,7 +10,7 @@
 // That gap is the actual recurring defect, and it has now shipped twice. Round 10: full-strength
 // shadows framing an empty "No lookups yet" panel on every cold start of a fresh install — a
 // RESTING state, which no fixture rendered, self-healing after the first lookup so an on-device
-// pass missed it. Round 11 Q4: masks and fades frozen when content changed size without a scroll
+// pass missed it. Round 11: masks and fades frozen when content changed size without a scroll
 // event — a TRANSITION, which no fixture performed. Each was answered with one more point test.
 // This is the systematic replacement: name the states, and sweep the regions through them.
 //

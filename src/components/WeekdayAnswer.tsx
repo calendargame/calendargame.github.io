@@ -1,5 +1,5 @@
 // WeekdayAnswer — the Sun..Sat answer grid shared by the four weekday mode screens. Extracted
-// verbatim from main.tsx (Q1 phase 1).
+// verbatim from main.tsx (the main.tsx split).
 import type { InputStyle } from '../store/settings.js'
 import type { ButtonState } from '../engine/answerButtons.js'
 import type { FlashState } from '../modes/modeTypes.js'
@@ -32,7 +32,7 @@ const WEEKDAY_HIT_PAD = answerGridHitPad(WEEKDAY_COLS, WEEKDAY_SPANS)
 // and AoX now also blurs the answer on touch like the others (harmless: just drops focus after a
 // tap) — so behaviour, and the DOM tests that drive it, are unchanged. The dots are unlabelled
 // circles (aria-label carries the accessible day name) sized + positioned by the .dot-box/
-// .dot-cluster/.dot-btn CSS (index.css). Every caller keys the grid on state.gridEpoch (Q9):
+// .dot-cluster/.dot-btn CSS (index.css). Every caller keys the grid on state.gridEpoch:
 // RESET / RESET_ROUND bump it, so a reset REMOUNTS the grid and the cleared colors SNAP to idle
 // — .surface-button's hover transition would otherwise fade the green away (remounted elements
 // never transition from a predecessor's styles; reorder/useLayoutEffect alone proven insufficient).
@@ -71,7 +71,7 @@ function WeekdayAnswer({
     const shouldDim = optionsDisabled && !ps && !isFlashing
     // pointer-events-none ONLY when the whole grid is inert (codes open / browsing back / inactive). A
     // perLocked (already-answered) button stays hit-testable so it still highlights as you drag over it
-    // (Q4) — the onClick guard below blocks any re-answer, so it can't be re-selected.
+    // — the onClick guard below blocks any re-answer, so it can't be re-selected.
     const inert = optionsDisabled
     const onClick = () => {
       if (perLocked) return

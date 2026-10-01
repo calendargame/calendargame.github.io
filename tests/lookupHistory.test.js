@@ -6,7 +6,7 @@ import {
   normalizeLookupEntries,
 } from '../src/store/lookupHistory.js'
 
-// lookupHistory.test.js — the pure logic behind store/lookupHistory (Q1, round 20). Mirrors
+// lookupHistory.test.js — the pure logic behind store/lookupHistory (round 20). Mirrors
 // progress.test.js's split: the pure rewrites/validators are unit-tested here (Node); the
 // persisted-store wiring (localStorage/sessionStorage, hydrate, the amnesic session mechanism) is
 // tests/lookupHistory.dom.test.js, which needs jsdom storage. normalizeLookupEntries and its
@@ -34,7 +34,7 @@ describe('lookupHistory — addLookupEntry', () => {
 })
 
 // ── moveEntryToTop: re-asking a question you already have ───────────────────────────────────
-// Extracted from main.tsx's inline rewrite (Q1, round 20) so both the permanent list and the
+// Extracted from main.tsx's inline rewrite (round 20) so both the permanent list and the
 // session-only overflow apply the exact same array surgery.
 describe('lookupHistory — moveEntryToTop', () => {
   const a = { id: 'a', y: 1, m: 1, d: 1 }
@@ -102,7 +102,7 @@ describe('lookupHistory — mergeForDisplay', () => {
   })
 })
 
-// ── the lookup-history normalizer: shape + validation (Q2; moved here verbatim, Q1 round 20) ────
+// ── the lookup-history normalizer: shape + validation (Q2; moved here verbatim, round 20) ────
 // label/weekday/result were snapshots of how the date read at lookup time; the card derives all
 // three now, so the stored copies were not merely redundant but WRONG after a Date Format change.
 // The VALIDATION half matters just as much: LookupCard carries no per-field guards any more, so an
@@ -170,7 +170,7 @@ describe('lookupHistory — normalizeLookupEntries', () => {
     expect(normalizeLookupEntries('nope')).toEqual([])
   })
 
-  // ── The date must be REAL, not merely number-shaped (round-11 Q2) ───────────────────────────
+  // ── The date must be REAL, not merely number-shaped (round 11) ───────────────────────────
   // Number-shaped is not enough now that the card answers rather than refuses: the day-number
   // arithmetic underneath rolls February 30 into March and would print a confident weekday for a
   // date that never happened. Same either-calendar rule Lookup validates with — a date counts if a

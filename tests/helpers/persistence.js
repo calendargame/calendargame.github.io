@@ -42,7 +42,7 @@ export const LIVE_STORES = {
   progress: useProgress, // lifetime stats, all-time bests
   userDefaults: useUserDefaults, // the player's saved personal defaults
 }
-// ⚠ LOOKUP HISTORY IS DELIBERATELY NOT A FIFTH ENTRY HERE (Q1, round 20). It used to live inside
+// ⚠ LOOKUP HISTORY IS DELIBERATELY NOT A FIFTH ENTRY HERE (round 20). It used to live inside
 // `progress`, but it is not one of "the four kinds of thing a preset owns" any more — it moved to
 // its own store/lookupHistory precisely because it is SHARED across every preset instead of being
 // swapped per preset, which is the one fact this whole file's net (and the preset-switch/delete

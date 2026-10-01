@@ -1,4 +1,4 @@
-// lib/accordionMotion.ts — the pure math of every accordion in the app (Q8; Q5 round-8).
+// lib/accordionMotion.ts — the pure math of every accordion in the app (round 8).
 //
 // Kept apart from the component (components/GuidePage.tsx) for the lib/selectionGuard
 // reasons: the component file only exports components (the react-refresh rule), and every
@@ -7,7 +7,7 @@
 // scroll writer; this module owns what the numbers MEAN: how long a toggle takes, the
 // curve the panels and the writer both run, and where the scroller must land.
 //
-// Q5 (round 8) widened it from "the HTP coordinator's math" to the ONE motion law: the
+// Round 8 widened it from "the HTP coordinator's math" to the ONE motion law: the
 // codes panel (components/MethodBreakdown) now runs the same duration floor and the same
 // curve, and its freeze window is derived here rather than hand-synced in a file of its
 // own. The scroll math below stays guide-only — the codes panel is the last element in a
@@ -26,7 +26,7 @@
 // named: the app's OTHER accordion — the codes panel (components/MethodBreakdown) — runs
 // at exactly this duration by passing it as Expander's durationMs, CODES_CLOSE_MS below
 // derives its freeze window from it, and index.css carries it as the --expander-ms
-// fallback. One number, one home. (Before Q5 the codes panel ran 280ms and the guide's
+// fallback. One number, one home. (Before round 8 the codes panel ran 280ms and the guide's
 // short panels 240ms — two hand-tuned literals that happened to be close; the guide's
 // formula returns this floor for anything under ~429px, and the codes panel is ~72-97px,
 // so the two were only ever going to be the same value. Now they ARE the same value.)

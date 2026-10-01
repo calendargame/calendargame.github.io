@@ -1,4 +1,4 @@
-// lib/selectionGuard.ts — the GuideSection header-toggle guard predicate (Q8).
+// lib/selectionGuard.ts — the GuideSection header-toggle guard predicate.
 //
 // Kept apart from the component (components/GuidePage.tsx) for the same reason as
 // lib/sliderValue.ts: the component file only exports components (the react-refresh rule),

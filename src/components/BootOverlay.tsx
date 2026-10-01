@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { bootFlowOffset, BOOT_FLOW_FALLBACK_LEN } from '../lib/bootFlow.js'
 
-// BootOverlay (Q3) — the full-screen UPDATING screen: the fully-drawn W5 trace (STATIC for now —
+// BootOverlay — the full-screen UPDATING screen: the fully-drawn W5 trace (STATIC for now —
 // the erase-from-2 / redraw-from-2 flow sweep is parked behind BOOT_TRACE_ANIMATED below; see
 // lib/bootFlow for the retained driver math + the iOS render fix) + "Updating" with a
 // sequential three-dot pulse. Shown by the Settings "Check for updates" button, by the
 // auto-update-on-open SW effect in App (when a freshly-deployed version is waiting at launch),
-// and by the Q2 build-change flash effect (a cold open that detects an update already landed
+// and by the build-change flash effect (a cold open that detects an update already landed
 // silently between sessions — same screen, no reload).
 // The LOADING splash is no longer rendered here — it's index.html's body-level #boot, which App
 // removes via dismissBootSplash; only the `updating` variant is ever mounted (the prop's loading
@@ -14,7 +14,7 @@ import { bootFlowOffset, BOOT_FLOW_FALLBACK_LEN } from '../lib/bootFlow.js'
 // pass). Theme-aware (bg = --bg1; logo lavender on dark, brand-purple on light). The glyph is the
 // W5 logo, kept in sync with index.html's pre-React boot splash + src/components/W5Logo.tsx. Logo
 // scaled up (174×188) for both screens (owner 2026-06-28).
-// Static trace for now (Backlog B2 revisits the sweep); flip to true to restore the rAF driver +
+// Static trace for now (the animated sweep is parked on the backlog); flip to true to restore the rAF driver +
 // blurred mask below (plus lib/bootFlow + .boot-flow in index.css — all kept intact for that).
 const BOOT_TRACE_ANIMATED = false
 function BootOverlay({ updating = false }: { updating?: boolean }) {
@@ -32,7 +32,7 @@ function BootOverlay({ updating = false }: { updating?: boolean }) {
   // "Updating" caption's three-dot pulse (.boot-d, index.css) now multiplies its duration and both
   // stagger delays by --motion-scale, because an animated ellipsis after a word that already says
   // "Updating" is decoration. With the trace parked static behind BOOT_TRACE_ANIMATED, that leaves
-  // the Reduce-Motion updating screen completely still; re-enabling the trace (B2) is what gives
+  // the Reduce-Motion updating screen completely still; re-enabling the trace is what gives
   // the setting's users their progress motion back, and this comment is why that matters.
   const flowRef = useRef<SVGPathElement | null>(null)
   useEffect(() => {

@@ -42,7 +42,7 @@ import {
 } from './helpers/settingsPanel.jsx'
 
 const bar = () => screen.getByRole('banner')
-// The row itself — ONE flat flex row since Q6 (round 20), not two nested shrink-0 groups, so it is
+// The row itself — ONE flat flex row since round 20, not two nested shrink-0 groups, so it is
 // resolved structurally (the logo's own parent) rather than by a `justify-between` class that no
 // longer exists on it: the switcher is the one control that grows now, and a gap between two
 // groups is not where that growth lives any more (main.tsx's budget block argues the whole thing).
@@ -116,7 +116,7 @@ describe("the owner's layout: logo, preset, mode, gear", () => {
 
   it('leaves the mark first and the gear last in the row, with nothing after either', () => {
     mountApp()
-    // ONE FLAT ROW since Q6 (round 20) — logo, preset wrapper, mode wrapper, gear wrapper as four
+    // ONE FLAT ROW since round 20 — logo, preset wrapper, mode wrapper, gear wrapper as four
     // direct siblings, not two nested shrink-0 groups. `logo()` IS the first child directly (it
     // needs no wrapper of its own — its className is this file's to set already); the gear sits
     // inside the LAST child's own wrapper, same as before.
@@ -217,7 +217,7 @@ describe('the width cuts that paid for the fourth control', () => {
     expect(switcherClasses).not.toContain('shrink-0')
   })
 
-  // Q10 (round 21): the mode trigger is pinned to its OWN dropdown's width, the preset dropdown to
+  // Round 21: the mode trigger is pinned to its OWN dropdown's width, the preset dropdown to
   // ITS OWN trigger's — opposite directions, one shared CustomSelect. jsdom can't measure either
   // result; what it CAN pin is that each call site asked for the right behaviour, via the style
   // the prop produces. The pixel equality is verified in a real browser (main.tsx budget block).

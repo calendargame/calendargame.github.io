@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // THE BEHAVIOUR NET, groups 7–9: RESET SETTINGS, FULL RESET (both through the shared ConfirmModal
-// since Q7 round 21), and THE DEFAULTS SNAPSHOT.
+// since round 21), and THE DEFAULTS SNAPSHOT.
 //
 // WHY THIS FILE EXISTS. The ⚙ panel is about to be lifted out of App, and the gate on that move is
 // falsifiable and absolute: this net passes with ZERO edits. So every question below is asked the
@@ -24,7 +24,7 @@
 //        (or every Full Reset silently loses the user's four saved personal prefs), and switchMode()
 //        before the guide's reading position is cleared (or How to Play restores its pre-reset
 //        place instead of opening at the top). The reach is fired through the shared ConfirmModal
-//        now (Q7 round 21 replaced the two-tap in-place arm) — the button opens the popup, the
+//        now (round 21 replaced the two-tap in-place arm) — the button opens the popup, the
 //        popup's own "Full Reset" button confirms; group 8b does the same for Reset Settings, which
 //        had no confirmation before this round.
 //
@@ -189,7 +189,7 @@ const divergeNonCapturable = () =>
   })
 
 // All sixteen settings, each moved off its factory value — the round-trip subject in G9 and the
-// "one tap snaps everything back" subject in G7. (`defaultMode` joined the store in round-21 Q3.)
+// "one tap snaps everything back" subject in G7. (`defaultMode` joined the store in round 21.)
 const PERSONAL_SETTINGS = {
   randomFormat: true,
   dateFormat: 'numeric-ymd',
@@ -787,7 +787,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     }
   })
 
-  it('View Saved Defaults and Clear Saved Defaults are both always there; Clear dims and locks until something is saved (round-20 Q5)', () => {
+  it('View Saved Defaults and Clear Saved Defaults are both always there; Clear dims and locks until something is saved (round 20)', () => {
     divergeCapturable()
     mountApp()
     openSettings()
@@ -868,7 +868,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     expect(panelValues()).toEqual(shown) // not one visible setting moved…
     // …but "default" now means factory, so the same live state is suddenly a divergence.
     expect(offers()).toMatchObject({ gear: true, saveDefaults: true, resetSettings: true })
-    // Round-20 Q5: the link stays MOUNTED — it dims and locks rather than disappearing.
+    // Round 20: the link stays MOUNTED — it dims and locks rather than disappearing.
     expect(
       within(panelEl()).getByRole('button', { name: 'Clear Saved Defaults' }),
     ).toBeInTheDocument()
@@ -948,7 +948,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
   })
 
   it('Escape in a numeric field DISCARDS its edit and keeps the popup up; Escape on a slider dismisses the popup', () => {
-    // ⚠ RE-BLESSED (round 15, B6). This asserted that Escape here COMMITTED through the 2–1000
+    // ⚠ RE-BLESSED (round 15). This asserted that Escape here COMMITTED through the 2–1000
     // clamp, leaving 2 in the box — the last field in the app where Escape kept an edit. It now
     // discards back to the value the field held when the keyboard entered it, matching the ⚙ Year
     // Range boxes (round 14) and the tap-to-type slider readouts beside this very field (round 2).

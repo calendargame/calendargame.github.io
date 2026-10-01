@@ -19,9 +19,9 @@ import type { CSSProperties, ReactNode } from 'react'
 // transition behavior), and content stays mounted (and queryable) in both states. Pure
 // presentational — no app state.
 //
-// durationMs (Q8, round 7) sets the slide duration: it stamps the --expander-ms CSS var
+// durationMs (round 7) sets the slide duration: it stamps the --expander-ms CSS var
 // inline, which the .expander transition reads with a .24s fallback. BOTH consumers state
-// it now (Q5, round 8) — the guide's motion coordinator (GuidePage) computes one
+// it now (round 8) — the guide's motion coordinator (GuidePage) computes one
 // distance-scaled duration per toggle (lib/accordionMotion) and hands the SAME value to both
 // panels of an accordion switch so they tween on one shared clock; the codes panel
 // (MethodBreakdown) states the ACCORDION_MS_FLOOR that formula returns for panels its size.
@@ -29,7 +29,7 @@ import type { CSSProperties, ReactNode } from 'react'
 // the calc() is invalid at computed-value time and the transition would silently become 0s.
 //
 // Extracted from main.jsx in Stage C, Step 4a; rewritten from the max-height technique to the
-// grid idiom in Q4 (round 6, 2026-07-18).
+// grid idiom in round 6 (2026-07-18).
 export default function Expander({
   open,
   durationMs,
@@ -40,7 +40,7 @@ export default function Expander({
   children?: ReactNode
 }) {
   // Plain ternary, not a template literal: the old `expander${open…` form glued a class
-  // token to `${` — the bug class tests/classGlueGuard.test.js now bans (Q6, round 7) —
+  // token to `${` — the bug class tests/classGlueGuard.test.js now bans (round 7) —
   // and with only two fixed states the conditional needs no interpolation at all.
   return (
     <div

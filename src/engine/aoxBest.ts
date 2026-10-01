@@ -15,7 +15,7 @@
 // number of times, in either direction — so the run's standing stats keep moving after the
 // completion recorded the Best. So AoxMode snapshots the ENTIRE pre-run Best record when the run
 // records (the cumulative best of every PRIOR run — the floor that can never be lost, the cross-run
-// corner the Blitz C2 fix had to add; `undefined` when the config had no record) and, on every
+// corner the Blitz cross-round rollback fix had to add; `undefined` when the config had no record) and, on every
 // post-completion stats change, sets the record to reconcileAoxStanding(snapshot, standing stats):
 // still standing (good ≥ n) → the snapshot improved by the run's CURRENT avg/median; no longer
 // standing (a credit was retracted) → the snapshot unchanged, as if the run never completed — which,
@@ -26,7 +26,7 @@
 // Extracted from main.tsx so it can be fuzzed directly against an independent oracle (best == the
 // min avg/median among standing runs, compared and stored at DISPLAY precision — see the ★ comments
 // on reconcileAoxBest below for why raw-float comparison was a bug, not a simplification). Pure — no
-// React, no app state. Mirrors engine/blitzBest.ts. (C2 Part 1.)
+// React, no app state. Mirrors engine/blitzBest.ts.
 // ─────────────────────────────────────────────────────────────────────────
 import { calcAvg, calcMed } from './stats.js'
 import { roundCentis } from '../lib/modeFormat.js'

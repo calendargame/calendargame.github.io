@@ -28,7 +28,7 @@ const FACTORY_PREFS = {
   blitzQSec: MODE_PREFS_DEFAULTS.blitzQSec,
   aoxN: MODE_PREFS_DEFAULTS.aoxN,
 }
-// Round-20 Q4 — diverges from the factory `false` the same way the settings/prefs fixtures above
+// Round 20 — diverges from the factory `false` the same way the settings/prefs fixtures above
 // diverge from theirs, so a round-trip through it proves something rather than being a coincidence.
 const CUSTOM_AMNESIC = true
 
@@ -79,7 +79,7 @@ describe('userDefaults pure helpers', () => {
     expect(effectivePrefDefaults(saved)).toEqual(CUSTOM_PREFS)
   })
 
-  // Round-20 Q4 — mirrors the two tests above: factory (false) when nothing is saved, the saved
+  // Round 20 — mirrors the two tests above: factory (false) when nothing is saved, the saved
   // value (in EITHER direction) when a snapshot exists.
   it('effectiveAmnesicDefault: factory (false) when null, the saved value when present', () => {
     expect(effectiveAmnesicDefault(null)).toBe(false)
@@ -107,7 +107,7 @@ describe('userDefaults pure helpers', () => {
       blitzQSec: FACTORY_PREFS.blitzQSec,
     })
     // amnesic wasn't SPREAD onto `saved` at all here — the one-boolean equivalent of "a release adds
-    // this field after the save": a build from before round-20 Q4 never wrote it, so `saved.amnesic`
+    // this field after the save": a build from before round 20 never wrote it, so `saved.amnesic`
     // is `undefined` rather than merely absent from an object spread. Must still read factory (false).
     expect(effectiveAmnesicDefault(saved)).toBe(false)
   })

@@ -126,7 +126,7 @@ function ClassicMode({
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i })
     eng.answer(i)
   }
-  // The one Override ⇄ Undo press (round 23 Q6). A press that CREDITS the live question pulses green
+  // The one Override ⇄ Undo press (round 23). A press that CREDITS the live question pulses green
   // on the correct button (the engine's creditsLiveCard — one rule for every mode). Everything else
   // is the engine's alone: Classic keeps no state of its own that an Override changes, in either
   // direction.
@@ -170,7 +170,7 @@ function ClassicMode({
       <StatPanel stats={statsArr} dimmed={!saveStats} />
       <div className="mt-3">
         {/* Reset Stats — a static caption now; the confirmation is the shared ConfirmModal below
-            (Q7 round 21 replaced the two-tap in-place arm). The `S` shortcut routes through this
+            (round 21 replaced the two-tap in-place arm). The `S` shortcut routes through this
             same onClick, so it opens the popup too. */}
         <button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={onResetTap}>
           Reset Stats

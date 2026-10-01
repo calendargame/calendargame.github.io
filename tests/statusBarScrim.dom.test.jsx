@@ -91,7 +91,7 @@ describe('status bar dims to match the scrim while a modal is open', () => {
 
   it('never writes an inline style on <body> — the round-22 body mechanism is gone', async () => {
     // Round 22 dimmed body's inline background-color; it proved inert on the owner's installed app
-    // and was deleted (round 23 Q1). Nothing should put it back by accident.
+    // and was deleted (round 23). Nothing should put it back by accident.
     mountApp()
     const scrim = await openScrim()
     expect(document.body.getAttribute('style') ?? '').toBe('')

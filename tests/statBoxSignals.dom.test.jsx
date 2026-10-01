@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// THE STAT BOX'S THREE SIGNALS (C1, round 16) — the behaviour net for the redesign.
+// THE STAT BOX'S THREE SIGNALS (round 16) — the behaviour net for the redesign.
 //
 // The rule the whole strip is built to, site-wide, in every mode that has toggleable stats:
 //
@@ -413,7 +413,7 @@ describe('Classic — your toggle and Save Stats are two separate signals (C1, t
     expect(valueOf('Score')).toBe('1/1') // and it is still the same tap that brings it back
   })
 
-  // ── "Enable and Reset Stats?" — the timing-desync confirm (Q7 round 21) ──────────────────────
+  // ── "Enable and Reset Stats?" — the timing-desync confirm (round 21) ──────────────────────
   // When timing is hidden the clock STOPS (Classic feeds useGameEngine timingOff:true), so a
   // question answered while hidden bumps `good` but records no time. Un-hiding then cannot
   // reconcile — so it opens the shared ConfirmModal, and confirming runs eng.fullReset(). Was an

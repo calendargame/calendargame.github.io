@@ -53,7 +53,7 @@ function clickCtrl(name) {
     fireEvent.click(ctrl(name))
   })
 }
-// Q7 round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm — the
+// Round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm — the
 // confirm button is resolved WITHIN the dialog so it never collides with the always-present mode
 // button of the same name.
 function fireResetStats() {
@@ -76,7 +76,7 @@ function clickEl(el) {
 // contain "Score"/"Streak" spans). The value is the cell's last <span>.
 // ⚠ Reads the value through its OWN marker, [data-statval] — the auto-fit target StatPanel puts on
 // the value span — and NOT "the cell's last span". A cell can carry a trailing screen-reader-only
-// span (the "Off" that names a blanked group, C1 round 16), and last-span would read that instead of
+// span (the "Off" that names a blanked group, round 16), and last-span would read that instead of
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 function statValue(label) {
   const labelSpan = Array.from(document.querySelectorAll('span')).find(
@@ -109,7 +109,7 @@ function visibleAnswerGrid() {
   )
 }
 const flashGoodCount = () => visibleAnswerGrid().querySelectorAll('.flash-good').length
-// Gap utilities on a grid element. Used by the Q4 round-9 gutter tests below: jsdom cannot measure,
+// Gap utilities on a grid element. Used by the round 9 gutter tests below: jsdom cannot measure,
 // so the class token IS the contract. Returns an array so "exactly one gap token" is assertable —
 // two stacked gaps would leave the gutter up to CSS emission order.
 const gapTokens = (el) => el.className.split(/\s+/).filter((c) => /^gap-/.test(c))
@@ -294,7 +294,7 @@ describe('Deduction — characterization (batch 2: Day live Override)', () => {
     clickCtrl('Override')
     expect(statValue('Score')).toBe('0/1')
     expect(statValue('Streak')).toBe('0/0')
-    expect(isDisabled(ctrl('Undo'))).toBe(false) // the spent Override reads Undo (round 23 Q6)
+    expect(isDisabled(ctrl('Undo'))).toBe(false) // the spent Override reads Undo (round 23)
     clickCtrl('Undo')
     expect(statValue('Score')).toBe('1/1')
     expect(statValue('Streak')).toBe('1/1')
@@ -756,7 +756,7 @@ describe('Deduction — Q14: both-crosses 2-option Year sizer overlay', () => {
           expect(sizer.querySelectorAll('button').length).toBe(0) // …inert DIVs, never buttons
           // Strut and real grid draw their gutter from the one ANSWER_GRID_GAP, so the height the
           // strut reserves is the height the 5-layout actually takes. A drift here is invisible in
-          // jsdom and on-screen alike — it just leaves a dead band or a jump (Q4 round-9).
+          // jsdom and on-screen alike — it just leaves a dead band or a jump (round 9).
           expect(gapTokens(sizer)).toEqual(gapTokens(grid))
           expect(gapTokens(sizer)).toHaveLength(1)
           // The 5-layout's col-spans are derived from the same yearGridLayout the real grid uses.
@@ -796,7 +796,7 @@ describe('Deduction — Q14: both-crosses 2-option Year sizer overlay', () => {
   })
 })
 
-// ── Q4 round-8: the three sub-modes' answer buttons are ONE height tier ────────
+// ── round 8: the three sub-modes' answer buttons are ONE height tier ────────
 // Deduction's options are years / month-code boxes / day numbers, so its answer buttons sit one
 // text tier below the weekday grids' BASE_BTN. Day and Year used to append that smaller size per
 // grid and Month did not, which left Month's answers 4.2px taller (the text-base→text-sm
@@ -804,7 +804,7 @@ describe('Deduction — Q14: both-crosses 2-option Year sizer overlay', () => {
 // because of which of two stacked text sizes CSS happened to emit last. The size is derived once
 // now. jsdom cannot measure, so what is pinned is the class contract that decides the height:
 // every option button in every sub-mode carries the SAME single text-size token.
-describe('Deduction — Q4 round-8: Day / Month / Year answer buttons share one text size', () => {
+describe('Deduction — round 8: Day / Month / Year answer buttons share one text size', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -864,7 +864,7 @@ describe('Deduction — Q4 round-8: Day / Month / Year answer buttons share one 
   })
 })
 
-// ── Q4 round-9: one gutter across the sub-modes AND the weekday grid ──────────
+// ── round 9: one gutter across the sub-modes AND the weekday grid ──────────
 // The owner saw the space between Deduction's answer buttons CHANGE with the sub-mode: Month ran
 // gap-3 while Day and Year ran gap-2 (12.69px vs 8.46px at his 16.92px fluid root). Day and Year
 // were widened onto gap-3 — the value Month already had, and the one the weekday grid has always
@@ -878,7 +878,7 @@ describe('Deduction — Q4 round-8: Day / Month / Year answer buttons share one 
 // phrased as "every [data-answer-grid] wears the gutter" would fail the moment Settings → Input →
 // Dots is picked. Scoping to the labelled grids keeps this honest. The strut is covered too, in
 // the Q14 sizer test above (it has the reroll loop needed to reach a both-crosses N=2 puzzle).
-describe('Deduction — Q4 round-9: every labelled answer grid shares one gutter', () => {
+describe('Deduction — round 9: every labelled answer grid shares one gutter', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })

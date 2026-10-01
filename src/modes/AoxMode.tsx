@@ -55,7 +55,7 @@ import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/parkedEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
 
-// Round-21 Q11 — the shape AoxMode parks in store/sessionRound for an ENDED run (done | failed). It
+// Round 21 — the shape AoxMode parks in store/sessionRound for an ENDED run (done | failed). It
 // round-trips its own engine state plus the component fields the completed view (and a
 // post-completion Override) need; store/sessionRound never looks inside it. `currentRunId` +
 // `prevBestSnap` are what keep the done/failed Best-reconcile correct on a restored run — the
@@ -132,7 +132,7 @@ function AoxMode({
 }: ModeProps & { fmtDate: FmtDate; genDate?: GenDate }) {
   const aoxN = useModePrefs((s) => s.aoxN),
     setAoxN = useModePrefs((s) => s.setAoxN) // persisted (mode-prefs store)
-  // WHAT ESCAPE IN THE RUN-LENGTH BOX REVERTS TO (round 15, B6): the value the field held when the
+  // WHAT ESCAPE IN THE RUN-LENGTH BOX REVERTS TO (round 15): the value the field held when the
   // keyboard entered it. A ref rather than state because nothing renders it — it is written on
   // focus and read on one keypress, and re-rendering the screen for it would be pure cost. See the
   // long note at the input for why the value has to be remembered at all.
@@ -144,7 +144,7 @@ function AoxMode({
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
     setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
   // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — see modes/modeHooks' useMountedDataId
-  // for why a round is parked and restored ONLY against the copy it was played on (round 23 Q2).
+  // for why a round is parked and restored ONLY against the copy it was played on (round 23).
   const dataId = useMountedDataId()
   const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
   // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes,
@@ -178,8 +178,8 @@ function AoxMode({
   const [run, setRun] = useState<RunConfig | null>(parkedRun?.run ?? null)
   // The length that run's arithmetic uses (see RunConfig): its own while there is one.
   const runN = run?.n ?? n
-  const [runPhase, setRunPhase] = useState(parkedRun?.runPhase ?? 'idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop) — only done/failed are ever parked (round-21 Q11)
-  // ★ ONE-BY-ONE: WHICH QUESTION THE PLAYER HAS ASKED TO SEE (round 23 Q5) — the engine `questionId`
+  const [runPhase, setRunPhase] = useState(parkedRun?.runPhase ?? 'idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop) — only done/failed are ever parked (round 21)
+  // ★ ONE-BY-ONE: WHICH QUESTION THE PLAYER HAS ASKED TO SEE (round 23) — the engine `questionId`
   // Begin started the run on, or the one Continue revealed; null with no run. The date on screen is
   // then a FUNCTION of the engine's question counter (`shown` below): a question is shown only if it
   // is the one revealed, so EVERY way play moves on to a new question hides it until Continue —
@@ -203,7 +203,7 @@ function AoxMode({
     useJulian,
     saveStats: true,
     timingOff: false,
-    // Round-21 Q11 — seed the reducer from the parked ended run when there is one (a getter, read
+    // Round 21 — seed the reducer from the parked ended run when there is one (a getter, read
     // once in the lazy init). `parkedRun` was keyed to the stats copy live at mount, so this only ever
     // restores the incoming copy's own run.
     getInitialState: () => parkedRun?.engine ?? null,
@@ -220,7 +220,7 @@ function AoxMode({
   // A live question RESOLVED AS A MISS (Allow Mistakes on): Reveal or Show Codes showed the answer
   // + counted a played miss (a plain wrong answer sets countedWrong but NOT revealed, so it stays
   // retryable — excluded). The grid is dimmed for it (the engine ignores answers on it).
-  // …and since round 23 Q6 a live card a PRESS left as a miss is one of those too, by construction:
+  // …and since round 23 a live card a PRESS left as a miss is one of those too, by construction:
   // the engine leaves an overridden-to-miss card locked, revealed and burned, which is exactly the
   // shape above — as is an Undo that puts a revealed miss back.
   const resolvedMiss = isRunning && !inBack && state.revealed && state.countedWrong
@@ -251,10 +251,10 @@ function AoxMode({
   const bests = useProgress((s) => s.aoxBest),
     setBests = useProgress((s) => s.setAoxBest)
   // ★ THE RUN ON SCREEN — its id, from Begin until Reset (null while there is none). A Best tagged
-  // with it is a best this run set, which is the whole ★ rule (round 23 Q4). State, not a ref, because
+  // with it is a best this run set, which is the whole ★ rule (round 23). State, not a ref, because
   // the ★ renders from it. NEVER-REPEATING (engine/roundId's newRoundId), because the id is SAVED
   // inside the Best record: the per-screen counter that restarted at 1 made two different runs "the
-  // same run" to the Same Round tag. Restored from the parked run (round-21 Q11), so
+  // same run" to the Same Round tag. Restored from the parked run (round 21), so
   // `snap.runId === runId` still holds after a remount and the done/failed reconcile keeps
   // recognising THIS run — and its ★ comes back with it.
   const [runId, setRunId] = useState<number | null>(parkedRun?.currentRunId ?? null)
@@ -280,7 +280,7 @@ function AoxMode({
 
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
 
-  // The codes panel's close-animation freeze lives in MethodBreakdownSection (Q5, round 8).
+  // The codes panel's close-animation freeze lives in MethodBreakdownSection (round 8).
   // AoX used to keep a private copy of it here; see the render below for what that cost.
 
   // Run completion + Best reconcile — ONE effect owns every Best write (mirrors Blitz's
@@ -339,7 +339,7 @@ function AoxMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runPhase, doneCount, runN, saveStats, S.good, S.times, runId, setBests])
 
-  // Round-21 Q11 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the stats copy
+  // Round 21 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the stats copy
   // this screen was mounted on (`dataId`), exactly as the effect above mirrors the run's Best to
   // store/progress. On the remount a preset switch or an Amnesic toggle causes, the mount-time reads
   // restore whatever is parked for the now-live copy (see `parkedRun`). Only an ended run is parked; every other state DISCARDS the slot:
@@ -409,7 +409,7 @@ function AoxMode({
     state.calcOpen === false &&
     breakdownOpen === false &&
     Object.keys(bests).length === 0 &&
-    // Nothing on the card: never wrong, never overridden (round 23 Q6 — one record replaced the four
+    // Nothing on the card: never wrong, never overridden (round 23 — one record replaced the four
     // flags the old Override machinery kept here; same pair as modeHooks.engineFresh).
     state.card.wrongTime === null &&
     state.card.answered === null &&
@@ -459,7 +459,7 @@ function AoxMode({
   // — there the trio is a plain result readout, not a toggle. Save Stats off drops the toggle, like
   // the scoring trio. (Persisted as aoxTimingOff — excluded from the defaults system.)
   //
-  // ★ `timeHidden` is the USER'S hide toggle and nothing else (C1, round 16), so it is what feeds
+  // ★ `timeHidden` is the USER'S hide toggle and nothing else (round 16), so it is what feeds
   // `off` below; the scoring trio (untoggleable in AoX) carries no `off` at all. The Save-Stats fact
   // is `dimmed` on the panel: one flag, whole strip. See the three-signal note in StatPanel.
   //
@@ -577,7 +577,7 @@ function AoxMode({
     if (state.calcOpen) eng.showCodes(false)
     eng.doNew()
   }
-  // ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ─────────────────────
+  // ── Override ⇄ Undo (round 23: one permanent per-card toggle) ─────────────────────
   // ONE PRESS, BOTH DIRECTIONS — and it can move the RUN, not just the score: fail it, resume it, or
   // hand a completed run back to the player. Which of those it does is read off the engine's plan
   // (what this press will do, and to which card) BEFORE the press, from the same object the reducer
@@ -672,7 +672,7 @@ function AoxMode({
   // run on screen always matches the current settings — while an idle run regenerates its (hidden)
   // next date. Deferred to close so adjusting several settings doesn't churn the run/date (and the
   // solve timer) per keystroke. (Replaces the old immediate prevAoxPopRef effect.) aoxN is in the
-  // deps because Reset Settings can now restore the run length mid-run (round-6 Q7): the N field is
+  // deps because Reset Settings can now restore the run length mid-run (round 6): the N field is
   // idle-locked (readOnly while running), so its only in-popover writer is Reset Settings, and a
   // reset that changes N (a Best-key dimension) must reconcile the run exactly as a panel change does.
   useSettingsCloseEffect(
@@ -783,7 +783,7 @@ function AoxMode({
           )}
         </div>
       </div>
-      {/* items-stretch, NOT items-center (Q3 round-9) — this is the app's ONLY flex row that puts an
+      {/* items-stretch, NOT items-center (round 9) — this is the app's ONLY flex row that puts an
               <input> beside a <button>, and neither declares a height: each derives one from its own inner
               line box, and WebKit's machinery for a text control lands ~2px away from its machinery for a
               button. Under items-center that split rendered symmetrically — the box sitting ~1px proud
@@ -797,7 +797,7 @@ function AoxMode({
                 popup N field's validation trio — digits only while typing, blur and Enter
                 normalize-commit with the shared clamp (normalizeAoxN), and ESCAPE DISCARDS.
                 text-xs on the 'Mo' span too, so "Mo10" reads as one flush token.
-                ★ ESCAPE DISCARDS — round 15 (B6), and it used to normalize-COMMIT like the other
+                ★ ESCAPE DISCARDS — round 15, and it used to normalize-COMMIT like the other
                 two. Escape now means one thing in every box you can type a NUMBER into, which the
                 ⚙ Year Range boxes have meant since round 14 and the tap-to-type slider readouts
                 since round 2: Enter keeps the edit and lets go, Escape throws it away and lets go,
@@ -945,7 +945,7 @@ function AoxMode({
           <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
         </div>
         {/* Show Codes — the SHARED MethodBreakdownSection, exactly like the other four modes
-                (Q5, round 8). AoX's gate isn't "is there a date" but "is the date SHOWABLE": the run
+                (round 8). AoX's gate isn't "is there a date" but "is the date SHOWABLE": the run
                 is idle, or a One-by-One date is still hidden. Passing null then is how Blitz and Flash
                 already spell the same thing, and it drives the disabled classes, the aria-disabled and
                 the panel's closed state off one value. `codesDisabled` can only turn true in the same

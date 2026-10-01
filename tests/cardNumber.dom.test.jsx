@@ -43,7 +43,7 @@ const click = (name) =>
   act(() => {
     fireEvent.click(ctrl(name))
   })
-// Q7 round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm.
+// Round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm.
 const fireResetStats = () => {
   click('Reset Stats')
   act(() => {

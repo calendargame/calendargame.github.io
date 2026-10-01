@@ -60,7 +60,7 @@ const tick = (ms) =>
   })
 const dayBtn = (name) => screen.getByRole('button', { name })
 const ctrl = (name) => screen.getByRole('button', { name })
-// Q7 round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
+// Round 21: Reset Settings confirms through a shared popup now. Open it, then confirm.
 const fireResetSettings = () => {
   act(() => fireEvent.click(ctrl('Reset Settings')))
   act(() =>
@@ -76,7 +76,7 @@ const fireResetSettings = () => {
 // (tests/helpers/offered) so this file never names a class string.
 const isDisabled = (btn) => !isOffered(btn)
 // A text match on the VISIBLE screen, and the reason a plain screen.getByText won't do: every
-// screen but Lookup is always-mounted — the five game modes, and How to Play since Q6 (round 9) —
+// screen but Lookup is always-mounted — the five game modes, and How to Play since round 9 —
 // so their markup sits in the DOM under display:none while another mode is up. The guide's Blitz
 // section names the "Same Round" tag in prose, which a global query matches as readily as the tag
 // itself. Same visibility filter statValue and hasStat use, in the shape getByText has.
@@ -105,7 +105,7 @@ function requireStatCell(label) {
 }
 // ⚠ Reads the value through its OWN marker, [data-statval] — the auto-fit target StatPanel puts on
 // the value span — and NOT "the cell's last span". A cell can carry a trailing screen-reader-only
-// span (the "Off" that names a blanked group, C1 round 16), and last-span would read that instead of
+// span (the "Off" that names a blanked group, round 16), and last-span would read that instead of
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 function statValue(label) {
   return requireStatCell(label).querySelector('[data-statval]').textContent.trim()
@@ -313,7 +313,7 @@ describe('Blitz — characterization (batch 3: Override)', () => {
     click(wrongName(last)) // wrong → round ends; good = 1
     expect(screen.getByText(/Best Score: 1\b/)).toBeInTheDocument()
     // Back-browse to the credited answer and Override it to wrong → the round scored nothing after
-    // all, and the Best it had created goes with it. Round 23 Q4: the record is REBUILT from the one
+    // all, and the Best it had created goes with it. Round 23: the record is REBUILT from the one
     // before the round (none here), so it reads "—" exactly as it does after a round that never
     // scored — not a "Best Score: 0" that only an Override could produce.
     act(() => {
@@ -767,12 +767,12 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
   })
 })
 
-// ── Q7 round-6: Reset Settings now restores the mode-screen round timer too, so a Reset Settings
+// ── round 6: Reset Settings now restores the mode-screen round timer too, so a Reset Settings
 // that changes a running/ended round's timer reconciles it on the popover close — exactly the Q2 rule,
 // now triggered by the timer dep the close-effect gained. Uses a FACTORY panel so Reset Settings
 // touches ONLY the timer, isolating the mode-screen-pref path from the ⚙-panel path Q2 already covers.
-// (Q7 round-6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
-describe('Blitz — Q7 round-6 (Reset Settings restoring the round timer reconciles the round)', () => {
+// (round 6 = "extend Reset Settings"; distinct from the Session-11 Q7 that added Save Defaults.)
+describe('Blitz — round 6 (Reset Settings restoring the round timer reconciles the round)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -992,7 +992,7 @@ describe('Blitz — Per Question + Allow Mistakes (C3a)', () => {
     act(() => fireEvent.click(ctrl('<'))) // browse the credited answer
     expect(isDisabled(ctrl('Override'))).toBe(false)
     act(() => fireEvent.click(ctrl('Override'))) // flip it to wrong → good 1→0
-    // rolled back with the round — to the record before it, which was none (round 23 Q4 rebuild)
+    // rolled back with the round — to the record before it, which was none (round 23 rebuild)
     expect(screen.getByText(/Best Score: —/)).toBeInTheDocument()
   })
 
@@ -1473,7 +1473,7 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
   })
 })
 
-// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
+// ── Override ⇄ Undo (round 23) ─────────────────────────────────────────────────────────────
 // Where Override used to go inert after use it reads Undo, and every press flips one card — which in
 // Blitz can move the ROUND as well: a press can resume an ended round or end a running one. The
 // clock rule: a round that ended on its LIVE date (answered, revealed, show-coded — an 'answer' end)
@@ -1726,7 +1726,7 @@ describe('Blitz — Override ⇄ Undo', () => {
   })
 })
 
-// ── The ★: "the round ON SCREEN set this best" (round 23 Q4 — the one meaning MoX already had) ──
+// ── The ★: "the round ON SCREEN set this best" (round 23 — the one meaning MoX already had) ──
 // The ★ is no longer a stored per-config flag: it is DERIVED from the record's round id matching the
 // round on screen (engine/roundId's isNewBest). So an Override that raises a Best lights it and its
 // Undo that hands the record back to an earlier round puts it out; an earlier round's record is NOT

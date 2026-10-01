@@ -47,7 +47,7 @@ import { useBackButton } from '../components/overlayStack.js'
 
 // The Best records that stood BEFORE the current round (snapshotted at Begin) — the reconcile
 // floor and the Override-resume revert target. Named so the ref below and the round snapshot
-// (round-21 Q11) share one shape.
+// (round 21) share one shape.
 interface PrevRoundBest {
   blitzBk: string
   suddenBk: string
@@ -56,7 +56,7 @@ interface PrevRoundBest {
   suddenAm?: BlitzBest
 }
 
-// Round-21 Q11 — the shape BlitzMode parks in store/sessionRound for an ENDED round. It round-trips
+// Round 21 — the shape BlitzMode parks in store/sessionRound for an ENDED round. It round-trips
 // its own engine state plus the component fields the completed view (and a post-round Override)
 // need; store/sessionRound never looks inside it. `currentRoundId` + `prevRoundBest` are what keep
 // the Best-reconcile / Override-rollback correct on a restored round — without them a later Override
@@ -65,7 +65,7 @@ interface PrevRoundBest {
 // `remain` is the round's clock as it stopped — what an Override that rescues the restored round
 // resumes from (Per Round) and what its readout shows.
 // WHY A ROUND ENDED — the one fact that decides whether it can come back, and what its clock does
-// while it waits (round 23 Q6):
+// while it waits (round 23):
 //   'clock'  — the countdown expired on a card the player had not already burned. Never resumable:
 //              running out of time is not a misclick.
 //   'answer' — the LIVE card became a scored miss (a wrong with Allow Mistakes off, a Reveal, a Show
@@ -138,7 +138,7 @@ function BlitzMode({
   const timingOff = useModePrefs((s) => s.blitzTimingOff),
     setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the timing trio, the engine clock never stops (no arm/reset)
   // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — every parked-round read, write and
-  // discard below uses it (modes/modeHooks' useMountedDataId argues why, round 23 Q2).
+  // discard below uses it (modes/modeHooks' useMountedDataId argues why, round 23).
   const dataId = useMountedDataId()
   const blitzSec = useModePrefs((s) => s.blitzSec),
     setBlitzSec = useModePrefs((s) => s.setBlitzSec) // persisted (mode-prefs store)
@@ -230,12 +230,12 @@ function BlitzMode({
     setSuddenAmBest = useProgress((s) => s.setSuddenAmBest)
   // ★ THE ROUND ON SCREEN — its id, from Begin until Reset (null while there is none). Every Best field
   // this round sets is tagged with it (the reconcile below), and a Best marked with it IS "a best the
-  // round on screen set", which is the whole of the ★ rule (engine/roundId's isNewBest; round 23 Q4
+  // round on screen set", which is the whole of the ★ rule (engine/roundId's isNewBest; round 23
   // standardized Blitz on MoX's meaning). State, not a ref, because the ★ renders from it.
   // ⚠ NEVER-REPEATING (engine/roundId's newRoundId), because the id is SAVED inside the Best records:
   // the counter that restarted at 1 on every screen load made today's round 1 and last week's round 1
   // the same round to the Same Round tag and to the rollback that used to compare ids.
-  // Restored from the parked round (round-21 Q11), so a round that comes back after a preset switch
+  // Restored from the parked round (round 21), so a round that comes back after a preset switch
   // or a reload is still the round its records name — its ★ comes back with it, and the reconcile
   // keeps tagging its edits correctly.
   const [roundId, setRoundId] = useState<number | null>(parkedRound?.currentRoundId ?? null)
@@ -243,16 +243,16 @@ function BlitzMode({
   // (snapshotted at Begin), serving two jobs from one snapshot: (a) the reconcile's BASE — every
   // reconcile rebuilds the round's record from these (engine/blitzBest), so an Override that drops
   // THIS round's score can never pull a Best below the earlier round it overwrote, and hands the
-  // field back to that round (C2 — cross-round Best rollback; round 23 Q4 — its holder too);
+  // field back to that round (C2 — cross-round Best rollback; round 23 — its holder too);
   // (b) the resume-REVERT — when an Override credits a misclick and RESUMES the round, the Best the
   // interrupted round provisionally saved is rolled back wholesale to these records (it re-saves
   // only when the round genuinely ends). (C2 Q2-A.)
-  // ★ THE KEYS ARE THE ROUND'S, NOT THE SCREEN'S (round 23 Q2). The round is filed under the config
+  // ★ THE KEYS ARE THE ROUND'S, NOT THE SCREEN'S (round 23). The round is filed under the config
   // it was PLAYED under — `blitzBk`/`suddenBk` below are the live settings, and they move the moment
   // a setting is changed in the ⚙ panel, while the round waits for the panel to close before it
   // resets. Reading the live keys there filed the ended round's result under a config it was never
   // played on.
-  // Restored from the parked round (round-21 Q11): a resume via Override reverts the interrupted
+  // Restored from the parked round (round 21): a resume via Override reverts the interrupted
   // round's provisional Best to THESE records, so after a remount they have to be the real pre-round
   // records and not the `{blitzBk:'',…}` fresh-mount stub — otherwise resumeRound would `delete`
   // the wrong (empty) key and leave a legitimate Best in place, or drop one that should stand.
@@ -286,7 +286,7 @@ function BlitzMode({
     useJulian,
     saveStats: true,
     timingOff: false,
-    // Round-21 Q11 — seed the reducer from the parked ended round when there is one (a getter, read
+    // Round 21 — seed the reducer from the parked ended round when there is one (a getter, read
     // once in the lazy init). `parkedRound` was keyed to the stats copy live at mount, so this only
     // ever restores the incoming copy's own round and cannot pull in the one just left.
     getInitialState: () => parkedRound?.engine ?? null,
@@ -304,7 +304,7 @@ function BlitzMode({
   const S = state.stats
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
 
-  // (Round 23 Q6: `resumableEnd = timerDone && state.countedWrong` lived here — one boolean standing
+  // (Round 23: `resumableEnd = timerDone && state.countedWrong` lived here — one boolean standing
   // for "a player action, not the clock, ended this round". It became the `endKind` the ending itself
   // records, because a press can now end a round too, and that end has different clock rules from an
   // action's; see EndKind at the top and `onOverride`. The old corner it documented still holds and is
@@ -338,7 +338,7 @@ function BlitzMode({
   }
   // Draw `r` remaining seconds on the running sub-mode's bar + readout. Direct DOM writes, like every
   // frame of the countdown — a React render per frame would be the expensive way to move one bar.
-  // ⚠ SPLIT FROM paintClock ON PURPOSE (round 23 Q6). A 'toggle'-ended round's remaining is DERIVED
+  // ⚠ SPLIT FROM paintClock ON PURPOSE (round 23). A 'toggle'-ended round's remaining is DERIVED
   // (`remainNow` = the stamped base minus the wall-clock gap), so its drain loop must draw without
   // writing the base back — storing the charged value while the stamp stood still would charge the
   // same seconds again on the next frame, and the clock would drain at compounding speed.
@@ -455,7 +455,7 @@ function BlitzMode({
         qPausedAtRef.current = null
         qPausedAccRef.current += dt
       }
-      // …and the same fold for a 'toggle'-ended round's draining gap (round 23 Q6). It cannot use an
+      // …and the same fold for a 'toggle'-ended round's draining gap (round 23). It cannot use an
       // accumulator like the two above, because the gap is measured in WALL-CLOCK time so that it
       // survives a preset switch — so the stamp itself moves forward by the paused span, which leaves
       // `Date.now() − endedAt` reading exactly the un-paused gap. Same rule, one clock later: an
@@ -464,7 +464,7 @@ function BlitzMode({
     }
   }, [clockPaused])
 
-  // ★ THE ENDED ROUND THAT IS STILL DRAINING (round 23 Q6). A 'toggle'-ended round keeps its clock
+  // ★ THE ENDED ROUND THAT IS STILL DRAINING (round 23). A 'toggle'-ended round keeps its clock
   // running (see EndKind), and the player can SEE the readout — so it has to be drawn, or the screen
   // would promise time the round no longer has. This is the countdown loop's other half: it paints
   // remainNow() and, at zero, demotes the end to 'clock' — the round waited out its own clock, so
@@ -581,7 +581,7 @@ function BlitzMode({
     endedAtRef.current = null
     armClock(remain)
   }
-  // ── Override ⇄ Undo (round 23 Q6: one permanent per-card toggle) ─────────────────────
+  // ── Override ⇄ Undo (round 23: one permanent per-card toggle) ─────────────────────
   // ONE PRESS, BOTH DIRECTIONS — and it can change the ROUND, not just the score: it can put an ended
   // round back on the clock, and it can end a running one. Which of those it does is read off the
   // engine's plan (what this press will do, and to which card) BEFORE the press, from the same object
@@ -719,7 +719,7 @@ function BlitzMode({
   // mode-untangle dropped (BlitzMode had no settings effect; AoX does this via its own close-effect)
   // AND applies the ended-round reset so the round on screen always matches the current settings. Idle
   // has no live round/date to reconcile. Deferred to close (batched, no per-keystroke churn). The two
-  // timer lengths are in the deps because Reset Settings can now restore them mid-round (round-6 Q7):
+  // timer lengths are in the deps because Reset Settings can now restore them mid-round (round 6):
   // the sliders are idle-locked, so the only in-popover writer of blitzSec/qSec is Reset Settings, and a
   // reset that lands a fresh timer must reconcile the running/ended round exactly as a panel change does.
   useSettingsCloseEffect(
@@ -789,7 +789,7 @@ function BlitzMode({
     setSuddenAmBest,
   ])
 
-  // Round-21 Q11 — mirror an ENDED round to sessionStorage, keyed by the stats copy this screen was
+  // Round 21 — mirror an ENDED round to sessionStorage, keyed by the stats copy this screen was
   // mounted on (`dataId`), exactly as the effect above mirrors the round's Best to store/progress. On
   // the remount a preset switch or an Amnesic toggle causes, the mount-time reads restore whatever is
   // parked for the now-live copy (see `parkedRound`). Only an ENDED round is parked; every other state DISCARDS the slot:
@@ -865,7 +865,7 @@ function BlitzMode({
     state.locked === false &&
     state.revealed === false &&
     state.countedWrong === false &&
-    // Nothing on the card: never wrong, never overridden (round 23 Q6 — one record replaced the four
+    // Nothing on the card: never wrong, never overridden (round 23 — one record replaced the four
     // flags the old Override machinery kept here; same pair as modeHooks.engineFresh).
     state.card.wrongTime === null &&
     state.card.answered === null &&
@@ -907,7 +907,7 @@ function BlitzMode({
   // desync (structurally desync-proof). (Persisted as blitzTimingOff — excluded from the defaults
   // system.) Save Stats off drops the toggle, exactly as it does for the scoring trio.
   //
-  // ★ `off` is the USER'S hide toggle and nothing else (C1, round 16) — so it is `timeHidden`
+  // ★ `off` is the USER'S hide toggle and nothing else (round 16) — so it is `timeHidden`
   // below and NOT a `!saveStats` term, and the scoring trio (Score/Accuracy/Streak — untoggleable,
   // the score IS the mode) carries no `off` at all. The Save-Stats fact is `dimmed` on the panel
   // below: one flag, whole strip.

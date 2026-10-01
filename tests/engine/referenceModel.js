@@ -39,7 +39,7 @@
 //     Codes on the live question / per-question timeout — IF Save Stats was effectively on; that
 //     first action FREEZES the question's Save-Stats (ssFrozen), so a later toggle can't re-score
 //     or un-score it. One played per question, ever.
-//   • ★ THE OVERRIDE, IN THIS MODEL'S OWN VOCABULARY (round 23 Q6): each question keeps the facts of
+//   • ★ THE OVERRIDE, IN THIS MODEL'S OWN VOCABULARY (round 23): each question keeps the facts of
 //     how it was ANSWERED — `aCredited` (a clean first-try correct that counted), `aTime` (that
 //     answer's recorded solve time), `wrongTime` (the first miss's time) — which the Override NEVER
 //     touches, plus ONE bit, `overridden`, which is all the Override ever flips. So:

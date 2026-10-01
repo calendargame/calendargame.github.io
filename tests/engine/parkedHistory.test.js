@@ -1,4 +1,4 @@
-// parkedHistory — round 23 Q11: what a casual mode's parked history IS and what comes back from one
+// parkedHistory — round 23: what a casual mode's parked history IS and what comes back from one
 // (engine/parkedHistory). Pinned here on its own: the parked text (the engine, without the saved
 // times), the restore (only the exact state the saved stats support, and only through the one engine
 // restore door — engine/parkedEngine), what it refuses and reports, and the budget cut — the oldest cards forgotten, every

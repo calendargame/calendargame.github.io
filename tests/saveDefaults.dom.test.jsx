@@ -3,7 +3,7 @@
 // Save Defaults (Q7) + the gear "modified" indicator (Q8) — App-level behavior tests.
 //
 // Drives the real <App/> like a user: the ⚙ footer's Save Defaults button opens a centered
-// confirmation popup (portaled to #root, rendering the shared DefaultsCard — Q5 round-6) whose
+// confirmation popup (portaled to #root, rendering the shared DefaultsCard — round 6) whose
 // edits touch ONLY a pending snapshot; Save makes that snapshot the EFFECTIVE defaults
 // (store/userDefaults) that Reset Settings, Full Reset, the gear indicator, and the
 // Save-Defaults dim all mean by "default" from then on. The pure store/helper contract is
@@ -37,7 +37,7 @@ import {
 // The three footer offers are asked of the panel helper — "is the app OFFERING this?" — never of
 // a class string, so what "dimmed" is spelled as stops being this file's business.
 const btn = (name) => screen.getByRole('button', { name })
-// Q7 round 21: Reset Settings and Full Reset confirm through the shared ConfirmModal now. Fire each
+// Round 21: Reset Settings and Full Reset confirm through the shared ConfirmModal now. Fire each
 // end to end — the footer button opens the popup, the popup's own button (resolved WITHIN the
 // dialog, so it never collides with the footer button of the same name) applies.
 const fireResetSettings = () => {
@@ -92,7 +92,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(screen.getAllByDisplayValue('1600')).toHaveLength(1)
   })
 
-  // ── Q7 round-6: Reset Settings now also restores the 4 mode-screen prefs (Flash speed, both Blitz
+  // ── round 6: Reset Settings now also restores the 4 mode-screen prefs (Flash speed, both Blitz
   // timers, MoX run length) — the exact mirror of Save Defaults over the 19-value unit the gear judges.
   it('Reset Settings restores the 4 mode-screen prefs to the FACTORY defaults when nothing is saved (non-capturable prefs untouched)', () => {
     const p = useModePrefs.getState()
@@ -140,7 +140,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(r.aoxN).toBe('25')
   })
 
-  it('Reset Settings clears a gear lit ONLY by a divergent mode-screen pref (the round-6 Q7 enable + restore mirror)', () => {
+  it('Reset Settings clears a gear lit ONLY by a divergent mode-screen pref (the round 6 enable + restore mirror)', () => {
     useModePrefs.getState().setFlashMs(800)
     mountApp()
     openSettings()
@@ -240,7 +240,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(isOffered(footerButton('Save Defaults'))).toBe(false)
   })
 
-  // ── Round-20 Q4: Amnesic joins the Save Defaults / Reset Settings / Full Reset contract ────────
+  // ── Round 20: Amnesic joins the Save Defaults / Reset Settings / Full Reset contract ────────
   // Owner's explicit, confirmed decision (flagged as a real tradeoff, reaffirmed anyway): Save
   // Defaults captures whether the active preset is Amnesic at the moment of saving; Reset Settings
   // and Full Reset both restore it.
@@ -402,7 +402,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
   })
 
   it("the popup's N field applies the AoX validation trio (digits only, clamp on commit, Escape discards)", () => {
-    // ⚠ RE-BLESSED (round 15, B6) — AND IT WAS STILL GREEN WHEN THE BEHAVIOUR CHANGED UNDER IT,
+    // ⚠ RE-BLESSED (round 15) — AND IT WAS STILL GREEN WHEN THE BEHAVIOUR CHANGED UNDER IT,
     // which is the more useful half of this note. Escape here used to normalize-COMMIT; it now
     // discards back to the value the field held when the keyboard entered it. This case went on
     // passing only because it focused the field AFTER typing, so the "value at focus" it discarded
@@ -470,7 +470,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     mountApp()
     openSettings()
     openPopup()
-    // Round-20 Q5: the footer link is always MOUNTED now, never absent — nothing saved yet means it
+    // Round 20: the footer link is always MOUNTED now, never absent — nothing saved yet means it
     // dims and locks instead. It still carries no popup-scoped twin, which is the rest of this case.
     expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false)
     act(() => fireEvent.click(btn('Save')))
@@ -484,7 +484,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(within(dialog).queryByRole('button', { name: /Clear Saved Defaults/ })).toBeNull()
     expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(true) // now reachable — a snapshot exists
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear Saved Defaults' })))
-    // The link asks first now (Q5 round-6): nothing is cleared until the confirm's red-tier Clear.
+    // The link asks first now (round 6): nothing is cleared until the confirm's red-tier Clear.
     expect(useUserDefaults.getState().saved).not.toBeNull()
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' })))
     expect(useUserDefaults.getState().saved).toBeNull() // back to factory semantics
@@ -495,7 +495,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
   it('the ⚙ footer Clear Saved Defaults link: dimmed and locked without a snapshot, reachable at steady state (Save Defaults dimmed), clears via its confirm', () => {
     mountApp()
     openSettings()
-    expect(footerButton('Clear Saved Defaults')).toBeInTheDocument() // always mounted (round-20 Q5)
+    expect(footerButton('Clear Saved Defaults')).toBeInTheDocument() // always mounted (round 20)
     expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // …but nothing saved, so it is inert
     act(() => fireEvent.click(footerButton('Clear Saved Defaults'))) // a press against the lock is a no-op
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull() // the confirm never opened
@@ -506,7 +506,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(true) // the footer link is the escape hatch
     const footerLink = screen.getByRole('button', { name: 'Clear Saved Defaults' })
     act(() => fireEvent.click(footerLink))
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' }))) // through the confirm popup (Q5 round-6)
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Clear' }))) // through the confirm popup (round 6)
     expect(useUserDefaults.getState().saved).toBeNull() // snapshot forgotten (live settings untouched)
     expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // dims and locks again
   })
@@ -523,7 +523,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()
     expect(within(dialog).queryByRole('button', { name: 'Close' })).toBeNull()
     expect(nField().className).not.toContain('btn-solid')
-    expect(nField().className).toContain('border surface-tray') // clean = the shared interactive surface (Q7 round-7)
+    expect(nField().className).toContain('border surface-tray') // clean = the shared interactive surface (round 7)
     act(() => fireEvent.change(nField(), { target: { value: '25' } }))
     expect(nField().className).toContain('btn-solid') // the dirty accent on the box…
     expect(nField().className).not.toContain('surface-tray') // …swapped in for the tray surface WHOLE (NUM_INPUT_DIRTY_CLASS)
@@ -537,7 +537,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     expect(screen.queryByText('Saving here updates only these values.')).toBeNull() // manager-only note
   })
 
-  it('the ⚙ Year Range pair wears the shared interactive surface (border surface-tray), never the container panel (Q7 round-7)', () => {
+  it('the ⚙ Year Range pair wears the shared interactive surface (border surface-tray), never the container panel (round 7)', () => {
     // The other two NUM_INPUT_CLASS sites (the AoX mode-screen box is pinned in
     // tests/aox.dom.test.jsx; the popup box in the shared-card test above): the site-wide
     // interactive-border rule puts every editable box on the sbtn-bd control tier.

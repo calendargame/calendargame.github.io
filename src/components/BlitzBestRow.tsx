@@ -4,12 +4,12 @@ import { NewBestStar } from './primitives.jsx'
 
 // BlitzBestRow — the two-field Best Score / Best Streak row with ★ new-best flags and the
 // Same Round / Different Rounds tag, shared by the two BlitzBest-shaped records: per-round
-// (blitzBest) and per-question + Allow Mistakes (suddenAmBest, C3a). The tag renders only
+// (blitzBest) and per-question + Allow Mistakes (suddenAmBest). The tag renders only
 // once BOTH round ids exist: same id = one exceptional round set both, different = two
 // strong ones. (Per-question sudden death keeps its own score-only row — different shape.)
 // Each ★ is DERIVED, never stored: a field is starred exactly when the round on screen (`roundId`,
 // null when there is none) is the round that set it — engine/roundId's isNewBest, the one rule MoX
-// uses too (round 23 Q4).
+// uses too (round 23).
 function BlitzBestRow({ rec, roundId }: { rec?: BlitzBest; roundId: number | null }) {
   const showTag = rec && rec.scoreRoundId != null && rec.streakRoundId != null
   return (

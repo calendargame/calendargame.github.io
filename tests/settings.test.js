@@ -19,7 +19,7 @@ describe('settings store', () => {
     const s = useSettings.getState()
     expect(s.dateFormat).toBe('written-mdy')
     expect(s.inputStyle).toBe('buttons')
-    // Every preset opens on Classic until the player changes Default Mode (round-21 Q3).
+    // Every preset opens on Classic until the player changes Default Mode (round 21).
     expect(s.defaultMode).toBe('classic')
     // Standard — the orientation the app icon, the launch PNGs and every screenshot already show.
     expect(s.dotRotation).toBe('standard')
@@ -85,7 +85,7 @@ describe('settings store', () => {
   })
 })
 
-// ★ THE ROTATE DOTS MIGRATION (round-23 Q6) — every saved shape the setting has had, onto today's
+// ★ THE ROTATE DOTS MIGRATION (round 23) — every saved shape the setting has had, onto today's
 // three-way `dotRotation`, in one pure step. Unit-tested here (Node); the WIRING — that stored
 // payloads actually reach it through useSettings.persist.rehydrate(), and that store/userDefaults'
 // snapshot gets the same rewrite — is tests/dotRotation.dom's and tests/userDefaults.dom's (both

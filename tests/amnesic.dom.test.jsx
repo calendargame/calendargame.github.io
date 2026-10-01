@@ -240,7 +240,7 @@ describe('an amnesic preset never writes its stats down', () => {
     expect(parked()).toBe(before)
     // The flag itself is untouched HERE because relaunch() rehydrates the progress store — the
     // store-level stand-in for a RELOAD, which keeps the session (see the next case). A real cold
-    // open is a full <App/> remount, and round-21 Q1 makes that reseed every preset's Amnesic flag
+    // open is a full <App/> remount, and round 21 makes that reseed every preset's Amnesic flag
     // from its saved default; that path has its own coverage in the 'cold-open reseed' block below.
     expect(isAmnesic(usePresets.getState(), 1)).toBe(true)
   })
@@ -528,11 +528,11 @@ describe('the Amnesic switch in the ⚙ panel', () => {
   // Q5): the gear's bar, Reset Settings' dim and Save Defaults' dim are ONE expression (main.tsx's
   // settingsAtDefaults), so leaving Amnesic out of it left Save Defaults dimmed and INERT whenever
   // Amnesic was the only thing a player had changed — making "Amnesic: on" impossible to save as a
-  // default at all, even though the popup's commit had captured it since round-20 Q4. Every offer
+  // default at all, even though the popup's commit had captured it since round 20. Every offer
   // that lights here really acts on the flag: Reset Settings and Full Reset both restore it (see
   // the Full Reset cases above, and tests/saveDefaults for the capture).
   // ⚠ THE OLD COMMENT ALSO SAID AMNESIC WAS "absent from the Save Defaults snapshot", which
-  // round-20 Q4 had already made false — it is captured. That half was simply stale.
+  // Round 20 had already made false — it is captured. That half was simply stale.
   it('lights the gear ON ITS OWN, and offers all three footer buttons with it', () => {
     openPanel()
     // Nothing has been changed yet: no bar, and all three footer buttons withheld.
@@ -577,7 +577,7 @@ describe('the Amnesic switch in the ⚙ panel', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// COLD-OPEN RESEED (round-21 Q1). An Amnesic flag is a SESSION toggle: every genuine app open resets
+// COLD-OPEN RESEED (round 21). An Amnesic flag is a SESSION toggle: every genuine app open resets
 // EVERY preset's Amnesic flag to that preset's own saved default (store/userDefaults'
 // effectiveAmnesicDefault — false when nothing is saved). A mid-session toggle still sticks until
 // the next cold open. src/main.tsx does this in a one-shot boot effect that walks the registry and
@@ -588,9 +588,9 @@ describe('the Amnesic switch in the ⚙ panel', () => {
 // below unmounts, clears sessionStorage (what a real close does — it is also what takes the session
 // stats and store/browsingSession's marker with it), and mounts again: the store singletons and
 // localStorage carry over (a real browser reloads them from disk to the same values), and it is the
-// boot effect on the fresh mount that does the reseed. ★ Round 23 Q2: a remount WITHOUT the clear is a
+// boot effect on the fresh mount that does the reseed. ★ Round 23: a remount WITHOUT the clear is a
 // reload, and a reload no longer reseeds — pinned by the last case in this block.
-describe('cold-open reseed of Amnesic (round-21 Q1)', () => {
+describe('cold-open reseed of Amnesic (round 21)', () => {
   beforeEach(() => resetAppState())
   afterEach(() => {
     cleanup()
@@ -647,7 +647,7 @@ describe('cold-open reseed of Amnesic (round-21 Q1)', () => {
     expect(isAmnesic(usePresets.getState(), 1)).toBe(false)
   })
 
-  it('a RELOAD is the same session: it does not reseed (round 23 Q2)', () => {
+  it('a RELOAD is the same session: it does not reseed (round 23)', () => {
     mountApp()
     saveAmnesicDefault(false)
     setAmnesic(true) // the guest flips it on…

@@ -18,7 +18,7 @@ import { useSettings } from './settings.js'
 //   • Lifetime stats for the continuous modes — Classic, Flash, and Deduction's
 //     three sub-modes (Day/Month/Year). Each is the engine's Stats object.
 //   • All-time bests, config-keyed — Blitz per-round (score/streak), per-question
-//     sudden death (score only), per-question with Allow Mistakes (score/streak, C3a),
+//     sudden death (score only), per-question with Allow Mistakes (score/streak),
 //     and AoX (average/median). These already lived as component state; the store
 //     now owns them (and their types).
 //
@@ -32,7 +32,7 @@ import { useSettings } from './settings.js'
 //   • The "new best ★" markers — nothing is stored for them at all: each is read off the round id
 //     saved inside the Best record (engine/roundId's isNewBest).
 //
-// ⚠ LOOKUP HISTORY USED TO LIVE HERE AND NO LONGER DOES (Q1, round 20) — it moved to its own
+// ⚠ LOOKUP HISTORY USED TO LIVE HERE AND NO LONGER DOES (round 20) — it moved to its own
 // store/lookupHistory, because it stopped being PRESET data: it is now one shared list read by
 // every preset, not one of the four things a preset switch swaps out. See that file's header for
 // the full argument. Its old field on THIS store's persisted payload is handled at the bottom of
@@ -76,7 +76,7 @@ export type ProgressValues = {
   stats: Record<StatsKey, Stats>
   blitzBest: Record<string, BlitzBest>
   suddenBest: Record<string, SuddenBest>
-  // Per-question + Allow Mistakes bests (C3a): the same BlitzBest {score, streak} shape as
+  // Per-question + Allow Mistakes bests: the same BlitzBest {score, streak} shape as
   // per-round, keyed by the SAME per-question key string as suddenBest — for per-question,
   // AM-ness is the MAP split (the two variants' record shapes differ), not a key segment.
   // Added as a fresh key space, so no migration and no version bump of its own: an older payload
@@ -196,7 +196,7 @@ const PERSISTED_KEYS: (keyof ProgressValues)[] = [
   'aoxBest',
 ]
 
-// v1 → v2: AoX Best keys gain the julianChance dimension (C2). The original key omitted it —
+// v1 → v2: AoX Best keys gain the julianChance dimension. The original key omitted it —
 // inconsistent with Blitz/Sudden and with the How-to-Play contract ("Bests are tracked per exact
 // configuration"), and it merged genuinely different difficulties when the year range spans
 // pre-1582. Old: `n|allowMistakes|fmt|leapChance|janFebChance|minY-maxY|useJulian` (7 segments);
@@ -258,7 +258,7 @@ export const useProgress = create<ProgressState>()(
       // share one saved copy: the times are still seconds, and an older build's `migrate` passes a
       // newer version through untouched. What an older build does WRITE is the trim, which the
       // v4 → v5 step re-derives (above).
-      // v4 = lookupHistory LEFT the shape (Q1, round 20 — see store/lookupHistory). The bump
+      // v4 = lookupHistory LEFT the shape (round 20 — see store/lookupHistory). The bump
       // still records that change even though nothing here has to REWRITE anything for it: an old
       // payload's `lookupHistory` field is not in PERSISTED_KEYS above any more, so partialize
       // simply stops re-writing it, and `mergeOverDefaults` below spreads the raw persisted object

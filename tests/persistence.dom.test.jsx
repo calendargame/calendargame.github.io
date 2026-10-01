@@ -26,7 +26,7 @@
 // must keep passing unchanged through the preset work, which is itself the assertion that they
 // stayed global.
 //
-// ⚠ LOOKUP HISTORY JOINED THAT LIST (Q1, round 20). It used to live inside `progress`, one of the
+// ⚠ LOOKUP HISTORY JOINED THAT LIST (round 20). It used to live inside `progress`, one of the
 // four stores this net exists to prove ARE independent per-preset places — but it is a player's
 // saved data that is nonetheless GLOBAL, the one exception the file header on store/lookupHistory
 // argues for at length: a Lookup is a question you asked, not a record of how you did, so it reads
@@ -71,7 +71,7 @@ const AOX_REC = { avg: 1.5, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: 1.5, m
 
 // Seed a device that has been PLAYED ON — through the stores' own setters, because a payload the
 // app never wrote is not evidence about what the app saves. Lookup history is deliberately not
-// seeded here any more (Q1, round 20) — it left `progress` for its own global store, so it is no
+// seeded here any more (round 20) — it left `progress` for its own global store, so it is no
 // longer part of what "a played-in preset" means; tests/lookupHistory.dom seeds and asserts it now.
 function seedAPlayedDevice() {
   const p = progress.getState()
@@ -172,7 +172,7 @@ describe('what you saved is there when you come back', () => {
     userDefaults.getState().saveDefaults({
       settings: { ...settings.getState(), minY: 1600, leapChance: '75' },
       prefs: { flashMs: 800, blitzSec: 120, blitzQSec: 20, aoxN: '25' },
-      amnesic: true, // round-20 Q4 — non-default so the round trip is a real claim, not a coincidence
+      amnesic: true, // round 20 — non-default so the round trip is a real claim, not a coincidence
     })
     const fresh = await reopenApp()
     const back = fresh.userDefaults.getState().saved
@@ -182,7 +182,7 @@ describe('what you saved is there when you come back', () => {
     expect(back.amnesic).toBe(true)
   })
 
-  // EVERY SOLVE IS KEPT (round 23 Q3), stated as the player meets it: a long practice history comes
+  // EVERY SOLVE IS KEPT (round 23), stated as the player meets it: a long practice history comes
   // back whole, so the all-time Mean and Median a reopened app shows are the ones it showed before.
   // (This case used to promise the opposite — a capped copy keeping only the most recent solves —
   // and that cap is what made a reload change the Mean and raise a false "Enable and Reset Stats?".)
@@ -220,7 +220,7 @@ describe('an older save still opens', () => {
 
   // ⚠ THE TWO LOOKUP-HISTORY CASES THAT USED TO STAND HERE ARE GONE, DELIBERATELY, NOT MOVED. They
   // proved "a Lookup date saved by an older release still opens" — a promise this app no longer
-  // makes for that field (Q1, round 20): lookupHistory left `progress` for its own global store,
+  // makes for that field (round 20): lookupHistory left `progress` for its own global store,
   // and this app never migrates a field forward by copying it out of an old payload (the same
   // "preset 1 IS the data, never a copy" principle store/presets states for itself — see
   // store/lookupHistory's header). A device's pre-move saved lookups are simply left behind under

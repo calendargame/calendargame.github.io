@@ -137,7 +137,7 @@ describe('CustomSelect — the trigger names its setting AND its value', () => {
 
 // ── The fixed portal panel: position, what closes it, and --bar-h ────────────────────────────
 //
-// POSITION (Q8, round 11). The option panel portals into #root as position:FIXED, so its
+// POSITION (round 11). The option panel portals into #root as position:FIXED, so its
 // containing block is the viewport in both of the app's layouts and its coordinates are simply
 // the trigger's viewport rect — no scroll term, no mode-dependent correction. That replaces the
 // round-4 ± window.scrollY patch, which existed only because the panel was position:absolute

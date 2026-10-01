@@ -1,4 +1,4 @@
-// tests/scrollRegionGuard.test.js — Q5 round-7's divergence kill for scroll regions.
+// tests/scrollRegionGuard.test.js — round 7's divergence kill for scroll regions.
 // History: the settings popover, the changelog popup, and the Lookup history list each carried
 // their own copy of parts of the one scroll treatment (the px-4 scrollbar lane inside the
 // scroller, the fade-scroll-* edge masks, the scroll/resize edge listener), and each drifted —
@@ -80,7 +80,7 @@ const tokenLines = scanned.flatMap((file) =>
         ),
 )
 
-describe('scroll-region guard (Q5 round-7) — every scroll region comes from components/scrollRegion', () => {
+describe('scroll-region guard (round 7) — every scroll region comes from components/scrollRegion', () => {
   it('scans the real tree (main.tsx and LookupCard.tsx both present — the guard cannot go blind)', () => {
     const names = scanned.map(rel)
     expect(names).toContain('src/main.tsx')

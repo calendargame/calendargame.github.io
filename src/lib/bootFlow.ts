@@ -18,7 +18,7 @@
 // time per cycle that existed on every engine.
 //
 // NOTE: this is purely a make-it-render-right mechanism change. The approved animation DESIGN
-// (and the owner's separately-parked aesthetic wishlist, Backlog B2) is unchanged.
+// (and the owner's separately-parked aesthetic wishlist, on the backlog) is unchanged.
 
 export const BOOT_FLOW_CYCLE_MS = 2600
 // True arc length of "M310,256 C313,226 313,206 310,196 C300,184 240,184 202,196" (numerically

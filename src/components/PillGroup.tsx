@@ -4,7 +4,7 @@ import { PillGroupLock } from './pillGroupLock.js'
 
 // PillGroup — the radiogroup HOUSING every ⚙ Settings picker sits in: the role, its accessible
 // name, the lock, and the KEYBOARD CONTRACT that role="radiogroup" promises. Round-8 gave the
-// trays role="radiogroup" / role="radio" / aria-checked; round-9 (Q2) added the half that was
+// trays role="radiogroup" / role="radio" / aria-checked; round 9 added the half that was
 // missing, because announcing a convention the app does not keep is worse than announcing none.
 //
 // THE CONTRACT (WAI-ARIA APG, radio group):

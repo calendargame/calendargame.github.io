@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 
-// OverrideButton — the Override ⇄ Undo control at the end of every mode's action row (round 23 Q6).
+// OverrideButton — the Override ⇄ Undo control at the end of every mode's action row (round 23).
 //
 // ONE BUTTON, ONE PRESS, AND THE CARD DECIDES WHAT IT MEANS. Every scored date remembers how you
 // answered it plus whether it has been overridden, so the button simply reads the date it points at
@@ -39,7 +39,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 // taps inside ~300 ms as one double-tap gesture, so 300 is the shortest window that covers what the
 // device itself calls a double tap; the extra 50 covers the frame the new label needs to be painted
 // before anyone could have read it. It is far under any deliberate second press — you have to SEE
-// the button say Undo before choosing to press it — so the toggle stays as unlimited as Q6 promised.
+// the button say Undo before choosing to press it — so the toggle stays as unlimited as it was designed to be.
 //
 // ⚠ IT GUARDS TAPS AND CLICKS ONLY — NOT THE KEYBOARD, and that is a decision, not an oversight. A
 // press arrives here from three places: a finger or mouse; the O shortcut (src/main.tsx clicks this

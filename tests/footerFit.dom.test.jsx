@@ -3,7 +3,7 @@
 // Footer-button caption auto-fit (Round-2) — the ⚙ Save Defaults / Reset Settings / Full Reset
 // trio shares ONE font-size so no caption overflows on a narrow phone.
 //
-// ★ Q7 (round 21) REMOVED THE HIDDEN STATIC TWINS. They existed only because Full Reset's caption
+// ★ Round 21 REMOVED THE HIDDEN STATIC TWINS. They existed only because Full Reset's caption
 // swapped to "Confirm?" while the two-tap arm was live, which would have shrunk a live measurement
 // mid-arm and jiggled the row. Q7 replaced that arm with a ConfirmModal, so every caption in the
 // trio is static text now — fitFooterBtns measures the live [data-fitlabel] spans directly, after

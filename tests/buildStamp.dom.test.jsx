@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The last-run build stamp + the cold-open build-change "Updating" flash (round-6 Q2). The stamp
+// The last-run build stamp + the cold-open build-change "Updating" flash (round 6). The stamp
 // (cg-last-build, plain localStorage — lib/buildStamp) records which build's DEPLOY_TS this device
 // last booted; every boot restamps. A mismatch means an update landed SILENTLY (the waiting
 // worker's activation completed between sessions, or an evicted Safari tab downloaded fresh), so

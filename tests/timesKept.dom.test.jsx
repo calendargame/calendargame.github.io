@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// EVERY SOLVE TIME IS KEPT (round 23 Q3) — the player-visible half, on the real <App/>.
+// EVERY SOLVE TIME IS KEPT (round 23) — the player-visible half, on the real <App/>.
 //
 // The old 1,000-time cap trimmed the SAVED times while the correct-answer count kept growing. Two
 // things a player could see followed from it, and this file pins both as they now behave:

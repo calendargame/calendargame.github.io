@@ -1,6 +1,6 @@
 // engine/stats — the time-stat helpers every stat strip, the run breakdown and the MoX bests read.
 //
-// ★ WHY THIS FILE EXISTS NOW (round 23 Q3): every solve time is kept, so a casual mode's pool grows
+// ★ WHY THIS FILE EXISTS NOW (round 23): every solve time is kept, so a casual mode's pool grows
 // without bound — 100,000 times is a year and a half of heavy daily play in one mode. Median used to
 // SORT a copy of the whole pool, and the casual modes' stat strip computes it on every render (not
 // just when a time is added): at 100,000 times that was ~50-60 ms per render in Chromium, several

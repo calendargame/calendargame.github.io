@@ -1,4 +1,4 @@
-// lib/updateCheck.ts — "Check for updates" ACTUALLY CHECKS (Q7, round 11).
+// lib/updateCheck.ts — "Check for updates" ACTUALLY CHECKS (round 11).
 //
 // Before this, the button was a lie by construction: it showed the Updating screen, waited, and ran
 // forceReloadLatest() unconditionally — claiming to update even when nothing had changed, and
@@ -37,7 +37,7 @@
 //    is repeated at the top of scripts/versionLedger.mjs, where it killed a candidate design.
 //  • DEPLOY_TS is NOT the thing to compare, and round 16 did not change that. It is not in
 //    index.html — it lives inside the ~476 KB bundle, so reading the deployed one would mean
-//    downloading the whole build to ask a question about it. (Q1 did remove the OTHER objection
+//    downloading the whole build to ask a question about it. (Round 16 did remove the OTHER objection
 //    that used to stand here: it is no longer a hand-edited literal that a forgotten bump could
 //    make lie. It is now injected from the build clock, and the changelog date is gated against it.
 //    Still the wrong file to fetch.)

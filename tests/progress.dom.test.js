@@ -282,7 +282,7 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
     expect(useProgress.getState().stats.classic.played).toBe(1)
   })
 
-  // ★ EVERY SOLVE TIME IS KEPT (round 23 Q3). This case used to pin the opposite — a 1,000-time
+  // ★ EVERY SOLVE TIME IS KEPT (round 23). This case used to pin the opposite — a 1,000-time
   // rolling window on the write path — and that window was the bug: it trimmed the saved times while
   // the correct-answer count kept growing, so after a reload `good !== times.length` was true for
   // every player past 1,000 timed answers (a false "Enable and Reset Stats?") and a reloaded Mean

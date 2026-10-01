@@ -1,4 +1,4 @@
-// dateGen — the weekday-question generator. Extracted verbatim from main.tsx (Q1 phase 1).
+// dateGen — the weekday-question generator. Extracted verbatim from main.tsx (the main.tsx split).
 //
 // It had to come out BEFORE the mode screens that use it: AoxMode defaults `genDate` to
 // randomDate and DeductionMode reaches for the puzzle generator, so leaving these in main.tsx

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// openIn.dom — THE ⚙ PANEL'S "Open in" DROPDOWN (round 23, Q8), in the real app.
+// openIn.dom — THE ⚙ PANEL'S "Open in" DROPDOWN (round 23), in the real app.
 //
 // Presets are unlimited, so "Open in" stopped being a tray (one segment per preset, a height that
 // grew with the count) and became the SAME dropdown as the top-bar preset switcher: one trigger row
@@ -117,7 +117,7 @@ describe('"Open in" is a dropdown', () => {
       createPreset('Guest')
     })
     mountApp()
-    // After the mount: round-21 Q1 reseeds Amnesic from saved defaults on a cold open.
+    // After the mount: round 21 reseeds Amnesic from saved defaults on a cold open.
     act(() => setPresetAmnesic(3, true))
     openSettings('key')
     fireEvent.click(openInTrigger())

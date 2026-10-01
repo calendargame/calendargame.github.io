@@ -15,13 +15,13 @@ import type { FormatId } from '../lib/format.js'
 // in an Expander, with the freeze contract that holds the panel's inputs steady
 // for CODES_CLOSE_MS while it slides shut. Shared by App, AoxMode, and LookupCard.
 //
-// Extracted from main.jsx in Stage C, Step 4g (verbatim). Q5 (round 8) folded AoxMode's
+// Extracted from main.jsx in Stage C, Step 4g (verbatim). Round 8 folded AoxMode's
 // hand-rolled copy of the toggle + freeze onto this component, so all SIX codes panels
 // (Classic, Blitz, Flash, Deduction, AoX, Lookup) are now literally this one implementation.
 
 // The Show/Hide Codes toggle's className. Every one of the six sites reaches it through this
-// component, so the six can no longer drift — which they had (Q4 round-8 found AoX's inline
-// copy missing the aria-disabled and cursor-not-allowed the other five carried; Q5 round-8
+// component, so the six can no longer drift — which they had (round 8 found AoX's inline
+// copy missing the aria-disabled and cursor-not-allowed the other five carried; round 8
 // removed that copy outright). Module-local: nothing outside this file renders the button.
 // `border border-transparent` completes the button's RENDERED height. It is a solid fill, so it
 // carries no visible border, but every control it is measured against does (Reveal / Override /
@@ -46,7 +46,7 @@ export interface CodeDate {
 // The per-date code summary shape, taken from computeMethodSummary's inferred return.
 type MethodSummary = NonNullable<ReturnType<typeof computeMethodSummary>>
 
-// Module-local, exactly like CODES_BTN_CLASS above: until Q5 (round 8) AoxMode imported this
+// Module-local, exactly like CODES_BTN_CLASS above: until round 8 AoxMode imported this
 // directly to hand-roll its own toggle, and that import was its last one — the fold left the
 // export behind with no consumer anywhere in the repo. Nothing outside this file renders the
 // codes body; it is reached only through MethodBreakdownSection, which owns the freeze contract
@@ -226,7 +226,7 @@ export function MethodBreakdownSection({
   // above already folds in hasDate, so a date going away (Reset Stats, Lookup selecting a gap
   // entry) arrives as open=false and takes the same hold-then-release path. A HOLD, not an
   // immediate release: the panel may be mid-slide when the date disappears, and releasing on the
-  // spot would swap the codes for the "AD dates only" line in full view. Until Q5 (round 11) this
+  // spot would swap the codes for the "AD dates only" line in full view. Until round 11 this
   // effect opened with `if (!date) return`, which wedged the machine — React ran the previous
   // run's cleanup, clearing the pending release timer, and armed nothing in its place, so
   // closingRef stayed true and the snapshot stayed on the departed date until the next open. It
@@ -275,7 +275,7 @@ export function MethodBreakdownSection({
         onClick={toggle}
         className={`${CODES_BTN_CLASS} ${!hasDate ? CODES_BTN_DISABLED_CLASS : ''}`}
         aria-disabled={!hasDate}
-        // The same disclosure contract the guide's accordion headers got in round 7 (Q8) and
+        // The same disclosure contract the guide's accordion headers got in round 7 and
         // this toggle did not: state announced, and a pointer at the region it opens. `open`
         // already folds in hasDate, so a disabled toggle reports itself collapsed.
         aria-expanded={open}
@@ -286,7 +286,7 @@ export function MethodBreakdownSection({
       {/* durationMs is stated, not inherited: the codes panel runs the accordion duration
           FLOOR — the same value the guide's distance-scaled formula returns for every panel
           this size — and CODES_CLOSE_MS is derived from that floor. Passing it makes the
-          agreement explicit rather than a coincidence of two literals (Q5 round-8); the
+          agreement explicit rather than a coincidence of two literals (round 8); the
           .expander var fallback in index.css is now pure defense and never a live path. */}
       <Expander open={open && hasDate} durationMs={ACCORDION_MS_FLOOR}>
         <div id={panelId} className={contentClassName}>

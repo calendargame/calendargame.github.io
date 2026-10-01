@@ -96,7 +96,7 @@ beforeEach(() => {
   useProgress.getState().resetProgress()
   // The per-mode setup store (Stage D follow-up) is the same kind of persisted singleton.
   useModePrefs.getState().resetModePrefs()
-  // Lookup history (Q1, round 20) left store/progress for its own two stores, and it is a module
+  // Lookup history (round 20) left store/progress for its own two stores, and it is a module
   // singleton for the SAME reason the two above are: localStorage.clear() (wherever a test file
   // does its own) cannot reach an in-memory value already sitting in either store, so a test that
   // looked something up would otherwise leak it into every later test in the suite — permanent
@@ -105,12 +105,12 @@ beforeEach(() => {
   // each list to [] both clears memory and (through persist) overwrites whatever was on disk.
   useLookupHistory.getState().setHistory([])
   useLookupSession.getState().setSessionEntries([])
-  // The per-preset SESSION PAGE (store/sessionMode, round-21 Q3) is sessionStorage-backed and keyed
+  // The per-preset SESSION PAGE (store/sessionMode, round 21) is sessionStorage-backed and keyed
   // by preset id, so a test that switches modes leaves a page choice that a later test's cold
   // mountApp() would restore instead of opening on the launch Classic. Same class of leak as the
   // singletons above; cleared the same way, before every test.
   discardAllSessionModes()
-  // The per-(preset, mode) PARKED ROUND (store/sessionRound, round-21 Q11) is the same shape of leak:
+  // The per-(preset, mode) PARKED ROUND (store/sessionRound, round 21) is the same shape of leak:
   // a sessionStorage-backed singleton keyed by preset id, so a test that finishes a Blitz round or a
   // MoX run leaves a parked snapshot a later test's cold mountApp() would restore onto the timed
   // screen. Cleared the same way, before every test.

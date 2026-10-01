@@ -194,7 +194,7 @@ describe('index.css — the 45° lattice is one scoped override; Standard and 90
   })
 })
 
-// ── The persisted-shape migration, WIRED (round-23 Q6) ──────────────────────────────────────────
+// ── The persisted-shape migration, WIRED (round 23) ──────────────────────────────────────────
 //
 // The pure rewrite (`migrateDotRotation`) is unit-tested in settings.test.js (Node); this is the
 // WIRING half — stored payloads actually reaching it via useSettings.persist.rehydrate(), the same

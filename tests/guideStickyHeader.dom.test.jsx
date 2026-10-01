@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// HOW TO PLAY — THE PINNED SECTION HEADER (Q9, round 23).
+// HOW TO PLAY — THE PINNED SECTION HEADER (round 23).
 //
 // The open section's header sticks under the fixed bar while its content scrolls beneath it, and
 // the owner's one requirement shapes every case here: OPENING A SECTION MUST NOT PIN IT. The glide

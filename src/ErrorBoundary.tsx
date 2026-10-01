@@ -25,7 +25,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Record it for debugging — never swallow it silently.
     console.error('Calendar Game crashed:', error, info)
-    // Report it so real-world crashes on devices we can't test surface (C1). A no-op until the SDK
+    // Report it so real-world crashes on devices we can't test surface. A no-op until the SDK
     // loads, which main.tsx does behind import.meta.env.PROD — so dev/tests never report.
     captureError(error, { boundary: 'app', componentStack: info.componentStack })
   }
@@ -112,7 +112,7 @@ export class ModeErrorBoundary extends Component<ModeErrorBoundaryProps, ErrorBo
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(`Calendar Game: the "${this.props.mode}" mode crashed:`, error, info)
-    // Report it WITH the mode name as context (C1) — so a crash report says which mode broke.
+    // Report it WITH the mode name as context — so a crash report says which mode broke.
     captureError(error, {
       boundary: 'mode',
       mode: this.props.mode,

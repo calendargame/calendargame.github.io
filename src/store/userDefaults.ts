@@ -6,19 +6,19 @@ import { SETTINGS_DEFAULTS, migrateDotRotation } from './settings.js'
 import type { SettingsValues, LegacyDotFields } from './settings.js'
 import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
 
-// userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, Q7 "Save Defaults").
+// userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, "Save Defaults").
 //
 // The ⚙ footer's Save Defaults button snapshots the full 16-value settings panel PLUS the four
 // capturable mode-screen prefs (Flash reveal speed, both Blitz timer lengths, the AoX run length —
 // deliberately NOT Blitz Per-Round/Per-Question, Deduction sub-type, Allow Mistakes, One-by-One,
-// or the show/hide stat toggles) PLUS, since round-20 Q4, whether the active preset was Amnesic
+// or the show/hide stat toggles) PLUS, since round 20, whether the active preset was Amnesic
 // at the moment of saving. From then on those saved values — not the factory constants — are what
 // "default" means everywhere: Reset Settings restores the saved panel values AND the four prefs
-// (extended to the prefs in round-6 Q7 — it used to be panel-only) AND the saved Amnesic state,
+// (extended to the prefs in round 6 — it used to be panel-only) AND the saved Amnesic state,
 // Full Reset does the same (it delegates its ENTIRE settings restore to resetSettings, Amnesic
 // included — see main.tsx's resetSettings) and additionally wipes stats/history and returns every
 // non-capturable mode pref to factory, and the gear's "modified" bar lights when live state
-// diverges from the panel + prefs — AMNESIC INCLUDED as of round-22 Q5.
+// diverges from the panel + prefs — AMNESIC INCLUDED as of round 22.
 // ⚠ THAT LAST CLAUSE USED TO READ "NEVER for Amnesic", on the reasoning that the flag is a property
 // of the preset rather than a settings value. The premise was right and the conclusion was a BUG:
 // the gear's bar, Reset Settings' dim and Save Defaults' dim are one expression (main.tsx's
@@ -47,7 +47,7 @@ export type PrefDefaults = {
   blitzQSec: number
   aoxN: string
 }
-// amnesic: whether the ACTIVE PRESET was Amnesic at the moment of saving (round-20 Q4). Owner's
+// amnesic: whether the ACTIVE PRESET was Amnesic at the moment of saving (round 20). Owner's
 // explicit, confirmed decision: Save Defaults captures it, and Reset Settings / Full Reset restore
 // it along with everything else — even though pressing either mid-guest-session for an unrelated
 // reason will then silently flip Amnesic back to whatever was saved. See effectiveAmnesicDefault
@@ -80,7 +80,7 @@ export const effectiveSettingsDefaults = (saved: SavedDefaults | null): Settings
 export const effectivePrefDefaults = (saved: SavedDefaults | null): PrefDefaults =>
   saved ? { ...FACTORY_PREF_DEFAULTS, ...saved.prefs } : FACTORY_PREF_DEFAULTS
 // The effective Amnesic default — same "nothing saved = factory" rule as the two helpers above,
-// AND THE SAME FORWARD-MERGE NEED: a snapshot saved by a build from before round-20 Q4 shipped this
+// AND THE SAME FORWARD-MERGE NEED: a snapshot saved by a build from before round 20 shipped this
 // field has `saved !== null` but `saved.amnesic === undefined` — the field is simply absent from
 // the persisted JSON, the one-boolean equivalent of effectiveSettingsDefaults' missing-julianChance
 // case. `?? false` is that merge (there is only one key, so there is nothing to spread). Factory is
@@ -93,7 +93,7 @@ export const effectiveAmnesicDefault = (saved: SavedDefaults | null): boolean =>
 
 // ★ THE AMNESIC DEFAULT FOR ANY PRESET, read straight off ITS namespaced userDefaults key rather
 // than through the live store (which is only ever the ACTIVE preset's — persist scopes it via
-// store/presets' presetScopedStorage). src/main.tsx's cold-open reseed (round-21 Q1) is the one
+// store/presets' presetScopedStorage). src/main.tsx's cold-open reseed (round 21) is the one
 // caller: on every full app open it walks EVERY preset and resets its Amnesic flag to this value,
 // because an Amnesic flag is a SESSION toggle — guest mode is temporary by construction, so a
 // preset left Amnesic must be back to normal the next time the app opens. Session toggles still
@@ -125,7 +125,7 @@ export const storedAmnesicDefault = (presetId: number): boolean => {
   }
 }
 
-// The AoX run-length clamp — the rule's ONE home (Q18): the AoX run-length box's blur/Enter/Escape
+// The AoX run-length clamp — the rule's ONE home: the AoX run-length box's blur/Enter/Escape
 // commits (modes/AoxMode), the Save Defaults and manage-defaults N fields (components/SettingsPanel)
 // and the defaults card's own N field (components/DefaultsCard) all call it — plus prefsMatchDefaults
 // just below, which re-normalizes both sides. 2–1000, non-numeric → 10.
@@ -182,7 +182,7 @@ export const useUserDefaults = create<UserDefaultsState>()(
       // silently revert the player's SAVED Rotate Dots choice — forever, since
       // `commitManageDefaults` (components/SettingsPanel) then carries the same stale shape forward
       // on every subsequent Manage-Defaults edit-and-save.
-      // v2 = `dotOrientation` → the boolean `rotateDots` (Q3, round 20), as store/settings' v1→v2.
+      // v2 = `dotOrientation` → the boolean `rotateDots` (round 20), as store/settings' v1→v2.
       // v3 = `rotateDots` → the three-way `dotRotation` (round 23), as store/settings' v3→v4.
       //   ⚠ AN OLDER BUILD READING A v3 SNAPSHOT is fail-safe AND lossless here, unlike the live
       //   settings key: it finds no `rotateDots`, so its Reset Settings lands on its factory upright

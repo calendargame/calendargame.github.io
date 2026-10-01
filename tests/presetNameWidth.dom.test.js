@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // presetNameWidth.dom — the DOM/canvas-touching half of lib/presetNameWidth's live typing cap
-// (Q6, round 20): reading the switcher's live cell (readSwitcherBudget), measuring text against a
+// (round 20): reading the switcher's live cell (readSwitcherBudget), measuring text against a
 // canvas (measureTextWidthPx, fitTextToWidth), and the one function components/PresetManager
 // actually calls (capCandidateToSwitcherWidth). tests/presetNameWidth.test.js owns the PURE
 // decision (fitsWithinWidth) with fabricated numbers and no jsdom at all.

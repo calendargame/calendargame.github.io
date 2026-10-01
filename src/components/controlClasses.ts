@@ -1,4 +1,4 @@
-// The app's shared control className tokens, extracted verbatim from main.tsx (Q1 phase 1) so the
+// The app's shared control className tokens, extracted verbatim from main.tsx (the main.tsx split) so the
 // mode screens can move into their own modules without re-declaring them. Every comment here is
 // the original — these strings encode hard-won layout rules (see Key learnings: rendered height
 // must count borders; a box is only flush with button neighbours because its ROW stretches it).
@@ -7,18 +7,18 @@ import type { ButtonState } from '../engine/answerButtons.js'
 // Reset-style button shared className. Used by Reset Stats (Classic/Deduction/Flash),
 // Round Reset (Blitz active), AoX Reset, and the Save-Defaults Clear. (The ⚙ footer's Reset
 // Settings / Full Reset pair uses the derived FOOTER_RESET_BTN_CLASS below.)
-// border border-transparent completes the RENDERED height (Q4 round-8, the round-4 lesson):
+// border border-transparent completes the RENDERED height (round 8, the round-4 lesson):
 // a solid fill carries no visible border, but every control it is measured against does — the
 // grid neighbours Reveal / Override / ‹ › wear `border surface-button`, and the ⚙ footer's
 // View/Clear Saved Defaults pair wears `border surface-toggle`. A border counts toward rendered
 // height, so without it this button's own height sat 2px under its row's (masked so far only
 // because every host stretches its items).
-// ⚠ THE NEIGHBOUR NAMED HERE USED TO BE "the Save-Defaults Cancel beside Clear", and Q2 removed
+// ⚠ THE NEIGHBOUR NAMED HERE USED TO BE "the Save-Defaults Cancel beside Clear", and round 22 removed
 // every Cancel button in the app — so the EXAMPLE moved to a surviving `surface-toggle` pair while
 // the RULE did not move at all. It is still measured against real neighbours: the ⚙ footer's trio
 // (Save Defaults / Reset Settings / Full Reset share one row), and the mode screens' reset buttons
 // beside their bordered grid controls. The two places this class now stands ALONE in its row — a
-// ConfirmModal's confirm and the preset manager's Delete, both `w-full` since Q2 — keep the border
+// ConfirmModal's confirm and the preset manager's Delete, both `w-full` since round 22 — keep the border
 // for the same reason every variant does: the token is one height tier, not a per-row measurement.
 export const RESET_BTN_CLASS =
   'px-3 py-2 rounded-xl bg-rose-600/90 text-white border border-transparent text-sm font-medium'
@@ -33,7 +33,7 @@ export const FOOTER_RESET_BTN_CLASS = RESET_BTN_CLASS.replace('text-sm', 'text-x
   'py-2',
   'py-1.5',
 )
-// HOW A BUTTON SAYS "YOU CANNOT PRESS THIS" (round 15, B7) — appended by the ⚙ footer's three
+// HOW A BUTTON SAYS "YOU CANNOT PRESS THIS" (round 15) — appended by the ⚙ footer's three
 // buttons (Save Defaults / Reset Settings / Full Reset) while the app is not offering them, and
 // ALWAYS alongside aria-disabled on the same element. The pair is the whole convention: the class
 // draws it, the attribute announces it, and the button's own handler guard is what actually makes
@@ -61,15 +61,15 @@ export const FOOTER_RESET_BTN_CLASS = RESET_BTN_CLASS.replace('text-sm', 'text-x
 // so the strings genuinely differ. Converging them means deciding whether Show Codes should also
 // become hittable-but-inert, which is its own change with its own gate.
 export const NOT_OFFERED_BTN_CLASS = 'opacity-60 cursor-not-allowed'
-// Compact Reset Stats button variant (smaller py + col-span fit for stats panel). Q7 (round 21)
+// Compact Reset Stats button variant (smaller py + col-span fit for stats panel). Round 21
 // removed the ARMED variant — the two-tap confirm became the shared ConfirmModal, so this caption
 // never changes colour or text now.
 export const RESET_STATS_BTN_CLASS =
   'w-full px-3 py-1.5 rounded-xl btn-solid border border-transparent text-sm font-medium'
 // ── THE ⚙ FOOTER'S METADATA ROW ─────────────────────────────────────────────────────────────
-// Round-7 Q2 once hoisted a single FOOTER_LINK_ROW_CLASS over this row AND the View/Clear
+// Round 7 once hoisted a single FOOTER_LINK_ROW_CLASS over this row AND the View/Clear
 // saved-defaults row, on the argument that they were "the same kind of row". That stopped being
-// true — the saved-defaults pair moved into the pinned button block — and round 21 (Q2) finished
+// true — the saved-defaults pair moved into the pinned button block — and round 21 finished
 // the divergence: those two are now plain equal-width PILL BUTTONS (the RESET_BTN_CLASS family,
 // see SettingsPanel), a simple `flex gap-2` row that needs no named token at all. So only this
 // one is left here, and it is a named token because it still carries an argument.
@@ -90,7 +90,7 @@ export const RESET_STATS_BTN_CLASS =
 // whatever landed on it, which is the honest consequence of anchoring the ends rather than a
 // second rule.
 export const FOOTER_META_ROW_CLASS = 'flex items-center flex-wrap justify-between gap-3'
-// Boxed numeric-input shared className (Q18; split base + surface Q7 round-7) — the app's
+// Boxed numeric-input shared className (split into base + surface in round 7) — the app's
 // second shared input idiom beside SliderValueEditor: a bordered box with centered tabular
 // digits at the text-xs control tier. Used by the AoX run-length field (mode screen + the
 // Save Defaults popup, both appending " py-1 w-14 shrink-0") and the ⚙ Year Range pair
@@ -108,7 +108,7 @@ export const FOOTER_META_ROW_CLASS = 'flex items-center flex-wrap justify-betwee
 // selector, gear, stat panel — deliberately STAYS .panel: the container tier, owner call.)
 // NUM_INPUT_BASE carries the geometry alone so the DefaultsCard's dirty variant
 // (NUM_INPUT_DIRTY_CLASS, defined beside the card) swaps the whole surface, not a token.
-// appearance-none (Q4 round-8) turns the NATIVE form-field treatment off: these boxes fully
+// appearance-none (round 8) turns the NATIVE form-field treatment off: these boxes fully
 // declare their own border, background and radius, so leaving appearance:auto in place is a
 // false declaration that also keeps iOS's own inner shadow and focus treatment live on top
 // of ours. (Every text input in the app now states this: here, the Lookup date field, and
@@ -146,7 +146,7 @@ export const BASE_BTN = 'w-full rounded-2xl border px-4 py-3 text-base shadow-xs
 // (worn by Classic/Flash/Blitz/AoX through the single WeekdayAnswer) and all three Deduction
 // sub-mode grids plus the Year sizer strut. Deduction's Day and Year used to run gap-2 while
 // Month and the weekday grid ran gap-3, so the gutter visibly CHANGED as you switched Deduction
-// sub-mode (Q4 round-9); they were widened onto this token, never the reverse. Sharing it also
+// sub-mode (round 9); they were widened onto this token, never the reverse. Sharing it also
 // puts every layout on ONE column lattice: at a common gap g, a 6-col grid's col-span-2 is
 // exactly a 3-col column ((W−2g)/3) and its col-span-3 exactly a 2-col column ((W−g)/2), so
 // Deduction's 2-/3-/6-col grids and the weekday 2-col grid share invisible column edges —

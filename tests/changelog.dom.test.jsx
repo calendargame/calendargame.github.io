@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 //
-// The changelog + update-signal dots (round-6 Q6). src/changelog holds the hand-maintained
+// The changelog + update-signal dots (round 6). src/changelog holds the hand-maintained
 // plain-words per-DAY entries (newest first; a second same-day deploy RESTATES that day's net
 // effect versus production inside the one entry rather than prepending a second log — the round-7
-// combine policy, ordering amended in round-11 Q6 — so dates stay unique). Round-8 Q8 made that
+// combine policy, ordering amended in round 11 — so dates stay unique). Round 8 made that
 // array the published set exactly: the popup renders CHANGELOG as-is, so the ten-day cap is
 // enforced at SOURCE (pinned below) and the oldest entry moves to CHANGELOG-ARCHIVE.md instead of
 // piling up here. That retired the render-time slice, and with it the separate changelogLimit.dom
@@ -18,7 +18,7 @@
 // Opening ⚙ Settings retires the gear's dot, and the first tap on the footer's Changelog link
 // (right of Check for updates) retires the link's. The popup follows the established settings-
 // modal contract (focus-on-open, capture Escape, close-with-settings, Android Back, the shared
-// Tab trap, the [data-settings-modal] marker). Round-8 Q7 split the one dot into the two forms
+// Tab trap, the [data-settings-modal] marker). Round 8 split the one dot into the two forms
 // its two hosts can actually carry (components/UpdateDot: a corner badge for the ⚙ icon button,
 // an in-flow marker for the text link), so the assertions below read the marker element's own
 // data-update-dot / data-lit attributes — the host's className no longer says anything about it.
@@ -59,7 +59,7 @@ const OLD_STAMP = '2020-01-01T00:00:00.000Z' // any build that is not the runnin
 const changelogLink = () => screen.getByRole('button', { name: /^Changelog/ })
 const openChangelog = () => act(() => fireEvent.click(changelogLink()))
 // The two update markers, found by the attribute components/UpdateDot publishes — never by a class
-// on the host. That is the round-8 Q7 contract: the hosts mount DIFFERENT forms of the same dot.
+// on the host. That is the round 8 contract: the hosts mount DIFFERENT forms of the same dot.
 const gearMark = () => gear().querySelector('[data-update-dot]')
 const linkMark = () => changelogLink().querySelector('[data-update-dot]')
 const changelogTitle = () => screen.queryByText("What's new")
@@ -77,13 +77,13 @@ describe('changelog data (src/changelog)', () => {
     expect([...dates].sort().reverse()).toEqual(dates) // newest-first (ISO sorts lexically)
     // One entry per Pacific day (the round-7 same-day COMBINE policy): a second same-day deploy
     // rewrites that day's existing entry to the day's net effect versus production, rather than
-    // adding a twin-dated card (round-11 Q6 settled the rewrite; the card count is the same
+    // adding a twin-dated card (round 11 settled the rewrite; the card count is the same
     // either way). Uniqueness is what makes the ordering pin above STRICT, and it protects the
     // popup's key={en.date} React-key contract.
     expect(new Set(dates).size).toBe(dates.length)
   })
 
-  it('holds at most ten days — the cap is the DATA, not the rendering (round-8 Q8)', () => {
+  it('holds at most ten days — the cap is the DATA, not the rendering (round 8)', () => {
     // Trimmed at source: the popup renders the array as-is, so an eleventh day would SHIP; move
     // the oldest entry to CHANGELOG-ARCHIVE.md when adding a new day.
     expect(CHANGELOG.length).toBeLessThanOrEqual(10)
@@ -327,7 +327,7 @@ describe('the two-stage breadcrumb (stamp → dots → cleared)', () => {
     expect(screen.getByRole('button', { name: 'Changelog' })).toBe(changelogLink())
   })
 
-  it('the two hosts mount DIFFERENT forms of the one marker (round-8 Q7)', () => {
+  it('the two hosts mount DIFFERENT forms of the one marker (round 8)', () => {
     bootAfterUpdate()
     // The ⚙ icon button gets the corner badge, and is the marker's containing block by its OWN
     // literal class — not by whichever of the two indicator classes happens to be applied.
@@ -432,7 +432,7 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(document.activeElement).toBe(dialog) // focus landed IN the dialog on open
     // One bulleted list per entry, all inside the popup's own scroll region. Nothing is held back:
-    // round-8 Q8 removed the render-time slice, so the whole array draws and the ten-day cap is the
+    // Round 8 removed the render-time slice, so the whole array draws and the ten-day cap is the
     // data-shape guard above instead.
     const lists = within(dialog).getAllByRole('list')
     expect(lists).toHaveLength(CHANGELOG.length)
@@ -469,7 +469,7 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(within(dialog).queryAllByRole('button')).toHaveLength(0)
   })
 
-  it('wears the settings scroll recipe: py-4 card, the px-4 lane inside the scroll region, px-4 title row (round-7 Q5)', () => {
+  it('wears the settings scroll recipe: py-4 card, the px-4 lane inside the scroll region, px-4 title row (round 7)', () => {
     mountApp()
     openPopup()
     const dialog = changelogDialog()
@@ -532,7 +532,7 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(screen.queryByRole('dialog', { name: `What's new v${APP_VERSION}` })).toBeNull()
   })
 
-  it('edge fades track scroll position inside the popup (the shared scroll-state listener, round-7 Q5)', () => {
+  it('edge fades track scroll position inside the popup (the shared scroll-state listener, round 7)', () => {
     mountApp()
     openPopup()
     const region = changelogDialog().querySelector('.overflow-y-auto')
@@ -636,10 +636,10 @@ describe('the Changelog popup (modal parity + content)', () => {
   it('the metadata row anchors its ends and keeps the ring-gap floor — and no longer shares the saved-defaults row’s class', () => {
     mountApp()
     openSettings()
-    // ⚠ THIS CASE REPLACES "both settings-footer link rows share one row class" (round-7 Q2). That
+    // ⚠ THIS CASE REPLACES "both settings-footer link rows share one row class" (round 7). That
     // one asserted the two classNames were EQUAL, on the argument that the View/Clear row and this
     // one were the same kind of row. They are not any more: the saved-defaults pair became two
-    // plain pill buttons on a `flex gap-2` row (round 21, Q2), while this row spreads edge-to-edge
+    // plain pill buttons on a `flex gap-2` row (round 21), while this row spreads edge-to-edge
     // as FOOTER_META_ROW_CLASS. Keeping the equality assertion would have meant a test that can
     // only pass by re-uniting rows that must differ, so what is pinned now is what each row
     // separately promises.

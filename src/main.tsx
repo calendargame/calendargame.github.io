@@ -84,7 +84,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // types are read by AoxMode, BlitzMode, components/BlitzBestRow and src/engine/{aoxBest,blitzBest}.
     // LookupEntry / addLookupEntry / moveEntryToTop / mergeForDisplay, and the two stores that split
     // Lookup's history into a permanent shared list and a session-only amnesic overflow, moved OUT of
-    // store/progress entirely (Q1, round 20) to store/lookupHistory.ts — see that file's header for
+    // store/progress entirely (round 20) to store/lookupHistory.ts — see that file's header for
     // why Lookup's history stopped being preset data. App takes useLookupHistory, useLookupSession,
     // addLookupEntry, moveEntryToTop and mergeForDisplay from it; nothing else reaches that module.
 
@@ -167,7 +167,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // DEPLOY_TS (the deploy stamp the "Last Updated" line renders and the build-change detection
     // below compares against) -> src/deployStamp.ts, imported at top. It moved there because it is
     // read from BOTH sides of the settings-panel boundary, and main.tsx cannot be imported by the
-    // panel without a cycle. ★ THERE IS NO PER-DEPLOY BUMP ANY MORE (round 16, Q1): vite.config.js
+    // panel without a cycle. ★ THERE IS NO PER-DEPLOY BUMP ANY MORE (round 16): vite.config.js
     // injects the build clock as __BUILD_TS__, and the build FAILS if the newest changelog entry is
     // not dated that stamp's Pacific day. Nothing here has to be edited before a push.
 
@@ -190,7 +190,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const consumeSkipBootHold=()=>{try{const set=sessionStorage.getItem(SKIP_BOOT_HOLD_KEY)!==null;sessionStorage.removeItem(SKIP_BOOT_HOLD_KEY);return set;}catch{return false;}};
 
     // Force the very latest deployed version, bypassing the service-worker cache — the big hammer
-    // BEHIND Settings → "Check for updates", and since Q7 (round 11) no longer what that button
+    // BEHIND Settings → "Check for updates", and since round 11 no longer what that button
     // does. The button checks first and applies through the service worker; this runs only when a
     // check FOUND something the gentle path cannot deliver (no registration at all, or no handoff
     // within UPDATE_HANDOFF_MS). It stays reachable because it is the only cure for the round-7
@@ -289,7 +289,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       return()=>link.removeEventListener('load',onLoad);
     };
 
-    // Q8 (round 21): a #rgb / #rrggbb theme colour composited OVER the modal scrim's 40% black —
+    // Round 21: a #rgb / #rrggbb theme colour composited OVER the modal scrim's 40% black —
     // i.e. each channel × 0.6. Runtime-derived from the `--tc` string the theme effect already
     // reads, so it adds NO third copy of the per-theme values: index.html's pre-React boot map
     // (`var c={dusk:'#0d1117',…}`, ~line 110) and index.css's `--tc` are the two that exist, and
@@ -456,7 +456,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // shared engine, AoxMode).
     // ============================================================
     function App(){
-      // Q3 (round 21): "classic" is only the FIRST-PAINT value now. A one-shot boot effect below
+      // Round 21: "classic" is only the FIRST-PAINT value now. A one-shot boot effect below
       // immediately moves it to the active preset's session page (survived a reload) or its
       // `defaultMode` ⚙ setting (a true cold open); a preset switch moves it to the incoming
       // preset's session-or-default page. switchMode is still the one door and now also persists
@@ -487,7 +487,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚙ Settings store (Stage C, Step 5a). ★ THE COUNT, AND WHICH SET IT COUNTS — three different
       // numbers live in this area and conflating them is how the old comments went wrong:
       //   16 = the settings the ⚙ store HOLDS AND PERSISTS (store/settings SETTINGS_DEFAULTS, and
-      //        therefore PERSISTED_KEYS; round-21 Q3 added `defaultMode`). App binds all 16 as
+      //        therefore PERSISTED_KEYS; round 21 added `defaultMode`). App binds all 16 as
       //        values below: it needs every one for settingsAtDefaults, and several again for date
       //        generation, the mode props and the title-bar mark.
       //    3 = the store FUNCTIONS App binds — setMinY, setMaxY (they feed the year-range mirrors
@@ -514,7 +514,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const randomFormat=useSettings(s=>s.randomFormat);
       const inputStyle=useSettings(s=>s.inputStyle);
       const dotRotation=useSettings(s=>s.dotRotation);
-      // defaultMode (round-21 Q3) — bound only for settingsAtDefaults below (a changed opening page
+      // defaultMode (round 21) — bound only for settingsAtDefaults below (a changed opening page
       // must light the gear and un-dim Save Defaults, since it is captured). The panel selects its
       // own setDefaultMode; nothing else in App reads this — the page itself is applied by the
       // boot effect / preset-switch subscription via readStoredDefaultMode, not this binding.
@@ -528,7 +528,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // and the gear's "modified" indicator; the mode components read their own slices for their
       // freshness checks. Survives Full Reset by design (see store/userDefaults).
       const savedDefaults=useUserDefaults(s=>s.saved);
-      // ★ THE ACTIVE PRESET'S AMNESIC FLAG, BOUND HERE FOR settingsAtDefaults BELOW (round-22 Q5).
+      // ★ THE ACTIVE PRESET'S AMNESIC FLAG, BOUND HERE FOR settingsAtDefaults BELOW (round 22).
       // It is NOT a ⚙ setting — it lives on the registry (store/presets' `Preset.amnesic`) for the
       // reasons store/amnesic argues at length — but Save Defaults CAPTURES it and Reset Settings /
       // Full Reset RESTORE it, so it is one of the values "back to my defaults" is talking about and
@@ -547,7 +547,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
 
       const activeTheme=useSystem?(systemIsDark?darkTheme:lightTheme):manualTheme;
       useEffect(()=>{const mq=window.matchMedia("(prefers-color-scheme: dark)");const h=(e: MediaQueryListEvent)=>setSystemIsDark(e.matches);mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);},[]);
-      // ★★ THE STATUS BAR UNDER A MODAL (round 21 Q8; round 22 Q7; round 23 Q1) — the app's ONE account
+      // ★★ THE STATUS BAR UNDER A MODAL (round 21; round 22; round 23) — the app's ONE account
       // of how the phone's status-bar strip gets its colour. index.css's layout note points here rather
       // than keeping a second version; there used to be two, and they contradicted each other.
       // THE DEFECT: a modal's scrim (`fixed inset-0 z-[60] bg-black/40`) dims the whole page but not
@@ -643,7 +643,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // App-side useRefs, exactly like settingsPopoverRef: the panel attaches them, the hook's two
       // focus guards read them, and nothing else touches them.
       const minInputRef=useRef<HTMLInputElement | null>(null),maxInputRef=useRef<HTMLInputElement | null>(null);
-      // Lookup history persists across reloads (Stage D1), and since Q1 (round 20) is SHARED across
+      // Lookup history persists across reloads (Stage D1), and since round 20 is SHARED across
       // every preset instead of living inside the progress store: sourced from store/lookupHistory's
       // two stores instead of local useState. lookupHistory is the PERMANENT shared list;
       // sessionLookupEntries is this browsing session's overflow for lookups made while the ACTIVE
@@ -827,7 +827,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // [] deps because it needs nothing from render: a ref call and a stable setter. The stable
       // identity that falls out of that is what keeps the keydown effect from re-subscribing on
       // every render — a nicety, not a requirement (that effect only swaps one window listener).
-      // ⚠ Q3 (round 21): switchMode also PERSISTS the page per preset now (store/sessionMode,
+      // ⚠ Round 21: switchMode also PERSISTS the page per preset now (store/sessionMode,
       // sessionStorage — survives a reload, gone on a full close). It resolves a functional updater
       // against modeRef (it has [] deps and cannot read `mode`), records the resolved page under the
       // ACTIVE preset's id, then commits. Every path still routes through here — the bar's mode
@@ -914,7 +914,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // container.
       // The listener is paired with observeScrollExtent (components/scrollRegion) on the same
       // element, because a scroll event answers only "where is the scroller" and the edge question
-      // also asks "how much content is there" — see round 11 Q4 below.
+      // also asks "how much content is there" — see round 11 below.
       // What it drives, in two languages (round 10 item B):
       //   • CONTINUOUS — the bar's boundary shadow, and in guide mode the two doc-fade strips, all
       //     via the 0…1 --shade written straight onto those elements. Strength is a function of
@@ -991,7 +991,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         return()=>{el.removeEventListener('scroll',evaluate);stopExtent();};
       },[mode]);
       // Root-scroll invariant on MOUNT and on BFCache restore — nothing else. The division of
-      // labour, stated explicitly because this effect used to overreach (Q6, round 8):
+      // labour, stated explicitly because this effect used to overreach (round 8):
       //   • the scroll-ownership layout effect above owns the position on a mode switch (restore
       //     for the guide, top for everything else), and fullReset owns it on a reset (it zeroes
       //     the scroller inline, and clears the guide's saved position with it).
@@ -1012,7 +1012,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //     rAF + setTimeout because iOS Safari applies that restoration AFTER the event fires.
       //     window/documentElement/body are still reset alongside (body has overflow:hidden so it
       //     cannot scroll, but a restore might try anyway).
-      //   • A BFCACHE RESTORE (event.persisted) IS SKIPPED ENTIRELY (Q3, round 11) — the opposite
+      //   • A BFCACHE RESTORE (event.persisted) IS SKIPPED ENTIRELY (round 11) — the opposite
       //     case, and the reason the gate exists. `pageshow` fires for both a genuine load and a
       //     back-forward-cache restore, and a restore is not a navigation: the JS heap is kept
       //     alive, so the app comes back in the SAME mode with the SAME DOM it left. Whatever
@@ -1023,7 +1023,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //     in a second event; round 9 then built the guide's position preservation on top of it.
       //     The invariant above is untouched by the gate: a restore cannot smuggle in a stale
       //     offset, because the mode that produced it is the mode being restored.
-      //   • BACKGROUNDING NOW MOVES NOTHING — a deliberate behaviour CHANGE (Q6, round 8), not a
+      //   • BACKGROUNDING NOW MOVES NOTHING — a deliberate behaviour CHANGE (round 8), not a
       //     tidy-up. There was a visibilitychange→reset listener here calling this same reset(),
       //     which zeroes the inner scroller too: switching apps and coming back jumped you to the
       //     top of whatever you were reading. That was invisible for a long time only because the
@@ -1091,7 +1091,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // this before revealing the app (the rare same-boot overlap: a freshly-downloaded new build
       // AND an even newer version already waiting).
       const updateReloadPendingRef=useRef(false);
-      // ══ Q7 (round 11): "Check for updates" ACTUALLY CHECKS ═══════════════════════════════════
+      // ══ round 11: "Check for updates" ACTUALLY CHECKS ═══════════════════════════════════
       // It used to show the Updating screen and run forceReloadLatest unconditionally — claiming an
       // update on every press and destroying the offline copy even on the presses where nothing had
       // changed. Now it asks first. The feature is three parts and App owns exactly one of them:
@@ -1235,7 +1235,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // in the sessionStorage attempt counter (the loop breaker — see readUpdateAttempts): after 2
       // straight failed attempts the flow is SKIPPED, the counter cleared, and the app renders on the
       // old version instead of looping Updating→reload forever.
-      // Q10a (round 11) — BOTH ways the registration can fail now REPORT instead of vanishing. The
+      // Round 11 — BOTH ways the registration can fail now REPORT instead of vanishing. The
       // dynamic import's rejection (the ./sw.js chunk itself failing to load) is captured below, and
       // the registration call's own failure is captured inside src/sw.ts via onRegisterError. Either
       // one leaves the app running with NO service worker — no offline copy, no update path, and
@@ -1294,7 +1294,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         }).catch(()=>{});
         return ()=>{cancelled=true;gate?.cancel();if(engageOnCss)window.removeEventListener('app-css-ready',engageOnCss);if(onControllerChange)navigator.serviceWorker.removeEventListener('controllerchange',onControllerChange);};
       },[]);
-      // Q2 (round 6): the cold-open build-change "Updating" flash — the visible signal for updates
+      // Round 6: the cold-open build-change "Updating" flash — the visible signal for updates
       // that land SILENTLY, with nothing waiting for the auto flow above to bridge. The primary case:
       // closing the app releases the old worker's last client, the browser completes the waiting
       // worker's activation in the background, and the next open is already the new version (an
@@ -1655,7 +1655,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚠ WHAT IT DELIBERATELY DOES **NOT** TOUCH: the settings/progress/modePrefs stores (Full
       // Reset resets those separately and BEFORE calling here, so the modes re-hydrate from the
       // emptied store; a switch must not, or it would wipe the preset it just opened).
-      // ⚠ THE CURRENT PAGE IS NO LONGER LEFT ALONE ON A PRESET SWITCH (round-21 Q3). It used to be —
+      // ⚠ THE CURRENT PAGE IS NO LONGER LEFT ALONE ON A PRESET SWITCH (round 21). It used to be —
       // "no store has ever held a last mode" — but the page is now a per-preset, session-lived fact
       // (store/sessionMode). remountScreens itself still does not set it; the registry subscription
       // just below does, right after calling this, so the switch's remount and its page change land
@@ -1706,7 +1706,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚠ It still ignores everything ELSE in the registry: renaming or creating a preset, or
       // flipping some OTHER preset's amnesic flag, all rewrite the registry value and none of them
       // may throw away a run in progress.
-      // ⚠ Q3 (round 21): the same subscription now also moves the current PAGE — but only when the
+      // ⚠ Round 21: the same subscription now also moves the current PAGE — but only when the
       // ACTIVE PRESET actually changed (s.activeId !== prev.activeId), never on a bare Amnesic
       // toggle of the preset you are already on (which changes activeDataId but not which preset's
       // page you want). The incoming preset shows its session page if it has one this session, else
@@ -1774,7 +1774,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         commitOpenedPreset();
         for(const p of usePresets.getState().presets)setPresetAmnesic(p.id,storedAmnesicDefault(p.id));
       },[]);
-      // ★ COLD-OPEN PAGE (round-21 Q3). `mode` starts "classic" only for the first paint; this
+      // ★ COLD-OPEN PAGE (round 21). `mode` starts "classic" only for the first paint; this
       // one-shot boot effect immediately moves it to the ACTIVE preset's session page — set if a
       // reload preserved it this session — else its `defaultMode` ⚙ setting (a true cold open, where
       // sessionStorage was cleared by the full close). The app-global "open in" pin has ALREADY
@@ -1853,7 +1853,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // store/userDefaults), the factory launch values otherwise. This is the exact MIRROR of Save
       // Defaults, which copies the same 20-value unit the other way — live → the snapshot.
       // ★ 20 IS THE SNAPSHOT'S SIZE, NOT THE GEAR'S. Keep the two apart:
-      //   20 RESTORED / SAVED = the 16 store settings (round-21 Q3 added `defaultMode`) + the 4
+      //   20 RESTORED / SAVED = the 16 store settings (round 21 added `defaultMode`) + the 4
       //      capturable prefs. (This restore also rewrites the 2 year-range text mirrors, which are
       //      stored nowhere and so have nothing to copy back — hence 22 written here, 20 in the
       //      snapshot.) `defaultMode` restores like any other value; it only takes visible effect on
@@ -1862,14 +1862,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //   22 or 21 COMPARED by the gear's "modified" bar: 13 plain settings + the 4 prefs + the
       //      theme trio judged BY WHAT IS IN EFFECT (2 of the three with Use System On —
       //      darkTheme/lightTheme; 1 with it Off — manualTheme) + the 2 year-range TEXT MIRRORS +
-      //      the preset's AMNESIC flag (round-22 Q5 — it was the one captured-and-restored value
+      //      the preset's AMNESIC flag (round 22 — it was the one captured-and-restored value
       //      the comparison had never included, which made Save Defaults unreachable for an
       //      amnesic-only change; settingsAtDefaults below argues it).
       //      The dormant theme value(s) — one with Use System On, TWO with it Off — are never
       //      compared; settingsAtDefaults below says why at length.
       // ⚠ SO IT IS NOT A SUBSET OF THE 20 IN EITHER DIRECTION, and two rounds put it that way. The
       // 2 mirrors are compared but not saved (round 15). AMNESIC is the reverse — saved and
-      // restored but, until round-22 Q5, not compared — and it IS restored by the line at the foot
+      // restored but, until round 22, not compared — and it IS restored by the line at the foot
       // of this function, so "one tap clears a lit gear" holds for it as it does for the mirrors;
       // the mirrors are the ones this restore has to write explicitly (the resetTo line below)
       // because the snapshot has nothing to write back for them.
@@ -1890,7 +1890,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         applySettingsStore(defSettings);
         yearRange.resetTo(defSettings.minY,defSettings.maxY);
         applyModePrefs(defPrefs);
-        // …and (round-20 Q4, owner's explicit, confirmed decision) the SAVED AMNESIC STATE, onto the
+        // …and (round 20, owner's explicit, confirmed decision) the SAVED AMNESIC STATE, onto the
         // ACTIVE preset. setPresetAmnesic no-ops when the flag already matches; when it actually flips
         // it reloads all four per-preset stores (store/presetControl's reloadPresetStores), which is a
         // documented genuine no-op for the two of those four this function just wrote — useSettings
@@ -1945,7 +1945,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // below remounts them and resets every per-screen value to its hook
       // default in the same render. App therefore only resets what IT owns: the current mode,
       // the ⚙ settings (delegated to resetSettings → the Zustand store, the 2 input mirrors, and
-      // — since round-6 Q7 — the 4 capturable mode prefs), the Lookup state, and the scroll position.
+      // — since round 6 — the 4 capturable mode prefs), the Lookup state, and the scroll position.
       // Deliberately NOT a location.reload() — this stays the single source of truth for "back to
       // launch" as offline/profile state is added.
       const fullReset=()=>{
@@ -1955,7 +1955,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         setAppAtBottom(true);
         setAppScrolledFromTop(false);
         // Settings popover → EFFECTIVE defaults (16 store values incl. theme + the 2 transient
-        // input mirrors — the user's saved personal defaults when present). Since round-6 Q7 this
+        // input mirrors — the user's saved personal defaults when present). Since round 6 this
         // ALSO applies the 4 capturable mode prefs; the resetModePrefs()+applyModePrefs(defPrefs) pair
         // below re-establishes them over the factory modePrefs reset, so that write is subsumed here
         // (the net four-pref result is identical) — resetSettings keeps its standalone contract.
@@ -1968,7 +1968,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // persisted store, making Full Reset permanent. Runs BEFORE the remount-key bumps below, so
         // the continuous modes re-hydrate from the now-empty store (blank stats).
         resetProgress();
-        // ⚠ LOOKUP HISTORY LEFT THE PROGRESS STORE (Q1, round 20) BUT NOT FULL RESET'S REACH — the
+        // ⚠ LOOKUP HISTORY LEFT THE PROGRESS STORE (round 20) BUT NOT FULL RESET'S REACH — the
         // owner's explicit call, and it is the ONE thing in this function that is not scoped to the
         // preset you pressed the button from. Every other line here is "wipe THIS preset's copy of
         // something"; Lookup history has exactly one copy, shared by every preset, so wiping it from
@@ -2005,7 +2005,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // the guide, so this clears it AFTER the capture rather than instead of it). ★ THE SAME CALL
         // A PRESET SWITCH MAKES; see remountScreens, which is shared precisely so the two can never
         // drift apart.
-        // …and this preset's PARKED ended round/run (round-21 Q11, store/sessionRound). Full Reset is
+        // …and this preset's PARKED ended round/run (round 21, store/sessionRound). Full Reset is
         // a manual reset — the owner's rule is "only a manual Reset or a full app close clears an
         // ended round" — so it must clear the park BEFORE the remount below, or the timed screens'
         // getInitialState would re-read the still-parked blob and restore the very round this button
@@ -2029,7 +2029,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         discardSessionHistories(usePresets.getState().activeId);
         // How to Play is in the six for its ONE piece of state, the open panel: it used to be
         // conditionally rendered, so leaving it dropped that for free — now that it stays mounted
-        // (Q6, round 9), a reset that left a panel hanging open would not be the launch state.
+        // (round 9), a reset that left a panel hanging open would not be the launch state.
         remountScreens();
         // App container to the top, synchronously — the scroll-ownership effect would do it one
         // commit later, and this avoids the flash in between.
@@ -2049,7 +2049,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ★ AND IT IS THE PANEL, NOT THE STORE — in BOTH directions, which is why it has two terms
       // that are not store settings at all. The last two are the two year-range TEXT MIRRORS
       // (components/useYearRangeMirrors), so a year that has been TYPED but not yet
-      // committed reads as diverged; and since round-22 Q5 there is also the preset's AMNESIC flag,
+      // committed reads as diverged; and since round 22 there is also the preset's AMNESIC flag,
       // which lives on the REGISTRY rather than in any settings store and is compared here because
       // Save Defaults captures it and both reset buttons restore it (argued at the term itself
       // below). That is round 15's change and the OWNER'S REVERSAL of the call
@@ -2113,7 +2113,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // mode-screen prefs.
       // Its complement means "nothing new to save, and nothing for Reset Settings to undo", so those
       // three are literally the same expression and cannot drift apart. (Reset Settings watching the
-      // panel alone would strand a gear lit only by a divergent mode-screen pref — round-6 Q7.)
+      // panel alone would strand a gear lit only by a divergent mode-screen pref — round 6.)
       const settingsModified=!(settingsAtDefaults&&prefsAtDefaults);
       // Every per-mode piece of state now lives in the always-mounted mode components, which
       // each report a comprehensive freshness flag (config + stats + history + UI toggles) up
@@ -2162,7 +2162,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
             the screen edge against a 15.59px gutter on the left. That asymmetry WAS the visible
             symptom, and it is why "just add a fourth control" was never an option.
 
-            WHAT THIS ROW COSTS NOW (Q10, round 21) — the row structure is unchanged from Q6 (ONE
+            WHAT THIS ROW COSTS NOW (round 21) — the row structure is unchanged from Q6 (ONE
             flat flex container; three controls `shrink-0`, content-sized; the FOURTH — the preset
             switcher — `flex-1 min-w-0`, consuming whatever the other three and their gaps do not).
             What Q10 changed is ONE fixed cost: the mode selector's trigger is now pinned to its
@@ -2276,7 +2276,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                 in the bar renders the words. */}
             <h1 className="sr-only">Calendar Game</h1>
             {/* ONE FLAT ROW, four direct children — logo, preset, mode, gear — rather than the two
-                nested shrink-0 groups the bar shipped with (Q6, round 20). `justify-between` is
+                nested shrink-0 groups the bar shipped with (round 20). `justify-between` is
                 GONE too: it existed to put the slack SOMEWHERE between two shrink-0 groups, and
                 once one control is meant to consume that slack itself, a gap between groups is not
                 where it belongs any more — see the budget block above for why the preset switcher
@@ -2284,7 +2284,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                 every other child keeps `shrink-0`, unchanged from before. */}
             <div className="flex items-center gap-1.5">
               {/* ★ THE MARK FOLLOWS THE DOT LAYOUT (Settings → Display → Rotate Dots) — BUT ONLY
-                  WHILE Input IS Dots (Q3, round 20). The app icon IS that 7-dot grid, coordinate
+                  WHILE Input IS Dots (round 20). The app icon IS that 7-dot grid, coordinate
                   for coordinate, so turning the input and leaving the mark upright would break the
                   very claim How-to-Play makes about them — while turning the mark when there are
                   no dots ANYWHERE on screen for it to correspond to is a different bug, and the one
@@ -2485,7 +2485,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               the parent stays at its min-height (one screenful), and flex-auto grows this back to
               fill it. Rests on the same definite-height #root the clamped scroller already needs. */}
           {mode==="lookup"&&(<ModeErrorBoundary mode="Lookup" active={true} onCrash={discardLookupScreen}><div className="mt-5 flex flex-col flex-auto h-0 min-h-0"><LookupCard history={displayLookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div></ModeErrorBoundary>)}
-          {/* How to Play is always-mounted like the five game modes (Q6, round 9), and for the same
+          {/* How to Play is always-mounted like the five game modes (round 9), and for the same
               reason they are: leaving a screen must not destroy what you had set up on it. It used
               to be conditionally rendered, which is why a detour into a game mode closed whichever
               panel you had open — the component was unmounted and its state went with it. The

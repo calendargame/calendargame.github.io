@@ -19,7 +19,7 @@ import { useSettingsCloseEffect } from './useSettingsCloseEffect.js'
 //     refusal of a second in-flight check, and the abort-on-close below.
 //   • THE APPLIER — App's applyUpdate, passed in. It stays in main.tsx deliberately: it raises the
 //     Updating overlay (setUpdating), claims the overlay through to a navigation
-//     (updateReloadPendingRef, shared with the Q2 build-change flash), and drives the reload gate /
+//     (updateReloadPendingRef, shared with the build-change flash), and drives the reload gate /
 //     forceReloadLatest — all App-and-module-scope machinery this hook has no business owning. From
 //     here it is simply "there is something to get; take it from here". It answers whether it TOOK
 //     the update. When it did it is TERMINAL: every route out of it navigates, so nothing below runs

@@ -51,7 +51,7 @@ const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
 
 const dayBtn = (name) => screen.getByRole('button', { name })
 const ctrl = (name) => screen.getByRole('button', { name })
-// Q7 round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm — the
+// Round 21: Reset Stats confirms through the shared ConfirmModal. Open it, then confirm — the
 // confirm button is resolved WITHIN the dialog so it never collides with the always-present mode
 // button of the same name.
 const resetStatsDialog = () => screen.getByRole('dialog', { name: 'Reset Stats?' })
@@ -75,7 +75,7 @@ function statCell(label) {
 }
 // ⚠ Reads the value through its OWN marker, [data-statval] — the auto-fit target StatPanel puts on
 // the value span — and NOT "the cell's last span". A cell can carry a trailing screen-reader-only
-// span (the "Off" that names a blanked group, C1 round 16), and last-span would read that instead of
+// span (the "Off" that names a blanked group, round 16), and last-span would read that instead of
 // the value. The marker names the one element that IS the readout, so it cannot drift again.
 function statValue(label) {
   return statCell(label).querySelector('[data-statval]').textContent.trim()
@@ -204,7 +204,7 @@ describe('Classic — characterization (batch 2: live Override paths)', () => {
     fireEvent.click(ctrl('Override'))
     expect(statValue('Score')).toBe('0/1')
     expect(statValue('Streak')).toBe('0/0')
-    // Where Override used to go inert, the same button now reads Undo (round 23 Q6).
+    // Where Override used to go inert, the same button now reads Undo (round 23).
     expect(screen.queryByRole('button', { name: 'Override' })).toBeNull()
     expect(isDisabled(ctrl('Undo'))).toBe(false)
   })
@@ -283,7 +283,7 @@ describe('Classic — characterization (batch 3: Back/Forward + history Override
   })
 })
 
-// ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
+// ── Override ⇄ Undo (round 23) ─────────────────────────────────────────────────────────────
 // "everything will either say override or undo, no locked override anymore. We just gotta store what
 // you got wrong so that if you get smth wrong then override then later come back to that question by
 // browsing or from another preset or smth and undo there it shows your original red highlight(s)."
@@ -906,7 +906,7 @@ describe('Classic — Q2 (settings regen deferred to popover close)', () => {
 })
 
 // ── Q2 / Q7: Reset Stats confirmation popup ───────────────────────────────────
-// The Reset Stats button opens a ConfirmModal (Q7 round 21 replaced the two-tap in-place arm) and
+// The Reset Stats button opens a ConfirmModal (round 21 replaced the two-tap in-place arm) and
 // only clears on the popup's Confirm — preventing an accidental wipe of lifetime stats (it's also
 // the `S` shortcut). The popup + has-data gate live in the shared useResetStatsConfirm hook, used
 // identically by Flash + Deduction, so pinning it on Classic covers all three.

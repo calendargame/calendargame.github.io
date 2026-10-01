@@ -20,7 +20,7 @@ describe('checkStatsInvariants — passes healthy stats', () => {
     expect(
       checkStatsInvariants({ played: 5, good: 3, streak: 2, best: 3, times: [1, 2, 3] }, 'stats'),
     ).toEqual([]))
-  // A save the old 1,000-time cap trimmed (round 23 Q3): its lost times are a baseline beside the kept.
+  // A save the old 1,000-time cap trimmed (round 23): its lost times are a baseline beside the kept.
   it('a legacy baseline that, with the kept times, accounts for no more than the credits', () =>
     expect(
       checkStatsInvariants(
@@ -174,7 +174,7 @@ describe('checkGameInvariants — the card-number ledger', () => {
   })
 })
 
-// ── The per-card Override record (round 23 Q6) ─────────────────────────────────────────────────
+// ── The per-card Override record (round 23) ─────────────────────────────────────────────────
 // Every scored card holds two fixed states — A (as answered) and O (overridden) — and its credit is
 // A.credited XOR overridden. A card in O stores its A in `meta.answered`; these tripwires catch a
 // record that has come apart from the card it describes, which is the one way a toggle could

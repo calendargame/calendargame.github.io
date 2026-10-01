@@ -15,7 +15,7 @@ import type { FormatId } from '../lib/format.js'
 import type { InputStyle, DefaultMode } from '../store/settings.js'
 import type { DotRotation } from '../lib/dotLayout.js'
 
-// Default Mode — the page a preset OPENS ON (round-21 Q3). Seven choices = the seven entries of the
+// Default Mode — the page a preset OPENS ON (round 21). Seven choices = the seven entries of the
 // bar's mode CustomSelect (main.tsx MODE_LABELS), split across TWO stacked PillTrays reading and
 // writing the ONE `defaultMode` setting (the Date Format family pattern): the five practice modes
 // on the first row, Lookup + How to Play on the second. Whichever row does not hold the active
@@ -52,7 +52,7 @@ export const INPUT_STYLES: { value: InputStyle; label: string }[] = [
   { value: 'buttons', label: 'Buttons' },
   { value: 'dots', label: 'Dots' },
 ]
-// Rotate Dots — how far the 7-dot layout turns, counterclockwise (round-23 Q6; a picker again after
+// Rotate Dots — how far the 7-dot layout turns, counterclockwise (round 23; a picker again after
 // round 20's two-option switch — components/SettingsPanel's Rotate Dots block tells the story). The
 // values are lib/dotLayout's DotRotation, listed in DOT_ROTATIONS order. Every label is unique in
 // the panel, so no ariaLabel.

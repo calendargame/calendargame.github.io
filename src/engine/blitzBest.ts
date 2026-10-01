@@ -15,13 +15,13 @@
 // No "is this the same round?" question is ever asked, because the answer is structural: only THIS
 // round can have moved the record since `pre` was taken (the config — the Best key — is locked while
 // a round exists). That one rule covers the new high, the Override that raises it, the Override that
-// drops it back (never below an earlier round — the C2 fix), and a drop all the way back.
+// drops it back (never below an earlier round — the cross-round rollback fix), and a drop all the way back.
 // ⚠ WHAT IT REPLACED, and why: the old fold took the CURRENT record plus a numeric floor and, on a
 // drop, wrote `max(good, floor)` while KEEPING the round's id — so when the floor won, an earlier
 // round's score came back credited to the round that had just lost it (a wrong Same Round tag, and,
 // now that ★ is derived from the id, a wrong ★). It also asked `cur.scoreRoundId === roundId` to
 // recognise its own round, which a round-id counter that restarted at 1 on every screen load answered
-// "yes" for a stranger's record — the lowering half of Q2's Amnesic bug.
+// "yes" for a stranger's record — the lowering half of round 23's Amnesic contamination bug.
 //
 // `undefined` in either direction means NO RECORD: a round begun on a config with none, that has not
 // beaten 0 on either field, leaves none behind (rather than a record of 0 that says a round scored

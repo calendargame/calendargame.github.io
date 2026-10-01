@@ -17,13 +17,13 @@ import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './pre
 // defaults differ (Classic/Deduction launch with timing hidden, Flash with it shown). Those
 // three non-round toggles feed useGameEngine's `timingOff` (timing actually pauses while hidden,
 // with the desync-arm on re-enable). Blitz and AoX instead carry a VISUAL-ONLY timing toggle
-// (blitzTimingOff/aoxTimingOff, launch SHOWN, Q8): it blanks the timing trio's display but never
+// (blitzTimingOff/aoxTimingOff, launch SHOWN): it blanks the timing trio's display but never
 // stops the engine clock — round/run timing is structural (the score/average is the mode), so
 // there is no arm/reset and hiding can never desync. `allowMistakes` is likewise namespaced
 // (blitz*/aox*).
 //
 // NOT here (intentionally): the current page — a preset's opening page is the `defaultMode` ⚙
-// setting in store/settings, and its live session page is store/sessionMode (round-21 Q3); and any
+// setting in store/settings, and its live session page is store/sessionMode (round 21); and any
 // mid-game state — a half-finished timed run can't fairly resume.
 //
 // Same pattern as settings.ts: Zustand `persist` (localStorage 'cg-modeprefs-v1',
@@ -42,12 +42,12 @@ export type ModePrefsValues = {
   blitzQSec: number
   blitzPerQ: boolean
   blitzAllowMistakes: boolean
-  blitzTimingOff: boolean // VISUAL-ONLY (Q8): blanks the timing trio; the engine keeps timing
+  blitzTimingOff: boolean // VISUAL-ONLY: blanks the timing trio; the engine keeps timing
   // AoX
   aoxN: string
   aoxAllowMistakes: boolean
   aoxOneByOne: boolean
-  aoxTimingOff: boolean // VISUAL-ONLY (Q8): blanks the LIVE trio; a completed run still shows its result
+  aoxTimingOff: boolean // VISUAL-ONLY: blanks the LIVE trio; a completed run still shows its result
   // Deduction
   dedType: string
   dedTimingOff: boolean
@@ -81,7 +81,7 @@ export type ModePrefsState = ModePrefsValues & {
 
 // The launch defaults — single source of truth, reused by resetModePrefs(). Timing hidden by
 // default in Classic/Deduction, shown in Flash; Blitz and AoX launch with their VISUAL-ONLY
-// timing SHOWN (blitzTimingOff/aoxTimingOff false — Q8). The Flash reveal (2s) and Blitz
+// timing SHOWN (blitzTimingOff/aoxTimingOff false). The Flash reveal (2s) and Blitz
 // per-question countdown (10s) launch at beginner-friendly lengths (Round-2 timer audit,
 // 2026-07-12, owner-ratified — a newcomer doing the mental method needs the headroom; elites
 // turn them down).

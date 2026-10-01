@@ -11,7 +11,7 @@
 //     "Same Round" for a best score and a best streak set on different days;
 //   • Blitz's old same-round rollback (`cur.scoreRoundId === roundId`), which let a new round 1
 //     "roll back" a record an old round 1 had set — the lowering half of the Amnesic contamination
-//     bug (Q2);
+//     bug (round 23);
 //   • and the ★, which is now DERIVED from exactly this comparison (isNewBest below), so a colliding
 //     id would light a ★ on a record the round on screen never touched.
 // So the id is drawn from the wall clock (milliseconds × 1024) plus ten random bits, and never goes

@@ -68,7 +68,7 @@ export { isOffered, isDimmed }
 // itself is cleared. Three of the seven files omitted it and got away with it only because they
 // never save a snapshot. Including it costs those three nothing and removes the trap.
 //
-// LOOKUP HISTORY IS THE SAME TRAP, ONE STORE OVER (Q1, round 20). It is no longer one of the four
+// LOOKUP HISTORY IS THE SAME TRAP, ONE STORE OVER (round 20). It is no longer one of the four
 // per-preset stores above — it moved to its own store/lookupHistory, precisely because it is SHARED
 // across every preset rather than swapped per preset — but it is still an in-memory module
 // singleton `localStorage.clear()` cannot reach, so a case that looks something up leaks it into
@@ -564,7 +564,7 @@ export const changelogDot = () => updateDot(changelogLink())
 // ⚠ 'Amnesic' is the one entry that is NOT a ⚙ setting: the value belongs to the PRESET
 // (store/presets' `Preset.amnesic`) and is written through store/presetControl rather than through
 // useSettings. That is a fact about STORAGE only — it IS captured by the Save Defaults snapshot
-// (round-20 Q4) and it DOES light the gear (round-22 Q5, which fixed the bug that omission caused:
+// (round 20) and it DOES light the gear (round 22, which fixed the bug that omission caused:
 // Save Defaults was dimmed and inert for an Amnesic-only change, so the capture was unreachable).
 // It is listed here because this list is "every On/Off switch in the panel", which is a question
 // about the panel, not about the store.
@@ -795,13 +795,13 @@ export function arrowPicker(name, key) {
 // 'Confirm?' once armed, and Check for updates has four labels because the label is its state.
 export const footerButton = (name) => panel().getByRole('button', { name })
 
-// The Full Reset FOOTER BUTTON. Its caption is static now (Q7 round 21 replaced the two-tap arm —
+// The Full Reset FOOTER BUTTON. Its caption is static now (round 21 replaced the two-tap arm —
 // which swapped it to "Confirm?" — with a ConfirmModal), so a plain name match is enough. The
 // popup's own confirm button is reached through confirmFullReset() / fullResetConfirmCard() below,
 // not through this.
 export const fullResetButton = () => footerButton('Full Reset')
 
-// THE FULL RESET CONFIRMATION POPUP (Q7 round 21) — the shared ConfirmModal the footer button now
+// THE FULL RESET CONFIRMATION POPUP (round 21) — the shared ConfirmModal the footer button now
 // opens. Resolved by its published accessible name, like every other modal in the suite.
 export const FULL_RESET_CONFIRM_TITLE = 'Full Reset this preset?'
 export const fullResetConfirmCard = () =>
@@ -818,7 +818,7 @@ export function fireFullReset() {
   tap(within(fullResetConfirmCard()).getByRole('button', { name: 'Full Reset' }))
 }
 
-// THE RESET SETTINGS CONFIRMATION POPUP (Q7 round 21) — Reset Settings had no confirmation before
+// THE RESET SETTINGS CONFIRMATION POPUP (round 21) — Reset Settings had no confirmation before
 // this round; it is the shared ConfirmModal now, opened by the footer button.
 export const RESET_SETTINGS_CONFIRM_TITLE = 'Reset Settings for this preset?'
 export const resetSettingsConfirmCard = () =>
@@ -868,7 +868,7 @@ export function offers() {
 }
 
 // THE WHOLE "NOT OFFERED" TREATMENT ON A FOOTER BUTTON, ASSERTED AS ONE CLAIM — the same shape as
-// expectLock above, and for the same reason. Round 15 (B7) made withholding a THREE-part statement
+// expectLock above, and for the same reason. Round 15 made withholding a THREE-part statement
 // and the only useful question is whether the parts agree: the class DRAWS it unavailable, the
 // aria-disabled ANNOUNCES it unavailable, and the handler guard makes it INERT. Asked one facet at
 // a time, "greyed and unpressable but announced to a screen reader as an ordinary live button"
@@ -889,14 +889,14 @@ export function footerOfferState(name) {
 }
 
 // The three footer captions in left-to-right order — what the row READS. All three are static text
-// now (Q7 round 21 froze the last one — "Full Reset" no longer swaps to "Confirm?").
+// now (round 21 froze the last one — "Full Reset" no longer swaps to "Confirm?").
 export const footerCaptions = () => [
   footerButton('Save Defaults').textContent.trim(),
   footerButton('Reset Settings').textContent.trim(),
   fullResetButton().textContent.trim(),
 ]
 
-// FULL RESET, as the user meets it (Q7 round 21): the button's caption (static now), whether it is
+// FULL RESET, as the user meets it (round 21): the button's caption (static now), whether it is
 // being offered, and whether its confirmation popup is currently up.
 export function fullResetState() {
   const el = fullResetButton()
@@ -1088,7 +1088,7 @@ export function panelValues() {
     dateFormat: pickerChosen('Date Format'),
     input: pickerChosen('Input'),
     dotRotation: pickerChosen('Rotate Dots'),
-    // Default Mode (round-21 Q3) — a two-tray PillGroup like Date Format; pickerChosen reads the lit
+    // Default Mode (round 21) — a two-tray PillGroup like Date Format; pickerChosen reads the lit
     // pill across both trays. Reported here so the "Reset Settings returns every value the panel
     // shows" round-trip covers it too.
     defaultMode: pickerChosen('Default Mode'),
@@ -1173,7 +1173,7 @@ export function checkUpdatesState() {
 // `openModal` loop below is about. A case that means the confirmation asks for that title by name,
 // and tests/presetManager.dom is where those live.
 //
-// ⚠ `fullReset` and `resetSettings` (Q7 round 21) are the shared ConfirmModal, opened by their
+// ⚠ `fullReset` and `resetSettings` (round 21) are the shared ConfirmModal, opened by their
 // footer buttons. Like `save`, they open only while `settingsModified` — so any sweep over
 // MODAL_KEYS that already arranges a divergence for `save` (every one does, via makeSaveable())
 // reaches them too. Their `openModal` only OPENS the popup; the reset itself needs the modal's own

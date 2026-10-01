@@ -350,7 +350,7 @@ const ruleBody = (re) => {
 
 describe('index.css — the rules the move re-hosted, and the clamps it made permanent', () => {
   it('hosts the reading line on the scrollport itself, as bar + ONE PANEL GAP', () => {
-    // The gap, not the feather (Q5 round 9). The fixed bar hides everything above --bar-h, so
+    // The gap, not the feather (round 9). The fixed bar hides everything above --bar-h, so
     // seating the tapped panel one panel-gap below it lands the bottom edge of the panel above
     // exactly on the bar's underside — out of frame. bar + --fade-h overshot by 24 − 8.46 = 15.5px
     // and left that much of the previous panel showing, which is the bug that fixed.

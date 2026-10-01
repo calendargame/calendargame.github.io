@@ -1,5 +1,5 @@
 // dedPuzzle — the Deduction puzzle generator and its answer-grid data. Extracted verbatim from
-// main.tsx (Q1 phase 1).
+// main.tsx (the main.tsx split).
 //
 // Like dateGen, this had to come out BEFORE DeductionMode: the mode calls makeDedPuzzle, so
 // leaving the generator in main.tsx would have made the extracted mode import main.tsx — a cycle,

@@ -687,7 +687,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
   // All three now short-circuit on the same condition that dims them, so all three do NOTHING; the
   // three cases below assert that one at a time, because a rewrite that drops a guard is invisible
   // without them and the failure it ships is a popup with nothing in it.
-  // Round 15 (B7) found the ANNOUNCEMENT half that was left: those same buttons were still a tab
+  // Round 15 found the ANNOUNCEMENT half that was left: those same buttons were still a tab
   // stop announcing themselves as ordinary live buttons, so a keyboard user reached one, was told
   // nothing, pressed it and got nothing. They now carry aria-disabled — deliberately not a real
   // `disabled`, which would have removed them from the tab order instead of explaining them. The

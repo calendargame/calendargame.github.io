@@ -8,7 +8,7 @@
 // The shipped example was the Lookup history list's max-h-[440px], which round-7 RESTORED after a
 // Tailwind glue bug had silently killed it (see tests/classGlueGuard.test.js). 440px was tuned on
 // one phone; on a smaller one the list pushed the Show Codes panel off-screen and the whole page
-// scrolled. Round-8 Q2 replaced the cap itself with measured flex layout — the list simply takes
+// scrolled. Round 8 replaced the cap itself with measured flex layout — the list simply takes
 // the room that's left — and this guard keeps the shortcut from coming back.
 // SCOPE — the VERTICAL axis only, and only fixed px:
 //   • banned:  h-[64px]  min-h-[40px]  max-h-[440px]

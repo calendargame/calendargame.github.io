@@ -19,7 +19,7 @@
 // the list's scroll region ever shows its fades, and whether a newly created preset scrolls into
 // view are ALL DEVICE QUESTIONS and only the owner's iPhone can answer them. What is asserted below
 // is the structure and the behaviour those outcomes rest on.
-// ⚠ AND — SPECIFICALLY FOR THE RENAME FIELD'S WIDTH CAP (Q6, round 20) — lib/presetNameWidth's own
+// ⚠ AND — SPECIFICALLY FOR THE RENAME FIELD'S WIDTH CAP (round 20) — lib/presetNameWidth's own
 // measurement is MOCKED in this file rather than exercised for real: jsdom has no canvas either
 // (verified in tests/presetNameWidth.dom, which owns the real mechanism end to end, fake canvas and
 // all), so what belongs here is narrower — does PresetManager's onChange call that function with
@@ -190,7 +190,7 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
     })
     openManager()
     // Guest (id 3) — a preset you are NOT on, which only the registry can answer for. Set AFTER
-    // mountApp(): round-21 Q1 reseeds every preset's Amnesic flag from its saved default on a cold
+    // mountApp(): round 21 reseeds every preset's Amnesic flag from its saved default on a cold
     // open, and Guest has no saved defaults, so a flag set before the mount would be cleared by
     // that boot pass. The manager re-renders off the registry subscription, so the marker appears.
     act(() => setPresetAmnesic(3, true))
@@ -300,7 +300,7 @@ describe('renaming', () => {
     expect(registry().presets[0].name).toBe('Half')
   })
 
-  // ── The live, pixel-width typing cap (Q6, round 20) ─────────────────────────────────────────
+  // ── The live, pixel-width typing cap (round 20) ─────────────────────────────────────────
   //
   // lib/presetNameWidth is MOCKED for this whole file (see the ⚠ at the top) — these cases are
   // about the WIRING: does every keystroke reach it with the raw candidate, does the field show
@@ -408,7 +408,7 @@ describe('renaming', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// reordering — the DRAG HANDLE (Q7, round 20), replacing the ↑/↓ buttons this round removed.
+// reordering — the DRAG HANDLE (round 20), replacing the ↑/↓ buttons this round removed.
 //
 // Three groups: the KEYBOARD path (ArrowUp/ArrowDown on the handle — fully provable in jsdom, no
 // layout needed), the POINTER path (a real pointerdown → pointermove → pointerup/cancel sequence
@@ -1068,7 +1068,7 @@ describe('deleting', () => {
       id = createPreset('Guest').id
     })
     openManager()
-    // ⚠ AFTER THE MOUNT, NOT BEFORE IT. main.tsx's cold-open reseed (round-21 Q1) walks every preset
+    // ⚠ AFTER THE MOUNT, NOT BEFORE IT. main.tsx's cold-open reseed (round 21) walks every preset
     // on app open and puts its Amnesic flag back to that preset's saved default — so a flag set
     // before mountApp would be switched off again before the first render, and this case would
     // silently be testing an ordinary fresh preset instead.

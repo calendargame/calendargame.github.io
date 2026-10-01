@@ -134,10 +134,10 @@ export type PresetRegistryValues = {
   openInPreset: OpenInPreset
 }
 
-// ★★ HOW LONG A PRESET NAME MAY BE — round 20 Q6 CHANGED WHAT THIS NUMBER IS FOR, and that is
+// ★★ HOW LONG A PRESET NAME MAY BE — round 20 CHANGED WHAT THIS NUMBER IS FOR, and that is
 // worth stating before the number itself. It used to be DERIVED, pinned exactly to the switcher's
 // then-FIXED display cell (6em at text-sm, ≈12 characters) so that a typed name could never
-// truncate under ordinary conditions. Q6 made that cell FLEXIBLE — it now grows with the top bar
+// truncate under ordinary conditions. Round 20 made that cell FLEXIBLE — it now grows with the top bar
 // (components/PresetSwitcher's PRESET_NAME_COL is a MINIMUM width today, not a fixed one) — and
 // put a LIVE, PIXEL-MEASURED cap on the one place a name is actually typed (the rename field,
 // components/PresetManager, measured against the switcher's own current rendered width — see
@@ -185,7 +185,7 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
   presets: [{ id: FIRST_PRESET_ID, name: defaultPresetName(FIRST_PRESET_ID), amnesic: false }],
   activeId: FIRST_PRESET_ID,
   nextId: FIRST_PRESET_ID + 1,
-  // 'last' is the behaviour every build before round-21 Q3 had: use the persisted activeId as-is.
+  // 'last' is the behaviour every build before round 21 had: use the persisted activeId as-is.
   openInPreset: 'last',
 })
 
@@ -224,7 +224,7 @@ export function normalizeRegistry(
   const activeId = presets.some((p) => p.id === raw?.activeId) ? raw!.activeId! : presets[0].id
   // The "open in" pin, screened the same way everything else here is: 'last' passes; a preset id
   // passes only while that preset still exists; anything else (a deleted id, a string, a tampered
-  // value, or the absent key of a pre-Q3 payload) collapses to 'last'. So a pin whose preset was
+  // value, or the absent key of a payload from before the pin existed) collapses to 'last'. So a pin whose preset was
   // deleted since it was set self-heals to 'last' on the next hydrate — the mid-session deletePreset
   // also clears it eagerly, but this is the backstop that does not depend on that path running.
   const rawPin = raw?.openInPreset
@@ -324,8 +324,8 @@ export const usePresets = create<PresetRegistryState>()(
           PERSISTED_KEYS.map((k) => [k, state[k]]),
         ) as Partial<PresetRegistryState>,
       // No `migrate` yet — v1 is the first shape there has ever been, so there is no older payload
-      // in existence to rewrite. `openInPreset` (round-21 Q3) is additive: normalizeRegistry turns
-      // its absent key into 'last', which is the pre-Q3 behaviour, so no migrate step is owed. The
+      // in existence to rewrite. `openInPreset` (round 21) is additive: normalizeRegistry turns
+      // its absent key into 'last', which is the behaviour before the pin existed, so no migrate step is owed. The
       // version field is here so that a future shape change HAS a gate to hang off; the
       // unconditional screen below is what guards the go-forward path, and it is the one that runs
       // on every load at every version.

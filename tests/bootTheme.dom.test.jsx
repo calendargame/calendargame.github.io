@@ -152,7 +152,7 @@ describe('index.html boot theme script', () => {
     expect(painted()).toBe('nebula')
   })
 
-  // ★ THE "OPEN IN" PIN (round-21 Q3). The script resolves it the same way store/presets' hydrate
+  // ★ THE "OPEN IN" PIN (round 21). The script resolves it the same way store/presets' hydrate
   // `merge` does, so the first painted frame already wears the pinned preset's theme — otherwise
   // it would paint the last-active preset's and App's hydrate would repaint a frame later.
   it('paints the PINNED preset’s theme when openInPreset names a live preset', () => {

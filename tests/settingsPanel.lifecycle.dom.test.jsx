@@ -109,7 +109,7 @@ function freshApp(setup) {
 
 // A PERSONAL DEFAULTS SNAPSHOT, seeded before the mount. Needed by every case that involves the
 // 'Clear Saved Defaults' link, which the footer now always renders but leaves dimmed and locked
-// until a snapshot exists (round-20 Q5) — this is what makes it reachable.
+// until a snapshot exists (round 20) — this is what makes it reachable.
 function seedSavedDefaults() {
   const prefs = useModePrefs.getState()
   useUserDefaults.getState().saveDefaults({

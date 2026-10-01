@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 //
-// lookupCard.dom.test.jsx — LookupCard's BEHAVIOUR (round-8 Q2, extended by round-11 Q2). The
+// lookupCard.dom.test.jsx — LookupCard's BEHAVIOUR (round 8, extended by round 11). The
 // component had no behaviour test at all before round 8: scrollRegion.dom pins its geometry
 // classes, lookupHistory.* pins the saved shape (progress.* did, before Q1/round 20 moved it out),
 // but nothing described what the card actually does when you type into it.
 //
 // Three contracts are locked here.
 //
-// 1. The ANSWER SLOT is always present, at a constant height, in every state. Before round-8 Q2 the
+// 1. The ANSWER SLOT is always present, at a constant height, in every state. Before round 8 the
 //    result line rendered only when there was a result, so the panel below it jumped by a line the
 //    moment you pressed Lookup and jumped back when you pressed Clear. Now the slot always exists:
 //    it shows the hint when there is nothing to say, and the answer or the error when there is.
-//    Round-11 Q2 made it three EXPLICIT ROWS — the date, then the reading(s) — instead of a
+//    Round 11 made it three EXPLICIT ROWS — the date, then the reading(s) — instead of a
 //    sentence whose wrap decided the height. (The HEIGHT is a class contract — jsdom lays nothing
 //    out — so the test asserts the reserving class is on the node, plus that the node itself never
 //    disappears, plus that the row COUNT is what the reserve was sized for.)
@@ -104,7 +104,7 @@ const lookup = (container, text) => {
   fireEvent.click(screen.getByRole('button', { name: 'Lookup' }))
 }
 
-describe('Lookup answer slot — always rendered, constant height (round-8 Q2 / round-11 Q2)', () => {
+describe('Lookup answer slot — always rendered, constant height (round 8 / round 11)', () => {
   afterEach(cleanup)
 
   it('a fresh card shows the hint, in the dimmer tone, in a three-line slot', () => {
@@ -186,7 +186,7 @@ describe('Lookup answer slot — always rendered, constant height (round-8 Q2 / 
     expect(screen.getByText('No lookups yet')).toBeTruthy()
   })
 
-  // The HARD constraint from round-8 Q2: the hint is a render-time fallback, never state. main.tsx
+  // The HARD constraint from round 8: the hint is a render-time fallback, never state. main.tsx
   // computes isFullyReset from lookupOutput === "" — if the hint were ever written into that
   // state, the Full Reset button would silently unlock on a brand-new, untouched app.
   it('lookupOutput stays "" while the hint shows, and while an ANSWER shows', () => {
@@ -203,12 +203,12 @@ describe('Lookup answer slot — always rendered, constant height (round-8 Q2 / 
   })
 })
 
-describe('Lookup — the Oct 5–14, 1582 gap (round-8 Q2)', () => {
+describe('Lookup — the Oct 5–14, 1582 gap (round 8)', () => {
   afterEach(cleanup)
 
   // The gap days are NOT an ambiguous date with two readings: isJulianDate ends the Julian era on
   // Oct 4, 1582, so these ten days are neither calendar's — a third thing, which is what the
-  // message says. Round-11 Q2 left this answer word for word as it was.
+  // message says. Round 11 left this answer word for word as it was.
   it('answers with the short message; the long version lives in the How-to-Play guide', () => {
     const { container } = render(<Host dateFormat="numeric-mdy" />)
     lookup(container, '10/10/1582')
@@ -227,7 +227,7 @@ describe('Lookup — the Oct 5–14, 1582 gap (round-8 Q2)', () => {
   })
 })
 
-describe('Lookup — the answer is derived, not stored (round-8 Q2 regression pin)', () => {
+describe('Lookup — the answer is derived, not stored (round 8 regression pin)', () => {
   afterEach(cleanup)
 
   // THE bug: an entry saved under one Date Format kept its rendered sentence, so after the user
@@ -290,11 +290,11 @@ describe('Lookup — the answer is derived, not stored (round-8 Q2 regression pi
   })
 })
 
-// ── Both calendars for an ambiguous date (round-11 Q2) ────────────────────────────────────────
+// ── Both calendars for an ambiguous date (round 11) ────────────────────────────────────────
 // Weekday oracles below are independent of the app's own arithmetic: Julian Oct 4, 1582 was a
 // Thursday and the next day was Gregorian Oct 15, a Friday (the pair calendar.test.js also pins),
 // and the rest follow from the fixed 10-day offset in that era.
-describe('Lookup — a pre-reform date shows BOTH calendars (round-11 Q2)', () => {
+describe('Lookup — a pre-reform date shows BOTH calendars (round 11)', () => {
   afterEach(cleanup)
 
   it('names both readings in full, one per line, Julian first', () => {
@@ -383,7 +383,7 @@ describe('Lookup — a pre-reform date shows BOTH calendars (round-11 Q2)', () =
     expect(slot(container).textContent).toBe('Day must be 1–28 for February') // post-reform: one rule
   })
 
-  // Validation now runs BEFORE the history match. Until round-11 Q2 the match short-circuited
+  // Validation now runs BEFORE the history match. Until round 11 the match short-circuited
   // ahead of the day check, so a date the app refuses to CREATE became answerable the moment an
   // entry for it happened to be stored — same input, same settings, opposite outcome depending on
   // the contents of a list. The either-calendar rule closed the reachable path to that (nothing
@@ -419,9 +419,9 @@ describe('Lookup — a pre-reform date shows BOTH calendars (round-11 Q2)', () =
   })
 })
 
-// ── The isFullyReset contract, at App level (round-8 Q2) ─────────────────────────────────────
+// ── The isFullyReset contract, at App level (round 8) ─────────────────────────────────────
 // The Full Reset footer button is dimmed and locked exactly while the whole app sits at launch
-// state, and App reads `lookupOutput === ""` as one of the terms. Round-8 Q2 changed who writes
+// state, and App reads `lookupOutput === ""` as one of the terms. Round 8 changed who writes
 // that state: a successful lookup used to store its result sentence there and now stores nothing
 // (the answer is derived from the selected history entry). This test is the direct consequence pin
 // — a real lookup must still light Full Reset, through the OTHER Lookup terms (history, input,
@@ -460,7 +460,7 @@ describe('Lookup — Full Reset freshness (isFullyReset reads lookupOutput)', ()
     expect(isOffered(fullReset())).toBe(false) // …and it was only ever text
   })
 
-  // ⚠ RESTRUCTURED TWICE (Q1, round 20): the first pass dropped `lookupHistory.length===0` from
+  // ⚠ RESTRUCTURED TWICE (round 20): the first pass dropped `lookupHistory.length===0` from
   // isFullyReset on the assumption Full Reset would stop reaching the (now-shared) history — the
   // owner overruled that: Full Reset still clears it, from whichever preset you press it (there is
   // only one copy). So the term is back, reading `displayLookupHistory` (the permanent list plus

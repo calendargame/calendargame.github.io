@@ -1,10 +1,10 @@
 import { DEFAULT_MODE_VALUES } from './settings.js'
 import type { DefaultMode } from './settings.js'
 
-// store/sessionMode.ts — the CURRENT PAGE, per preset, for THIS browsing session only (round-21 Q3).
+// store/sessionMode.ts — the CURRENT PAGE, per preset, for THIS browsing session only (round 21).
 //
 // WHAT IT IS. src/main.tsx's `mode` was `useState("classic")` — app-global, not persisted, not
-// per-preset. Q3 makes "which page you are on" a per-preset fact with the SAME lifetime Amnesic's
+// per-preset. Round 21 makes "which page you are on" a per-preset fact with the SAME lifetime Amnesic's
 // session stats already use: it survives a reload, and a full app close throws it away.
 //   • On a COLD OPEN (no session entry for a preset) that preset opens on its `defaultMode` ⚙
 //     setting (store/settings, read via readStoredDefaultMode).

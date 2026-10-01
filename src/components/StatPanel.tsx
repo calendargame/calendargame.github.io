@@ -9,7 +9,7 @@ import { fitScale } from '../lib/statFit.js'
 // {label, value, fn?, off?}) as equal-width cells separated by thin dividers.
 // A cell with `fn` renders as a button.
 //
-// ★ THE THREE SIGNALS (C1, round 16) — one meaning each, and NO STRIKETHROUGH ANYWHERE:
+// ★ THE THREE SIGNALS (round 16) — one meaning each, and NO STRIKETHROUGH ANYWHERE:
 //   • an em dash (—)  = there is no data YET, but there could be. It is produced by the VALUE
 //                       ITSELF (fmtTime/truncTime/fmtAccuracyPct return '—' with nothing recorded),
 //                       and by `dimmed` below, which is the same statement at strip scale.
@@ -17,7 +17,7 @@ import { fitScale } from '../lib/statFit.js'
 //                       ⚠ "HIDDEN", NOT "still recording", AND NOT "you turned it off" — both of
 //                       those are true of most callers and false of some, and this panel cannot tell
 //                       which caller it has. Recording continues for the scoring trio in every mode,
-//                       and for the timing trio in Blitz/AoX (visual-only, Q8). It does NOT continue
+//                       and for the timing trio in Blitz/AoX (visual-only). It does NOT continue
 //                       for the timing trio in Classic/Deduction/Flash: there `off` rides the same
 //                       flag as useGameEngine's `tracking`, so hiding actually STOPS the clock and
 //                       re-enabling after answering costs a full reset (modes/modeHooks
@@ -72,20 +72,20 @@ import { fitScale } from '../lib/statFit.js'
 // one. The reserved height is silent either way — an empty box announces nothing.
 //
 // ⚠ THE DIM CARRIES A WORD TOO, FOR EXACTLY THE SAME REASON — one sr-only line at the top of the
-// strip when `dimmed`. C1 promoted the dim to a first-class signal with a meaning of its own
+// strip when `dimmed`. Round 16 promoted the dim to a first-class signal with a meaning of its own
 // ("nothing is being recorded"), and a meaning that only exists as an opacity is no meaning at all
 // to someone who cannot see it: without this line, Save Stats off and a strip that simply has no
 // data yet both announce as six dashes. It sits on the strip and not on a cell because the fact is
 // the strip's — the same reason `dimmed` is one flag rather than six. `sr-only` is absolutely
 // positioned, so like the "Off" it costs no layout and moves no pixel.
 //
-// VALUE AUTO-FIT (Q3): each value box AUTO-FITS — a per-box measure-and-scale keeps any value, however
+// VALUE AUTO-FIT: each value box AUTO-FITS — a per-box measure-and-scale keeps any value, however
 // long (a big Score "12345/67890", a long solve time), inside its own cell on every device, while short
 // values stay at the normal size. The math is in fitScale; the wiring is the layout effect below. It
 // replaced a tiered char-count shrink that only ran on fractional values and triggered on the longest
 // SIDE (so "123/456" didn't shrink but the narrower "1000/2" did), and never shrank the time boxes.
 //
-// ★ NO MORE `armedSpan` (Q7, round 21). This panel used to grow one wide "Enable and Reset Stats?"
+// ★ NO MORE `armedSpan` (round 21). This panel used to grow one wide "Enable and Reset Stats?"
 // button in place of the three time cells while a two-tap arm was live — with two 1px phantom
 // spacers to keep the surrounding flex math pixel-identical. That arm is the shared ConfirmModal
 // now (modes/modeHooks' useStatsHideToggles), so the strip is always just six cells and this file

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The Lookup history list on the shared scroll-region recipe (round-7 Q5). The recipe itself —
+// The Lookup history list on the shared scroll-region recipe (round 7). The recipe itself —
 // the tokens, the fade truth table, and the no-raw-literals rule — is pinned in
 // scrollRegionGuard.test.js; the changelog popup's adoption (structure + live fades) is pinned
 // in changelog.dom; the settings popover was already the reference. What's left is Lookup's
@@ -8,9 +8,9 @@
 // list's 1rem right padding sits INSIDE the scroller (the text-free lane the iOS scrollbar
 // paints in) and the header/method dividers cut edge-to-edge without the pre-Q5 -mx-4
 // counter-margins. Content widths are unchanged by construction — only the paint lane moved.
-// Q2 (round-8) then took the list's fixed pixel cap away and let the column measure itself, so
+// Round 8 then took the list's fixed pixel cap away and let the column measure itself, so
 // the shrink chain is pinned here too. Also here, because this is the file that renders
-// LookupCard directly: the Q7 round-7 interactive-border pin for the typed date box (the
+// LookupCard directly: the round 7 interactive-border pin for the typed date box (the
 // describe at the bottom).
 // Round 10 (item B) added the third piece: the boundary SHADOWS around this list — the History
 // header above it and the Show Codes section below — are progressive, driven by a continuous
@@ -18,7 +18,7 @@
 // behind that shade is pinned first, as pure functions, because it is the piece that had to have
 // exactly one owner: the shadow's strength and the mask's on/off are two readings of one
 // measurement, and this file proves they cannot disagree.
-// Round 11 Q4 then generalized the ship-blocker pinned at the bottom of this file: the STATES it
+// Round 11 then generalized the ship-blocker pinned at the bottom of this file: the STATES it
 // hid in — resting, empty, exactly fitting, growing with no scroll event — are named fixtures now
 // (tests/helpers/scrollGeometry) swept across every region in tests/scrollExtent.dom, instead of
 // being pinned one point test at a time here after each one ships.
@@ -41,10 +41,10 @@ import {
 } from '../src/components/scrollRegion.js'
 
 // The saved entry shape (store/progress): the date the user typed and nothing else — every
-// rendered string is derived from it (round-8 Q2).
+// rendered string is derived from it (round 8).
 const entry = (i) => ({ id: `e${i}`, y: 1592, m: 3, d: i + 1 })
 
-describe('Lookup history on the shared scroll-region recipe (round-7 Q5)', () => {
+describe('Lookup history on the shared scroll-region recipe (round 7)', () => {
   afterEach(cleanup)
 
   it('the list wears the shared token; the panel owns vertical padding only', () => {
@@ -58,7 +58,7 @@ describe('Lookup history on the shared scroll-region recipe (round-7 Q5)', () =>
     expect(panel.className.split(/\s+/)).not.toContain('p-4') // vertical-only — the lane moved inward
   })
 
-  // Round-8 Q2 replaced the list's fixed 440-pixel cap with measured layout: the list takes the
+  // Round 8 replaced the list's fixed 440-pixel cap with measured layout: the list takes the
   // room the header and method section leave and scrolls past that, at any screen height. The
   // shrink chain is what makes that work, and every link is a class — jsdom lays nothing out, so
   // the classes are the contract. (tests/heightGuard.test.js bans the pixel cap coming back.)
@@ -76,7 +76,7 @@ describe('Lookup history on the shared scroll-region recipe (round-7 Q5)', () =>
     expect(root.className).toContain('flex flex-col')
     expect(root.className).toContain('min-h-0')
     expect(root.className.split(/\s+/)).not.toContain('mt-1') // would no longer margin-collapse
-    // Since round 23 (Q10) Show Codes lives in the TOP card, which holds its size: opening the codes
+    // Since round 23 Show Codes lives in the TOP card, which holds its size: opening the codes
     // grows that card, and the history panel below is what gives the room back.
     const topCard = root.firstElementChild
     expect(topCard).not.toBe(panel)
@@ -156,7 +156,7 @@ describe('the edge arithmetic — ONE owner for both indicator languages (round 
   })
 })
 
-describe('Lookup’s history list is unframed — its fades alone mark scrolling (round 23, Q10)', () => {
+describe('Lookup’s history list is unframed — its fades alone mark scrolling (round 23)', () => {
   afterEach(cleanup)
 
   // The list used to be walled off: a divider line + a progressive shadow under the History heading,
@@ -210,7 +210,7 @@ describe('Lookup’s history list is unframed — its fades alone mark scrolling
   })
 })
 
-describe('Lookup date input on the interactive-border rule (round-7 Q7)', () => {
+describe('Lookup date input on the interactive-border rule (round 7)', () => {
   afterEach(cleanup)
 
   it('wears the shared interactive surface (border surface-tray), never the container panel', () => {
@@ -225,7 +225,7 @@ describe('Lookup date input on the interactive-border rule (round-7 Q7)', () => 
   })
 
   it('states its text tier out loud — the page’s primary entry field, not a compact stepper', () => {
-    // Q2 round-8: the box kept its larger size only by inheriting the root font, so any future
+    // Round 8: the box kept its larger size only by inheriting the root font, so any future
     // change to an ancestor could have shrunk it silently. text-base is the same rendered size,
     // now declared. (Deliberately NOT the text-sm the compact steppers elsewhere use.)
     const { container } = render(<LookupCard history={[]} />)

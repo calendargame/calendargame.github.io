@@ -1,4 +1,4 @@
-// Real-user error reporting (Current Work C1) — Sentry, PRODUCTION + STAGING ONLY.
+// Real-user error reporting — Sentry, PRODUCTION + STAGING ONLY.
 //
 // Why this shape:
 //  • ErrorBoundary (whole-app) + ModeErrorBoundary (per-mode) already CATCH crashes and show a

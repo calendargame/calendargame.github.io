@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// amnesicRound.dom — round 23 Q2: an Amnesic (guest) preset must NEVER touch the other copy of the
+// amnesicRound.dom — round 23: an Amnesic (guest) preset must NEVER touch the other copy of the
 // stats, and a reload is the SAME session everywhere (only a real close of the app starts fresh).
 //
 // ★ THE BUG THESE CASES WERE WRITTEN AGAINST (all reproduced on v2.26.0 by the investigation that

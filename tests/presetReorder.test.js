@@ -1,4 +1,4 @@
-// presetReorder — the PURE arithmetic behind PresetManager's drag handle (Q7, round 20).
+// presetReorder — the PURE arithmetic behind PresetManager's drag handle (round 20).
 //
 // Exercised here against FABRICATED numbers, no jsdom at all, for the exact reason the file's own
 // header comment gives: jsdom has no layout engine, so "which slot is the pointer over right now"

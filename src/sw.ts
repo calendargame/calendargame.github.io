@@ -1,6 +1,6 @@
 import { captureError } from './observability/sentry'
 
-// sw.ts — PWA service-worker registration (Q3 auto-update-on-open).
+// sw.ts — PWA service-worker registration (auto-update-on-open).
 //
 // ONE native call, deliberately. This module used to go through vite-plugin-pwa's
 // `virtual:pwa-register` helper, which pulled workbox-window in as its own ~5.6 KB precached chunk
@@ -52,7 +52,7 @@ import { captureError } from './observability/sentry'
 //   • NO visibility/focus re-check — cold-open only (the owner's call), so it never reloads on a
 //     mere app resume.
 // The Settings → "Check for updates" button CHECKS first and applies a real update through this same
-// registration (Q7, round 11); forceReloadLatest is its fallback when there is nothing to hand off to.
+// registration (round 11); forceReloadLatest is its fallback when there is nothing to hand off to.
 //
 // This whole path is service-worker behaviour that only runs in a real browser with a built SW
 // (devOptions.enabled is false, and jsdom has no SW), so the LIVE behaviour is verified ON-DEVICE on
@@ -99,7 +99,7 @@ navigator.serviceWorker
     // the next launch tries again. Reporting it would drown the signal below in expected noise.
     registration.update().catch(() => {})
   })
-  // Q10a (round 11): registration FAILING is the opposite case — it leaves the app running with NO
+  // Round 11: registration FAILING is the opposite case — it leaves the app running with NO
   // service worker at all (no offline copy, no update path, and the "Check for updates" button with
   // nothing to apply through). An agent hit exactly that state in July 2026 and nothing anywhere
   // said so, because this reporting did not exist and the rejection had nowhere to go. It is rare

@@ -8,7 +8,7 @@
 // return null on an empty array (rendered as "—" by the formatters).
 // ─────────────────────────────────────────────────────────────────────────
 
-// ★ THE SOLVE-TIME GRID: every recorded time is a whole number of 0.1 ms (1/10000 s). Round 23 Q3
+// ★ THE SOLVE-TIME GRID: every recorded time is a whole number of 0.1 ms (1/10000 s). Round 23
 // made the saved times unbounded (every solve is kept), which made their SIZE matter, and a raw time
 // was ~17 characters of floating-point noise: performance.now() is clamped to 0.1 ms in Chrome (1 ms
 // in Safari and Firefox), but the SUBTRACTION of two clamped readings is not — 126913.4 − 123456.7

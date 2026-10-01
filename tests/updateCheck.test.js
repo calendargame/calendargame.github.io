@@ -1,4 +1,4 @@
-// tests/updateCheck.test.js — the detector behind "Check for updates" (Q7, round 11).
+// tests/updateCheck.test.js — the detector behind "Check for updates" (round 11).
 //
 // The button used to reload unconditionally; it now asks first, and every way that question can be
 // answered is pinned here. Three of these tests exist because the OPPOSITE behaviour was measured

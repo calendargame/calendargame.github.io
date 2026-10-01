@@ -75,7 +75,7 @@
   <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/apple-splash-1290-2796.png">
   <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/apple-splash-1320-2868.png">
   <!-- Apply the SAVED theme + its matching toolbar color BEFORE React mounts, so there's no
-       wrong-theme / dark-toolbar flash on first paint (Q2). Mirrors the store's resolution
+       wrong-theme / dark-toolbar flash on first paint. Mirrors the store's resolution
        (useSystem ? OS-dark?darkTheme:lightTheme : manualTheme) from the settings store's saved
        payload; falls back to the OS light/dark default (= SETTINGS_DEFAULTS) when nothing is saved.
        The color map is each theme's --tc in src/index.css — keep in sync if those change. The map is
@@ -123,7 +123,7 @@
     document.documentElement.style.background=c[t]||'#0d1117';
     document.addEventListener('gesturestart',function(e){e.preventDefault();});
   })();</script>
-  <!-- Pre-React BOOT SPLASH (Q3 Loading screen): a BODY-LEVEL sibling of #root (NOT inside it), so
+  <!-- Pre-React BOOT SPLASH (the Loading screen): a BODY-LEVEL sibling of #root (NOT inside it), so
        React's first commit can't wipe it. Styled inline here because the built stylesheet is swapped to a
        non-blocking preload (vite.config.js bootCssPreload) — that makes this splash the page's FIRST
        PAINT, covering the whole load (CSS + JS fetch/parse + React mount) instead of a white flash. App

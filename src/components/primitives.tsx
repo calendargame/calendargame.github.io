@@ -10,7 +10,7 @@ import type { ReactNode } from 'react'
 // Kbd          — the <kbd> chip used by the keyboard-shortcut rows in How-to-Play.
 //
 // ★★ THE ⚙ PANEL'S HEADING HIERARCHY IS THREE TIERS, AND THE RULE LIVES HERE because this is where
-// the two class strings that draw it do. Round-22 Q4 added the top one; the pair below it is
+// the two class strings that draw it do. Round 22 added the top one; the pair below it is
 // unchanged, and the convention note in components/SettingsPanel points at this block.
 //
 //   1. GROUP   — GroupLabel.               Global · Per-preset
@@ -27,7 +27,7 @@ import type { ReactNode } from 'react'
 //                alternatives within a single setting's picker.
 //
 // ⚠ TIERS 1 AND 3 ARE BOTH CENTERED AND THAT IS NOT A COLLISION — it is why tier 1 is a separate
-// component rather than `<SectionLabel className="text-center">`. Before Q4 the centered spelling
+// component rather than `<SectionLabel className="text-center">`. Before the two group headings existed the centered spelling
 // was RESERVED for tier 3 precisely so it could never out-rank tier 2, and centering the two group
 // headings would have re-created exactly that clash. They out-rank tier 2 on three axes at once
 // (larger, semibold, and two tone steps brighter) and tier 3 on all three as well, so alignment is

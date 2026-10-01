@@ -262,7 +262,7 @@ function DeductionMode({
   const optionsDisabled = state.locked || state.calcOpen || state.calcPenaltyActive
   const revealDisabled =
     (state.locked && state.revealed) || state.calcOpen || state.calcPenaltyActive
-  // Deduction's answer buttons sit ONE text tier below the weekday grids (Q4 round-8): its
+  // Deduction's answer buttons sit ONE text tier below the weekday grids (round 8): its
   // options are years / month names / day numbers, and up to six of them share a row, so
   // text-sm is the size that fits. Derived once here rather than appended per grid — Day and
   // Year used to append it and Month did not, which left Month's answers 4.2px taller (the
@@ -280,7 +280,7 @@ function DeductionMode({
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i, n: date.options.length })
     eng.answer(i)
   }
-  // The one Override ⇄ Undo press (round 23 Q6), on the ACTIVE silo's engine. A press that CREDITS
+  // The one Override ⇄ Undo press (round 23), on the ACTIVE silo's engine. A press that CREDITS
   // the live puzzle pulses green on the correct option (the engine's creditsLiveCard). Deduction
   // keeps no state of its own that an Override changes, and switching sub-type shows a different
   // silo, whose own cards — each with their own Override records — are what the button then reads.
@@ -545,7 +545,7 @@ function DeductionMode({
                     Reveal/Override row must not move a pixel as puzzles alternate 2↔5. The real
                     grid self-centers in that space (the 5-layout's visual centroid; top/bottom-
                     aligned reads as a dead band). A strut, not a calc(): it tracks the real button
-                    metrics by construction. It is also DERIVED, not copied (Q4 round-9) — cell
+                    metrics by construction. It is also DERIVED, not copied (round 9) — cell
                     COUNT from YEAR_OPTION_DEFAULT, grid + col-spans from yearGridLayout, gutter
                     from ANSWER_GRID_GAP, cell chrome from the same baseBtn the real buttons wear.
                     It used to hand-copy the n=5 classes, so every one of those was a place the two

@@ -37,7 +37,7 @@ import { usePillGroupLock } from './pillGroupLock.js'
 // two trays inside one group can repeat a visible label ('MDY' appears in both date-format
 // trays), and radios in a group must be tellable apart by name.
 //
-// THE TAB STOP is per GROUP, not per tray (round-9 Q2): the pill holding the group's value is
+// THE TAB STOP is per GROUP, not per tray (round 9): the pill holding the group's value is
 // tabbable and every other pill is not, so two trays sharing one setting still add up to ONE tab
 // stop and the arrows walk straight from one into the other. PillGroup appoints that pill and
 // drives that walk; the full contract is documented there. What the tray owns is the SEGMENT half

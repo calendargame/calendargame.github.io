@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// defaultMode.dom — round-21 Q3: the page a preset OPENS ON, and the per-preset SESSION page that
+// defaultMode.dom — round 21: the page a preset OPENS ON, and the per-preset SESSION page that
 // survives a switch-and-return but not a full close.
 //
 // Three facts, driven through the real <App/>:

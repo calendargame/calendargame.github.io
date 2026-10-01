@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// components/ConfirmModal — the ONE shape every reset-style confirmation wears since Q7 (round 21):
+// components/ConfirmModal — the ONE shape every reset-style confirmation wears since round 21:
 // Full Reset, Reset Settings, each casual mode's Reset Stats, Clear Saved Defaults, and the
 // "Enable and Reset Stats?" desync case. This file tests the component in isolation — mounted with
 // its own #root, driven by a user — so the five modal-contract terms it owns are provable without

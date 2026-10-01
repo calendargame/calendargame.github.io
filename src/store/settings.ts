@@ -9,7 +9,7 @@ import { isDotRotation, type DotRotation } from '../lib/dotLayout.js'
 //
 // Holds the 16 values that live in the Settings popover (13 at the Stage-C extraction; the Input
 // style was added Session 10, the Rotate Dots setting in batch group 3, `defaultMode` in
-// round-21 Q3). Originally these were useState hooks inside App; centralizing them
+// Round 21). Originally these were useState hooks inside App; centralizing them
 // is the structural groundwork
 // for (a) saved-progress and (b) splitting the fused game modes apart later,
 // since the modes can read settings from here instead of receiving them all as
@@ -37,7 +37,7 @@ import { isDotRotation, type DotRotation } from '../lib/dotLayout.js'
 // (Settings → Input). Stored as an enum (not a boolean) so more layouts can be added later.
 export type InputStyle = 'buttons' | 'dots'
 
-// defaultMode — the page a preset OPENS ON (round-21 Q3). One of the seven entries of the bar's
+// defaultMode — the page a preset OPENS ON (round 21). One of the seven entries of the bar's
 // mode CustomSelect (main.tsx MODE_LABELS): the five practice modes, Lookup, and How to Play
 // ('guide'). It is a per-preset ⚙ setting like the fifteen above it — persisted here, captured by
 // Save Defaults (SavedDefaults.settings is a full SettingsValues snapshot, so it rides along with
@@ -61,7 +61,7 @@ export const isDefaultMode = (v: unknown): v is DefaultMode =>
 // `dotRotation` — Settings → Display → Rotate Dots, a three-way pill: Standard / 45° CCW / 90° CCW
 // (round 23). ITS HISTORY, because two older shapes of it are still out there in saved data and
 // migrateDotRotation below reads both: it launched as `dotOrientation: 'columns' | 'rows'` (a
-// two-option picker), became the boolean `rotateDots` in round 20 (Q3 — two named options were
+// two-option picker), became the boolean `rotateDots` in round 20 (two named options were
 // always an on/off shape), and became this when 45° was added. Its type, DotRotation, lives in
 // lib/dotLayout, the geometry file, because every geometry table there is indexed by it directly.
 
@@ -122,7 +122,7 @@ export const SETTINGS_DEFAULTS: SettingsValues = {
   dotRotation: 'standard',
   // Every preset opens on Classic until the player picks otherwise — the behaviour the app has
   // always had (main.tsx's `mode` useState was hard-coded to "classic"). An absent key on a
-  // pre-Q3 payload merges to exactly this, so v2→v3 needs no migrate function.
+  // payload from before `defaultMode` existed merges to exactly this, so v2→v3 needs no migrate function.
   defaultMode: 'classic',
   useJulian: true,
   minY: 1,
@@ -151,7 +151,7 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
 // 19 of the snapshot's 21 (a dormant theme value is always excluded) PLUS the ⚙ panel's two Year
 // Range TEXT BOXES, which live in components/useYearRangeMirrors and are stored nowhere. So a year
 // that has been TYPED but not committed counts as "modified" while there is nothing to save for it.
-// (Round-22 Q5 closed the gap the other way — amnesic was in the snapshot and NOT in the
+// (Round 22 closed the gap the other way — amnesic was in the snapshot and NOT in the
 // comparison, which left Save Defaults unreachable for an amnesic-only change.)
 const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
 
@@ -210,7 +210,7 @@ export const useSettings = create<SettingsState>()(
       // unconditionally, ignoring anything the user has saved.
       // ⚠⚠ WHAT THIS IS NOT: the ⚙ panel's "RESET SETTINGS" BUTTON. That button is App's own
       // resetSettings in main.tsx, which restores the user's EFFECTIVE defaults — their SAVED
-      // personal defaults (Q7, store/userDefaults) when a snapshot exists, factory only when none
+      // personal defaults (store/userDefaults) when a snapshot exists, factory only when none
       // does — and additionally restores the two year-range text mirrors and the four capturable
       // mode prefs. Until round 15 this action was itself called `resetSettings`, so the two
       // differed by nothing but their file; the rename is the whole of the fix, and the paragraph
@@ -264,10 +264,10 @@ export const useSettings = create<SettingsState>()(
       // changes; the adapter rewrites it to the ACTIVE preset's key at each read and each write.
       // See store/presets for why that beat swapping the name on every switch.
       storage: presetScopedStorage<Partial<SettingsState>>(),
-      // v2 = `dotOrientation` LEFT the shape for the boolean `rotateDots` (Q3, round 20).
-      // v3 = `defaultMode` JOINED the shape (round-21 Q3). It needs no rewrite: an absent key on an
+      // v2 = `dotOrientation` LEFT the shape for the boolean `rotateDots` (round 20).
+      // v3 = `defaultMode` JOINED the shape (round 21). It needs no rewrite: an absent key on an
       // older payload is exactly what `mergeOverDefaults` turns into the factory 'classic', which
-      // is the pre-Q3 behaviour.
+      // is the behaviour before `defaultMode` existed.
       // v4 = `rotateDots` LEFT the shape for the three-way `dotRotation` (round 23).
       version: 4,
       // Saved-shape migration, run once at hydrate whenever the stored version DIFFERS — older OR
@@ -308,7 +308,7 @@ export const useSettings = create<SettingsState>()(
 // Reads the persist envelope directly — the same `{ state: {...} }` shape store/presets'
 // readStoredRegistry and store/userDefaults' storedAmnesicDefault parse. Only `state.defaultMode`
 // is consulted, which no migration step touches, so none is reproduced here. An absent, unreadable,
-// malformed or out-of-range value is treated as the factory 'classic' — the pre-Q3 behaviour, and
+// malformed or out-of-range value is treated as the factory 'classic' — the behaviour before `defaultMode` existed, and
 // the correct landing for a payload that cannot be trusted to say where it wanted to open.
 // ⚠ The ACTIVE preset's key is the un-namespaced base key (presetKey's identity), so this one path
 // covers it too — no special case.

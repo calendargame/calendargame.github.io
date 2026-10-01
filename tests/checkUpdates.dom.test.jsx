@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// "Check for updates" — the settings-footer button, rebuilt in round 11 (Q7) to actually CHECK.
+// "Check for updates" — the settings-footer button, rebuilt in round 11 to actually CHECK.
 //
 // It used to be a lie by construction: press it and it showed the Updating screen, waited, and ran
 // forceReloadLatest() — unregistering the service worker and deleting every cache — whether or not

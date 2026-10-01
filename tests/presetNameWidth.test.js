@@ -1,4 +1,4 @@
-// fitsWithinWidth — the PURE half of lib/presetNameWidth's live typing cap (Q6, round 20).
+// fitsWithinWidth — the PURE half of lib/presetNameWidth's live typing cap (round 20).
 //
 // Deliberately apart from every DOM/canvas-touching function in that file (readSwitcherBudget,
 // measureTextWidthPx, fitTextToWidth, capCandidateToSwitcherWidth — all covered in

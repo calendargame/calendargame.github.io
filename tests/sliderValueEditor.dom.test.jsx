@@ -6,7 +6,7 @@
 // onChange regex; blur/Enter commit through the parse → convert → snap → clamp pipeline
 // (lib/sliderValue, pure math locked in tests/sliderValue.test.js); Escape reverts WITHOUT
 // committing; disabled follows the
-// slider's lock; and the Q4 round-8 zero-shift geometry — the invisible widest-string strut is
+// slider's lock; and the round 8 zero-shift geometry — the invisible widest-string strut is
 // the ONLY in-flow child of the cell, both live controls sit on top of it out of flow, and
 // .svalue-input's outward inset exactly matches its own chrome so the input's CONTENT box lands
 // on the strut. jsdom cannot lay out, so the pixels are an on-device check per the standing
@@ -250,7 +250,7 @@ describe('SliderValueEditor', () => {
     // The colour must keep coming from .surface-tray: the `border` SHORTHAND would reset
     // border-color to currentcolor and leave the result depending on rule order.
     expect(SVALUE_RULE).not.toMatch(/(^|;)border:/)
-    // Native form-field treatment off (Q4 round-8 Part B) — the box declares its own chrome.
+    // Native form-field treatment off (round 8 Part B) — the box declares its own chrome.
     expect(SVALUE_RULE).toContain('appearance:none')
     // And the class really is what the widest-strut site mounts.
     render(<SliderValueEditor {...aoxProps} onCommit={vi.fn()} />)
