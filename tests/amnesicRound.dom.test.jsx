@@ -379,6 +379,182 @@ describe('within one session everything comes back exactly as it was left', () =
   })
 })
 
+// ── A parked round carries the configuration it was played under ───────────────────────────────
+// The ⚙ settings and the per-mode setup are shared by a preset's two stats copies, and a guest's idle
+// screen leaves every one of them editable. So "your finished round comes back" has a condition: it
+// comes back only over the configuration it was played under. Restored over a different one, the
+// round reconciled against settings it was never played on — and each of these changed a PERMANENT
+// best (round 23's review, reproduced as found). A round that no longer matches is not restored: the
+// screen is idle, and every saved Best is exactly as the round left it.
+describe('a guest who changes the setup never changes your saved bests', () => {
+  beforeEach(() => resetAppState())
+  afterEach(unmount)
+
+  it('MoX: the guest raises the run length — your Best is not taken away', () => {
+    mountApp()
+    pinReadable()
+    press('A')
+    act(() => useModePrefs.getState().setAoxN('2'))
+    finishMox(2) // YOUR run: done, its Best recorded
+    const before = JSON.stringify(permanent().aoxBest)
+    expect(Object.values(permanent().aoxBest)[0].avg).toEqual(expect.any(Number))
+    setAmnesic(true)
+    act(() => useModePrefs.getState().setAoxN('5')) // the guest edits the (idle) run length
+    setAmnesic(false)
+    expect(JSON.stringify(permanent().aoxBest)).toBe(before)
+    expect(ctrl('Begin')).toBeInTheDocument() // a Mo2 run is not shown as a Mo5 one
+  })
+
+  it('MoX: the guest flips One-by-One — your run is not restored into the other sub-mode', () => {
+    mountApp()
+    pinReadable()
+    press('A')
+    act(() => useModePrefs.getState().setAoxN('2'))
+    finishMox(2)
+    const before = JSON.stringify(permanent().aoxBest)
+    setAmnesic(true)
+    act(() => useModePrefs.getState().setAoxOneByOne(true))
+    setAmnesic(false)
+    expect(JSON.stringify(permanent().aoxBest)).toBe(before)
+    expect(ctrl('Begin')).toBeInTheDocument()
+  })
+
+  for (const [label, guestEdit] of [
+    ['Per Question', () => useModePrefs.getState().setBlitzPerQ(true)],
+    [
+      'Per Question + Allow Mistakes off',
+      () => {
+        useModePrefs.getState().setBlitzPerQ(true)
+        useModePrefs.getState().setBlitzAllowMistakes(false)
+      },
+    ],
+    ['Allow Mistakes off', () => useModePrefs.getState().setBlitzAllowMistakes(false)],
+    ['a different round length', () => useModePrefs.getState().setBlitzSec(30)],
+  ])
+    it(`Blitz: the guest picks ${label} — no Best appears in a sub-mode you never played`, () => {
+      mountApp()
+      pinReadable()
+      press('B')
+      finishBlitz(4) // YOUR Per Round round: 4/5
+      const before = JSON.stringify(permanent())
+      setAmnesic(true)
+      act(guestEdit) // the guest's screen is idle, so its setup is all live
+      setAmnesic(false)
+      expect(JSON.stringify(permanent())).toBe(before)
+      expect(ctrl('Begin')).toBeInTheDocument()
+    })
+
+  it('Blitz: the guest changes the year range — your round does not come back to be resumed on it', () => {
+    mountApp()
+    pinReadable()
+    press('B')
+    finishBlitz(4) // 4 right, then Reveal ends it: 4/5 on 1583–10000
+    const before = JSON.stringify(permanent())
+    setAmnesic(true)
+    act(() => {
+      useSettings.getState().setMinY(2000)
+      useSettings.getState().setMaxY(2001)
+    })
+    setAmnesic(false)
+    // Restored, an Override on the revealed card resumed the round drawing 2000–2001 dates and the
+    // 1583–10000 Best rose with them. There is no round to resume.
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(statValue('Score')).toBe('0/0')
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(JSON.stringify(permanent())).toBe(before)
+  })
+
+  it('a guest who changes nothing: your round still comes back, untouched', () => {
+    mountApp()
+    pinReadable()
+    press('B')
+    finishBlitz(4)
+    const before = JSON.stringify(permanent())
+    setAmnesic(true)
+    act(() => useModePrefs.getState().setBlitzPerQ(true)) // changed…
+    act(() => useModePrefs.getState().setBlitzPerQ(false)) // …and put back
+    setAmnesic(false)
+    expect(statValue('Score')).toBe('4/5')
+    expect(JSON.stringify(permanent())).toBe(before)
+  })
+
+  it('the same holds across a reload: a round parked under settings that have since moved is dropped', () => {
+    mountApp()
+    pinReadable()
+    press('B')
+    finishBlitz(4)
+    const before = JSON.stringify(permanent().blitzBest)
+    unmount()
+    act(() => {
+      useSettings.getState().setMinY(1900) // another tab on this origin moved the shared settings
+    })
+    mountApp()
+    press('B')
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(JSON.stringify(permanent().blitzBest)).toBe(before)
+  })
+})
+
+// The same rule from inside one copy: Reset Settings can move the run length under a MoX run that is
+// still on screen (the run resets when the ⚙ panel closes). The run's own arithmetic uses the length
+// it was BEGUN at, so nothing happens to it — or to its Best — in between.
+describe('MoX: a run keeps the length it was begun at', () => {
+  beforeEach(() => resetAppState())
+  afterEach(unmount)
+
+  it('Reset Settings with a finished run on screen does not take its Best away', () => {
+    mountApp()
+    pinReadable()
+    press('A')
+    act(() => useModePrefs.getState().setAoxN('2'))
+    finishMox(2)
+    const key = onlyKey(useProgress.getState().aoxBest)
+    const record = JSON.stringify(useProgress.getState().aoxBest[key])
+    openSettings('gear')
+    fireResetSettings() // the run length goes back to 10 while the Mo2 run is still up
+    expect(useModePrefs.getState().aoxN).toBe('10')
+    expect(JSON.stringify(useProgress.getState().aoxBest[key])).toBe(record)
+  })
+
+  it('Reset Settings with a run in progress does not complete it early', () => {
+    mountApp()
+    pinReadable()
+    act(() => useModePrefs.getState().setAoxN('2'))
+    act(() => {
+      useUserDefaults.getState().saveDefaults({
+        settings: { ...useSettings.getState() },
+        prefs: { flashMs: 800, blitzSec: 60, blitzQSec: 10, aoxN: '2' },
+        amnesic: false,
+      })
+    })
+    press('A')
+    act(() => useModePrefs.getState().setAoxN('5'))
+    tap(ctrl('Begin'))
+    for (let i = 0; i < 3; i++) tap(screen.getByRole('button', { name: correctName(readDate()) }))
+    openSettings('gear')
+    fireResetSettings() // the saved run length (2) comes back under a Mo5 run holding 3 solves
+    expect(useModePrefs.getState().aoxN).toBe('2')
+    expect(useProgress.getState().aoxBest).toEqual({}) // 3 solves are not a finished Mo2
+  })
+})
+
+// A config with no Best has no key — after a run that created one is retracted, exactly as Blitz.
+describe('MoX: a retracted run with no earlier Best leaves no record behind', () => {
+  beforeEach(() => resetAppState())
+  afterEach(unmount)
+  it('Override on the completing solve removes the record the run created', () => {
+    mountApp()
+    pinReadable()
+    press('A')
+    act(() => useModePrefs.getState().setAoxN('2'))
+    finishMox(2)
+    expect(Object.keys(useProgress.getState().aoxBest)).toHaveLength(1)
+    tap(ctrl('Override')) // the held completing solve, overridden to a miss: the run no longer stands
+    expect(useProgress.getState().aoxBest).toEqual({})
+    expect(permanent().aoxBest).toEqual({})
+  })
+})
+
 describe('a reload is the same session; only a real close starts fresh', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)

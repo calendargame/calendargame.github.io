@@ -26,6 +26,7 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
 import { buildRunBreakdown } from '../engine/runBreakdown.js'
 import { reconcileBlitzBest, reconcileSuddenBest } from '../engine/blitzBest.js'
+import { fileBest } from '../engine/bestMap.js'
 import { newRoundId, isNewBest } from '../engine/roundId.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -53,26 +54,6 @@ interface PrevRoundBest {
   blitz?: BlitzBest
   sudden?: SuddenBest
   suddenAm?: BlitzBest
-}
-
-// File one config's Best record into its map: `rec` replaces the key, `undefined` removes it (no
-// record — see engine/blitzBest). Returns the SAME map when nothing changes, so a reconcile that lands
-// where it already was is not a store write (and not a re-render). The one writer both the reconcile
-// effect and resumeRound's revert go through.
-function fileBest<T extends BlitzBest | SuddenBest>(
-  map: Record<string, T>,
-  key: string,
-  rec: T | undefined,
-): Record<string, T> {
-  const cur = map[key]
-  if (rec === undefined) {
-    if (!(key in map)) return map
-    const nx = { ...map }
-    delete nx[key]
-    return nx
-  }
-  if (cur && (Object.keys(rec) as (keyof T)[]).every((k) => cur[k] === rec[k])) return map
-  return { ...map, [key]: rec }
 }
 
 // Round-21 Q11 — the shape BlitzMode parks in store/sessionRound for an ENDED round. It round-trips
@@ -105,6 +86,8 @@ interface BlitzRoundSnapshot {
   active: boolean
   currentRoundId: number | null
   prevRoundBest: PrevRoundBest
+  // The configuration the round was played under (`roundConfig` in the component, which argues it).
+  config: string
   remain: number
   // Why this round ended, and — for a 'toggle' end only — the WALL-CLOCK instant it ended at, so the
   // charge for the gap survives the remount a preset switch causes (every performance.now()-based
@@ -154,22 +137,54 @@ function BlitzMode({
   // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — every parked-round read, write and
   // discard below uses it (modes/modeHooks' useMountedDataId argues why, round 23 Q2).
   const dataId = useMountedDataId()
-  // Round-21 Q11 — the ended round this (stats copy, mode) parked before its last unmount, read
-  // EXACTLY ONCE at mount. On a preset switch or an Amnesic toggle the always-mounted screens remount
-  // (src/main.tsx remountScreens) and the registry ALREADY names the INCOMING copy by the time this
-  // runs — switchPreset / setPresetAmnesic write the registry before they rehydrate the stores, one
+  const blitzSec = useModePrefs((s) => s.blitzSec),
+    setBlitzSec = useModePrefs((s) => s.setBlitzSec) // persisted (mode-prefs store)
+  const qSec = useModePrefs((s) => s.blitzQSec),
+    setQSec = useModePrefs((s) => s.setBlitzQSec) // persisted (mode-prefs store)
+  // The per-config Best silo keys. blitzBk leads with an m/n Allow-Mistakes marker (both
+  // per-round variants share the one blitzBest map); suddenBk has NO AM segment — for
+  // per-question, AM-ness is the MAP split (suddenBest = sudden death, suddenAmBest = Allow
+  // Mistakes on, C3a), because the two record shapes differ (score-only vs score+streak).
+  const dateConfig = `${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
+  const blitzBk = `${allowMistakes ? 'm' : 'n'}${blitzSec}|${dateConfig}`
+  const suddenBk = `${qSec}|${dateConfig}`
+  // ★ THE CONFIGURATION A ROUND IS PLAYED UNDER — the timing sub-mode, Allow Mistakes, and the Best
+  // key of the sub-mode in play (its timer length and every date setting): everything that decides
+  // which record the round's result is filed in, which reconcile it gets, what its clock runs to and
+  // which dates a resumed round would draw. A round carries the one it was BEGUN under
+  // (roundConfigRef), a PARKED round carries it into the snapshot, and it comes back only if it is
+  // still exactly the live one.
+  // WHY: the settings and the per-mode setup are shared by a preset's two stats copies, so a guest's
+  // interlude can change them under a parked round (the idle guest screen's Per Question / Allow
+  // Mistakes toggles and its sliders are all live). The mount reconcile branches on the LIVE
+  // sub-mode, so a restored Per Round round wrote its score into the Per Question records — a Best
+  // in a sub-mode never played — and one restored over a changed year range resumed drawing the new
+  // range's dates into a round filed under the old one, raising that Best with dates it does not
+  // cover. A round that no longer matches is simply not restored: the screen comes up idle, exactly
+  // as a settings change resets a round that is on screen, and the Bests it set stay as saved.
+  const roundConfig = `${perQ ? 'q' : 'r'}|${allowMistakes ? 'm' : 'n'}|${perQ ? suddenBk : blitzBk}`
+  // The ended round this (stats copy, mode) parked before its last unmount, read EXACTLY ONCE at
+  // mount. On a preset switch or an Amnesic toggle the always-mounted screens remount (src/main.tsx
+  // remountScreens) and the registry ALREADY names the INCOMING copy by the time this runs —
+  // switchPreset / setPresetAmnesic write the registry before they rehydrate the stores, one
   // synchronous turn (store/presetControl). So this is the incoming copy's OWN parked round and never
   // the one just left; the copy key is the whole contamination guard (a blob keyed to preset 1's
-  // saved copy is unreachable while preset 2, or preset 1's guest session, is up). Factored into one read so the six initializers below don't
-  // each call sessionStorage. The engine inside goes through the one restore door here, before any
-  // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
-  // engine/parkedEngine's restoreParkedEngine), so the screen never shows an "ended" round over a
-  // fresh engine.
+  // saved copy is unreachable while preset 2, or preset 1's guest session, is up). Factored into one
+  // read so the initializers below don't each call sessionStorage. Two gates, before any initializer
+  // reads the snapshot, and either one drops the WHOLE snapshot so the screen never shows an "ended"
+  // round over a fresh engine:
+  //   • the round was played under exactly the live configuration (`roundConfig` above);
+  //   • the engine inside comes through the one restore door (engine/parkedEngine's
+  //     restoreParkedEngine) — a blob this build cannot read is not a round.
   const [parkedRound] = useState<BlitzRoundSnapshot | null>(() => {
     const snap = readSessionRound<ParkedSnapshot<BlitzRoundSnapshot>>(dataId, 'blitz')
-    const engine = snap && restoreParkedEngine(snap.engine, useJulian, 'blitz')
+    if (!snap || snap.config !== roundConfig) return null
+    const engine = restoreParkedEngine(snap.engine, useJulian, 'blitz')
     return engine ? { ...snap, engine } : null
   })
+  // The configuration the round on screen was begun under — written by Begin, restored with a parked
+  // round (which by the gate above is the live one). A ref: nothing renders from it.
+  const roundConfigRef = useRef(parkedRound?.config ?? roundConfig)
   // Only ENDED rounds are ever parked, so a restored round always has active === false; it is read
   // from the blob for symmetry rather than assumed.
   const [active, setActive] = useState(parkedRound?.active ?? false)
@@ -182,10 +197,6 @@ function BlitzMode({
   const endedAtRef = useRef<number | null>(parkedRound?.endedAt ?? null)
   const [breakdownOpen, setBreakdownOpen] = useState(false) // the round breakdown popup (components/RunBreakdown) — ephemeral, dies with the round
   const [showTimerDate, setShowTimerDate] = useState(parkedRound?.showTimerDate ?? false)
-  const blitzSec = useModePrefs((s) => s.blitzSec),
-    setBlitzSec = useModePrefs((s) => s.setBlitzSec) // persisted (mode-prefs store)
-  const qSec = useModePrefs((s) => s.blitzQSec),
-    setQSec = useModePrefs((s) => s.setBlitzQSec) // persisted (mode-prefs store)
   // `clockRemainRef` — the running sub-mode's remaining seconds as last drawn (the countdown writes it
   // every frame), as STAMPED when the round ended, or as PARKED with an ended round (round 22's fixer:
   // the park used to omit it, so a restored Per Round round that an Override rescued resumed with a
@@ -282,13 +293,6 @@ function BlitzMode({
   // recorded where the countdown decides its kind: a Per Question expiry on a card the player had
   // ALREADY answered wrong is an 'answer' end, and crediting that card resumes the round with a fresh
   // question clock — exactly what a judged-correct answer would have granted before the expiry.)
-
-  // The per-config Best silo keys. blitzBk leads with an m/n Allow-Mistakes marker (both
-  // per-round variants share the one blitzBest map); suddenBk has NO AM segment — for
-  // per-question, AM-ness is the MAP split (suddenBest = sudden death, suddenAmBest = Allow
-  // Mistakes on, C3a), because the two record shapes differ (score-only vs score+streak).
-  const blitzBk = `${allowMistakes ? 'm' : 'n'}${blitzSec}|${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
-  const suddenBk = `${qSec}|${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
 
   const resetTimerBars = () => {
     if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
@@ -500,6 +504,7 @@ function BlitzMode({
       sudden: suddenBest[suddenBk],
       suddenAm: suddenAmBest[suddenBk],
     }
+    roundConfigRef.current = roundConfig
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
@@ -791,6 +796,7 @@ function BlitzMode({
         active,
         currentRoundId: roundId,
         prevRoundBest: prevRoundBestRef.current,
+        config: roundConfigRef.current,
         remain: clockRemainRef.current,
         // WHY this round ended, and — for a 'toggle' end — the wall-clock instant it did, so the
         // charge for the gap keeps running across the switch instead of resetting to free.

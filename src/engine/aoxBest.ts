@@ -13,12 +13,14 @@
 // a press of the Override ⇄ Undo button can retract one of the run's n credited solves (on a browsed
 // card, on the card behind the live one, or on the held completing solve) or add a credit back — any
 // number of times, in either direction — so the run's standing stats keep moving after the
-// completion recorded the Best. So AoxMode snapshots the ENTIRE pre-run Best object when the run
+// completion recorded the Best. So AoxMode snapshots the ENTIRE pre-run Best record when the run
 // records (the cumulative best of every PRIOR run — the floor that can never be lost, the cross-run
-// corner the Blitz C2 fix had to add) and, on every post-completion stats change, sets the record to
-// reconcileAoxStanding(snapshot, standing stats): still standing (good ≥ n) → the snapshot improved
-// by the run's CURRENT avg/median; no longer standing (a credit was retracted) → the snapshot
-// unchanged, as if the run never completed. That subsumes the old undo-the-completing-solve rollback
+// corner the Blitz C2 fix had to add; `undefined` when the config had no record) and, on every
+// post-completion stats change, sets the record to reconcileAoxStanding(snapshot, standing stats):
+// still standing (good ≥ n) → the snapshot improved by the run's CURRENT avg/median; no longer
+// standing (a credit was retracted) → the snapshot unchanged, as if the run never completed — which,
+// for a config that had no record, is NO RECORD (the key is removed, exactly as Blitz does:
+// engine/bestMap). That subsumes the old undo-the-completing-solve rollback
 // and closes the back-browse hole (before the fix, only the live-edge reversal rolled the Best back,
 // so a back-browse un-credit left a FABRICATED Best standing on a run with fewer than n credits).
 // Extracted from main.tsx so it can be fuzzed directly against an independent oracle (best == the
@@ -104,31 +106,30 @@ export function reconcileAoxBest(
   }
 }
 
+// Does this record say anything? A record with neither metric is the same as none. (Builds before
+// this one WROTE such a record when a run with no prior Best was retracted, so one can be sitting in
+// a saved map; read as "no record", it is removed the next time a run on that config is retracted.)
+const holdsABest = (b: AoxBest): boolean => b.avg != null || b.med != null
+
 // The recorded run's reconcile target as its standing stats move post-completion. While the run
 // STANDS (still has its n credits, with computable stats), Best[its key] = the pre-run record
 // improved by the run's CURRENT avg/median — re-fired on every post-completion stats edit, so a
 // credited miss (faster standing avg) improves the record and the displayed Mean/Median can
 // never silently beat the recorded Best. The moment it stops standing (good < n — a post-end
-// Override retracted a credit), the record reverts to the pre-run snapshot, as if the run never
-// completed. AoxMode calls this from its reconcile effect; the fuzz drives it directly.
+// Override retracted a credit), the record reverts to the pre-run one, as if the run never
+// completed — `undefined` (NO record) when there was none before it. `n` is the length the run was
+// BEGUN at, never the live setting (AoxMode's `run`). AoxMode calls this from its reconcile effect;
+// the fuzz drives it directly.
 export function reconcileAoxStanding(
-  preRun: AoxBest,
+  preRun: AoxBest | undefined,
   good: number,
   n: number,
   times: number[],
   rid: number | null,
-): AoxBest {
+): AoxBest | undefined {
   const avg = calcAvg(times)
   const med = calcMed(times)
-  if (good < n || avg == null || med == null) return { ...preRun }
-  return reconcileAoxBest(preRun, avg, med, rid)
+  if (good < n || avg == null || med == null)
+    return preRun && holdsABest(preRun) ? { ...preRun } : undefined
+  return reconcileAoxBest(preRun ?? emptyAoxBest(), avg, med, rid)
 }
-
-// Field-wise equality for the reconcile effect's write-skip (avoid no-op store writes + marker churn).
-export const aoxBestEqual = (a: AoxBest, b: AoxBest): boolean =>
-  a.avg === b.avg &&
-  a.avgMed === b.avgMed &&
-  a.avgRoundId === b.avgRoundId &&
-  a.med === b.med &&
-  a.medAvg === b.medAvg &&
-  a.medRoundId === b.medRoundId

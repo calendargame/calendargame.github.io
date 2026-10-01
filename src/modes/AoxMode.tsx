@@ -40,7 +40,8 @@ import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
 import { buildRunBreakdown } from '../engine/runBreakdown.js'
-import { reconcileAoxStanding, aoxBestEqual, emptyAoxBest } from '../engine/aoxBest.js'
+import { reconcileAoxStanding, emptyAoxBest } from '../engine/aoxBest.js'
+import { fileBest } from '../engine/bestMap.js'
 import { newRoundId, isNewBest } from '../engine/roundId.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -65,7 +66,41 @@ interface AoxRunSnapshot {
   runPhase: string
   revealedQ: number | null
   currentRunId: number | null
-  prevBestSnap: { key: string; best: AoxBest; runId: number } | null
+  run: RunConfig
+  prevBestSnap: PrevBestSnap | null
+}
+// The Best record that stood before the run recorded — none (`best` absent) when its config had none.
+interface PrevBestSnap {
+  key: string
+  best?: AoxBest
+  runId: number
+}
+
+// ★ THE CONFIGURATION A RUN IS PLAYED UNDER, fixed at Begin for the life of the run: its length, the
+// key its Best is filed under (which carries the length, Allow Mistakes and every date setting), and
+// One-by-One. Three things read it instead of the live settings:
+//   • the run's OWN ARITHMETIC — when it completes, and whether it still stands — uses the length it
+//     was begun at. The live length can move under a run that is still on screen (Reset Settings
+//     restores it while the ⚙ panel is open; the run resets when the panel closes), and reading it
+//     live there completed a 10-solve run at 3 solves, or took a finished run's Best away;
+//   • the Best is filed under the key the run was played on;
+//   • a run PARKED for the browsing session (store/sessionRound) carries it, and comes back only if
+//     it is still exactly the live configuration (sameRun). Settings and the per-mode setup are
+//     shared by a preset's two stats copies, so a guest's interlude can change them under a parked
+//     run — and a run restored over a different length or a different date range reconciled its Best
+//     against settings it was never played on (erasing it), or would have resumed drawing the wrong
+//     dates. A run that no longer matches is simply not restored: the screen comes up idle, exactly
+//     as a settings change resets a run that is on screen, and the Best it set stays as it was saved.
+interface RunConfig {
+  n: number
+  bestKey: string
+  oneByOne: boolean
+}
+// Read off an untrusted blob (the slot may hold anything a build on this origin wrote).
+const sameRun = (parked: unknown, live: RunConfig): boolean => {
+  if (typeof parked !== 'object' || parked === null) return false
+  const p = parked as Partial<RunConfig>
+  return p.n === live.n && p.bestKey === live.bestKey && p.oneByOne === live.oneByOne
 }
 
 // ============================================================
@@ -111,21 +146,38 @@ function AoxMode({
   // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — see modes/modeHooks' useMountedDataId
   // for why a round is parked and restored ONLY against the copy it was played on (round 23 Q2).
   const dataId = useMountedDataId()
-  // Round-21 Q11 — the ended run this (stats copy, mode) parked before its last unmount, read EXACTLY
-  // ONCE at mount. On a preset switch or an Amnesic toggle the always-mounted screens remount
-  // (src/main.tsx remountScreens) and the registry ALREADY names the INCOMING copy by then — the
-  // registry is written before the stores rehydrate, one synchronous turn (store/presetControl). So
-  // this is the incoming copy's OWN parked run and never the one just left; the copy key is the whole
-  // contamination guard. Factored into one read so the initializers below don't each
-  // hit sessionStorage. The engine inside goes through the one restore door here, before any
-  // initializer reads the snapshot: a blob this build cannot read drops the WHOLE snapshot (see
-  // engine/parkedEngine's restoreParkedEngine), so the screen never shows an ended run over a
-  // fresh engine.
+  const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
+  // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes,
+  // format (random→'random' bucket), leapChance, janFebChance, julianChance, year range,
+  // useJulian — the SAME dimensions as Blitz/Sudden (and as How-to-Play documents). The original
+  // app omitted julianChance here only (an inconsistency: it changes the Julian-date mix, a real
+  // difficulty dimension when the range spans pre-1582); fixed C2 — store/progress.ts migrates
+  // saved v1 keys so no recorded Best is orphaned.
+  const bestKey = `${n}|${allowMistakes}|${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
+  // The configuration a run begun (or restored) RIGHT NOW is played under — see RunConfig.
+  const liveRun: RunConfig = { n, bestKey, oneByOne }
+  // The ended run this (stats copy, mode) parked before its last unmount, read EXACTLY ONCE at
+  // mount. On a preset switch or an Amnesic toggle the always-mounted screens remount (src/main.tsx
+  // remountScreens) and the registry ALREADY names the INCOMING copy by then — the registry is
+  // written before the stores rehydrate, one synchronous turn (store/presetControl). So this is the
+  // incoming copy's OWN parked run and never the one just left; the copy key is the whole
+  // contamination guard. Factored into one read so the initializers below don't each hit
+  // sessionStorage. Two gates, before any initializer reads the snapshot, and either one drops the
+  // WHOLE snapshot so the screen never shows an ended run over a fresh engine:
+  //   • the run was played under exactly the live configuration (RunConfig argues why);
+  //   • the engine inside comes through the one restore door (engine/parkedEngine's
+  //     restoreParkedEngine) — a blob this build cannot read is not a run.
   const [parkedRun] = useState<AoxRunSnapshot | null>(() => {
     const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(dataId, 'aox')
-    const engine = snap && restoreParkedEngine(snap.engine, useJulian, 'aox')
+    if (!snap || !sameRun(snap.run, liveRun)) return null
+    const engine = restoreParkedEngine(snap.engine, useJulian, 'aox')
     return engine ? { ...snap, engine } : null
   })
+  // The run on screen's configuration, from Begin until Reset (null with no run) — restored with a
+  // parked run, which by the gate above is the live one.
+  const [run, setRun] = useState<RunConfig | null>(parkedRun?.run ?? null)
+  // The length that run's arithmetic uses (see RunConfig): its own while there is one.
+  const runN = run?.n ?? n
   const [runPhase, setRunPhase] = useState(parkedRun?.runPhase ?? 'idle') // idle | running | done | failed (the RUN; the engine just runs the per-question loop) — only done/failed are ever parked (round-21 Q11)
   // ★ ONE-BY-ONE: WHICH QUESTION THE PLAYER HAS ASKED TO SEE (round 23 Q5) — the engine `questionId`
   // Begin started the run on, or the one Continue revealed; null with no run. The date on screen is
@@ -140,14 +192,6 @@ function AoxMode({
   // Harmless outside One-by-One: every use is guarded by `oneByOne`.
   const [revealedQ, setRevealedQ] = useState<number | null>(parkedRun?.revealedQ ?? null)
   const [breakdownOpen, setBreakdownOpen] = useState(false) // the run breakdown popup (components/RunBreakdown) — ephemeral, dies with the run
-  const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
-  // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes,
-  // format (random→'random' bucket), leapChance, janFebChance, julianChance, year range,
-  // useJulian — the SAME dimensions as Blitz/Sudden (and as How-to-Play documents). The original
-  // app omitted julianChance here only (an inconsistency: it changes the Julian-date mix, a real
-  // difficulty dimension when the range spans pre-1582); fixed C2 — store/progress.ts migrates
-  // saved v1 keys so no recorded Best is orphaned.
-  const bestKey = `${n}|${allowMistakes}|${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
   // saveStats:true ALWAYS → the run tracks + completes regardless of the global Save Stats
   // setting (which only dims the display + gates recording a Best). timingOff:false → solve
   // times are recorded for the average.
@@ -227,13 +271,11 @@ function AoxMode({
   }
   // The PRE-run Best record {key,best,runId}, latched once when this run records (completion with
   // Save Stats on) — the floor every post-completion reconcile starts from (see the effect below).
-  // Restored from the parked run (round-21 Q11): it is the floor every post-completion reconcile
-  // starts from, so after a remount it must be the real pre-run record and not null — otherwise the
-  // reconcile effect early-returns and an Override on the restored run cannot roll a fabricated Best
-  // back (or would rebuild one the run no longer earns).
-  const prevBestSnapRef = useRef<{ key: string; best: AoxBest; runId: number } | null>(
-    parkedRun?.prevBestSnap ?? null,
-  )
+  // Restored from the parked run: it is the floor every post-completion reconcile starts from, so
+  // after a remount it must be the real pre-run record and not null — otherwise the reconcile effect
+  // early-returns and an Override on the restored run cannot roll a fabricated Best back (or would
+  // rebuild one the run no longer earns).
+  const prevBestSnapRef = useRef<PrevBestSnap | null>(parkedRun?.prevBestSnap ?? null)
   const bestData = bests[bestKey] || emptyAoxBest()
 
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
@@ -242,16 +284,19 @@ function AoxMode({
   // AoX used to keep a private copy of it here; see the render below for what that cost.
 
   // Run completion + Best reconcile — ONE effect owns every Best write (mirrors Blitz's
-  // timerDone effect). (a) The credited count reaching N completes the run: flip the phase and,
-  // if the global Save Stats is on, LATCH the pre-run Best {key,best,runId} as this run's floor.
+  // timerDone effect). (a) The credited count reaching the run's N (`runN` — the length it was BEGUN
+  // at, see RunConfig) completes the run: flip the phase and, if the global Save Stats is on, LATCH
+  // the pre-run Best {key,best,runId} as this run's floor.
   // Latched once per run: a reversal can resume + re-complete the run, and re-latching then would
   // capture the run's own record as its floor (the stale-snapshot trap). The completing answer
   // used eng.answer(...,{complete}) so the engine stayed on the solve; re-entry is phase-guarded.
   // (b) From the latch on, every stats change re-reconciles the record under the key the run
-  // RECORDED under (the panel's bestKey can move — settings stay editable while a run sits done):
-  // still standing (good ≥ n) → the floor improved by the run's CURRENT avg/median; not standing
+  // was PLAYED under (the panel's bestKey can move — settings stay editable while a run sits done):
+  // still standing (good ≥ its N) → the floor improved by the run's CURRENT avg/median; not standing
   // (a press retracted a credit — on a browsed card, on the card behind the live one, or on the held
-  // completing solve) → the floor restored, as if the run never completed. Before the C2 fix only the live-edge
+  // completing solve) → the floor restored, as if the run never completed — and when there was no
+  // record before the run, none after it (engine/bestMap's fileBest removes the key, as Blitz does).
+  // Before the C2 fix only the live-edge
   // reversal rolled back (rollbackBest, gated on !inBack), so a back-browse un-credit left a
   // FABRICATED Best standing on a run with fewer than n credits — and a mid-done settings change
   // (key moved) dodged even that. ★ markers need nothing here: each is read off the record's run id,
@@ -266,26 +311,22 @@ function AoxMode({
   // directive only covers the line it sits on. Q1 is a verbatim move, so these are repositioned
   // and annotated, never restructured. ▶ Queued for proper review as its own item.
   useEffect(() => {
-    if (runPhase === 'running' && doneCount >= n) {
+    if (runPhase === 'running' && doneCount >= runN) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRunPhase('done')
-      if (saveStats && runId != null && prevBestSnapRef.current?.runId !== runId)
-        prevBestSnapRef.current = {
-          key: bestKey,
-          best: { ...(bests[bestKey] || emptyAoxBest()) },
-          runId,
-        }
+      if (saveStats && runId != null && prevBestSnapRef.current?.runId !== runId) {
+        const key = run?.bestKey ?? bestKey
+        prevBestSnapRef.current = { key, best: bests[key], runId }
+      }
     }
     const snap = prevBestSnapRef.current
     if (!snap || snap.runId !== runId) return // this run hasn't recorded
-    const next = reconcileAoxStanding(snap.best, S.good, n, S.times, snap.runId)
+    const next = reconcileAoxStanding(snap.best, S.good, runN, S.times, snap.runId)
     // No ★ bookkeeping here: the ★ is read off the record's run ids, so a write that improves a metric
     // lights it and a write that restores the floor puts it out, with nothing to keep in step.
-    setBests((p) =>
-      aoxBestEqual(p[snap.key] || emptyAoxBest(), next) ? p : { ...p, [snap.key]: next },
-    )
+    setBests((p) => fileBest(p, snap.key, next))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runPhase, doneCount, n, saveStats, S.good, S.times, runId, setBests])
+  }, [runPhase, doneCount, runN, saveStats, S.good, S.times, runId, setBests])
 
   // Round-21 Q11 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the stats copy
   // this screen was mounted on (`dataId`), exactly as the effect above mirrors the run's Best to
@@ -298,19 +339,20 @@ function AoxMode({
   // the reconcile effect above) re-parks the updated snapshot. This effect sits AFTER that
   // reconcile effect on purpose: the reconcile latches prevBestSnapRef in the same commit the phase
   // turns 'done', effects run top-to-bottom, so the write below always sees the latched floor.
-  // `runId` is written only by begin() / reset(), so it is stable whenever a phase is ended (it is a
-  // dep only because it is state this effect reads).
+  // `runId` and `run` are written only by begin() / reset(), so they are stable whenever a phase is
+  // ended (they are deps only because they are state this effect reads).
   useEffect(() => {
-    if (runPhase === 'done' || runPhase === 'failed')
+    if ((runPhase === 'done' || runPhase === 'failed') && run)
       writeSessionRound(dataId, 'aox', {
         engine: state,
         runPhase,
         revealedQ,
         currentRunId: runId,
+        run,
         prevBestSnap: prevBestSnapRef.current,
-      })
+      } satisfies AoxRunSnapshot)
     else discardSessionRound(dataId, 'aox')
-  }, [runPhase, revealedQ, state, runId, dataId])
+  }, [runPhase, revealedQ, state, runId, run, dataId])
 
   // Reset the run if the panel is hidden mid-run (also cancel any pending reveal auto-advance).
   useEffect(() => {
@@ -322,6 +364,7 @@ function AoxMode({
       eng.resetStats()
       setRunPhase('idle')
       setRevealedQ(null)
+      setRun(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
@@ -461,6 +504,7 @@ function AoxMode({
   const begin = () => {
     eng.resetStats()
     setRunId(newRoundId())
+    setRun(liveRun) // the configuration this run is played under, fixed here (see RunConfig)
     prevBestSnapRef.current = null
     setRunPhase('running')
     setRevealedQ(questionIdAfterReset(state)) // the run's first question: Begin itself reveals it
@@ -475,7 +519,7 @@ function AoxMode({
   }
   const submitDoW = (i: number) => {
     setFlashWithTimeout({ type: i === correct ? 'good' : 'bad', idx: i })
-    const willComplete = i === correct && !state.countedWrong && doneCount === n - 1 // the Nth credited solve completes the run
+    const willComplete = i === correct && !state.countedWrong && doneCount === runN - 1 // the Nth credited solve completes the run
     eng.answer(i, { complete: willComplete }) // an advance moves the question counter → One-by-One hides the next date (`shown`)
     if (i !== correct && !allowMistakes) {
       eng.lockReveal()
@@ -573,7 +617,7 @@ function AoxMode({
     //     vanished with it). Blitz holds for the same reason on a round that stays ended.
     // `hold` only ever matters to a press that would otherwise advance (the live card newly credited);
     // taking a credit away never advances — the engine's own rule — so it needs nothing here.
-    const hold = goodAfter >= n || (isLocked && !resumes)
+    const hold = goodAfter >= runN || (isLocked && !resumes)
     // The green pulse on a press that credits the live card, held or not (the engine's creditsLiveCard).
     if (creditsLiveCard(plan)) setFlashWithTimeout({ type: 'good', idx: correct })
     eng.override({ hold }) // any Best impact reconciles in the effect above
@@ -596,6 +640,7 @@ function AoxMode({
     setRevealedQ(null)
     prevBestSnapRef.current = null
     setRunId(null) // no run on screen — and so no ★: a best is marked only while its run is up
+    setRun(null)
     setBreakdownOpen(false) //  the breakdown belongs to the run being cleared
   }
   // Cancel a pending reveal auto-advance if the component unmounts mid-flash (Full Reset remount).

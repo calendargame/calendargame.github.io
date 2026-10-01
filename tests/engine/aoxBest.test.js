@@ -20,12 +20,8 @@
 // reachability through the real UI is pinned by aox.dom batch 9 (back-browse retract, cross-run
 // floor, mid-done key move).
 import { describe, it, expect } from 'vitest'
-import {
-  reconcileAoxBest,
-  reconcileAoxStanding,
-  aoxBestEqual,
-  emptyAoxBest,
-} from '../../src/engine/aoxBest.js'
+import { isDeepStrictEqual } from 'node:util'
+import { reconcileAoxBest, reconcileAoxStanding, emptyAoxBest } from '../../src/engine/aoxBest.js'
 import { calcAvg, calcMed } from '../../src/engine/stats.js'
 import { roundCentis } from '../../src/lib/modeFormat.js'
 import { mulberry32 } from '../helpers/rng.js'
@@ -122,9 +118,19 @@ describe('aoxBest — standing reconcile (the post-completion protocol)', () => 
     expect(next.medRoundId).not.toBe(2)
   })
 
-  it('an empty floor + a retracted run stays empty (no fabricated record)', () => {
-    const next = reconcileAoxStanding(emptyAoxBest(), 1, 2, [0.1], 1)
-    expect(next).toEqual(emptyAoxBest())
+  // ★ NO RECORD BEFORE THE RUN ⇒ NO RECORD AFTER ITS RETRACTION — `undefined`, which AoxMode files as
+  // "remove the key" (engine/bestMap), exactly as Blitz does. It used to hand back an all-null
+  // record, which was then SAVED: a Best map holding a record that says nothing, so a preset with
+  // nothing in it read as played-in.
+  it('no floor + a retracted run leaves NO record (not an empty one)', () => {
+    expect(reconcileAoxStanding(undefined, 1, 2, [0.1], 1)).toBe(undefined)
+    // …and an all-null record an older build saved is the same "no record".
+    expect(reconcileAoxStanding(emptyAoxBest(), 1, 2, [0.1], 1)).toBe(undefined)
+  })
+
+  it('no floor + a standing run records from scratch', () => {
+    const next = reconcileAoxStanding(undefined, 2, 2, [2.0, 4.0], 7)
+    expect(next).toMatchObject({ avg: 3, avgRoundId: 7, med: 3, medRoundId: 7 })
   })
 
   it('extra credits (good > n) still stand, at the run’s CURRENT stats', () => {
@@ -160,13 +166,6 @@ describe('aoxBest — standing reconcile (the post-completion protocol)', () => 
     expect(next.avgRoundId).not.toBe(2)
     expect(next.avg).toBe(2.13)
     expect(next.avgRoundId).toBe(1) // record stays with run 1 — run 2 never actually beat it on screen
-  })
-
-  it('aoxBestEqual: field-wise equality', () => {
-    const a = reconcileAoxBest(emptyAoxBest(), 2, 3, 1)
-    expect(aoxBestEqual(a, { ...a })).toBe(true)
-    expect(aoxBestEqual(a, { ...a, avgRoundId: 9 })).toBe(false)
-    expect(aoxBestEqual(emptyAoxBest(), emptyAoxBest())).toBe(true)
   })
 })
 
@@ -225,7 +224,7 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
   // store must equal the oracle.
   function runSession(seed, runCount, coverage) {
     const rnd = mulberry32(seed)
-    let best = emptyAoxBest()
+    let best // the config's saved record — undefined (no key) until a run earns one
     const runs = [] // every run's CURRENT {recorded, good, n, times, rid}
     let nextRid = 1
     for (let r = 0; r < runCount; r++) {
@@ -236,11 +235,11 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
       const recorded = rnd() < 0.85 // global Save Stats at completion
       const run = { recorded, good: n, n, times, rid }
       runs.push(run)
-      let floor = null
+      let floor
       if (recorded) {
-        floor = { ...best } // the latch: the pre-run Best, taken once
+        floor = best // the latch: the pre-run Best, taken once (undefined = no record yet)
         best = reconcileAoxStanding(floor, run.good, n, run.times, rid)
-        expect(best, `seed ${seed} run ${r} record`).toEqual(expectedBest(runs))
+        expect(best ?? emptyAoxBest(), `seed ${seed} run ${r} record`).toEqual(expectedBest(runs))
       }
       // Post-end Override ⇄ Undo presses on the ended run (on a browsed card or the card behind).
       const edits = Math.floor(rnd() * 5)
@@ -260,25 +259,31 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
         if (run.recorded) {
           const prev = best
           best = reconcileAoxStanding(floor, run.good, n, run.times, rid)
-          if (
-            !aoxBestEqual(prev, best) &&
-            floor.avg != null &&
-            aoxBestEqual(best, floor) &&
-            run.good < n
-          )
-            coverage.floorRestore = true
+          if (run.good < n) {
+            if (floor && !isDeepStrictEqual(prev, best) && isDeepStrictEqual(best, floor))
+              coverage.floorRestore = true
+            if (!floor && prev && best === undefined) coverage.recordRemoved = true
+          }
         }
-        expect(best, `seed ${seed} run ${r} edit ${e}`).toEqual(expectedBest(runs))
+        expect(best ?? emptyAoxBest(), `seed ${seed} run ${r} edit ${e}`).toEqual(
+          expectedBest(runs),
+        )
       }
     }
   }
 
   it('Best avg/median equals the min standing run across 400 random edited sessions', () => {
-    const coverage = { retractBelowN: false, postEndImproveChance: false, floorRestore: false }
+    const coverage = {
+      retractBelowN: false,
+      postEndImproveChance: false,
+      floorRestore: false,
+      recordRemoved: false,
+    }
     for (let seed = 1; seed <= 400; seed++) runSession(seed, 12, coverage)
     // The sessions actually exercised the C2 corners (no vacuous pass):
     expect(coverage.retractBelowN).toBe(true) // a recorded run dropped below n credits
     expect(coverage.floorRestore).toBe(true) // …and the write restored a NON-EMPTY earlier floor
+    expect(coverage.recordRemoved).toBe(true) // …or, with no earlier record, removed the run's own
     expect(coverage.postEndImproveChance).toBe(true) // a standing run's stats moved post-end
   })
 })
