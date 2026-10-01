@@ -441,7 +441,7 @@ describe('Round 23 Q6 — an overridden card comes back overridden, and still to
     document.getElementById('root')?.remove()
   })
 
-  it('Blitz: a browsed card overridden before the switch reads Undo after it, and restores its mark', () => {
+  it('Blitz: a browsed card overridden before the switch reads Undo after it, and restores its mark', async () => {
     mountApp()
     pinReadable()
     switchToBlitz()
@@ -464,6 +464,12 @@ describe('Round 23 Q6 — an overridden card comes back overridden, and still to
     tap(ctrl('Undo'))
     expect(statValue('Score')).toBe('2/3')
     expect(dayClass(card2)).toContain('btn-correct-persist') // the answer it left is back
+    // A second DELIBERATE press comes a beat after the first. `tap` is a real press (a pointerdown,
+    // then the click), and this button ignores a second physical press inside 350 ms as the
+    // double-tap it almost always is (components/OverrideButton; tests/overrideButton.dom).
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 360))
+    })
     tap(ctrl('Override')) // …and it re-credits, as many times as the player likes
     expect(statValue('Score')).toBe('1/3')
   })

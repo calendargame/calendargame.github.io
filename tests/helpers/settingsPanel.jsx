@@ -257,6 +257,10 @@ export async function drainHistory() {
 // not close the panel" as a pass for a control the panel would have closed on.
 // (jsdom's synthetic pointerdown is not a PRIMARY pointer, so the press-drag controller and the
 // press-drag triggers ignore it, exactly as they ignored the mousedown this used to send.)
+// ⚠ ONE CONTROL DOES READ IT: the Override ⇄ Undo button takes a pointerdown as proof of a physical
+// press, and ignores a second such press inside 350 ms as a double-tap (components/OverrideButton).
+// So two `tap`s on that button back to back are a double-tap, and the second does nothing — exactly
+// as on a phone. A case that means two DELIBERATE presses has to leave a beat between them.
 export const tap = (el) =>
   act(() => {
     fireEvent.pointerDown(el)
