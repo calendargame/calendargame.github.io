@@ -127,6 +127,12 @@ interface PanelPos {
 // state, which changes no dimension.)
 const OPTION_ROW_BOX =
   'w-full text-left rounded-xl pl-4 pr-4 py-3 text-[15px] flex items-center gap-2.5'
+// What joins the option VALUES into the one string an effect can depend on (the options array
+// itself is a new object every render). A value is a mode id or a preset number — never free text
+// — so a separator only has to be a character no value contains, and it is written as a visible
+// escape rather than as the raw control character, which is invisible in an editor and makes git
+// and grep treat the whole file as binary.
+const OPTION_VALUE_SEPARATOR = '\u001f'
 export default function CustomSelect({
   value,
   onChange,
@@ -245,7 +251,7 @@ export default function CustomSelect({
     // every render. The mirror re-renders with the new labels regardless, and the ResizeObserver
     // above catches any width change that causes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerMatchesDropdown, options.map((o) => o.value).join(' ')])
+  }, [triggerMatchesDropdown, options.map((o) => o.value).join(OPTION_VALUE_SEPARATOR)])
   // measurePanel reads the trigger's current viewport rect and writes panelPos: right edge
   // aligned to the trigger, 6px below it. Called on open, on resize / visualViewport change, and
   // when --bar-h moves the bar the trigger sits in — and on NOTHING else, in particular never on
