@@ -329,8 +329,9 @@ const BUILD_TIME = new Date()
 // vacuous. (2) HONESTY: a dev server is not a deploy, and stamping one with the current time would
 // print a "Last Updated" that never corresponded to anything shipped. The epoch is unmistakably not
 // a deploy date, which is the point — nobody can mistake a dev build for a released one. A dev
-// server therefore renders `Last Updated: 12/31/1969 16:00` in Pacific (verified in a real browser
-// against `npm run dev`); that is this sentinel showing through, not a bug.
+// server does not PRINT it, though: the ⚙ panel shows "Last Updated: development build" there
+// (src/deployStamp.ts's BUILD_IS_DEPLOYED), because the epoch drawn as a date — 12/31/1969 16:00
+// in Pacific — reads as a broken clock. Vitest still draws it as a date.
 // ⚠ In dev, Vite does NOT substitute defines into the served source — it assigns them onto
 // globalThis from /@vite/env, which /@vite/client imports ahead of the app module. So the served
 // deployStamp.ts still literally reads `new Date(__BUILD_TS__)` and resolves at runtime. Checked in

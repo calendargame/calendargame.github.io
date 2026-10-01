@@ -18,7 +18,7 @@
 // would go red on the first day nobody deployed, which would make the suite a calendar rather than
 // a test. The real CHANGELOG is checked against instants DERIVED from its own newest entry instead,
 // which is day-drift-free and still proves the shipped data satisfies the guard that gates it.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   PACIFIC_TZ,
   pacificDate,
@@ -28,7 +28,7 @@ import {
   describeChangelogStampMismatch,
 } from '../scripts/changelogStamp.mjs'
 import { CHANGELOG } from '../src/changelog.js'
-import { DEPLOY_TS } from '../src/deployStamp.js'
+import { BUILD_IS_DEPLOYED, DEPLOY_TS } from '../src/deployStamp.js'
 
 const at = (iso) => pacificDate(new Date(iso))
 
@@ -190,7 +190,7 @@ describe('the real src/changelog.ts against the guard that gates it', () => {
   })
 })
 
-// ── The OTHER half of Q1: what the TEST ENVIRONMENT is handed ────────────────────────────────
+// ── The OTHER half of the build-time stamp: what the TEST ENVIRONMENT is handed ─────────────────
 // ⚠ THIS PINS THE SENTINEL, NOT A DEPLOY DATE, and the distinction is the whole reason the case is
 // allowed to exist. src/deployStamp.ts warns against asserting DEPLOY_TS, and that warning is about
 // the DEPLOY date — a test that hard-coded a release day would have to be edited on every deploy and
@@ -202,8 +202,31 @@ describe('the real src/changelog.ts against the guard that gates it', () => {
 // Vitest, or that ternary were edited, every stamp-touching case in the suite would quietly become
 // clock-dependent and stay green while it happened. The absence of a fallback in deployStamp.ts
 // proves only that SOME define arrives, never which branch. One line closes that hole.
-describe('the deploy stamp under Vitest (Q1, round 16)', () => {
-  it('is the frozen sentinel, never the clock — the determinism half of Q1', () => {
+describe('the deploy stamp under Vitest', () => {
+  it('is the frozen sentinel, never the clock — the determinism half of the build-time stamp', () => {
     expect(DEPLOY_TS.toISOString()).toBe('1970-01-01T00:00:00.000Z')
+  })
+
+  // The ⚙ panel prints the stamp as a date only for a build that WAS deployed; a dev server, which
+  // never was, says "development build" instead of drawing the sentinel as 12/31/1969. Vitest runs
+  // in its own mode and must stay on the date side — every panel case that reads "Last Updated" is
+  // a case about the line a player sees.
+  it('counts as a deployed build under Vitest, and as not deployed only in Vite`s development mode', async () => {
+    expect(BUILD_IS_DEPLOYED).toBe(true)
+    vi.stubEnv('MODE', 'development')
+    vi.resetModules()
+    try {
+      expect((await import('../src/deployStamp.js')).BUILD_IS_DEPLOYED).toBe(false)
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+    vi.stubEnv('MODE', 'production')
+    try {
+      expect((await import('../src/deployStamp.js')).BUILD_IS_DEPLOYED).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 })

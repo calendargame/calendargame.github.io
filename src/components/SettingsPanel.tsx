@@ -51,7 +51,7 @@ import {
   FOOTER_META_ROW_CLASS,
   NUM_INPUT_CLASS,
 } from './controlClasses.js'
-import { DEPLOY_TS } from '../deployStamp.js'
+import { BUILD_IS_DEPLOYED, DEPLOY_TS } from '../deployStamp.js'
 import { APP_VERSION } from '../appVersion.js'
 import { CHANGELOG } from '../changelog.js'
 import { useSettings, SETTINGS_DEFAULTS } from '../store/settings.js'
@@ -1588,6 +1588,8 @@ export function SettingsPanel({
             <span>
               Last Updated:{' '}
               {(() => {
+                // A dev server was never deployed, so it has no date to show (src/deployStamp).
+                if (!BUILD_IS_DEPLOYED) return 'development build'
                 const d = DEPLOY_TS
                 const yy = d.getFullYear()
                 const mo = d.getMonth() + 1
