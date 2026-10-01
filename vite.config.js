@@ -281,7 +281,7 @@ const buildIdentity = () => {
   }
 }
 
-// precacheIntegrity (Q10b, round 11) — the round-7 class made unshippable. Fails the BUILD when any
+// precacheIntegrity (round 11) — the round-7 class made unshippable. Fails the BUILD when any
 // precache revision in the generated sw.js disagrees with the md5 of the file actually sitting in
 // dist, which is the only thing that decides whether a client ever re-downloads that file. The
 // check itself lives in scripts/precacheIntegrity.mjs (pure + unit-tested); this is just its wiring.
@@ -552,7 +552,7 @@ export default defineConfig(({ command, mode }) => ({
           }),
         ]
       : []),
-    // Sentry source-map upload (Current Work C1b) — WIRED BUT NEVER YET ACTIVE. Read this before
+    // Sentry source-map upload — WIRED BUT NEVER YET ACTIVE. Read this before
     // trusting a stack trace.
     //
     // WHAT IT WOULD DO: make crash stack traces READABLE (real file/line, not minified gibberish) by

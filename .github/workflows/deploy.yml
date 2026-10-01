@@ -121,7 +121,7 @@ jobs:
       - name: Lint
         run: npm run lint
       # Formatting gate — Prettier must be clean (npm run format locally to fix). Without this, style
-      # drift silently re-accumulates on edited files (it has twice); now it can never ship. (B1.)
+      # drift silently re-accumulates on edited files (it has twice); now it can never ship.
       - name: Check formatting
         run: npm run format:check
       - name: Type-check
