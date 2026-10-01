@@ -244,7 +244,12 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
           ]),
         ),
       }
-      localStorage.setItem('cg-progress-v1', JSON.stringify({ state: values, version: 4 }))
+      // Stamped with the CURRENT version: this is the round trip of a save this build wrote, which
+      // must come back exactly. (An older build's save goes through `migrate`, which is allowed to
+      // change it — a random Best of 0 here is precisely what the v4 → v5 step drops — and has its
+      // own cases below.)
+      const version = useProgress.persist.getOptions().version
+      localStorage.setItem('cg-progress-v1', JSON.stringify({ state: values, version }))
       await useProgress.persist.rehydrate()
       const s = useProgress.getState()
       expect(s.stats, `seed ${seed}`).toEqual(values.stats)
@@ -368,5 +373,79 @@ describe('progress store — v4 → v5 legacy baseline for saves the 1,000-cap t
     )
     await useProgress.persist.rehydrate()
     expect(useProgress.getState().stats.flash).toEqual(v5)
+  })
+})
+
+// ── v4 → v5: the Best records of NOTHING an older build left behind are dropped ────────────────
+// Builds up to v2.26.0 left a key behind when a round or run that set a config's first record was
+// overridden back below it: a MoX record with no mean and no median, a Blitz record of 0 and 0.
+// Underneath, each is a key in a Best map — so Full Reset stayed lit and the preset read as
+// played-in. They go as the save loads; every real record stays exactly as it was.
+describe('progress store — v4 → v5 drops the empty Best records an older build saved', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useProgress.getState().resetProgress()
+  })
+  afterEach(() => {
+    localStorage.clear()
+    useProgress.getState().resetProgress()
+  })
+  const emptyMox = {
+    avg: null,
+    avgMed: null,
+    avgRoundId: null,
+    med: null,
+    medAvg: null,
+    medRoundId: null,
+  }
+  const zeroBlitz = { score: 0, streak: 0, scoreRoundId: 3, streakRoundId: 3 }
+  const realBlitz = { score: 4, streak: 0, scoreRoundId: 5, streakRoundId: null }
+  const seed = (bests, version) =>
+    localStorage.setItem(
+      'cg-progress-v1',
+      JSON.stringify({ state: { ...makeProgressDefaults(), ...bests }, version }),
+    )
+
+  it('an all-null MoX record and zero Blitz records are gone after the load, and from the re-save', async () => {
+    seed(
+      {
+        aoxBest: { emptied: emptyMox, kept: rec },
+        blitzBest: { emptied: zeroBlitz, kept: realBlitz },
+        suddenAmBest: { emptied: zeroBlitz },
+        suddenBest: { emptied: { score: 0, roundId: 2 }, kept: { score: 1, roundId: 2 } },
+      },
+      4,
+    )
+    await useProgress.persist.rehydrate()
+    const bestsOf = (s) => ({
+      aoxBest: s.aoxBest,
+      blitzBest: s.blitzBest,
+      suddenAmBest: s.suddenAmBest,
+      suddenBest: s.suddenBest,
+    })
+    const expected = {
+      aoxBest: { kept: rec },
+      blitzBest: { kept: realBlitz },
+      suddenAmBest: {},
+      suddenBest: { kept: { score: 1, roundId: 2 } },
+    }
+    expect(bestsOf(useProgress.getState())).toEqual(expected)
+    const saved = JSON.parse(localStorage.getItem('cg-progress-v1'))
+    expect(saved.version).toBe(5)
+    expect(bestsOf(saved.state)).toEqual(expected)
+  })
+
+  it('a save holding nothing else comes back equal to a brand-new one', async () => {
+    seed({ aoxBest: { emptied: emptyMox }, blitzBest: { emptied: zeroBlitz } }, 4)
+    await useProgress.persist.rehydrate()
+    const { stats, blitzBest, suddenBest, suddenAmBest, aoxBest } = useProgress.getState()
+    expect({ stats, blitzBest, suddenBest, suddenAmBest, aoxBest }).toEqual(makeProgressDefaults())
+  })
+
+  it('a record with one metric, and anything this build cannot name, is left exactly as found', async () => {
+    const half = { ...emptyMox, med: 2.5, medAvg: 2.6, medRoundId: 9 }
+    seed({ aoxBest: { half, odd: 'not a record', none: null } }, 4)
+    await useProgress.persist.rehydrate()
+    expect(useProgress.getState().aoxBest).toEqual({ half, odd: 'not a record', none: null })
   })
 })

@@ -129,6 +129,45 @@ export function baselineTrimmedTimes(stats: Record<string, unknown>): Record<str
   return out
 }
 
+// ── v4 → v5, THE OTHER REPAIR: A BEST RECORD THAT SAYS NOTHING IS NOT A RECORD ─────────────────
+//
+// Every Best map holds a key ONLY for a configuration that has a record (engine/bestMap). Builds up
+// to v2.26.0 broke that in one corner: a round or run that set a config's FIRST record and was then
+// overridden back below it left the key behind, holding a record of nothing — a MoX record with no
+// mean and no median, a Blitz record with a score and streak of 0. On screen it reads as "no record"
+// (MoX) or as a Best of 0 nobody earned (Blitz); underneath, it is a key — so Full Reset stayed lit
+// with nothing left to reset, and deleting the preset asked about data that was not there.
+// Those records are dropped here, where the save crosses into this build's shape, and from then on
+// neither door lets one in: no write files one (fileBest takes the key away instead), and no load
+// keeps one.
+// ⚠ IN THE VERSION-GATED STEP, NOT ON EVERY LOAD, and the shared origin is why that is enough: an
+// older build stamps everything it writes with ITS version (it even re-stamps a newer save the
+// moment it loads one), so a record like this can only ever arrive inside a pre-v5 payload — which
+// is exactly what runs this step, again, every time it happens. It is also the step
+// store/presetControl's isPresetFactory judges a preset you are not on through, so a preset whose
+// only "data" is one of these reads as untouched without being opened.
+// ⚠ ONLY THE EXACT EMPTY SHAPES. Anything else under a Best key — a real record, or something this
+// build cannot name — is left exactly as it was found.
+// The older build that may still be open on this origin is not harmed: to it a missing key and one
+// of these records read the same (it falls back to the same empty record for both).
+// Exported for tests.
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object'
+const SAYS_NOTHING: { [K in Exclude<keyof ProgressValues, 'stats'>]: (rec: unknown) => boolean } = {
+  blitzBest: (r) => isRecord(r) && r.score === 0 && r.streak === 0,
+  suddenAmBest: (r) => isRecord(r) && r.score === 0 && r.streak === 0,
+  suddenBest: (r) => isRecord(r) && r.score === 0,
+  aoxBest: (r) => isRecord(r) && r.avg === null && r.med === null,
+}
+export function dropEmptyBests(state: Partial<ProgressValues>): Partial<ProgressValues> {
+  const out: Record<string, unknown> = { ...state }
+  for (const [map, saysNothing] of Object.entries(SAYS_NOTHING)) {
+    const saved = out[map]
+    if (!isRecord(saved)) continue
+    out[map] = Object.fromEntries(Object.entries(saved).filter(([, rec]) => !saysNothing(rec)))
+  }
+  return out as Partial<ProgressValues>
+}
+
 // Fresh defaults via a FACTORY (not a shared const): the nested Stats objects/arrays must be
 // new each call so resetProgress() never aliases — and so a reset can't mutate live/persisted data.
 export const makeProgressDefaults = (): ProgressValues => ({
@@ -210,7 +249,8 @@ export const useProgress = create<ProgressState>()(
       // cannot forget any of them however this file changes. See store/amnesic.
       storage: presetStatsStorage<Partial<ProgressState>>(),
       // v5 = every solve time is kept; a save the old 1,000 cap trimmed gains its
-      // one-time `timesLost` baseline in `migrate` below. The TIMES THEMSELVES ARE NOT REWRITTEN —
+      // one-time `timesLost` baseline in `migrate` below — and no Best map holds a record of
+      // nothing (dropEmptyBests). The TIMES THEMSELVES ARE NOT REWRITTEN —
       // a legacy time's long float spelling round-trips exactly through JSON, and snapping it onto
       // the new 0.1 ms grid could move a displayed hundredth that sat on a boundary (a Last or a
       // Median, measured at ~0.15%). At most 1,000 such times per silo, ~10 KB, once.
@@ -231,9 +271,10 @@ export const useProgress = create<ProgressState>()(
       // and the stray field does nothing" half of this claim.
       version: 5,
       // Saved-shape migrations — the version-gated REWRITES, run once at hydrate when the stored
-      // version is older, each for information a later read cannot reconstruct: aoxBest's keys
-      // gained a dimension (v2), and a trimmed save's lost-times count exists only at the moment
-      // the trimmed save is read (v5). Zustand re-saves the result at the current version.
+      // version is older: aoxBest's keys gained a dimension (v2); a trimmed save's lost-times count
+      // exists only at the moment the trimmed save is read (v5); and the Best records of nothing an
+      // older build left behind are dropped (v5, dropEmptyBests). Zustand re-saves the result at
+      // the current version.
       migrate: (persisted, version) => {
         let state = persisted as Partial<ProgressValues>
         if (version < 2 && state?.aoxBest && typeof state.aoxBest === 'object') {
@@ -242,11 +283,13 @@ export const useProgress = create<ProgressState>()(
             aoxBest: migrateAoxBestKeys(state.aoxBest, useSettings.getState().julianChance),
           }
         }
-        if (version < 5 && state?.stats && typeof state.stats === 'object') {
-          state = {
-            ...state,
-            stats: baselineTrimmedTimes(state.stats) as ProgressValues['stats'],
-          }
+        if (version < 5 && state && typeof state === 'object') {
+          if (state.stats && typeof state.stats === 'object')
+            state = {
+              ...state,
+              stats: baselineTrimmedTimes(state.stats) as ProgressValues['stats'],
+            }
+          state = dropEmptyBests(state)
         }
         return state
       },

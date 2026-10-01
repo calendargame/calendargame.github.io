@@ -121,11 +121,10 @@ describe('aoxBest — standing reconcile (the post-completion protocol)', () => 
   // ★ NO RECORD BEFORE THE RUN ⇒ NO RECORD AFTER ITS RETRACTION — `undefined`, which AoxMode files as
   // "remove the key" (engine/bestMap), exactly as Blitz does. It used to hand back an all-null
   // record, which was then SAVED: a Best map holding a record that says nothing, so a preset with
-  // nothing in it read as played-in.
+  // nothing in it read as played-in. (The ones an older build already saved are dropped as the save
+  // loads — store/progress' dropEmptyBests, tests/progress.dom — so none can reach this as a floor.)
   it('no floor + a retracted run leaves NO record (not an empty one)', () => {
     expect(reconcileAoxStanding(undefined, 1, 2, [0.1], 1)).toBe(undefined)
-    // …and an all-null record an older build saved is the same "no record".
-    expect(reconcileAoxStanding(emptyAoxBest(), 1, 2, [0.1], 1)).toBe(undefined)
   })
 
   it('no floor + a standing run records from scratch', () => {

@@ -37,7 +37,7 @@ import { writeSessionMode } from '../src/store/sessionMode.js'
 import { writeSessionRound } from '../src/store/sessionRound.js'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
-import { useProgress } from '../src/store/progress.js'
+import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 
 const PLAYED = { played: 5, good: 3, streak: 2, best: 2, times: [1200, 900] }
@@ -860,6 +860,33 @@ describe('is a preset factory-fresh', () => {
       envelope({ dotOrientation: 'columns' }, 1),
     )
     expect(isPresetFactory(older, true)).toBe(true)
+  })
+
+  // …and the same goes for the stats: the previous build could leave a Best record of NOTHING
+  // behind (a MoX record with no mean and no median — store/progress' dropEmptyBests), which is a
+  // key in a Best map and nothing a player could miss.
+  it('a preset whose only saved "best" is the empty record the previous build left is still factory', () => {
+    const id = other('Emptied')
+    const emptied = {
+      avg: null,
+      avgMed: null,
+      avgRoundId: null,
+      med: null,
+      medAvg: null,
+      medRoundId: null,
+    }
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.progress, id),
+      envelope({ ...makeProgressDefaults(), aoxBest: { '10|false|x': emptied } }, 4),
+    )
+    expect(isPresetFactory(id, true)).toBe(true)
+    // A record that holds a time is a record.
+    const real = other('Recorded')
+    localStorage.setItem(
+      presetKey(PRESET_STORE_KEYS.progress, real),
+      envelope({ ...makeProgressDefaults(), aoxBest: { '10|false|x': { ...emptied, avg: 2 } } }, 4),
+    )
+    expect(isPresetFactory(real, true)).toBe(false)
   })
 
   it('…but the same old shape holding a TURNED layout is a setting off its default', () => {

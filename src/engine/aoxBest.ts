@@ -106,11 +106,6 @@ export function reconcileAoxBest(
   }
 }
 
-// Does this record say anything? A record with neither metric is the same as none. (Builds before
-// this one WROTE such a record when a run with no prior Best was retracted, so one can be sitting in
-// a saved map; read as "no record", it is removed the next time a run on that config is retracted.)
-const holdsABest = (b: AoxBest): boolean => b.avg != null || b.med != null
-
 // The recorded run's reconcile target as its standing stats move post-completion. While the run
 // STANDS (still has its n credits, with computable stats), Best[its key] = the pre-run record
 // improved by the run's CURRENT avg/median — re-fired on every post-completion stats edit, so a
@@ -129,7 +124,6 @@ export function reconcileAoxStanding(
 ): AoxBest | undefined {
   const avg = calcAvg(times)
   const med = calcMed(times)
-  if (good < n || avg == null || med == null)
-    return preRun && holdsABest(preRun) ? { ...preRun } : undefined
+  if (good < n || avg == null || med == null) return preRun
   return reconcileAoxBest(preRun ?? emptyAoxBest(), avg, med, rid)
 }
