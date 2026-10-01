@@ -94,7 +94,7 @@ interface BlitzRoundSnapshot {
   // stamp restarts there; Date.now() does not).
   endKind: EndKind
   endedAt: number | null
-  // Does this ending count toward the Bests — was Save Stats on as the round ended (`recordedRef` in
+  // Does this round count toward the Bests — was Save Stats on as it FIRST ended (`recordedRef` in
   // the component, which argues it).
   recorded: boolean
 }
@@ -259,19 +259,23 @@ function BlitzMode({
   const prevRoundBestRef = useRef<PrevRoundBest>(
     parkedRound?.prevRoundBest ?? { blitzBk: '', suddenBk: '' },
   )
-  // ★ DOES THE ENDED ROUND ON SCREEN COUNT TOWARD THE BESTS? Decided ONCE PER ENDING, by the Save
-  // Stats setting as the round ended (How to Play: "whatever the toggle is when the round ends"), and
-  // never asked again while that ending stands: true/false for an ended round, null while there is
-  // none. The reconcile effect below is its only writer.
+  // ★ DOES THE ROUND ON SCREEN COUNT TOWARD THE BESTS? Decided ONCE, by the Save Stats setting as the
+  // round FIRST ends, and it is the round's for the rest of its life: null from Begin until that first
+  // ending, then true or false until Reset or the next Begin — through every Override and Undo, a
+  // resume and the ending after it, a guest's interlude and a reload (it is parked with the round).
+  // The reconcile effect below takes the verdict; Begin and Reset clear it.
   // WHY IT IS REMEMBERED RATHER THAN READ LIVE. The reconcile used to gate on the live setting, so a
   // practice round sitting ended on screen was recorded the moment Save Stats was turned back on —
   // a Best for a round played while nothing counted — and, since the setting is shared by a preset's
   // two stats copies, a guest flipping it recorded the owner's PARKED practice round when it came
   // back. The other direction was wrong too: a recorded round whose score an Override then lowered
   // kept its old Best for as long as Save Stats was off.
-  // An Override that RESUMES the round clears it (the round is live again; resumeRound has already
-  // put the Bests back as they stood before it), and the next ending is judged afresh. Parked with
-  // the round, so a restored ending keeps the verdict it was given.
+  // WHY ONCE PER ROUND AND NOT ONCE PER ENDING. A press can put an ended round back in play, and the
+  // press after it can end it again without a single date being answered in between (Override, then
+  // Undo, on the card that ended it). When every ending was judged afresh, that pair of presses was a
+  // way to change the verdict of a round already played: turn Save Stats on, press twice, and the
+  // practice round became a recorded Best; turn it off, press twice, and a recorded round lost its.
+  // A round is practice or it is not, from its first ending on.
   const recordedRef = useRef<boolean | null>(parkedRound?.recorded ?? null)
   // saveStats:true ALWAYS (like AoX): the round tracks internally regardless of the global Save
   // Stats toggle, which now gates only the DISPLAY (a dimmed strip of "—"), whether a Best is recorded,
@@ -523,6 +527,7 @@ function BlitzMode({
       suddenAm: suddenAmBest[suddenBk],
     }
     roundConfigRef.current = roundConfig
+    recordedRef.current = null // a fresh round: whether it counts is settled when it first ends
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
@@ -561,9 +566,14 @@ function BlitzMode({
   // card never left the screen and no fresh date was drawn.
   const resumeRound = (remain: number) => {
     const snap = prevRoundBestRef.current
-    if (!perQ) setBlitzBest((prev) => fileBest(prev, snap.blitzBk, snap.blitz))
-    else if (allowMistakes) setSuddenAmBest((prev) => fileBest(prev, snap.suddenBk, snap.suddenAm))
-    else setSuddenBest((prev) => fileBest(prev, snap.suddenBk, snap.sudden))
+    // Only a round that COUNTS (recordedRef) ever saved anything to take back: a practice round
+    // writes no Best, in either direction.
+    if (recordedRef.current) {
+      if (!perQ) setBlitzBest((prev) => fileBest(prev, snap.blitzBk, snap.blitz))
+      else if (allowMistakes)
+        setSuddenAmBest((prev) => fileBest(prev, snap.suddenBk, snap.suddenAm))
+      else setSuddenBest((prev) => fileBest(prev, snap.suddenBk, snap.sudden))
+    }
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
@@ -685,6 +695,7 @@ function BlitzMode({
   const resetRound = () => {
     eng.resetStats()
     setRoundId(null) // no round on screen — and so no ★: a best is marked only while its round is up
+    recordedRef.current = null // …and no verdict: it belonged to the round being cleared
     setActive(false)
     setTimerDone(false)
     setEndKind(null) //  no round, so no end
@@ -752,15 +763,13 @@ function BlitzMode({
   // ★ FILED UNDER THE ROUND'S OWN KEYS (prevRoundBestRef.blitzBk / suddenBk), never the live
   // `blitzBk`/`suddenBk` — see prevRoundBestRef for why the two can differ while a round is ended. The
   // live keys are therefore NOT deps: a setting changed mid-panel no longer re-files anything.
-  // ★ ONLY A RECORDED ENDING WRITES (recordedRef): a round that ended in practice mode (Save Stats
-  // off) plays and tracks internally but records NO Best, whatever the setting does afterwards — and
-  // a recorded one keeps being reconciled whatever the setting does afterwards. The verdict is taken
-  // here, in the commit the round ends in, from the Save Stats value that commit rendered with.
+  // ★ ONLY A ROUND THAT COUNTS WRITES (recordedRef): a round that first ended in practice mode (Save
+  // Stats off) plays and tracks internally but records NO Best, whatever the setting or an Override
+  // does afterwards — and a recorded one keeps being reconciled whatever the setting does afterwards.
+  // The verdict is taken here, ONCE, in the commit the round first ends in, from the Save Stats value
+  // that commit rendered with; a round put back in play and ended again keeps the one it has.
   useEffect(() => {
-    if (!timerDone) {
-      recordedRef.current = null
-      return
-    }
+    if (!timerDone) return
     if (recordedRef.current === null) recordedRef.current = saveStats
     if (!recordedRef.current) return
     const pre = prevRoundBestRef.current
@@ -828,8 +837,8 @@ function BlitzMode({
         // charge for the gap keeps running across the switch instead of resetting to free.
         endKind,
         endedAt: endedAtRef.current,
-        // The ending's verdict, taken by the reconcile effect above — which is declared first, so it
-        // has already run in the commit that ended the round.
+        // The round's verdict, taken by the reconcile effect above — which is declared first, so it
+        // has already run in the commit that first ended the round.
         recorded: recordedRef.current === true,
       } satisfies BlitzRoundSnapshot)
     else discardSessionRound(dataId, 'blitz')

@@ -635,8 +635,9 @@ describe('round ids are never reused across screen loads (what the ★ rule rest
 // ── A PRACTICE ROUND STAYS A PRACTICE ROUND ACROSS A GUEST'S INTERLUDE ─────────────────────────
 // Save Stats is a ⚙ setting, and the settings are shared by a preset's two stats copies — so a guest
 // can turn it back ON while the owner's ended practice round (played with Save Stats OFF) waits
-// parked. Whether a round counts was settled as it ended and is parked with it (BlitzMode's
-// recordedRef; MoX's latch): the round comes back exactly as it was left, and records nothing.
+// parked. Whether a round counts was settled as it FIRST ended and is parked with it (recordedRef in
+// both screens): the round comes back exactly as it was left, and records nothing — not on its
+// return, and not when an Override puts it back in play and it ends again with the switch on.
 describe('a parked practice round is not recorded when a guest turns Save Stats on', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)
@@ -655,6 +656,11 @@ describe('a parked practice round is not recorded when a guest turns Save Stats 
     expect(statValue('Score')).toBe('3/4') // the owner's round is back on screen
     expect(useProgress.getState().blitzBest).toEqual({})
     expect(permanent().blitzBest).toEqual({})
+    tap(ctrl('Override')) // credits the revealed card → the round is back in play
+    tap(ctrl('Reveal')) // …and ends a second time, with Save Stats on: still the practice round
+    expect(statValue('Score')).toBe('4/5')
+    expect(useProgress.getState().blitzBest).toEqual({})
+    expect(permanent().blitzBest).toEqual({})
   })
 
   it('MoX: the practice run comes back, and the permanent Bests are still empty', () => {
@@ -668,6 +674,13 @@ describe('a parked practice round is not recorded when a guest turns Save Stats 
     setAmnesic(true)
     setSaveStats(true)
     setAmnesic(false)
+    expect(statValue('Score')).toBe('2/2')
+    expect(useProgress.getState().aoxBest).toEqual({})
+    expect(permanent().aoxBest).toEqual({})
+    // (Bare clicks, not two taps: the button reads a second TAP inside 350 ms as a double-tap.)
+    act(() => fireEvent.click(ctrl('Override'))) // the completing solve → a miss: the run fails
+    expect(statValue('Score')).toBe('1/2')
+    act(() => fireEvent.click(ctrl('Undo'))) // …and completes again, with Save Stats on
     expect(statValue('Score')).toBe('2/2')
     expect(useProgress.getState().aoxBest).toEqual({})
     expect(permanent().aoxBest).toEqual({})

@@ -1427,11 +1427,11 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
     expect(Object.keys(useProgress.getState().blitzBest)).toHaveLength(1)
   })
 
-  // ★ THE ENDING DECIDES, ONCE (BlitzMode's recordedRef). Whether a round counts toward the Bests is
-  // settled by Save Stats as the round ENDS — the switch is never asked again while that ending
-  // stands. It used to be read live: turning Save Stats back on recorded a practice round that was
-  // still on screen, and turning it off froze a recorded round's Best at a score an Override had
-  // since taken away.
+  // ★ THE FIRST ENDING DECIDES, ONCE (BlitzMode's recordedRef). Whether a round counts toward the
+  // Bests is settled by Save Stats as the round FIRST ends — the switch is never asked again until
+  // Reset or the next Begin. It used to be read live: turning Save Stats back on recorded a practice
+  // round that was still on screen, and turning it off froze a recorded round's Best at a score an
+  // Override had since taken away.
   it('turning Save Stats back ON with an ended practice round on screen records nothing', () => {
     mountApp()
     switchToBlitz()
@@ -1470,6 +1470,73 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
     act(() => fireEvent.click(ctrl('Override'))) // a credited card → a miss: the round now scores 1
     const [best] = Object.values(useProgress.getState().blitzBest)
     expect(best.score).toBe(1) // not a Best of 2 the round no longer has
+  })
+
+  // The verdict used to be retaken at every ending, so Override then Undo on the wrong answer that
+  // ended the round — two presses, no date answered — put it back in play and ended it again under
+  // whatever Save Stats said by then, which recorded a practice round.
+  it('a practice round is not recorded by Save Stats on + Override, Undo on the answer that ended it', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off → a wrong answer ends the round
+    toggleSettings()
+    flipSaveStats() // practice mode
+    toggleSettings()
+    begin()
+    click(correctName(readDate()))
+    click(correctName(readDate()))
+    click(wrongName(readDate())) // the round ends on 2, in practice mode
+    toggleSettings()
+    flipSaveStats() // back on
+    toggleSettings()
+    act(() => fireEvent.click(ctrl('Override'))) // credits the wrong → the round is back in play
+    expect(statValue('Score')).toBe('3/3')
+    act(() => fireEvent.click(ctrl('Undo'))) // takes it back → it ends again, with Save Stats on
+    expect(statValue('Score')).toBe('2/3')
+    expect(screen.getByText(/Best Score: —/)).toBeInTheDocument()
+    expect(useProgress.getState().blitzBest).toEqual({})
+  })
+
+  // …and the mirror: a recorded round keeps its Best through the same pair of presses with Save
+  // Stats off.
+  it('a recorded round keeps its Best through Save Stats off + Override, Undo on the answer that ended it', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    begin()
+    click(correctName(readDate()))
+    click(correctName(readDate()))
+    click(wrongName(readDate())) // ends on 2, recorded
+    const recorded = useProgress.getState().blitzBest
+    expect(Object.values(recorded)[0].score).toBe(2)
+    toggleSettings()
+    flipSaveStats() // off
+    toggleSettings()
+    act(() => fireEvent.click(ctrl('Override'))) // back in play: its provisional Best is taken back…
+    expect(useProgress.getState().blitzBest).toEqual({})
+    act(() => fireEvent.click(ctrl('Undo'))) // …and it ends again, in practice mode — still recorded
+    expect(useProgress.getState().blitzBest).toEqual(recorded)
+  })
+
+  // A Reset is where a verdict ends: the next round is judged on its own first ending.
+  it('the round after a practice round is recorded normally', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    toggleSettings()
+    flipSaveStats() // practice mode
+    toggleSettings()
+    begin()
+    click(correctName(readDate()))
+    click(wrongName(readDate()))
+    toggleSettings()
+    flipSaveStats() // back on
+    toggleSettings()
+    clickText('Reset')
+    begin()
+    click(correctName(readDate()))
+    click(wrongName(readDate()))
+    expect(Object.values(useProgress.getState().blitzBest)[0].score).toBe(1)
   })
 })
 

@@ -289,8 +289,8 @@ describe('a finished MoX run survives a preset round-trip', () => {
 // case proves it by running BOTH and comparing the resulting Best store byte for byte. Each mode's
 // useSettingsCloseEffect already resets an active OR ended round on a Best-key change (BlitzMode
 // `if (active || timerDone) resetRound()`; AoxMode `if (runPhase !== 'idle') reset()`), pinned
-// natively in tests/blitz.dom / tests/aox.dom; resetRound()/reset() never touches prevRoundBestRef
-// or prevBestSnapRef, so a rehydrated ended round resets identically to a natively-ended one.
+// natively in tests/blitz.dom / tests/aox.dom; a rehydrated ended round resets identically to a
+// natively-ended one.
 // (Until round 23 the Blitz reconcile effect had the LIVE `blitzBk` in its deps, so the key flip wrote
 // a second entry under the new key mirroring the round's own result before the reset flushed — a
 // round filed under a config it was never played on. Round 23 files every round under its own keys; the
@@ -610,16 +610,14 @@ describe('a parked round in a shape this build cannot read', () => {
     pinReadable()
     switchToBlitz()
     finishBlitzRound(1)
+    switchToMox()
+    tap(ctrl('Begin'))
+    tap(ctrl('Reveal')) // Allow Mistakes off → the run fails, and an ended run is parked
+    // Each screen's OWN parked snapshot with only its engine damaged, so the engine is the one thing
+    // each restore can be refusing.
     const raw = JSON.parse(sessionStorage.getItem('cg-round-v2'))
-    const blitz = raw['1:saved:blitz']
-    raw['1:saved:blitz'] = { ...blitz, engine: corrupt(blitz.engine) }
-    raw['1:saved:aox'] = {
-      engine: corrupt(blitz.engine),
-      runPhase: 'done',
-      revealedQ: null,
-      currentRunId: 1,
-      prevBestSnap: null,
-    }
+    for (const slot of ['1:saved:blitz', '1:saved:aox'])
+      raw[slot] = { ...raw[slot], engine: corrupt(raw[slot].engine) }
     sessionStorage.setItem('cg-round-v2', JSON.stringify(raw))
     const p2 = createPreset()
     openPreset(p2.id)

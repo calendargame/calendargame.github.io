@@ -57,23 +57,21 @@ import { useBackButton } from '../components/overlayStack.js'
 
 // Round 21 — the shape AoxMode parks in store/sessionRound for an ENDED run (done | failed). It
 // round-trips its own engine state plus the component fields the completed view (and a
-// post-completion Override) need; store/sessionRound never looks inside it. `currentRunId` +
-// `prevBestSnap` are what keep the done/failed Best-reconcile correct on a restored run — the
-// reconcile floor is `prevBestSnap.best` and it only applies while `prevBestSnap.runId === runId`,
-// so both have to come back together (and `currentRunId` is what keeps the restored run's ★ lit).
+// post-completion Override) need; store/sessionRound never looks inside it. `preRunBest` and
+// `recorded` are what keep the Best-reconcile correct on a restored run — the floor every reconcile
+// rebuilds the record from, and whether this run writes one at all — and `currentRunId` is the id
+// the reconcile tags its fields with (which is what keeps the restored run's ★ lit).
 interface AoxRunSnapshot {
   engine: GameState
   runPhase: string
   revealedQ: number | null
   currentRunId: number | null
   run: RunConfig
-  prevBestSnap: PrevBestSnap | null
-}
-// The Best record that stood before the run recorded — none (`best` absent) when its config had none.
-interface PrevBestSnap {
-  key: string
-  best?: AoxBest
-  runId: number
+  // The Best record that stood under the run's key before it began — absent when there was none.
+  preRunBest?: AoxBest
+  // Does this run count toward the Bests — was Save Stats on as it FIRST ended (`recordedRef` in the
+  // component, which argues it).
+  recorded: boolean
 }
 
 // ★ THE CONFIGURATION A RUN IS PLAYED UNDER, fixed at Begin for the life of the run: its length, the
@@ -167,9 +165,10 @@ function AoxMode({
   //   • the run was played under exactly the live configuration (RunConfig argues why);
   //   • the engine inside comes through the one restore door (engine/parkedEngine's
   //     restoreParkedEngine) — a blob this build cannot read is not a run.
+  // (…and a blob that does not say whether its run counts is not one this build parked.)
   const [parkedRun] = useState<AoxRunSnapshot | null>(() => {
     const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(dataId, 'aox')
-    if (!snap || !sameRun(snap.run, liveRun)) return null
+    if (!snap || !sameRun(snap.run, liveRun) || typeof snap.recorded !== 'boolean') return null
     const engine = restoreParkedEngine(snap.engine, useJulian, 'aox')
     return engine ? { ...snap, engine } : null
   })
@@ -240,8 +239,8 @@ function AoxMode({
   // not an answer to that; the way ON from a miss is Next.)
   const awaitingNext = resolvedMiss && !revealFlowing
 
-  // Per-config Best Mean / Median (component-owned, like Blitz's Best Score). A run records
-  // its Best on completion and keeps it RECONCILED while its stats move post-completion (a
+  // Per-config Best Mean / Median (component-owned, like Blitz's Best Score). A run that counts
+  // records its Best on completion and keeps it RECONCILED while its stats move post-completion (a
   // back-browse / retro / live-reversal Override can retract or add a credit on the ended run):
   // standing (good ≥ n) → the pre-run floor improved by the current avg/median; not standing →
   // the floor restored. See the reconcile effect below (engine/aoxBest.ts owns the pure fold).
@@ -269,13 +268,30 @@ function AoxMode({
     }
     setRevealFlowing(false)
   }
-  // The PRE-run Best record {key,best,runId}, latched once when this run records (completion with
-  // Save Stats on) — the floor every post-completion reconcile starts from (see the effect below).
-  // Restored from the parked run: it is the floor every post-completion reconcile starts from, so
-  // after a remount it must be the real pre-run record and not null — otherwise the reconcile effect
-  // early-returns and an Override on the restored run cannot roll a fabricated Best back (or would
-  // rebuild one the run no longer earns).
-  const prevBestSnapRef = useRef<PrevBestSnap | null>(parkedRun?.prevBestSnap ?? null)
+  // The Best record that stood under the run's key BEFORE the run on screen began (snapshotted at
+  // Begin; `undefined` when the config had none) — the floor every reconcile rebuilds the record
+  // from (see the effect below), exactly as Blitz's prevRoundBestRef is for a round. Taken at Begin
+  // rather than at completion because only THIS run can move the record under its key while it is on
+  // screen, so the two moments read the same record — and a floor taken once, before the run has
+  // written anything, can never be the run's own record (the trap a later latch had to guard against).
+  // Restored from the parked run: after a remount it must be the real pre-run record, or an Override
+  // on the restored run could not roll a Best back to it.
+  const preRunBestRef = useRef<AoxBest | undefined>(parkedRun?.preRunBest)
+  // ★ DOES THE RUN ON SCREEN COUNT TOWARD THE BESTS? Decided ONCE, by the Save Stats setting as the
+  // run FIRST ends — completed or failed — and it is the run's for the rest of its life: null from
+  // Begin until that first ending, then true or false until Reset or the next Begin — through every
+  // Override and Undo, a resume and the ending after it, a guest's interlude and a reload (it is
+  // parked with the run). The effect below takes the verdict; Begin and Reset clear it. The live
+  // setting is never asked after that, in either direction: a practice run is not recorded by turning
+  // Save Stats on (nor is one parked for the session, when a guest turns the shared setting on), and
+  // a recorded run keeps being reconciled while Save Stats is off.
+  // WHY ONCE PER RUN AND NOT ONCE PER ENDING. A press can hand an ended run back to the player, and the
+  // press after it can end it again without a single date being answered in between (Override, then
+  // Undo, on the completing solve). When every completion was judged afresh, that pair of presses was
+  // a way to change the verdict of a run already played: turn Save Stats on, press twice, and the
+  // practice run became a recorded Best; turn it off, press twice, and a recorded run lost its. A run
+  // is practice or it is not, from its first ending on — the same rule, and the same ref, as Blitz.
+  const recordedRef = useRef<boolean | null>(parkedRun?.recorded ?? null)
   const bestData = bests[bestKey] || emptyAoxBest()
 
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
@@ -285,28 +301,19 @@ function AoxMode({
 
   // Run completion + Best reconcile — ONE effect owns every Best write (mirrors Blitz's
   // timerDone effect). (a) The credited count reaching the run's N (`runN` — the length it was BEGUN
-  // at, see RunConfig) completes the run: flip the phase and, if the global Save Stats is on, LATCH
-  // the pre-run Best {key,best,runId} as this run's floor.
-  // Latched once per run: a reversal can resume + re-complete the run, and re-latching then would
-  // capture the run's own record as its floor (the stale-snapshot trap). The completing answer
-  // used eng.answer(...,{complete}) so the engine stayed on the solve; re-entry is phase-guarded.
-  // ★ EACH COMPLETION DECIDES, by the Save Stats setting as the run completes (How to Play: "whatever
-  // the toggle is when the run ends"), and the latch IS that decision: a completion in practice mode
-  // (Save Stats off) latches nothing — and DROPS a latch an earlier, recorded completion of this same
-  // run left, or a run that was recorded, handed back by an Override and then finished in practice
-  // mode would be recorded on the strength of the old latch. Nothing is lost by dropping it: the run
-  // was not standing in the moment before it re-completed, so the reconcile had already put the
-  // record back to that floor, and a later recorded completion latches the same floor again.
-  // The live setting is never asked after that, in either direction: an ended practice run is not
-  // recorded by turning Save Stats on (nor is one parked for the session, when a guest turns the
-  // shared setting on), and a recorded run keeps being reconciled while Save Stats is off.
-  // (b) From the latch on, every stats change re-reconciles the record under the key the run
-  // was PLAYED under (the panel's bestKey can move — settings stay editable while a run sits done):
-  // still standing (good ≥ its N) → the floor improved by the run's CURRENT avg/median; not standing
-  // (a press retracted a credit — on a browsed card, on the card behind the live one, or on the held
-  // completing solve) → the floor restored, as if the run never completed — and when there was no
-  // record before the run, none after it (engine/bestMap's fileBest removes the key, as Blitz does).
-  // Before that fix only the live-edge
+  // at, see RunConfig) completes the run: flip the phase. The completing answer used
+  // eng.answer(...,{complete}) so the engine stayed on the solve; re-entry is phase-guarded.
+  // (b) The run's FIRST ending — that completion, or the handler that failed it — takes the verdict
+  // (recordedRef), from the Save Stats value the ending's commit rendered with. A run with a verdict
+  // never takes another.
+  // (c) For a run that counts, every stats change re-reconciles the record under the key the run was
+  // PLAYED under (`run.bestKey` — the panel's bestKey can move, settings stay editable while a run
+  // sits done), rebuilt from the pre-run floor each time: standing (good ≥ its N) → the floor improved
+  // by the run's CURRENT avg/median; not standing (it failed, a press retracted a credit — on a
+  // browsed card, on the card behind the live one, or on the held completing solve — or a press
+  // handed the run back to the player) → the floor restored, as if the run never completed — and
+  // when there was no record before the run, none after it (engine/bestMap's fileBest removes the
+  // key, as Blitz does). Before that fix only the live-edge
   // reversal rolled back (rollbackBest, gated on !inBack), so a back-browse un-credit left a
   // FABRICATED Best standing on a run with fewer than n credits — and a mid-done settings change
   // (key moved) dodged even that. ★ markers need nothing here: each is read off the record's run id,
@@ -321,21 +328,19 @@ function AoxMode({
   // directive only covers the line it sits on. The main.tsx split is a verbatim move, so these are repositioned
   // and annotated, never restructured. ▶ Queued for proper review as its own item.
   useEffect(() => {
-    if (runPhase === 'running' && doneCount >= runN) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRunPhase('done')
-      if (!saveStats) prevBestSnapRef.current = null
-      else if (runId != null && prevBestSnapRef.current?.runId !== runId) {
-        const key = run?.bestKey ?? bestKey
-        prevBestSnapRef.current = { key, best: bests[key], runId }
-      }
+    const completes = runPhase === 'running' && doneCount >= runN
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (completes) setRunPhase('done')
+    if (!run) return // no run on screen
+    if (recordedRef.current === null) {
+      if (!completes && runPhase !== 'done' && runPhase !== 'failed') return // still in its first play
+      recordedRef.current = saveStats
     }
-    const snap = prevBestSnapRef.current
-    if (!snap || snap.runId !== runId) return // this run hasn't recorded
-    const next = reconcileAoxStanding(snap.best, S.good, runN, S.times, snap.runId)
+    if (!recordedRef.current) return // a practice run writes no Best
+    const next = reconcileAoxStanding(preRunBestRef.current, S.good, runN, S.times, runId)
     // No ★ bookkeeping here: the ★ is read off the record's run ids, so a write that improves a metric
     // lights it and a write that restores the floor puts it out, with nothing to keep in step.
-    setBests((p) => fileBest(p, snap.key, next))
+    setBests((p) => fileBest(p, run.bestKey, next))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runPhase, doneCount, runN, saveStats, S.good, S.times, runId, setBests])
 
@@ -348,8 +353,8 @@ function AoxMode({
   //   • idle after Reset / Begin / an Override that resumed the run → discard, the park is stale.
   // `state` is a dep so a post-completion Override (which edits the run's engine state and re-runs
   // the reconcile effect above) re-parks the updated snapshot. This effect sits AFTER that
-  // reconcile effect on purpose: the reconcile latches prevBestSnapRef in the same commit the phase
-  // turns 'done', effects run top-to-bottom, so the write below always sees the latched floor.
+  // reconcile effect on purpose: the reconcile takes the run's verdict in the commit it first ends
+  // in, effects run top-to-bottom, so the write below always sees the verdict.
   // `runId` and `run` are written only by begin() / reset(), so they are stable whenever a phase is
   // ended (they are deps only because they are state this effect reads).
   useEffect(() => {
@@ -360,25 +365,11 @@ function AoxMode({
         revealedQ,
         currentRunId: runId,
         run,
-        prevBestSnap: prevBestSnapRef.current,
+        preRunBest: preRunBestRef.current,
+        recorded: recordedRef.current === true,
       } satisfies AoxRunSnapshot)
     else discardSessionRound(dataId, 'aox')
   }, [runPhase, revealedQ, state, runId, run, dataId])
-
-  // Reset the run if the panel is hidden mid-run (also cancel any pending reveal auto-advance).
-  useEffect(() => {
-    if (!visible && runPhase === 'running') {
-      // (The directive moved up a line when cancelRevealAdvance began setting `revealFlowing`: the
-      // rule reports only the effect's FIRST synchronous setState, which is now that call.)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      cancelRevealAdvance()
-      eng.resetStats()
-      setRunPhase('idle')
-      setRevealedQ(null)
-      setRun(null)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible])
 
   // Settings reconcile now fires on the ⚙ popover CLOSE — the useSettingsCloseEffect is below,
   // after reset() is defined (a RUNNING or ENDED run resets, an idle run regenerates its hidden date).
@@ -516,7 +507,8 @@ function AoxMode({
     eng.resetStats()
     setRunId(newRoundId())
     setRun(liveRun) // the configuration this run is played under, fixed here (see RunConfig)
-    prevBestSnapRef.current = null
+    preRunBestRef.current = bests[bestKey] // the floor its Best is rebuilt from
+    recordedRef.current = null // whether it counts is settled when it first ends
     setRunPhase('running')
     setRevealedQ(questionIdAfterReset(state)) // the run's first question: Begin itself reveals it
   }
@@ -603,8 +595,9 @@ function AoxMode({
   //     stopped standing, which that effect would have judged afresh.)
   //   • a press on a HISTORY card of a done run changes no phase at all: the run is over, and the only
   //     thing that reacts is reconcileAoxStanding, which raises or restores the Best from the floor.
-  // prevBestSnapRef and `runId` are NEVER written here — only begin(), reset() and the run's own
-  // completion touch them — which is what makes any number of presses land where the last one says.
+  // preRunBestRef, recordedRef and `runId` are NEVER written here — only begin() and reset() write
+  // the first and the last, and the run's first ending takes the verdict — which is what makes any
+  // number of presses land where the last one says.
   const onOverride = () => {
     const plan = eng.overridePlan
     if (!plan) return
@@ -654,11 +647,19 @@ function AoxMode({
     eng.resetStats()
     setRunPhase('idle')
     setRevealedQ(null)
-    prevBestSnapRef.current = null
+    preRunBestRef.current = undefined
+    recordedRef.current = null // no run, so no verdict: it belonged to the run being cleared
     setRunId(null) // no run on screen — and so no ★: a best is marked only while its run is up
     setRun(null)
     setBreakdownOpen(false) //  the breakdown belongs to the run being cleared
   }
+  // Leaving the mode mid-run ABANDONS the run — the same Reset the button gives (which also cancels
+  // a pending reveal auto-advance and clears the run's verdict). An ENDED run survives the detour.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!visible && runPhase === 'running') reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
   // Cancel a pending reveal auto-advance if the component unmounts mid-flash (Full Reset remount).
   useEffect(
     () => () => {

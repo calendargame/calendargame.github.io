@@ -1636,9 +1636,10 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     expect(bestVal('Mean')).not.toBe('—')
   })
 
-  // ★ EACH COMPLETION DECIDES (AoxMode's completion effect). Whether a run counts toward the Bests
-  // is settled by Save Stats as the run COMPLETES, and the switch is never asked again while that
-  // completion stands.
+  // ★ THE FIRST ENDING DECIDES, ONCE (AoxMode's recordedRef). Whether a run counts toward the Bests
+  // is settled by Save Stats as the run FIRST ends, and the switch is never asked again until Reset
+  // or the next Begin — not when the setting changes, and not when an Override hands the run back and
+  // it ends a second time.
   it('turning Save Stats back ON with a completed practice run on screen records nothing', () => {
     useModePrefs.getState().setAoxN('2')
     mountApp()
@@ -1657,7 +1658,61 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     expect(useProgress.getState().aoxBest).toEqual({})
   })
 
-  it('a recorded run handed back by an Override and then finished in practice mode is not recorded', () => {
+  // The verdict used to be retaken at every completion, so Override then Undo on the completing
+  // solve — two presses, no date answered — re-ended the run under whatever Save Stats said by then
+  // and recorded a practice run. Both Allow Mistakes settings, because the two presses take different
+  // routes: off, the Override FAILS the run and the Undo resumes and completes it; on, the Override
+  // hands the run back as running and the Undo completes it.
+  it.each([
+    ['off', false],
+    ['on', true],
+  ])(
+    'a practice run is not recorded by Save Stats on + Override, Undo on its completing solve (Allow Mistakes %s)',
+    (_, allowMistakes) => {
+      useModePrefs.getState().setAoxN('2')
+      mountApp()
+      switchToAox()
+      if (allowMistakes) click('Allow Mistakes')
+      toggleSettings()
+      flipSaveStats() // practice mode
+      toggleSettings()
+      click('Begin')
+      answerCorrect()
+      answerCorrect() // completes, in practice mode
+      toggleSettings()
+      flipSaveStats() // back on
+      toggleSettings()
+      click('Override') // the completing solve → a miss: the run is no longer complete
+      expect(statValue('Score')).toBe('1/2')
+      click('Undo') // …and back: it completes a second time, now with Save Stats on
+      expect(statValue('Score')).toBe('2/2')
+      expect(ctrl('Reset')).toBeInTheDocument()
+      expect(bestVal('Mean')).toBe('—')
+      expect(useProgress.getState().aoxBest).toEqual({})
+    },
+  )
+
+  // …and the mirror: a run that was recorded stays recorded through the same pair of presses with
+  // Save Stats off — it does not lose its Best for being re-ended in practice mode.
+  it('a recorded run keeps its Best through Save Stats off + Override, Undo on its completing solve', () => {
+    useModePrefs.getState().setAoxN('2')
+    mountApp()
+    switchToAox()
+    click('Begin')
+    answerCorrect()
+    answerCorrect() // completes, recorded
+    const recorded = useProgress.getState().aoxBest
+    expect(Object.keys(recorded)).toHaveLength(1)
+    toggleSettings()
+    flipSaveStats() // off
+    toggleSettings()
+    click('Override') // the run fails: it no longer stands, so its Best goes back to the floor…
+    expect(useProgress.getState().aoxBest).toEqual({})
+    click('Undo') // …and it completes again, in practice mode — still the recorded run it was
+    expect(useProgress.getState().aoxBest).toEqual(recorded)
+  })
+
+  it('a recorded run handed back by an Override and then finished in practice mode is still recorded', () => {
     useModePrefs.getState().setAoxN('2')
     mountApp()
     switchToAox()
@@ -1675,13 +1730,50 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     answerCorrect() // the run completes again — with Save Stats off
     expect(ctrl('Reset')).toBeInTheDocument()
     expect(statValue('Score')).toBe('—')
-    expect(useProgress.getState().aoxBest).toEqual({})
-    // …and the switch coming back on does not record it after the fact either.
+    // It counted when it first ended, and it is the same run: its Best is back.
+    expect(Object.keys(useProgress.getState().aoxBest)).toHaveLength(1)
+  })
+
+  // A run's first ending can be a FAILURE, and that ending takes the verdict too: a run that failed
+  // in practice mode and is then rescued and completed with Save Stats on is still a practice run.
+  it('a run that first FAILED in practice mode is not recorded when an Override rescues and completes it', () => {
+    useModePrefs.getState().setAoxN('2')
+    mountApp()
+    switchToAox()
     toggleSettings()
-    flipSaveStats()
+    flipSaveStats() // practice mode
     toggleSettings()
-    expect(statValue('Score')).toBe('2/3')
+    click('Begin')
+    answerCorrect()
+    answerWrong() // Allow Mistakes off → the run fails, in practice mode
+    toggleSettings()
+    flipSaveStats() // back on
+    toggleSettings()
+    click('Override') // credits the failing wrong: the run resumes, and that credit completes it
+    expect(statValue('Score')).toBe('2/2')
+    expect(ctrl('Reset')).toBeInTheDocument()
     expect(useProgress.getState().aoxBest).toEqual({})
+  })
+
+  // A Reset is where a verdict ends: the next run is judged on its own first ending.
+  it('the run after a practice run is recorded normally', () => {
+    useModePrefs.getState().setAoxN('2')
+    mountApp()
+    switchToAox()
+    toggleSettings()
+    flipSaveStats() // practice mode
+    toggleSettings()
+    click('Begin')
+    answerCorrect()
+    answerCorrect()
+    toggleSettings()
+    flipSaveStats() // back on
+    toggleSettings()
+    click('Reset')
+    click('Begin')
+    answerCorrect()
+    answerCorrect()
+    expect(Object.keys(useProgress.getState().aoxBest)).toHaveLength(1)
   })
 
   it('a completed run that still stands after its held solve is taken back stays done, and stays recorded', () => {

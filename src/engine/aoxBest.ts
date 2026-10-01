@@ -13,10 +13,10 @@
 // a press of the Override ⇄ Undo button can retract one of the run's n credited solves (on a browsed
 // card, on the card behind the live one, or on the held completing solve) or add a credit back — any
 // number of times, in either direction — so the run's standing stats keep moving after the
-// completion recorded the Best. So AoxMode snapshots the ENTIRE pre-run Best record when the run
-// records (the cumulative best of every PRIOR run — the floor that can never be lost, the cross-run
+// completion recorded the Best. So AoxMode snapshots the ENTIRE pre-run Best record at Begin
+// (the cumulative best of every PRIOR run — the floor that can never be lost, the cross-run
 // corner the Blitz cross-round rollback fix had to add; `undefined` when the config had no record) and, on every
-// post-completion stats change, sets the record to reconcileAoxStanding(snapshot, standing stats):
+// stats change of a run that counts, sets the record to reconcileAoxStanding(snapshot, standing stats):
 // still standing (good ≥ n) → the snapshot improved by the run's CURRENT avg/median; no longer
 // standing (a credit was retracted) → the snapshot unchanged, as if the run never completed — which,
 // for a config that had no record, is NO RECORD (the key is removed, exactly as Blitz does:
