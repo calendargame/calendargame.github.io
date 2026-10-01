@@ -31,6 +31,8 @@ import {
   outsideTarget,
   changelogLink,
   currentMode,
+  openModeMenu,
+  modeMenuOpen,
   yearInput,
   focusYear,
   typeYear,
@@ -221,5 +223,70 @@ describe('a dropdown list inside the ⚙ panel is a layer of its own', () => {
     expect(isSettingsOpen()).toBe(true)
     closeSettings('escape')
     expect(isSettingsOpen()).toBe(false)
+  })
+})
+
+// ── Lookup's own keys are page shortcuts too ─────────────────────────────────────────────────────
+// ↑/↓ walk Lookup's history and Backspace/Delete clear the card (components/LookupCard). They sat
+// outside the stack's rules: with a popup open they still acted on the page behind the dim — in
+// Manage Presets, ↓ on a reorder grip moved the preset AND the selection behind it, and took the
+// keyboard off the grip — and with a dropdown list open they walked the history as well as the list.
+describe("Lookup's keys stand aside for whatever is open over the page", () => {
+  const field = () => document.querySelector('input[placeholder^="e.g.,"]')
+  const lookup = (text) => {
+    act(() => fireEvent.change(field(), { target: { value: text } }))
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Lookup' })))
+  }
+  const answer = () => document.querySelector('.text-sm.min-h-15').textContent
+  // Three lookups; the newest (top) row is the selected one.
+  function onLookupWithHistory() {
+    mountApp()
+    pressKey('L')
+    lookup('7/4/1776')
+    lookup('3/14/1592')
+    lookup('1/1/2000')
+    expect(answer()).toContain('January 1, 2000')
+  }
+  const key = (target, k) => act(() => fireEvent.keyDown(target, { key: k }))
+
+  it('with nothing open, ↓ walks the history and Backspace clears the card (the control case)', () => {
+    onLookupWithHistory()
+    key(document.body, 'ArrowDown')
+    expect(answer()).toContain('March 14, 1592')
+    key(document.body, 'Backspace')
+    expect(field().value).toBe('')
+    expect(answer()).not.toContain('1592')
+  })
+
+  it('under a popup the keys do nothing to the page behind it', () => {
+    act(() => {
+      createPreset('Second')
+    })
+    onLookupWithHistory()
+    openSettings()
+    openModal('presets')
+    const grip = screen.getByRole('button', { name: /^Reorder Preset 1, position 1 of 2$/ })
+    act(() => grip.focus())
+    key(grip, 'ArrowDown') // the grip's own key: Preset 1 moves down a place…
+    expect(screen.getByRole('button', { name: /^Reorder Preset 1, position 2 of 2$/ })).toBe(
+      document.activeElement, // …and the keyboard is still on its grip
+    )
+    expect(answer()).toContain('January 1, 2000') // the selection behind the dim did not move
+    key(document.body, 'ArrowDown')
+    key(document.body, 'Backspace')
+    key(document.body, 'Delete')
+    expect(answer()).toContain('January 1, 2000')
+    expect(field().value).toBe('1/1/2000')
+  })
+
+  it('an open dropdown list keeps its arrows to itself', () => {
+    onLookupWithHistory()
+    openModeMenu()
+    const trigger = document.activeElement
+    key(trigger, 'ArrowDown')
+    key(trigger, 'ArrowUp')
+    expect(modeMenuOpen()).toBe(true)
+    expect(document.activeElement).toBe(trigger) // the list still has the keyboard
+    expect(answer()).toContain('January 1, 2000') // …and the history behind it was not walked
   })
 })

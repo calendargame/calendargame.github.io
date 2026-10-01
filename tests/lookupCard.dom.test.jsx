@@ -404,6 +404,32 @@ describe('Lookup — a pre-reform date shows BOTH calendars (round 11)', () => {
     expect(container.querySelector('ul button').className).not.toContain('bg-(--hist-sel)')
   })
 
+  // A refused lookup puts its message in the answer slot — and nothing of the date before it may
+  // stay underneath: its Show Codes panel used to stay open below the error, still explaining it.
+  it.each([
+    ['text it cannot read', 'July 4', /^Enter date as m\/d\/y/],
+    ['a year out of range', '7/4/10001', /^Year must be between/],
+    ['a month out of range', '13/4/1776', /^Month must be 1–12$/],
+    ['a day the month does not have', '2/30/1776', /^Day must be 1–29 for February$/],
+  ])(
+    '%s: the previous date’s Show Codes closes, and there is no date left to explain',
+    (_, bad, message) => {
+      const { container } = render(<Host />)
+      const codesButton = () => screen.getByRole('button', { name: /Show Codes|Hide Codes/ })
+      lookup(container, '7/4/1776')
+      fireEvent.click(codesButton())
+      expect(codesButton().getAttribute('aria-expanded')).toBe('true')
+      lookup(container, bad)
+      expect(lines(container)[0]).toMatch(message)
+      expect(codesButton().getAttribute('aria-expanded')).toBe('false')
+      expect(isOffered(codesButton())).toBe(false) // …and none to open it for
+      // A good lookup afterwards starts from closed codes, as every new lookup does.
+      lookup(container, '3/14/1592')
+      expect(isOffered(codesButton())).toBe(true)
+      expect(codesButton().getAttribute('aria-expanded')).toBe('false')
+    },
+  )
+
   // Show Codes teaches ONE method, and the Julian Calendar setting still picks which — but it can
   // no longer pick a calendar the date does not exist in. With the setting off, February 29, 1500
   // would otherwise be walked through as a Gregorian date that never happened.

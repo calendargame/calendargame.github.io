@@ -8,6 +8,7 @@ import {
   useScrollEdgeState,
   useWindowedRows,
 } from './scrollRegion.js'
+import { isPopupOpen } from './overlayStack.js'
 import type { FormatId } from '../lib/format.js'
 // The history entry's persisted shape lives with the store that versions and migrates it
 // (store/lookupHistory) — it is {id, y, m, d, isGap?} and nothing else. Everything shown on screen
@@ -366,6 +367,17 @@ export default function LookupCard({
     // time on purpose — they are inputs to the rewrite, not triggers for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFormat])
+  // A lookup the card cannot answer: the message takes the answer slot, and NOTHING OF THE PREVIOUS
+  // DATE STAYS UNDER IT — not its selection, and not its Show Codes panel, which used to stay open
+  // beneath the error, still explaining the date before. The box keeps the keyboard so the text can
+  // be fixed without reaching for it again.
+  const refuse = (message: string) => {
+    ssid(null)
+    scd(null)
+    sco(false)
+    slo(message)
+    lookupInputRef.current?.focus()
+  }
   function runLookup() {
     const s = li.trim()
     // Build regex based on the input format. Year accepts 1–5 digits, month/day 1–2 digits.
@@ -374,12 +386,7 @@ export default function LookupCard({
     if (inputMeta.orderType === 'ymd')
       match = new RegExp(`^(\\d{1,5})${sepEsc}(\\d{1,2})${sepEsc}(\\d{1,2})$`).exec(s)
     else match = new RegExp(`^(\\d{1,2})${sepEsc}(\\d{1,2})${sepEsc}(\\d{1,5})$`).exec(s)
-    if (!match) {
-      ssid(null)
-      slo(`Enter date as ${inputMeta.label}, e.g. ${inputMeta.example}`)
-      lookupInputRef.current?.focus()
-      return
-    }
+    if (!match) return refuse(`Enter date as ${inputMeta.label}, e.g. ${inputMeta.example}`)
     let mm: number, dd: number, yy: number
     if (inputMeta.orderType === 'ymd') {
       yy = +match[1]
@@ -394,18 +401,8 @@ export default function LookupCard({
       mm = +match[2]
       yy = +match[3]
     }
-    if (yy < 1 || yy > 10000) {
-      ssid(null)
-      slo('Year must be between 1 and 10000')
-      lookupInputRef.current?.focus()
-      return
-    }
-    if (mm < 1 || mm > 12) {
-      ssid(null)
-      slo('Month must be 1–12')
-      lookupInputRef.current?.focus()
-      return
-    }
+    if (yy < 1 || yy > 10000) return refuse('Year must be between 1 and 10000')
+    if (mm < 1 || mm > 12) return refuse('Month must be 1–12')
     // The day check, on the EITHER-calendar rule: a date is real if it exists in a calendar this
     // date can be read in, so pre-reform February keeps Julian's 29th. It runs BEFORE the history
     // match on purpose — the match short-circuited ahead of it until now, which meant a date the
@@ -415,12 +412,7 @@ export default function LookupCard({
     // check like any other October day — October has 31 of them in both calendars — and are picked
     // out below, which is where their "never existed" answer belongs.)
     const maxd = dimEither(yy, mm)
-    if (dd < 1 || dd > maxd) {
-      ssid(null)
-      slo(`Day must be 1–${maxd} for ${MONTH[mm - 1]}`)
-      lookupInputRef.current?.focus()
-      return
-    }
+    if (dd < 1 || dd > maxd) return refuse(`Day must be 1–${maxd} for ${MONTH[mm - 1]}`)
     // Every SUCCESSFUL path below clears lookupOutput and selects the entry instead: what is on
     // screen is derived from the selection (see selectedEntry), so lookupOutput is now purely the
     // transient "couldn't answer" message — leaving a stale error behind it would be dead state.
@@ -515,8 +507,18 @@ export default function LookupCard({
   //   Backspace/Delete  — clear the Lookup input box (matches the Clear button).
   // When an input IS focused, all keys pass through unchanged so typing & native cursor
   // handling (including ↑/↓ jumping cursor to start/end on single-line inputs) work normally.
+  // ★ THEY ARE PAGE SHORTCUTS, AND THEY STAND ASIDE LIKE THE REST OF THEM (src/main.tsx's keyboard
+  // handler argues the rule for its own):
+  //   • A POPUP IS OPEN ⇒ the page behind it is inert. These keys used to act straight through one:
+  //     in Manage Presets, ↓ on a reorder grip moved the preset AND the Lookup selection behind the
+  //     dim (and selecting blurs whatever has the keyboard, so the grip lost it too), and
+  //     Backspace emptied the card under any popup.
+  //   • A CONTROL ALREADY USED THE KEY ⇒ it is not also a shortcut. An open dropdown list walks its
+  //     options with ↑/↓ and says so by preventing the key's default; this listener sits on the
+  //     document, after every control's own handler, so it can see that and leave the press alone.
   React.useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || isPopupOpen()) return
       const ae = document.activeElement as HTMLElement | null
       const inInput =
         ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
