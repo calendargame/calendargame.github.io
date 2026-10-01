@@ -223,6 +223,86 @@ describe('Android-like (navigator.standalone undefined) — entries pushed', () 
   })
 })
 
+// ── A reload lands on the entry of whatever was open ───────────────────────────────────────────
+// The session history survives a reload, so a page reloaded with something open starts on that
+// thing's marker entry, with nothing open. An overlay that then pushed its own entry left the old one
+// behind it forever — a Back press that does nothing — and How to Play, which comes back open after
+// a reload, did that on every reload. The first overlay to open on such a page takes the entry over.
+describe('a page that loaded onto an overlay entry (a reload with something open)', () => {
+  // The "previous page": an overlay opened, and the page reloaded while it was up. A fresh module
+  // copy is the new page — it samples the entry it loaded on at import.
+  async function reloadedOn(id) {
+    window.history.pushState({ cgOverlay: id }, '')
+    pushSpy.mockClear()
+    return freshUseBackButton()
+  }
+
+  it('the overlay that comes back open takes that entry over — no second entry, and Back closes it', async () => {
+    const useBackButton = await reloadedOn('guide')
+    const before = window.history.length
+    const close = vi.fn()
+    function Guide() {
+      useBackButton(true, close, 'guide')
+      return null
+    }
+    render(<Guide />)
+    expect(pushSpy).not.toHaveBeenCalled()
+    expect(window.history.length).toBe(before)
+    expect(window.history.state).toEqual({ cgOverlay: 'guide' })
+    act(() => window.history.back()) // a real Back press
+    await flushTraversals()
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(window.history.state?.cgOverlay).toBeUndefined() // …and it lands on the page's own entry
+  })
+
+  it('a different overlay opening first takes it over just the same, under its own id', async () => {
+    const useBackButton = await reloadedOn('settings') // the ⚙ panel was open at the reload
+    const before = window.history.length
+    function Codes() {
+      useBackButton(true, () => {}, 'codes')
+      return null
+    }
+    render(<Codes />)
+    expect(pushSpy).not.toHaveBeenCalled()
+    expect(window.history.length).toBe(before)
+    expect(window.history.state).toEqual({ cgOverlay: 'codes' })
+  })
+
+  it('only the FIRST overlay takes it over — the next one pushes its own entry as always', async () => {
+    const useBackButton = await reloadedOn('guide')
+    function Two() {
+      useBackButton(true, () => {}, 'guide')
+      useBackButton(true, () => {}, 'settings')
+      return null
+    }
+    render(<Two />)
+    expect(pushSpy).toHaveBeenCalledTimes(1)
+    expect(pushSpy).toHaveBeenCalledWith({ cgOverlay: 'settings' }, '')
+  })
+
+  it('once the player has moved in the history, an overlay pushes its own entry', async () => {
+    const useBackButton = await reloadedOn('guide')
+    act(() => window.history.back()) // Back, with nothing open: off the loaded entry
+    await flushTraversals()
+    function Guide() {
+      useBackButton(true, () => {}, 'guide')
+      return null
+    }
+    render(<Guide />)
+    expect(pushSpy).toHaveBeenCalledWith({ cgOverlay: 'guide' }, '')
+  })
+
+  it('a page that loaded on its own entry is untouched: the first overlay pushes', async () => {
+    const useBackButton = await freshUseBackButton()
+    function Guide() {
+      useBackButton(true, () => {}, 'guide')
+      return null
+    }
+    render(<Guide />)
+    expect(pushSpy).toHaveBeenCalledWith({ cgOverlay: 'guide' }, '')
+  })
+})
+
 describe('iOS standalone (navigator.standalone === true) — history never written', () => {
   it('open pushes no entry, UI close calls no history.back(), and close/reopen bookkeeping stays intact', async () => {
     setStandalone(true)

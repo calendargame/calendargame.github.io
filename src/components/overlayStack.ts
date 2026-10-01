@@ -70,6 +70,19 @@ type Entry = {
 
 const stack: Entry[] = []
 let ignorePop = false
+// ★ THE ENTRY THIS PAGE LOADED ON MAY ALREADY BE AN OVERLAY'S. A reload keeps the session history
+// and the place in it — so a page reloaded while something was open starts life sitting ON that
+// thing's marker entry, with nothing open (a new page has an empty stack). If the next thing to
+// open pushed an entry of its own, the old one would be left behind it for good: a dead entry that
+// costs one Back press which does nothing. How to Play made that a steady leak, because it comes
+// back open after a reload (store/sessionMode) and so pushed again every time — one more dead Back
+// press per reload — and Show Codes, which a casual mode also brings back open, did the same.
+// So the first overlay to open after such a load TAKES THE ENTRY OVER instead (replaceState in
+// pushOverlay): the history is exactly as long as it was, and Back closes that overlay and lands
+// on the page's own entry. Read once, here, at import — before anything can have opened — and
+// dropped by the first open or the first traversal, after which the place is no longer the one the
+// page loaded on.
+let onLoadedOverlayEntry = typeof window !== 'undefined' && !!window.history.state?.cgOverlay
 // The newest entry that answers `is` — every rule in this file is "the top one of some kind".
 const topWhere = (is: (entry: Entry) => boolean): Entry | undefined => {
   for (let i = stack.length - 1; i >= 0; i--) if (is(stack[i])) return stack[i]
@@ -124,6 +137,7 @@ const IOS_STANDALONE =
 // armed even before any overlay has opened in this page load.
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', (event) => {
+    onLoadedOverlayEntry = false // a traversal: wherever this is, it is not where the page loaded
     if (ignorePop) {
       ignorePop = false // this popstate came from our own unwind (or bounce) — not a real Back
       return
@@ -223,7 +237,12 @@ function pushOverlay(entry: Entry) {
   // readout) normalize-commit; the Lookup date box has no onBlur at all, so its text is simply left
   // standing. Either way opening something is not a discard — Escape is the discard, everywhere.
   dismissKeyboard()
-  if (!IOS_STANDALONE) window.history.pushState({ cgOverlay: entry.id }, '')
+  if (IOS_STANDALONE) return
+  // Its history entry: a new one — or, for the first overlay to open on a page that loaded onto a
+  // previous load's marker entry, that entry taken over (see onLoadedOverlayEntry).
+  if (onLoadedOverlayEntry) window.history.replaceState({ cgOverlay: entry.id }, '')
+  else window.history.pushState({ cgOverlay: entry.id }, '')
+  onLoadedOverlayEntry = false
 }
 
 // ⚠⚠ OVERLAYS THAT CLOSE TOGETHER UNWIND TOGETHER — ONE TRAVERSAL, ONE IGNORED popstate. This used
