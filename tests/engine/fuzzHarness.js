@@ -15,6 +15,7 @@ import {
   overridePlan,
   liveCredited,
   forgetOldestCards,
+  regenReplaces,
 } from '../../src/engine/gameReducer.js'
 import { isDeepStrictEqual } from 'node:util'
 import { parkedText, restoreParked } from '../../src/engine/parkedHistory.js'
@@ -964,6 +965,11 @@ export function runSequence(seed, steps, cov, profile) {
     const ht = harnessTarget(state)
     if (ht !== overrideTarget(state))
       violations.push(`TARGET: harness ${ht}, reducer ${overrideTarget(state)}`)
+    // What a screen is TOLD a regeneration will do is what the reducer then did: regenReplaces is
+    // asked before the dispatch (Flash ends its flash on the answer), so it must never disagree with
+    // whether REGEN_DATE replaced the waiting question.
+    if (action.type === 'REGEN_DATE' && regenReplaces(prev) !== (state !== prev))
+      violations.push(`REGEN: regenReplaces said ${regenReplaces(prev)}, the reducer disagreed`)
     if (profile.strongOracle) violations.push(...checkStrongScoreOracle(state, priorHistory))
     if (model) violations.push(...compareRefModel(model, state, overridePlan(state)))
     if (violations.length) {

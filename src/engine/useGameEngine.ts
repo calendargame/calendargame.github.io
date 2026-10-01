@@ -25,6 +25,7 @@ import {
   correctIndexOf,
   effectiveSaveStats,
   overridePlan,
+  regenReplaces,
 } from './gameReducer.js'
 import type { GameState, Question, Stats } from './gameReducer.js'
 import { checkGameInvariants } from './invariants.js'
@@ -188,8 +189,15 @@ export function useGameEngine({
   const back = () => dispatch({ type: 'BACK' })
   const forward = () => dispatch({ type: 'FORWARD', useJulian })
   const resetStats = () => dispatch({ type: 'RESET', timingOff, nextDate: newDate() })
-  // Regenerate the live date in place (timing/Save-Stats enable, or a date-setting change).
-  const regenDate = () => dispatch({ type: 'REGEN_DATE', nextDate: newDate() })
+  // Regenerate the waiting question in place (timing/Save-Stats enable, or a date-setting change) —
+  // and say whether it WENT: the engine keeps a question that has been used (gameReducer's
+  // regenReplaces, the rule REGEN_DATE itself applies), and a screen holding something that belongs
+  // to the waiting question — Flash's running flash — drops it only when the question did go.
+  const regenDate = (): boolean => {
+    const replaces = regenReplaces(state)
+    dispatch({ type: 'REGEN_DATE', nextDate: newDate() })
+    return replaces
+  }
   // Full reset of stats + history + the live question (timing-enable when a desync exists).
   const fullReset = () => dispatch({ type: 'RESET', timingOff: false, nextDate: newDate() })
   // Clear history + current-question state but KEEP stats (timed-mode "Reset" mid-round).

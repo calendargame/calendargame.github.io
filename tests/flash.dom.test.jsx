@@ -577,3 +577,107 @@ describe('Flash — Override ⇄ Undo', () => {
     expect(dateDisplayText()).toBe('—')
   })
 })
+
+// ── What belongs to the waiting question goes when the question goes — and only then ────────────
+// Three doors regenerate the question Flash has waiting: a date setting changed in the ⚙ panel (as
+// the panel closes), timing shown again, and Save Stats back on while timing is shown. The engine
+// keeps a question that has been USED (answered wrong, revealed, shown its codes). A running flash
+// and a date left showing belong to the waiting question, so they end exactly when it is replaced:
+//   • the teardown used to run whether or not the question went, which blanked a revealed date to
+//     "—" under its lit answer and stopped a flash on a question that could then never be finished;
+//   • the date-setting door had no teardown at all, so the date changed under a running flash and
+//     the player was judged against a date they had never been shown.
+describe('Flash — a regenerated question takes its flash with it; a kept one keeps it', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs() // flashMs → the 2000 ms factory window; timing shown
+    useProgress.getState().resetProgress()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const press = (name) => act(() => fireEvent.click(ctrl(name)))
+  const toggleSettings = () =>
+    act(() => fireEvent.click(screen.getByRole('button', { name: /^Settings( \(|$)/ })))
+  const shown = ({ y, m, d }) => `${y}-${m}-${d}`
+  // Each door, as the player opens it. Every one of them is a no-op for a USED question and
+  // replaces an unused one.
+  const DOORS = [
+    [
+      'a date setting changed in the ⚙ panel',
+      () => {},
+      () => {
+        toggleSettings()
+        act(() => useSettings.getState().setMaxY(9000))
+        toggleSettings()
+      },
+    ],
+    [
+      'Save Stats back on while timing is shown',
+      () => useSettings.getState().setSaveStats(false),
+      () => {
+        toggleSettings()
+        act(() => fireEvent.click(screen.getByRole('button', { name: 'Save Stats' })))
+        toggleSettings()
+      },
+    ],
+    [
+      'timing shown again',
+      () => useModePrefs.getState().setFlashTimingOff(true),
+      () => act(() => fireEvent.click(statCell('Last'))),
+    ],
+  ]
+
+  it.each(DOORS)('%s: a live flash on an untouched question ends', (_, arrange, openDoor) => {
+    arrange()
+    mountApp()
+    switchToFlash()
+    press('Begin')
+    readDate() // the flashed date is on screen
+    openDoor()
+    // Idle: the question the flash belonged to has been replaced, so nothing of it is left — no
+    // date, no flash to answer into. Begin flashes a date the player has not seen.
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(dateDisplayText()).toBe('—')
+    expect(statValue('Score')).not.toBe('0/1')
+  })
+
+  it.each(DOORS)(
+    '%s: a live flash on a question already answered wrong keeps running',
+    (_, arrange, openDoor) => {
+      arrange()
+      useModePrefs.getState().setFlashMs(5000)
+      mountApp()
+      switchToFlash()
+      press('Begin')
+      const date = readDate()
+      act(() => fireEvent.click(dayBtn(wrongName(date)))) // wrong: the flash goes on, same question
+      openDoor()
+      expect(ctrl('Reset')).toBeInTheDocument() // still live — not handed back to Begin
+      expect(dateDisplayText()).toBe(shown(date)) // …on the question it was flashing
+      act(() => fireEvent.click(dayBtn(correctName(date)))) // …and it can still be finished
+      expect(ctrl('Begin')).toBeInTheDocument()
+    },
+  )
+
+  it.each(DOORS)('%s: a revealed date stays on screen', (_, arrange, openDoor) => {
+    arrange()
+    mountApp()
+    switchToFlash()
+    press('Begin')
+    const date = readDate()
+    press('Reveal') // the answer is lit, and the date stays shown beside it
+    expect(dateDisplayText()).toBe(shown(date))
+    openDoor()
+    expect(dateDisplayText()).toBe(shown(date)) // not blanked to "—" under its answer
+  })
+})

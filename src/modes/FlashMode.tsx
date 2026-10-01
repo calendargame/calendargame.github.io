@@ -343,9 +343,16 @@ function FlashMode({
     stopFlash()
   } // primary "Reset" while live (= App arm)
 
-  // A time can now be recorded on this screen (timing shown again, or Save Stats back on while it is
-  // shown), so the question the engine was waiting on has just been regenerated: a flash that was
-  // live belonged to the question that went, and so did a date left showing.
+  // ★ THE WAITING QUESTION WAS REPLACED UNDER THE SCREEN — by one of the three doors that regenerate
+  // it (a date setting changed in the ⚙ panel, timing shown again, Save Stats back on while timing is
+  // shown) or by "Enable and Reset Stats". Two things on this screen belonged to the question that
+  // went, and go with it: a flash that was live (it was that question's reveal window — left running,
+  // the player would be judged against a date they were never shown), and a date left showing.
+  // ⚠ ONLY WHEN IT WAS REPLACED. The engine KEEPS a question that has been used — answered wrong,
+  // revealed, shown its codes — and then nothing here may move: tearing down regardless blanked a
+  // revealed date to "—" under its lit answer, and stopped a flash on a question already answered
+  // wrong, which could then never be finished. So every door asks the engine (regenDate says whether
+  // the question went) instead of assuming.
   const endFlashForFreshQuestion = () => {
     if (active) {
       setActive(false)
@@ -353,9 +360,12 @@ function FlashMode({
     }
     setShowTimerDate(false)
   }
-  // Hideable stats chrome shared with Classic/Deduction. Flash supplies its flash-timer teardown:
-  // afterTimingEnabled (re-enabling timing while a flash is live stops it + hides its date) and
-  // onHide (leaving the mode stops a live flash). Classic/Deduction pass neither (no timer).
+  const regenWaiting = () => {
+    if (eng.regenDate()) endFlashForFreshQuestion()
+  }
+  // Hideable stats chrome shared with Classic/Deduction. Flash supplies its two teardowns:
+  // onQuestionReplaced (above — turning timing back on replaced the waiting question) and onHide
+  // (leaving the mode stops a live flash). Classic/Deduction pass neither (no timer).
   const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
     eng,
     saveStats,
@@ -364,7 +374,7 @@ function FlashMode({
     setTimingOff,
     scoringOff,
     setScoringOff,
-    afterTimingEnabled: endFlashForFreshQuestion,
+    onQuestionReplaced: endFlashForFreshQuestion,
     onHide: () => {
       if (active) {
         setActive(false)
@@ -373,14 +383,12 @@ function FlashMode({
     },
   })
 
-  // Defer the live-date regen to the ⚙ popover CLOSE — batched, no per-keystroke timer churn.
-  useSettingsCloseEffect(settingsOpen ?? false, dateSettings, () => eng.regenDate())
-  // Save Stats coming back on while timing is shown regenerates it too (modeHooks) — and does to a
-  // live flash exactly what turning timing back on does.
-  useSaveStatsOnRegen(settingsOpen ?? false, saveStats, timingOff, () => {
-    eng.regenDate()
-    endFlashForFreshQuestion()
-  })
+  // Defer the live-date regen to the ⚙ popover CLOSE — batched, no per-keystroke timer churn. (The
+  // flash keeps running behind the panel; if the question it belongs to is regenerated as the panel
+  // closes, the flash ends with it — regenWaiting.)
+  useSettingsCloseEffect(settingsOpen ?? false, dateSettings, regenWaiting)
+  // Save Stats coming back on while timing is shown regenerates it too (modeHooks).
+  useSaveStatsOnRegen(settingsOpen ?? false, saveStats, timingOff, regenWaiting)
 
   // Freshness for App's isFullyReset (Flash owns its state now): engine fresh + Flash's own
   // fields. flashMs (and the idle countdown mirror) compare against the EFFECTIVE default —

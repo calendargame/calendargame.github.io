@@ -407,6 +407,20 @@ export const initEngine = (date: Question, initialStats?: Stats): GameState => (
   timesBase: initialStats?.times?.length ?? 0,
 })
 
+// WOULD A REGEN_DATE REPLACE THE QUESTION THIS ENGINE HAS WAITING? — the used-or-not rule the
+// reducer's REGEN_DATE case argues, as a question a screen can ask BEFORE it dispatches, off the same
+// state the reducer will act on. A screen that keeps something of its own about the waiting question
+// (Flash's running flash, a date left showing) must drop it exactly when the question goes and never
+// when it stays; asking the rule here is what keeps the two from being told different stories.
+export function regenReplaces(state: GameState): boolean {
+  if (state.backDepth === 0) return !(state.countedWrong || state.revealed || liveCredited(state))
+  // Browsing: the live question waits as the `isLive` entry at the bottom of the forward stack.
+  const live = state.forwardStack[0]
+  const ls = live?.liveState
+  if (!live?.isLive || !ls) return false
+  return !(ls.countedWrong || ls.revealed || earnedCredit(live.btns, ls.revealed, ls.countedWrong))
+}
+
 // The card's LIFETIME number — the figure the Q# badge shows beside the Score box. `stack` holds the
 // entries BEHIND the card being viewed (browsing back pops them), so the base plus that depth plus
 // one is the viewed card's 1-based position in everything this mode has ever played. One counter per
@@ -1002,22 +1016,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     // waiting question alone: a date outside a year range that had just been narrowed, and — once a
     // history could come back after a reload — a question the player had already read, returning
     // with a fresh clock.)
+    // The used-or-not test itself is regenReplaces (above), so a screen can ask it too.
     case 'REGEN_DATE': {
       const { nextDate } = action
-      if (state.backDepth === 0) {
-        if (state.countedWrong || state.revealed || liveCredited(state)) return state
+      if (!regenReplaces(state)) return state
+      if (state.backDepth === 0)
         return { ...state, date: nextDate, questionId: state.questionId + 1 }
-      }
       const [live, ...ahead] = state.forwardStack
-      const ls = live?.liveState
-      if (!live?.isLive || !ls) return state
-      if (ls.countedWrong || ls.revealed || earnedCredit(live.btns, ls.revealed, ls.countedWrong))
-        return state
-      const { btns, hasCredit, solveTime, meta } = live
+      const { btns, liveState, hasCredit, solveTime, meta } = live
       return {
         ...state,
         forwardStack: [
-          { ...nextDate, isLive: true, btns, liveState: ls, hasCredit, solveTime, meta },
+          { ...nextDate, isLive: true, btns, liveState, hasCredit, solveTime, meta },
           ...ahead,
         ],
         questionId: state.questionId + 1,

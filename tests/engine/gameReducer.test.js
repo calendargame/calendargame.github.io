@@ -10,6 +10,7 @@ import {
   overrideTarget,
   overridePlan,
   liveCredited,
+  regenReplaces,
 } from '../../src/engine/gameReducer.js'
 import { wday } from '../../src/lib/calendar.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
@@ -416,6 +417,25 @@ describe('gameReducer — REGEN_DATE', () => {
     expect(r.forwardStack[1]).toBe(s.forwardStack[1]) // the browsed-past history card: untouched
     expect(r.forwardStack[0]).toMatchObject({ ...OTHER, isLive: true })
     expect(checkGameInvariants(r, false)).toEqual([])
+  })
+
+  // regenReplaces is the same rule asked ahead of the dispatch — a screen ends what belongs to the
+  // waiting question (Flash's running flash) on its answer, so the two must be one fact. (The fuzz
+  // holds them together on every regeneration it draws; these are the named corners.)
+  it('regenReplaces says, before the dispatch, exactly whether the waiting question will go', () => {
+    const played = answer(initEngine(DATE), C)
+    const corners = [
+      initEngine(DATE), // a fresh question
+      answer(initEngine(DATE), W), // answered wrong
+      reveal(initEngine(DATE)), // revealed
+      answer(initEngine(DATE), C, { complete: true }), // a credit held on the live card
+      back(played), // browsing, the live question untouched
+      back(answer(played, wOf(played))), // browsing, the live question answered wrong
+      back(reveal(played)), // browsing, the live question revealed
+    ]
+    const said = corners.map((s) => regenReplaces(s))
+    expect(said).toEqual([true, false, false, false, true, false, false])
+    expect(corners.map((s) => regen(s) !== s)).toEqual(said)
   })
 })
 

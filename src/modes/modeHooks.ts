@@ -81,8 +81,10 @@ function engineUntouched(s: GameState) {
 // ConfirmModal, opened from the mode component — this hook now just owns the open flag and the
 // confirm/cancel handlers. Both toggles (`timingOff` + `scoringOff`) are owned by the component and
 // persisted in the mode-prefs store, so they're passed in with their setters (timingOff also feeds
-// useGameEngine). Flash is the only mode with a live timer to tear down, so it passes
-// afterTimingEnabled() (on re-enable) and onHide() (on mode-leave); Classic/Deduction omit them.
+// useGameEngine). Flash is the only mode that keeps something of its own about the waiting question
+// (a running flash, a date left showing), so it passes onQuestionReplaced() — called when turning
+// timing back on actually REPLACED that question, and never when the engine kept it — and onHide()
+// (on mode-leave); Classic/Deduction omit them.
 export function useStatsHideToggles({
   eng,
   saveStats,
@@ -91,7 +93,7 @@ export function useStatsHideToggles({
   setTimingOff,
   scoringOff,
   setScoringOff,
-  afterTimingEnabled,
+  onQuestionReplaced,
   onHide,
 }: {
   eng: GameEngine
@@ -101,7 +103,7 @@ export function useStatsHideToggles({
   setTimingOff: (v: boolean) => void
   scoringOff: boolean
   setScoringOff: (v: boolean) => void
-  afterTimingEnabled?: () => void
+  onQuestionReplaced?: () => void
   onHide?: () => void
 }) {
   // timingOff + scoringOff are owned by the mode component (persisted in the mode-prefs store) and
@@ -136,8 +138,9 @@ export function useStatsHideToggles({
     // every reload for anyone past 1,000 timed answers, offering to wipe their stats for nothing.)
     const desync = S.good - (S.timesLost ?? 0) !== S.times.length
     if (!desync) {
-      eng.regenDate()
-      if (afterTimingEnabled) afterTimingEnabled()
+      // The engine keeps a question that has been used (answered wrong, revealed, shown its codes) —
+      // so the screen's own teardown runs only when the question really went.
+      if (eng.regenDate()) onQuestionReplaced?.()
       setTimingOff(false)
       return
     }
@@ -145,12 +148,12 @@ export function useStatsHideToggles({
     // it has to reset this mode's stats. Ask first (the popup renders from the mode component).
     setEnableResetOpen(true)
   }
-  // Accept: the full reset the reconcile needs, then flip timing on and run the mode's teardown —
-  // the exact body the old two-tap's confirming tap ran.
+  // Accept: the full reset the reconcile needs — which always replaces the waiting question, so the
+  // mode's teardown always runs — then flip timing on.
   const confirmEnableReset = () => {
     setEnableResetOpen(false)
     eng.fullReset()
-    if (afterTimingEnabled) afterTimingEnabled()
+    onQuestionReplaced?.()
     setTimingOff(false)
   }
   // The mode's teardown (onHide — Flash's live-flash stopper) IS a real side effect, so it stays
