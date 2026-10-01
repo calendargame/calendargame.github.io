@@ -172,17 +172,24 @@ describe('the amnesic marker', () => {
     expect(within(plain).queryByText('A')).toBeNull()
   })
 
-  it('carries a PRINTING separator, so the name cannot run into the preset name', () => {
-    // The name-from-content algorithm trims each child's text before joining, so a leading space is
-    // dropped: ", amnesic" is what survives the join, " amnesic" is not. The ⚙ footer's changelog
-    // dot learned this the hard way ("Changelog(update)").
+  it('says the name and the word as ONE phrase — nothing for a screen reader to join', () => {
+    // A name assembled from two elements is joined differently by different engines: Chromium put
+    // a space between the name and a ", amnesic" tail ("Guest , amnesic"), and a join that trims
+    // each piece runs them together ("Guestamnesic"). So one sr-only element holds the whole
+    // phrase, and the visible name beside it is hidden from a screen reader instead of being said
+    // twice.
     act(() => {
       const p = createPreset('Guest')
       setPresetAmnesic(p.id, true)
     })
     mount()
     openMenu()
-    expect(screen.getByRole('option', { name: /Guest, amnesic/ })).toBeTruthy()
+    const row = screen.getByRole('option', { name: 'Guest, amnesic' })
+    expect(within(row).getByText('Guest, amnesic').className).toContain('sr-only')
+    expect(within(row).getByText('Guest').getAttribute('aria-hidden')).toBe('true')
+    // A preset that is not amnesic has nothing hidden and nothing added: its name is its text.
+    const plain = screen.getByRole('option', { name: /Preset 1/ })
+    expect(within(plain).getByText('Preset 1').getAttribute('aria-hidden')).toBeNull()
   })
 
   it('is aligned to the right of the name cell, and never gives way before the name does', () => {
@@ -215,7 +222,7 @@ describe('the amnesic marker', () => {
     // …and it reaches the trigger's ACCESSIBLE NAME, which is the half that matters here: the
     // marker's whole requirement is that it be a word a screen reader says, and the trigger used to
     // wear an aria-label that replaced its content — announcing "Preset" and dropping the preset,
-    // the ", amnesic" and everything else. The name is composed from the setting plus the selected
+    // the "amnesic" and everything else. The name is composed from the setting plus the selected
     // option's own text (components/CustomSelect), so this is the marker arriving through it.
     expect(screen.getByRole('button', { name: 'Preset, Preset 1, amnesic' })).toBe(trigger())
   })

@@ -115,11 +115,14 @@ import { switchPreset } from '../store/presetControl.js'
 //
 // ⚠ IT IS A LETTER PLUS A WORD, NEVER A LETTER ALONE. A bare "A" is not an accessible name — it is
 // a glyph a screen reader reads as the indefinite article. So the letter is `aria-hidden` and an
-// `sr-only` sibling carries the real word, exactly the idiom the ⚙ footer's Changelog dot uses.
-// ⚠ THE COMMA IN ", amnesic" IS LOAD-BEARING, and the Changelog dot paid for that lesson: the
-// name-from-content algorithm TRIMS each child's text before joining, so a leading space is dropped
-// and "Weekend" + "amnesic" would be announced as "Weekendamnesic". A printing separator is the
-// only one that survives the join.
+// `sr-only` sibling carries the real word.
+// ⚠ AND THAT SIBLING CARRIES THE WHOLE PHRASE — "Weekend, amnesic", name included, with the visible
+// name hidden from a screen reader beside it — rather than a ", amnesic" tail for the browser to
+// join onto the name. A name assembled from several elements is joined by rules that differ by
+// engine and by each piece's layout: Chromium puts a space between a block-level piece and its
+// neighbour (the name is a flex item, the sr-only span is absolutely positioned), which read as
+// "Weekend , amnesic"; and a join that trims each piece drops a leading space instead, which is
+// "Weekendamnesic". One text node has nothing to join, so it reads the same everywhere.
 // ⚠ NOTHING ABOUT IT IS CONVEYED BY COLOUR — it is a glyph, dimmed by OPACITY rather than tinted.
 // That is not only an a11y rule here, it is a correctness one: the dropdown panel paints a light
 // frosted background and hardcodes `color:#1a1a1a` on its rows in EVERY theme, while the trigger
@@ -194,7 +197,9 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
           after typing (a rotation, a text-size accessibility setting, a viewport resize), and a
           canvas measurement is not bit-for-bit identical to this element's own DOM layout. This
           is the safety net that makes all three survivable instead of an overflowing name. */}
-      <span className="truncate">{p.name}</span>
+      <span className="truncate" aria-hidden={p.amnesic || undefined}>
+        {p.name}
+      </span>
       {p.amnesic && (
         <>
           {/* ml-auto is the right-alignment: it eats the cell's leftover space, so the marker sits
@@ -207,7 +212,7 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
           >
             A
           </span>
-          <span className="sr-only">, amnesic</span>
+          <span className="sr-only">{p.name}, amnesic</span>
         </>
       )}
     </span>

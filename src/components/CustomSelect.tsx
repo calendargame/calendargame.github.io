@@ -199,16 +199,15 @@ export default function CustomSelect({
   // indicator "with a real accessible name". Reading the preset control without its preset name
   // fails that on the enclosing control instead of on the marker.)
   //   WHY aria-labelledby RATHER THAN A COMPOSED STRING. Option labels are ReactNodes, not text —
-  // the preset switcher's is a whole element tree carrying a truncating name cell and an `sr-only`
-  // ", amnesic" sibling. There is nothing to concatenate at render time. Referencing the two NODES
-  // instead hands the name computation to the platform, which walks the selected option's subtree
-  // and reads exactly what a sighted user sees plus what the sr-only text adds: "Preset, Weekend,
-  // amnesic". The unselected options stacked in the same grid cell are `aria-hidden`, and a hidden
+  // the preset switcher's is a whole element tree carrying a truncating name cell and, for an
+  // amnesic preset, an `sr-only` phrase that stands in for it. There is nothing to concatenate at
+  // render time. Referencing the two NODES instead hands the name computation to the platform,
+  // which walks the selected option's subtree and reads exactly what that option says of itself:
+  // "Preset, Weekend, amnesic". The unselected options stacked in the same grid cell are `aria-hidden`, and a hidden
   // node that is not itself the referenced one contributes nothing to a name — which is what keeps
   // the other six modes out of it.
-  //   ⚠ THE COMMA LIVES ON THE LABEL, for the same reason PresetSwitcher's marker puts one on
-  // ", amnesic": the name-from-content algorithm TRIMS each referenced node's text before joining
-  // them with a space, so a separator has to be a printing character or there is none.
+  //   ⚠ THE COMMA LIVES ON THE LABEL: the two referenced nodes' texts are trimmed and joined with
+  // a space, so a separator has to be a printing character on one of them or there is none.
   const labelId = `${listboxId}-label`
   const valueId = `${listboxId}-value`
   const selectedIdx = options.findIndex((o) => o.value === value)

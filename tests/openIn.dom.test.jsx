@@ -121,8 +121,11 @@ describe('"Open in" is a dropdown', () => {
     act(() => setPresetAmnesic(3, true))
     openSettings('key')
     fireEvent.click(openInTrigger())
-    // The ✓ column is part of each option's text, so the selected row reads "✓Last used".
-    expect(optionNames()).toEqual(['✓Last used', 'Preset 1', 'Timed', 'GuestA, amnesic'])
+    // The ✓ column is part of each option's text, so the selected row reads "✓Last used". An
+    // amnesic row's text is what is DRAWN (the name, the A) followed by what is SPOKEN in their
+    // place (the one sr-only phrase) — components/PresetSwitcher's shared label.
+    expect(optionNames()).toEqual(['✓Last used', 'Preset 1', 'Timed', 'GuestAGuest, amnesic'])
+    expect(screen.getByRole('option', { name: 'Guest, amnesic' })).toBeTruthy()
   })
 
   it('the trigger is ONE control however many presets there are — no tray, no segment per preset', () => {

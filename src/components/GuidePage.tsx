@@ -1080,7 +1080,7 @@ export default function GuidePage({
           it touched are Saved Progress, Save Defaults / Reset Settings / Full Reset, Settings
           Overview, and Accessibility.
           Sources, so a reader can check any sentence against the code: the control = components/
-          PresetSwitcher (its ariaLabel, its options list, the ", amnesic" sr-only sibling); the
+          PresetSwitcher (its ariaLabel, its options list, the sr-only "<name>, amnesic" phrase); the
           manager = components/PresetManager (every button's accessible name, the delete
           confirmation's two views, the withheld ✕ on a last preset); what a switch actually swaps =
           store/presetControl's PER_PRESET_STORES, all four of them; what a delete actually removes =
@@ -1651,7 +1651,7 @@ export default function GuidePage({
           when the visible wordmark was removed (that markup argues why one without the other is not
           the fix, and tests/topBar.dom pins both); the bar's two lists = CustomSelect's
           COMPOSED trigger name (the caller's label plus the selected option's own text, which is
-          what carries PresetSwitcher's ", amnesic" sr-only sibling into the bar), plus that
+          what carries PresetSwitcher's sr-only "<name>, amnesic" phrase into the bar), plus that
           component's open-state key handler for "the same keys do the same things"; its GAP line = the same
           handler's closed branch ("NO key opens the dropdown from the trigger") together with
           main.tsx's global Tab binding, which resolves modeSelectRef and nothing else — so a
