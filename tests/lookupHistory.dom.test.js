@@ -26,11 +26,7 @@
 // implementation detail about to move.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, cleanup, fireEvent, act } from '@testing-library/react'
-import {
-  useLookupHistory,
-  useLookupSession,
-  LOOKUP_HISTORY_CAP,
-} from '../src/store/lookupHistory.js'
+import { useLookupHistory, useLookupSession } from '../src/store/lookupHistory.js'
 import { usePresets } from '../src/store/presets.js'
 import {
   createPreset,
@@ -133,13 +129,24 @@ describe('the permanent list', () => {
     expect(fresh.useLookupHistory.getState().history).toEqual([])
   })
 
-  it('setHistory accepts a direct value and a functional updater, capped at LOOKUP_HISTORY_CAP', () => {
+  it('setHistory accepts a direct value and a functional updater', () => {
     useLookupHistory.getState().setHistory([{ id: 'a', y: 1, m: 1, d: 1 }])
     expect(useLookupHistory.getState().history).toHaveLength(1)
     useLookupHistory.getState().setHistory((prev) => [{ id: 'b', y: 2, m: 2, d: 2 }, ...prev])
     expect(useLookupHistory.getState().history).toHaveLength(2)
     expect(useLookupHistory.getState().history[0].id).toBe('b')
-    expect(LOOKUP_HISTORY_CAP).toBe(100) // the number How-to-Play states — pinned so it reads as a decision
+  })
+
+  it('a history of thousands is saved and read back whole — nothing trims it on the way', async () => {
+    const many = Array.from({ length: 5000 }, (_, i) => ({
+      id: `h${i}`,
+      y: 1 + (i % 9999),
+      m: (i % 12) + 1,
+      d: (i % 28) + 1,
+    }))
+    useLookupHistory.getState().setHistory(many)
+    const fresh = await reopenLookupHistory()
+    expect(fresh.useLookupHistory.getState().history).toEqual(many)
   })
 })
 

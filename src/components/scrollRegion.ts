@@ -1,5 +1,6 @@
-import { useLayoutEffect, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
+import { flushSync } from 'react-dom'
 
 // The site-wide scroll-region treatment (round-7 Q5) — the ⚙ Settings recipe, extracted here so
 // no scroll region can quietly diverge from it again (settings, the changelog popup, and the
@@ -301,5 +302,152 @@ export function holdScrollRegion(from: Element | null): (() => void) | undefined
   return () => {
     region.style.overflowY = prevOverflowY
     region.style.scrollbarGutter = prevGutter
+  }
+}
+
+// ── WINDOWED ROWS — a list of any length that only ever draws what is near the screen ──────────
+//
+// Lookup's history is unlimited, so its list can hold thousands of rows. Drawing them all costs
+// time in proportion to the list on every render of the card around it, and the scroll itself
+// stutters once the browser is laying out thousands of buttons it is not showing. So the list
+// draws only the rows in and around the viewport, and stands in for the rest with two blank
+// spacers — one above, one below — whose heights are exactly the rows they replace. The scroller's
+// content is therefore as tall as the full list at all times: the scrollbar, the edge fades
+// (useScrollEdgeState above reads scrollHeight) and "scroll to row N" all behave as if every row
+// were there.
+//
+// WHAT THE CALLER OWES: every row the same height (Lookup's rows are one line tall by
+// construction), each drawn row carrying `data-row`, the gap between rows written as a top margin
+// on every row but the list's first (a `space-y` utility would also put a margin on the spacers),
+// and the two spacers drawn from `padTop` / `padBottom`.
+//
+// HOW IT KNOWS THE GEOMETRY: it measures it. Row height and the row-to-row pitch are read off two
+// neighbouring drawn rows, never written down as numbers — the app's root font is fluid, so a row
+// is a different number of pixels on every screen, and re-measured whenever the scroller's box
+// changes (a rotation changes the font, and so the rows).
+//   • BEFORE THE FIRST MEASUREMENT it draws a first batch from the top; the measuring layout
+//     effect runs before the browser paints, so that frame is never seen.
+//   • WHERE NOTHING CAN BE MEASURED (a layout-free test environment reports every size as 0, and so
+//     does a list that is not displayed) it draws EVERY row: correct, and only as slow as the list
+//     is long.
+//
+// `revealIndex` / `revealKey` — the row that must be in view, and its identity (Lookup's selected
+// row and its id). Whenever either changes the list scrolls the least it has to for that row to be
+// whole and clear of the edge fades: arrowing through the history walks the list with the
+// selection, and a new lookup (added at the top) brings the top into view. The first reveal after
+// the list mounts CENTRES the row instead — that is coming back to Lookup, or a reload, with a row
+// already selected somewhere far down a long list.
+const WINDOW_FIRST_BATCH = 60
+// At least this many rows are kept drawn beyond each edge of the viewport, and never less than one
+// viewport's worth: a fling scrolls on the compositor ahead of the next render, and the rows it
+// arrives at have to exist already or it shows a blank band.
+const WINDOW_MIN_OVERSCAN = 12
+
+export interface RowWindow {
+  /** The first row to draw, and one past the last. */
+  start: number
+  end: number
+  /** The heights, in px, of the undrawn rows above and below — one spacer each. */
+  padTop: number
+  padBottom: number
+}
+
+// What was measured. `pitch` is the distance from one row's top to the next row's; 0 means there was
+// nothing to measure against (see above), and every row is drawn.
+type RowMetrics = { rowHeight: number; pitch: number }
+
+export function useWindowedRows<T extends HTMLElement>(
+  ref: RefObject<T | null>,
+  count: number,
+  revealIndex: number,
+  revealKey: unknown,
+): RowWindow {
+  const [metrics, setMetrics] = useState<RowMetrics | null>(null)
+  // The first row in the viewport, and how many rows the viewport holds.
+  const [view, setView] = useState({ first: 0, rows: WINDOW_FIRST_BATCH })
+  // The effect's own "re-read the scroll position now", for the reveal below: a programmatic
+  // scroll reports itself a frame late, and the rows it lands on must be drawn in the same frame.
+  const syncRef = useRef<() => void>(() => {})
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let pitch = 0
+    const sync = () => {
+      if (pitch <= 0) return
+      const first = Math.floor(Math.max(el.scrollTop, 0) / pitch)
+      const rows = Math.ceil(el.clientHeight / pitch)
+      setView((prev) => (prev.first === first && prev.rows === rows ? prev : { first, rows }))
+    }
+    const measure = () => {
+      const [a, b] = el.querySelectorAll<HTMLElement>('[data-row]')
+      const top = a?.getBoundingClientRect()
+      const rowHeight = top?.height ?? 0
+      // Two drawn rows are always neighbours, so the difference of their tops IS the pitch.
+      pitch = a && b ? b.getBoundingClientRect().top - top!.top : 0
+      if (!(pitch > 0)) pitch = 0
+      const next = { rowHeight, pitch }
+      setMetrics((prev) =>
+        prev && prev.rowHeight === next.rowHeight && prev.pitch === next.pitch ? prev : next,
+      )
+      sync()
+    }
+    syncRef.current = sync
+    measure()
+    // ★ A SCROLL RE-DRAWS THE WINDOW INSIDE THE SCROLL EVENT (flushSync), not on React's own
+    // schedule. Left to the scheduler the new rows arrive a frame after the scroll that needed
+    // them, and a hard fling or a scrollbar drag — which can cross more than the margin of rows
+    // kept drawn — shows a blank band for that frame. It costs nothing while the first visible row
+    // has not changed (setView returns the same object, so there is nothing to flush), and it is
+    // only ever called from the event: a flushSync inside a layout effect is an error.
+    const onScroll = () => flushSync(sync)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      ro.disconnect()
+    }
+    // `count` is a dependency because a list of ONE row has no neighbour to measure a pitch from:
+    // the second row arriving is what makes the geometry measurable.
+  }, [ref, count])
+
+  const pitch = metrics?.pitch ?? 0
+  const rowHeight = metrics?.rowHeight ?? 0
+  const mounted = useRef(false)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || pitch <= 0) return
+    const first = !mounted.current
+    mounted.current = true
+    if (revealIndex < 0) return
+    const top = revealIndex * pitch
+    if (first) el.scrollTop = top - (el.clientHeight - rowHeight) / 2
+    else {
+      // Clear of the edge fades, not merely inside the box: a row at the very edge is half-dissolved
+      // by the fade there. (No fade depth to read where no stylesheet is served.)
+      const margin = readShadeRampPx() || 0
+      if (top - margin < el.scrollTop) el.scrollTop = top - margin
+      else if (top + rowHeight + margin > el.scrollTop + el.clientHeight)
+        el.scrollTop = top + rowHeight + margin - el.clientHeight
+    }
+    syncRef.current()
+    // The reveal answers a change of WHICH row is wanted (or the geometry becoming known) — not
+    // every scroll, which is the user's.
+  }, [ref, revealIndex, revealKey, pitch, rowHeight])
+
+  if (metrics === null)
+    return { start: 0, end: Math.min(count, WINDOW_FIRST_BATCH), padTop: 0, padBottom: 0 }
+  if (pitch <= 0) return { start: 0, end: count, padTop: 0, padBottom: 0 }
+  const overscan = Math.max(view.rows, WINDOW_MIN_OVERSCAN)
+  const end = Math.min(count, view.first + view.rows + overscan)
+  const start = Math.max(0, Math.min(view.first - overscan, end - 1))
+  return {
+    start,
+    end,
+    // Everything above the first drawn row: `start` rows and the gaps between them. The gap before
+    // the first drawn row is that row's own margin.
+    padTop: start === 0 ? 0 : start * pitch - (pitch - rowHeight),
+    padBottom: (count - end) * pitch,
   }
 }

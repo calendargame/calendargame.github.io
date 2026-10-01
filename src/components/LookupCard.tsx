@@ -2,7 +2,12 @@ import * as React from 'react'
 import { fmt, MONTH, DAY, numericFormatOf } from '../lib/format.js'
 import { dim, dimEither, wday, wdayJulian, isJulianDate, isGapDate } from '../lib/calendar.js'
 import { MethodBreakdownSection, type CodeDate } from './MethodBreakdown.jsx'
-import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
+import {
+  SCROLL_REGION_CLASS,
+  scrollFadeClass,
+  useScrollEdgeState,
+  useWindowedRows,
+} from './scrollRegion.js'
 import type { FormatId } from '../lib/format.js'
 // The history entry's persisted shape lives with the store that versions and migrates it
 // (store/lookupHistory) — it is {id, y, m, d, isGap?} and nothing else. Everything shown on screen
@@ -143,6 +148,93 @@ const codesUseJulian = (date: CodeDate | null, useJulian: boolean): boolean => {
   return date.d <= dim(date.y, date.m) ? useJulian : true
 }
 
+// The history list — every lookup ever made on this device, newest first, with no limit.
+//
+// THE LIST IS THE PART OF THE PAGE THAT GIVES: it takes the room the heading above it does not need,
+// and scrolls past that (measured flex layout, never a pixel max-height — tests/heightGuard).
+//
+// ★ IT IS WINDOWED (components/scrollRegion's useWindowedRows). Only the rows in and near view are
+// drawn; two blank spacers stand in for the rest, so the list is exactly as tall as if every row
+// were there and a history of thousands scrolls like one of ten. Everything a row needs is derived
+// from its entry, so a row scrolled away and drawn again is the same row.
+//   • SELECTION is the caller's (an id), not the DOM's — it is true of a row whether or not that
+//     row is drawn, which is what lets a reload come back to a selected row far down the list.
+//   • THE SELECTED ROW IS BROUGHT INTO VIEW when the selection changes (arrowing through the list,
+//     a new lookup landing at the top) and centred when the list first appears with one selected.
+//   • aria-setsize / aria-posinset tell a screen reader the row's place in the WHOLE list, which it
+//     could otherwise only count from the rows that happen to be drawn.
+//   • The two edge fades are the shared recipe's (useScrollEdgeState) and read the full height.
+// `entries` stands in as the edge hook's active key, so the listener re-attaches whenever the list
+// changes; its extent observer covers the list being resized under the user — a screen-size change,
+// or Show Codes opening in the card above and taking the list's room.
+// There are NO boundary surfaces: the list is not framed by lines or shadows, as on every other
+// page — the fades already say "there is more this way".
+function LookupHistoryList({
+  entries,
+  selectedId,
+  onSelect,
+  fmtDate,
+}: {
+  entries: LookupEntry[]
+  selectedId: string | null
+  onSelect: (entry: LookupEntry) => void
+  fmtDate?: (y: number, m: number, d: number) => string
+}) {
+  const listRef = React.useRef<HTMLUListElement>(null)
+  const { scrolledFromTop, atBottom } = useScrollEdgeState(listRef, entries)
+  const selectedIndex = selectedId === null ? -1 : entries.findIndex((e) => e.id === selectedId)
+  const { start, end, padTop, padBottom } = useWindowedRows(
+    listRef,
+    entries.length,
+    selectedIndex,
+    selectedId,
+  )
+  return (
+    <ul
+      ref={listRef}
+      className={`${SCROLL_REGION_CLASS} flex-auto min-h-0 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
+    >
+      {padTop > 0 && <li aria-hidden="true" role="presentation" style={{ height: padTop }} />}
+      {entries.slice(start, end).map((e, i) => {
+        const index = start + i
+        return (
+          // mt-2 on every row but the list's first is the gap between rows — a margin on the row
+          // itself rather than a space-y utility on the list, which would also space the spacers.
+          <li
+            key={e.id}
+            data-row={index}
+            aria-setsize={entries.length}
+            aria-posinset={index + 1}
+            className={index > 0 ? 'mt-2' : undefined}
+          >
+            <button
+              type="button"
+              onClick={() => onSelect(e)}
+              className={`w-full text-left px-3 py-2 rounded-xl panel flex items-center justify-between gap-3 text-xs transition ${selectedId === e.id ? 'border-l-2 border-l-(--acc) bg-(--hist-sel)' : 'hover:bg-(--hist-hov)'}`}
+            >
+              {/* Every row is exactly one line tall, by construction rather than by fitting:
+                  the readings never wrap and never shrink (a two-reading line is the whole
+                  point of the row), and the date label is the side that gives — truncate ends
+                  it with an ellipsis instead of pushing the readings out of the panel. The
+                  measurement in entryRowReadings says nothing reachable actually needs the
+                  truncation; it is here so that a row's height can never depend on its
+                  content — which a scrolling list wants anyway, and a WINDOWED one requires:
+                  the undrawn rows are stood in for by their count times one row's height. */}
+              <span className="block min-w-0 truncate text-[13px] font-medium text-(--tx-100-90)">
+                {entryLabel(e, fmtDate)}
+              </span>
+              <span className="shrink-0 whitespace-nowrap text-[12px] font-semibold text-(--tx-200-80)">
+                {entryRowReadings(e)}
+              </span>
+            </button>
+          </li>
+        )
+      })}
+      {padBottom > 0 && <li aria-hidden="true" role="presentation" style={{ height: padBottom }} />}
+    </ul>
+  )
+}
+
 // LookupCard — the Lookup-mode card: a numeric date input (format follows the
 // active dateFormat) with the note saying what it takes, a three-line answer slot
 // with the shared Show Codes panel right under it, and a history list that scrolls
@@ -186,23 +278,6 @@ export default function LookupCard({
   const ssid =
     typeof onSelectedHistoryIdChange === 'function' ? onSelectedHistoryIdChange : () => {}
   const cov = !!calcOpen
-  // Lookup history scroll-state — the shared useScrollEdgeState (components/scrollRegion, the
-  // settings-recipe edge listener). Its two flags drive the list's own fade masks and nothing
-  // else:
-  //   lookupHistoryScrolledFromTop → the list's top fade mask
-  //   lookupHistoryAtBottom        → the list's bottom fade mask
-  // ★ NO BOUNDARY SURFACES (round 23, Q10). The list used to be framed: a divider line and a
-  // progressive shadow under the History heading, and another pair above Show Codes, which sat at
-  // the panel's foot — the hook wrote each one's --shade. No other main page walls its scroller off
-  // like that, and the fades already say "there is more this way", so both lines and both shadows
-  // are gone, and Show Codes moved up under the answer it explains (see the first panel below).
-  // `history` stands in as the hook's active key: the <ul> only exists with entries, so a history
-  // change re-attaches the listener to a freshly (re)mounted list; the hook's extent observer
-  // covers the list being resized under the user — a screen-size change, or Show Codes opening in
-  // the panel above and taking the list's room.
-  const lookupHistoryRef = React.useRef<HTMLUListElement>(null)
-  const { scrolledFromTop: lookupHistoryScrolledFromTop, atBottom: lookupHistoryAtBottom } =
-    useScrollEdgeState(lookupHistoryRef, history)
   // Codes-open is purely global state — it stays as-is when the user clicks through
   // history entries, only changing on (1) a manual toggle, (2) a brand-new lookup
   // via runLookup, or (3) MethodBreakdownSection's auto-close when the displayed
@@ -635,9 +710,9 @@ export default function LookupCard({
             whitespace-nowrap is what keeps that true at every width — a wrap is the one way this
             could grow the header, and a heading that changes height shoves the whole list below it
             down, exactly the reflow worth designing out (the same by-construction rule
-            the history rows below follow). It appears from the SECOND entry on (a "(1)" beside
-            a list you can see has one row is noise) and stops at the cap, where it simply reads
-            (100). Dimmer than the label it follows — --tx-300-60 is the footnote tier, a step down
+            the history rows follow). It appears from the SECOND entry on (a "(1)" beside
+            a list you can see has one row is noise) and counts the whole list, however long.
+            Dimmer than the label it follows — --tx-300-60 is the footnote tier, a step down
             from the header's own --tx-200-70 in every theme — so it reads as a detail about the
             heading rather than part of it. */}
         <div className="lookup-history-header shrink-0 px-4 flex items-center justify-between text-[11px] uppercase tracking-wide text-(--tx-200-70)">
@@ -653,47 +728,13 @@ export default function LookupCard({
             </button>
           )}
         </div>
-        {/* The list is the part that gives: it takes the room the heading above it doesn't need,
-            and scrolls past that. It used to carry a fixed 440-pixel
-            max-height — one number, too tall on a small phone and leaving screen unused on a big
-            one, and the fluid-root font system had no way to scale it. Measured layout replaces
-            it; tests/heightGuard.test.js keeps pixel heights from creeping back. */}
         {entries.length > 0 ? (
-          <ul
-            ref={lookupHistoryRef}
-            className={`${SCROLL_REGION_CLASS} space-y-2 flex-auto min-h-0 ${scrollFadeClass(lookupHistoryScrolledFromTop, lookupHistoryAtBottom)}`}
-          >
-            {entries.map((e) => (
-              <li key={e.id}>
-                <button
-                  type="button"
-                  onClick={() => selEntry(e)}
-                  // The unselected arm used to also carry `hist-unsel`, a custom class that reset
-                  // border-left-color to --panel-bd. It was a pure no-op in both directions:
-                  // .panel's `border` shorthand already sets that exact colour, and the
-                  // border-l-(--acc) it existed to undo is only ever on the OTHER arm. It was
-                  // written while the whole selected treatment was invisible (the cascade-layer
-                  // regression — see the ★★ block in src/index.css), which is how a rule that
-                  // undoes nothing came to look necessary. Both the class and its CSS are gone.
-                  className={`w-full text-left px-3 py-2 rounded-xl panel flex items-center justify-between gap-3 text-xs transition ${sid === e.id ? 'border-l-2 border-l-(--acc) bg-(--hist-sel)' : 'hover:bg-(--hist-hov)'}`}
-                >
-                  {/* Every row is exactly one line tall, by construction rather than by fitting:
-                      the readings never wrap and never shrink (a two-reading line is the whole
-                      point of the row), and the date label is the side that gives — truncate ends
-                      it with an ellipsis instead of pushing the readings out of the panel. The
-                      measurement in entryRowReadings says nothing reachable actually needs the
-                      truncation; it is here so that a row's height can never depend on its
-                      content, which in a scrolling list is the failure worth designing out. */}
-                  <span className="block min-w-0 truncate text-[13px] font-medium text-(--tx-100-90)">
-                    {entryLabel(e, fmtDate)}
-                  </span>
-                  <span className="shrink-0 whitespace-nowrap text-[12px] font-semibold text-(--tx-200-80)">
-                    {entryRowReadings(e)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <LookupHistoryList
+            entries={entries}
+            selectedId={sid}
+            onSelect={selEntry}
+            fmtDate={fmtDate}
+          />
         ) : (
           <p className="px-4 text-sm text-(--tx-200-70)">No lookups yet</p>
         )}

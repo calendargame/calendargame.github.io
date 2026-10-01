@@ -3216,22 +3216,25 @@ export default function GuidePage({
             through the calendar the date actually has.
           </li>
           <li>
-            The history panel keeps your 100 most recent lookups: each new one goes on top, and once
-            the list is full the oldest drops off the bottom on its own. From the second entry
-            onwards the number saved is shown beside the History heading. The list scrolls within
-            its own box whenever it is taller than the room available, and softly fades out at the
-            top or bottom edge wherever there are more entries that way.
+            The history panel keeps every date you look up — there is no limit, and nothing drops
+            off the end. Each new one goes on top, and looking a date up again moves it back to the
+            top rather than listing it twice. From the second entry onwards the number saved is
+            shown beside the History heading. The list scrolls within its own box whenever it is
+            taller than the room available, however long it gets, and softly fades out at the top or
+            bottom edge wherever there are more entries that way. <b>Clear History</b> empties it.
           </li>
           <li>
             History rows say the same thing in short, so each stays on one line: "J: Sat · G: Wed"
             for a date with two readings, and just the weekday on its own for every other date. Tap
             a row to see it spelled out in full above; the row you tapped is tinted and marked with
             a coloured edge down its left side, so you can always tell which one you are reading.
+            The list keeps that row in view: ↑ and ↓ walk it along with the selection, and a new
+            lookup brings the list back to the top, where the new entry is.
           </li>
           <li>
             A reload keeps the page as you had it — the date in the box, its answer, the selected
-            row and Show Codes open or closed. Closing the app starts it empty again; the history
-            list stays either way.
+            row (scrolled back into view, wherever in the list it is) and Show Codes open or closed.
+            Closing the app starts it empty again; the history list stays either way.
           </li>
           <li>
             Nothing in Lookup is frozen at the moment you look it up: the answer and every history

@@ -64,17 +64,21 @@ export interface LookupEntry {
   isGap?: boolean
 }
 
-// The Lookup history WINDOW, and the one function that applies it — moved verbatim from
-// store/progress. Newest to the front; past the cap the oldest simply falls off the end, so the
-// payload (localStorage — and sessionStorage too) cannot grow without bound. 100 entries of
-// {id,y,m,d} is a few KB, in either storage area. ⚠ This cap stays for its own reason — the list is
-// a convenience, not a record — while the solve times it used to be compared with are now kept in
-// full (store/progress), because every one of them is part of an all-time Mean.
-// (Keep the How-to-Play wording in sync with this number — GuidePage's Lookup section states it,
-// once.)
-export const LOOKUP_HISTORY_CAP = 100
-export const addLookupEntry = (prev: LookupEntry[], entry: LookupEntry): LookupEntry[] =>
-  [entry, ...prev].slice(0, LOOKUP_HISTORY_CAP)
+// Newest to the front — and NOTHING FALLS OFF THE END. The list used to be a window of the 100 most
+// recent; the owner's call was to keep every lookup, like every solve time (store/progress).
+// THE COST, stated so nobody has to re-derive it: an entry is about 48 characters saved, and the
+// list holds one entry per DATE (looking a date up again moves its entry to the front rather than
+// adding one — components/LookupCard), so 10,000 different dates is about 480 KB, a tenth of the
+// ~5 million characters a browser gives this site. A device that does run out refuses the save
+// without breaking anything and tells the player (store/storageHealth), and Clear History is the
+// way to make room. On screen the list draws only the rows near the viewport
+// (components/scrollRegion's useWindowedRows), so its length costs nothing to scroll.
+// ⚠ ONE CAVEAT, accepted: live and staging share this saved copy, so a tab still running a build
+// from before this change trims the list back to 100 the next time a lookup is made IN THAT TAB.
+export const addLookupEntry = (prev: LookupEntry[], entry: LookupEntry): LookupEntry[] => [
+  entry,
+  ...prev,
+]
 
 // Move an existing entry to the front of ITS OWN list — a re-asked question reads as "the most
 // recent one again" without duplicating it. Extracted from main.tsx's inline moveHistoryEntryToTop
@@ -100,14 +104,10 @@ export const moveEntryToTop = (prev: LookupEntry[], id: string): LookupEntry[] =
 // (store/progress' own header explains why: inputs only, nothing derived or timestamped). The case
 // is rare enough — crossing the amnesic boundary mid-session and then looking something up again —
 // that trading it away for a shape with no extra field is the right side of that line.
-// Capped at LOOKUP_HISTORY_CAP again after the merge: two buckets each individually capped at 100
-// could otherwise show up to 200 rows, breaking the "100 most recent" promise the How-to-Play guide
-// states for the visible list, not just for either bucket alone.
 export const mergeForDisplay = (
   history: LookupEntry[],
   sessionEntries: LookupEntry[],
-): LookupEntry[] =>
-  sessionEntries.length ? [...sessionEntries, ...history].slice(0, LOOKUP_HISTORY_CAP) : history
+): LookupEntry[] => (sessionEntries.length ? [...sessionEntries, ...history] : history)
 
 // The lookup-history normalizer, and the ONLY thing that decides what shape a stored entry has.
 // Moved verbatim from store/progress (see that store's git history for the v1→v3 shape story this
@@ -199,7 +199,7 @@ export const useLookupHistory = create<LookupHistoryState>()(
 // has to appear on screen for the rest of THIS browsing session — the file header argues why this
 // is its own bucket rather than a reuse of store/amnesic's per-preset session machinery. It is
 // created here, alongside the permanent list, rather than in store/amnesic itself, because it is
-// Lookup's data and Lookup's shape (LookupEntry, the same cap) — amnesic.ts stays the single owner
+// Lookup's data and Lookup's shape (LookupEntry, likewise unlimited) — amnesic.ts stays the single owner
 // of the FLAG (`selectAmnesic`) that main.tsx reads to decide which of the two stores below a new
 // entry goes into; it does not need to know this bucket exists.
 const LOOKUP_SESSION_KEY = 'cg-lookup-session-v1'

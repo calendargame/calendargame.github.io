@@ -36,7 +36,7 @@ import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import LookupCard from '../src/components/LookupCard.jsx'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
-import { addLookupEntry, LOOKUP_HISTORY_CAP } from '../src/store/lookupHistory.js'
+import { addLookupEntry } from '../src/store/lookupHistory.js'
 import { fmt } from '../src/lib/format.js'
 import { isOffered } from './helpers/offered.js'
 
@@ -502,10 +502,9 @@ describe('Lookup — Full Reset freshness (isFullyReset reads lookupOutput)', ()
 })
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-// The history WINDOW and the count beside the heading (round 13).
-// The cap has always existed and nothing described it; it moved 20 → 100 this round, and the
-// count is what makes it visible without opening a menu. The rule's one owner is
-// store/lookupHistory (addLookupEntry), so this reads the real number rather than restating it.
+// The count beside the History heading. The list is unlimited (store/lookupHistory), and the
+// count is what says how long it is without scrolling to find out. (What the list DRAWS of a long
+// history is tests/lookupWindow.dom's subject; jsdom lays nothing out, so here every row is drawn.)
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 const dated = (i) => ({ id: `h${i}`, y: 1900 + (i % 120), m: (i % 12) + 1, d: (i % 28) + 1 })
 const header = () => document.querySelector('.lookup-history-header')
@@ -513,18 +512,9 @@ const header = () => document.querySelector('.lookup-history-header')
 // Clear History button from the first entry on.
 const heading = () => header().firstElementChild.textContent
 
-describe('Lookup history: the window, and the count beside the heading (round 13)', () => {
+describe('Lookup history: the count beside the heading', () => {
   beforeEach(() => localStorage.clear())
   afterEach(cleanup)
-
-  it('keeps the newest LOOKUP_HISTORY_CAP and drops the oldest off the end', () => {
-    const over = Array.from({ length: LOOKUP_HISTORY_CAP + 25 }, (_, i) => dated(i))
-    const kept = over.reduce((prev, entry) => addLookupEntry(prev, entry), [])
-    expect(kept).toHaveLength(LOOKUP_HISTORY_CAP)
-    expect(kept[0]).toEqual(over[over.length - 1]) // newest to the FRONT
-    expect(kept.at(-1)).toEqual(over[over.length - LOOKUP_HISTORY_CAP])
-    expect(kept).not.toContainEqual(over[0]) // …and the oldest is simply gone
-  })
 
   it('shows nothing at 0 or 1 entries — a “(1)” beside a list you can see is noise', () => {
     const { rerender } = render(<LookupCard history={[]} />)
@@ -533,15 +523,17 @@ describe('Lookup history: the window, and the count beside the heading (round 13
     expect(heading()).toBe('History')
   })
 
-  it('appears on the second entry and reads the total, up to and including the cap', () => {
-    const all = Array.from({ length: LOOKUP_HISTORY_CAP }, (_, i) => dated(i))
+  it('appears on the second entry and reads the total, however long the list is', () => {
+    const all = Array.from({ length: 2500 }, (_, i) => dated(i))
     const { rerender } = render(<LookupCard history={all.slice(0, 2)} />)
     expect(heading()).toBe('History (2)')
     rerender(<LookupCard history={all.slice(0, 3)} />)
     expect(heading()).toBe('History (3)')
-    // At the cap it simply reads (100) and stays there — the owner's call.
+    // Past the old hundred it just keeps counting.
+    rerender(<LookupCard history={all.slice(0, 101)} />)
+    expect(heading()).toBe('History (101)')
     rerender(<LookupCard history={all} />)
-    expect(heading()).toBe(`History (${LOOKUP_HISTORY_CAP})`)
+    expect(heading()).toBe('History (2500)')
   })
 
   it('cannot reflow the header: no new flex child, no block box, and it may not wrap', () => {

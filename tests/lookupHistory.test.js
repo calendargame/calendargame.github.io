@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  LOOKUP_HISTORY_CAP,
   addLookupEntry,
   moveEntryToTop,
   mergeForDisplay,
@@ -14,7 +13,7 @@ import {
 // describe block below moved here VERBATIM from progress.test.js when Lookup history left that
 // store — the validation itself is unchanged by the move.
 
-// ── addLookupEntry: the WINDOW ───────────────────────────────────────────────────────────────
+// ── addLookupEntry: newest first, and nothing ever dropped ──────────────────────────────────
 describe('lookupHistory — addLookupEntry', () => {
   it('prepends, newest to the front', () => {
     const a = { id: 'a', y: 1776, m: 7, d: 4 }
@@ -22,14 +21,15 @@ describe('lookupHistory — addLookupEntry', () => {
     expect(addLookupEntry([a], b)).toEqual([b, a])
   })
 
-  it('caps at LOOKUP_HISTORY_CAP, dropping the oldest off the end', () => {
+  // The list used to be a window of the 100 most recent. Every lookup is kept now (the owner's
+  // call), so the hundred-and-first no longer pushes the first off the end — or the five-thousandth.
+  it('keeps EVERY entry — there is no cap for the oldest to fall off', () => {
     const dated = (i) => ({ id: `h${i}`, y: 1900 + (i % 120), m: (i % 12) + 1, d: (i % 28) + 1 })
-    const over = Array.from({ length: LOOKUP_HISTORY_CAP + 25 }, (_, i) => dated(i))
-    const kept = over.reduce((prev, entry) => addLookupEntry(prev, entry), [])
-    expect(kept).toHaveLength(LOOKUP_HISTORY_CAP)
-    expect(kept[0]).toEqual(over[over.length - 1])
-    expect(kept.at(-1)).toEqual(over[over.length - LOOKUP_HISTORY_CAP])
-    expect(kept).not.toContainEqual(over[0])
+    const all = Array.from({ length: 5000 }, (_, i) => dated(i))
+    const kept = all.reduce((prev, entry) => addLookupEntry(prev, entry), [])
+    expect(kept).toHaveLength(5000)
+    expect(kept[0]).toEqual(all.at(-1)) // newest to the FRONT
+    expect(kept.at(-1)).toEqual(all[0]) // …and the very first lookup is still there, last
   })
 })
 
@@ -83,22 +83,22 @@ describe('lookupHistory — mergeForDisplay', () => {
     expect(mergeForDisplay([], [])).toEqual([])
   })
 
-  // The merged DISPLAY list is capped again at LOOKUP_HISTORY_CAP (see the function's own header
-  // comment): two buckets each individually capped at 100 could otherwise show up to 200 rows.
-  it('re-caps the merge at LOOKUP_HISTORY_CAP, favoring the session overflow', () => {
-    const perm = Array.from({ length: LOOKUP_HISTORY_CAP }, (_, i) => ({
-      id: `p${i}`,
-      y: 1900,
-      m: 1,
-      d: 1,
-    }))
+  // The merged DISPLAY list is the whole of both buckets — the session overflow first — with no
+  // re-trim: it used to be cut back to 100 so two capped buckets could not show 200 rows.
+  it('shows every entry of both buckets, the session overflow first', () => {
+    const perm = Array.from({ length: 300 }, (_, i) => ({ id: `p${i}`, y: 1900, m: 1, d: 1 }))
     const session = Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, y: 2000, m: 1, d: 1 }))
     const merged = mergeForDisplay(perm, session)
-    expect(merged).toHaveLength(LOOKUP_HISTORY_CAP)
-    // The whole session overflow survives — it is always newest — and the tail of the permanent
-    // list (its oldest entries) is what gives up its spots.
+    expect(merged).toHaveLength(310)
     expect(merged.slice(0, 10)).toEqual(session)
-    expect(merged.slice(10)).toEqual(perm.slice(0, LOOKUP_HISTORY_CAP - 10))
+    expect(merged.slice(10)).toEqual(perm)
+  })
+
+  it('with nothing in the session bucket it IS the permanent list — the same array, not a copy', () => {
+    // src/main.tsx memoises the merge on the two buckets; with an empty session the list's identity
+    // is the store's own, so nothing downstream sees a "new" history that did not change.
+    const perm = [{ id: 'p', y: 1900, m: 1, d: 1 }]
+    expect(mergeForDisplay(perm, [])).toBe(perm)
   })
 })
 

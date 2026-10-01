@@ -1,0 +1,219 @@
+// @vitest-environment jsdom
+//
+// LOOKUP'S HISTORY LIST IS WINDOWED (components/scrollRegion's useWindowedRows, drawn by
+// components/LookupCard).
+//
+// The history is unlimited, so the list can be thousands of rows long. It draws only the rows in
+// and near the viewport and stands in for the rest with two blank spacers, so that it scrolls like a
+// short list while behaving, in every way a player can see, like the whole one: the same height, the
+// same count beside the heading, a selection that survives being scrolled away, and a selected row
+// that is brought into view.
+//
+// ⚠ jsdom LAYS NOTHING OUT, which is the one thing a window is computed from — so this file gives it
+// the three numbers the hook reads, and only those: a drawn row's rect (from its own `data-row`),
+// the list's clientHeight, and a scrollTop that sticks. With nothing to measure the hook draws every
+// row instead (pinned at the foot of this file, and relied on by tests/lookupCard.dom throughout).
+// Whether it is SMOOTH at 5,000 rows is a real-browser question; this proves the arithmetic.
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import * as React from 'react'
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import LookupCard from '../src/components/LookupCard.jsx'
+import { addLookupEntry } from '../src/store/lookupHistory.js'
+
+const ROW = 32 //    a row's height, px
+const PITCH = 40 //  from one row's top to the next row's (the row + its 8px gap)
+const VIEW = 400 //  the list's visible height: ten rows
+
+// 5,000 distinct real dates, newest first, the way the store holds them.
+const HISTORY = Array.from({ length: 5000 }, (_, i) => ({
+  id: `h${i}`,
+  y: 2000 + Math.floor(i / 336),
+  m: (Math.floor(i / 28) % 12) + 1,
+  d: (i % 28) + 1,
+}))
+
+function Host({ initialHistory = HISTORY, initialSelected = null }) {
+  const [history, setHistory] = React.useState(initialHistory)
+  const [input, setInput] = React.useState('')
+  const [output, setOutput] = React.useState('')
+  const [calcDate, setCalcDate] = React.useState(null)
+  const [selectedId, setSelectedId] = React.useState(initialSelected)
+  const [calcOpen, setCalcOpen] = React.useState(false)
+  return (
+    <LookupCard
+      history={history}
+      onAddHistory={(e) => setHistory((prev) => addLookupEntry(prev, e))}
+      onClearHistory={() => setHistory([])}
+      inputValue={input}
+      onInputChange={setInput}
+      outputValue={output}
+      onOutputChange={setOutput}
+      calcDate={calcDate}
+      onCalcDateChange={setCalcDate}
+      selectedHistoryId={selectedId}
+      onSelectedHistoryIdChange={setSelectedId}
+      calcOpen={calcOpen}
+      onCalcOpenChange={setCalcOpen}
+      dateFormat="numeric-mdy"
+      fmtDate={(y, m, d) => `${m}/${d}/${y}`}
+    />
+  )
+}
+
+const list = () => document.querySelector('ul')
+const drawn = () => [...list().querySelectorAll('li[data-row]')]
+const drawnIndexes = () => drawn().map((li) => Number(li.dataset.row))
+const spacers = () => [...list().querySelectorAll('li[role="presentation"]')]
+const px = (el) => parseFloat(el.style.height)
+// The list's full content height, as the browser would add it up: both spacers, every drawn row,
+// and the gap above every row but the list's first.
+const contentHeight = () =>
+  spacers().reduce((sum, s) => sum + px(s), 0) +
+  drawn().reduce((sum, li) => sum + ROW + (li.className.includes('mt-2') ? PITCH - ROW : 0), 0)
+const scrollTo = (y) =>
+  act(() => {
+    list().scrollTop = y
+    fireEvent.scroll(list())
+  })
+const selectedRow = () =>
+  drawn().find((li) => li.querySelector('button').className.includes('bg-(--hist-sel)'))
+
+let layout = true
+beforeEach(() => {
+  layout = true
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const row = layout && this.dataset?.row !== undefined ? Number(this.dataset.row) : null
+    const top = row === null ? 0 : row * PITCH
+    const height = row === null ? 0 : ROW
+    return { top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top }
+  })
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
+    return layout && this.tagName === 'UL' ? VIEW : 0
+  })
+})
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
+
+describe('a history of 5,000 draws a window of rows, not 5,000', () => {
+  it('draws only the rows near the top, and still counts every one in the heading', () => {
+    render(<Host />)
+    // Ten rows fit; the window keeps a margin of rows drawn past each edge on top of that.
+    expect(drawn().length).toBeGreaterThanOrEqual(10)
+    expect(drawn().length).toBeLessThan(60)
+    expect(drawnIndexes()[0]).toBe(0)
+    expect(document.querySelector('.lookup-history-header').firstElementChild.textContent).toBe(
+      'History (5000)',
+    )
+  })
+
+  it('is exactly as tall as the whole list would be — the spacers stand in for the undrawn rows', () => {
+    render(<Host />)
+    const whole = HISTORY.length * PITCH - (PITCH - ROW) // 5,000 rows and the 4,999 gaps between them
+    expect(contentHeight()).toBe(whole)
+    scrollTo(80000)
+    expect(contentHeight()).toBe(whole)
+    scrollTo(HISTORY.length * PITCH) // past the end
+    expect(contentHeight()).toBe(whole)
+    expect(drawnIndexes().at(-1)).toBe(4999)
+  })
+
+  it('scrolling moves the window: the rows now in view are drawn, and the ones left behind are not', () => {
+    render(<Host />)
+    scrollTo(80000) // row 2000 is at the top of the view
+    const indexes = drawnIndexes()
+    for (let i = 2000; i < 2010; i++) expect(indexes).toContain(i)
+    expect(indexes).not.toContain(0)
+    expect(indexes[0]).toBeLessThan(2000) // a margin above…
+    expect(indexes.at(-1)).toBeGreaterThan(2009) // …and below, for a fling to land on
+    expect(drawn().length).toBeLessThan(60)
+    // The rows are consecutive — a window, not a sample.
+    expect(indexes).toEqual(indexes.map((_, k) => indexes[0] + k))
+  })
+
+  it('tells a screen reader each row`s place in the WHOLE list', () => {
+    render(<Host />)
+    scrollTo(80000)
+    const row = drawn().find((li) => li.dataset.row === '2000')
+    expect(row.getAttribute('aria-setsize')).toBe('5000')
+    expect(row.getAttribute('aria-posinset')).toBe('2001')
+    for (const s of spacers()) expect(s.getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('the selected row, when it is not where the list happens to be scrolled', () => {
+  it('a row selected far down the list is brought to the middle of the view when the list appears', () => {
+    // What a reload does: Lookup comes back with its selected row (store/sessionLookup), and that
+    // row may be thousands of rows from the top.
+    render(<Host initialSelected="h3000" />)
+    expect(list().scrollTop).toBe(3000 * PITCH - (VIEW - ROW) / 2)
+    expect(selectedRow()?.dataset.row).toBe('3000')
+    // …and the answer is the selected entry's, whether or not anything is drawn.
+    expect(document.querySelector('.min-h-15').textContent).toContain('12/5/2008')
+  })
+
+  it('the selection survives its row being scrolled away and drawn again', () => {
+    render(<Host initialSelected="h3000" />)
+    scrollTo(0)
+    expect(selectedRow()).toBeUndefined() // not drawn at all up here
+    expect(document.querySelector('.min-h-15').textContent).toContain('12/5/2008') // still the answer
+    scrollTo(3000 * PITCH)
+    expect(selectedRow()?.dataset.row).toBe('3000')
+  })
+
+  it('arrowing past the bottom of the view scrolls the list along with the selection', () => {
+    render(<Host />)
+    act(() => fireEvent.click(drawn()[9].querySelector('button'))) // the last row wholly in view
+    expect(list().scrollTop).toBe(0)
+    act(() => fireEvent.keyDown(document, { key: 'ArrowDown' }))
+    expect(selectedRow()?.dataset.row).toBe('10')
+    expect(list().scrollTop).toBe(10 * PITCH + ROW - VIEW) // just far enough to show all of row 10
+    act(() => fireEvent.keyDown(document, { key: 'ArrowUp' }))
+    act(() => fireEvent.keyDown(document, { key: 'ArrowUp' }))
+    expect(selectedRow()?.dataset.row).toBe('8')
+    expect(list().scrollTop).toBe(10 * PITCH + ROW - VIEW) // row 8 was already in view: no scroll
+  })
+
+  it('a new lookup lands at the top and the list comes back up to show it', () => {
+    render(<Host />)
+    scrollTo(80000)
+    fireEvent.change(document.querySelector('input'), { target: { value: '7/4/1776' } })
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Lookup' })))
+    expect(list().scrollTop).toBe(0)
+    expect(selectedRow()?.dataset.row).toBe('0')
+    expect(selectedRow().textContent).toContain('7/4/1776')
+    expect(document.querySelector('.lookup-history-header').firstElementChild.textContent).toBe(
+      'History (5001)',
+    )
+  })
+
+  it('tapping a row that is already in view moves nothing', () => {
+    render(<Host />)
+    scrollTo(80000)
+    act(() =>
+      fireEvent.click(
+        drawn()
+          .find((li) => li.dataset.row === '2004')
+          .querySelector('button'),
+      ),
+    )
+    expect(list().scrollTop).toBe(80000)
+    expect(selectedRow()?.dataset.row).toBe('2004')
+  })
+})
+
+describe('where there is nothing to measure', () => {
+  it('draws every row — correct, and only as slow as the list is long', () => {
+    layout = false // every size reads 0: a layout-free environment, or a list that is not displayed
+    render(<Host initialHistory={HISTORY.slice(0, 300)} />)
+    expect(drawn()).toHaveLength(300)
+    expect(spacers()).toHaveLength(0)
+  })
+
+  it('a short list is simply drawn whole, with no spacers', () => {
+    render(<Host initialHistory={HISTORY.slice(0, 8)} />)
+    expect(drawnIndexes()).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    expect(spacers()).toHaveLength(0)
+  })
+})

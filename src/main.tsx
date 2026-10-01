@@ -1525,7 +1525,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // than up beside the store bindings so those two effects keep the exact ordinal position in
       // App's effect order that they had when they were written out on these lines.
       const yearRange=useYearRangeMirrors(minY,maxY,setMinY,setMaxY,minInputRef,maxInputRef);
-      // Newest to the front, capped — the rule and its number live in store/lookupHistory (addLookupEntry).
+      // Newest to the front, and every one kept — the rule lives in store/lookupHistory (addLookupEntry).
       // ⚠ WHICH LIST an entry joins is decided HERE, once, at the moment it is added — the identical
       // shape as fullReset's own `selectAmnesic(usePresets.getState())` check below. While the ACTIVE
       // preset is amnesic the entry goes into the SESSION overflow instead of the permanent list, so
@@ -1552,7 +1552,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // What LookupCard actually renders — the permanent list with this session's amnesic overflow
       // merged in front of it (store/lookupHistory's mergeForDisplay; see pushLookupHistory above for
       // why a session entry never reaches `lookupHistory` itself).
-      const displayLookupHistory=mergeForDisplay(lookupHistory,sessionLookupEntries);
+      // ⚠ MEMOISED, so the merged list keeps ONE identity until either bucket changes. The list is
+      // unlimited now, and with anything in the session bucket the merge builds a new array — a new
+      // one on every render of App would hand LookupCard a "changed" history thousands of rows long
+      // on every keystroke anywhere, re-attaching its scroll listeners each time.
+      const displayLookupHistory=useMemo(()=>mergeForDisplay(lookupHistory,sessionLookupEntries),[lookupHistory,sessionLookupEntries]);
       // Date format / randomFormat / leapChance / janFebChance / julianChance now from the
       // settings store (bound at top of App). Semantics unchanged:
       //   dateFormat: 'written-mdy'|'written-dmy'|'numeric-mdy'|'numeric-dmy'|'numeric-ymd'.
