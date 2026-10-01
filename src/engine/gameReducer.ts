@@ -985,10 +985,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     // ── REGEN_DATE ───────────────────────────────────────────────────────────────
     // Swap the LIVE QUESTION's date in place — no history push, no stat change. The one rule behind
-    // every "the unanswered date is regenerated": turning timing back on, a format / leap /
-    // year-range setting change, and a casual history coming back after a reload or a preset switch
-    // while a time could still be recorded for its live question (modes/modeHooks'
-    // readParkedHistory). Bumps questionId so the solve-timer restarts.
+    // every "the unanswered date is regenerated": turning timing back on, Save Stats coming back on
+    // while timing is shown (modes/modeHooks' useSaveStatsOnRegen), a format / leap / year-range
+    // setting change, and a casual history coming back after a reload or a preset switch while a
+    // time could still be recorded for its live question (modes/modeHooks' restoredEngine). Bumps
+    // questionId so the solve-timer restarts.
     // A date you have USED is kept: a BURNED one (wrong / Reveal / Show Codes), and a CREDITED card
     // at the live edge — one that credited without advancing (MoX's held completing solve, or a
     // crediting Override that held): swapping the date under it would leave its credit (and any

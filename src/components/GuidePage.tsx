@@ -1358,8 +1358,13 @@ export default function GuidePage({
           When Save Stats is off, the whole stats strip dims site-wide (every mode, including MoX)
           and every box that isn't already blank shows "—", because nothing is being recorded. The
           boxes also become non-interactive — toggling timing or scoring is disabled until Save
-          Stats is turned back on, which prevents accidental stat desyncs. Turning Save Stats on
-          while timing is also on regenerates an unanswered date for a clean start.
+          Stats is turned back on, which prevents accidental stat desyncs. Turning Save Stats back
+          on while a mode&apos;s timing is showing regenerates that mode&apos;s unanswered date for
+          a clean start, when you close the ⚙ menu: a time can be recorded for it again, and you may
+          already have looked at it. As with turning timing back on, a date you&apos;ve already
+          answered wrong, revealed, or shown codes on stays until you advance, and a flash that was
+          running in Flash ends. In Deduction all three sub-modes get a new puzzle. With timing
+          hidden nothing changes, and neither does turning Save Stats off.
         </p>
         <p>
           When timing stats are off, leaving and returning to one of these modes preserves the

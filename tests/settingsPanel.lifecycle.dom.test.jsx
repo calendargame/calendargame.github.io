@@ -53,6 +53,7 @@ import {
   gear,
   gearIndicator,
   tap,
+  pressKey,
   pressDragFromGear,
   outsideTarget,
   picker,
@@ -83,7 +84,14 @@ import {
 // The game screen, which is where group 10's whole subject lands. Shared rather than local: the
 // defaults lane asked the same three questions and answered them differently, and the two answers
 // rested on different invariants — see tests/helpers/modeScreen.jsx for which form won and why.
-import { questionShape, questionText, statReadouts } from './helpers/modeScreen.jsx'
+import {
+  questionShape,
+  questionText,
+  statReadouts,
+  readDate,
+  correctDayName,
+} from './helpers/modeScreen.jsx'
+import { DAY } from '../src/lib/format.js'
 
 // ── Standing the app up ───────────────────────────────────────────────────────────────────────
 
@@ -391,7 +399,7 @@ describe('the settings panel — what a close applies (group 10)', () => {
     )
   })
 
-  it('Save Stats is the exception — it takes effect at once and never regenerates the question', () => {
+  it('Save Stats is the exception — it takes effect at once, and off-then-on in one visit regenerates nothing', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     mountApp()
     act(() => useSettings.getState().setDateFormat('numeric-dmy'))
@@ -407,6 +415,110 @@ describe('the settings panel — what a close applies (group 10)', () => {
     closeSettings('gear')
     expect(questionText()).toBe(before)
     expect(questionShape()).toBe('numeric YMD')
+  })
+
+  // ── Save Stats coming back ON while timing is shown: the live-question rule ──────────────────
+  // A question looked at while nothing counted is regenerated the moment a solve time could be
+  // recorded for it — modes/modeHooks' useSaveStatsOnRegen, the same REGEN_DATE as "turning timing
+  // back on". Observed as every regeneration here is: the format is re-aimed with the panel CLOSED
+  // (which regenerates nothing), so a regeneration shows as the question changing shape.
+  const practiceApp = ({ timingShown, saveStats }) => {
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setSaveStats(saveStats)
+    useModePrefs.getState().setClassicTimingOff(!timingShown)
+    mountApp()
+    act(() => useSettings.getState().setDateFormat('numeric-dmy'))
+  }
+
+  it('Save Stats turned ON with timing shown regenerates the unanswered question, on close', () => {
+    practiceApp({ timingShown: true, saveStats: false })
+    const seen = questionText()
+    openSettings()
+    toggleSwitch('Save Stats')
+    expect(switchState('Save Stats')).toBe('On')
+    // Deferred like every other settings change: nothing behind the panel has moved yet.
+    expect(questionText()).toBe(seen)
+    closeSettings('gear')
+    expect(questionShape()).toBe('numeric DMY')
+  })
+
+  it('Save Stats turned ON with timing HIDDEN keeps the question — no time is recorded there', () => {
+    practiceApp({ timingShown: false, saveStats: false })
+    const seen = questionText()
+    openSettings()
+    toggleSwitch('Save Stats')
+    closeSettings('gear')
+    expect(questionText()).toBe(seen)
+  })
+
+  it('Save Stats turned OFF with timing shown keeps the question', () => {
+    practiceApp({ timingShown: true, saveStats: true })
+    const seen = questionText()
+    openSettings()
+    toggleSwitch('Save Stats')
+    expect(switchState('Save Stats')).toBe('Off')
+    closeSettings('gear')
+    expect(questionText()).toBe(seen)
+  })
+
+  it('Save Stats turned ON keeps a question already answered wrong — it records no time either way', () => {
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setSaveStats(false)
+    useModePrefs.getState().setClassicTimingOff(false)
+    mountApp()
+    const date = readDate()
+    const wrong = DAY[(DAY.indexOf(correctDayName(date)) + 1) % 7]
+    tap(screen.getByRole('button', { name: wrong }))
+    act(() => useSettings.getState().setDateFormat('numeric-dmy'))
+    const burned = questionText()
+    openSettings()
+    toggleSwitch('Save Stats')
+    closeSettings('gear')
+    expect(questionText()).toBe(burned)
+  })
+
+  it('Save Stats turned ON regenerates the waiting puzzle in all three Deduction sub-modes', () => {
+    // Deduction shows a PARTIAL date ('__' for the missing piece), which liveQuestion() skips on
+    // purpose — so its shape is read here: numeric YMD joins with '-', numeric DMY with '.'.
+    const puzzleShape = () => {
+      const shown = [...document.querySelectorAll('*')].filter(
+        (el) =>
+          el.children.length === 0 &&
+          el.textContent.includes('__') &&
+          !el.closest('[style*="display: none"]'),
+      )
+      expect(shown).toHaveLength(1)
+      return shown[0].textContent.includes('.') ? 'numeric DMY' : 'numeric YMD'
+    }
+    const subMode = (name) => tap(screen.getByRole('button', { name }))
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setSaveStats(false)
+    useModePrefs.getState().setDedTimingOff(false)
+    mountApp()
+    pressKey('D')
+    act(() => useSettings.getState().setDateFormat('numeric-dmy'))
+    openSettings()
+    toggleSwitch('Save Stats')
+    closeSettings('gear')
+    const shapes = []
+    for (const name of ['Day', 'Month', 'Year']) {
+      subMode(name)
+      shapes.push(`${name}: ${puzzleShape()}`)
+    }
+    expect(shapes).toEqual(['Day: numeric DMY', 'Month: numeric DMY', 'Year: numeric DMY'])
+  })
+
+  it('Save Stats turned ON during a live flash ends the flash — its question has been replaced', () => {
+    useSettings.getState().setSaveStats(false)
+    mountApp()
+    pressKey('F')
+    tap(screen.getByRole('button', { name: 'Begin' }))
+    expect(screen.queryByRole('button', { name: 'Begin' })).toBeNull()
+    openSettings()
+    toggleSwitch('Save Stats')
+    closeSettings('gear')
+    // Idle again: Begin is back, and it will flash a date the player has not seen.
+    expect(screen.getByRole('button', { name: 'Begin' })).toBeInTheDocument()
   })
 
   it('Reset Settings tapped inside the panel regenerates the question once, on close', () => {

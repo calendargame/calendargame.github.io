@@ -12,6 +12,7 @@ import {
   readParkedHistory,
   restoredEngine,
   useParkedHistory,
+  useSaveStatsOnRegen,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS, RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
@@ -342,6 +343,16 @@ function FlashMode({
     stopFlash()
   } // primary "Reset" while live (= App arm)
 
+  // A time can now be recorded on this screen (timing shown again, or Save Stats back on while it is
+  // shown), so the question the engine was waiting on has just been regenerated: a flash that was
+  // live belonged to the question that went, and so did a date left showing.
+  const endFlashForFreshQuestion = () => {
+    if (active) {
+      setActive(false)
+      stopFlash()
+    }
+    setShowTimerDate(false)
+  }
   // Hideable stats chrome shared with Classic/Deduction. Flash supplies its flash-timer teardown:
   // afterTimingEnabled (re-enabling timing while a flash is live stops it + hides its date) and
   // onHide (leaving the mode stops a live flash). Classic/Deduction pass neither (no timer).
@@ -353,13 +364,7 @@ function FlashMode({
     setTimingOff,
     scoringOff,
     setScoringOff,
-    afterTimingEnabled: () => {
-      if (active) {
-        setActive(false)
-        stopFlash()
-      }
-      setShowTimerDate(false)
-    },
+    afterTimingEnabled: endFlashForFreshQuestion,
     onHide: () => {
       if (active) {
         setActive(false)
@@ -368,8 +373,14 @@ function FlashMode({
     },
   })
 
-  // Defer the live-date regen to the ⚙ popover CLOSE (Q2) — batched, no per-keystroke timer churn.
+  // Defer the live-date regen to the ⚙ popover CLOSE — batched, no per-keystroke timer churn.
   useSettingsCloseEffect(settingsOpen ?? false, dateSettings, () => eng.regenDate())
+  // Save Stats coming back on while timing is shown regenerates it too (modeHooks) — and does to a
+  // live flash exactly what turning timing back on does.
+  useSaveStatsOnRegen(settingsOpen ?? false, saveStats, timingOff, () => {
+    eng.regenDate()
+    endFlashForFreshQuestion()
+  })
 
   // Freshness for App's isFullyReset (Flash owns its state now): engine fresh + Flash's own
   // fields. flashMs (and the idle countdown mirror) compare against the EFFECTIVE default —

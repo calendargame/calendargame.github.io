@@ -20,6 +20,7 @@ import {
   discardSessionHistory,
 } from '../store/sessionHistory.js'
 import type { HistorySilo } from '../store/sessionHistory.js'
+import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 
 // Timing constants. The codes panel's own timings (its slide duration and the CODES_CLOSE_MS
 // freeze window derived from it) live in src/lib/accordionMotion.js and are consumed entirely
@@ -231,10 +232,40 @@ export function useChangeEffect(deps: React.DependencyList, fn: () => void) {
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-// The settings-popover-CLOSE counterpart of useChangeEffect — useSettingsCloseEffect — moved to
-// components/useSettingsCloseEffect in round 11 (Q7), when App became a caller too: it was never
-// mode-specific, and a hook App depends on cannot live in the directory the phase-1 split exists to
-// push mode-screen code INTO. The five screens import it from there.
+// The settings-popover-CLOSE counterpart of useChangeEffect — useSettingsCloseEffect — lives in
+// components/useSettingsCloseEffect, because App is a caller too: it was never mode-specific, and a
+// hook App depends on cannot live in the directory that exists to hold mode-screen code. The five
+// screens import it from there.
+
+/**
+ * ★ SAVE STATS COMING BACK ON, IN A CASUAL MODE WHOSE TIMING IS SHOWN — the live-question rule's
+ * third door, beside "turning timing back on" (useStatsHideToggles above) and a screen coming back
+ * (restoredEngine below). The rule: a question the player has already looked at is regenerated the
+ * moment a solve time could be recorded for it. With Save Stats off nothing is recorded, so a
+ * question on screen then is one the player may study for as long as they like; with Save Stats back
+ * on and timing shown, its first-try answer would put a time in the mean. So the screen asks for
+ * the engine's one REGEN_DATE (`regenWaiting` — eng.regenDate for every question the screen has
+ * waiting), which keeps a question that has been USED — answered wrong, revealed, shown its codes —
+ * because that one records no time whatever the switch says (its Save Stats value froze at that
+ * first action).
+ *   • Timing hidden: nothing to do — no time is recorded there, and turning timing on later is the
+ *     other door.
+ *   • Save Stats going OFF: nothing to do — nothing can be recorded for the question any more.
+ *   • WHEN: as the ⚙ panel closes, like every other setting that regenerates a question — the
+ *     switch lives in the panel, nothing behind the panel can be answered while it is open, and the
+ *     fresh question's clock then starts with the panel out of the way. Off and back on inside one
+ *     visit to the panel is no change at all, and regenerates nothing.
+ */
+export function useSaveStatsOnRegen(
+  settingsOpen: boolean,
+  saveStats: boolean,
+  timingOff: boolean,
+  regenWaiting: () => void,
+) {
+  useSettingsCloseEffect(settingsOpen, [saveStats], () => {
+    if (saveStats && !timingOff) regenWaiting()
+  })
+}
 
 // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON — store/amnesic's activeDataId ("1:saved" /
 // "1:session"), read ONCE at mount and never again. Every parked round (store/sessionRound) and

@@ -12,6 +12,7 @@ import {
   readParkedHistory,
   restoredEngine,
   useParkedHistory,
+  useSaveStatsOnRegen,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
@@ -140,6 +141,8 @@ function ClassicMode({
   // burned or browsed date, so we just fire it on the relevant changes.
   // Defer the live-date regen to the ⚙ popover CLOSE (Q2) — batched, no per-keystroke timer churn.
   useSettingsCloseEffect(settingsOpen ?? false, dateSettings, () => eng.regenDate())
+  // …and so does Save Stats coming back on while this mode's timing is shown (modeHooks).
+  useSaveStatsOnRegen(settingsOpen ?? false, saveStats, timingOff, () => eng.regenDate())
   // Freshness — engine state at launch default + Classic's own toggle/flash fields. Reported up
   // via onFreshChange so App's isFullyReset (Full Reset dim/lock) accounts for Classic.
   const classicIsFresh =

@@ -13,6 +13,7 @@ import {
   readParkedHistory,
   restoredEngine,
   useParkedHistory,
+  useSaveStatsOnRegen,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import {
@@ -325,11 +326,15 @@ function DeductionMode({
   // format / random-format / leap / Jan-Feb / Julian-chance / range / calendar change.
   // Defer the global-settings regen to the ⚙ popover CLOSE (Q2). The cross-toggles below stay
   // immediate — they're mode-LOCAL (toggled outside the popover), so they'd never see a close transition.
-  useSettingsCloseEffect(panelOpen, dateSettings, () => {
+  const regenAllSilos = () => {
     dayEng.regenDate()
     monthEng.regenDate()
     yearEng.regenDate()
-  })
+  }
+  useSettingsCloseEffect(panelOpen, dateSettings, regenAllSilos)
+  // Save Stats coming back on while timing is shown (one switch for all three silos) regenerates
+  // every silo's waiting puzzle too (modeHooks): each may have been looked at while nothing counted.
+  useSaveStatsOnRegen(panelOpen, saveStats, timingOff, regenAllSilos)
   // Toggle-change regen: a relevant Deduction toggle regens the ACTIVE engine's puzzle (the
   // toggles only render in their own sub-mode, so the active engine is always the right one).
   useChangeEffect([abCrossOnly, julCrossOnly, monthOnly1582], () => eng.regenDate())
