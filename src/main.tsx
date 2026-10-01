@@ -259,6 +259,24 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // ever reveal an unstyled frame.
     const appCssApplied=()=>window.__cssReady===true||!document.querySelector('link[rel="preload"][as="style"]');
 
+    // ★ …AND THE STRICTER QUESTION, FOR ANYTHING THAT MEASURES OR SCROLLS: is the app stylesheet IN
+    // THE LAYOUT yet? `appCssApplied` answers "has the stylesheet arrived" — the preload link's onload
+    // swaps it to a live stylesheet and stamps __cssReady in the same breath, which is the right gate
+    // for what may be SHOWN (the browser applies the sheet before it next paints). It is not yet the
+    // layout: the swapped link still has to be processed, and until its `sheet` exists every element
+    // is unstyled to a script — the app scroller is an ordinary block that cannot scroll, and a
+    // scrollTop written to it is thrown away. The link fires `load` a second time when the sheet is
+    // in place, so this runs `fn` now when it already is (or when there is no such link at all —
+    // dev and tests, where the CSS arrives through the module graph before mount), and otherwise on
+    // the `load` that brings it. Returns the function that stops waiting.
+    const whenAppCssInLayout=(fn: ()=>void): (()=>void)=>{
+      const link=document.querySelector<HTMLLinkElement>('link[as="style"]');
+      if(!link||link.sheet){fn();return()=>{};}
+      const onLoad=()=>{if(!link.sheet)return;link.removeEventListener('load',onLoad);fn();};
+      link.addEventListener('load',onLoad);
+      return()=>link.removeEventListener('load',onLoad);
+    };
+
     // Q8 (round 21): a #rgb / #rrggbb theme colour composited OVER the modal scrim's 40% black —
     // i.e. each channel × 0.6. Runtime-derived from the `--tc` string the theme effect already
     // reads, so it adds NO third copy of the per-theme values: index.html's pre-React boot map
@@ -863,14 +881,28 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // A LAYOUT effect so all of it happens before the browser paints the new mode. Nothing else
       // in the app moves this scroller on a mode change, which is what makes the restore safe —
       // there is no later effect left to overwrite it.
+      // ★ THE RESTORE WAITS FOR A SCROLLER THAT CAN HOLD IT (whenAppCssInLayout, at the top of this
+      // file). On a reload the reader's place comes back from sessionStorage and the session page
+      // brings them straight into the guide — and on a fast, cached load React gets here BEFORE the
+      // stylesheet is in the layout. Written then, the offset lands on an element that cannot scroll
+      // and is thrown away; the reader opened at the top, and — worse — the reading closure below
+      // then reported that 0 as their place, so the next hide parked 0 over the real one. So both
+      // halves wait together: the offset is written, and the closure that READS the scroller is
+      // installed, only once the scroller is real. Until then the remembered offset stands (it is
+      // what switchMode and the page-hide park get), so nothing can overwrite it with a number read
+      // off an unstyled page. In every other case — the stylesheet already in, dev, tests — this is
+      // the same synchronous write it always was.
       useLayoutEffect(()=>{
         syncBarHeight();
         const el=appScrollRef.current;if(!el)return;
         if(mode!=="guide"){el.scrollTop=0;if(document.activeElement===el)el.blur();return;}
-        el.scrollTop=guideScrollYRef.current;
+        const stopWaiting=whenAppCssInLayout(()=>{
+          syncBarHeight(); // the bar's real height, which the offset is clamped against
+          el.scrollTop=guideScrollYRef.current;
+          saveReadingPosRef.current=()=>{guideScrollYRef.current=el.scrollTop;};
+        });
         el.focus({preventScroll:true});
-        saveReadingPosRef.current=()=>{guideScrollYRef.current=el.scrollTop;};
-        return()=>{saveReadingPosRef.current=null;};
+        return()=>{stopWaiting();saveReadingPosRef.current=null;};
       },[mode,syncBarHeight]);
       // The reading offset as of NOW, for GuidePage to park when the page hides (round 23 Q11): the
       // live scroller's while the guide is on screen (taken through the same closure switchMode uses,

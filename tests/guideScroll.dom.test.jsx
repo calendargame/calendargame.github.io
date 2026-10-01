@@ -256,6 +256,78 @@ describe('the guide remembers where you were reading', () => {
     }
   })
 
+  it('a RELOAD keeps the place even when the stylesheet reaches the layout AFTER React has booted', () => {
+    // The production page swaps its stylesheet in from a preload (vite.config.js bootCssPreload), so
+    // on a fast cached load React can mount first. Until the sheet is in the layout the app scroller
+    // is an unstyled block: it cannot scroll, a scrollTop written to it is thrown away, and it
+    // reads 0. The restore used to be written then — the reader landed at the top, and the next
+    // hide parked that 0 over their real place.
+    const first = mountApp()
+    pressKey('H')
+    const g = installGuide(first.container)
+    g.setContent(3000)
+    tap(first.container, 'overview')
+    g.scrollTo(640)
+    const hide = () =>
+      act(() => {
+        window.dispatchEvent(new Event('pagehide'))
+      })
+    hide()
+    const atPagehide = Array.from({ length: sessionStorage.length }, (_, i) => {
+      const k = sessionStorage.key(i)
+      return [k, sessionStorage.getItem(k)]
+    })
+    g.restore()
+    guide = null
+    first.unmount()
+    document.getElementById('root').remove()
+    sessionStorage.clear()
+    for (const [k, v] of atPagehide) sessionStorage.setItem(k, v)
+
+    // The built page's stylesheet link, still a preload: no `sheet` yet.
+    const link = document.createElement('link')
+    link.setAttribute('rel', 'preload')
+    link.setAttribute('as', 'style')
+    document.head.appendChild(link)
+    // The app scroller as the platform has it: unstyled it holds no offset; styled it holds what
+    // it is given.
+    let styled = false
+    let held = 0
+    Object.defineProperty(HTMLDivElement.prototype, 'scrollTop', {
+      configurable: true,
+      get() {
+        return this.style.paddingTop === 'var(--bar-h)' && styled ? held : 0
+      },
+      set(v) {
+        if (this.style.paddingTop === 'var(--bar-h)' && styled) held = v
+      },
+    })
+    const parkedY = () => JSON.parse(sessionStorage.getItem('cg-guide-place-v1')).y
+    try {
+      const { container } = mountApp() // React boots: the stylesheet is not in the layout yet
+      expect(held).toBe(0)
+      hide() // the page goes to the background at exactly the wrong moment…
+      expect(parkedY()).toBe(640) // …and the reader's place is NOT overwritten with the unstyled 0
+      // The stylesheet lands: the link becomes a stylesheet, its sheet exists, and it fires `load`.
+      styled = true
+      link.setAttribute('rel', 'stylesheet')
+      Object.defineProperty(link, 'sheet', { configurable: true, value: {} })
+      act(() => {
+        link.dispatchEvent(new Event('load'))
+      })
+      expect(held).toBe(640) // now the scroller can hold it, and it is given the place
+      const header = container.querySelector('#guide-sec-overview button')
+      expect(header.getAttribute('aria-expanded')).toBe('true')
+      // …and from here the live position is what gets parked, as always.
+      held = 700
+      hide()
+      expect(parkedY()).toBe(700)
+    } finally {
+      delete HTMLDivElement.prototype.scrollTop
+      link.remove()
+    }
+  })
+
   it('gives the game modes no scroll memory — each one opens at its own top', () => {
     const { container } = mountApp() // Classic
     const el = scrollContainer(container)
