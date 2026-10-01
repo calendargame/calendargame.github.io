@@ -1426,6 +1426,51 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
     expect(screen.getByText(/Best Score: 1/)).toBeInTheDocument()
     expect(Object.keys(useProgress.getState().blitzBest)).toHaveLength(1)
   })
+
+  // ★ THE ENDING DECIDES, ONCE (BlitzMode's recordedRef). Whether a round counts toward the Bests is
+  // settled by Save Stats as the round ENDS — the switch is never asked again while that ending
+  // stands. It used to be read live: turning Save Stats back on recorded a practice round that was
+  // still on screen, and turning it off froze a recorded round's Best at a score an Override had
+  // since taken away.
+  it('turning Save Stats back ON with an ended practice round on screen records nothing', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off → a wrong answer ends the round
+    toggleSettings()
+    flipSaveStats() // practice mode
+    toggleSettings()
+    begin()
+    click(correctName(readDate()))
+    click(wrongName(readDate())) // the round ends on an internally-tracked score of 1
+    toggleSettings()
+    flipSaveStats() // …and Save Stats comes back on with that round still on screen
+    toggleSettings()
+    expect(statValue('Score')).toBe('1/2') // the same ended round, its readouts back
+    expect(screen.getByText(/Best Score: —/)).toBeInTheDocument()
+    expect(useProgress.getState().blitzBest).toEqual({})
+    // A press on it changes its score, and still records nothing: it ended in practice mode.
+    act(() => fireEvent.click(ctrl('<')))
+    act(() => fireEvent.click(ctrl('Override'))) // the credited card → a miss
+    expect(useProgress.getState().blitzBest).toEqual({})
+  })
+
+  it('a recorded round keeps its Best in step with an Override while Save Stats is off', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    begin()
+    click(correctName(readDate()))
+    click(correctName(readDate()))
+    click(wrongName(readDate())) // ends on 2, recorded
+    expect(screen.getByText(/Best Score: 2/)).toBeInTheDocument()
+    toggleSettings()
+    flipSaveStats() // off — the round on screen was recorded when it ended, and stays that round
+    toggleSettings()
+    act(() => fireEvent.click(ctrl('<')))
+    act(() => fireEvent.click(ctrl('Override'))) // a credited card → a miss: the round now scores 1
+    const [best] = Object.values(useProgress.getState().blitzBest)
+    expect(best.score).toBe(1) // not a Best of 2 the round no longer has
+  })
 })
 
 // ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────

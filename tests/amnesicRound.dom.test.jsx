@@ -631,3 +631,45 @@ describe('round ids are never reused across screen loads (Q4 prerequisite)', () 
     expect(tag.textContent).toBe('Different Rounds')
   })
 })
+
+// ── A PRACTICE ROUND STAYS A PRACTICE ROUND ACROSS A GUEST'S INTERLUDE ─────────────────────────
+// Save Stats is a ⚙ setting, and the settings are shared by a preset's two stats copies — so a guest
+// can turn it back ON while the owner's ended practice round (played with Save Stats OFF) waits
+// parked. Whether a round counts was settled as it ended and is parked with it (BlitzMode's
+// recordedRef; MoX's latch): the round comes back exactly as it was left, and records nothing.
+describe('a parked practice round is not recorded when a guest turns Save Stats on', () => {
+  beforeEach(() => resetAppState())
+  afterEach(unmount)
+  const setSaveStats = (on) => act(() => useSettings.getState().setSaveStats(on))
+
+  it('Blitz: the practice round comes back, and the permanent Bests are still empty', () => {
+    mountApp()
+    pinReadable()
+    setSaveStats(false)
+    press('B')
+    finishBlitz(3) // ended on an internally-tracked 3, in practice mode
+    expect(useProgress.getState().blitzBest).toEqual({})
+    setAmnesic(true) // the guest's turn…
+    setSaveStats(true) // …and the guest turns the shared switch on
+    setAmnesic(false)
+    expect(statValue('Score')).toBe('3/4') // the owner's round is back on screen
+    expect(useProgress.getState().blitzBest).toEqual({})
+    expect(permanent().blitzBest).toEqual({})
+  })
+
+  it('MoX: the practice run comes back, and the permanent Bests are still empty', () => {
+    mountApp()
+    pinReadable()
+    act(() => useModePrefs.getState().setAoxN('2'))
+    setSaveStats(false)
+    press('A')
+    finishMox(2)
+    expect(useProgress.getState().aoxBest).toEqual({})
+    setAmnesic(true)
+    setSaveStats(true)
+    setAmnesic(false)
+    expect(statValue('Score')).toBe('2/2')
+    expect(useProgress.getState().aoxBest).toEqual({})
+    expect(permanent().aoxBest).toEqual({})
+  })
+})

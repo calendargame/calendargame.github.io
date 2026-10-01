@@ -290,6 +290,16 @@ function AoxMode({
   // Latched once per run: a reversal can resume + re-complete the run, and re-latching then would
   // capture the run's own record as its floor (the stale-snapshot trap). The completing answer
   // used eng.answer(...,{complete}) so the engine stayed on the solve; re-entry is phase-guarded.
+  // ★ EACH COMPLETION DECIDES, by the Save Stats setting as the run completes (How to Play: "whatever
+  // the toggle is when the run ends"), and the latch IS that decision: a completion in practice mode
+  // (Save Stats off) latches nothing — and DROPS a latch an earlier, recorded completion of this same
+  // run left, or a run that was recorded, handed back by an Override and then finished in practice
+  // mode would be recorded on the strength of the old latch. Nothing is lost by dropping it: the run
+  // was not standing in the moment before it re-completed, so the reconcile had already put the
+  // record back to that floor, and a later recorded completion latches the same floor again.
+  // The live setting is never asked after that, in either direction: an ended practice run is not
+  // recorded by turning Save Stats on (nor is one parked for the session, when a guest turns the
+  // shared setting on), and a recorded run keeps being reconciled while Save Stats is off.
   // (b) From the latch on, every stats change re-reconciles the record under the key the run
   // was PLAYED under (the panel's bestKey can move — settings stay editable while a run sits done):
   // still standing (good ≥ its N) → the floor improved by the run's CURRENT avg/median; not standing
@@ -314,7 +324,8 @@ function AoxMode({
     if (runPhase === 'running' && doneCount >= runN) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRunPhase('done')
-      if (saveStats && runId != null && prevBestSnapRef.current?.runId !== runId) {
+      if (!saveStats) prevBestSnapRef.current = null
+      else if (runId != null && prevBestSnapRef.current?.runId !== runId) {
         const key = run?.bestKey ?? bestKey
         prevBestSnapRef.current = { key, best: bests[key], runId }
       }
@@ -584,7 +595,12 @@ function AoxMode({
   //     resumes it — and the completion effect then flips a completing one straight to 'done';
   //   • a press that takes the HELD COMPLETING SOLVE's credit away (Allow Mistakes on — with it off the
   //     first rule already fired) hands the run back as 'running'. The card stays on screen as a
-  //     resolved miss and the existing Next button carries the run on (see `awaitingNext`).
+  //     resolved miss and the existing Next button carries the run on (see `awaitingNext`). ONLY WHEN
+  //     THE RUN IS THEN SHORT OF ITS N: a done run can hold more than N credits (a miss credited
+  //     after it completed), and taking the held solve's credit from one of those leaves a run that
+  //     still stands — nothing to hand back, so it stays done. (It used to go 'running' for one commit
+  //     and be completed again by the effect above: a second "completion" of a run that never
+  //     stopped standing, which that effect would have judged afresh.)
   //   • a press on a HISTORY card of a done run changes no phase at all: the run is over, and the only
   //     thing that reacts is reconcileAoxStanding, which raises or restores the Best from the floor.
   // prevBestSnapRef and `runId` are NEVER written here — only begin(), reset() and the run's own
@@ -606,7 +622,7 @@ function AoxMode({
     const resumes =
       !fails &&
       ((runPhase === 'failed' && plan.credits && state.backDepth === 0 && S.played === goodAfter) ||
-        (runPhase === 'done' && plan.target === 'live' && !plan.credits))
+        (runPhase === 'done' && plan.target === 'live' && !plan.credits && goodAfter < runN))
     // ⚠ HOLD WHENEVER THE RUN IS ENDED AFTER THIS PRESS — the one rule, with two ways in:
     //   • this credit is the run's Nth (goodAfter ≥ n): advancing would complete the run while
     //     sitting on a phantom extra question (an Ao10 via Reveal + Override showed Q11). Same rule as

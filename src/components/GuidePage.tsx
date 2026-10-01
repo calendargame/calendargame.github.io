@@ -2346,9 +2346,17 @@ export default function GuidePage({
           <li>
             <b>MoX (run-level)</b> — in-run score, streak, times, and Back/Forward all work normally
             regardless of the toggle. Whatever the toggle is when the run ends determines whether
-            Best Mean, Best Median, and Best Streak update.
+            Best Mean and Best Median update.
           </li>
         </UL>
+        <p>
+          That decision is made once, as the round or run ends, and flipping the toggle afterward
+          doesn&apos;t change it. A round or run that ended with Save Stats off is never recorded
+          later — not by turning Save Stats back on while it is still on screen, and not by an
+          Override on it. One that ended with Save Stats on stays recorded: if an Override then
+          changes its result, its Bests follow, even while Save Stats is off. If an Override puts an
+          ended round or run back in play, the toggle is read again when it next ends.
+        </p>
       </GuideSection>
       <GuideSection
         id="amnesic"

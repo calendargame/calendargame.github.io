@@ -1635,6 +1635,87 @@ describe('AoX — the settings net: an in-progress run vs Reset Settings and Sav
     expect(Object.keys(useProgress.getState().aoxBest)).toHaveLength(1)
     expect(bestVal('Mean')).not.toBe('—')
   })
+
+  // ★ EACH COMPLETION DECIDES (AoxMode's completion effect). Whether a run counts toward the Bests
+  // is settled by Save Stats as the run COMPLETES, and the switch is never asked again while that
+  // completion stands.
+  it('turning Save Stats back ON with a completed practice run on screen records nothing', () => {
+    useModePrefs.getState().setAoxN('2')
+    mountApp()
+    switchToAox()
+    toggleSettings()
+    flipSaveStats() // practice mode
+    toggleSettings()
+    click('Begin')
+    answerCorrect()
+    answerCorrect() // completes
+    toggleSettings()
+    flipSaveStats() // back on, with that run still on screen
+    toggleSettings()
+    expect(statValue('Score')).toBe('2/2')
+    expect(bestVal('Mean')).toBe('—')
+    expect(useProgress.getState().aoxBest).toEqual({})
+  })
+
+  it('a recorded run handed back by an Override and then finished in practice mode is not recorded', () => {
+    useModePrefs.getState().setAoxN('2')
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes') // on, so taking the completing solve back resumes the run
+    click('Begin')
+    answerCorrect()
+    answerCorrect() // completes, recorded
+    expect(Object.keys(useProgress.getState().aoxBest)).toHaveLength(1)
+    click('Override') // the completing solve → a miss: the run is running again, its Best gone
+    expect(useProgress.getState().aoxBest).toEqual({})
+    toggleSettings()
+    flipSaveStats() // practice mode from here on
+    toggleSettings()
+    click('Next')
+    answerCorrect() // the run completes again — with Save Stats off
+    expect(ctrl('Reset')).toBeInTheDocument()
+    expect(statValue('Score')).toBe('—')
+    expect(useProgress.getState().aoxBest).toEqual({})
+    // …and the switch coming back on does not record it after the fact either.
+    toggleSettings()
+    flipSaveStats()
+    toggleSettings()
+    expect(statValue('Score')).toBe('2/3')
+    expect(useProgress.getState().aoxBest).toEqual({})
+  })
+
+  it('a completed run that still stands after its held solve is taken back stays done, and stays recorded', () => {
+    useModePrefs.getState().setAoxN('2')
+    mountApp()
+    switchToAox()
+    click('Allow Mistakes') // on
+    click('Begin')
+    answerWrong()
+    answerCorrect() // a late correct: card 1 is a miss
+    answerCorrect()
+    answerCorrect() // 2 credits → completes, recorded
+    expect(statValue('Score')).toBe('2/3')
+    click('<')
+    click('<') // card 1, the miss
+    click('Override') // credited after the fact: 3 credits on a run of 2
+    expect(statValue('Score')).toBe('3/3')
+    click('>')
+    click('>') // back on the held completing solve
+    toggleSettings()
+    flipSaveStats() // off — the completion was recorded, and that is not asked again
+    toggleSettings()
+    click('Override') // the held solve → a miss: 2 credits, which is still a completed run
+    expect(ctrl('Reset')).toBeInTheDocument() // still done: no Next, nothing handed back
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull()
+    expect(Object.keys(useProgress.getState().aoxBest)).toHaveLength(1)
+    // …and the record is still THIS run's to take back: un-credit card 1 again and the run is one
+    // short, so its Best goes (it was the config's first).
+    click('<')
+    click('<')
+    click('Undo')
+    expect(statValue('Score')).toBe('—') // (Save Stats is off — the strip is dimmed)
+    expect(useProgress.getState().aoxBest).toEqual({})
+  })
 })
 
 // ── Override ⇄ Undo (round 23 Q6) ─────────────────────────────────────────────────────────────
