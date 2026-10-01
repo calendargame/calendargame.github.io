@@ -6,7 +6,7 @@
 // only in the engine's memory — so anything that rebuilt the screen threw them away. This file keeps
 // them for exactly the session's lifetime, across everything that rebuilds a screen without the
 // player asking for a clean start:
-//   • a RELOAD — pull-to-refresh, the app's own update reload, the error card's Reload;
+//   • a RELOAD — a browser reload, the app's own update reload, the error card's Reload;
 //   • a PRESET SWITCH — each preset's history is waiting when you switch back to it;
 //   • an AMNESIC interlude — your own history, parked for the guest's visit, returns with your own
 //     stats when the guest is done (and the guest's is thrown away with the guest's session).

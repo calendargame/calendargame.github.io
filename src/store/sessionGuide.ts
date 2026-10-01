@@ -4,7 +4,7 @@
 // THE OWNER'S RULE (store/browsingSession): "only truly closing the app starts fresh." The guide
 // already held its place through every detour inside the app — it stays mounted (the open section is
 // GuidePage's own state) and src/main.tsx keeps the reading offset in guideScrollYRef — but both lived
-// only in memory, so a reload (pull-to-refresh, the update reload) put the reader back at the top with
+// only in memory, so a reload (a browser reload, the update reload) put the reader back at the top with
 // every section closed. This keeps the two for the session's lifetime, and a real close still clears
 // them (the browser drops sessionStorage).
 //

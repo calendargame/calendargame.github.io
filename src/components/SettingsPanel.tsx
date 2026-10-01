@@ -1125,10 +1125,12 @@ export function SettingsPanel({
                 behaves when the year range makes it moot and exactly how Amnesic behaves while Save
                 Stats is off. Switch Input back to Dots and the rotation you chose is still
                 selected.
-                ⚠ THE ONE CONSEQUENCE, written down so it is not later reported as one: the title-bar
-                mark follows this setting ONLY while Input is Dots (main.tsx gates `<W5Logo>`'s prop
-                on `inputStyle==='dots'`), so wherever this picker is locked the mark is FROZEN at
-                Standard, same as the rest of the answer layout it sits beside. */}
+                ⚠ THE LOCK AND THE MARK ARE GATED ON DIFFERENT THINGS, written down so it is not later
+                reported as a bug: this picker locks on Deduction OR Input-on-Buttons, while the
+                title-bar mark is gated on Input alone (main.tsx passes `<W5Logo>` the setting only
+                while `inputStyle==='dots'`). So on Buttons the mark is upright in every mode; and
+                in Deduction with Input on Dots the picker is locked but the mark still shows the
+                rotation chosen. How to Play says exactly this. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Rotate Dots</div>
             <PillGroup label="Rotate Dots" disabled={mode === 'deduction' || inputStyle !== 'dots'}>
               <PillTray

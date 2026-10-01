@@ -679,18 +679,20 @@ export default function GuidePage({
         <Subhead>Updates</Subhead>
         <p>
           Updates take care of themselves: while you use the app, any new version quietly downloads
-          in the background and takes effect the next time you open the app fresh. A short{' '}
-          <b>updating screen</b> marks the change — it appears once for each new version, even when
-          the switch already finished quietly between visits. Switching back from another app never
-          triggers it; the update waits for a fresh open. To ask right now instead, the Settings (⚙)
-          panel has a <b>Check for updates</b> link. It really does check: the link reads{' '}
-          <b>Checking…</b> while it looks, then answers in the same spot — <b>Up to date</b> if you
-          already have the newest version the site is handing out, or <b>No connection</b> if it
-          could not reach the internet. The answer stays for a few seconds and the link goes back to
-          normal. Only when there genuinely is something new does it install it there and then,
-          behind the same updating screen (your saved progress is kept either way). A brand-new
-          version can take up to about ten minutes to reach everywhere, so a check in that window
-          can still answer <b>Up to date</b> — asking again a little later finds it.
+          in the background and takes effect the next time the app loads — when you open it again,
+          or reload it. A short <b>updating screen</b> marks the change — it appears once for each
+          new version, even when the switch already finished quietly between visits. Switching back
+          from another app never triggers it; the update waits for the next load. To ask right now
+          instead, the Settings (⚙) panel has a <b>Check for updates</b> link. It really does check:
+          the link reads <b>Checking…</b> while it looks, then answers in the same spot —{' '}
+          <b>Up to date</b> if you already have the newest version the site is handing out, or{' '}
+          <b>No connection</b> if it could not reach the internet. The answer stays for a few
+          seconds and the link goes back to normal. Only when there genuinely is something new does
+          it install it there and then, behind the same updating screen (your saved progress is kept
+          either way) — unless something is still waiting to be saved, when it holds off instead and
+          says why (see <b>Saved Progress</b>). A brand-new version can take up to about ten minutes
+          to reach everywhere, so a check in that window can still answer <b>Up to date</b> — asking
+          again a little later finds it.
         </p>
         <p>
           To see what an update actually changed, the <b>Changelog</b> link — at the right-hand end
@@ -1000,10 +1002,12 @@ export default function GuidePage({
             — getting on for a thousand dates or more in one mode — only the most recent of them may
             come back: about three thousand in Classic and Flash, about two thousand in
             Deduction&apos;s Day and Year puzzles, and a little under a thousand in its Month
-            puzzle. Your scores and the date numbers are unaffected. A Blitz round or MoX run that
-            has <i>ended</i> comes back the same ways, with every date&apos;s Override state —
-            unless a setting it was played under was changed in the meantime, in which case it is
-            not brought back (the bests it set are kept).
+            puzzle. And if several modes hold very long histories at once, the history of a mode you
+            are not in may not come back at all; the one you are in always does. Your scores and the
+            date numbers are unaffected either way. A Blitz round or MoX run that has <i>ended</i>{' '}
+            comes back the same ways, with every date&apos;s Override state — unless a setting it
+            was played under was changed in the meantime, in which case it is not brought back (the
+            bests it set are kept).
           </li>
         </UL>
         <p>Override in the run modes:</p>
@@ -1151,11 +1155,12 @@ export default function GuidePage({
             of its name in the list, so you can see which ones forget before you switch into one.
           </li>
           <li>
-            Switching re-reads every screen from the copy of your stats that is now live, so a Blitz
-            round or an MoX run still in progress is ended by it. What a preset had on its screens
-            otherwise waits for you: a round or run that has already <i>ended</i>, and the dates you
-            can browse back through in Classic, Flash and Deduction, are still there when you switch
-            back, until you press Reset or close the app.
+            Switching re-reads every mode screen from the copy of your stats that is now live, so a
+            Blitz round or an MoX run still in progress is ended by it. (This guide and the Lookup
+            page are not any one preset&apos;s, and stay exactly as they are.) What a preset had on
+            its screens otherwise waits for you: a round or run that has already <i>ended</i>, and
+            the dates you can browse back through in Classic, Flash and Deduction, are still there
+            when you switch back, until you press Reset or close the app.
           </li>
           <li>
             A long name is cut short with an … so the bar can never be pushed wider than the screen.
@@ -1186,9 +1191,9 @@ export default function GuidePage({
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to
             move it; hold it near the top or bottom of the list and the list scrolls to bring the
-            rest to you. Or select the grip and press the up/down arrow keys. That order is the
-            order the top-left list shows them in, and nothing else: moving a preset changes no
-            stats and no settings.
+            rest to you. Or select the grip and press the up/down arrow keys — the list scrolls to
+            keep the row you are moving in view. That order is the order the top-left list shows
+            them in, and nothing else: moving a preset changes no stats and no settings.
           </li>
           <li>
             <b>Delete</b> — the ✕ at the left-hand end of each row, kept well away from the grip so
@@ -1212,15 +1217,16 @@ export default function GuidePage({
           <li>
             <b>An untouched preset is not worth a question, so it does not get one.</b> If a preset
             still holds nothing at all — every ⚙ setting at its launch value; each mode&apos;s setup
-            at its launch value too (Flash speed, both Blitz timers, the MoX run length, Allow
-            Mistakes, One-by-One, the Deduction type, and which stats are shown or hidden); no stats
-            and no all-time bests; no saved defaults of its own; and nothing on its screens, whether
-            a round or run still going or a finished one waiting — the ✕ deletes it on the spot.
-            That is the state a brand-new preset is in, and the state <b>Clear Saved Defaults</b>{' '}
-            followed by <b>Full Reset</b> would put one back into. Anything else at all — even a
-            Blitz round or MoX run you have only just begun — and the question appears as described
-            here. Having <b>Amnesic</b> switched on does not count as holding something: there is
-            nothing being kept for it to be about.
+            at its launch value too (Flash speed, both Blitz timers, Blitz&apos;s Per Round / Per
+            Question choice, the MoX run length, Allow Mistakes in both, One-by-One, the Deduction
+            type, and which stats are shown or hidden); no stats and no all-time bests; no saved
+            defaults of its own; and nothing on its screens, whether a round or run still going or a
+            finished one waiting — the ✕ deletes it on the spot. That is the state a brand-new
+            preset is in, and the state <b>Clear Saved Defaults</b> followed by <b>Full Reset</b>{' '}
+            would put one back into. Anything else at all — even a Blitz round or MoX run you have
+            only just begun — and the question appears as described here. Having <b>Amnesic</b>{' '}
+            switched on does not count as holding something: there is nothing being kept for it to
+            be about.
           </li>
           <li>
             Deleting a preset removes <i>everything</i> it holds — its stats and all-time bests, its
@@ -1232,7 +1238,7 @@ export default function GuidePage({
           <li>
             You can delete the preset you are currently on. The popup says so, and names the one it
             will open instead — the row below it, or the row above when it was the last. That is a
-            switch like any other, so the screens clear with it — a Blitz round or MoX run in
+            switch like any other, so the mode screens clear with it — a Blitz round or MoX run in
             progress included.
           </li>
           <li>
@@ -1377,9 +1383,9 @@ export default function GuidePage({
           neither does turning Save Stats off.
         </p>
         <p>
-          When timing stats are off, leaving and returning to one of these modes preserves the
-          current question exactly as you left it — same date, same answers, codes panel in the same
-          state.
+          Leaving one of these modes for another and coming back preserves the current question
+          exactly as you left it — same date, same answers, codes panel in the same state — whether
+          its timing is shown or hidden. (A flash that was running in Flash ends when you leave.)
         </p>
         <p>
           The same rule decides what happens to the date that was waiting when the screen itself
@@ -1447,8 +1453,9 @@ export default function GuidePage({
           <li>
             <b>It isn't saved.</b> The breakdown is built from the ended run or round on your
             screen, each time you open it, and exists only as long as that run or round does — which
-            includes going to another mode or another preset and coming back. Reset (or Full Reset)
-            clears it along with the run, and so does closing the app.
+            includes going to another mode or another preset and coming back, and a reload. Reset
+            (or Full Reset) clears it along with the run, and so do closing the app and changing a
+            setting the run or round was played under.
           </li>
         </UL>
         <Subhead>Hiding stats (Blitz, MoX)</Subhead>
@@ -1555,6 +1562,21 @@ export default function GuidePage({
             </div>
           </div>
           <div>
+            <SectionLabel className="mb-1.5">Lookup</SectionLabel>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd>
+                <span>Select the history row above / below</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Kbd>Backspace</Kbd>
+                <Kbd>Delete</Kbd>
+                <span>Clear (when the date box isn&apos;t being typed in)</span>
+              </div>
+            </div>
+          </div>
+          <div>
             <SectionLabel className="mb-1.5">Overlays</SectionLabel>
             <div className="space-y-1 text-sm">
               <div className="flex items-center gap-2">
@@ -1609,10 +1631,11 @@ export default function GuidePage({
             modifier (Ctrl/Cmd/Alt/Shift) is held.
           </li>
           <li>
-            The answer keys and the Game Actions above are ignored while a popup is open, too —
-            whatever is behind a popup is out of reach until you close it, so an answer, an Override
-            or an Undo can't be pressed through one. The mode letters and <Kbd>H</Kbd> still work:
-            they leave the screen, and any popup belonging to it goes at the same moment.{' '}
+            The answer keys, the Game Actions and the Lookup keys above are ignored while a popup is
+            open, too — whatever is behind a popup is out of reach until you close it, so an answer,
+            an Override or an Undo can't be pressed through one. (Lookup&apos;s arrows also stand
+            aside while a list is open and using them.) The mode letters and <Kbd>H</Kbd> still
+            work: they leave the screen, and any popup belonging to it goes at the same moment.{' '}
             <Kbd>G</Kbd> still closes the ⚙ menu together with any of its popups, but does nothing
             while a game screen&apos;s own popup (such as a Reset Stats question or a breakdown) is
             open. The one popup those keys can&apos;t take with them is the &quot;Your progress
@@ -1814,9 +1837,10 @@ export default function GuidePage({
             Manage Presets — are proper dialogs. Opening one puts the keyboard inside it,{' '}
             <Kbd>Tab</Kbd> and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> cycle that popup&apos;s own controls
             and wrap around at the ends rather than wandering into the menu beneath, and{' '}
-            <Kbd>Esc</Kbd> closes it. The Changelog has no controls to cycle — it and the resting
-            saved-defaults list are read-only, closed by tapping outside, <Kbd>Esc</Kbd>, or Back —
-            and there the keyboard simply stays on the dialog.
+            <Kbd>Esc</Kbd> closes it. The Changelog is the one with no controls to cycle — it is
+            read-only, closed by tapping outside, <Kbd>Esc</Kbd>, or Back — so there the keyboard
+            simply stays on the dialog. The saved-defaults list is not read-only: its rows can be
+            edited in place (see <b>Save Defaults</b>), and <Kbd>Tab</Kbd> cycles them.
           </li>
           <li>
             Manage Presets asks its delete question — when there is one to ask; an untouched preset
@@ -1882,9 +1906,10 @@ export default function GuidePage({
             keyboard is on it.
           </li>
           <li>
-            The preset list can only be opened by tapping or clicking it. <Kbd>Tab</Kbd> opens the
-            mode selector from anywhere in the app, and no key opens this one — not even with the
-            control itself selected.
+            The preset list at the top, and the <b>Open in</b> list in the ⚙ menu, can only be
+            opened by tapping or clicking them. <Kbd>Tab</Kbd> opens the mode selector from anywhere
+            in the app, and no key opens either of these — not even with the control itself
+            selected. Once one is open, its arrow keys, <Kbd>Enter</Kbd> and <Kbd>Esc</Kbd> work.
           </li>
           <li>
             Pinch-to-zoom is switched off deliberately, to keep the app feeling like an app rather
@@ -1928,13 +1953,13 @@ export default function GuidePage({
           <li>
             <b>Global</b> — first, and app-wide, not per-preset: <b>Open in</b> (which preset a
             fresh open of the app lands in — &quot;Last used&quot;, or a preset you pin), and the
-            door to <b>Manage Presets</b> (see <b>Presets</b> in the first section). Neither is part
-            of any preset, and neither is touched by the Reset buttons or Save Defaults.{' '}
-            <b>Open in</b> is a list like the preset control at the top left — tap it, then tap
-            &quot;Last used&quot; or a preset. It stays one row however many presets you have; the
-            list floats over the menu, scrolls when it is long, and the menu behind it holds still
-            until you have picked. If you open the ⚙ menu by pressing and dragging, letting go on{' '}
-            <b>Open in</b> opens its list; tap your choice from there.
+            door to <b>Manage Presets</b> (see <b>Presets</b> above). Neither is part of any preset,
+            and neither is touched by the Reset buttons or Save Defaults. <b>Open in</b> is a list
+            like the preset control at the top left — tap it, then tap &quot;Last used&quot; or a
+            preset. It stays one row however many presets you have; the list floats over the menu,
+            scrolls when it is long, and the menu behind it holds still until you have picked. If
+            you open the ⚙ menu by pressing and dragging, letting go on <b>Open in</b> opens its
+            list; tap your choice from there.
           </li>
           <li>
             <b>Per-preset</b> — the label over everything that is saved for the current preset and
@@ -1977,7 +2002,9 @@ export default function GuidePage({
           Settings changes apply when you <b>close</b> the ⚙ menu, not on each adjustment — so
           changing several at once regenerates the date just once (and never restarts your solve
           timer mid-adjustment). The sections below cover each setting and exactly when a change
-          regenerates a date or resets a round/run.
+          regenerates a date or resets a round/run. A flash running in Flash goes with its date: if
+          closing the menu regenerates the date, the flash ends and Begin starts a new one; if the
+          date stays (you had already answered it wrong), the flash carries on.
         </p>
       </GuideSection>
       <GuideSection
@@ -2103,20 +2130,21 @@ export default function GuidePage({
           neighbours; the two empty gaps and the space around the pattern stay dead, so sliding off
           onto them still cancels a press. Rotate Dots is locked whenever there are no dots to turn:
           in Deduction, alongside Input and for the same reason, and in every mode while Input is
-          set to Buttons. It keeps whatever you last chose — and so does the logo below. Your choice
-          doesn&apos;t affect your stats: bests and history are shared across all three.
+          set to Buttons. While locked it keeps whatever you last chose. Your choice doesn&apos;t
+          affect your stats: bests and history are shared across all three.
         </p>
         <p>
           <b>The logo turns with it — but only while Dots is your Input.</b> The mark at the top
           left of every screen <i>is</i> this seven-dot layout, so turning the dots turns that mark
-          too (by the same amount, and at 45° shrunk the same way), whenever Input is set to Dots.
-          The rest of the time — in Deduction, or in any mode while Input is set to Buttons — the
-          mark stays upright, for the same reason Rotate Dots itself locks there: with no dots
-          anywhere on screen, there is nothing for a turned mark to correspond to. What can&apos;t
-          follow even when Dots is your Input are the pictures your device saved earlier: the
-          home-screen icon, the launch screen and the link preview image are fixed image files, so
-          those keep the upright logo whatever you choose here. The full-screen launch screen and
-          the <b>Rotate back to portrait</b> screen keep the upright mark to match them.
+          too (by the same amount, and at 45° shrunk the same way), whenever Input is set to Dots —
+          on every page, including the ones with no weekday dots of their own (Deduction, Lookup and
+          this guide), where Rotate Dots is locked but the mark still shows the rotation you chose.
+          While Input is set to Buttons the mark stays upright on every page: with Buttons there are
+          no dots anywhere in the app for a turned mark to correspond to. What can&apos;t follow
+          even when Dots is your Input are the pictures your device saved earlier: the home-screen
+          icon, the launch screen and the link preview image are fixed image files, so those keep
+          the upright logo whatever you choose here. The full-screen launch screen and the{' '}
+          <b>Rotate back to portrait</b> screen keep the upright mark to match them.
         </p>
       </GuideSection>
       <GuideSection
@@ -2265,20 +2293,28 @@ export default function GuidePage({
         </p>
         <Subhead>Toggling Julian</Subhead>
         <UL>
-          <li>For dates after October 4, 1582, Julian has no effect.</li>
           <li>
-            For Julian-eligible dates (October 4, 1582 or earlier), the date stays if you haven't
-            wrong-guessed yet — the answer and codes simply update.
+            A date after October 4, 1582 reads the same either way: the setting only changes the
+            weekday, and the codes, of a date on or before it.
           </li>
           <li>
-            If you've already wrong-guessed, the date regenerates and is added to your history with
-            both your red guess and a green for the day that was correct under the calendar system
-            in effect when it was first generated.
+            <b>Classic and Flash</b> — the date on screen stays, whether or not you&apos;ve already
+            answered it wrong, revealed it, or shown its codes. If it is one of those early dates,
+            its correct answer and its codes follow the setting from the moment you change it; the
+            marks already on the answer grid stay as they are.
           </li>
           <li>
-            Each date snapshots its calendar system at generation, so revisiting an earlier question
-            via Back shows the highlights and codes correct under the system in effect when that
-            date was generated.
+            <b>Deduction and MoX (idle)</b> — the change is treated like any other date setting: an
+            unanswered puzzle (in all three Deduction sub-types) or the date MoX has waiting is
+            redrawn when you close the ⚙ menu, and one you&apos;ve already answered wrong, revealed,
+            or shown codes on stays.
+          </li>
+          <li>
+            Each date remembers the calendar system it was drawn under, so revisiting an earlier
+            question via Back works its codes under that system. Its green and red marks are the
+            ones it was given as you answered it — so for a date that was drawn under one setting
+            and answered under the other (Classic and Flash keep such a date on screen), the marks
+            and the codes can disagree.
           </li>
           <li>
             In Blitz rounds and MoX runs (active or just ended), a Julian toggle resets the
@@ -2385,9 +2421,10 @@ export default function GuidePage({
         </Lead>
         <p>
           It is a guest mode. Hand the phone over, let someone play, and when the app closes nothing
-          they did is kept — while everything <i>you</i> had is still exactly where you left it.
+          they scored is kept — while every stat <i>you</i> had is still exactly where you left it.
           Nothing is deleted to make that happen: while Amnesic is on, your saved stats are simply
-          never written to.
+          never written to. It sets apart stats only: a setting the guest changes stays changed (see{' '}
+          <b>What it keeps</b>).
         </p>
         <Subhead>What it forgets</Subhead>
         <UL>
@@ -2395,7 +2432,8 @@ export default function GuidePage({
           <li>
             The question history you browse with Back and Forward, and any round or run on screen —
             the guest&apos;s, that is. Your own are set aside when Amnesic goes on and are back when
-            it goes off.
+            it goes off — except an ended round or run whose setup the guest changed in the meantime
+            (see <b>Turning it on and off</b>).
           </li>
           <li>
             All-time bests — Blitz score and streak, Per Question sudden-death score, and MoX mean
@@ -2424,11 +2462,10 @@ export default function GuidePage({
         <p>
           Lookup history is shared across every preset (see <b>Presets</b> above), so it is not this
           preset&apos;s to forget or to keep. A lookup you make while a preset is amnesic still
-          works exactly as normal, but it does not join that shared list — it is held only for the
-          rest of this browsing session, the same &quot;never written down&quot; treatment your
-          parked stats get, and it never becomes a permanent entry afterwards. Switching to a
-          different preset, turning Amnesic off, or coming back later all leave it exactly as gone
-          as closing the app does.
+          works exactly as normal, but it is never written to that saved list — the same &quot;never
+          written down&quot; treatment the guest&apos;s stats get. It stays in the History list for
+          as long as the app is open, in every preset and after Amnesic is turned off, and it is
+          gone when the app is really closed: it never becomes a permanent entry.
         </p>
         <Subhead>Turning it on and off</Subhead>
         <UL>
@@ -2442,13 +2479,15 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          Either direction clears the screens, including a Blitz round or an MoX run in progress —
-          the same discard switching preset makes, and for the same reason: every screen has to be
-          re-read from whichever copy of your stats is now live. A round or run that had already{' '}
+          Either direction clears the five mode screens, including a Blitz round or an MoX run in
+          progress — the same discard switching preset makes, and for the same reason: every mode
+          screen has to be re-read from whichever copy of your stats is now live. (This guide and
+          the Lookup page hold no stats, so they stay as they are.) A round or run that had already{' '}
           <i>ended</i> belongs to the stats it was played on, and only ever comes back with them:
           yours is put aside while the guest plays and is back on screen, exactly as you left it,
-          when Amnesic goes off; the guest&apos;s is discarded along with the guest&apos;s stats,
-          and never touches your bests.
+          when Amnesic goes off — unless a setting it was played under was changed while it was set
+          aside, in which case it is not brought back (any Best it had set is kept). The
+          guest&apos;s is discarded along with the guest&apos;s stats, and never touches your bests.
         </p>
         <Subhead>Two things it deliberately is not</Subhead>
         <UL>
@@ -2552,7 +2591,7 @@ export default function GuidePage({
         </p>
         <Subhead>Kept for the visit only (cleared when you fully close the app)</Subhead>
         <p>
-          A reload — pulling down to refresh, or the app updating itself — is not a close: each
+          A reload — reloading the page, or the app updating itself — is not a close: each
           preset&apos;s page, any ended round or run, your Back / Forward history in Classic, Flash
           and Deduction, what you had on the Lookup page, and your place in this guide are all still
           there afterward. A round or run still in progress is not; a reload stops it, just as a
@@ -2568,12 +2607,13 @@ export default function GuidePage({
             <i>into</i> is the <b>Open in</b> setting (⚙ &rarr; Global).
           </li>
           <li>
-            Any timed round or run on screen &mdash; whether still in progress <i>or</i> ended but
-            not yet Reset. An <i>ended</i> run is kept as you switch presets and return, the same as
-            the page above; a fresh close of the app or a manual Reset clears it, and so does a
-            change to any setting it was played under while it was set aside (a guest changing the
-            setup during an Amnesic interlude, say). A run still <i>in progress</i> is discarded on
-            a preset switch. Either way, only a Best it already recorded persists.
+            <b>A timed round or run that has ended</b> but not yet been Reset. It is kept through a
+            reload and as you switch presets and return, the same as the page above; a fresh close
+            of the app or a manual Reset clears it, and so does a change to any setting it was
+            played under while it was set aside (a guest changing the setup during an Amnesic
+            interlude, say). A round or run still <i>in progress</i> is not kept: a reload, a preset
+            switch, an Amnesic toggle, or leaving the mode ends it. Either way, only a Best it
+            already recorded persists.
           </li>
           <li>
             <b>The dates you can browse back through</b> in Classic, Flash and Deduction, each with
@@ -2638,7 +2678,7 @@ export default function GuidePage({
           Every reset-style action in the app now asks the same way: a <b>popup</b> that spells out
           what it does and whether it is <b>per-preset</b> or app-wide. That covers{' '}
           <b>Reset Settings</b>, <b>Full Reset</b>, <b>Clear Saved Defaults</b>, each casual mode's{' '}
-          <b>Reset Stats</b> (see <b>Playing — Reset Stats</b>), and the "Enable and Reset Stats?"
+          <b>Reset Stats</b> (see <b>Buttons — Reset Stats</b>), and the "Enable and Reset Stats?"
           case when you un-hide timing after a desync. The one exception is <b>deleting a preset</b>
           , which asks in place inside <b>Manage Presets</b> rather than in a separate popup — and
           does not ask at all when the preset is still completely untouched, since there would be

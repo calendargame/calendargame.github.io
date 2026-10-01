@@ -28,7 +28,7 @@ import { useStorageHealth } from '../store/storageHealth.js'
 //   • "only kept until you close or reload the app" — what could not be saved is held in memory,
 //     each piece for the exact place it belongs (that preset, that stats copy), so it survives
 //     switching presets and back and turning Amnesic on and off. It is lost only when the page goes
-//     away: closing the app, or RELOADING it (pull-to-refresh, the error card's Reload). Check for
+//     away: closing the app, or RELOADING it (a browser reload, the error card's Reload). Check for
 //     updates declines to reload while anything is unsaved.
 //   • "saved by itself" — every held piece is written to its own place as soon as a save fits, or
 //     the moment a deleted preset frees room.

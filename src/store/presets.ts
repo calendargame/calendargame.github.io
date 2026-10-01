@@ -108,7 +108,7 @@ export type Preset = {
 //   'last'      → the preset that was active when the app last closed (the persisted `activeId` is
 //                 used as-is).
 //   <preset id> → always open in THAT preset, whatever was active last time.
-// ★ A FRESH OPEN ONLY. A reload — pull-to-refresh, the app's own update reload, the error card's
+// ★ A FRESH OPEN ONLY. A reload — a browser reload, the app's own update reload, the error card's
 // Reload — is the same browsing session (store/browsingSession), and it stays on the preset the
 // player was on, whatever the pin says: a guest playing in an Amnesic preset must not be dropped
 // into the pinned (permanent) one by a refresh.

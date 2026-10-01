@@ -1761,7 +1761,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // owner-confirmed revert for a preset set Amnesic with no saved defaults). Session toggles still
       // stick within the session; this only re-seeds on the next cold open.
       // ★★ A RELOAD IS NOT A COLD OPEN (the owner reversed round 21's "a reload counts as
-      // a reopen"): "only truly closing the app starts fresh", so pull-to-refresh and the auto-update
+      // a reopen"): "only truly closing the app starts fresh", so a browser reload and the auto-update
       // reload keep a guest's Amnesic preset Amnesic, with its session stats and its finished round,
       // exactly like every other session-lived thing in the app. A boot effect alone cannot tell the
       // two apart — both mount <App/> from scratch — so store/browsingSession asks sessionStorage,

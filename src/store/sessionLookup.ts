@@ -3,7 +3,7 @@
 // THE OWNER'S RULE (store/browsingSession): "only truly closing the app starts fresh." Lookup's
 // HISTORY LIST is saved for good (store/lookupHistory). What the player had on the screen above it —
 // the text in the date box, the answer or message being shown, which history row is selected, and
-// whether Show Codes is open — was plain App state, so a reload (pull-to-refresh, the app's own
+// whether Show Codes is open — was plain App state, so a reload (a browser reload, the app's own
 // update reload) emptied the box and closed the codes under them. This keeps those values for the
 // browsing session; a real close clears them (the browser drops sessionStorage).
 //

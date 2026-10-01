@@ -1,7 +1,7 @@
 // store/browsingSession.ts — is this boot a GENUINE cold open, or a reload inside the same session?
 //
 // ★ THE OWNER'S RULE, which this file is the whole mechanism for: "only truly closing the app starts
-// fresh." A reload — Safari's pull-to-refresh, the app's own auto-update reload, the Reload button on
+// fresh." A reload — the browser's own reload, the app's own auto-update reload, the Reload button on
 // the error card — is the SAME browsing session, everywhere on the site: the page you were on stays,
 // a finished round stays, and a guest's Amnesic preset stays Amnesic with its session stats.
 //
