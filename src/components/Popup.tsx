@@ -33,7 +33,10 @@ import { isTopPopup, usePopupLayer } from './overlayStack.js'
 //     closing a popup can never put the soft keyboard back up.)
 //   • …AND IT KEEPS THE KEYBOARD WHILE IT IS ON TOP. Focus that lands anywhere outside the top
 //     popup — Tab pressed with nothing focused, which the browser walks into the page behind the
-//     dim; a screen behind it focusing itself — is brought straight back to the dialog.
+//     dim; a screen behind it focusing itself — is brought straight back to the dialog. So is focus
+//     that leaves for NOWHERE, which is what <body> holding it means: a text box in the card that
+//     blurs itself when Enter commits it, a press on the dim that is not a tap (a right-click, one
+//     let go over the card), a control removed while it had the keyboard.
 //   • THE TAB TRAP, on the scrim (modalContract's trapModalTab).
 //   • THE [data-settings-modal] MARKER, which is how the test suite finds a popup's scrim. Nothing
 //     in the app reads it: every "is a popup open?" question is asked of the stack.
@@ -79,15 +82,53 @@ export default function Popup({
   // declaration order, so on close this listener is gone before focus is handed back to the opener
   // — which is outside the popup, and would otherwise be pulled straight back into a card that is
   // about to be removed.
+  // ★ …AND FOCUS THAT GOES NOWHERE COMES BACK TOO. No `focusin` reports that — nothing was focused
+  // — so the listener above never hears of it, and the keyboard is left on <body> behind the scrim:
+  // outside the Tab trap, with nothing on screen to say where it is. Two things can send it there,
+  // and each has its own signal:
+  //   • SOMETHING LET GO OF IT — a text box blurring itself, a press on something that cannot hold
+  //     focus. That is a `focusout` with no element taking over.
+  //   • THE CONTROL THAT HAD IT WAS REMOVED — a tap-to-type readout closing on Escape. Some engines
+  //     send a `focusout` for that and some send nothing at all, so the card's own tree is watched.
+  // ⚠ NEITHER SIGNAL IS ACTED ON AS IT ARRIVES. Both can arrive while the browser is half-way
+  // through handing focus from one control to the next — the box being left blurs, commits and is
+  // redrawn before the box being entered has focus — and for that moment nothing holds focus
+  // either. Focusing the dialog then CANCELS the hand-over: measured in a real browser, a tap from
+  // one text box to another landed on the dialog instead. So a signal only asks for a look once the
+  // browser is done (the next task), and the look is at where focus IS:
+  //   • ON SOMETHING — a text box, a reorder grip that focused itself, a readout's input focused
+  //     as it appeared, a box that kept the keyboard while the WINDOW lost focus — and this stands
+  //     aside. It only ever acts when nothing holds focus, so it cannot fight a control for it.
+  //   • ON NOTHING, with this popup on top — and the dialog takes it.
   useLayoutEffect(() => {
+    const scrim = scrimRef.current
+    if (!scrim) return
+    const toDialog = () => scrim.querySelector<HTMLElement>('[role="dialog"]')?.focus()
     const keep = (e: FocusEvent) => {
-      const scrim = scrimRef.current
-      if (!scrim || !isTopPopup(id) || !(e.target instanceof Node) || scrim.contains(e.target))
-        return
-      scrim.querySelector<HTMLElement>('[role="dialog"]')?.focus()
+      if (!isTopPopup(id) || !(e.target instanceof Node) || scrim.contains(e.target)) return
+      toDialog()
+    }
+    let look = 0
+    const lookWhenSettled = () => {
+      window.clearTimeout(look)
+      look = window.setTimeout(() => {
+        const active = document.activeElement
+        if (isTopPopup(id) && (active === null || active === document.body)) toDialog()
+      })
+    }
+    const letGo = (e: FocusEvent) => {
+      if (e.relatedTarget === null) lookWhenSettled()
     }
     document.addEventListener('focusin', keep)
-    return () => document.removeEventListener('focusin', keep)
+    document.addEventListener('focusout', letGo)
+    const removals = new MutationObserver(lookWhenSettled)
+    removals.observe(scrim, { childList: true, subtree: true })
+    return () => {
+      document.removeEventListener('focusin', keep)
+      document.removeEventListener('focusout', letGo)
+      removals.disconnect()
+      window.clearTimeout(look)
+    }
   }, [id])
   // Hand focus back on close. Declared after the stack entry on purpose: registering takes the
   // keyboard down first, so what is remembered here is never a text box.

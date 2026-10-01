@@ -28,6 +28,7 @@ import {
   modalCard,
   queryModalCard,
   isSettingsOpen,
+  makeSaveable,
   outsideTarget,
   changelogLink,
   currentMode,
@@ -206,6 +207,171 @@ describe('the popup in front keeps the keyboard', () => {
     tap(changelogLink())
     escape()
     expect(document.activeElement).toBe(changelogLink())
+  })
+})
+
+// ── …and focus that leaves for NOWHERE comes back too ────────────────────────────────────────────
+// Nothing is focused when focus goes nowhere, so no `focusin` reports it — and the rule above, which
+// listens for one, never heard. The keyboard was left on <body> behind the scrim: after Enter
+// committed a preset rename (the box blurs itself), after a right-click on the dim, and after a
+// control was removed while it had the keyboard.
+// The popup looks once the browser has settled, not as the signal arrives (components/Popup says
+// why), so each case lets a moment pass first.
+describe('focus that leaves the popup in front for nowhere comes back to its dialog', () => {
+  const settled = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+  const nameBox = () => screen.getAllByRole('textbox', { name: 'Preset name' })[0]
+
+  it('Enter commits a preset rename: the box lets go, and the dialog takes the keyboard', async () => {
+    mountApp()
+    openSettings()
+    openModal('presets')
+    act(() => nameBox().focus())
+    fireEvent.change(nameBox(), { target: { value: 'Weekend' } })
+    act(() => void fireEvent.keyDown(nameBox(), { key: 'Enter' }))
+    expect(nameBox().value).toBe('Weekend')
+    expect(document.activeElement).toBe(document.body) // the box has let go…
+    await settled()
+    expect(document.activeElement).toBe(modalCard('presets')) // …and the keyboard is not left there
+  })
+
+  it('Escape discarding a rename is the same', async () => {
+    mountApp()
+    openSettings()
+    openModal('presets')
+    act(() => nameBox().focus())
+    fireEvent.change(nameBox(), { target: { value: 'Weekend' } })
+    act(() => void fireEvent.keyDown(nameBox(), { key: 'Escape' }))
+    await settled()
+    expect(queryModalCard('presets')).not.toBeNull() // that Escape was the box's, not the popup's
+    expect(document.activeElement).toBe(modalCard('presets'))
+  })
+
+  it('a press on the dim that is not a tap — a right-click — does not leave it on <body>', async () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    // What a browser does with a press on something that cannot hold focus: whatever had the
+    // keyboard loses it, and nothing gains it. (jsdom moves no focus for a press, so the test does.)
+    act(() => {
+      fireEvent.pointerDown(scrims()[0], { button: 2 })
+      document.activeElement.blur()
+    })
+    expect(document.activeElement).toBe(document.body)
+    await settled()
+    expect(queryModalCard('changelog')).not.toBeNull() // a right-click closes nothing
+    expect(document.activeElement).toBe(modalCard('changelog'))
+  })
+
+  it('a control removed while it had the keyboard — a tap-to-type readout closed with Escape', async () => {
+    mountApp()
+    openSettings()
+    makeSaveable()
+    openModal('save')
+    const card = within(modalCard('save'))
+    tap(card.getByRole('button', { name: 'Edit Flash Speed' }))
+    const box = card.getByRole('textbox', { name: 'Flash Speed (seconds)' })
+    expect(document.activeElement).toBe(box)
+    act(() => void fireEvent.keyDown(box, { key: 'Escape' })) // the edit is dropped: the box is gone
+    expect(box.isConnected).toBe(false)
+    await settled()
+    expect(document.activeElement).toBe(modalCard('save'))
+  })
+
+  it('…and committed with Enter, which blurs it first', async () => {
+    mountApp()
+    openSettings()
+    makeSaveable()
+    openModal('save')
+    const card = within(modalCard('save'))
+    tap(card.getByRole('button', { name: 'Edit Flash Speed' }))
+    const box = card.getByRole('textbox', { name: 'Flash Speed (seconds)' })
+    fireEvent.change(box, { target: { value: '1.5' } })
+    act(() => void fireEvent.keyDown(box, { key: 'Enter' }))
+    await settled()
+    expect(card.getByRole('button', { name: 'Edit Flash Speed' }).textContent).toBe('1.5s')
+    expect(document.activeElement).toBe(modalCard('save'))
+  })
+
+  // ── It only ever acts when NOTHING holds focus, so it cannot fight a control for it ──────────
+  it('a text box in the popup keeps the keyboard, and so does the next one focus moves to', async () => {
+    mountApp()
+    act(() => {
+      createPreset('Timed')
+    })
+    openSettings()
+    openModal('presets')
+    const [first, second] = screen.getAllByRole('textbox', { name: 'Preset name' })
+    act(() => first.focus())
+    await settled()
+    expect(document.activeElement).toBe(first)
+    act(() => second.focus()) // the first box lets go TO the second: something is taking over
+    await settled()
+    expect(document.activeElement).toBe(second)
+  })
+
+  it('a tap-to-type readout swapping to its input, and focus moving from that input to a box', async () => {
+    mountApp()
+    openSettings()
+    makeSaveable()
+    openModal('save')
+    const card = within(modalCard('save'))
+    const readout = card.getByRole('button', { name: 'Edit Flash Speed' })
+    act(() => readout.focus()) // a desktop click focuses the button it lands on…
+    tap(readout) // …and the button is then replaced by the input, which focuses itself
+    await settled()
+    const box = card.getByRole('textbox', { name: 'Flash Speed (seconds)' })
+    expect(document.activeElement).toBe(box)
+    const runLength = card.getByRole('textbox', { name: 'MoX Run Length' })
+    act(() => runLength.focus()) // the readout's input commits and is removed as it is left
+    await settled()
+    expect(document.activeElement).toBe(runLength)
+  })
+
+  it('a reorder grip keeps the keyboard through a move', async () => {
+    mountApp()
+    act(() => {
+      createPreset('Timed')
+    })
+    openSettings()
+    openModal('presets')
+    const grip = () => screen.getByRole('button', { name: /^Reorder Timed, position/ })
+    act(() => grip().focus())
+    act(() => void fireEvent.keyDown(grip(), { key: 'ArrowUp' }))
+    await settled()
+    expect(grip().getAttribute('aria-label')).toMatch(/position 1 of 2$/)
+    expect(document.activeElement).toBe(grip())
+  })
+
+  it('a box that still holds the keyboard when the WINDOW loses focus keeps it', async () => {
+    mountApp()
+    openSettings()
+    openModal('presets')
+    act(() => nameBox().focus())
+    // A window losing focus sends the box the same "let go, to nothing" — and leaves it holding
+    // the keyboard for when the window comes back.
+    act(() => void fireEvent.focusOut(nameBox()))
+    await settled()
+    expect(document.activeElement).toBe(nameBox())
+  })
+
+  it('with two popups up it comes back to the one in front, not the one under it', async () => {
+    openNoticeOverPresets()
+    act(() => notice().blur())
+    expect(document.activeElement).toBe(document.body)
+    await settled()
+    expect(document.activeElement).toBe(notice())
+  })
+
+  it('once the popup has closed, nothing is pulled anywhere', async () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    act(() => modalCard('changelog').blur()) // a look is now owed…
+    escape() // …and the popup closes before it happens
+    expect(queryModalCard('changelog')).toBeNull()
+    act(() => document.activeElement.blur())
+    await settled()
+    expect(document.activeElement).toBe(document.body)
   })
 })
 
