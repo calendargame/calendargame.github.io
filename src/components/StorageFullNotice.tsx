@@ -18,6 +18,10 @@ import { useStorageHealth } from '../store/storageHealth.js'
 // ★ IT CAN OPEN OVER ANOTHER POPUP — a refused save does not wait for the screen to be clear (making
 // a preset inside Manage Presets is a save). It is then simply the top popup of the stack: one dim,
 // and Escape, Back or a tap outside closes this notice and leaves the popup under it open.
+// ★ AND IT IS THE APP'S, NOT A SCREEN'S (`appWide`): it is mounted beside every screen and the ⚙
+// panel, so changing the page does not take it away. A mode letter, H or G pressed under it would
+// therefore change the page BEHIND a popup that is still up — so while it is open those keys do
+// nothing (components/overlayStack's isAppWidePopupOpen), and it is closed first.
 //
 // ⚠ THE COPY PROMISES ONLY WHAT storageHealth DOES, and each clause is one of its facts:
 //   • "you can keep playing" — a refused save never throws; the screen is untouched by it.
@@ -36,7 +40,7 @@ export default function StorageFullNotice() {
   const dismiss = useStorageHealth((s) => s.dismissStorageNotice)
   if (!open) return null
   return (
-    <Popup id="storage-full" onDismiss={dismiss}>
+    <Popup id="storage-full" onDismiss={dismiss} appWide>
       <div
         tabIndex={-1}
         role="dialog"

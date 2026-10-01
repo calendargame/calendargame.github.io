@@ -1615,7 +1615,10 @@ export default function GuidePage({
             they leave the screen, and any popup belonging to it goes at the same moment.{' '}
             <Kbd>G</Kbd> still closes the ⚙ menu together with any of its popups, but does nothing
             while a game screen&apos;s own popup (such as a Reset Stats question or a breakdown) is
-            open. <Kbd>Tab</Kbd> stays inside the popup rather than opening the mode selector (see
+            open. The one popup those keys can&apos;t take with them is the &quot;Your progress
+            isn&apos;t being saved&quot; notice, which belongs to no screen: while it is up the mode
+            letters, <Kbd>H</Kbd> and <Kbd>G</Kbd> do nothing either, until you close it.{' '}
+            <Kbd>Tab</Kbd> stays inside the popup rather than opening the mode selector (see
             Accessibility).
           </li>
           <li>

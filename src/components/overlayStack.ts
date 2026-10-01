@@ -61,6 +61,9 @@ type Entry = {
   escape: boolean
   // A popup: it sits behind a scrim that owns every press, and it is what the dim follows.
   modal: boolean
+  // A popup that belongs to the APP rather than to a screen or to the ⚙ panel (the storage-full
+  // notice): nothing that changes the screen takes it away. See isAppWidePopupOpen.
+  appWide: boolean
   // A scrim-less layer's own press handler, called for a press anywhere while it is the top layer.
   press: Press | null
 }
@@ -94,6 +97,17 @@ const topPopupId = (): string | null => topWhere((entry) => entry.modal)?.id ?? 
 // reach (src/main.tsx's shortcuts); the hook is for rendering.
 export const isPopupOpen = () => topPopupId() !== null
 export const usePopupOpen = () => useSyncExternalStore(subscribe, isPopupOpen)
+// Is THIS the top popup, as the stack stands this instant? For a popup's own event handlers, which
+// can run between the stack changing and React re-rendering the popups to match (components/Popup's
+// focus rule); rendering reads the same answer through usePopupLayer.
+export const isTopPopup = (id: string) => topPopupId() === id
+// ★ IS AN APP-WIDE POPUP OPEN? Every other popup belongs to something the keyboard can replace: a ⚙
+// popup is a child of the panel, and a mode screen's popup shows only while its screen does — which
+// is why a mode letter, H and G are allowed with one of THOSE up (src/main.tsx's keyboard handler):
+// the press takes the popup away with what it replaces. An app-wide popup stays whatever the screen
+// does, so the same press would change the page BEHIND a popup that is still up — and a page behind
+// a popup is inert. While one is open those keys do nothing; the popup is closed first.
+export const isAppWidePopupOpen = () => stack.some((entry) => entry.appWide)
 
 // iOS home-screen detection. `navigator.standalone` is a WebKit-only property (undefined on every
 // other engine) that is true exactly in the installed-app case being starved. Deliberately NOT
@@ -265,6 +279,7 @@ function useRegistration(
   escape: boolean,
   modal: boolean,
   press: Press | null,
+  appWide = false,
 ) {
   // Held in refs, updated POST-COMMIT (writing a ref during render trips the React-Compiler-strict
   // react-hooks/refs rule). The registered closures read them lazily, when the gesture arrives.
@@ -282,10 +297,11 @@ function useRegistration(
       close: () => closeRef.current(),
       escape,
       modal,
+      appWide,
       press: pressed ? (e) => pressRef.current?.(e) : null,
     })
     return () => popOverlay(id)
-  }, [isOpen, id, escape, modal, pressed])
+  }, [isOpen, id, escape, modal, pressed, appWide])
 }
 
 // A PAGE STATE (Show Codes, How-to-Play): Back closes it, and nothing else here does.
@@ -303,7 +319,8 @@ export function useLayer(isOpen: boolean, close: () => void, id: string, onPress
 
 // A POPUP, open for as long as its component is mounted (components/Popup, the only caller).
 // Returns whether it is the TOP popup — the one that paints the dim and holds the keyboard.
-export function usePopupLayer(close: () => void, id: string) {
-  useRegistration(true, close, id, true, true, null)
-  return useSyncExternalStore(subscribe, () => topPopupId() === id)
+// `appWide`: it belongs to no screen and no panel (isAppWidePopupOpen argues what that changes).
+export function usePopupLayer(close: () => void, id: string, appWide: boolean) {
+  useRegistration(true, close, id, true, true, null, appWide)
+  return useSyncExternalStore(subscribe, () => isTopPopup(id))
 }

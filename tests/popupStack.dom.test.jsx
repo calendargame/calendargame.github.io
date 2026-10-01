@@ -130,14 +130,82 @@ describe('two popups at once — the storage-full notice over Manage Presets', (
     expect(isSettingsOpen()).toBe(true)
   })
 
-  it('a mode letter still works with a popup up — and the notice, which belongs to no screen, stays', () => {
+  // ★ THE NOTICE BELONGS TO NO SCREEN, so no change of screen takes it away — and a key that would
+  // change the screen behind it is a key pressed on the page behind a popup. A mode letter, H and G
+  // work under a ⚙ popup or a mode screen's popup because the press takes that popup WITH it; under
+  // the notice the same press used to change the page behind the dim (H opened How to Play there and
+  // gave it the keyboard, and Back then closed the guide from under the notice).
+  it('a mode letter, H and G do nothing while the notice is up; it is closed first', () => {
     openNoticeOverPresets()
-    pressKey('F')
-    expect(currentMode()).toBe('Flash')
-    expect(isSettingsOpen()).toBe(false) // the panel went, and Manage Presets with it
-    expect(queryModalCard('presets')).toBeNull()
+    for (const key of ['F', 'H', 'G']) pressKey(key)
+    expect(currentMode()).toBe('Classic')
+    expect(isSettingsOpen()).toBe(true)
+    expect(queryModalCard('presets')).not.toBeNull()
     expect(notice()).not.toBeNull()
-    expect(dimmed()).toHaveLength(1)
+    expect(document.activeElement).toBe(notice())
+    escape() // the notice closes like any popup…
+    expect(notice()).toBeNull()
+    pressKey('F') // …and the key works again, taking the panel and its popup with it
+    expect(currentMode()).toBe('Flash')
+    expect(isSettingsOpen()).toBe(false)
+    expect(queryModalCard('presets')).toBeNull()
+  })
+
+  it('the same over a game screen: H does not open How to Play behind the notice', async () => {
+    mountApp()
+    act(() => useStorageHealth.setState({ unsaved: true, noticeOpen: true }))
+    expect(notice()).not.toBeNull()
+    pressKey('H')
+    pressKey('L')
+    expect(currentMode()).toBe('Classic')
+    await pressBack() // Back closes the notice — there is nothing under it to close instead
+    expect(notice()).toBeNull()
+    expect(currentMode()).toBe('Classic')
+  })
+})
+
+// ── The top popup keeps the keyboard ─────────────────────────────────────────────────────────────
+// Focus that lands outside the popup in front — Tab pressed with nothing focused, which a browser
+// walks into the page behind the dim; anything behind it focusing itself — comes straight back.
+describe('the popup in front keeps the keyboard', () => {
+  it('focus sent to a control behind the popup comes back to its dialog', () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    expect(document.activeElement).toBe(modalCard('changelog'))
+    act(() => changelogLink().focus()) // a control in the ⚙ panel, behind the dim
+    expect(document.activeElement).toBe(modalCard('changelog'))
+    act(() => screen.getByRole('button', { name: 'New' }).focus()) // …and one on the page
+    expect(document.activeElement).toBe(modalCard('changelog'))
+  })
+
+  it('a control INSIDE the popup takes focus normally', () => {
+    mountApp()
+    openSettings()
+    openModal('presets')
+    const box = screen.getByRole('textbox', { name: 'Preset name' })
+    act(() => box.focus())
+    expect(document.activeElement).toBe(box)
+  })
+
+  it('with two popups up it is the one in front that keeps it — the one under it does not pull it back', () => {
+    openNoticeOverPresets()
+    expect(document.activeElement).toBe(notice())
+    const box = () => screen.getAllByRole('textbox', { name: 'Preset name' })[0]
+    act(() => box().focus()) // a control in the popup underneath
+    expect(document.activeElement).toBe(notice())
+    escape() // the notice goes, and Manage Presets is in front again
+    act(() => box().focus())
+    expect(document.activeElement).toBe(box())
+  })
+
+  it('closing the popup still hands the keyboard back to what opened it', () => {
+    mountApp()
+    openSettings()
+    act(() => changelogLink().focus())
+    tap(changelogLink())
+    escape()
+    expect(document.activeElement).toBe(changelogLink())
   })
 })
 

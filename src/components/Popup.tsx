@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom'
 import { useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { MODAL_DIM_CLASS, MODAL_SCRIM_CLASS, trapModalTab } from './modalContract.js'
-import { usePopupLayer } from './overlayStack.js'
+import { isTopPopup, usePopupLayer } from './overlayStack.js'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Popup — the shell every popup in the app is drawn in: the full-screen scrim, and every term of
@@ -30,6 +30,9 @@ import { usePopupLayer } from './overlayStack.js'
 //     panel underneath, or the button on the page that opened it — when that is still there to take
 //     it. (A text box never is: opening anything blurs it first, overlayStack's keyboard rule, so
 //     closing a popup can never put the soft keyboard back up.)
+//   • …AND IT KEEPS THE KEYBOARD WHILE IT IS ON TOP. Focus that lands anywhere outside the top
+//     popup — Tab pressed with nothing focused, which the browser walks into the page behind the
+//     dim; a screen behind it focusing itself — is brought straight back to the dialog.
 //   • THE TAB TRAP, on the scrim (modalContract's trapModalTab).
 //   • THE [data-settings-modal] MARKER, which is how the test suite finds a popup's scrim. Nothing
 //     in the app reads it: every "is a popup open?" question is asked of the stack.
@@ -41,22 +44,44 @@ import { usePopupLayer } from './overlayStack.js'
 export default function Popup({
   id,
   onDismiss,
+  appWide = false,
   children,
 }: {
   // Unique per popup INSTANCE across the whole app: it keys the stack entry.
   id: string
   // What Escape, Android Back and a tap on the scrim all call.
   onDismiss: () => void
+  // This popup belongs to the app, not to a screen or to the ⚙ panel: nothing that changes the
+  // screen takes it away (components/overlayStack's isAppWidePopupOpen says what follows from that).
+  appWide?: boolean
   children: ReactNode
 }) {
   const scrimRef = useRef<HTMLDivElement | null>(null)
-  const top = usePopupLayer(onDismiss, id)
+  const top = usePopupLayer(onDismiss, id, appWide)
   // Did the press now in progress start on the CARD? The click that ends a press is reported on the
   // nearest element containing both ends of it — so a press that began on the card and was released
   // over the dim arrives as a click on the scrim, indistinguishable from a tap there by its target
   // alone. The press's own start is what tells them apart, so it is noted as the press goes down
   // and read (and cleared) by the click.
   const pressBeganOnCardRef = useRef(false)
+  // ★ KEEP THE KEYBOARD WHILE ON TOP: focus arriving anywhere outside this popup comes back to its
+  // dialog. The stack is asked at the moment of the event, not the `top` this render saw: when a
+  // second popup opens over this one, it takes focus before React has re-rendered this one as "no
+  // longer on top", and a rule read off the render would pull the keyboard back down from it.
+  // ⚠ DECLARED BEFORE the hand-back effect below, and the order is load-bearing: cleanups run in
+  // declaration order, so on close this listener is gone before focus is handed back to the opener
+  // — which is outside the popup, and would otherwise be pulled straight back into a card that is
+  // about to be removed.
+  useLayoutEffect(() => {
+    const keep = (e: FocusEvent) => {
+      const scrim = scrimRef.current
+      if (!scrim || !isTopPopup(id) || !(e.target instanceof Node) || scrim.contains(e.target))
+        return
+      scrim.querySelector<HTMLElement>('[role="dialog"]')?.focus()
+    }
+    document.addEventListener('focusin', keep)
+    return () => document.removeEventListener('focusin', keep)
+  }, [id])
   // Hand focus back on close. Declared after the stack entry on purpose: registering takes the
   // keyboard down first, so what is remembered here is never a text box.
   useLayoutEffect(() => {

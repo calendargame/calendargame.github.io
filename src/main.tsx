@@ -25,7 +25,7 @@ import GuidePage from './components/GuidePage.jsx'
 import LookupCard from './components/LookupCard.jsx'
 import W5Logo from './components/W5Logo.jsx'
 import PresetSwitcher from './components/PresetSwitcher.jsx'
-import { isPopupOpen, useBackButton, useLayer, usePopupOpen } from './components/overlayStack.js'
+import { isAppWidePopupOpen, isPopupOpen, useBackButton, useLayer, usePopupOpen } from './components/overlayStack.js'
 import { useYearRangeMirrors } from './components/useYearRangeMirrors.js'
 import { SettingsPanel } from './components/SettingsPanel.jsx'
 import StorageFullNotice from './components/StorageFullNotice.jsx'
@@ -1456,6 +1456,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // reason (modes/AoxMode, tests/runBreakdown "leaving the mode takes the popup with it").
         // Gating them would take a documented escape hatch away and leave a card that can only be
         // dismissed by the controls under the finger.
+        // ⚠ …EXCEPT UNDER A POPUP THE PRESS WOULD NOT TAKE WITH IT. The storage-full notice belongs
+        // to the app, not to a screen or to the panel (components/overlayStack's isAppWidePopupOpen),
+        // so it stays up whatever the page does: H under it opened How to Play BEHIND the dim, gave
+        // the guide the keyboard, and put the guide above the notice in the Back order. A press that
+        // leaves the popup standing is a press on the page behind it, and that page is inert — so
+        // while one is open, Category 3 does nothing either. It closes like any popup (Escape, a tap
+        // outside, Back), and the keys work again.
         // The scrim's trap already stopPropagation()s presses inside the modal's own tree; this
         // covers presses that start outside it. The question is isPopupOpen — the app's stack of
         // open things (components/overlayStack) — asked only for a press that has already turned
@@ -1501,6 +1508,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         else if(k==='ArrowRight')dataKey='ArrowRight';
         else if(k.length===1){const upper=k.toUpperCase();if(upper>='A'&&upper<='Z')dataKey=upper;}
         if(!dataKey)return;
+        if(isAppWidePopupOpen())return; // the page behind it is inert to EVERY category (see above)
         // Category 3a: mode switching — direct switchMode (no DOM button per mode)
         const MODE_KEYS: Record<string, string>={K:'classic',F:'flash',B:'blitz',A:'aox',D:'deduction',L:'lookup'};
         if(MODE_KEYS[dataKey]){e.preventDefault();switchMode(MODE_KEYS[dataKey]);setSettingsOpen(false);return;}
