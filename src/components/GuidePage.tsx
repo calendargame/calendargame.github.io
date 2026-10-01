@@ -1346,13 +1346,21 @@ export default function GuidePage({
           recorded. Classic and Deduction start out this way, with their timing stats already hidden
           and paused until you tap one; Flash starts with them shown. When you turn timing back on,
           the current date is regenerated if still unanswered; if you've already answered wrong,
-          revealed, or shown codes, the date stays until you advance. If a date came to count as
-          correct while timing was hidden — a correct answer, or a credit from Override — it has no
-          time, so your score and your times no longer match; turning timing back on then opens an
-          "Enable and Reset Stats?" popup — which says, like Reset Stats does, that the other modes
-          keep theirs and no other preset is touched — confirm to turn it on and reset this mode's
-          stats, or dismiss the popup (tap outside it, <Kbd>Esc</Kbd>, or Back) to leave timing
-          hidden.
+          revealed, or shown codes, the date stays until you advance. A flash that was running in
+          Flash ends when its date is regenerated, and keeps going when the date stays. If a date
+          came to count as correct while timing was hidden — a correct answer, or a credit from
+          Override — it has no time, so your score and your times no longer match; turning timing
+          back on then opens an "Enable and Reset Stats?" popup — which says, like Reset Stats does,
+          that the other modes keep theirs and no other preset is touched — confirm to turn it on
+          and reset this mode's stats, or dismiss the popup (tap outside it, <Kbd>Esc</Kbd>, or
+          Back) to leave timing hidden.
+        </p>
+        <p>
+          Deduction has one timing switch for its three sub-types, so turning it back on settles all
+          three at once, whichever one is on screen: each sub-type gets a new puzzle (unless its
+          puzzle was already answered wrong, revealed, or shown codes), and the popup opens if the
+          score and times no longer match in any of them. It names the sub-types that will be reset
+          — only those are; the others keep their stats.
         </p>
         <p>
           When Save Stats is off, the whole stats strip dims site-wide (every mode, including MoX)
@@ -1362,9 +1370,10 @@ export default function GuidePage({
           on while a mode&apos;s timing is showing regenerates that mode&apos;s unanswered date for
           a clean start, when you close the ⚙ menu: a time can be recorded for it again, and you may
           already have looked at it. As with turning timing back on, a date you&apos;ve already
-          answered wrong, revealed, or shown codes on stays until you advance, and a flash that was
-          running in Flash ends. In Deduction all three sub-modes get a new puzzle. With timing
-          hidden nothing changes, and neither does turning Save Stats off.
+          answered wrong, revealed, or shown codes on stays until you advance; a flash that was
+          running in Flash ends with a regenerated date and keeps going on one that stays; and in
+          Deduction all three sub-types get a new puzzle. With timing hidden nothing changes, and
+          neither does turning Save Stats off.
         </p>
         <p>
           When timing stats are off, leaving and returning to one of these modes preserves the

@@ -368,6 +368,7 @@ function FlashMode({
   // (leaving the mode stops a live flash). Classic/Deduction pass neither (no timer).
   const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
     eng,
+    timed: [eng],
     saveStats,
     visible,
     timingOff,

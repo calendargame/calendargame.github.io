@@ -111,6 +111,7 @@ function ClassicMode({
   // 6-box stats strip), shared with Flash/Deduction via useStatsHideToggles.
   const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
     eng,
+    timed: [eng],
     saveStats,
     visible,
     timingOff,

@@ -14,6 +14,7 @@ import {
   restoredEngine,
   useParkedHistory,
   useSaveStatsOnRegen,
+  timingMismatch,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import {
@@ -40,6 +41,28 @@ import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
 import { parkedFlag } from '../engine/parkedHistory.js'
+
+// What "Enable and Reset Stats?" says it will reset: the sub-types whose stats moved while the
+// timer readouts were hidden — which is exactly the set the confirm resets (modeHooks'
+// useStatsHideToggles). Named, because the one timing switch covers all three sub-types and the
+// one on screen need not be among them.
+const enableResetBody = (names: string[]): string => {
+  const [where, what, kept] =
+    names.length === 3
+      ? ['all three sub-types', "all three sub-types' stats", 'The other modes keep theirs']
+      : names.length === 2
+        ? [
+            `the ${names[0]} and ${names[1]} sub-types`,
+            "those sub-types' stats",
+            'The other modes and the third sub-type keep theirs',
+          ]
+        : [
+            `the ${names[0]} sub-type`,
+            "that sub-type's stats",
+            'The other modes and sub-types keep theirs',
+          ]
+  return `The timer readouts were hidden while stats changed in ${where}, so turning them back on has to reset ${what} for the preset you are on. ${kept}, and no other preset is touched.`
+}
 
 // ============================================================
 // DeductionMode — the Deduction game mode on the shared engine (mode-untangle Step 4).
@@ -220,9 +243,18 @@ function DeductionMode({
   // One flash for the active grid (only one sub-mode visible at a time). setFlash is cleared
   // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
   const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
-  // Hideable stats chrome shared with Classic/Flash — operates on the ACTIVE sub-mode's engine.
+  // Hideable stats chrome shared with Classic/Flash. The strip shows the ACTIVE sub-mode's stats;
+  // the timing switch is ONE switch over all three silos, so turning it back on settles all three
+  // (modeHooks argues it): each waiting puzzle is regenerated, and a silo whose stats moved while
+  // timing was hidden is reset — after the popup below has named it.
+  const silos = [
+    { name: 'Day', eng: dayEng },
+    { name: 'Month', eng: monthEng },
+    { name: 'Year', eng: yearEng },
+  ]
   const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
     eng,
+    timed: silos.map((s) => s.eng),
     saveStats,
     visible,
     timingOff,
@@ -440,7 +472,9 @@ function DeductionMode({
         onCancel={closeEnableReset}
         onConfirm={confirmEnableReset}
         title="Enable and Reset Stats?"
-        body="The timer readouts were hidden while this sub-type's stats changed, so turning them back on has to reset this sub-type's stats for the preset you are on. The other modes and sub-types keep theirs, and no other preset is touched."
+        body={enableResetBody(
+          silos.filter((s) => timingMismatch(s.eng.state.stats)).map((s) => s.name),
+        )}
         confirmLabel="Enable and Reset Stats"
         id="enable-reset-stats-deduction"
       />

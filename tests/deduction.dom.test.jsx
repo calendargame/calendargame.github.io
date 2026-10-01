@@ -919,3 +919,114 @@ describe('Deduction — round 9: every labelled answer grid shares one gutter', 
     expect(gapTokens(dots)).toEqual([]) // spacing is --dot-frac in index.css, not a gap
   })
 })
+
+// ── Turning timing back on settles ALL THREE sub-types ───────────────────────────────────────────
+// Deduction has one timing switch over three silos (Day / Month / Year), each with its own stats and
+// its own waiting puzzle. From the moment timing is shown, a first-try answer records a solve time in
+// every one of them — so every one is settled when the switch comes back on, not just the one on
+// screen: a waiting puzzle is regenerated (unless it has been used), and a silo whose stats moved
+// while timing was hidden is reset, after "Enable and Reset Stats?" has named it. It used to act on
+// the sub-type on screen alone: the other two kept a puzzle the player had already studied (a fake
+// fast time), and a hidden sub-type's mismatch never raised the popup at all.
+// A regeneration is observed the way tests/settingsPanel.lifecycle observes one: the Date Format is
+// re-aimed with the ⚙ panel CLOSED (which regenerates nothing — a puzzle keeps the format it was
+// drawn in), so a puzzle drawn after that reads in the new shape.
+describe('Deduction — turning timing back on settles all three sub-types', () => {
+  beforeEach(() => pin())
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const puzzleText = () => {
+    const shown = Array.from(document.querySelectorAll('div')).filter(
+      (e) => e.children.length === 0 && !isHidden(e) && e.textContent.includes('__'),
+    )
+    expect(shown).toHaveLength(1)
+    return shown[0].textContent.trim()
+  }
+  const drawnAfterReaim = () => puzzleText().includes('.')
+  const reaimFormat = () => act(() => useSettings.getState().setDateFormat('numeric-dmy'))
+  const tapStat = (label) => {
+    const span = Array.from(document.querySelectorAll('span')).find(
+      (s) => s.textContent.trim() === label && !isHidden(s),
+    )
+    clickEl(span.parentElement)
+  }
+  const dialog = () => screen.queryByRole('dialog', { name: 'Enable and Reset Stats?' })
+  const confirm = () =>
+    clickEl(within(dialog()).getByRole('button', { name: 'Enable and Reset Stats' }))
+  // Each sub-type, looked at in turn: was its puzzle drawn after the format was re-aimed, and what
+  // does its Score read?
+  const survey = () =>
+    ['Day', 'Month', 'Year'].map((name) => {
+      clickCtrl(name)
+      return `${name}: ${drawnAfterReaim() ? 'new' : 'kept'} ${statValue('Score')}`
+    })
+
+  it('with nothing mismatched, every sub-type gets a fresh puzzle — not only the one on screen', () => {
+    mountApp()
+    switchToDeduction() // timing is hidden by default
+    clickCtrl('Month') // study the Month puzzle…
+    clickCtrl('Day') // …and come back to Day
+    reaimFormat()
+    tapStat('Last') // timing back on, with Day on screen
+    expect(dialog()).toBeNull()
+    expect(statValue('Last')).toBe('—') // shown, with no time yet
+    expect(survey()).toEqual(['Day: new 0/0', 'Month: new 0/0', 'Year: new 0/0'])
+  })
+
+  it('a puzzle that has been USED is kept, in whichever sub-type it waits', () => {
+    mountApp()
+    switchToDeduction()
+    clickCtrl('Month')
+    answerWrong() // 0/1 — no credit, so no mismatch; and a used puzzle records no time
+    clickCtrl('Day')
+    reaimFormat()
+    tapStat('Last')
+    expect(dialog()).toBeNull()
+    expect(survey()).toEqual(['Day: new 0/0', 'Month: kept 0/1', 'Year: new 0/0'])
+  })
+
+  it('a mismatch in a sub-type that is NOT on screen still asks, names it, and resets only it', () => {
+    mountApp()
+    switchToDeduction()
+    clickCtrl('Month')
+    answerCorrect() // Month 1/1 with timing hidden: a credit with no time
+    clickCtrl('Year')
+    answerWrong() // Year 0/1: played, but nothing mismatched
+    clickCtrl('Day')
+    reaimFormat()
+    tapStat('Last')
+    expect(dialog()).not.toBeNull()
+    expect(dialog().textContent).toContain('stats changed in the Month sub-type,')
+    expect(dialog().textContent).toContain("has to reset that sub-type's stats")
+    expect(statValue('Last')).toBe('') // still hidden until the player agrees
+    confirm()
+    expect(dialog()).toBeNull()
+    expect(statValue('Last')).toBe('—')
+    // Month is reset; Year keeps its stats (and its used puzzle); Day gets a fresh puzzle.
+    expect(survey()).toEqual(['Day: new 0/0', 'Month: new 0/0', 'Year: kept 0/1'])
+  })
+
+  it('the popup names every mismatched sub-type, and dismissing it changes nothing', () => {
+    mountApp()
+    switchToDeduction()
+    answerCorrect() // Day 1/1
+    clickCtrl('Month')
+    answerCorrect() // Month 1/1
+    reaimFormat()
+    tapStat('Last')
+    expect(dialog().textContent).toContain('stats changed in the Day and Month sub-types,')
+    expect(dialog().textContent).toContain('The other modes and the third sub-type keep theirs')
+    act(() => fireEvent.keyDown(document, { key: 'Escape' }))
+    expect(dialog()).toBeNull()
+    expect(statValue('Last')).toBe('') // timing still hidden
+    expect(survey()).toEqual(['Day: kept 1/1', 'Month: kept 1/1', 'Year: kept 0/0'])
+    // All three mismatched reads as "all three".
+    answerCorrect() // Year 1/1 (survey left Year on screen)
+    tapStat('Last')
+    expect(dialog().textContent).toContain('stats changed in all three sub-types,')
+    confirm()
+    expect(survey()).toEqual(['Day: new 0/0', 'Month: new 0/0', 'Year: new 0/0'])
+  })
+})

@@ -4,7 +4,7 @@
 import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { gameReducer } from '../engine/gameReducer.js'
-import type { GameState, Question } from '../engine/gameReducer.js'
+import type { GameState, Question, Stats } from '../engine/gameReducer.js'
 import type { GameEngine, FlashState } from './modeTypes.js'
 import { calcLast, calcAvg, calcMed } from '../engine/stats.js'
 import { fittedParkedText, restoreParkedText } from '../engine/parkedHistory.js'
@@ -73,20 +73,44 @@ function engineUntouched(s: GameState) {
     s.calcPenaltyActive === false
   )
 }
+// ★ DID THIS SILO'S STATS MOVE WHILE ITS TIMING WAS HIDDEN? — the "Enable and Reset Stats?" test.
+// EXACT, because every credited, timed solve keeps its time: the only way a credit comes to have no
+// time is an answer given while timing was hidden, which is precisely what the popup is for. The one
+// correction is a save an OLD build trimmed to its newest 1,000 times — those credits had times
+// once, and store/progress' v5 migration recorded how many as `timesLost`, so they never read as a
+// mismatch. (Before the cap went, this check fired after every reload for anyone past 1,000 timed
+// answers, offering to wipe their stats for nothing.)
+export const timingMismatch = (S: Stats): boolean => S.good - (S.timesLost ?? 0) !== S.times.length
+
 // Shared "hideable stats" chrome for the three non-timed modes (Classic, Flash, Deduction): the
-// show/hide toggles, the "Enable and Reset Stats?" desync case, and the 6-box stats array for
-// <StatPanel>. Re-enabling timing follows App's original rule: OFF→just hide; ON with no
-// desync→regen the live date; ON with a desync (stats moved while hidden)→confirm→full reset. That
-// last branch was a two-tap arm rendered INSIDE <StatPanel>; round 21 made it the shared
-// ConfirmModal, opened from the mode component — this hook now just owns the open flag and the
-// confirm/cancel handlers. Both toggles (`timingOff` + `scoringOff`) are owned by the component and
-// persisted in the mode-prefs store, so they're passed in with their setters (timingOff also feeds
-// useGameEngine). Flash is the only mode that keeps something of its own about the waiting question
-// (a running flash, a date left showing), so it passes onQuestionReplaced() — called when turning
-// timing back on actually REPLACED that question, and never when the engine kept it — and onHide()
-// (on mode-leave); Classic/Deduction omit them.
+// show/hide toggles, the "Enable and Reset Stats?" mismatch case, and the 6-box stats array for
+// <StatPanel>. Both toggles (`timingOff` + `scoringOff`) are owned by the component and persisted in
+// the mode-prefs store, so they're passed in with their setters (timingOff also feeds useGameEngine).
+//
+// ★ TURNING TIMING BACK ON IS ONE ACT ON EVERY ENGINE THE SWITCH COVERS (`timed`). A mode has ONE
+// timing switch; Classic and Flash have one engine behind it, Deduction has three (its Day, Month
+// and Year silos, each with its own stats and its own waiting puzzle). From the moment timing is
+// shown a first-try answer records a solve time — in EVERY one of those silos, not just the one on
+// screen — so each of them is settled by the same two rules:
+//   • a silo whose stats moved while timing was hidden (timingMismatch) cannot be reconciled and
+//     has to be RESET — which the player is asked about first ("Enable and Reset Stats?", a shared
+//     ConfirmModal the mode component renders; this hook owns its open flag and its two handlers);
+//   • every other silo follows the LIVE-QUESTION RULE (restoredEngine, below): its waiting question
+//     is regenerated unless it has been used.
+// So the check and the reset agree by construction: the popup opens when ANY covered silo is
+// mismatched, and accepting it resets exactly the mismatched ones and regenerates the rest.
+// (It used to look at, and act on, the engine on screen alone. In Deduction that left the other two
+// sub-types holding a puzzle the player had already studied — its solve time would then start from
+// whenever they next looked at it — and let timing come on over a hidden sub-type whose readouts
+// and recorded times disagreed, the very state the popup exists to prevent.)
+//
+// Flash is the only mode that keeps something of its own about the waiting question (a running
+// flash, a date left showing), so it passes onQuestionReplaced() — called when turning timing back
+// on actually REPLACED that question, and never when the engine kept it — and onHide() (on
+// mode-leave); Classic/Deduction omit them.
 export function useStatsHideToggles({
   eng,
+  timed,
   saveStats,
   visible,
   timingOff,
@@ -96,7 +120,10 @@ export function useStatsHideToggles({
   onQuestionReplaced,
   onHide,
 }: {
+  // The engine on screen — the strip shows its stats.
   eng: GameEngine
+  // EVERY engine this mode's timing switch covers, the one on screen included.
+  timed: GameEngine[]
   saveStats: boolean
   visible: boolean
   timingOff: boolean
@@ -107,7 +134,7 @@ export function useStatsHideToggles({
   onHide?: () => void
 }) {
   // timingOff + scoringOff are owned by the mode component (persisted in the mode-prefs store) and
-  // passed in, so the hook holds no toggle state of its own — it just decides when the desync
+  // passed in, so the hook holds no toggle state of its own — it just decides when the mismatch
   // confirm opens and builds the stats strip from them.
   const S = eng.state.stats
   // "Enable and Reset Stats?" — the ConfirmModal open flag. `closeEnableReset` is the cancel path;
@@ -124,37 +151,34 @@ export function useStatsHideToggles({
     if (!saveStats) return
     setScoringOff(!scoringOff)
   } // scoringOff is the current (prop) value
+  // Timing comes back on: each covered engine is reset (mismatched) or has its waiting question
+  // regenerated (the engine keeps one that has been used). The screen's own teardown runs only when
+  // a question really went — a reset always replaces it; a regeneration says whether it did.
+  const showTiming = () => {
+    for (const e of timed) {
+      let replaced = true
+      if (timingMismatch(e.state.stats)) e.fullReset()
+      else replaced = e.regenDate()
+      if (replaced) onQuestionReplaced?.()
+    }
+    setTimingOff(false)
+  }
   const toggleTimingOff = () => {
     if (!saveStats) return
     if (!timingOff) {
       setTimingOff(true)
       return
     }
-    // ★ EXACT, because every credited, timed solve keeps its time: the only way a
-    // credit comes to have no time is an answer given while timing was hidden, which is precisely
-    // what this popup is for. The one correction is a save an OLD build trimmed to its newest 1,000
-    // times — those credits had times once, and store/progress' v5 migration recorded how many as
-    // `timesLost`, so they never read as a desync. (Before the cap went, this check fired after
-    // every reload for anyone past 1,000 timed answers, offering to wipe their stats for nothing.)
-    const desync = S.good - (S.timesLost ?? 0) !== S.times.length
-    if (!desync) {
-      // The engine keeps a question that has been used (answered wrong, revealed, shown its codes) —
-      // so the screen's own teardown runs only when the question really went.
-      if (eng.regenDate()) onQuestionReplaced?.()
-      setTimingOff(false)
-      return
-    }
-    // The readouts and the recorded times disagree — turning timing back on cannot reconcile, so
-    // it has to reset this mode's stats. Ask first (the popup renders from the mode component).
-    setEnableResetOpen(true)
+    // A covered silo's readouts and recorded times disagree — turning timing back on cannot
+    // reconcile them, so it has to reset that silo's stats. Ask first (the popup renders from the
+    // mode component).
+    if (timed.some((e) => timingMismatch(e.state.stats))) setEnableResetOpen(true)
+    else showTiming()
   }
-  // Accept: the full reset the reconcile needs — which always replaces the waiting question, so the
-  // mode's teardown always runs — then flip timing on.
+  // Accept: the same act, now that the player has agreed to the reset it includes.
   const confirmEnableReset = () => {
     setEnableResetOpen(false)
-    eng.fullReset()
-    onQuestionReplaced?.()
-    setTimingOff(false)
+    showTiming()
   }
   // The mode's teardown (onHide — Flash's live-flash stopper) IS a real side effect, so it stays
   // in an effect. [visible]-only: onHide is re-created each render and listing it would re-fire the
