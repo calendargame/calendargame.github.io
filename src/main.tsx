@@ -49,6 +49,7 @@ import { parkCasualHistories } from './modes/modeHooks.js'
 import { onPageHidden } from './lib/pageHidden.js'
 import { useStorageHealth, showStorageNotice } from './store/storageHealth.js'
 import { readGuidePlace, discardGuidePlace } from './store/sessionGuide.js'
+import { readLookupScreen, writeLookupScreen, discardLookupScreen } from './store/sessionLookup.js'
 import { useModePrefs } from './store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, storedAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
 import { useProgress } from './store/progress.js'
@@ -641,11 +642,20 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const setSessionLookupEntries=useLookupSession(s=>s.setSessionEntries);
       const resetProgress=useProgress(s=>s.resetProgress);   // Full Reset wipes saved progress too (Stage D1)
       const resetModePrefs=useModePrefs(s=>s.resetModePrefs);   // Full Reset restores the per-mode setup too
-      const [lookupInput,setLookupInput]=useState("");
-      const [lookupOutput,setLookupOutput]=useState("");
-      const [lookupCalcDate,setLookupCalcDate]=useState<CodeDate | null>(null);
-      const [lookupSelectedHistoryId,setLookupSelectedHistoryId]=useState<string | null>(null);
-      const [lookupCalcOpen,setLookupCalcOpen]=useState(false);
+      // ★ LOOKUP'S SCREEN — the text in the box, the message shown, the date Show Codes explains, the
+      // selected history row and whether Show Codes is open — SURVIVES A RELOAD (store/sessionLookup):
+      // each of the five seeds from what the last page of this browsing session left, and the effect
+      // below mirrors every change back. A real close starts them empty (sessionStorage is gone), and
+      // so does everything that resets them here — Clear, a preset switch, Full Reset.
+      const [keptLookup]=useState(readLookupScreen);
+      const [lookupInput,setLookupInput]=useState(keptLookup.input);
+      const [lookupOutput,setLookupOutput]=useState(keptLookup.output);
+      const [lookupCalcDate,setLookupCalcDate]=useState<CodeDate | null>(keptLookup.calcDate);
+      const [lookupSelectedHistoryId,setLookupSelectedHistoryId]=useState<string | null>(keptLookup.selectedId);
+      const [lookupCalcOpen,setLookupCalcOpen]=useState(keptLookup.calcOpen);
+      useEffect(()=>{
+        writeLookupScreen({input:lookupInput,output:lookupOutput,calcDate:lookupCalcDate,selectedId:lookupSelectedHistoryId,calcOpen:lookupCalcOpen});
+      },[lookupInput,lookupOutput,lookupCalcDate,lookupSelectedHistoryId,lookupCalcOpen]);
       // #6 — removed prevLookupCalcKeyRef and its effect; lookup Show Codes now only closes
       // when runLookup() fires a new result or the user manually closes it.
       // Bar height tracking. The htp-sticky-bar is position:fixed (chrome-style fixed
@@ -1599,8 +1609,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // re-reads the stores as they are NOW. The two App-owned transients that belong to those
       // screens rather than to App go with them: Lookup's five (its history lives in
       // store/lookupHistory, so lookupSelectedHistoryId names an entry in whatever the store held a
-      // moment ago) and the guide's saved reading offset (captured against a panel that is about to
-      // be closed).
+      // moment ago — and the copy of the five kept for a reload, store/sessionLookup, follows them
+      // through the mirror effect beside their declarations) and the guide's saved reading offset
+      // (captured against a panel that is about to be closed).
       // ⚠ TWO CALLERS, AND THAT IS THE WHOLE POINT OF EXTRACTING IT. Full Reset has always done
       // this; a PRESET SWITCH is structurally a second Full Reset and must do exactly the same
       // discard, or the outgoing preset's run keeps playing on the incoming preset's data — the
@@ -2466,7 +2477,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               very bug the list's old fixed 440-pixel cap existed to prevent). height:0 adds nothing,
               the parent stays at its min-height (one screenful), and flex-auto grows this back to
               fill it. Rests on the same definite-height #root the clamped scroller already needs. */}
-          {mode==="lookup"&&(<ModeErrorBoundary mode="Lookup" active={true}><div className="mt-5 flex flex-col flex-auto h-0 min-h-0"><LookupCard history={displayLookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div></ModeErrorBoundary>)}
+          {mode==="lookup"&&(<ModeErrorBoundary mode="Lookup" active={true} onCrash={discardLookupScreen}><div className="mt-5 flex flex-col flex-auto h-0 min-h-0"><LookupCard history={displayLookupHistory} onAddHistory={pushLookupHistory} onMoveHistory={moveHistoryEntryToTop} onClearHistory={clearLookupHistory} inputValue={lookupInput} onInputChange={setLookupInput} outputValue={lookupOutput} onOutputChange={setLookupOutput} calcDate={lookupCalcDate} onCalcDateChange={setLookupCalcDate} selectedHistoryId={lookupSelectedHistoryId} onSelectedHistoryIdChange={setLookupSelectedHistoryId} calcOpen={lookupCalcOpen} onCalcOpenChange={setLookupCalcOpen} fmtDate={fmtDate} dateFormat={dateFormat} useJulian={useJulian}/></div></ModeErrorBoundary>)}
           {/* How to Play is always-mounted like the five game modes (Q6, round 9), and for the same
               reason they are: leaving a screen must not destroy what you had set up on it. It used
               to be conditionally rendered, which is why a detour into a game mode closed whichever

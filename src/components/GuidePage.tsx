@@ -2500,9 +2500,10 @@ export default function GuidePage({
         <p>
           A reload — pulling down to refresh, or the app updating itself — is not a close: each
           preset&apos;s page, any ended round or run, your Back / Forward history in Classic, Flash
-          and Deduction, and your place in this guide are all still there afterward. A round or run
-          still in progress is not; a reload stops it, just as a preset switch does — and a Flash
-          date that was still showing goes back to Begin, as it does when you leave the mode.
+          and Deduction, what you had on the Lookup page, and your place in this guide are all still
+          there afterward. A round or run still in progress is not; a reload stops it, just as a
+          preset switch does — and a Flash date that was still showing goes back to Begin, as it
+          does when you leave the mode.
         </p>
         <UL>
           <li>
@@ -2527,6 +2528,12 @@ export default function GuidePage({
             yours are set aside during a guest&apos;s Amnesic interlude and returned after it. A
             Reset or a Full Reset starts the history over, and deleting a preset takes its history
             with it. The stats those dates earned are saved separately and are not affected.
+          </li>
+          <li>
+            <b>What is on the Lookup page</b> — the date in the box, the answer or message under it,
+            the history row you had selected, and whether Show Codes is open. A reload keeps them; a
+            preset switch or a Full Reset clears them, as Clear does. (The history list itself is
+            saved — see above.)
           </li>
           <li>
             <b>Your place in this guide</b> — the open section and how far down you had read. A
@@ -3196,6 +3203,11 @@ export default function GuidePage({
             for a date with two readings, and just the weekday on its own for every other date. Tap
             a row to see it spelled out in full above; the row you tapped is tinted and marked with
             a coloured edge down its left side, so you can always tell which one you are reading.
+          </li>
+          <li>
+            A reload keeps the page as you had it — the date in the box, its answer, the selected
+            row and Show Codes open or closed. Closing the app starts it empty again; the history
+            list stays either way.
           </li>
           <li>
             Nothing in Lookup is frozen at the moment you look it up: the answer and every history
