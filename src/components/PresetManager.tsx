@@ -229,15 +229,24 @@ function ReorderHandleIcon() {
   )
 }
 
-// ── THE ROW, LEFT TO RIGHT (Q7, round 23): ✕ · name · ✓ · A · grip ─────────────────────────────
+// ── THE ROW, LEFT TO RIGHT ON SCREEN: ✕ · name · ✓ · A · grip ───────────────────────────────────
 //
 // ★ THE iPHONE REORDER-LIST CONVENTION, AND THE REASON IS A MIS-TAP, NOT LOOKS. The grip and the ✕
 // used to sit side by side at the right edge. The grip is the control a thumb reaches for over and
-// over; the ✕ is the destructive one, and since round 22 (Q1) a preset that holds nothing deletes on
-// the spot with no question to catch a slip. A frequently-grabbed handle beside a destructive button
-// is how a reorder becomes a delete. So they are now at opposite ends — the ✕ at the LEFT edge, the
-// grip at the RIGHT edge where the thumb already is — with the name between them and the two
-// markers after the name.
+// over; the ✕ is the destructive one, and a preset that holds nothing deletes on the spot with no
+// question to catch a slip. A frequently-grabbed handle beside a destructive button is how a
+// reorder becomes a delete. So they are at opposite ends — the ✕ at the LEFT edge, the grip at the
+// RIGHT edge where the thumb already is — with the name between them and the two markers after the
+// name.
+//
+// ★★ THE ORDER IN THE MARKUP IS DIFFERENT, ON PURPOSE: name · ✓ · A · grip · ✕ — the ✕ LAST. The
+// markup order is the order Tab walks and the order a screen reader reads, and the on-screen order
+// would make "Delete <the first preset>" the first thing the keyboard lands on in this popup: one
+// Tab and one Enter from opening it, a preset that holds nothing would be gone, unasked. So the
+// row reads its name first, then the handle that moves it, and the destructive control comes last;
+// each cell is PLACED in its on-screen column by class (ROW_COL below), which is what lets the two
+// orders differ. The same slip is why nothing destructive ever takes the keyboard on open: the
+// popup focuses its card, never a control.
 //
 // THE ✕ KEEPS ITS BUTTON CHROME (the owner's ask): a boxed control says "tap". `shrink-0` because
 // the NAME is the thing that gives way when the card is narrow — a control that shrank to a sliver
@@ -254,11 +263,23 @@ const DELETE_BTN_CLASS =
 // THE GRIP HAS NO BUTTON CHROME AT ALL — no border, no fill — the other half of the owner's call: a
 // bare ≡ says "drag", where a boxed one reads as one more thing to tap. What it keeps is everything
 // a control needs that is not decoration: a hit area wider and taller than its 14px glyph
-// (`self-stretch` takes the row's full height, px-3 gives it ~38px of width), a focus ring for the
-// keyboard route (the grip is Tab-reachable and takes ↑/↓), and a grab cursor for a mouse. The glyph
-// is quieter than the text (--tx-200-80) because it is furniture until it is held.
+// (`self-stretch` takes the row's full height, px-3 gives it ~38px of width), a grab cursor for a
+// mouse, and a FOCUS RING for the keyboard route (index.css's .kbd-ring): the grip is Tab-reachable
+// and its ↑/↓ move a preset, and with no border or fill of its own there is nothing else that could
+// show the keyboard is on it. The ring is drawn for keyboard focus only (:focus-visible), so
+// grabbing the grip with a finger or a mouse — which also focuses it, see beginDrag — draws none.
+// The glyph is quieter than the text (--tx-200-80) because it is furniture until it is held.
 const GRIP_CLASS =
-  'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab focus:outline-hidden focus-ring'
+  'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab kbd-ring'
+// Each cell's on-screen column in the row's five-column grid, all on the first row track — the
+// placement that lets the markup order (above) differ from the order on screen.
+const ROW_COL = {
+  delete: 'col-start-1 row-start-1',
+  name: 'col-start-2 row-start-1',
+  current: 'col-start-3 row-start-1',
+  amnesic: 'col-start-4 row-start-1',
+  grip: 'col-start-5 row-start-1',
+} as const
 
 // THREE PROPS. The first two are the same one fact: which preset the delete confirmation is asking
 // about, or null while the list is showing. Nothing in this card dismisses itself — it has no Close
@@ -796,16 +817,16 @@ export default function PresetManager({
               drag && drag.id !== p.id ? 'transition-transform duration-150 ease-out' : undefined
             }
           >
-            {/* THE ROW IS A GRID, NOT A FLEX ROW (Q7, round 23) — five columns, ✕ · name · ✓ · A ·
-              grip (the order is argued at DELETE_BTN_CLASS above), and a SECOND ROW that only the
-              width-cap note ever occupies, placed under the name box in the name's own column. As a
-              flex row the note had to live outside it with a hand-tuned indent that matched the ✓
-              slot which used to sit in front of the name; now the ✕ is in front, a width no fixed
-              indent can know, so the grid does the lining up instead. `items-center` works per row
-              track, so the note appearing never moves the controls above it. */}
+            {/* THE ROW IS A GRID, NOT A FLEX ROW — five columns, ✕ · name · ✓ · A · grip on
+              screen (both orders are argued at DELETE_BTN_CLASS above), and a SECOND ROW that only
+              the width-cap note ever occupies, placed under the name box in the name's own column.
+              As a flex row the note had to live outside it with a hand-tuned indent; the ✕ in
+              front of the name is a width no fixed indent can know, so the grid does the lining up
+              instead. `items-center` works per row track, so the note appearing never moves the
+              controls above it. */}
             <div
               className={`grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-x-1 rounded-xl ${
-                // THE LIFT while THIS row is the one being dragged (Q7, round 23): index.css's
+                // THE LIFT while THIS row is the one being dragged: index.css's
                 // .row-lifted — the card's own fill, so the rows sliding underneath do not show
                 // through the gaps between its controls, and ONE soft all-round shadow. It sits on
                 // THIS element, the controls' own box, rounded to the controls' own radius, so the
@@ -816,15 +837,6 @@ export default function PresetManager({
                 drag?.id === p.id ? 'row-lifted' : ''
               }`}
             >
-              <button
-                type="button"
-                aria-label={`Delete ${p.name}`}
-                aria-disabled={!canDelete || undefined}
-                onClick={() => pressDelete(p.id)}
-                className={`${DELETE_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
-              >
-                {DELETE_GLYPH}
-              </button>
               {/* THE NAME, AS A TEXT BOX — the rename IS the field, with no edit mode to enter and no
                 pencil to find.
                 ⚠ IT NAMES ITSELF "Preset name" AND NOTHING MORE, deliberately. A textbox's VALUE is
@@ -871,14 +883,14 @@ export default function PresetManager({
                     discardRename(e.currentTarget)
                   }
                 }}
-                className="min-w-0 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs focus:outline-hidden focus-ring"
+                className={`${ROW_COL.name} min-w-0 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs focus:outline-hidden focus-ring`}
               />
               {/* THE CURRENT-PRESET MARK, after the name, in a reserved fixed-width slot so every
                 name box ends at the same x whether the row is marked or not — the same reason
                 CustomSelect gives its ✓ column a width of its own. aria-hidden + an sr-only word,
                 the idiom every quiet marker in this app uses (the switcher's "A", the footer's
                 Changelog dot), because a bare ✓ is a glyph rather than an accessible name. */}
-              <span className="w-3 text-center text-xs text-(--tx-200-80)">
+              <span className={`${ROW_COL.current} w-3 text-center text-xs text-(--tx-200-80)`}>
                 {p.id === activeId && (
                   <>
                     <span aria-hidden="true">✓</span>
@@ -894,7 +906,7 @@ export default function PresetManager({
                 ⚠ DIMMED BY OPACITY, NEVER TINTED, and inheriting currentColor: components/
                 PresetSwitcher argues it (a themed colour token would read correctly in one of the
                 two places this letter appears and be invisible in the other). */}
-              <span className="w-3 text-center">
+              <span className={`${ROW_COL.amnesic} w-3 text-center`}>
                 {p.amnesic && (
                   <>
                     <span aria-hidden="true" className="text-[0.8em] font-semibold opacity-70">
@@ -925,7 +937,7 @@ export default function PresetManager({
                 role="button"
                 tabIndex={0}
                 aria-label={`Reorder ${p.name}, position ${i + 1} of ${presets.length}`}
-                className={GRIP_CLASS}
+                className={`${ROW_COL.grip} ${GRIP_CLASS}`}
                 style={{ touchAction: 'none' }}
                 onPointerDown={beginDrag(p, i)}
                 onPointerMove={onDragMove}
@@ -935,6 +947,17 @@ export default function PresetManager({
               >
                 <ReorderHandleIcon />
               </div>
+              {/* THE ✕ — LAST in the markup, FIRST on screen (ROW_COL; the ★★ above the row's class
+                constants says why the two orders differ). */}
+              <button
+                type="button"
+                aria-label={`Delete ${p.name}`}
+                aria-disabled={!canDelete || undefined}
+                onClick={() => pressDelete(p.id)}
+                className={`${ROW_COL.delete} ${DELETE_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
+              >
+                {DELETE_GLYPH}
+              </button>
               {/* THE WIDTH-CAP NOTE — WIDTH LANGUAGE, NEVER A CHARACTER COUNT, because a character
                 count is no longer the true reason a keystroke stopped landing (lib/presetNameWidth,
                 and the ★★ note above this component). Shown only for the row currently being typed
@@ -945,7 +968,7 @@ export default function PresetManager({
                 note below, for the same reason: a small fact about why a control just did what it
                 did. */}
               {editing?.id === p.id && nameWidthCapped && (
-                <div className="col-start-2 col-span-4 pl-1 pt-1 text-[11px] text-(--tx-300-60)">
+                <div className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[11px] text-(--tx-300-60)">
                   That&apos;s as long as this name can display.
                 </div>
               )}

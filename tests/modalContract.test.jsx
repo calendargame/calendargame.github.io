@@ -98,6 +98,18 @@ describe('trapModalTab', () => {
     expect(document.activeElement).toBe(b)
   })
 
+  it('an element made a tab stop by hand is a control too — it can be an END of the cycle', () => {
+    // The preset manager's reorder grip is a div with tabIndex 0. Left out of the cycle, a card
+    // ending on one would let Tab walk off it and out of the popup.
+    const { scrim } = mountScrim('<button>A</button><div role="button" tabindex="0">grip</div>')
+    const grip = scrim.querySelector('[role="button"]')
+    grip.focus()
+    const e = tabEvent(scrim)
+    trapModalTab(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+    expect(document.activeElement).toBe(scrim.querySelector('button'))
+  })
+
   it('two controls: a Tab from the MIDDLE of the cycle is left to native traversal (only the ends wrap)', () => {
     const { scrim } = mountScrim('<button>A</button><button>B</button><button>C</button>')
     const b = scrim.querySelectorAll('button')[1]

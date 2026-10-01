@@ -27,6 +27,8 @@
 // right row and no other, does it clear on commit and on discard. The measurement itself is a
 // different file's claim to make.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { cleanup, screen, within, act, fireEvent } from '@testing-library/react'
 import {
   resetAppState,
@@ -505,12 +507,16 @@ describe('reordering', () => {
     })
   })
 
-  // ★ Q7, round 23 — THE ROW'S LAYOUT IS THE iPHONE REORDER-LIST CONVENTION, and the order is the
-  // point: the grip is grabbed over and over, the ✕ is destructive (and deletes an untouched preset
-  // without asking), so they sit at opposite ends — ✕ at the LEFT, grip at the RIGHT, the name and
-  // its two markers between them.
+  // ★ THE ROW HAS TWO ORDERS, AND BOTH ARE THE POINT.
+  // ON SCREEN it is the iPhone reorder-list convention: the grip is grabbed over and over, the ✕ is
+  // destructive (and deletes an untouched preset without asking), so they sit at opposite ends — ✕
+  // at the LEFT, grip at the RIGHT, the name and its two markers between them.
+  // IN THE MARKUP — the order Tab walks and a screen reader reads — the ✕ comes LAST: name, ✓, A,
+  // grip, ✕. On-screen order in the markup made "Delete <first preset>" the first Tab stop of the
+  // popup, one Enter away from deleting an untouched preset unasked.
   describe('the row layout', () => {
-    it('reads ✕, name, ✓, A, grip — left to right', () => {
+    const column = (el) => /(?:^|\s)col-start-(\d)(?:\s|$)/.exec(el.className)?.[1]
+    it('reads ✕, name, ✓, A, grip — left to right on screen', () => {
       let guestId
       act(() => {
         guestId = createPreset('Guest').id
@@ -518,16 +524,54 @@ describe('reordering', () => {
       openManager()
       // After the mount, for the reason the listing case above gives (the cold-open reseed).
       act(() => setPresetAmnesic(guestId, true))
-      const kids = [...rowOf('Preset 1').children]
-      expect(kids[0]).toBe(rowButton('Preset 1', 'delete'))
-      expect(kids[1]).toBe(nameBoxes()[0])
-      expect(kids[2].textContent).toBe('✓Current preset')
-      expect(kids[3].textContent).toBe('') // Preset 1 is not amnesic; the slot is still reserved
-      expect(kids[4]).toBe(reorderHandle('Preset 1'))
-      const guest = [...rowOf('Guest').children]
+      // jsdom lays nothing out, so "on screen" is read off the grid placement each cell declares.
+      const onScreen = (name) => [...rowOf(name).children].sort((a, b) => column(a) - column(b))
+      const cells = onScreen('Preset 1')
+      expect(cells.map(column)).toEqual(['1', '2', '3', '4', '5'])
+      expect(cells.every((c) => /(?:^|\s)row-start-1(?:\s|$)/.test(c.className))).toBe(true)
+      expect(cells[0]).toBe(rowButton('Preset 1', 'delete'))
+      expect(cells[1]).toBe(nameBoxes()[0])
+      expect(cells[2].textContent).toBe('✓Current preset')
+      expect(cells[3].textContent).toBe('') // Preset 1 is not amnesic; the slot is still reserved
+      expect(cells[4]).toBe(reorderHandle('Preset 1'))
+      const guest = onScreen('Guest')
       expect(guest[2].textContent).toBe('') // not the current preset; the slot is still reserved
       expect(guest[3].textContent).toBe('AAmnesic')
       expect(guest[4]).toBe(reorderHandle('Guest'))
+    })
+
+    it('reads name, ✓, A, grip, ✕ in the markup — the destructive control is the LAST of its row', () => {
+      openManager()
+      const kids = [...rowOf('Preset 1').children]
+      expect(kids[0]).toBe(nameBoxes()[0])
+      expect(kids[3]).toBe(reorderHandle('Preset 1'))
+      expect(kids[4]).toBe(rowButton('Preset 1', 'delete'))
+    })
+
+    it('opening the popup puts the keyboard on the card, and the first Tab stop is a NAME — never a ✕', () => {
+      act(() => {
+        createPreset('Scratch') // untouched: its ✕ would delete it without asking
+      })
+      openManager()
+      expect(document.activeElement).toBe(card())
+      const stops = [
+        ...card().closest('[data-settings-modal]').querySelectorAll('button,input,[tabindex="0"]'),
+      ]
+      expect(stops[0]).toBe(nameBoxes()[0])
+      // The whole cycle, row by row: name, grip, ✕ — and New Preset at the foot.
+      expect(stops.map((el) => el.getAttribute('aria-label') ?? el.textContent)).toEqual([
+        'Preset name',
+        'Reorder Preset 1, position 1 of 2',
+        'Delete Preset 1',
+        'Preset name',
+        'Reorder Scratch, position 2 of 2',
+        'Delete Scratch',
+        'New Preset',
+      ])
+      // …so Enter on the first stop keeps a name; it cannot delete anything.
+      act(() => stops[0].focus())
+      act(() => fireEvent.keyDown(stops[0], { key: 'Enter' }))
+      expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Preset 1', 'Scratch'])
     })
 
     it('the ✕ keeps its button chrome; the grip is bare — no border, no fill', () => {
@@ -537,9 +581,23 @@ describe('reordering', () => {
       const grip = reorderHandle('Preset 1').className
       expect(grip).not.toMatch(/(^|\s)border(\s|$)/)
       expect(grip).not.toMatch(/surface-/)
-      // …but it is still a control: a focus ring for the keyboard route, a grab cursor for a mouse.
-      expect(grip).toMatch(/focus-ring/)
+      // …but it is still a control: a grab cursor for a mouse, and a focus ring for the keyboard.
       expect(grip).toMatch(/cursor-grab/)
+      expect(grip).toMatch(/(^|\s)kbd-ring(\s|$)/)
+      // Nothing may switch that ring off: Tailwind's outline-hidden on :focus is what removed the
+      // grip's only keyboard indicator once.
+      expect(grip).not.toMatch(/outline-hidden|outline-none/)
+    })
+
+    it('the grip`s ring is a real, visible outline drawn for keyboard focus (index.css)', () => {
+      const css = readFileSync(resolve(__dirname, '../src/index.css'), 'utf8').replace(
+        /\/\*[\s\S]*?\*\//g,
+        '',
+      )
+      const rule = /\.kbd-ring:focus-visible\{([^}]*)\}/.exec(css)?.[1]
+      expect(rule).toMatch(/outline:2px solid var\(--tx-50\)/)
+      // A rule on plain :focus would draw it for every finger and mouse press on the grip too.
+      expect(css).not.toMatch(/\.kbd-ring(:focus)?\{/)
     })
 
     it('the width-cap note sits under the NAME, in the row`s own grid, not under the ✕', () => {

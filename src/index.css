@@ -654,6 +654,14 @@ button:focus,select:focus{outline:none}
    on the owner's device twice. Recorded here so nobody rediscovers it as a bug. */
 [data-select-trigger]{touch-action:none}
 .drag-target{outline:2px solid var(--drag-ring);outline-offset:-2px}
+/* THE KEYBOARD FOCUS RING — for a control that has no surface of its own to show the keyboard is
+   on it. One user today: the reorder grip in Manage Presets (components/PresetManager), a bare
+   glyph you Tab to and move with the arrow keys. :focus-visible, so it is drawn for the keyboard
+   and never for a finger or a mouse press; inset like the drag ring above, so the list's scroll
+   region cannot clip it. The colour is the card's strongest text tier rather than --drag-ring: that
+   one is tuned to be subtle (about half-transparent in every theme), which suits a hover-like hint
+   and is too faint for the only sign of where the keyboard is. */
+.kbd-ring:focus-visible{outline:2px solid var(--tx-50);outline-offset:-2px}
 /* The mode-selector dropdown (the only [data-select-group] portal) has a theme-INVARIANT frosted-light
    surface with dark text (CustomSelect's portaled listbox), so the per-theme ring tuned for the app
    surfaces would vanish on it — pin its ring to the fixed dark brand accent in every theme. */
@@ -913,6 +921,10 @@ button:focus,select:focus{outline:none}
    keyboard focus, so a visible focus indicator on those elements is dead
    weight. The .focus-ring class is left on element classNames as a no-op
    so future re-enablement is a one-line CSS change rather than a sweep.
+   (That reasoning never covered the popups: inside one, Tab is trapped and
+   does walk its controls. The one control there with no surface of its own
+   draws a real ring — .kbd-ring, above — and the guide's "Where it falls
+   short" list states the rest.)
    ⚠ ONE EXCEPTION since round-9 (Q2): the ⚙ Settings pickers now implement
    the radiogroup keyboard contract (components/PillGroup), so once focus is
    inside a group — placed by a click or an AT activation, since Tab still

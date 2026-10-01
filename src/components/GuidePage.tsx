@@ -1689,7 +1689,9 @@ export default function GuidePage({
           was scaled at all; the word is honest now, which is why it is back.)
           ★ THE KNOWN-GAPS BLOCK IS LOAD-BEARING, not throat-clearing. Each line is a thing the
           code does NOT do, checked one at a time: button:focus{outline:none} is global
-          (index.css) and .focus-ring has been a no-op since the Tab binding landed; index.html
+          (index.css) and .focus-ring has been a no-op since the Tab binding landed (the one ring
+          that IS drawn, .kbd-ring on the preset manager's reorder grip, is named as the exception);
+          index.html
           sets user-scalable=no on purpose; the < and > history buttons carry only their glyph and
           the mode-screen range inputs carry no aria-label (the DefaultsCard copies do); and the
           GAME SCREENS' dimmed buttons are opacity-60 + pointer-events-none and announce nothing.
@@ -1763,7 +1765,11 @@ export default function GuidePage({
             position 2 of 3&quot; (the position updates after every move, so the same name is
             announced again with a new number), and &quot;Delete Weekend&quot;. The <b>✓</b> on the
             row you are on says &quot;Current preset&quot; and the <b>A</b> says
-            &quot;Amnesic&quot;, so neither marker is only a shape.
+            &quot;Amnesic&quot;, so neither marker is only a shape. <Kbd>Tab</Kbd> walks each row in
+            the order it is read out — the name, then the reorder handle, then <b>✕</b> — rather
+            than left to right, so the first thing the keyboard reaches in this popup is a name and
+            never a delete. The reorder handle is outlined while the keyboard is on it; ↑ and ↓ move
+            the preset from there.
           </li>
           <li>
             In the seven-dot answer layout every dot carries its weekday name, so the dots offer the
@@ -1846,10 +1852,12 @@ export default function GuidePage({
         <p>Stated plainly, so you know before you try:</p>
         <UL>
           <li>
-            Nothing on the site draws a focus ring, so on a computer there&apos;s no outline showing
-            which button the keyboard is on. Inside a ⚙ picker the selection stands in for one —
-            landing on an option chooses it, so the option you&apos;re on is the lit one — but
+            Almost nothing on the site draws a focus ring, so on a computer there&apos;s no outline
+            showing which button the keyboard is on. Inside a ⚙ picker the selection stands in for
+            one — landing on an option chooses it, so the option you&apos;re on is the lit one — but
             inside the popups above, <Kbd>Tab</Kbd> moves with nothing drawn to say where it went.
+            The one exception is the reorder handle in Manage Presets, which is outlined while the
+            keyboard is on it.
           </li>
           <li>
             The preset list can only be opened by tapping or clicking it. <Kbd>Tab</Kbd> opens the

@@ -1351,7 +1351,9 @@ export function tabInModal(key, { shift = false } = {}) {
 // the card and asserted "focus is still inside the modal" would therefore assert
 // `card.contains(card)`, and would pass with the trap deleted. Seating the keyboard on a real END
 // of the cycle is the only way to make the wrap observable here.
-export const modalTabStops = (key) => [...modalScrim(key).querySelectorAll('button,input')]
+export const modalTabStops = (key) => [
+  ...modalScrim(key).querySelectorAll('button,input,[tabindex="0"]'),
+]
 
 // Put the keyboard on one END of that cycle, so the next Tab is a wrap rather than a no-op.
 export function focusModalEdge(key, edge) {
