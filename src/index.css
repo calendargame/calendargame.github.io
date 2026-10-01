@@ -221,13 +221,28 @@ body{color:var(--body-color)}
    for browsers without dvh (they keep the prior large-viewport behavior). The text itself is still
    sized to the full screen via vh (see the fluid font-size below), so the toolbar never shrinks text
    — it only adds scroll, which is the intended behavior. */
-/* ★ #root PAINTS THE PAGE BACKGROUND (round 23 Q1), not body and not the canvas. It used to be
+/* ★ #root PAINTS THE PAGE BACKGROUND, not body and not the canvas. It used to be
    body{background:var(--bg1)} — dead in practice (body's box is zero-height and <html>'s own background
    stops it reaching the canvas), so the colour behind the whole app was really <html>'s inline --tc
    stamp. Moving it here puts an opaque layer between the app and the canvas, which is what lets App's
-   theme effect dim <html>'s background under a modal (the status-bar signal) without dimming the page
-   twice. --bg1 equals --tc in every theme, so nothing on screen changes. The full account is the ★★
-   status-bar note above App's theme effect in src/main.tsx. */
+   theme effect dim <html>'s background under a popup (the status-bar signal) without dimming the page
+   twice. --bg1 equals --tc in every theme, so no COLOUR on screen changes. The full account is the
+   ★★ status-bar note above App's theme effect in src/main.tsx.
+   ⚠ ONE THING DOES CHANGE, on desktop Windows only, and it is the text's ANTIALIASING, not its
+   colour. Chromium draws text with ClearType (subpixel, with its faint colour fringes) only where it
+   knows the backdrop is opaque, and greyscale otherwise. While #root was transparent the whole app
+   was greyscale there; with an opaque #root the page's text is ClearType — the platform's own
+   default for text on a solid ground. Text on a see-through surface (the ⚙ panel and the popup cards,
+   whose --card-bg is a few percent translucent) is still greyscale, so the two now differ. Measured
+   in Chromium on Windows; phones and high-density screens use greyscale throughout and are
+   unaffected.
+   ⚠ THERE IS NO CLEAN WAY TO HAVE BOTH. Putting the same opaque fill on a separate element behind
+   a transparent #root (a body or html pseudo-element) was measured and switches the text to
+   ClearType just the same — the engine keys on "is there an opaque backdrop", not on which element
+   paints it. What does force greyscale is a compositing trick on #root (a will-change, a
+   near-1 opacity, a filter), and every one of those makes #root a containing block for the fixed
+   menus portaled into it — the drift tests/containingBlockGuard exists to forbid. Hiding the canvas
+   is what the status-bar dim needs, so the opaque fill stays. */
 #root{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;overflow:hidden;background:var(--bg1)}
 /* THE THREE CLAMPS ABOVE ARE NOW PERMANENT, AND THAT IS THE POINT (round 13). Rounds 7–12
    carried a release beside them — <html data-doc-scroll>, stamped by App for the whole of guide

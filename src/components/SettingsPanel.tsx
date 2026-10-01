@@ -812,15 +812,20 @@ export function SettingsPanel({
           slot, and it is `absolute left-4 right-4 top-full` against the bar's `relative` inner
           wrapper — an extra div here would become the containing block and detach the panel.
           Elevation + bottom cushion (Calendar Game, refined 2026-06-09): this popover is a FLOATING
-          OVERLAY (it pops over the dimmed page), so it uses the app's even, all-around overlay
+          OVERLAY (it pops over the page, which stays live and undimmed behind it — only a popup
+          dims the page), so it uses the app's even, all-around overlay
           shadow — the SAME visual language as the dropdown menus (CustomSelect) — NOT the
           directional `elev-shadow-down` (that one is the scroll-BOUNDARY cue for fixed
           bars/headers/footers, the wrong language for a free-floating panel). It's OFFSET-FREE
           (`0 0 8px`, vs the dropdowns' downward-offset shadow) so the shadow extends EQUALLY on all
           four sides — the panel is inset against the screen edge on every side and must read as
-          symmetric. It's SUBTLE (12% black, the app's overlay-shadow color) because the opaque fill
-          + 1px card border + dimmed backdrop already separate it (the shadow only adds a gentle
-          lift); and SMALL (8px blur) so it stays clearly contained inside the 1rem gap (vs the
+          symmetric. It's SUBTLE (12% black, the app's overlay-shadow color) because the card's fill
+          + 1px card border already separate it (the shadow only adds a gentle lift). ⚠ That fill
+          is NOT quite opaque: --card-bg is 93–98% in every theme (95% on the two light ones), a
+          value each theme has carried since the original single-file app, where this panel was
+          the surface's only user. So the page shows faintly through this panel and through every
+          popup card, most visibly on the light themes — by that original design, not by a later
+          slip; and SMALL (8px blur) so it stays clearly contained inside the 1rem gap (vs the
           dropdowns' 28px blur, which would overflow the cushion and clip at the screen edge).
           Bottom cushion: the calc uses REM, not px, so it matches the rem-based side insets EXACTLY
           — left-4/right-4 = 1rem, and the app's root font is FLUID (html{font-size:clamp(...)}), so
