@@ -119,7 +119,7 @@ export function averageRowHeight(slotMidpoints: readonly number[]): number {
 
 /**
  * Where the dragged row's CENTER may actually be drawn, given where the pointer would put it
- * (`centerY`) — Q7, round 23, the fix for a dragged row that escaped the list. Every number is in
+ * (`centerY`) — the fix for a dragged row that escaped the list. Every number is in
  * the list's own CONTENT coordinates (0 = the top of the scrollable content, not of the screen),
  * the same space `slotMidpoints` is captured in.
  *
@@ -129,12 +129,13 @@ export function averageRowHeight(slotMidpoints: readonly number[]): number {
  *      the owner photographed: the row sliding up over the Presets popup's description text, or
  *      down past the list's foot. Clamping the CENTER to the first/last slot's center keeps the row
  *      inside the band the list itself occupies.
- *   2. THE PART OF THE LIST THAT IS ON SCREEN (`visibleTop`/`visibleBottom`, i.e. scrollTop and
- *      scrollTop + clientHeight). Unlimited presets (Q8) make a list taller than its scroll region
- *      the ordinary case, and a row dragged past the region's edge would be clipped out of sight
- *      while it was still in the player's hand. So it stops, whole, at the edge — `halfRow` in from
- *      it — and the edge auto-scroll (autoScrollDirection below) brings the rest of the list to it,
- *      the way iOS's own reorder lists behave.
+ *   2. THE PART OF THE LIST THAT IS ON SCREEN AND UNFADED (`visibleTop`/`visibleBottom`: scrollTop
+ *      and scrollTop + clientHeight, each pulled in by edgeFadeInset below while that edge's fade
+ *      is showing). Unlimited presets make a list taller than its scroll region the ordinary case,
+ *      and a row dragged past the region's edge would be clipped out of sight — or dissolved by
+ *      the edge fade — while it was still in the player's hand. So it stops, whole, `halfRow` in
+ *      from that bound, and the edge auto-scroll (autoScrollDirection below) brings the rest of
+ *      the list to it, the way iOS's own reorder lists behave.
  *      ⚠ SKIPPED WHEN THE REGION CANNOT HOLD ONE WHOLE ROW (visibleBottom − visibleTop < 2·halfRow),
  *      where "fully visible" has no answer at all. No real layout of this card gets there (the list
  *      is at least one row tall by construction); it is the honest answer rather than an inverted
@@ -155,6 +156,27 @@ export function clampDragCenter(
     y = Math.min(Math.max(y, visibleTop + halfRow), visibleBottom - halfRow)
   }
   return Math.min(Math.max(y, first), last)
+}
+
+/**
+ * How far in from one edge of the list's scroll region the dragged row has to stop, so that the
+ * region's edge FADE never paints over a row that is in the player's hand.
+ *
+ * The list's fades (components/scrollRegion) are a mask on the scroller, `fadeDepth` px deep at any
+ * edge with content still past it — and a mask applies to everything inside, the lifted row
+ * included. Left at the bare edge (clampDragCenter's `visibleTop`/`visibleBottom`) the row sat
+ * half-dissolved for the whole of an auto-scroll, which is exactly when it is being held there.
+ * So the caller pulls each visible bound in by this much.
+ *
+ * `gap` is the px of content still unreached past that edge and `band` the edge's "arrived"
+ * tolerance (scrollRegion's scrollEdgeGaps and BOTTOM_EDGE_BAND_PX; 0 at the top) — the same two
+ * numbers that switch the fade on, so the inset is non-zero exactly when a fade is showing. It is
+ * the gap itself until the gap is deeper than the fade, NOT a step to `fadeDepth`: a step would
+ * snap the row a full fade-depth down in one frame at the moment the list reaches its end, where
+ * this lets it travel the last stretch to the final slot in step with the content.
+ */
+export function edgeFadeInset(gap: number, band: number, fadeDepth: number): number {
+  return Math.min(Math.max(gap - band, 0), Math.max(fadeDepth, 0))
 }
 
 /**

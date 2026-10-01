@@ -12,6 +12,7 @@ import {
   previewShift,
   averageRowHeight,
   clampDragCenter,
+  edgeFadeInset,
   autoScrollDirection,
 } from '../src/lib/presetReorder.js'
 
@@ -200,5 +201,45 @@ describe('autoScrollDirection(pointerY, startY, inBand)', () => {
   it('outside both bands, never', () => {
     expect(autoScrollDirection(10, 300, 0)).toBe(0)
     expect(autoScrollDirection(900, 300, 0)).toBe(0)
+  })
+})
+
+// The list's edge fades are a mask on the scroll region, so they paint over everything inside it —
+// the row in the player's hand included. The dragged row therefore stops short of an edge by the
+// depth of that edge's fade, for exactly as long as the fade is showing.
+describe('edgeFadeInset(gap, band, fadeDepth)', () => {
+  it('is the full fade depth while there is more content past the edge than the fade is deep', () => {
+    expect(edgeFadeInset(500, 0, 24)).toBe(24)
+    expect(edgeFadeInset(500, 4, 24)).toBe(24)
+    expect(edgeFadeInset(28, 4, 24)).toBe(24)
+  })
+
+  it('is zero at the edge itself — no fade there, so the row may go all the way', () => {
+    expect(edgeFadeInset(0, 0, 24)).toBe(0)
+    // The bottom edge counts as reached inside its tolerance band, which is where its fade ends.
+    expect(edgeFadeInset(4, 4, 24)).toBe(0)
+    expect(edgeFadeInset(2, 4, 24)).toBe(0)
+  })
+
+  it('shrinks with the gap over the last stretch, so the row arrives at the end without a jump', () => {
+    // A step from 24 to 0 would snap the row a whole fade-depth in the frame the list stops.
+    const steps = [28, 22, 16, 10, 6, 4].map((gap) => edgeFadeInset(gap, 4, 24))
+    expect(steps).toEqual([24, 18, 12, 6, 2, 0])
+  })
+
+  it('is zero where there is no fade to keep clear of (a layout-free environment reads none)', () => {
+    expect(edgeFadeInset(500, 0, 0)).toBe(0)
+    expect(edgeFadeInset(500, 0, -1)).toBe(0)
+  })
+
+  it('pulls clampDragCenter`s visible window in, so the row`s edge meets the fade and no further', () => {
+    // Twenty 40px rows, a 200px window scrolled to the middle: both fades are showing.
+    const slots = Array.from({ length: 20 }, (_, i) => 20 + i * 40)
+    const top = 300 + edgeFadeInset(300, 0, 24)
+    const bottom = 500 - edgeFadeInset(300, 4, 24)
+    // Held at the bottom: the row's lower edge (center + 20) is 24px above the window's.
+    expect(clampDragCenter(9999, slots, top, bottom, 20) + 20).toBe(500 - 24)
+    // …and at the top, its upper edge is 24px below the window's.
+    expect(clampDragCenter(-9999, slots, top, bottom, 20) - 20).toBe(300 + 24)
   })
 })

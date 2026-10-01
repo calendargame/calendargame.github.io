@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
+import {
+  BOTTOM_EDGE_BAND_PX,
+  SCROLL_REGION_CLASS,
+  readShadeRampPx,
+  scrollEdgeGaps,
+  scrollFadeClass,
+  useScrollEdgeState,
+} from './scrollRegion.js'
 import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
 import { usePresets, MAX_PRESET_NAME } from '../store/presets.js'
@@ -20,6 +27,7 @@ import {
   previewShift,
   averageRowHeight,
   clampDragCenter,
+  edgeFadeInset,
   autoScrollDirection,
 } from '../lib/presetReorder.js'
 import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
@@ -502,6 +510,9 @@ export default function PresetManager({
     pointerY: number
     startScrollTop: number
     transformY: number
+    // How deep the list's edge fades are (index.css's --fade-h), read once at the grab: the dragged
+    // row is kept out from under them (dragFrame).
+    fadeDepth: number
   }
   const [drag, setDrag] = useState<DragState | null>(null)
   // The same value, readable from the auto-scroll loop below — a rAF callback closes over the render
@@ -523,17 +534,21 @@ export default function PresetManager({
   // pointer, the list's scroll position and lib/presetReorder's clamp meet. The row follows the
   // finger exactly, EXCEPT that clampDragCenter keeps it between the first and last slot (the fix
   // for the row escaping the list, over the description above it and past the foot below) and
-  // wholly inside the part of the list on screen (so a long list never clips it out of the hand).
+  // wholly inside the part of the list that is on screen AND clear of the list's edge fades (so a
+  // long list never clips the row out of the hand, and the fade at a scrolling edge never
+  // dissolves it — lib/presetReorder's edgeFadeInset says how the two bounds are pulled in).
   const dragFrame = (d: DragState, pointerY: number): DragState => {
     const list = listRef.current
     const scrollTop = list?.scrollTop ?? 0
+    const clientHeight = list?.clientHeight ?? 0
+    const gaps = scrollEdgeGaps(scrollTop, list?.scrollHeight ?? 0, clientHeight)
     const startCenter = d.slotMidpoints[d.startIndex]
     const wanted = startCenter + (pointerY - d.startPointerY) + (scrollTop - d.startScrollTop)
     const center = clampDragCenter(
       wanted,
       d.slotMidpoints,
-      scrollTop,
-      scrollTop + (list?.clientHeight ?? 0),
+      scrollTop + edgeFadeInset(gaps.top, 0, d.fadeDepth),
+      scrollTop + clientHeight - edgeFadeInset(gaps.bottom, BOTTOM_EDGE_BAND_PX, d.fadeDepth),
       d.halfRow,
     )
     return {
@@ -645,6 +660,8 @@ export default function PresetManager({
       pointerY: e.clientY,
       startScrollTop: scrollTop,
       transformY: 0,
+      // NaN where no stylesheet is served (jsdom): no fade there, so no inset.
+      fadeDepth: readShadeRampPx() || 0,
     })
   }
 
