@@ -89,7 +89,7 @@ const visibleText = (text) => {
 // AoX panels also contain "Score" spans). The cell is the label span's PARENT, and its tag is the
 // affordance: StatPanel renders a cell carrying an `fn` as a <button> and one without as a plain
 // <div>. So the scoring trio (Score/Accuracy/Streak) is always <div>s, and a timing cell
-// (Last/Mean/Median) is a <button> only while the mode is actually offering the Q8 hide toggle.
+// (Last/Mean/Median) is a <button> only while the mode is actually offering the hide toggle.
 // Returns null when no such cell is on screen. ONE lookup — the four readers below all used to ask
 // this same question in the same words, three of them with their own copy of the not-found throw.
 function statCell(label) {
@@ -111,7 +111,7 @@ function statValue(label) {
   return requireStatCell(label).querySelector('[data-statval]').textContent.trim()
 }
 // Close the run/round breakdown (the popup an ended strip's tap now opens — sub-group 3C). Used by
-// the Q8 tests, whose subject is the hide toggle: they still tap the strip, and this puts the
+// the visual-only timing tests, whose subject is the hide toggle: they still tap the strip, and this puts the
 // screen back so the assertions after the tap are about the strip and not about the popup over it.
 // Round 21 removed the popup's Close button (and its title is now "Round Breakdown" per round /
 // "Run Breakdown" per question), so this dismisses it the way a player now does — Escape.
@@ -121,7 +121,7 @@ const closeBreakdown = () => {
     fireEvent.keyDown(document, { key: 'Escape' }) // …and Escape is how it closes now
   })
 }
-// Tap a stat cell (Q8: a timing-trio cell is a button that toggles the visual-only hide). It fires
+// Tap a stat cell (a timing-trio cell is a button that toggles the visual-only hide). It fires
 // at the cell whether or not it is currently a button, deliberately — that is how a test can show
 // that tapping a box the mode has made inert does nothing at all.
 function clickStat(label) {
@@ -648,12 +648,12 @@ describe('Blitz — Save Stats off: misclick rescue, no Best recorded', () => {
   })
 })
 
-// ── Q2 (2026-06-21): a config setting changed on the ⚙ popover CLOSE resets the round ──────────────
+// ── 2026-06-21: a config setting changed on the ⚙ popover CLOSE resets the round ──────────────
 // Restores the documented "in active Blitz rounds, any settings change ends the round" behavior the
 // mode-untangle dropped (BlitzMode had no settings effect), AND extends it: an ENDED round (timerDone)
 // also resets, so the round on screen always matches the current settings. Deferred to popover CLOSE so
 // adjusting several settings doesn't churn the round per keystroke; an open→close with no change is a no-op.
-describe('Blitz — Q2 (a config change on popover close resets the round)', () => {
+describe('Blitz — a config change on popover close resets the round', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()
@@ -670,7 +670,7 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
     document.getElementById('root')?.remove()
   })
   // /^Settings/ — the gear's accessible name flips to "Settings (modified)" once any
-  // setting diverges from the effective defaults (the Q8 indicator), which these tests do.
+  // setting diverges from the effective defaults (the gear indicator), which these tests do.
   const toggleSettings = () =>
     act(() => fireEvent.click(screen.getByRole('button', { name: /^Settings/ })))
 
@@ -698,7 +698,7 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
     expect(ctrl('Begin')).toBeInTheDocument() // ended round reset on close
   })
 
-  // ★ ROUND 23 Q2: an ended round is filed under the config it was PLAYED under. While the ⚙ panel is
+  // ★ ROUND 23: an ended round is filed under the config it was PLAYED under. While the ⚙ panel is
   // open the round waits for the close to reset it — and the reconcile effect used to read the LIVE
   // Best key, so moving a key setting in that window filed the round's result a second time, under a
   // config it was never played on.
@@ -734,12 +734,12 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
     expect(ctrl('Reset')).toBeInTheDocument() // still active
   })
 
-  // Q9: the close-fired round reset REMOUNTS the answer grid (keyed on the engine's gridEpoch —
+  // The close-fired round reset REMOUNTS the answer grid (keyed on the engine's gridEpoch —
   // Blitz's resetRound is eng.resetStats, i.e. RESET, which bumps it) — fresh DOM nodes have no
   // prior colors to CSS-transition from, so the cleared grid snaps to idle instead of fading. A
   // normal advance must NOT remount (the epoch is untouched), or an in-flight flash keyframe
   // would restart.
-  it('the settings-close reset REMOUNTS the answer grid; a normal advance does NOT (Q9)', () => {
+  it('the settings-close reset REMOUNTS the answer grid; a normal advance does NOT', () => {
     mountApp()
     switchToBlitz()
     begin()
@@ -755,7 +755,7 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
     DAY.forEach((nm, i) => expect(dayBtn(nm)).not.toBe(before[i])) // all-new nodes — snap, no fade
   })
 
-  it('a manual Reset tap REMOUNTS the answer grid too (Q9: same RESET mechanism)', () => {
+  it('a manual Reset tap REMOUNTS the answer grid too (same RESET mechanism)', () => {
     mountApp()
     switchToBlitz()
     begin()
@@ -768,9 +768,9 @@ describe('Blitz — Q2 (a config change on popover close resets the round)', () 
 })
 
 // ── round 6: Reset Settings now restores the mode-screen round timer too, so a Reset Settings
-// that changes a running/ended round's timer reconciles it on the popover close — exactly the Q2 rule,
+// that changes a running/ended round's timer reconciles it on the popover close — exactly the settings-close rule above,
 // now triggered by the timer dep the close-effect gained. Uses a FACTORY panel so Reset Settings
-// touches ONLY the timer, isolating the mode-screen-pref path from the ⚙-panel path Q2 already covers.
+// touches ONLY the timer, isolating the mode-screen-pref path from the ⚙-panel path that rule already covers.
 // (round 6 = "extend Reset Settings"; distinct from the Session-11 change that added Save Defaults.)
 describe('Blitz — round 6 (Reset Settings restoring the round timer reconciles the round)', () => {
   beforeEach(() => {
@@ -1031,7 +1031,7 @@ describe('Blitz — Per Question + Allow Mistakes', () => {
     expect(statValue('Score')).toBe('2/2')
   })
 
-  // ★ ROUND 23 Q6 CHANGED THIS ONE DELIBERATELY. A press on the card BEHIND the live question used to
+  // ★ ROUND 23 CHANGED THIS ONE DELIBERATELY. A press on the card BEHIND the live question used to
   // both advance past the live question and re-arm its clock — which, once the toggle became
   // unlimited, was a question clock the player could refill a press at a time. A press on a past card
   // now does nothing to the live question at all: it stays, and its own clock keeps draining.
@@ -1130,7 +1130,7 @@ describe('Blitz — freshness (suddenAmBest blocks fully-reset until wiped)', ()
   })
 })
 
-// ── Q8: the visual-only timing-stats hide toggle (Last/Mean/Median) ───────────────────────
+// ── The visual-only timing-stats hide toggle (Last/Mean/Median) ───────────────────────
 // Blitz gained a per-mode timing-trio hide toggle that is VISUAL ONLY: it blanks the display but the
 // engine keeps timing (Blitz feeds the engine timingOff:false always). So there is NO "Enable and
 // Reset Stats?" arm — hiding can never desync — and the scoring trio (Score/Accuracy/Streak) stays
@@ -1153,7 +1153,7 @@ describe('Blitz — freshness (suddenAmBest blocks fully-reset until wiped)', ()
 // where that matters: the tap is the only writer of blitzTimingOff in the app, so dropping the
 // toggle while leaving the times blanked would strand a player with three blank boxes and no way to
 // read the round they just played.
-describe('Blitz — Q8 visual-only timing hide', () => {
+describe('Blitz — visual-only timing hide', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     localStorage.clear()

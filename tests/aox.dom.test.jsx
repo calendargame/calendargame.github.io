@@ -98,7 +98,7 @@ function statValue(label) {
   if (!labelSpan) throw new Error(`stat "${label}" not found`)
   return labelSpan.parentElement.querySelector('[data-statval]').textContent.trim()
 }
-// Tap a stat cell (Q8: the timing-trio cells are buttons that toggle the visual-only hide). The
+// Tap a stat cell (the timing-trio cells are buttons that toggle the visual-only hide). The
 // cell is the label span's parent (a <button> for the timing trio); clicking it fires the toggle.
 function clickStat(label) {
   const labelSpan = Array.from(document.querySelectorAll('span')).find(
@@ -110,7 +110,7 @@ function clickStat(label) {
   })
 }
 // Fast-forward the faked clock (performance.now advances in lockstep) inside act, so a solve made
-// after the tick records a nonzero time. Used by the Q8 visual-only-timing tests.
+// after the tick records a nonzero time. Used by the visual-only-timing tests.
 const tick = (ms) =>
   act(() => {
     vi.advanceTimersByTime(ms)
@@ -404,7 +404,7 @@ describe('AoX — characterization (batch 5: One-by-One)', () => {
     expect(statValue('Score')).toBe('2/2')
   })
 
-  // ★ ROUND 23 Q5 — the owner: "no matter what you should have to click continue before you see the
+  // ★ ROUND 23 — the owner: "no matter what you should have to click continue before you see the
   // next date, that's the whole point of one-by-one." The date shown is now a function of the
   // engine's question counter (the question Continue revealed), so EVERY way play advances hides the
   // next date — not only the two hand-written hide calls there used to be. Before the fix an Override
@@ -883,7 +883,7 @@ describe('AoX — bug fix (post-completion Override reconciles the Best)', () =>
     const oldKey = '2|false|numeric-ymd|random|random|random|1583-10000|true'
     expect(useProgress.getState().aoxBest[oldKey]?.avg).toEqual(expect.any(Number)) // recorded here
     act(() => {
-      useSettings.getState().setMinY(3000) // DIRECT store change (NOT via the ⚙ popover) — isolates the reconcile-key path; a real popover-close change now resets the done run (see "AoX — Q2")
+      useSettings.getState().setMinY(3000) // DIRECT store change (NOT via the ⚙ popover) — isolates the reconcile-key path; a real popover-close change now resets the done run (see "AoX — a config change on popover close resets a done/failed run")
     })
     expect(isDisabled(ctrl('Override'))).toBe(false)
     click('Override') // reverse the completing solve at the live edge → the run no longer stands
@@ -943,11 +943,11 @@ describe('AoX — mode switch mid-run resets, done state survives', () => {
   })
 })
 
-// ── Q2 (2026-06-21): a config change on the ⚙ popover CLOSE resets a running OR ended AoX run ───────
+// ── 2026-06-21: a config change on the ⚙ popover CLOSE resets a running OR ended AoX run ───────
 // So the run on screen always matches the current settings (the recorded Best is config-keyed). Deferred
 // to popover close; an open→close with no change is a no-op. (The old "done run left alone" test above
 // uses a DIRECT store change to isolate the reconcile-key path — the real popover path resets, here.)
-describe('AoX — Q2 (a config change on popover close resets a done/failed run)', () => {
+describe('AoX — a config change on popover close resets a done/failed run', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -959,7 +959,7 @@ describe('AoX — Q2 (a config change on popover close resets a done/failed run)
     document.getElementById('root')?.remove()
   })
   // /^Settings/ — the gear's accessible name flips to "Settings (modified)" once any
-  // setting diverges from the effective defaults (the Q8 indicator), which these tests do.
+  // setting diverges from the effective defaults (the gear indicator), which these tests do.
   const toggleSettings = () =>
     act(() => fireEvent.click(screen.getByRole('button', { name: /^Settings/ })))
 
@@ -991,10 +991,10 @@ describe('AoX — Q2 (a config change on popover close resets a done/failed run)
     expect(statValue('Score')).toBe('2/2')
   })
 
-  // Q9: the close-fired reset REMOUNTS the answer grid (keyed on the engine's gridEpoch, which
+  // The close-fired reset REMOUNTS the answer grid (keyed on the engine's gridEpoch, which
   // RESET bumps) — fresh DOM nodes have no prior green to CSS-transition from, so the cleared
   // grid snaps to idle instead of fading. Node identity is the observable remount proof.
-  it('the settings-close reset REMOUNTS the answer grid (Q9: fresh nodes, cleared green)', () => {
+  it('the settings-close reset REMOUNTS the answer grid (fresh nodes, cleared green)', () => {
     mountApp()
     switchToAox()
     setN(2)
@@ -1011,7 +1011,7 @@ describe('AoX — Q2 (a config change on popover close resets a done/failed run)
     expect(dayState(green)).toBe('idle') // and the green is gone
   })
 
-  it('a manual Reset tap REMOUNTS the answer grid too (Q9: same RESET mechanism)', () => {
+  it('a manual Reset tap REMOUNTS the answer grid too (same RESET mechanism)', () => {
     mountApp()
     switchToAox()
     setN(2)
@@ -1027,8 +1027,8 @@ describe('AoX — Q2 (a config change on popover close resets a done/failed run)
   })
 })
 
-// ── Q18: the run-length field (the shared boxed-numeric idiom + the one clamp) ────
-describe('AoX — Q18 (the run-length field shares the popup N field validation trio)', () => {
+// ── The run-length field (the shared boxed-numeric idiom + the one clamp) ────
+describe('AoX — the run-length field shares the popup N field validation trio', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()
@@ -1039,7 +1039,7 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
     cleanup()
     document.getElementById('root')?.remove()
   })
-  // The field gained its aria-label in the same batch (a Q18 gap-fill) — an accessible-name
+  // The field gained its aria-label in the same batch (a gap-fill) — an accessible-name
   // lookup here is itself the regression test for it.
   const nField = () => screen.getByRole('textbox', { name: 'MoX run length' })
 
@@ -1061,7 +1061,7 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
       fireEvent.change(nField(), { target: { value: '10' } })
       fireEvent.blur(nField())
     })
-    // The flagged Q18 behavior change: letters never ENTER the field (the popup N field's
+    // The flagged behavior change: letters never ENTER the field (the popup N field's
     // contract) — previously they were accepted raw and only clamped away on commit.
     act(() => fireEvent.change(nField(), { target: { value: 'abc' } }))
     expect(nField().value).toBe('10')
@@ -1192,7 +1192,7 @@ describe('AoX — round 6 (Reset Settings restoring the run length reconciles th
   })
 })
 
-// ── Q8: the visual-only timing-stats hide toggle (Last/Mean/Median) ───────────────────────
+// ── The visual-only timing-stats hide toggle (Last/Mean/Median) ───────────────────────
 // AoX gained a per-mode timing-trio hide toggle that is VISUAL ONLY: it blanks the display but the
 // engine keeps timing (AoX feeds the engine timingOff:false always). So there is NO "Enable and
 // Reset Stats?" arm — hiding can never desync — and the scoring trio stays untoggleable. Hiding
@@ -1206,7 +1206,7 @@ describe('AoX — round 6 (Reset Settings restoring the run length reconciles th
 // stat you hid stop reading identically. Save Stats off is the third signal: dim, whole strip, which
 // AoX's Save-Stats cases below still pin. Every '—' in this describe that used to mean "hidden" is
 // now '' and says so.
-describe('AoX — Q8 visual-only timing hide', () => {
+describe('AoX — visual-only timing hide', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     pin()

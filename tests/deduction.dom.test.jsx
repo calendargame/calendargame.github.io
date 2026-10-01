@@ -101,7 +101,7 @@ function optState(btn) {
   if (c.includes('btn-override-wrong')) return 'override-wrong'
   return 'idle'
 }
-// The visible answer-grid element itself (the Q14 both-crosses sizer strut deliberately carries
+// The visible answer-grid element itself (the both-crosses sizer strut deliberately carries
 // NO data-answer-grid, so this always finds the REAL grid).
 function visibleAnswerGrid() {
   return Array.from(document.querySelectorAll('[data-answer-grid="true"]')).find(
@@ -599,7 +599,7 @@ describe('Deduction — a silo round-trip preserves browse + armed-override + co
   })
 })
 
-// ── Q13: flash validity — a flash only renders on a grid with the button count it was born in ──
+// ── Flash validity — a flash only renders on a grid with the button count it was born in ──
 // Answering correct advances INSIDE the flash's 550ms window, so the carried green pulse used to
 // repaint on whatever button sat at the same index in the NEW layout when the option count changed
 // (Year 2↔5 under both crosses, Day 7↔4 across Oct 1582). The rule is general: a count-changing
@@ -614,7 +614,7 @@ describe('Deduction — a silo round-trip preserves browse + armed-override + co
 // sweeps assert nothing on the wall, they simply run long). The caps still break early the moment
 // both branches are observed, and nothing about the generation is forced, so every probability
 // documented per-sweep stays exactly as written.
-describe('Deduction — Q13: carried flash suppressed when the option count changes', () => {
+describe('Deduction — carried flash suppressed when the option count changes', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -705,7 +705,7 @@ describe('Deduction — Q13: carried flash suppressed when the option count chan
   })
 })
 
-// ── Q14: both-crosses Year reserves the 5-layout height (2-button grid centered in a sizer) ──
+// ── Both-crosses Year reserves the 5-layout height (2-button grid centered in a sizer) ──
 // With ab Cross AND Jul Cross both on, puzzles alternate between the 5-option two-row and the
 // 2-option one-row layouts, teleporting everything below the answer panel ~57px per flip. The
 // 2-option grid therefore overlays an invisible inert 5-layout strut that holds the panel at the
@@ -713,7 +713,7 @@ describe('Deduction — Q13: carried flash suppressed when the option count chan
 // when both toggles are on and N===2 — any other 2-option Year (e.g. Jul Cross alone, where every
 // puzzle is one row) keeps the tight layout. The pixel geometry itself is on-device territory;
 // this pins the structure.
-describe('Deduction — Q14: both-crosses 2-option Year sizer overlay', () => {
+describe('Deduction — both-crosses 2-option Year sizer overlay', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -877,7 +877,7 @@ describe('Deduction — round 8: Day / Month / Year answer buttons share one tex
 // 3×3 place-items:center cluster spaced by --dot-frac, so it holds no gap token at all — a guard
 // phrased as "every [data-answer-grid] wears the gutter" would fail the moment Settings → Input →
 // Dots is picked. Scoping to the labelled grids keeps this honest. The strut is covered too, in
-// the Q14 sizer test above (it has the reroll loop needed to reach a both-crosses N=2 puzzle).
+// the both-crosses sizer test above (it has the reroll loop needed to reach a both-crosses N=2 puzzle).
 describe('Deduction — round 9: every labelled answer grid shares one gutter', () => {
   beforeEach(() => {
     vi.useFakeTimers()

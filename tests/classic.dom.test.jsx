@@ -662,8 +662,8 @@ describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-0
 // ── Override + back-browse: a question can never be credited TWICE (owner's scenarios, 2026-06-06) ─
 // Owner-reported scenarios, and the reason the old engine had a per-question lock: crediting a
 // back-browsed wrong entry did not invalidate the live question's pending override (which targeted the
-// SAME entry), so Forward + Override credited it again → an impossible 2/1. The lock is GONE (round 23
-// Q6) and the guarantee is stronger without it: a card's credit is its as-answered credit XOR one
+// SAME entry), so Forward + Override credited it again → an impossible 2/1. The lock is GONE (round
+// 23) and the guarantee is stronger without it: a card's credit is its as-answered credit XOR one
 // `overridden` bit, so a second press on the same card is its Undo, by construction, whatever route
 // the player took to it. These six scenarios are kept exactly as the owner reported them and now
 // assert that shape — the button reads Undo on the card it already flipped, and pressing it takes the
@@ -860,11 +860,11 @@ describe('Classic — back-browse Override past a live miss (fix 2026-06-08)', (
   })
 })
 
-// ── Q2 (2026-06-21): a settings change regenerates the live date on the ⚙ popover CLOSE ────────────
+// ── 2026-06-21: a settings change regenerates the live date on the ⚙ popover CLOSE ────────────
 // The ⚙ settings only change while the popover is open, so the date regen (which bumps questionId and
 // thus restarts the solve timer) is deferred to one apply on close — no per-keystroke churn. While the
 // popover is open the live date stays put; closing after a change regenerates it into the new config.
-describe('Classic — Q2 (settings regen deferred to popover close)', () => {
+describe('Classic — settings regen deferred to popover close', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
@@ -878,7 +878,7 @@ describe('Classic — Q2 (settings regen deferred to popover close)', () => {
     document.getElementById('root')?.remove()
   })
   // /^Settings/ — the gear's accessible name flips to "Settings (modified)" once any
-  // setting diverges from the effective defaults (the Q8 indicator), which these tests do.
+  // setting diverges from the effective defaults (the gear indicator), which these tests do.
   const toggleSettings = () =>
     act(() => fireEvent.click(screen.getByRole('button', { name: /^Settings/ })))
 
@@ -905,12 +905,12 @@ describe('Classic — Q2 (settings regen deferred to popover close)', () => {
   })
 })
 
-// ── Q2 / Q7: Reset Stats confirmation popup ───────────────────────────────────
+// ── Reset Stats confirmation popup ───────────────────────────────────
 // The Reset Stats button opens a ConfirmModal (round 21 replaced the two-tap in-place arm) and
 // only clears on the popup's Confirm — preventing an accidental wipe of lifetime stats (it's also
 // the `S` shortcut). The popup + has-data gate live in the shared useResetStatsConfirm hook, used
 // identically by Flash + Deduction, so pinning it on Classic covers all three.
-describe('Classic — Reset Stats confirmation popup (Q2 / Q7)', () => {
+describe('Classic — Reset Stats confirmation popup', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
@@ -930,7 +930,7 @@ describe('Classic — Reset Stats confirmation popup (Q2 / Q7)', () => {
     pressNewAndRead()
     answerCorrect()
     expect(statValue('Score')).toBe('1/1')
-    // Dismiss first — the popup opens, nothing clears. Q2 removed the Cancel button from every
+    // Dismiss first — the popup opens, nothing clears. Round 22 removed the Cancel button from every
     // ConfirmModal in the app (the owner: a dismiss already says it), so the route that stands in
     // for it is Escape — one of the three the component owns, and the one a keyboard reaches.
     fireEvent.click(ctrl('Reset Stats'))
