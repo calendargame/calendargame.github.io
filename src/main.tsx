@@ -794,7 +794,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // The guide's reading position, in the scroll container's own scrollTop units — the app's
       // ONLY per-mode scroll memory (the game modes always open at their own top; only the guide is
       // a reading page). A ref because nothing renders from it. It SEEDS from the place the guide
-      // parked before a reload (round 23 Q11, store/sessionGuide — GuidePage parks it when the page
+      // parked before a reload (store/sessionGuide — GuidePage parks it when the page
       // hides, through readGuideOffset below), so a reload lands the reader where they were; a real
       // close clears sessionStorage, so a cold start still opens at the top with every panel closed.
       // Read once, in an initializer: the boot effect that restores the session page (possibly the
@@ -904,7 +904,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         el.focus({preventScroll:true});
         return()=>{stopWaiting();saveReadingPosRef.current=null;};
       },[mode,syncBarHeight]);
-      // The reading offset as of NOW, for GuidePage to park when the page hides (round 23 Q11): the
+      // The reading offset as of NOW, for GuidePage to park when the page hides: the
       // live scroller's while the guide is on screen (taken through the same closure switchMode uses,
       // so it is the one place that reads it), the remembered one while it is not.
       const readGuideOffset=useCallback(()=>{saveReadingPosRef.current?.();return guideScrollYRef.current;},[]);
@@ -1741,13 +1741,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // …and the same park when the PAGE is going away or to the background — a reload, the app's
       // own update reload, a tab the browser may discard (lib/pageHidden).
       useEffect(()=>onPageHidden(parkCasualHistories),[]);
-      // ★ COLD-OPEN AMNESIC RESEED (round-21 Q1; round 23 Q2 made it a GENUINE cold open only). An
+      // ★ COLD-OPEN AMNESIC RESEED (a GENUINE cold open only). An
       // Amnesic flag is a SESSION toggle: guest mode is temporary by construction, so when the app is
       // truly opened afresh EVERY preset's Amnesic flag is reset to that preset's own saved default
       // (store/userDefaults' effectiveAmnesicDefault — false when nothing is saved, which is the
       // owner-confirmed revert for a preset set Amnesic with no saved defaults). Session toggles still
       // stick within the session; this only re-seeds on the next cold open.
-      // ★★ A RELOAD IS NOT A COLD OPEN (round 23 Q2 — the owner reversed round 21's "a reload counts as
+      // ★★ A RELOAD IS NOT A COLD OPEN (the owner reversed round 21's "a reload counts as
       // a reopen"): "only truly closing the app starts fresh", so pull-to-refresh and the auto-update
       // reload keep a guest's Amnesic preset Amnesic, with its session stats and its finished round,
       // exactly like every other session-lived thing in the app. A boot effect alone cannot tell the
@@ -2030,7 +2030,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // getInitialState would re-read the still-parked blob and restore the very round this button
         // just erased. Scoped to the active preset, like every other line here (a switch's own
         // discard covers the preset you leave). It clears BOTH of the preset's stats copies' parks
-        // (round 23 Q2 keys them "<id>:saved" / "<id>:session"), which is exactly Full Reset's reach —
+        // (they are keyed "<id>:saved" / "<id>:session"), which is exactly Full Reset's reach —
         // in an amnesic preset it erases the parked permanent stats too — so no amnesic branch is
         // needed: a round of either copy would otherwise come back over the stats just wiped. The per-mode
         // Reset button never reaches here: it drives the mode's own idle transition, whose mirror

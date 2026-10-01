@@ -48,14 +48,14 @@ export interface UseGameEngineOptions {
   // the engine never re-hydrates mid-session. Omitted ⇒ blank stats (timed modes; post-Full-Reset remount).
   getInitialStats?: () => Stats
   // Seed the reducer with a PARKED engine instead of a fresh question. A GETTER, read ONCE inside the
-  // lazy init. Two kinds of screen pass one: the timed modes (Blitz / MoX, round-21 Q11) return their
-  // ENDED round from store/sessionRound, so the remount a preset switch causes lands the incoming
-  // copy's own ended round back on screen; the casual modes (Classic / Flash / Deduction, round 23
-  // Q11) return the history they parked before a reload (modes/modeHooks' readParkedHistory). Returns
-  // null (or is omitted) ⇒ a fresh question, exactly as before. When it returns a state, genDate is not
-  // called and getInitialStats is ignored — the parked state already carries its stats (a casual
-  // history is only accepted when they ARE the saved stats getInitialStats would have read).
-  // ⚠ A GameState, already brought forward: the raw blob (which an older or unknown build may have
+  // lazy init. Two kinds of screen pass one: the timed modes (Blitz / MoX) return their ENDED round
+  // from store/sessionRound, so the remount a preset switch causes lands the incoming copy's own
+  // ended round back on screen; the casual modes (Classic / Flash / Deduction) return the history
+  // they last parked (store/sessionHistory), with the waiting question settled by modes/modeHooks'
+  // restoredEngine. Returns null (or is omitted) ⇒ a fresh question. When it returns a state, genDate
+  // is not called and getInitialStats is ignored — the parked state already carries its stats (a
+  // casual history is only accepted when they ARE the saved stats getInitialStats would have read).
+  // ⚠ A GameState, already checked: the raw blob (which an unknown build on this origin may have
   // written) goes through engine/parkedEngine's restoreParkedEngine in the MODE, at its parked
   // read, because only the mode can drop its own half of the snapshot along with an unreadable engine.
   getInitialState?: () => GameState | null
@@ -130,7 +130,7 @@ export function useGameEngine({
   // (correctIndexOf dispatches on whether state.date is a puzzle). Used for the answer flash.
   const correct = useMemo(() => correctIndexOf(state.date, useJulian), [state.date, useJulian])
 
-  // ── THE OVERRIDE BUTTON (round 23 Q6: one permanent per-card toggle) ────────────────────────
+  // ── THE OVERRIDE BUTTON (one permanent per-card toggle) ──────────────────────────────────────
   // What a press would do, and to which card, from the ONE selector the reducer itself acts on
   // (gameReducer's overridePlan) — so the word on the button and the flip the press makes can never
   // be told different stories. null ⇔ there is no card to point at.

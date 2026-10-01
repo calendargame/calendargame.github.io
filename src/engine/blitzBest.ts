@@ -7,7 +7,7 @@
 // set each field — which is what the Same Round / Different Rounds tag compares and what the ★ is
 // derived from (engine/roundId's isNewBest).
 //
-// ★★ THE RECORD IS REBUILT FROM THE PRE-ROUND RECORD ON EVERY CALL (round 23 Q4), the way MoX's
+// ★★ THE RECORD IS REBUILT FROM THE PRE-ROUND RECORD ON EVERY CALL, the way MoX's
 // reconcileAoxStanding has always worked. The caller passes `pre` = the record that stood BEFORE this
 // round began (snapshotted at Begin, BlitzMode's prevRoundBestRef), and each field is simply:
 //     this round's value, tagged with this round,   if it beats the pre-round value;

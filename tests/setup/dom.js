@@ -124,14 +124,14 @@ beforeEach(() => {
   discardGuidePlace()
   // …and Lookup's screen kept for a reload (store/sessionLookup) — same leak.
   discardLookupScreen()
-  // The BROWSING-SESSION MARKER (store/browsingSession, round 23 Q2) is what tells a genuine cold open
+  // The BROWSING-SESSION MARKER (store/browsingSession) is what tells a genuine cold open
   // from a reload — it survives a reload and not a close. The harness has no close event, so without
   // this every test after the first in a worker would boot as a "reload" and the Amnesic cold-open
   // reseed would never run. Forgetting it here makes each test's first mount the fresh visit it
   // models; a test that wants a reload simply remounts without forgetting it.
   forgetBrowsingSession()
-  // The STORAGE-FULL state (store/storageHealth, round 23 Q3) is in-memory module state: which stores
-  // a refused save left unsaved, and whether the notice is up. A test that fills the device would
+  // The STORAGE-FULL state (store/storageHealth) is in-memory module state: the saves a full device
+  // refused, held for their destinations, and whether the notice is up. A test that fills the device would
   // otherwise leave the next one mid-episode — a notice that never opens, or one already open.
   forgetStorageHealth()
   // The SAVED PERSONAL DEFAULTS snapshot (store/userDefaults) is the last singleton of this shape,

@@ -24,7 +24,9 @@ import { checkGameInvariants } from './invariants.js'
 import { captureError } from '../observability/sentry.js'
 import type { GameState } from './gameReducer.js'
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+/** Is this a non-null object — the first question asked of anything read back out of storage. */
+export const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null
 
 // A parked blob in, today's engine state out, or null when the blob is not one. Null means "nothing
 // is parked": the caller drops its WHOLE snapshot (its own fields ride on this engine, so a fresh

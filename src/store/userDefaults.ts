@@ -183,7 +183,7 @@ export const useUserDefaults = create<UserDefaultsState>()(
       // `commitManageDefaults` (components/SettingsPanel) then carries the same stale shape forward
       // on every subsequent Manage-Defaults edit-and-save.
       // v2 = `dotOrientation` → the boolean `rotateDots` (Q3, round 20), as store/settings' v1→v2.
-      // v3 = `rotateDots` → the three-way `dotRotation` (round-23 Q6), as store/settings' v3→v4.
+      // v3 = `rotateDots` → the three-way `dotRotation` (round 23), as store/settings' v3→v4.
       //   ⚠ AN OLDER BUILD READING A v3 SNAPSHOT is fail-safe AND lossless here, unlike the live
       //   settings key: it finds no `rotateDots`, so its Reset Settings lands on its factory upright
       //   layout; and although it re-saves at once (zustand's migrate-then-save on the version

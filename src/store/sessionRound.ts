@@ -1,12 +1,12 @@
 // store/sessionRound.ts — an ENDED timed round/run, per (stats copy, mode), for THIS browsing session
-// only (round-21 Q11).
+// only.
 //
 // THE PROBLEM. A preset switch bumps every mode screen's remount key (src/main.tsx's
 // remountScreens, fired from the registry subscription), unmounting and remounting the six
 // always-mounted screens so their engine + component state re-hydrates from the INCOMING preset's
 // stores — the mechanism that stops one preset's stats leaking into another (store/presetControl's
 // switchPreset argues the "500-cards-becomes-4" bug in full). That remount is load-bearing and is
-// NOT touched here. Its side effect, before Q11, was that an ENDED Blitz round / MoX run — which
+// NOT touched here. Its side effect, before this file, was that an ENDED Blitz round / MoX run — which
 // used to survive a detour into another mode (BlitzMode/AoxMode only reset an ACTIVE round when
 // hidden, never an ended one) — was thrown away by a preset ROUND-TRIP too. The owner wants an
 // ended round to behave the same across a preset switch as across a mode detour: only a manual
@@ -19,7 +19,7 @@
 // restores it as the engine's initial reducer state plus the handful of component fields the
 // completed view needs.
 //   ★★ KEYED BY THE STATS COPY — store/amnesic's `activeDataId`, "<presetId>:saved" or
-//     "<presetId>:session" — NOT by the preset alone (round 23 Q2). A parked round carries its Best
+//     "<presetId>:session" — NOT by the preset alone. A parked round carries its Best
 //     floor and its round id, and the mount that restores it reconciles it into whatever Best records
 //     are live; so a round must only ever come back against the copy it was PLAYED on. Keyed by preset
 //     alone, turning Amnesic off restored the GUEST'S round over the permanent stats and reconciled it
@@ -40,16 +40,20 @@
 //     schedules a wipe) and a reload keeps it — the same lifetime store/amnesic and store/sessionMode
 //     use, and the owner's rule that a reload is the SAME session (store/browsingSession).
 //   • A manual Reset takes the round to idle, at which point the mode's mirror effect deletes the
-//     key (discardSessionRound). Full Reset remounts every screen AND resetProgress/resetModePrefs
-//     run first, so the restored blob is stale-keyed and a fresh screen ignores it; the mode also
-//     discards on idle. discardSessionRounds clears every copy's rounds for a preset when the preset
-//     is deleted (store/presetControl's clearPresetStorage).
+//     key (discardSessionRound). Full Reset clears the preset's rounds itself, both copies', BEFORE
+//     its remount (src/main.tsx — the remounted screens would otherwise read the parked blob back),
+//     and discardSessionRounds does the same when a preset is deleted (store/presetControl's
+//     clearPresetStorage).
+//   • A PARKED ROUND CARRIES THE CONFIGURATION IT WAS PLAYED UNDER, and the mode restores it only
+//     over exactly that configuration (modes/BlitzMode's roundConfig, modes/AoxMode's RunConfig):
+//     the settings are shared by a preset's two copies, so a guest can change them under a parked
+//     round, and a round reconciled against settings it was never played on changed real bests.
 //
 // ONE JSON BLOB under one key, a map of "<dataId>:<mode>" (e.g. "1:saved:blitz") → snapshot. The
 // snapshot shape is the mode component's business (it round-trips its own engine state + flags); this
 // module only reads and writes it and never inspects it. Every access is try/catch-wrapped —
 // sessionStorage throws on the property access under locked-down browsing, and a round that cannot be
-// parked just behaves the way it did before Q11 (gone on the switch), which never breaks a render.
+// parked is simply gone on the switch, which never breaks a render.
 // ⚠ THE KEY IS `cg-round-v2`. v1 keyed "<presetId>:<mode>" and cannot say which copy a round was
 // played on — which is the very fact whose absence was the bug — so a v1 blob is not read at all
 // rather than guessed at. The cost is bounded and one-off: an ended round on screen at the moment the
@@ -78,7 +82,7 @@ const write = (store: Store): void => {
   try {
     window.sessionStorage.setItem(KEY, JSON.stringify(store))
   } catch {
-    /* storage refused — the round only ever lived in memory, i.e. it behaves as it did pre-Q11 */
+    /* storage refused — the round only ever lived in memory, and is gone on the next remount */
   }
 }
 

@@ -20,7 +20,7 @@
 //     (`streak`, `best`) can never exceed the total credits (`good`); counts are
 //     non-negative integers; `times` are finite, non-negative, and never outnumber the
 //     credits that produced them — counting, for a save an old build trimmed, the times it
-//     discarded (`timesLost`, round 23 Q3) beside the ones it kept.
+//     discarded (`timesLost`) beside the ones it kept.
 //   • History structure: BACK pushes one forward entry + bumps backDepth, FORWARD undoes
 //     exactly that, advance() clears both — so backDepth and forwardStack.length move in
 //     lockstep. A mismatch means the Back/Forward bookkeeping desynced.
@@ -39,7 +39,7 @@
 //     solve, which is what every stat strip's "Last" reads (a toggle once broke that — see
 //     gameReducer's poolSlot). In a run mode, where timesBase is 0 by construction, the pool IS the
 //     cards' times, in order.
-//   • The PER-CARD OVERRIDE RECORD (round 23 Q6): every scored card holds two fixed states, A (as
+//   • The PER-CARD OVERRIDE RECORD: every scored card holds two fixed states, A (as
 //     answered) and O (overridden), and its credit is A.credited XOR overridden. A card in O stores
 //     its A; if that record and the card it describes ever come apart — the credit not the opposite,
 //     the grid not the answer alone, a time on an uncredited state, O not contributing its frozen

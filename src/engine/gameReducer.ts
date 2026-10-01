@@ -82,7 +82,7 @@ export type DedPuzzle = DayPuzzle | MonthPuzzle | YearPuzzle
 // A question is either a weekday prompt or a Deduction puzzle (discriminated on `type`).
 export type Question = WeekdayQuestion | DedPuzzle
 
-// ── THE PER-CARD OVERRIDE RECORD (round 23 Q6, the owner's corrected rule) ────────────────────
+// ── THE PER-CARD OVERRIDE RECORD (the owner's corrected rule) ─────────────────────────────────
 // "Everything will either say Override or Undo, no locked Override any more. Store what you got
 // wrong, so that if you get something wrong, override, then later come back to that question by
 // browsing or from another preset and Undo there, it shows your original red highlights."
@@ -177,7 +177,7 @@ export interface Stats {
   streak: number
   best: number
   times: number[] // EVERY credited, timed solve, in seconds on the 0.1 ms grid (engine/stats)
-  // ⚠ LEGACY ONLY — the credited solves whose times a build before round 23 (Q3) threw away. Those
+  // ⚠ LEGACY ONLY — the credited solves whose times a build up to v2.26.0 threw away. Those
   // builds kept only the newest 1,000 saved times while `good` kept counting, and the older times
   // are gone for good; store/progress' v5 migration records the gap ONCE, here, so the "Enable and
   // Reset Stats?" check (modes/modeHooks) can subtract it instead of seeing a desync that never
@@ -681,7 +681,7 @@ const withStreaks = (s: GameState): GameState => {
   }
 }
 
-// ── FORGETTING THE OLDEST CARDS (round 23 Q11) ──────────────────────────────────────────────────
+// ── FORGETTING THE OLDEST CARDS ─────────────────────────────────────────────────────────────────
 // Drop the `k` oldest cards of the history — the front of `stack` — and fold them into the state's
 // carried-in baselines, exactly as a hydrated start or RESET_ROUND carries what no card names any
 // more. store/sessionHistory is the caller: a history too long for its share of sessionStorage is

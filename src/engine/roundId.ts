@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 // engine/roundId.ts — the id a Blitz round / MoX run is tagged with, and the ★ rule that reads it.
 //
-// ★★ WHY THE ID HAS TO BE UNIQUE FOR ALL TIME, NOT JUST FOR ONE SCREEN (round 23 Q4). A round's id is
+// ★★ WHY THE ID HAS TO BE UNIQUE FOR ALL TIME, NOT JUST FOR ONE SCREEN. A round's id is
 // SAVED: every Best record carries the id of the round that set each of its fields (store/progress'
 // BlitzBest.scoreRoundId / streakRoundId, SuddenBest.roundId, AoxBest.avgRoundId / medRoundId), and
 // those records outlive the screen, the session and the app. Until this file the ids were a counter
@@ -37,7 +37,7 @@ export function newRoundId(): number {
 }
 
 /**
- * ★ THE "NEW BEST" MARKER, as ONE rule for both run modes (round 23 Q4): a best is marked ★ exactly
+ * ★ THE "NEW BEST" MARKER, as ONE rule for both run modes: a best is marked ★ exactly
  * when the round / run ON SCREEN set it — its saved id is the on-screen one. Nothing is stored for
  * the ★ itself, so it can never disagree with the record beside it: an Override that lowers the
  * record back to an earlier round's value takes the earlier round's id with it and the ★ goes out;

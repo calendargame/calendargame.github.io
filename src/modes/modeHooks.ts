@@ -127,7 +127,7 @@ export function useStatsHideToggles({
       setTimingOff(true)
       return
     }
-    // ★ EXACT, because every credited, timed solve keeps its time (round 23 Q3): the only way a
+    // ★ EXACT, because every credited, timed solve keeps its time: the only way a
     // credit comes to have no time is an answer given while timing was hidden, which is precisely
     // what this popup is for. The one correction is a save an OLD build trimmed to its newest 1,000
     // times — those credits had times once, and store/progress' v5 migration recorded how many as

@@ -59,7 +59,7 @@ export const DEFAULT_MODE_VALUES: readonly DefaultMode[] = [
 export const isDefaultMode = (v: unknown): v is DefaultMode =>
   typeof v === 'string' && (DEFAULT_MODE_VALUES as readonly string[]).includes(v)
 // `dotRotation` — Settings → Display → Rotate Dots, a three-way pill: Standard / 45° CCW / 90° CCW
-// (round-23 Q6). ITS HISTORY, because two older shapes of it are still out there in saved data and
+// (round 23). ITS HISTORY, because two older shapes of it are still out there in saved data and
 // migrateDotRotation below reads both: it launched as `dotOrientation: 'columns' | 'rows'` (a
 // two-option picker), became the boolean `rotateDots` in round 20 (Q3 — two named options were
 // always an on/off shape), and became this when 45° was added. Its type, DotRotation, lives in
@@ -268,7 +268,7 @@ export const useSettings = create<SettingsState>()(
       // v3 = `defaultMode` JOINED the shape (round-21 Q3). It needs no rewrite: an absent key on an
       // older payload is exactly what `mergeOverDefaults` turns into the factory 'classic', which
       // is the pre-Q3 behaviour.
-      // v4 = `rotateDots` LEFT the shape for the three-way `dotRotation` (round-23 Q6).
+      // v4 = `rotateDots` LEFT the shape for the three-way `dotRotation` (round 23).
       version: 4,
       // Saved-shape migration, run once at hydrate whenever the stored version DIFFERS — older OR
       // newer, since that is when zustand calls it. Deliberately not gated on the number:

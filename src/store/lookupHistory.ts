@@ -69,7 +69,7 @@ export interface LookupEntry {
 // payload (localStorage — and sessionStorage too) cannot grow without bound. 100 entries of
 // {id,y,m,d} is a few KB, in either storage area. ⚠ This cap stays for its own reason — the list is
 // a convenience, not a record — while the solve times it used to be compared with are now kept in
-// full (store/progress, round 23 Q3), because every one of them is part of an all-time Mean.
+// full (store/progress), because every one of them is part of an all-time Mean.
 // (Keep the How-to-Play wording in sync with this number — GuidePage's Lookup section states it,
 // once.)
 export const LOOKUP_HISTORY_CAP = 100

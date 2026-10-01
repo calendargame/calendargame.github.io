@@ -57,7 +57,7 @@ export const emptyAoxBest = (): AoxBest => ({
 // STRICT decrease (a faster time), so the FIRST run to reach a given minimum keeps the record (and its
 // companion stat) — a later run that merely ties does not displace it. Returns the next record; a
 // metric that improved is the one now tagged with `rid`, which is exactly what the "new best ★"
-// marker reads (engine/roundId's isNewBest — round 23 Q4 derived the ★ from the ids, so this no longer
+// marker reads (engine/roundId's isNewBest — the ★ is derived from the ids, so this no longer
 // reports a separate improved-flag pair). The caller snapshots the PRE-call `cur` for rollback
 // (restore-on-undo), so this stays a pure forward fold.
 //

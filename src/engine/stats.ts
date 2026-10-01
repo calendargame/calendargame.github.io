@@ -34,7 +34,7 @@ export const calcAvg = (t: number[]): number | null =>
 // "Last" — the newest solve's time. That is the pool's final entry only because the engine keeps the
 // pool in PLAY ORDER through every toggle (gameReducer's poolSlot; engine/invariants holds it there).
 export const calcLast = (t: number[]): number | null => (t.length ? t[t.length - 1] : null)
-// Median — SELECTED, not sorted (round 23 Q3). Every solve time is kept now, so a casual mode's pool
+// Median — SELECTED, not sorted. Every solve time is kept now, so a casual mode's pool
 // grows without bound, and the casual stat strip computes this on EVERY render, not only when a time
 // is added: sorting a copy of a 100,000-time pool cost ~50-60 ms a render in Chromium. Selecting the
 // middle element is linear (~1-2 ms there) and returns the very same doubles the sort did, so the

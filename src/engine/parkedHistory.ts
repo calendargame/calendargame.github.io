@@ -26,10 +26,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { forgetOldestCards } from './gameReducer.js'
 import type { GameState, Stats } from './gameReducer.js'
-import { restoreParkedEngine } from './parkedEngine.js'
+import { isObj, restoreParkedEngine } from './parkedEngine.js'
 import { captureError } from '../observability/sentry.js'
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
 /**
  * What a screen parks BESIDE its engine.

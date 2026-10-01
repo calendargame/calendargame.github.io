@@ -152,13 +152,14 @@ const clearPresetStorage = (presetId: number) => {
   // (round-21 Q3), in sessionStorage keyed by this id. Ids are never reused so a leftover entry is
   // harmless, but "remove exactly its keys" is the house rule.
   discardSessionMode(presetId)
-  // …and the FOURTH: its parked ended round/run (round-21 Q11), one sessionStorage entry per (stats
+  // …and the FOURTH: its parked ended round/run (store/sessionRound), one sessionStorage entry per (stats
   // copy, mode) for this id. discardSessionRounds clears both copies' modes in one call — same house
   // rule, same "harmless leftover but remove it anyway" reasoning as the page entry above.
   discardSessionRounds(presetId)
-  // …and the FIFTH: a casual mode's history parked for a reload (round 23 Q11, store/sessionHistory),
-  // one sessionStorage entry per (stats copy, silo). The screens' own unmount already retires the
-  // active preset's; this is the same house rule for any that outlived theirs.
+  // …and the FIFTH: its casual modes' parked histories (store/sessionHistory), one sessionStorage
+  // entry per (stats copy, silo). When the preset being deleted was the ACTIVE one, the registry
+  // write just before this parked its screens on the way out (src/main.tsx's subscription) — so this
+  // line is what has the last word: a deleted preset leaves no history behind.
   discardSessionHistories(presetId)
   // Deleting a preset is the likeliest way a player makes room after the storage-full notice, and
   // this is the moment the room appears — so anything a full device refused is re-saved now, not at
@@ -320,7 +321,7 @@ const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
  * store/sessionMode records which of the seven pages a preset was last showing THIS session — which
  * every visit writes, and which a full app close throws away on its own. Counting it would mean any
  * preset you had so much as looked at could never be deleted without a question, for a value no
- * player can miss. Every other entry in that function IS counted — the parked casual history
+ * player can miss. Every other entry in that function IS counted — parked casual play
  * (store/sessionHistory) only for a preset other than the active one, whose screens `screensFresh`
  * below already speaks for (see the note at its check).
  *
@@ -356,11 +357,12 @@ export function isPresetFactory(presetId: number, screensFresh: boolean): boolea
   // screen rather than a stored setting — per-preset data that lives in neither a store nor a
   // namespaced key.
   if (hasSessionRound(presetId)) return false
-  // …and, for a preset that is NOT on screen, a casual history parked for a reload (round 23 Q11,
-  // store/sessionHistory), which comes back the next time that copy's screens mount. The active
+  // …and, for a preset that is NOT on screen, parked casual PLAY (store/sessionHistory) — a history,
+  // an answered question, a screen setting — which comes back the next time that copy's screens
+  // mount. (A preset the player only looked at has parked the questions its screens were waiting on
+  // and nothing else; that is not play, and hasSessionHistory does not count it.) The active
   // preset's is skipped rather than counted: it is only ever an older copy of what its screens are
-  // holding right now, which `screensFresh` above already judged — counting it too would keep asking
-  // after a Reset Stats had cleared the very history it describes.
+  // holding right now, which `screensFresh` above already judged.
   return isActive || !hasSessionHistory(presetId)
 }
 
@@ -606,7 +608,7 @@ export function switchPreset(id: number): boolean {
  *   guarantees the session's numbers cannot be reconciled into the permanent ones afterwards:
  *   ⚠⚠ MERGING A SESSION BACK IS BANNED, and this is the line that makes it unwritable — by the
  *   time anything permanent is read again, the session's numbers no longer exist anywhere.
- *   ⚠⚠ …AND NEITHER DO ITS ROUNDS (round 23 Q2). An ended Blitz round / MoX run carries a Best
+ *   ⚠⚠ …AND NEITHER DO ITS ROUNDS. An ended Blitz round / MoX run carries a Best
  *   floor and a round id, and the screen that restores it reconciles it into the live Bests — so a
  *   guest round that survived the flip WAS a merge, by another door (reproduced: it replaced,
  *   lowered or erased permanent bests). The session copy's parked rounds are discarded with its
@@ -633,12 +635,16 @@ export function setPresetAmnesic(id: number, amnesic: boolean): boolean {
     presets: reg.presets.map((p) => (p.id === id ? { ...p, amnesic } : p)),
   })
   discardSessionStats(id)
-  // …and the rounds parked against that session copy, which share its lifetime (round 23 Q2): a guest
+  // …and the rounds parked against that session copy, which share its lifetime: a guest
   // round must not outlive the guest stats it was scored against, and a fresh guest start must not
   // find the last guest's round. The SAVED copy's parked rounds are untouched — turning Amnesic off
   // brings your own finished round back exactly as you left it (store/sessionRound's header).
   discardSessionRoundsOf(dataIdOf(id, true))
-  // …and, for the same reason, any casual history parked against that session copy (round 23 Q11).
+  // …and, for the same reason, any casual history parked against that session copy. Turning Amnesic
+  // OFF, the registry write above has just parked the guest's screens (src/main.tsx's subscription),
+  // and this throws that away with the rest of the guest's session; turning it ON, the same write
+  // parked YOUR screens under the saved copy, which this does not touch — that is the history that
+  // is waiting when the guest is done.
   discardSessionHistoriesOf(dataIdOf(id, true))
   // Only the ACTIVE preset has anything loaded to reload. Flipping the flag on a preset you are not
   // on changes nothing on screen and nothing in memory — it just decides where that preset's stats

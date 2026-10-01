@@ -24,12 +24,13 @@ import { useSettings } from './settings.js'
 //
 // WHAT DOES *NOT* PERSIST (intentionally — mid-run/round state is discarded):
 //   • The engine's live question, history stacks, locked/revealed flags, etc. — never HERE. (A
-//     casual mode's are kept across a RELOAD only, in sessionStorage: store/sessionHistory, round 23
-//     Q11. A real close still discards them.)
+//     casual mode's are kept for the browsing session, in sessionStorage: store/sessionHistory. A
+//     real close still discards them.)
 //   • Blitz/AoX engine stats — those are per-round/run scores, not lifetime totals;
-//     only their bests above persist.
-//   • The "new best ★" markers and the override-rollback refs — ephemeral per-session
-//     UI state; they stay as local state in the mode components.
+//     only their bests above persist. (An ENDED round or run is kept for the browsing session:
+//     store/sessionRound.)
+//   • The "new best ★" markers — nothing is stored for them at all: each is read off the round id
+//     saved inside the Best record (engine/roundId's isNewBest).
 //
 // ⚠ LOOKUP HISTORY USED TO LIVE HERE AND NO LONGER DOES (Q1, round 20) — it moved to its own
 // store/lookupHistory, because it stopped being PRESET data: it is now one shared list read by
@@ -37,7 +38,7 @@ import { useSettings } from './settings.js'
 // the full argument. Its old field on THIS store's persisted payload is handled at the bottom of
 // this file's `persist` options (the version bump, and why no `migrate` step is needed for it).
 //
-// ★ EVERY SOLVE TIME IS KEPT (round 23 Q3), so Mean and Median are all-time numbers and a reload
+// ★ EVERY SOLVE TIME IS KEPT, so Mean and Median are all-time numbers and a reload
 // shows exactly what the screen showed before it. This store used to keep only the newest 1,000
 // saved times while `good` kept counting — which made the "Enable and Reset Stats?" check fire after
 // every reload for anyone past 1,000 timed answers, and made a reloaded Mean average a different
@@ -98,7 +99,7 @@ const blankStats = (): Stats => ({ played: 0, good: 0, streak: 0, best: 0, times
 
 // ── v4 → v5: THE ONE-TIME REPAIR OF A SAVE THE OLD 1,000-TIME CAP TRIMMED ─────────────────────
 //
-// Builds before round 23 (Q3) saved only the newest 1,000 solve times. A silo they trimmed is
+// Builds up to v2.26.0 saved only the newest 1,000 solve times. A silo they trimmed is
 // recognisable exactly: 1,000 times beside MORE than 1,000 correct answers. The older times are gone
 // — nothing can bring them back — so the gap is recorded ONCE as `timesLost` (engine Stats), which
 // the desync check subtracts; every time from here on is kept, so the gap never grows.
@@ -208,7 +209,7 @@ export const useProgress = create<ProgressState>()(
       // and the saved personal defaults keep store/presets' permanent adapter, so an amnesic preset
       // cannot forget any of them however this file changes. See store/amnesic.
       storage: presetStatsStorage<Partial<ProgressState>>(),
-      // v5 = every solve time is kept (round 23 Q3); a save the old 1,000 cap trimmed gains its
+      // v5 = every solve time is kept; a save the old 1,000 cap trimmed gains its
       // one-time `timesLost` baseline in `migrate` below. The TIMES THEMSELVES ARE NOT REWRITTEN —
       // a legacy time's long float spelling round-trips exactly through JSON, and snapping it onto
       // the new 0.1 ms grid could move a displayed hundredth that sat on a boundary (a Last or a
