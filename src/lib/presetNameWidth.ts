@@ -34,8 +34,7 @@ import { PRESET_NAME_COL, PRESET_NAME_CELL_SELECTOR } from '../components/Preset
 // in the fixed top bar) are SIBLINGS somewhere far up the tree, not parent and child, so React
 // props and context have no clean path between them — the same shape of problem this app has
 // already solved by reaching across the DOM directly where its own tree does not offer a path:
-// main.tsx's `document.querySelector('[data-settings-modal]')`, the game's
-// `document.querySelectorAll('[data-key="..."]')` shortcuts, `[data-answer-grid="true"]`.
+// the game's `document.querySelectorAll('[data-key="..."]')` shortcuts, `[data-answer-grid="true"]`.
 // `readSwitcherBudget` below is the same idiom: `PRESET_NAME_CELL_SELECTOR`
 // (components/PresetSwitcher) names a stable `data-*` hook on the switcher's own flexible name
 // cell — not the whole trigger, the cell specifically, which is the element whose ACTUAL rendered

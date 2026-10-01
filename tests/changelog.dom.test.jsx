@@ -553,21 +553,20 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(region.className).not.toContain('fade-scroll-both')
   })
 
-  it('the scrim mousedown/click and Escape dismiss the popup only — the settings panel survives', () => {
+  it('a scrim press/click and Escape dismiss the popup only — the settings panel survives', () => {
     mountApp()
     openPopup()
     // Round 21 removed the Close button: the scrim tap and Escape are the routes now.
-    // The settings click-outside handler must treat the scrim as "inside" (the shared
-    // [data-settings-modal] marker)…
+    // A press on the scrim is never the panel's to judge — the popup is the top layer…
     const scrim = document.querySelector('[data-settings-modal]')
-    act(() => fireEvent.mouseDown(scrim))
+    act(() => fireEvent.pointerDown(scrim))
     expect(screen.getByRole('button', { name: 'Reset Settings' })).toBeInTheDocument()
     // …and a scrim CLICK cancels only the popup.
     act(() => fireEvent.click(scrim))
     expect(changelogTitle()).toBeNull()
     expect(screen.getByRole('button', { name: 'Reset Settings' })).toBeInTheDocument()
     openChangelog()
-    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // capture-phase popup handler wins
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // closes the top layer only
     expect(changelogTitle()).toBeNull()
     expect(screen.getByRole('button', { name: 'Reset Settings' })).toBeInTheDocument()
   })

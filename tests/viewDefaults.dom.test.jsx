@@ -370,9 +370,9 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     openSettings()
     saveSnapshot()
     act(() => fireEvent.click(btn('Clear Saved Defaults')))
-    // The settings click-outside handler must treat the scrim as "inside" (mousedown path)…
+    // A press on the scrim is never the panel's to judge — the popup is the top layer…
     const scrim = document.querySelector('[data-settings-modal]')
-    act(() => fireEvent.mouseDown(scrim))
+    act(() => fireEvent.pointerDown(scrim))
     expect(btn('Reset Settings')).toBeInTheDocument()
     // …and a scrim CLICK cancels only the popup.
     act(() => fireEvent.click(scrim))
@@ -380,7 +380,7 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(useUserDefaults.getState().saved).not.toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
     act(() => fireEvent.click(btn('Clear Saved Defaults')))
-    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // capture-phase popup handler wins
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // closes the top layer only
     expect(screen.queryByText('Clear your saved defaults?')).toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
     act(() => fireEvent.click(btn('Clear Saved Defaults')))
@@ -389,24 +389,23 @@ describe('The defaults manager (Q12 + Q5 round-6)', () => {
     expect(useUserDefaults.getState().saved).not.toBeNull() // dismissal never clears
   })
 
-  it('scrim mousedown/click and Escape dismiss the manager only — the settings panel survives', () => {
+  it('a scrim press/click and Escape dismiss the manager only — the settings panel survives', () => {
     act(() => useModePrefs.getState().setFlashMs(800))
     mountApp()
     openSettings()
     saveSnapshot()
     openManager()
     // Round 21 removed the resting Close button — the scrim tap and Escape are the routes now.
-    // The settings click-outside handler must treat the scrim as "inside" — the shared
-    // [data-settings-modal] marker (the same guard as the Save popup)…
+    // A press on the scrim is never the panel's to judge — the popup is the top layer…
     const scrim = document.querySelector('[data-settings-modal]')
-    act(() => fireEvent.mouseDown(scrim))
+    act(() => fireEvent.pointerDown(scrim))
     expect(btn('Reset Settings')).toBeInTheDocument()
     // …and a scrim CLICK cancels only the popup.
     act(() => fireEvent.click(scrim))
     expect(savedManager()).toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
     openManager()
-    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // capture-phase popup handler wins
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // closes the top layer only
     expect(savedManager()).toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
   })

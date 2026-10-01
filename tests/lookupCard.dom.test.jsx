@@ -636,26 +636,6 @@ describe('Lookup date box — Escape discards the edit and lets go (round 17)', 
     expect(rows(container)).toEqual([['7/4/1776', 'Thursday']]) // and so does the history
   })
 
-  it('the box consumes the press — nothing downstream of it ever sees the Escape', () => {
-    // The stopPropagation, at component level. App's settings Escape listener is a DOCUMENT
-    // keydown in the bubble phase, and React 19 attaches its own listener at the root container,
-    // so stopping the press there means document never sees it at all. (The consequence that
-    // matters — the ⚙ panel surviving the press — is the App-level case below.)
-    const { container } = render(<Host dateFormat="numeric-mdy" />)
-    const seen = []
-    const spy = (e) => seen.push(e.key)
-    document.addEventListener('keydown', spy)
-    try {
-      act(() => box(container).focus())
-      esc(box(container))
-      expect(seen).toEqual([])
-      act(() => fireEvent.keyDown(box(container), { key: 'Enter' })) // …and only Escape is stopped
-      expect(seen).toEqual(['Enter'])
-    } finally {
-      document.removeEventListener('keydown', spy)
-    }
-  })
-
   it('Clear moves the baseline: Escape after it cannot resurrect what Clear threw away', () => {
     // Clear preventDefaults its own mousedown, so pressing it leaves the keyboard in the box —
     // which is exactly the route that would misbehave if the baseline were only ever set on focus.

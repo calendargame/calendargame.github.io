@@ -178,7 +178,7 @@ export function installSystemColorScheme({ dark = false } = {}) {
 // ── Android Back, and the jsdom trap underneath it ───────────────────────────────────────────
 //
 // THE PROBLEM, and it is entirely an artefact of the test environment — nothing here is a claim
-// about the app. Closing an overlay through the UI runs useBackButton's popOverlay, which sets a
+// about the app. Closing an overlay through the UI runs components/overlayStack's popOverlay, which sets a
 // private `ignorePop` flag and traverses back (history.go, batched per commit) to unwind the entry that overlay pushed. The
 // resulting popstate is meant to arrive and be swallowed, clearing the flag. jsdom performs the
 // traversal on a LATER task, so two things can go wrong before it does:
@@ -215,7 +215,7 @@ if (typeof window !== 'undefined') {
     backGuardArmed = true
     nativeGo(delta)
   }
-  // Registered AFTER useBackButton's own module listener (this file imports the app first), so it
+  // Registered AFTER the overlay stack's own module listener (this file imports the app first), so it
   // observes the same popstate one step later — which is exactly the mirror we want.
   window.addEventListener('popstate', () => {
     backGuardArmed = false
@@ -251,23 +251,15 @@ export async function drainHistory() {
 // ── The gestures every route is built from ────────────────────────────────────────────────────
 
 // A FINGER TAP on `el`, as the whole gesture rather than as the one event a handler happens to
-// want. mousedown THEN click, because the panel has two listeners that fire on the press half and
-// never see the click — the click-outside handler (document mousedown/touchstart) and the Full
-// Reset disarm listener (document mousedown/touchstart, capture) — and a test that fired only
-// `click` would report "tapping this control does not disarm Full Reset" as a pass.
-//
-// ⚠ KNOWN LIMIT, MUTATION-VERIFIED (round 14 review). Both halves fire inside ONE act(), so React
-// never re-renders between them and a click handler still sees the state the press half wrote. That
-// makes the Full Reset disarm listener testable in one direction only: severing it (never disarm)
-// goes red as it should, but INVERTING it — disarming on every press including the confirming one —
-// leaves the whole defaults suite green, because the click closure still reads fullResetArmed as
-// true and fires the reset. On a real device the press and the release are separate tasks, so that
-// inversion would re-arm instead of firing and Full Reset would become unfireable by any route.
-// Closing it needs a variant that puts an act() boundary BETWEEN the halves for the confirming tap;
-// do not simply split this one, which every existing case is written against.
+// want. pointerdown THEN click, because the app's press-outside rule (components/overlayStack — one
+// window pointerdown listener that hands the press to the top open layer) fires on the press half
+// and never sees the click: a test that fired only `click` would report "tapping this control does
+// not close the panel" as a pass for a control the panel would have closed on.
+// (jsdom's synthetic pointerdown is not a PRIMARY pointer, so the press-drag controller and the
+// press-drag triggers ignore it, exactly as they ignored the mousedown this used to send.)
 export const tap = (el) =>
   act(() => {
-    fireEvent.mouseDown(el)
+    fireEvent.pointerDown(el)
     fireEvent.click(el)
   })
 
@@ -310,9 +302,9 @@ export const pressKeyOn = (el, key, init = {}) => {
 // The gear carries `data-select-trigger` and toggles on POINTERDOWN, so the controller ALWAYS arms
 // click suppression on it at release (src/lib/pointerGestures.ts — an unsuppressed click would
 // double-toggle the panel). That arming is cleared by exactly three things: the click that
-// consumes it, the next POINTERDOWN, or a 1s fallback timer. A real browser delivers the click and
-// the arming dies with it. jsdom delivers nothing, and `tap()` fires mousedown + click — neither
-// is a pointerdown — so the arming survives and eats that click in the capture phase. Under FAKE
+// consumes it, the next PRIMARY pointerdown, or a 1s fallback timer. A real browser delivers the
+// click and the arming dies with it. jsdom delivers nothing, and the pointerdown `tap()` fires is
+// not a primary pointer — so the arming survives and eats that click in the capture phase. Under FAKE
 // TIMERS the 1s fallback never fires either, so it survives indefinitely.
 //
 // The consequence is silent, which is what makes it worth a paragraph: `closeSettings()` defaults
@@ -382,8 +374,8 @@ const CLOSE_ROUTES = {
   gear: () => tap(gear()),
   gearPress: () => pressDragFromGear(() => gear()),
   key: () => pressKey('G'),
-  // Escape, which the panel handles on the document — and deliberately does NOT handle while a
-  // text-entry input has focus.
+  // Escape, which closes the top open layer (components/overlayStack) — and deliberately does
+  // NOT while a text-entry input has focus.
   escape: () => act(() => fireEvent.keyDown(document.body, { key: 'Escape' })),
   // A tap on the page behind the panel. Defaults to the bar's own background (outsideTarget
   // below), which is a real thing a finger can land on and is outside all FOUR excluded regions
@@ -1038,7 +1030,7 @@ export function beforeInputYear(which, char) {
 }
 
 // COMMIT what is typed, by either route a user has. 'blur' is a REAL blur when the box holds focus
-// (which is what the app's own click-outside close forces before unmounting), falling back to a
+// (which is what the app's own press-outside close forces before unmounting), falling back to a
 // dispatched blur when it does not. 'enter' is the key, which commits and then blurs itself.
 export function commitYear(which, via = 'blur') {
   const el = yearInput(which)
@@ -1061,14 +1053,20 @@ export function commitYear(which, via = 'blur') {
 //      inside that same batch still closing over the PRE-revert text, so the typed number won and
 //      landed in the store. Only unparseable text actually reverted, via commitMin's NaN branch —
 //      which is presumably why nobody noticed. The revert is now flushed before the blur.
-//   2. IT USED TO CLOSE THE PANEL. The panel's document-level Escape handler carves out text inputs
-//      by reading document.activeElement, and the box had already blurred itself by the time that
-//      handler ran, so the carve-out no longer applied. The box now stops the press propagating.
+//   2. IT USED TO CLOSE THE PANEL. The panel's Escape handler ran in the bubble phase and carved
+//      out text inputs by reading document.activeElement — but the box had already blurred itself
+//      by the time it ran, so the carve-out no longer applied. Escape is now decided in the CAPTURE
+//      phase, by the app's stack of open things (components/overlayStack), while the box still has
+//      the keyboard: the press is left to the box and the panel stays.
 //
-// ⚠ SO THIS HELPER IS NOT A SYNONYM FOR "press Escape". It delivers the press INSIDE the box, which
-// is the only way to exercise either fix; an Escape aimed at the page takes the panel's own handler
-// and closes the panel, which is correct and is a different case.
-export const escapeYear = (which) => keyInYear(which, 'Escape')
+// ⚠ SO THIS HELPER IS NOT A SYNONYM FOR "press Escape". It delivers the press the way a keyboard
+// does — to the box that HAS the keyboard, so it focuses the box first — which is the only way to
+// exercise either fix; an Escape with no text box focused closes the panel, which is correct and
+// is a different case.
+export const escapeYear = (which) => {
+  focusYear(which)
+  return keyInYear(which, 'Escape')
+}
 
 // ── Everything the panel currently reads ──────────────────────────────────────────────────────
 
@@ -1203,9 +1201,9 @@ export const modalCard = (nameOrKey) => screen.getByRole('dialog', { name: title
 export const queryModalCard = (nameOrKey) =>
   screen.queryByRole('dialog', { name: titleFor(nameOrKey) })
 
-// IS ANY MODAL UP? Asked through `[data-settings-modal]`, the marker App itself resolves live in
-// two places (the Tab guard at main.tsx:1093 and the click-outside rule at 1347) — so this is the
-// app's own definition of "a settings modal is mounted", not a second one invented here.
+// IS ANY MODAL UP? Asked through `[data-settings-modal]`, the marker components/Popup puts on every
+// popup's scrim — and Popup is the only thing that draws one, so "a marked scrim is in the
+// document" and the app's own answer (the stack in components/overlayStack) are the same fact.
 export const anyModalOpen = () => document.querySelector('[data-settings-modal]') !== null
 
 // A modal's SCRIM — the full-screen backdrop a tap can land on. Resolved from the card outward
@@ -1281,11 +1279,12 @@ export const makeSaveable = () =>
 //   scrim   — a FINGER TAP on the backdrop. Cancels the POPUP only; the panel stays up behind it.
 //             ⚠ IT IS `tap`, NOT `click`, AND THAT IS THE WHOLE PAIRING. The modal's own dismiss
 //             fires on click, but the claim "and the panel is still up behind it" is about the
-//             panel's click-outside rule — which listens on document mousedown/touchstart and
-//             never sees a click at all (src/main.tsx). A click-only route satisfies that half by
-//             never consulting the rule, so it would report "panel survived" even with the rule's
-//             `[data-settings-modal]` carve-out deleted. mousedown THEN click drives both.
-//   escape  — the capture-phase handler, which consumes the press so the panel's own Escape never
+//             press-outside rule — which runs on pointerdown and never sees a click at all
+//             (components/overlayStack hands the press to the TOP layer only). A click-only route
+//             satisfies that half by never consulting the rule, so it would report "panel
+//             survived" even if a press on a popup's scrim were offered to the panel underneath.
+//             pointerdown THEN click drives both.
+//   escape  — closes the top layer only, and the press is spent: the panel under the popup never
 //             sees it.
 //   back    — Android hardware Back. LIFO: the modal goes first, the panel on the next press.
 //             ⚠ ASYNC — `await closeModal(key, 'back')`; see pressBack for why.

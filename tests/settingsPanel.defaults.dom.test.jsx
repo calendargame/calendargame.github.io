@@ -622,27 +622,29 @@ describe('⚙ Full Reset — reach, outcomes and the confirmation popup (net gro
     expect(useSettings.getState().leapChance).toBe(SETTINGS_DEFAULTS.leapChance)
   })
 
-  it('closing the panel with the popup open dismisses the popup, and it is not still open on reopen', async () => {
-    for (const via of ['gear', 'key', 'escape', 'outside', 'back']) {
-      resetAppState()
+  // One case per route rather than one case looping over five: each mounts the whole app, and five
+  // mounts in a single case ran within a few seconds of its time limit on a loaded machine.
+  it.each(['gear', 'key', 'escape', 'outside', 'back'])(
+    'closing the panel (%s) with the popup open dismisses the popup, and it is not still open on reopen',
+    async (via) => {
       act(() => useSettings.getState().setLeapChance('75'))
-      const view = mountApp()
+      mountApp()
       openSettings()
       tap(fullResetButton())
       expect(fullResetState().confirmOpen).toBe(true)
-      // Escape / Back hit the modal first (LIFO), so send it twice for those two routes — the
-      // first press dismisses the popup, the second closes the panel.
-      await closeSettings(via)
+      // Escape, Back and a tap outside reach the popup first — it is the top layer — so those
+      // three take two presses: the first dismisses the popup, the second closes the panel. (A tap
+      // "outside" with the popup up can only land on its scrim, which covers the page.)
+      if (via === 'outside') tap(modalScrim('fullReset'))
+      else await closeSettings(via)
       if (isSettingsOpen()) await closeSettings(via)
       expect(isSettingsOpen()).toBe(false)
       expect(anyModalOpen()).toBe(false)
       openSettings()
       expect(fullResetState().confirmOpen).toBe(false)
       expect(useSettings.getState().leapChance).toBe('75') // nothing fired on the way through
-      view.unmount()
-      document.getElementById('root').remove()
-    }
-  })
+    },
+  )
 })
 
 describe('⚙ Reset Settings — the confirmation popup (net group 8b)', () => {
@@ -952,7 +954,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     // Range boxes (round 14) and the tap-to-type slider readouts beside this very field (round 2).
     // Cancel is still the discard for the whole popup; this is the discard for one field.
     // ★ WHAT THE CASE IS REALLY GUARDING IS UNCHANGED, and it is the second half of the title: the
-    // press must not reach the popup's capture-phase Escape handler or App's panel one. That is
+    // press must close neither the popup nor the panel under it. That is
     // why the two "still standing" assertions below matter more than the value does — a field that
     // discarded correctly but took the popup down with it would be a worse regression than the one
     // this case was written for.

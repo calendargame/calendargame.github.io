@@ -1,50 +1,58 @@
 // @vitest-environment jsdom
 //
-// statusBarScrim.dom — round 21 Q8, round 22 Q7, round 23 Q1. When a modal opens, its scrim
-// (`fixed inset-0 z-[60] bg-black/40`) covers the whole viewport EXCEPT the status bar, which the
-// browser paints itself — so the bar stays bright above 40%-darker content, a visible seam.
+// statusBarScrim.dom. When a popup opens, its scrim (`fixed inset-0 z-[60] bg-black/40`) covers the
+// whole viewport EXCEPT the status bar, which the browser paints itself — so the bar stays bright
+// above 40%-darker content, a visible seam.
 // src/main.tsx's theme effect answers with the SCRIMMED colour (each --tc channel × 0.6) on TWO
-// signals while any modal is up: <meta name="theme-color"> (Android Chrome, pre-26 Safari) and
-// <html>'s inline background (round 23: a theme change re-tints the installed iOS app's status bar
-// live, and re-stamping <html>'s background is the one thing a theme change did that the modal path
-// did not). Both are keyed on a MutationObserver watching #root for the [data-settings-modal] marker
-// every modal scrim carries. The ★★ note there is the account of all three attempts, and says
-// plainly what is still unverified on a device.
+// signals while any popup is up: <meta name="theme-color"> (Android Chrome, pre-26 Safari) and
+// <html>'s inline background (a theme change re-tints the installed iOS app's status bar live, and
+// re-stamping <html>'s background is the one thing a theme change did that the popup path did
+// not). Both are keyed on the app's stack of open things (components/overlayStack) — "is any popup
+// open?". The ★★ note there is the account of all three attempts, and says plainly what is still
+// unverified on a device.
 //
 // jsdom has no status bar and no real stylesheet, so this proves what it can: both signals flip to
-// the darker value when a [data-settings-modal] node appears under #root (where every real modal
-// portals), and both restore to plain --tc when the last one leaves. --tc is seeded as an inline
+// the darker value when a popup opens (a real components/Popup, the shell every popup in the app is
+// drawn in), and both restore to plain --tc when the last one closes. --tc is seeded as an inline
 // custom property (jsdom's getComputedStyle reflects those), and the exact hex asserted is the
 // channel-×-0.6 maths itself. The last block reads index.css to pin WHY dimming <html> is
 // invisible: #root paints the page background, so the canvas <html> colours sits behind it.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { act, cleanup } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { resetAppState, mountApp } from './helpers/settingsPanel.jsx'
 import { useSettings } from '../src/store/settings.js'
+import Popup from '../src/components/Popup.jsx'
 
 const meta = () => document.querySelector("meta[name='theme-color']")
 const htmlBg = () => document.documentElement.style.background
 
-// Let the MutationObserver microtask, the resulting setState and its effect all settle.
+// Let the stack's notification, the resulting render and its effect all settle.
 const flush = () =>
   act(async () => {
     await Promise.resolve()
   })
 
+// A real popup, opened beside the app: its own React root, the app's one stack. Each needs its own
+// id, as every popup in the app has.
+let popupSerial = 0
 const openScrim = async () => {
-  const scrim = document.createElement('div')
-  scrim.setAttribute('data-settings-modal', '')
+  const id = `status-bar-test-${++popupSerial}`
+  let popup
   await act(async () => {
-    document.getElementById('root').appendChild(scrim)
+    popup = render(
+      <Popup id={id} onDismiss={() => {}}>
+        <div role="dialog" aria-modal="true" tabIndex={-1} />
+      </Popup>,
+    )
   })
   await flush()
-  return scrim
+  return popup
 }
-const closeScrim = async (scrim) => {
+const closeScrim = async (popup) => {
   await act(async () => {
-    scrim.remove()
+    popup.unmount()
   })
   await flush()
 }
@@ -71,6 +79,7 @@ describe('status bar dims to match the scrim while a modal is open', () => {
     expect(meta().content).toBe('#0d1117')
 
     const scrim = await openScrim()
+    expect(document.querySelectorAll('#root > [data-settings-modal]')).toHaveLength(1)
     // 0d→08 (13×0.6=7.8→8), 11→0a (17×0.6=10.2→10), 17→0e (23×0.6=13.8→14)
     expect(htmlBg()).toBe('rgb(8, 10, 14)')
     expect(meta().content).toBe('#080a0e') // the two signals agree
@@ -91,8 +100,8 @@ describe('status bar dims to match the scrim while a modal is open', () => {
   })
 
   it('a second modal opening while one is up keeps the dim until the LAST one closes', async () => {
-    // A ConfirmModal can open over a ⚙ popup, so "a modal closed" is not "no modal is up". The
-    // observer re-queries the whole tree on every change, and this pins that — in both orders.
+    // The storage-full notice can open over a ⚙ popup, so "a popup closed" is not "no popup is up".
+    // The stack is asked whether ANY is open, and this pins that — in both orders.
     mountApp()
     const first = await openScrim()
     const second = await openScrim()
@@ -136,9 +145,9 @@ describe('status bar dims to match the scrim while a modal is open', () => {
     // The dimmed value lives ONLY in <meta>.content and <html>'s inline style — it is never
     // persisted, and the boot script stamps <html>'s background from the STORED theme on a cold
     // load, when no modal can be up. A BFCache restore freezes and thaws the meta, html's style,
-    // the scrim node and React's `anyModalOpen` together, so there is nothing to recompute on
-    // resume and the effect has no pagehide/visibilitychange listener by design. This pins that:
-    // the value does not drift across a resume, and the observer/effect are still live afterward.
+    // the popup and the stack that holds it together, so there is nothing to recompute on resume
+    // and the effect has no pagehide/visibilitychange listener by design. This pins that: the value
+    // does not drift across a resume, and the mechanism is still live afterward.
     mountApp()
     const scrim = await openScrim()
     expect(meta().content).toBe('#080a0e')
@@ -160,7 +169,7 @@ describe('status bar dims to match the scrim while a modal is open', () => {
     expect(htmlBg()).toBe('rgb(8, 10, 14)')
 
     await closeScrim(scrim)
-    expect(meta().content).toBe('#0d1117') // …and the observer still restores it when the modal goes
+    expect(meta().content).toBe('#0d1117') // …and it is still restored when the popup goes
     expect(htmlBg()).toBe('rgb(13, 17, 23)')
     delete document.visibilityState
   })

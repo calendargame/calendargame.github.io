@@ -1,18 +1,11 @@
-import { useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
+import { useRef } from 'react'
 import type { FmtDate } from '../modes/modeTypes.js'
 import { DAY, DAY_LETTER } from '../lib/format.js'
 import type { RunBreakdown as RunBreakdownData, SolveMark } from '../engine/runBreakdown.js'
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
-import { useBackButton } from './useBackButton.js'
-import {
-  MODAL_CARD_CLASS,
-  MODAL_CARD_SHADOW,
-  MODAL_SCRIM_CLASS,
-  trapModalTab,
-  useModalEscape,
-} from './modalContract.js'
+import Popup from './Popup.js'
+import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
 
 // ─────────────────────────────────────────────────────────────────────────
 // components/RunBreakdown — an ended run or round, solve by solve.
@@ -39,11 +32,9 @@ import {
 // — which is also why it can afford to be a live proof of the mean rather than a report about it.
 // The maths lives in engine/runBreakdown; this file only formats it.
 //
-// It is the app's one modal outside the ⚙ panel, and owes the same contract as the five ⚙ popups
-// — focus on open,
-// capture-phase Escape, Android Back, the Tab trap, the [data-settings-modal] marker — which is now
-// shared code rather than a checklist; see components/modalContract. The card, scrim, shadow, and
-// the scroll region's fades are the changelog popup's, literally: same tokens, same recipe.
+// It is a popup like the ⚙ panel's own, drawn in the same shared shell (components/Popup, which
+// owns the whole popup contract — see components/modalContract). The card, shadow, and the scroll
+// region's fades are the changelog popup's, literally: same tokens, same recipe.
 //
 // ⚠ THE MODE PAGE ITSELF MUST NEVER SCROLL (the owner's standing constraint), which is why this is
 // a modal with its OWN internal scroller and not a section that grows the screen. A run can be a
@@ -71,12 +62,10 @@ function Figure({ label, value }: { label: string; value: string }) {
   )
 }
 
-// ⚠ MOUNTED ONLY WHILE OPEN — there is no `open` prop, and that is deliberate. The four ⚙ popups
-// carry one because they live inside an always-mounted panel; this one is rendered by a mode screen
-// that can simply not render it. Conditional mounting is what lets the caller build the breakdown
-// data ONLY when the panel is up (a prop would be evaluated on every render of the mode, finished
-// run or not), and it makes "open" one fact — the component exists — instead of two that can
-// disagree. Every hook below therefore runs in the open state, unconditionally.
+// ⚠ MOUNTED ONLY WHILE OPEN — there is no `open` prop, and that is deliberate. Conditional mounting
+// is what lets the caller build the breakdown data ONLY when the popup is up (a prop would be
+// evaluated on every render of the mode, finished run or not), and it makes "open" one fact — the
+// component exists — instead of two that can disagree.
 export default function RunBreakdown({
   onClose,
   data,
@@ -91,30 +80,13 @@ export default function RunBreakdown({
   // owns the word for its own unit of play; this component owns nothing but the layout.
   title: string
 }) {
-  const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLUListElement | null>(null)
   const { scrolledFromTop, atBottom } = useScrollEdgeState(scrollRef, true)
-  // Term 1 of the modal contract: move focus INTO the dialog on open, so a screen reader announces a
-  // modal and the keyboard starts inside it rather than on the stat strip under the scrim.
-  useEffect(() => {
-    cardRef.current?.focus()
-  }, [])
-  useModalEscape(true, onClose, false) //  no text box to guard (and, since round 21, no buttons at all)
-  useBackButton(true, onClose, 'run-breakdown')
 
   const { rows, summary, fastestIdx, slowestIdx } = data
-  return createPortal(
-    <div
-      data-settings-modal
-      role="presentation"
-      className={MODAL_SCRIM_CLASS}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      onKeyDown={trapModalTab}
-    >
+  return (
+    <Popup id="run-breakdown" onDismiss={onClose}>
       <div
-        ref={cardRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
@@ -238,13 +210,12 @@ export default function RunBreakdown({
             </li>
           ))}
         </ul>
-        {/* NO dismiss button (round 21, Q5): the scrim tap, Escape and Android Back all already
-            dismiss, and the owner wanted the row back. The card is now title + summary + solve
-            list only. With zero focusable controls the modal contract's Tab trap keeps focus
-            pinned on this card (tabIndex={-1}, focused on open) rather than letting Tab walk out
-            to the screen under the scrim — see trapModalTab's degenerate branch. */}
+        {/* NO dismiss button: the scrim tap, Escape and Android Back all already dismiss, and the
+            owner wanted the row back. The card is title + summary + solve list only. With zero
+            focusable controls the popup's Tab trap keeps focus pinned on this card (tabIndex={-1},
+            focused on open) rather than letting Tab walk out to the screen under the scrim — see
+            trapModalTab's degenerate branch. */}
       </div>
-    </div>,
-    document.getElementById('root')!,
+    </Popup>
   )
 }

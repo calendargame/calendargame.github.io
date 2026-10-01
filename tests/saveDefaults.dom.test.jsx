@@ -589,24 +589,24 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
       fireEvent.keyDown(flashSlider(), { key: 'Escape' })
     })
     expect(popupTitle()).toBeNull() // the popup dismissed…
-    expect(btn('Reset Settings')).toBeInTheDocument() // …and the panel survived (capture handler consumed the press)
+    expect(btn('Reset Settings')).toBeInTheDocument() // …and the panel survived (the press was spent on the top layer)
   })
 
-  it('scrim mousedown/click and Escape cancel the POPUP only; the settings panel closes on the next Escape', () => {
+  it('a scrim press/click and Escape cancel the POPUP only; the settings panel closes on the next Escape', () => {
     mountApp()
     openSettings()
     makeSaveable() // round 14 (D7): a dimmed Save Defaults no longer opens its popup — see the helper
     openPopup()
     const scrim = document.querySelector('[data-settings-modal]')
-    // The settings click-outside handler must treat the scrim as "inside" (mousedown path)…
-    act(() => fireEvent.mouseDown(scrim))
+    // A press on the scrim is never the panel's to judge — the popup is the top layer…
+    act(() => fireEvent.pointerDown(scrim))
     expect(btn('Reset Settings')).toBeInTheDocument()
     // …and a scrim CLICK cancels only the popup.
     act(() => fireEvent.click(scrim))
     expect(popupTitle()).toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
     openPopup()
-    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // capture-phase popup handler wins
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' })) // closes the top layer only
     expect(popupTitle()).toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument()
     act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
@@ -628,7 +628,7 @@ describe('Save Defaults (Q7) + gear indicator (Q8)', () => {
     openSettings()
     openPopup()
     expect(popupTitle()).toBeInTheDocument()
-    // A real Back press manifests as a popstate the useBackButton stack consumes newest-first.
+    // A real Back press manifests as a popstate the overlay stack consumes newest-first.
     act(() => window.dispatchEvent(new PopStateEvent('popstate')))
     expect(popupTitle()).toBeNull()
     expect(btn('Reset Settings')).toBeInTheDocument() // settings survived the first Back

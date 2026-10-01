@@ -480,7 +480,7 @@ describe('the round breakdown — Blitz', () => {
 
     // …and the moment the breakdown is dismissed, G opens the panel normally again.
     act(() => {
-      fireEvent.keyDown(document, { key: 'Escape' }) // modalContract listens on document, capture phase
+      fireEvent.keyDown(document, { key: 'Escape' }) // closes the top open layer (overlayStack)
     })
     expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).toBeNull()
     act(() => {

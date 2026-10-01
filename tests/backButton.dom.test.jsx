@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Q3 (round-7) — useBackButton's two history regimes. The hook is the app's ONLY history writer:
+// components/overlayStack's two history regimes. The stack is the app's ONLY history writer:
 // on platforms with a Back affordance (Android hardware Back, desktop, browser tabs) each open
 // overlay pushes one {cgOverlay} entry so Back closes it, while the iOS INSTALLED app
 // (navigator.standalone === true) never touches history at all — iOS honors edge swipes over the
@@ -37,7 +37,7 @@ async function freshUseBackButton() {
   // Fresh module = fresh IOS_STANDALONE sample + empty stack + clean ignorePop. Set
   // navigator.standalone BEFORE calling this — the import evaluates the module-scope const.
   vi.resetModules()
-  return (await import('../src/components/useBackButton.js')).useBackButton
+  return (await import('../src/components/overlayStack.js')).useBackButton
 }
 
 async function flushTraversals() {

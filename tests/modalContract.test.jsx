@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 //
-// components/modalContract — the two pieces this module owns, unit-tested against fabricated DOM so
-// the degenerate cases are provable without standing up a whole modal:
-//   • useModalEscape — capture-phase, stopPropagation, the text-entry guard;  (covered broadly by
-//     the settings-panel suites — not re-proved here)
+// components/modalContract — the one piece of BEHAVIOUR this module owns, unit-tested against
+// fabricated DOM so the degenerate cases are provable without standing up a whole modal. (Escape,
+// Android Back, the dim and focus are the stack's and the shell's — components/overlayStack and
+// components/Popup — and are pinned through the real app in tests/popupStack.dom.)
 //   • trapModalTab — the focus trap, and specifically its ZERO-control and ONE-control degenerate
 //     branches (round 21: the run breakdown and the Changelog popup dropped their Close buttons, so
 //     a card whose only content is text now reaches the trap with nothing to cycle).

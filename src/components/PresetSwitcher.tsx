@@ -102,8 +102,8 @@ import { switchPreset } from '../store/presetControl.js'
 // DOM hook that measurement reads — components/PresetManager's rename field is mounted in a
 // completely different part of the tree (a ⚙ modal, not the fixed top bar), so it cannot reach
 // this cell through React props or context; it reads the live element the same way this app
-// already reaches across an unrelated component boundary elsewhere (main.tsx's
-// `[data-settings-modal]`, the game's `[data-key="..."]` shortcuts).
+// already reaches across an unrelated component boundary elsewhere (the game's `[data-key="..."]`
+// shortcuts, the answer grid's `[data-answer-grid]`).
 //
 // ── THE AMNESIC MARKER ────────────────────────────────────────────────────────────────────────
 //
@@ -153,7 +153,7 @@ export const PRESET_NAME_COL = '4.5em'
 // if the switcher's own menu happened to be open at the same moment the rename field is measuring,
 // which the ⚙ Presets modal and this control's dropdown can, in fact, both be open at once (the
 // same exclusion that lets pressing this trigger with the ⚙ panel open open the menu instead of
-// closing the panel — see the click-outside note near the top of this file). All seven stacked
+// closing the panel — see the press-outside note near the top of this file). All seven stacked
 // cells share the exact same rendered width regardless of which is the visible one (that sharing
 // is the whole "stack every option in one grid cell" trick CustomSelect's trigger already relies
 // on), so matching the FIRST one in document order is exactly as correct as matching the selected
@@ -216,7 +216,7 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
 
 export default function PresetSwitcher({
   // ⚠ REQUIRED, not optional, and that is the whole reason it exists (see the ⚠⚠ block above). Its
-  // one job is to give App a handle on this control's wrapper so the ⚙ click-outside handler can
+  // one job is to give App a handle on this control's wrapper so the ⚙ press-outside handler can
   // treat a press on this trigger as "inside". An optional prop would let a future call site mount
   // the switcher with the exclusion silently missing — and the symptom (the ⚙ panel slamming shut
   // under the finger that opened this menu) looks like a gesture bug, not like a forgotten prop.

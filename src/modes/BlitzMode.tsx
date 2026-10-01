@@ -43,7 +43,7 @@ import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/parkedEngine.js'
-import { useBackButton } from '../components/useBackButton.js'
+import { useBackButton } from '../components/overlayStack.js'
 
 // The Best records that stood BEFORE the current round (snapshotted at Begin) — the reconcile
 // floor and the Override-resume revert target. Named so the ref below and the round snapshot
@@ -281,7 +281,7 @@ function BlitzMode({
   const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
-  // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
+  // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const S = state.stats
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse

@@ -53,7 +53,7 @@ import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/parkedEngine.js'
-import { useBackButton } from '../components/useBackButton.js'
+import { useBackButton } from '../components/overlayStack.js'
 
 // Round-21 Q11 — the shape AoxMode parks in store/sessionRound for an ENDED run (done | failed). It
 // round-trips its own engine state plus the component fields the completed view (and a
@@ -799,32 +799,10 @@ function AoxMode({
                 aoxNAtFocusRef captures it on focus, which is the honest definition of "the edit"
                 (an edit begins when the keyboard enters the box). Restoring an un-normalized
                 capture is safe: the blur that follows normalizes it, exactly as it would have.
-                ⚠ AND IT STOPS PROPAGATION, for the reason round 14 wrote down at the year boxes.
-                App's Escape listener is a DOCUMENT keydown in the bubble phase that decides "is
-                this press mine?" by asking what has focus; blur() below runs first, so without the
-                stop it would find nothing focused and close the ⚙ panel on what the user meant as a
-                field dismiss.
-                ⚠ THE PATH IT WAS WRITTEN FOR IS NOW CLOSED, and this note is rewritten rather than
-                left standing because a defensive line with a wrong reason attached is worse than
-                none. Two orders were ever proposed. "Tab walks out of the panel" was always false —
-                App intercepts plain Tab on a document keydown and, with no [data-settings-modal]
-                up, preventDefaults it and sends focus to the mode selector (main.tsx), so Tab
-                cannot leave the panel onto this screen at all. The one that WAS reachable is the
-                opposite order: this field already holds focus, and THEN the ⚙ panel opens, because
-                tapping a <button> does not move focus on iOS or Safari. Round 18 (1D) closed that
-                one on the owner's report — opening ANY overlay now takes the keyboard down, in the
-                app's open-overlay registry (dismissKeyboard inside pushOverlay,
-                components/useBackButton) — so this box can no longer be holding an Escape while the
-                panel is up, and no test on this screen can observe the stop any more.
-                ⚠ SO WHY IT STAYS, plainly: it is one term of a contract shared by six boxes, and
-                four of them — both ⚙ Year Range fields, the Save Defaults popup's N field, every
-                tap-to-type readout — live INSIDE the panel, where the stop is reachable every time
-                and is what keeps their Escape from slamming the panel shut (tests/settingsPanel.
-                yearRange, tests/saveDefaults, tests/sliderValueEditor.dom pin it there). An Escape
-                contract that holds in four boxes and not the other two is not a contract; it is a
-                trap for whoever writes the seventh. The honest reading of this line today is "this
-                box handled the press", which is true on every path, rather than "this box is
-                defending the panel", which is no longer any path at all. */}
+                ⚠ NOTHING ELSE ANSWERS THIS PRESS. Escape also closes the top open layer (the ⚙ panel,
+                a popup — components/overlayStack), but that rule stands aside whenever a text box
+                has the keyboard, so the first Escape is always the box's and a second, with nothing
+                being typed, is the layer's. */}
         <div className="flex items-stretch shrink-0">
           <span
             className={`self-center text-xs leading-none text-(--tx-200-80) ${runPhase !== 'idle' ? ' opacity-60' : ''}`}
@@ -860,7 +838,6 @@ function AoxMode({
                 setAoxN((v) => normalizeAoxN(v))
                 e.currentTarget.blur()
               } else if (e.key === 'Escape') {
-                e.stopPropagation()
                 setAoxN(aoxNAtFocusRef.current)
                 e.currentTarget.blur()
               }

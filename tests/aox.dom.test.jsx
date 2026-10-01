@@ -1098,8 +1098,8 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
   it('opening the ⚙ panel takes the keyboard out of the box, and commits what was typed', () => {
     // ★ RE-BLESSED (round 18, 1D) — AND THE OLD ASSERTION WAS THE BUG. This case used to drive the
     // opposite: it clicked the gear, asserted the box STILL held the keyboard, and pinned the
-    // `e.stopPropagation()` on the Escape branch as the thing that stopped the resulting press from
-    // closing the panel. The owner reported that state as a defect in its own right — focus the run
+    // box's handling of the resulting Escape as the thing that stopped that press from closing the
+    // panel. The owner reported that state as a defect in its own right — focus the run
     // length, open Settings or the mode menu, and the keyboard just sits there over what you opened
     // — and his rule is "when the keyboard is open, doing anything at all should close it". So the
     // scenario the old case protected no longer exists to protect.
@@ -1112,15 +1112,13 @@ describe('AoX — Q18 (the run-length field shares the popup N field validation 
     // platform's accident. (Focusing the gear first would prove nothing: that is the path that
     // already worked.)
     //
-    // The rule itself is ONE line, in the app's open-overlay registry — dismissKeyboard() inside
-    // pushOverlay, components/useBackButton — so this case covers the gear, the mode menu, Show
+    // The rule itself is ONE line, in the app's stack of open things — dismissKeyboard() inside
+    // pushOverlay, components/overlayStack — so this case covers the gear, the mode menu, Show
     // Codes, How to Play and the four ⚙ popups at once. tests/textEntryFocus.dom walks the rest.
     //
-    // ⚠ WHAT PINS THE stopPropagation NOW: nothing on this screen, because it is no longer
-    // observable from here — with the keyboard gone at open, the box can no longer be holding an
-    // Escape while the panel is up. It stays in the source as one term of a contract its four
-    // siblings inside the panel still need; tests/settingsPanel.yearRange and tests/saveDefaults
-    // pin it where it is reachable. See the note beside it in modes/AoxMode.
+    // (The old case's other half — an Escape aimed at this box must not close the panel — has no
+    // way to arise from here any more: with the keyboard gone at open, the box cannot be holding an
+    // Escape while the panel is up.)
     mountApp()
     switchToAox()
     act(() => {

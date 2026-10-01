@@ -225,12 +225,12 @@ describe('the settings panel — opening and closing by every route (group 1)', 
   })
 
   it('a tap on any settings modal scrim closes only that modal and leaves the panel up', () => {
-    // ⚠ THE ROUTE HAS TO BE A REAL TAP, and it now is (the helper's `scrim` route fires mousedown
-    // THEN click; it fired click alone until this was caught). The half about the modal is
-    // satisfied by the click — the scrim's own onClick cancels its popup. The half about the PANEL
-    // is not: the panel's click-outside rule listens on document mousedown/touchstart and never
-    // sees a click at all, so a click-only route would report "panel true" by never consulting the
-    // rule, and would keep reporting it with the rule's `[data-settings-modal]` carve-out deleted.
+    // ⚠ THE ROUTE HAS TO BE A REAL TAP, and it is (the helper's `scrim` route fires pointerdown
+    // THEN click). The half about the modal is satisfied by the click — the scrim's own onClick
+    // cancels its popup. The half about the PANEL is not: the press-outside rule runs on pointerdown
+    // and never sees a click at all, so a click-only route would report "panel true" by never
+    // consulting the rule, and would keep reporting it even if a press on a popup's scrim were
+    // offered to the panel underneath as a press outside it.
     seedSavedDefaults()
     // The snapshot leaves live == saved, so Save Defaults sits dimmed — and since round 14 closed
     // defect D7 a dimmed footer button is genuinely inert, so the Save modal is unreachable until
@@ -546,7 +546,7 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
       // OUTSIDE the card in the DOM — which is precisely why a drag-release on modal content can
       // never dismiss the panel: the controller only acts on a release the menu CONTAINS.
       const outsideCard = !panelEl().contains(modalCard(key))
-      // ...and INSIDE for the panel's click-outside rule, so neither the card nor its scrim
+      // ...and never the panel's to judge as a press outside it (the popup is the top layer), so neither the card nor its scrim
       // pulls the panel down behind it.
       tap(modalCard(key))
       const cardKeptBoth = queryModalCard(key) !== null && isSettingsOpen()

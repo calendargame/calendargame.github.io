@@ -18,7 +18,7 @@
 // owner's iPhone is device-only truth and nothing in this suite can stand in for it.
 //
 // ⚠ AND WHY THERE IS NO TEST HERE FOR Show Codes OR How to Play. Rule 2 is one line inside
-// pushOverlay (components/useBackButton), the registry EVERY overlay in the app comes through, so
+// pushOverlay (components/overlayStack), the registry EVERY overlay in the app comes through, so
 // what needs covering is the registry's CALLERS — App (the ⚙ panel, How to Play), CustomSelect (the
 // mode menu), SettingsPanel (the four ⚙ popups) and the five mode screens (Show Codes) — not the
 // overlays those callers register. Contriving a route to Show Codes with a box focused would test

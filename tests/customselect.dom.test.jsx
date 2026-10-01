@@ -173,7 +173,7 @@ describe('CustomSelect — the trigger names its setting AND its value', () => {
 //      reaches the app. (What IS testable and IS fixed: once open, it stays open — below.)
 //   B. the page is already gliding when it opens   → opens, and the glide neither closes nor moves
 //      it;
-//   C. page still, the user swipes it              → closes, via the touchstart-outside path (the
+//   C. page still, the user swipes it              → closes, via the press-outside path (the
 //      test says so and proves which path did it);
 //   D. page still, then a scroll STARTS            → DELIBERATELY GIVEN UP. It stays open. Pinned
 //      below so nobody restores the dismissal by reflex.
@@ -312,11 +312,15 @@ describe('CustomSelect — the fixed portal panel (position, what closes it, --b
     const trigger = mount()
     fireEvent.click(trigger)
     expect(optionCount()).toBe(3)
-    // ⚠ WHICH PATH: the click-outside listener (mousedown/touchstart). The finger lands outside the
-    // panel, on the page it is about to pan, and that is simply a press outside an open popover —
-    // it closes there and then, before the page has moved a pixel. No scroll event has been
-    // dispatched at this point, which is what proves the path: there is no other one left.
-    fireEvent.touchStart(document.body)
+    // ⚠ WHICH PATH: the press-outside rule (pointerdown, handed to the top open layer by
+    // components/overlayStack). The finger lands outside the panel, on the page it is about to pan,
+    // and that is simply a press outside an open popover — it closes there and then, before the
+    // page has moved a pixel. No scroll event has been dispatched at this point, which is what
+    // proves the path: there is no other one left.
+    // (Opening the list put the keyboard on the trigger; a real press elsewhere takes it off again,
+    // which jsdom's synthetic event does not do by itself.)
+    act(() => trigger.blur())
+    fireEvent.pointerDown(document.body)
     expect(optionCount()).toBe(0)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).not.toBe(trigger) // outside-tap semantics: no refocus
@@ -326,7 +330,7 @@ describe('CustomSelect — the fixed portal panel (position, what closes it, --b
     // still under its trigger in the fixed bar. That is the D sacrifice seen from the user's side.
     fireEvent.click(trigger)
     expect(optionCount()).toBe(3)
-    fireEvent.touchStart(panel())
+    fireEvent.pointerDown(panel())
     expect(optionCount()).toBe(3)
     for (let i = 0; i < 12; i++) docScroll()
     expect(optionCount()).toBe(3)

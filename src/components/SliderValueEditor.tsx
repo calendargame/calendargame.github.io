@@ -14,14 +14,12 @@ import { commitSliderText } from '../lib/sliderValue.js'
 //     turn a typed "2,5" into "25" — commitSliderText normalizes the comma before parsing);
 //   • commit on blur/Enter — parse → convert to internal units → snap to the slider's grid →
 //     clamp into range; empty/junk reverts to the current value;
-//   • Escape — revert WITHOUT committing, and STOP PROPAGATION: the document-level settings/popup
-//     Escape handlers skip presses while a text input holds focus, but this input unmounts on the
-//     revert — without the stop the same native event would bubble on and slam the panel shut on
-//     what the user meant as a typing dismiss. This was the app's FIRST discard-on-Escape field
-//     (round 2); round 15 (B6) brought the last two NUMERIC ones — the AoX popup field and the AoX
-//     screen's own run-length box — onto the same contract, and round 17 brought the Lookup date
-//     box (components/LookupCard), the one field that was never numeric and the last one outside
-//     it. Escape therefore means "throw this edit away" in every box you can type into, with no
+//   • Escape — revert WITHOUT committing. The press is this box's alone: the app's rule that
+//     Escape closes the top open layer (components/overlayStack) stands aside while a text box has
+//     the keyboard, so the panel or popup this readout sits in stays open, and a second Escape,
+//     with nothing being typed, closes it. This was the app's FIRST discard-on-Escape field; the
+//     AoX popup field, the AoX screen's own run-length box and the Lookup date box
+//     (components/LookupCard) followed it onto the same contract. Escape therefore means "throw this edit away" in every box you can type into, with no
 //     exception left to name: these readouts, both ⚙ Year Range boxes, the Save Defaults popup's N
 //     field, the AoX screen's run length, and the Lookup date box.
 //
@@ -152,7 +150,6 @@ export default function SliderValueEditor({
           e.preventDefault()
           e.currentTarget.blur() // commit runs once, in onBlur
         } else if (e.key === 'Escape') {
-          e.stopPropagation()
           setText(null) // revert; the input unmounts (no blur fires on removal)
         }
       }}

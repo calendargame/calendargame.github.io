@@ -1668,8 +1668,10 @@ export default function GuidePage({
           blank had one, and the section may not claim coverage it only gives to two of three. If
           either span goes, the bullet goes with it; the guide's Known-gaps list below is where a
           purely-visual signal belongs instead; the popups =
-          SettingsPanel's four focus-on-open effects and the shared trapModalTab; the panel NOT
-          taking focus = the absence of any such effect for settingsOpen; the accordions =
+          components/Popup, the shell every popup is drawn in (focus in on open and back out on
+          close, the one dim) with the shared trapModalTab, and components/overlayStack for the
+          one-layer-at-a-time rule; the panel NOT taking focus = the absence of any focus call for
+          settingsOpen; the accordions =
           aria-expanded/aria-controls here and in MethodBreakdown; the mode list = CustomSelect's
           open-state key handler; the motion paragraph = a full grep of --motion-scale, which now
           has SIX consumers — index.css's .expander rule, this file's own inline transitionDuration
@@ -1817,7 +1819,18 @@ export default function GuidePage({
           <li>
             The preset control is the same kind of list, and once it&apos;s open the same keys do
             the same things. So is <b>Open in</b> in the ⚙ menu, and there <Kbd>Esc</Kbd> closes
-            just the list — the ⚙ menu stays open until a second <Kbd>Esc</Kbd>.
+            just the list — the ⚙ menu stays open until a second <Kbd>Esc</Kbd>. Opening any of
+            these lists puts the keyboard on its button, however you opened it, so the keys work
+            straight away.
+          </li>
+          <li>
+            Whatever is open closes one layer at a time, the one in front first. With a list open
+            over the ⚙ menu, a popup open over the menu, or the &quot;isn&apos;t being saved&quot;
+            notice open over another popup, <Kbd>Esc</Kbd>, your device&apos;s Back and a tap
+            outside each close only the one in front — do it again for the one behind it. However
+            many popups are open the screen is dimmed once, behind the popup in front, and a popup
+            waiting underneath is dimmed with the page. Closing a popup hands the keyboard back to
+            where it was: the control that opened it, or the popup underneath.
           </li>
         </UL>
         <Subhead>Motion</Subhead>

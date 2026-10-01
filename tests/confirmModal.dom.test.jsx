@@ -28,7 +28,7 @@ function mount(props) {
     onConfirm,
     title: 'Reset this thing?',
     body: 'It wipes the thing. This preset only.',
-    backButtonId: 'test-confirm',
+    id: 'test-confirm',
   }
   const view = render(<ConfirmModal {...base} {...props} />)
   return { view, onCancel, onConfirm, base }
@@ -104,7 +104,7 @@ describe('ConfirmModal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
-  it('Escape (capture phase) cancels, and stops the press from propagating to the page', () => {
+  it('Escape cancels, and the press is spent — it never propagates to the page', () => {
     const { onCancel } = mount()
     const bubbled = vi.fn()
     document.addEventListener('keydown', bubbled)
@@ -114,7 +114,7 @@ describe('ConfirmModal', () => {
       document.removeEventListener('keydown', bubbled)
     }
     expect(onCancel).toHaveBeenCalledTimes(1)
-    expect(bubbled).not.toHaveBeenCalled() // the capture handler consumed it
+    expect(bubbled).not.toHaveBeenCalled() // the stack's capture-phase listener consumed it
   })
 
   // ⚠ VERIFIED AGAINST THE REAL MARKUP, NOT ASSUMED FROM THE HELPER'S CLAIM. modalContract says a
@@ -136,7 +136,7 @@ describe('ConfirmModal', () => {
   })
 
   // The two dismiss routes that replaced the Cancel button are asserted above (the scrim tap and
-  // capture-phase Escape); this pins that they still land on onCancel with the button gone, i.e. that
+  // Escape); this pins that they still land on onCancel with the button gone, i.e. that
   // removing it did not quietly take the cancel semantics with it.
   it('Escape and a scrim tap both still cancel with no Cancel button on the card', () => {
     const { onCancel, onConfirm } = mount()

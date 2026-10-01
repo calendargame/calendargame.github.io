@@ -5,7 +5,7 @@
 // Direct component tests: tap swaps the readout button for a focused text input; the permissive
 // onChange regex; blur/Enter commit through the parse → convert → snap → clamp pipeline
 // (lib/sliderValue, pure math locked in tests/sliderValue.test.js); Escape reverts WITHOUT
-// committing and stops propagation (the popup/settings Escape contract); disabled follows the
+// committing; disabled follows the
 // slider's lock; and the Q4 round-8 zero-shift geometry — the invisible widest-string strut is
 // the ONLY in-flow child of the cell, both live controls sit on top of it out of flow, and
 // .svalue-input's outward inset exactly matches its own chrome so the input's CONTENT box lands
@@ -160,23 +160,17 @@ describe('SliderValueEditor', () => {
     expect(readout('Blitz round timer')).toHaveTextContent('60s')
   })
 
-  it('Escape reverts without committing AND stops propagation (the popup dismiss contract)', () => {
+  it('Escape reverts without committing', () => {
+    // That the press also leaves the popup or panel around the readout OPEN is the app's dismissal
+    // ladder (components/overlayStack: Escape closes the top layer only when the press is not aimed
+    // at a text box) — pinned where a layer exists, in tests/viewDefaults.dom and tests/popupStack.dom.
     const onCommit = vi.fn()
-    const docKeydown = vi.fn()
-    document.addEventListener('keydown', docKeydown)
-    try {
-      render(<SliderValueEditor {...perQProps} onCommit={onCommit} />)
-      openEditor('Blitz question timer')
-      act(() => fireEvent.change(field('Blitz question timer'), { target: { value: '25' } }))
-      act(() => fireEvent.keyDown(field('Blitz question timer'), { key: 'Escape' }))
-      expect(onCommit).not.toHaveBeenCalled()
-      expect(readout('Blitz question timer')).toHaveTextContent('10s') // reverted
-      // The same native press must never reach the document-level settings/popup Escape
-      // handlers — the input unmounts on revert, so their input-has-focus skip can't save it.
-      expect(docKeydown).not.toHaveBeenCalled()
-    } finally {
-      document.removeEventListener('keydown', docKeydown)
-    }
+    render(<SliderValueEditor {...perQProps} onCommit={onCommit} />)
+    openEditor('Blitz question timer')
+    act(() => fireEvent.change(field('Blitz question timer'), { target: { value: '25' } }))
+    act(() => fireEvent.keyDown(field('Blitz question timer'), { key: 'Escape' }))
+    expect(onCommit).not.toHaveBeenCalled()
+    expect(readout('Blitz question timer')).toHaveTextContent('10s') // reverted
   })
 
   it('disabled mirrors the slider lock: the readout is inert, and a lock mid-edit drops the edit', () => {

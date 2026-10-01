@@ -185,11 +185,12 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     //   1. IT COMMITTED INSTEAD OF REVERTING. The queued revert and the synchronous blur landed in
     //      one React batch, so the blur's own commit still held the PRE-revert text and the typed
     //      number won the race into the store. The revert is now flushed before the blur.
-    //   2. IT CLOSED THE PANEL. The panel's Escape handler carves out text inputs by asking what
-    //      has focus, and the box had already blurred itself, so the carve-out no longer applied.
-    //      The box now stops the press propagating: it consumed the Escape, so nothing else acts.
-    // Escape still gives up the keyboard — see the note beside the inputs in src/main.tsx for why
-    // that was kept rather than dropped.
+    //   2. IT CLOSED THE PANEL. The panel's Escape handler carved out text inputs by asking what
+    //      had focus, and the box had already blurred itself, so the carve-out no longer applied.
+    //      Escape is now decided before the box sees it, while the box still has the keyboard
+    //      (components/overlayStack), so the press is the box's alone.
+    // Escape still gives up the keyboard — see the note beside the inputs in
+    // components/SettingsPanel for why that was kept rather than dropped.
     openPanel()
     setYear('min', '1900')
     focusYear('min')
@@ -396,7 +397,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     typeYear('min', '1900')
     closeSettings('outside')
     expect(isSettingsOpen()).toBe(false)
-    // The click-outside close blurs the focused box before it unmounts the panel, on purpose —
+    // The press-outside close blurs the focused box before it unmounts the panel, on purpose —
     // without that, the typed value is silently dropped on every tap-away.
     expect(settings().minY).toBe(1900)
     openSettings()
@@ -405,7 +406,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
 
   it('PINS TODAY: closing the panel with the gear DROPS a half-typed year', () => {
     // ⚠ PINS TODAY, and it differs from the tap-away route above for a reason that is invisible in
-    // the markup: the gear is deliberately EXCLUDED from the click-outside rule (so that tapping it
+    // the markup: the gear is deliberately EXCLUDED from the press-outside rule (so that tapping it
     // toggles rather than double-closing), and the blur-before-close lives inside that rule. So the
     // panel unmounts with the box still focused and the typed year never commits. The text itself
     // survives — see the reopen case below — so nothing is lost, it is just not applied.
@@ -418,10 +419,8 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
   })
 
   it('Escape does not close the panel while a year box has the keyboard', () => {
-    // The text-entry carve-out, asserted at the panel for the first time — it was previously pinned
-    // only for the Save popup's sliders. ⚠ Note this is Escape arriving from the PAGE; an Escape
-    // sent to the box itself does close the panel, because the box blurs itself first. Both are
-    // pinned, and the difference between them is the defect the case above records.
+    // The text-entry carve-out, asserted at the panel: while a text box has the keyboard, Escape is
+    // not the panel's — wherever the event itself is dispatched (here, the page).
     openPanel()
     focusYear('min')
     typeYear('min', '1900')

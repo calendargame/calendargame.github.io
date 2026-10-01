@@ -42,43 +42,30 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 //     open, which is exactly the thing that contract says it does not survive.
 // The ⚙ panel is where every other thing you do TO your saved data already lives — Save Defaults,
 // the defaults manager, Clear Saved Defaults, Reset Settings, Full Reset — and it already has a
-// modal idiom with a shared contract. So this is the FIFTH user of that contract, not a fifth
-// style: components/modalContract's five terms, the same scrim, the same card, the same tokens.
+// popup idiom with a shared contract. So this is one more user of that contract, not a new style:
+// the same shell (components/Popup), the same card, the same tokens.
 //
-// ── ⚠⚠ THE CONFIRMATION IS A VIEW OF THIS CARD, NOT A MODAL ON TOP OF ONE ─────────────────────
+// ── ⚠⚠ THE CONFIRMATION IS A VIEW OF THIS CARD, NOT A POPUP ON TOP OF ONE ─────────────────────
 //
-// ★★ AND SINCE Q2 IT IS A VIEW YOU CAN DISMISS BACK OUT OF — THE LADDER. The confirmation used to
-// carry a Cancel button, which returned to the list while every dismiss route (scrim tap, Escape,
-// Android Back) closed the whole card. Q2 removed every Cancel in the app on the owner's rule that
-// tapping outside or pressing Escape already says the same thing — and this was the one place in the
-// app where that was FALSE, because those routes closed the card instead of answering the question.
-// So the routes were changed to match the button rather than the button kept as an exception: while
-// a delete is pending, a dismiss returns to the LIST, and a second dismiss closes the card. It is
-// the ladder the rename field below has always had (the first Escape belongs to the name being
-// typed, the second to the card), applied to the other view.
+// Deleting a preset that holds anything asks first (a preset that holds nothing skips the question
+// — see the ★ further down), and the ask REPLACES this card's body rather than opening a second
+// dialog over it. The question is about a row of this list, so it is answered where the list was:
+// one card, one place to look, and stepping back out of the question lands on the list again with
+// nothing to re-open. (It is a choice, not a limit. The app stacks popups properly —
+// components/overlayStack — and the storage-full notice does open over this card.)
+//
+// ★★ AND IT IS A VIEW YOU CAN DISMISS BACK OUT OF — THE LADDER. There is no Cancel button (the
+// owner's rule, app-wide: tapping outside or pressing Escape already says it), so every dismiss
+// route has to mean "never mind" here too: while a delete is pending, a dismiss returns to the
+// LIST, and a second dismiss closes the card. It is the ladder the rename field below has always
+// had (the first Escape belongs to the name being typed, the second to the card), applied to the
+// other view.
 // ⚠ WHICH IS WHY `pendingDeleteId` IS A PROP AND NOT THIS COMPONENT'S OWN STATE. A ladder is a
-// decision about a DISMISS, and all three dismiss routes belong to the caller
-// (components/SettingsPanel owns the scrim's onClick, useModalEscape and useBackButton for this
-// modal as it does for the other four) — so the flag they branch on is held there, beside them, and
-// handed down. Everything about DRAWING the two views is still this component's, focus included.
-//
-// Deleting a preset that holds anything asks first (Q1 skips the question entirely for one that
-// does not — see the ★ further down), and the ask REPLACES this card's body rather than opening a
-// second dialog over it. That is a deliberate refusal to invent nested modals, and the reason is mechanical:
-// modalContract's Escape term is a DOCUMENT-level capture listener registered per open modal, and
-// `stopPropagation` does not stop a second listener on the SAME node — so with two of them mounted
-// one Escape would close both, the inner dismiss taking the outer with it. Android Back (LIFO) and
-// the Tab trap would each need their own answer too, and every one of those answers would be new
-// machinery serving one button. The four modals that predate this one are mutually exclusive BY
-// CONSTRUCTION and have never had to answer any of it. One card with two views keeps it that way:
-// one Escape listener, one trap, one scrim, all three of them laddered by the one handler above.
-// ⚠ ANDROID BACK IS THE ONE TERM THAT GAINED A SECOND REGISTRATION IN Q2 ('presets-delete', beside
-// 'presets' — declared with the other Back entries in components/SettingsPanel, which argues it in
-// full). That is not the nested-modal machinery this section refuses: Back's registry IS a LIFO
-// stack whose whole job is holding one entry per open thing and unwinding them newest-first, where
-// the Escape term's flaw is two listeners on one node both firing for one press. And it is not
-// optional — a real Back press pops its entry BEFORE calling the close, so the ladder's first step
-// would otherwise leave this card open with nothing registered for the second.
+// decision about a DISMISS, and the dismiss handlers belong to the caller (components/SettingsPanel
+// gives the popup its onDismiss and registers the question as its own entry in the stack, so that
+// Escape and Android Back have something to close that is not the whole card) — so the flag they
+// branch on is held there, beside them, and handed down. Everything about DRAWING the two views is
+// still this component's, focus included.
 // ⚠ THE DIALOG'S ACCESSIBLE NAME THEREFORE CHANGES WITH THE VIEW, and both titles are FIXED
 // STRINGS — "Presets" and "Delete this preset?". The preset's name is in the confirmation's BODY
 // and deliberately not in its title: the Changelog popup paid for that lesson (see the ★ at its
@@ -274,12 +261,12 @@ const GRIP_CLASS =
   'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab focus:outline-hidden focus-ring'
 
 // THREE PROPS. The first two are the same one fact: which preset the delete confirmation is asking
-// about, or null while the list is showing. Nothing in this card dismisses itself — round 21 (Q5) removed
-// the standalone Close, and Q2 the confirmation's Cancel — so the caller (components/SettingsPanel)
-// owns the open flag and wires the scrim tap, capture-phase Escape and Android Back, exactly as it
-// does for the other four modals. Since Q2 those three routes LADDER through this value (the header
-// comment argues why it therefore lives with them and not here), so the card both reads it to pick
-// its view and writes it when the ✕ poses the question or the Delete button answers it.
+// about, or null while the list is showing. Nothing in this card dismisses itself — it has no Close
+// and its confirmation has no Cancel — so the caller (components/SettingsPanel) owns the open flag
+// and what a dismiss means, exactly as it does for the other popups. The dismiss routes LADDER
+// through this value (the header comment argues why it therefore lives with them and not here), so
+// the card both reads it to pick its view and writes it when the ✕ poses the question or the Delete
+// button answers it.
 // The third, `screensFresh`, is src/main.tsx's aggregate of the five mode screens' freshness reports,
 // passed straight through to isPresetFactory at the ✕ (pressDelete below says why it is needed).
 export default function PresetManager({
@@ -320,20 +307,15 @@ export default function PresetManager({
   // and a captured object would go stale where an id is resolved fresh on every render.
   const pendingDelete = presets.find((p) => p.id === pendingDeleteId) ?? null
 
-  // ★ THIS CARD FOCUSES ITSELF, which is modalContract's term 1 and the ONE term this modal takes
-  // off its call site (components/SettingsPanel declares the other four modals' focus effects in a
-  // row and says at that spot why this one is missing). The reason is the two views: each renders
-  // its OWN dialog element, so the term is not "focus the card when the modal opens" but "focus the
-  // card whenever the card is replaced" — and the element being replaced is this component's, on
-  // this component's ref. (Q2 moved the FLAG that decides the view up to the caller, for the
-  // dismissal ladder; the two dialog elements and the ref that focuses them did not move, and
-  // neither did this effect. What it would take to hoist the effect too is a cardRef PROP threaded
-  // back down for an effect that has nothing else to say.)
-  // Split across two owners, the second half is the half that gets forgotten, and the symptom is
-  // silent: press ✕, and the keyboard is on <body> behind a scrim with a destructive button on it.
-  // The dependency is the VIEW, not the mount, so it covers both directions — into the confirmation
-  // and back out of it.
-  // ⚠ IT DOES NOT COVER THE SKIPPED DELETE (Q1), because nothing it watches changes there — the view
+  // ★ THIS CARD RE-FOCUSES ITSELF WHEN ITS VIEW CHANGES. The popup shell (components/Popup) puts
+  // the keyboard on the dialog when the popup opens; what it cannot see is the swap between this
+  // card's two views, which removes the control that had the keyboard (the row's ✕ on the way in,
+  // the Delete button on the way out) while the popup neither opens nor closes. Left alone, the
+  // symptom is silent: press ✕, and the keyboard is on <body> behind a scrim with a destructive
+  // button on it. The dependency is the VIEW, so it covers both directions — into the confirmation
+  // and back out of it. (It also runs once on mount, where the shell has already focused the same
+  // element and it changes nothing.)
+  // ⚠ IT DOES NOT COVER THE SKIPPED DELETE, because nothing it watches changes there — the view
   // stays the list from start to finish. That route removes the very row whose ✕ has the keyboard,
   // so pressDelete refocuses the card itself; see the note there.
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -369,14 +351,9 @@ export default function PresetManager({
   // exactly how the year-box version survived unnoticed for so long. flushSync lands the discard
   // first, so the blur that follows runs against a render where `editing` is null and
   // commitRename's own guard returns.
-  // ⚠ AND IT STOPS PROPAGATION, for the second half of that same fix: App's panel-level Escape
-  // handler is a document keydown in the BUBBLE phase that decides "is this press mine?" by asking
-  // what has focus — and this field has already blurred by then, so without the stop it would take
-  // the whole ⚙ panel down on what the user meant as a discard. The MODAL's Escape handler is
-  // capture-phase and runs first, where the field still holds focus and modalContract's
-  // `guardTextEntry` bails — which is precisely what leaves this press to the field. A second
-  // Escape, with nothing focused, reaches that handler and dismisses the card: the app's dismissal
-  // ladder, unchanged.
+  // ⚠ THE CARD STAYS OPEN: Escape closes the top open layer (components/overlayStack) only when no
+  // text box has the keyboard, which is what leaves this press to the field. A second Escape, with
+  // nothing focused, dismisses the card: the app's dismissal ladder.
   const discardRename = (el: HTMLInputElement) => {
     flushSync(() => {
       setEditing(null)
@@ -754,14 +731,13 @@ export default function PresetManager({
             screen — a Blitz round or MoX run in progress included.
           </div>
         )}
-        {/* ONE BUTTON, AND IT IS THE DESTRUCTIVE ONE (Q2) — the way back to the list is now every
+        {/* ONE BUTTON, AND IT IS THE DESTRUCTIVE ONE — the way back to the list is every
             dismiss route this card has (tap outside, Escape, Android Back), which is the ladder the
             header comment argues. It is `w-full` in a plain pt-1 row rather than a `flex-1` child of
             a flex row: the wrapper and its gap existed to divide the row between two buttons, and a
             one-child flex row renders the same thing with more machinery. Identical markup to
-            components/ConfirmModal's single confirm, which is the point — this card is not a
-            ConfirmModal (it cannot be; see the header) but it must not LOOK like a different
-            promise. */}
+            components/ConfirmModal's single confirm, which is the point — this view is not a
+            ConfirmModal (see the header) but it must not LOOK like a different promise. */}
         <div className="pt-1">
           <button type="button" onClick={confirmDelete} className={`w-full ${RESET_BTN_CLASS}`}>
             Delete
@@ -892,7 +868,6 @@ export default function PresetManager({
                     commitRename()
                     e.currentTarget.blur()
                   } else if (e.key === 'Escape') {
-                    e.stopPropagation()
                     discardRename(e.currentTarget)
                   }
                 }}

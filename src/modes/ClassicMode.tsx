@@ -25,7 +25,7 @@ import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard } from '../engine/gameReducer.js'
-import { useBackButton } from '../components/useBackButton.js'
+import { useBackButton } from '../components/overlayStack.js'
 
 // ============================================================
 // ClassicMode — the Classic game mode, on the shared engine (mode-untangle Step 1c).
@@ -99,7 +99,7 @@ function ClassicMode({
   useParkedHistory(dataId, 'classic', state, visible, { config: dateConfig }, settingsOpen ?? false)
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
-  // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
+  // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const setModeStats = useProgress((s) => s.setModeStats)
   useEffect(() => {
@@ -180,7 +180,7 @@ function ClassicMode({
         title="Reset Stats?"
         body="Clears this mode's stats and all-time bests for the preset you are on. The other modes keep theirs, and no other preset is touched."
         confirmLabel="Reset Stats"
-        backButtonId="reset-stats-classic"
+        id="reset-stats-classic"
       />
       <ConfirmModal
         open={enableResetOpen}
@@ -189,7 +189,7 @@ function ClassicMode({
         title="Enable and Reset Stats?"
         body="The timer readouts were hidden while this mode's stats changed, so turning them back on has to reset this mode's stats for the preset you are on. The other modes keep theirs, and no other preset is touched."
         confirmLabel="Enable and Reset Stats"
-        backButtonId="enable-reset-stats-classic"
+        id="enable-reset-stats-classic"
       />
       <div className="mt-5">
         <div className="mt-4 rounded-2xl panel p-4">

@@ -25,7 +25,7 @@ import GuidePage from './components/GuidePage.jsx'
 import LookupCard from './components/LookupCard.jsx'
 import W5Logo from './components/W5Logo.jsx'
 import PresetSwitcher from './components/PresetSwitcher.jsx'
-import { useBackButton } from './components/useBackButton.js'
+import { isPopupOpen, useBackButton, useLayer, usePopupOpen } from './components/overlayStack.js'
 import { useYearRangeMirrors } from './components/useYearRangeMirrors.js'
 import { SettingsPanel } from './components/SettingsPanel.jsx'
 import StorageFullNotice from './components/StorageFullNotice.jsx'
@@ -464,7 +464,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const modeRef=useRef(mode);
       useEffect(()=>{modeRef.current=mode;if(mode!=='guide')prevNonGuideModeRef.current=mode;},[mode]);
       const modeSelectRef=useRef<HTMLDivElement | null>(null);
-      // The preset switcher's wrapper, and it exists for exactly one reason: the ⚙ click-outside
+      // The preset switcher's wrapper, and it exists for exactly one reason: the ⚙ press-outside
       // handler below has to treat a press on that trigger as "inside", the same way it treats the
       // mode selector's. components/PresetSwitcher makes the prop REQUIRED so this cannot be
       // forgotten at a call site; the two refs are separate because the two controls are separate
@@ -579,25 +579,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // modal cannot exist while #boot's opaque z-100 splash is still up. And anywhere it could ever
       // peek out with a modal up, it wears scrimTheme(tc) — exactly what the scrim over the page
       // background composites to — so it would read as more scrim, not as a seam.
-      // ★ THE SIGNAL is the [data-settings-modal] marker every modal scrim carries — SettingsPanel's
-      // popups, ConfirmModal and RunBreakdown — and every one mounts the SAME way:
-      // `createPortal(<scrim …>, document.getElementById('root'))`, so each scrim is a DIRECT CHILD
-      // of #root. A MutationObserver on #root with childList (no subtree) therefore sees every open and
-      // close while firing only when #root's own child list changes — modal/dropdown/mode-screen
-      // churn, not per-frame gameplay mutations. It re-queries the WHOLE document on every change, so
-      // stacked modals (a ConfirmModal over a ⚙ popup) keep the dim until the LAST one closes.
-      // ⚠ IF A FUTURE MODAL PORTALS ELSEWHERE OR WRAPS ITS SCRIM, widen this to subtree:true (or move
-      // it to document.body). Falls back to document.body when #root is somehow absent (it is in
-      // index.html and the test harness, so this is belt-and-braces).
-      const [anyModalOpen,setAnyModalOpen]=useState(false);
-      useEffect(()=>{
-        const host=document.getElementById('root')||document.body;
-        const read=()=>setAnyModalOpen(!!document.querySelector('[data-settings-modal]'));
-        read();
-        const mo=new MutationObserver(read);
-        mo.observe(host,{childList:true,subtree:host===document.body});
-        return()=>mo.disconnect();
-      },[]);
+      // ★ THE SIGNAL is the app's stack of open things (components/overlayStack): "is any popup
+      // open?", the same answer the popups' own dim is drawn from. However many are stacked, exactly
+      // one of them paints the scrim (the top one), so one dim's worth of tint is right at every
+      // depth, and it lifts only when the LAST popup closes.
+      const anyModalOpen=usePopupOpen();
       useEffect(()=>{
         document.documentElement.setAttribute("data-theme",activeTheme);
         const tc=getComputedStyle(document.documentElement).getPropertyValue("--tc").trim();
@@ -1454,9 +1440,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // Gating them would take a documented escape hatch away and leave a card that can only be
         // dismissed by the controls under the finger.
         // The scrim's trap already stopPropagation()s presses inside the modal's own tree; this
-        // covers presses that start outside it. Asked lazily — one DOM query, and only for a press
-        // that has already turned out to belong to one of the two gated categories.
-        const modalUp=()=>!!document.querySelector('[data-settings-modal]');
+        // covers presses that start outside it. The question is isPopupOpen — the app's stack of
+        // open things (components/overlayStack) — asked only for a press that has already turned
+        // out to belong to one of the two gated categories.
         // Tab: toggle the mode selector dropdown. Plain Tab only — Ctrl+Tab, Ctrl+Shift+Tab,
         // Shift+Tab, Alt+Tab all pass through to the browser. Works universally, including
         // when an input is focused (Esc/Enter already blur inputs, so the standard "leave
@@ -1466,7 +1452,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey)return;
           // An open modal owns Tab while it is up (its scrim's focus trap) — opening the mode
           // dropdown behind an aria-modal dialog would break the modal contract.
-          if(modalUp())return;
+          if(isPopupOpen())return;
           if(modeSelectRef.current){
             const trigger=modeSelectRef.current.querySelector('button');
             if(trigger){e.preventDefault();trigger.focus();trigger.click();}
@@ -1479,7 +1465,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         if(ae){const tag=ae.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||ae.isContentEditable)return;}
         // Category 1: 0–9 → answer grid — GATED, it clicks a button on the page underneath
         if(k>='0'&&k<='9'){
-          if(modalUp())return;
+          if(isPopupOpen())return;
           const grids=document.querySelectorAll<HTMLElement>('[data-answer-grid="true"]');
           let visible: HTMLElement | null=null;
           for(const g of grids){if(g.offsetParent!==null){visible=g;break;}}
@@ -1508,14 +1494,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // render guard drops it), G opening the panel while a non-panel modal is up — Q7's per-mode
         // Reset-Stats / "Enable and Reset Stats?" ConfirmModals, or the run breakdown — would slide
         // the panel in UNDER that modal's z-60 scrim, visible and reachable only by the controls
-        // beneath the finger. So G no-ops while a [data-settings-modal] is up AND the panel is not
-        // what owns it: settingsOpen false ⇒ the modal belongs to a mode screen or the breakdown.
-        // When the panel IS open its own four popups are children of it, and G still closes both
+        // beneath the finger. So G no-ops while a popup is open AND the panel is not: settingsOpen
+        // false ⇒ the popup belongs to a mode screen (or is the storage-full notice over one).
+        // When the panel IS open its own popups are children of it, and G still closes both
         // together (tests/settingsPanel.defaults) — that path is untouched.
-        if(dataKey==='G'){if(modalUp()&&!settingsOpen)return;e.preventDefault();toggleSettings();return;}
+        if(dataKey==='G'){if(isPopupOpen()&&!settingsOpen)return;e.preventDefault();toggleSettings();return;}
         // Category 2: data-key DOM walk for game-loop letters and arrows — GATED for the same
         // reason as Category 1, and it is the one that shipped the bug (Override, through a scrim).
-        if(modalUp())return;
+        if(isPopupOpen())return;
         const tagged=document.querySelectorAll<HTMLElement>(`[data-key="${dataKey}"]`);
         for(const btn of tagged){
           if(btn.tagName!=='BUTTON')continue;
@@ -1793,65 +1779,44 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // layout effect and its ResizeObserver -> components/SettingsPanel. Every one of them reads
       // or writes an element that only exists while the panel is open, so all of them belong to
       // the component that owns that DOM.
-      // Settings popover click-outside handler. Closes settings when the user taps
-      // anywhere outside FOUR regions: the gear button itself (settingsRef), the
-      // popover content (settingsPopoverRef), and the two CustomSelect wrappers in
-      // the bar — mode (modeSelectRef) and preset (presetSelectRef). The select
-      // exclusions are what let the user open and pick from either dropdown without
-      // the settings popover auto-closing on the same tap — taps inside a trigger or
-      // its open dropdown panel are inside that wrapper's subtree and therefore
-      // "inside" for this check.
+      // ★ THE ⚙ PANEL'S ENTRY IN THE APP'S STACK OF OPEN THINGS (components/overlayStack), which
+      // decides all three of its dismissals: Android Back, Escape and a press outside each close the
+      // TOP layer only. So a popup or a dropdown list opened over the panel takes the press and the
+      // panel stays: Back closes the popup first, Escape closes just the "Open in" list, and a tap
+      // on a popup's scrim is never offered here as a press "outside the panel". (How-to-Play's
+      // entry is registered further down; the mode menu, the other lists, the popups and Show Codes
+      // register their own.)
+      // ESCAPE needs nothing said here: the stack leaves the press alone while a text box has the
+      // keyboard — every box in the panel discards its edit on Escape — so the first Escape is the
+      // box's and the second closes the panel. A slider keeps focus after an adjust and is not a
+      // text box, so it never swallows the dismiss.
+      // A PRESS, while the panel is the top layer, closes it unless it lands in one of FOUR regions:
+      // the gear button itself (settingsRef), the popover content (settingsPopoverRef), and the two
+      // CustomSelect wrappers in the bar — mode (modeSelectRef) and preset (presetSelectRef). The
+      // select exclusions are what let the user open either dropdown without the panel closing on
+      // the same press: a CLOSED select has no entry in the stack yet, so the press that opens it is
+      // the panel's to judge, and it must judge it "inside".
       // ⚠ THE PRESET ONE IS NOT DECORATIVE SYMMETRY. Its trigger sits in the bar the ⚙ panel hangs
       // off, so without this clause the FIRST press on it would close the panel and the menu it
       // opened would be sitting over a bar that had just changed under the finger — the exact
       // failure the mode exclusion was added for. components/PresetSwitcher makes its wrapperRef a
       // required prop so a future mount cannot skip this line; tests/topBar.dom pins the behaviour.
-      useEffect(()=>{if(!settingsOpen)return;const h=(e: MouseEvent | TouchEvent)=>{const target=e.target as Element | null;const inBtn=settingsRef.current&&settingsRef.current.contains(target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(target);const inSel=(modeSelectRef.current&&modeSelectRef.current.contains(target))||(presetSelectRef.current&&presetSelectRef.current.contains(target));
-        // Mousedown on the browser scrollbar registers e.target as <html> on Windows. Ignore that
+      const pressOutsideSettings=(e: PointerEvent)=>{const target=e.target as Element | null;const inBtn=settingsRef.current&&settingsRef.current.contains(target);const inPop=settingsPopoverRef.current&&settingsPopoverRef.current.contains(target);const inSel=(modeSelectRef.current&&modeSelectRef.current.contains(target))||(presetSelectRef.current&&presetSelectRef.current.contains(target));
+        // A press on the browser scrollbar registers e.target as <html> on Windows. Ignore that
         // case so dragging the scrollbar doesn't close the popover.
         const onScrollbar=target===document.documentElement||target===document.body;
         if(onScrollbar)return;
-        // An open CustomSelect dropdown panel portals out to #root with role="listbox", so a tap
-        // on an option lands OUTSIDE the popover in the DOM. Treat that as "inside" so picking a
-        // row doesn't slam the settings popover shut before the selection registers.
-        // ⚠ THIS CLAUSE IS GENERIC ON PURPOSE, and that is exactly why mounting the preset
-        // switcher required no edit to this line: it matches WHICHEVER select is open — the bar's
-        // mode select or its preset select — instead of naming one by ref. (It used to read "the
-        // bar's mode select, the app's last one since the theme selects became PillTray rows";
-        // the top-bar rebuild put a second select in the bar and made that false.)
-        // ⚠ WHAT IT DOES NOT COVER IS A CLOSED SELECT'S TRIGGER — there is no listbox in the DOM
-        // to match yet, so the press that OPENS a menu is not caught here. That is the whole job
-        // of the two wrapper refs above, one per select, and why neither is redundant with this.
-        const inListbox=!!(target&&target.closest&&target.closest('[role="listbox"]'));
-        // The settings modals (Save Defaults Q7 / the defaults manager Q12+Q5 / the Clear confirm
-        // Q5 / Changelog Q6) portal to #root with a full-screen scrim — clicks on any (scrim
-        // included) are "inside": a scrim tap cancels only the POPUP (its own onClick handler),
-        // never the settings panel beneath it.
-        const inModal=!!(target&&target.closest&&target.closest('[data-settings-modal]'));
-        if(!inBtn&&!inPop&&!inSel&&!inListbox&&!inModal){
+        if(!inBtn&&!inPop&&!inSel){
           // Year-range inputs (and any future input in the popover) commit on blur. When closing
-          // settings via click-outside on a non-focusable element, the input keeps focus until
+          // settings via a press outside on a non-focusable element, the input keeps focus until
           // the popover unmounts — and React's synthetic onBlur doesn't reliably fire on unmount,
           // so the typed value gets dropped. Programmatically blur first so onBlur runs
-          // synchronously (commit), then close. (Mobile happens to work without this because
-          // tapping a non-focusable target on touch normally fires blur before touchstart.)
+          // synchronously (commit), then close.
           const ae=document.activeElement as HTMLElement | null;
           if(ae&&ae.tagName==='INPUT'&&settingsPopoverRef.current&&settingsPopoverRef.current.contains(ae))ae.blur();
           setSettingsOpen(false);
-        }};document.addEventListener('mousedown',h);document.addEventListener('touchstart',h);return()=>{document.removeEventListener('mousedown',h);document.removeEventListener('touchstart',h);};},[settingsOpen]);
-      // Escape closes the settings popover. It bails when a TEXT-ENTRY input has focus, because
-      // those have Escape semantics of their own (since round 15 every one of them DISCARDS the
-      // edit — the year boxes, the defaults card's N field, the tap-to-type slider readouts)
-      // and this listener would otherwise double-handle the same press. The guard is deliberately
-      // NOT "any INPUT": range sliders keep focus after an adjust and have no Escape semantics of
-      // their own — bailing on them would leave Escape dead until something else got focus.
-      // ⚠ THE GUARD IS NOT WHAT PROTECTS THE YEAR BOXES, and relying on it is exactly how they broke:
-      // it asks what has focus, and their handler blurs the box synchronously, so by the time this
-      // ran the answer was "nothing" and the panel closed mid-edit. They stopPropagation instead, so
-      // this listener never sees their press at all — see the note beside them, which is now over in
-      // components/SettingsPanel with the inputs. ⚠ THIS HANDLER STAYS HERE, on DOCUMENT and in the
-      // BUBBLE phase, and both facts are what make that stopPropagation work.
-      useEffect(()=>{if(!settingsOpen)return;const h=(e: KeyboardEvent)=>{if(e.key!=="Escape")return;const ae=document.activeElement as HTMLInputElement | null;if(ae&&ae.tagName==="INPUT"&&ae.type!=="range")return;e.preventDefault();setSettingsOpen(false);};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[settingsOpen]);
+        }};
+      useLayer(settingsOpen, ()=>setSettingsOpen(false), 'settings', pressOutsideSettings);
       // Close-on-drag-activate (Q5 rework): the pointer controller dispatches a bubbling "drag-dismiss"
       // CustomEvent from a drag-clicked member of a data-drag-dismiss menu (lib/pointerGestures) — the
       // settings popover card is the only such menu. Closing here is exactly a normal close, so the
@@ -2054,15 +2019,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // commit later, and this avoids the flash in between.
         if(appScrollRef.current)appScrollRef.current.scrollTop=0;
       };
-      // Android hardware Back closes these App-level overlays instead of quitting the app (Q1).
-      // Settings popover → close it; How-to-Play (the 'guide' mode) → return to the previous game mode
-      // (mirrors the H-key toggle). The mode menu + Show Codes register their own back entries from
-      // CustomSelect / the mode components. See components/useBackButton.
-      useBackButton(settingsOpen, ()=>setSettingsOpen(false), 'settings');
-      // The four settings MODALS register their own Back entries from inside the panel
-      // (components/SettingsPanel). The stack is chronological and a modal cannot open before the
-      // panel that hosts its link, so 'settings' is still underneath all four and Back still
-      // closes the modal first.
+      // Android hardware Back leaves How-to-Play (the 'guide' mode) for the previous game mode
+      // instead of quitting the app — it mirrors the H-key toggle. A page state, so Back is the only
+      // thing in components/overlayStack that closes it.
       useBackButton(mode==='guide', ()=>switchMode(prevNonGuideModeRef.current||'classic'), 'guide');
       // True when the whole ⚙ PANEL sits at its EFFECTIVE defaults — the user's saved personal
       // defaults when they exist (Q7, store/userDefaults), the factory launch values otherwise.
@@ -2337,7 +2296,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   hard requirement rather than a preference, and — since Q6 — why its trigger is
                   the ONE control in this row that GROWS rather than sizing to content, with a
                   MINIMUM name-cell width rather than the fixed one it shipped with. wrapperRef is
-                  REQUIRED there and feeds the ⚙ click-outside exclusion above — see that handler.
+                  REQUIRED there and feeds the ⚙ press-outside exclusion above — see that handler.
                   ⚠ `flex-1 min-w-0` LIVES ON THIS WRAPPING DIV, NOT ON THE TRIGGER ITSELF, and
                   that split is deliberate rather than incidental: CustomSelect's own top-level div
                   (the actual flex ITEM of the row above) is internal to that component and takes
@@ -2361,7 +2320,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   Mode CustomSelect. Replaced the original native <select> as part of the
                   site-wide CustomSelect rollout that fixed iOS Safari's native picker
                   auto-close bug — see the CustomSelect component for full context.
-                  wrapperRef={modeSelectRef} so the existing settings click-outside handler
+                  wrapperRef={modeSelectRef} so the existing settings press-outside handler
                   keeps treating taps inside the mode dropdown the same way it treated taps
                   on the original <select>. showChevron renders the same ▲▼ indicator.
                   The menu always opens DOWNWARD, with no prop and no longer any flip logic to

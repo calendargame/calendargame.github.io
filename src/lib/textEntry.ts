@@ -30,7 +30,7 @@
 // at each site. That is exactly the shape this project rejects: it works today and the NEXT box,
 // whenever it is written, forgets. A document-level listener is the one seam where "a text box just
 // took focus" can be answered for boxes that exist AND boxes that do not yet. Same idiom, same
-// argument, as the module-level popstate listener in components/useBackButton.
+// argument, as the module-level popstate listener in components/overlayStack.
 //
 // ⚠ AND WHY IT TAKES THREE EVENTS RATHER THAN ONE — the iOS half, and the reason a focus-only
 // implementation would be the version that merely works in Chromium. A selection made during
@@ -59,7 +59,7 @@
 //
 // ── RULE 2: OPENING AN OVERLAY TAKES THE KEYBOARD DOWN ────────────────────────────────────────
 // dismissKeyboard() at the foot of this file, called from ONE place — pushOverlay in
-// components/useBackButton, which is where the app already learns that an overlay opened. The
+// components/overlayStack, which is where the app already learns that an overlay opened. The
 // argument for that seam is written there, beside the call.
 
 // The <input> types that are NOT typing targets: none of them raises a soft keyboard, and none of

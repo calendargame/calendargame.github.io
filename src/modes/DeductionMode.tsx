@@ -37,7 +37,7 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { useBackButton } from '../components/useBackButton.js'
+import { useBackButton } from '../components/overlayStack.js'
 import { parkedFlag } from '../engine/parkedHistory.js'
 
 // ============================================================
@@ -204,7 +204,7 @@ function DeductionMode({
   const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
-  // (for Deduction it's the current silo), so this is one line per mode. See components/useBackButton.
+  // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const setModeStats = useProgress((s) => s.setModeStats)
   useEffect(() => {
@@ -428,7 +428,7 @@ function DeductionMode({
         title="Reset Stats?"
         body="Clears this sub-type's stats and all-time bests for the preset you are on. The other modes and sub-types keep theirs, and no other preset is touched."
         confirmLabel="Reset Stats"
-        backButtonId="reset-stats-deduction"
+        id="reset-stats-deduction"
       />
       <ConfirmModal
         open={enableResetOpen}
@@ -437,7 +437,7 @@ function DeductionMode({
         title="Enable and Reset Stats?"
         body="The timer readouts were hidden while this sub-type's stats changed, so turning them back on has to reset this sub-type's stats for the preset you are on. The other modes and sub-types keep theirs, and no other preset is touched."
         confirmLabel="Enable and Reset Stats"
-        backButtonId="enable-reset-stats-deduction"
+        id="enable-reset-stats-deduction"
       />
       <div className="mt-5">
         {/* Day/Month/Year trio pinned to exact page center (Q10): minmax(0,1fr) side tracks.

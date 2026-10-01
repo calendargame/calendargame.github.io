@@ -152,7 +152,7 @@ describe('"Open in" is a dropdown', () => {
       .getAllByRole('option')
       .find((o) => o.textContent.includes('Timed'))
     // A real tap: the press lands on the portaled option (outside the ⚙ card in the DOM)…
-    fireEvent.mouseDown(timed)
+    fireEvent.pointerDown(timed)
     fireEvent.click(timed)
     expect(usePresets.getState().openInPreset).toBe(2)
     expect(screen.queryByRole('listbox', { name: 'Open in' })).toBeNull()

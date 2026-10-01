@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { useBackButton } from './useBackButton.js'
+import { useLayer } from './overlayStack.js'
 import {
   SCROLLER_CORE_CLASS,
   holdScrollRegion,
@@ -21,9 +21,14 @@ import {
 // Renders a trigger button; when open, the option list is PORTALED to #root so
 // it escapes any clipping/overflow ancestor (e.g. the scrollable Settings
 // popover) and floats over the page, positioned FIXED against the viewport.
-// Full listbox keyboard support (↑/↓/Home/End/Enter/Space/Esc/Tab) and a
-// click-outside-to-close handler that correctly treats taps inside the portaled
+// Full listbox keyboard support (↑/↓/Home/End/Enter/Esc/Tab) and a
+// press-outside-to-close handler that correctly treats taps inside the portaled
 // panel (and on native scrollbars) as "inside".
+//
+// AN OPEN LIST IS A LAYER in the app's stack of open things (components/overlayStack), which is
+// where Escape, Android Back and a press outside are decided: each closes the TOP layer only. So
+// with the ⚙ panel's "Open in" list open, one Escape or one tap outside closes the list and leaves
+// the panel, and a second closes the panel.
 //
 // ⚠ CALLER CONTRACT (Q8, round 11; widened by Q8, round 23) — THE TRIGGER MUST NOT MOVE WHILE THE
 // PANEL IS OPEN. The panel is position:fixed and is measured from the trigger's viewport rect on
@@ -201,7 +206,7 @@ export default function CustomSelect({
   const labelId = `${listboxId}-label`
   const valueId = `${listboxId}-value`
   const selectedIdx = options.findIndex((o) => o.value === value)
-  // panelRef points at the PORTALED panel so the click-outside handler can
+  // panelRef points at the PORTALED panel so the press-outside handler can
   // treat taps inside it as "inside" (the panel is no longer a DOM descendant
   // of the wrapper). panelPos holds the measured viewport coordinates for the
   // portal.
@@ -281,9 +286,15 @@ export default function CustomSelect({
   }
   // Toggle handler. On the way OPEN it measures where the panel goes — the one thing that can only
   // be decided at that instant. Measurement only happens on open (close is cheap).
+  // ★ AND IT PUTS THE KEYBOARD ON THE TRIGGER. The open list is driven from the trigger — ↑/↓,
+  // Home/End, Enter and Tab are its onKeyDown, and aria-activedescendant only speaks for an element
+  // that has focus — and a press does not put it there on every engine: Safari and Firefox on a Mac
+  // do not focus a button that is clicked, and neither does a tap. Without this the list opened
+  // with its keys dead, and a screen reader was never told which option the cursor was on.
   const handleToggle = () => {
     if (!open) {
       measurePanel()
+      triggerRef.current?.focus()
       // Do NOT pre-highlight the selected option on open. The grey "active" box is a
       // pointer/keyboard cursor, not an open-state indicator (the ✓ already marks the
       // selection). It appears only once the user hovers with a MOUSE or presses an arrow —
@@ -303,21 +314,13 @@ export default function CustomSelect({
     onChange(options[i].value)
     closeAndFocus()
   }
-  // Trigger keyboard handler — opens dropdown with ↑/↓/Enter/Space, then arrow nav happens
-  // via the document-level handler below (set up only when open). Standard listbox pattern.
+  // Trigger keyboard handler — the open list's keys. (Escape is not here: closing the top layer is
+  // components/overlayStack's, whichever element has focus.)
   const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (open) {
-      if (e.key === 'Escape') {
-        // ★ THIS ESCAPE BELONGS TO THE MENU AND TO NOTHING UNDER IT — stopped here, so it never
-        // reaches App's document-level Escape (which closes the ⚙ panel). Before round 23 no open
-        // select sat inside the ⚙ panel, so one press closing both never came up; with "Open in"
-        // in there it would take the whole panel down with the menu. React's stopPropagation stops
-        // the native event at the root, before the document sees it — the app's dismissal ladder,
-        // one press per layer, innermost first.
+      if (e.key === 'ArrowDown') {
         e.preventDefault()
-        e.stopPropagation()
-        closeAndFocus()
-      } else if (e.key === 'ArrowDown') {
+        // First arrow      } else if (e.key === 'ArrowDown') {
         e.preventDefault()
         // First arrow (from the no-cursor -1 state) steps ONE option from the selected one — Down lands
         // just below the ✓, Up just above (owner's call 2026-06-06; previously the first arrow landed on
@@ -368,38 +371,33 @@ export default function CustomSelect({
       e.preventDefault()
     }
   }
-  // Android hardware Back closes an open dropdown instead of quitting the app (Q1). listboxId is a
-  // stable per-instance useId, so multiple selects (mode + the settings dropdowns) register distinctly.
-  useBackButton(open, () => setOpen(false), listboxId)
-  useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Element | null
-      if (!ref.current || ref.current.contains(target)) return
-      // The panel is portaled out of the wrapper, so a tap on an option is NOT
-      // contained by ref.current — without this, the mousedown/touchstart handler
-      // would close the dropdown before the option's click (selection) fired.
-      if (panelRef.current && panelRef.current.contains(target)) return
-      // Ignore mousedowns that landed in a scrollbar (Windows native scrollbars register
-      // mousedown on the scrolling element itself). Without this, dragging the Settings
-      // popover's scrollbar while a dropdown inside it is open closes the dropdown.
-      const t = target
-      if (t && t.nodeType === 1) {
-        const r = t.getBoundingClientRect()
-        const cx = 'clientX' in e ? e.clientX : null
-        const cy = 'clientY' in e ? e.clientY : null
-        if (t.scrollHeight > t.clientHeight && cx != null && cx > r.left + t.clientWidth) return
-        if (t.scrollWidth > t.clientWidth && cy != null && cy > r.top + t.clientHeight) return
-      }
-      setOpen(false)
+  // ★ THE OPEN LIST'S ENTRY IN THE APP'S STACK (components/overlayStack). listboxId is a stable
+  // per-instance useId, so every select registers distinctly.
+  //   • ESCAPE AND ANDROID BACK close it and hand the keyboard back to the trigger — and close ONLY
+  //     it: a list opened inside the ⚙ panel sits above the panel in the stack, so the press is
+  //     spent here and the panel stays.
+  //   • A PRESS OUTSIDE closes it, and the stack hands the press to this list alone while it is the
+  //     top layer — so the same tap is never also read by the ⚙ panel as a press outside the panel.
+  //     "Outside" is neither the wrapper nor the panel:
+  const pressOutside = (e: PointerEvent) => {
+    const target = e.target as Element | null
+    if (!ref.current || ref.current.contains(target)) return
+    // The panel is portaled out of the wrapper, so a tap on an option is NOT contained by
+    // ref.current — without this the press would close the dropdown before the option's click
+    // (the selection) fired.
+    if (panelRef.current && panelRef.current.contains(target)) return
+    // Ignore a press that landed in a scrollbar (Windows native scrollbars report the press on the
+    // scrolling element itself). Without this, dragging the Settings popover's scrollbar while a
+    // dropdown inside it is open closes the dropdown.
+    if (target && target.nodeType === 1) {
+      const r = target.getBoundingClientRect()
+      if (target.scrollHeight > target.clientHeight && e.clientX > r.left + target.clientWidth)
+        return
+      if (target.scrollWidth > target.clientWidth && e.clientY > r.top + target.clientHeight) return
     }
-    document.addEventListener('mousedown', h)
-    document.addEventListener('touchstart', h)
-    return () => {
-      document.removeEventListener('mousedown', h)
-      document.removeEventListener('touchstart', h)
-    }
-  }, [open, ref])
+    setOpen(false)
+  }
+  useLayer(open, closeAndFocus, listboxId, pressOutside)
   // While open: what RE-MEASURES the panel — and that is now this effect's whole job. Nothing here
   // dismisses (see the dismiss-rule note on the component), and NO SCROLL OF ANY KIND IS SUBSCRIBED
   // TO, which is the point twice over: dismissal is gone, and re-measuring per scroll event through

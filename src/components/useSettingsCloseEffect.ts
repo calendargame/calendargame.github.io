@@ -8,8 +8,8 @@ import { useLayoutEffect, useRef } from 'react'
 // callers. They are not any more: App itself uses it to end the Check-for-updates interaction on
 // close. So it moved OUT of src/modes/, which exists to hold what belongs to a mode SCREEN — App
 // reaching down into that directory would have inverted the layering the phase-1 split created,
-// and this hook was never mode-specific in the first place. It sits beside useBackButton, the
-// app's other cross-cutting overlay-lifecycle hook, and nothing here knows what a mode is.
+// and this hook was never mode-specific in the first place. It sits beside overlayStack, the
+// app's other cross-cutting overlay-lifecycle module, and nothing here knows what a mode is.
 //
 // Snapshots `deps` when the popover OPENS and runs fn ONCE on close iff they changed (a
 // change-then-revert is a no-op). The ⚙ settings only change while the popover is open, so this

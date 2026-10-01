@@ -13,7 +13,7 @@
 // ~line 545) to clean. Nothing about the code changes; only whether anything is looking at it.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import { createPortal, flushSync } from 'react-dom'
+import { flushSync } from 'react-dom'
 import { rangeHasLeapYear } from '../lib/calendar.js'
 import { fmt, numericFormatOf } from '../lib/format.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
@@ -30,14 +30,9 @@ import PresetManager from './PresetManager.jsx'
 import CustomSelect from './CustomSelect.jsx'
 import { PresetOptionLabel } from './PresetSwitcher.jsx'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
-import { useBackButton } from './useBackButton.js'
-import {
-  MODAL_CARD_CLASS,
-  MODAL_CARD_SHADOW,
-  MODAL_SCRIM_CLASS,
-  trapModalTab,
-  useModalEscape,
-} from './modalContract.js'
+import Popup from './Popup.js'
+import { useLayer } from './overlayStack.js'
+import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
 import {
   WRITTEN_FORMATS,
   NUMERIC_FORMATS,
@@ -102,9 +97,9 @@ import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 //     particular useUpdateCheck() is called by APP and its result passed in as two props, precisely
 //     because it contains one.
 //
-// WHAT STAYS IN App AND ARRIVES AS PROPS: the panel's open state and every write to it, the
-// click-outside / Escape / drag-dismiss listeners (two of the click-outside's three refs live in
-// the BAR), the gear-dot retire effect, the four at-defaults booleans the GEAR renders while the
+// WHAT STAYS IN App AND ARRIVES AS PROPS: the panel's open state and every write to it, its entry in
+// the app's stack of open things with its press-outside rule (three of that rule's four refs live
+// in the BAR), the drag-dismiss listener, the gear-dot retire effect, the four at-defaults booleans the GEAR renders while the
 // panel is closed, resetSettings/fullReset (which reach App's whole world), and the Year Range text
 // mirrors (whose lifetime must outlive this component's — see useYearRangeMirrors).
 //
@@ -114,8 +109,8 @@ import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 // ============================================================
 
 export type SettingsPanelProps = {
-  /** App's popover ref. App creates it because TWO document-level listeners it owns read it: the
-   *  click-outside handler (including its blur-before-close) and the drag-dismiss listener. */
+  /** App's popover ref. App creates it because two things it owns read it: the press-outside
+   *  handler (including its blur-before-close) and the drag-dismiss listener. */
   cardRef: RefObject<HTMLDivElement | null>
   /** Live state diverges from the effective defaults, in EITHER store. Computed in App because the
    *  GEAR renders it while the panel is closed; passing it is what stops the gear's violet bar and
@@ -298,7 +293,6 @@ export function SettingsPanel({
   // panel discards it by unmounting. (Q2 removed the popup's Cancel button, which was a fourth
   // spelling of that same discard — see components/DefaultsCard.)
   const [saveDefaultsOpen, setSaveDefaultsOpen] = useState(false)
-  const saveDefaultsCardRef = useRef<HTMLDivElement | null>(null) // the dialog card — focused on open (the modal a11y contract below)
   // A ref, and it is safe to re-create it per panel open: it is written by openSaveDefaults and
   // read only at commit, and the popup cannot outlive the panel that opened it.
   const pendSettingsRef = useRef<SettingsValues | null>(null)
@@ -310,7 +304,6 @@ export function SettingsPanel({
   // seed itself needs no copy — defPrefs cannot change while the modal is up (this modal owns the
   // only editor). Any dismiss — scrim tap, Escape, Android Back — discards the edits.
   const [manageDefaultsOpen, setManageDefaultsOpen] = useState(false)
-  const manageDefaultsCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
   const [managePrefs, setManagePrefs] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
   // Clear-saved-defaults confirm popup (Q5 round-6; folded onto the shared ConfirmModal in Q7 round
   // 21): the footer's Clear button asks before it forgets the snapshot. Just a boolean now — the
@@ -320,7 +313,6 @@ export function SettingsPanel({
   // footer's Changelog link. Its two dot flags live up in App with the build-stamp detection that
   // lights them; this popup only READS the link's and asks App to retire it.
   const [changelogOpen, setChangelogOpen] = useState(false)
-  const changelogCardRef = useRef<HTMLDivElement | null>(null) // its dialog card — same focus-on-open contract
   // The preset manager (sub-group 4C) — another user of the modal contract, opened from the
   // Presets section at the head of the panel. The card holds its own pending RENAME, which never
   // leaves it; what lives here is the open flag and — since Q2 — which preset the delete
@@ -340,11 +332,11 @@ export function SettingsPanel({
   // list", and a second dismiss closes the card: the dismissal LADDER (dismissPresets below), the
   // same shape the rename field has always had (the first Escape belongs to the name, the second to
   // the card).
-  // A ladder is a decision about a dismiss, and ALL THREE dismiss routes are this component's — the
-  // scrim's onClick, useModalEscape and useBackButton are all declared here, as they are for the
-  // other four modals. So this is the fact the dismisser needs, held where the dismisser is, rather
-  // than a callback reaching down into the card to ask. The card takes it as a prop and stays the
-  // owner of everything that is genuinely about drawing the two views.
+  // A ladder is a decision about a dismiss, and the dismiss handlers are this component's — it
+  // hands the popup its onDismiss, as it does for the other popups. So this is the fact the
+  // dismisser needs, held where the dismisser is, rather than a callback reaching down into the card
+  // to ask. The card takes it as a prop and stays the owner of everything that is genuinely about
+  // drawing the two views.
   // ⚠ AN ID, NOT THE PRESET OBJECT, for the reason the card's own version was an id: the registry
   // can be rewritten under an open card (a rename, a reorder), and a captured object goes stale
   // where an id resolves fresh on every render.
@@ -465,38 +457,18 @@ export function SettingsPanel({
     }
   }, [])
 
-  // Escape and Android Back — the two dismiss paths — are registered together below, beside the
-  // useBackButton calls, on the shared modal contract (components/modalContract). They used to be
-  // four hand-written capture-phase effects in a row right here; the argument for the capture phase,
-  // for stopPropagation, and for the text-entry guard now lives once, in that file.
-  //
-  // The popup's modal a11y contract, part 1 of 2 (part 2 = the Tab trap on the scrim, below): on
-  // open, move focus INTO the dialog — the card is tabIndex={-1} with role="dialog" +
-  // aria-modal="true", so screen readers announce a modal and keyboard context starts inside it.
-  // Without this, focus stays on the Save Defaults button UNDER the scrim, and keyboard/AT input
-  // keeps operating the live settings panel while commitSaveDefaults would still save the snapshot
-  // captured at open — a silent divergence between what's on screen and what Save persists.
-  useEffect(() => {
-    if (saveDefaultsOpen) saveDefaultsCardRef.current?.focus()
-  }, [saveDefaultsOpen])
-  useEffect(() => {
-    if (manageDefaultsOpen) manageDefaultsCardRef.current?.focus()
-  }, [manageDefaultsOpen]) // same contract for the defaults manager (Q12/Q5)
-  useEffect(() => {
-    if (changelogOpen) changelogCardRef.current?.focus()
-  }, [changelogOpen]) // and the Changelog popup (Q6)
-  // The Clear confirm, Full Reset and Reset Settings popups own this term themselves — they are the
-  // shared ConfirmModal (Q7 round 21), which focuses its own card on open.
-  // ⚠ THE PRESET MANAGER IS THE ONE MODAL WITH NO focus-on-open EFFECT HERE, AND IT IS NOT SKIPPING
-  // THE TERM — it OWNS it. That card has two views (the list, and the delete confirmation), each
-  // rendering its own dialog element, so "focus the card when it opens" is really "focus the card
-  // whenever the card is replaced", and the element replaced is the card's own, on the card's own
-  // ref. Splitting it — the open here, the swap there — would leave a term with two owners and one of
-  // them blind to the case that matters. So components/PresetManager holds its own ref and focuses
-  // itself, which is also why it takes no cardRef prop where the other four do. (Q2 gave this
-  // component the FLAG that picks the view, for the dismissal ladder above — so the swap is no longer
-  // a fact only the card knows. The ref still is, and hoisting the effect to sit beside the flag
-  // would buy a cardRef prop threaded back down for nothing.)
+  // Every popup below is a card inside components/Popup, which owns the whole popup contract
+  // (components/modalContract): the scrim, focus into the dialog on open and back out on close,
+  // Escape, Android Back, the scrim tap and the Tab trap. What this component owes each one is its
+  // open flag, its card, and what a dismiss means.
+  // ⚠ WHY FOCUS-ON-OPEN MATTERS HERE IN PARTICULAR: without it focus stays on the Save Defaults
+  // button UNDER the scrim, and keyboard/AT input keeps operating the live settings panel while
+  // commitSaveDefaults would still save the snapshot captured at open — a silent divergence between
+  // what's on screen and what Save persists.
+  // ⚠ THE PRESET MANAGER ALSO FOCUSES ITSELF, for the one case the shell cannot see: its card has
+  // two views (the list, and the delete question) and swapping between them can remove the control
+  // that had the keyboard, with the popup neither opening nor becoming the top one. That effect is
+  // components/PresetManager's, keyed on the view.
 
   // Save Defaults (Q7): open the confirmation popup, seeding the pending snapshot from the LIVE
   // stores (panel captured whole; the four mode-screen prefs become editable rows). The seed is
@@ -552,9 +524,9 @@ export function SettingsPanel({
   // the app that was not merely a third spelling of a dismiss (it went back to the list, where every
   // dismiss route closed the whole card), so removing it without this would have left a question
   // with no way out but destroying the card and re-opening it.
-  // ⚠ NOT memoized, deliberately: it reads `pendingDeleteId` on every call, and both hooks below
-  // hold their close through a post-commit ref (see components/useBackButton and modalContract), so
-  // a fresh identity per render re-attaches nothing.
+  // ⚠ NOT memoized, deliberately: it reads `pendingDeleteId` on every call, and the stack holds
+  // every close through a post-commit ref (components/overlayStack), so a fresh identity per render
+  // re-registers nothing.
   const dismissPresets = () => {
     if (pendingDeleteId !== null) clearPendingDelete()
     else closePresets()
@@ -640,65 +612,28 @@ export function SettingsPanel({
     setResetSettingsConfirmOpen(false)
     onResetSettings()
   }
-  // Android hardware Back closes these overlays instead of quitting the app (Q1). App registers
-  // 'settings' itself, BEFORE this component exists; the stack is chronological, and a modal cannot
-  // open before the panel that hosts its link, so Back still closes the modal first (LIFO).
-  // The Clear confirm, Full Reset and Reset Settings popups register their own Back entry from
-  // inside ConfirmModal (ids 'clear-defaults' / 'full-reset' / 'reset-settings-confirm').
-  useBackButton(saveDefaultsOpen, closeSaveDefaults, 'save-defaults')
-  useBackButton(manageDefaultsOpen, closeManageDefaults, 'manage-defaults') // the defaults manager (Q12/Q5)
-  useBackButton(changelogOpen, closeChangelog, 'changelog') // and the Changelog popup (Q6)
-  // …and the preset manager (4C), which since Q2 takes TWO entries — one per view, and this is the
-  // one place the ladder needs more than the single dismissPresets handler above.
-  // ⚠⚠ THE ARGUMENT THAT USED TO STAND HERE IS GONE WITH THE BUTTON IT RESTED ON. It said one entry
-  // for both views was right because a second "would buy a step backwards out of a question whose
-  // Cancel button is already on screen". Q2 took that button away, so the step backwards is now the
-  // ONLY way out of the question, and Back has to buy it like every other dismiss route.
-  // ⚠ AND IT CANNOT BE BOUGHT WITH THE HANDLER ALONE, which is the mechanical reason this route
-  // differs from the other two. A real Back press POPS the top entry before calling its close (see
-  // the popstate listener in components/useBackButton) — so a single 'presets' entry whose close only
-  // stepped back to the list would leave the card open with NO entry registered: useBackButton's
-  // effect does not re-push while `presetsOpen` is unchanged, and the next press would find 'settings'
-  // on top and take the whole ⚙ panel down with the card. A dedicated entry for the confirmation is
-  // the honest fix and it is NOT the nested-modal machinery components/PresetManager refuses: that
-  // refusal is about two simultaneous document-level Escape listeners and two scrims fighting over
-  // one press, where this registry is a LIFO stack built to hold exactly one entry per open thing and
-  // unwind them newest-first.
-  // ⚠ 'presets' STILL GETS THE LADDERED HANDLER even though LIFO means the delete entry above it is
-  // always popped first, so its first branch is unreachable BY THIS ROUTE: one dismiss function for
-  // all three routes is what keeps them provably identical, and a version that hard-coded the close
-  // here would quietly lose the ladder if this pair of entries ever collapsed back into one.
-  useBackButton(presetsOpen, dismissPresets, 'presets')
-  useBackButton(pendingDeleteId !== null, clearPendingDelete, 'presets-delete')
-  // …and Escape, the contract's other dismiss. The two popups that CONTAIN a text box guard against
-  // it (the N field and the tap-to-type readouts own their own Escape — it discards the edit, and a
-  // second press, with nothing focused, reaches the modal); the changelog, being buttons-only, does
-  // not. (The Clear confirm, Full Reset and Reset Settings popups own their Escape from inside
-  // ConfirmModal — buttons-only, so no text-entry guard.)
-  useModalEscape(saveDefaultsOpen, closeSaveDefaults, true)
-  useModalEscape(manageDefaultsOpen, closeManageDefaults, true)
-  useModalEscape(changelogOpen, closeChangelog, false)
-  // The preset manager CONTAINS text boxes (one per row, each the rename field), so it takes the
-  // guard: the first Escape belongs to the field that has the keyboard — it discards that rename —
-  // and a second, with nothing focused, reaches here. Exactly the ladder the two DefaultsCard modals
-  // above already use — and since Q2 that press reaches a ladder of its own (dismissPresets): the
-  // delete confirmation steps back to the list, and only a card with no question up closes.
-  useModalEscape(presetsOpen, dismissPresets, true)
+  // ★ THE DELETE QUESTION IS A LAYER OF ITS OWN in the app's stack of open things
+  // (components/overlayStack), over the Manage Presets popup that draws it. It has to be: Escape
+  // and Back each close the TOP entry and nothing else, so the question needs an entry for them to
+  // close — one whose close steps back to the list — or the first press would take the whole card.
+  // (For Back there is a mechanical reason as well: a real Back press removes the top entry BEFORE
+  // calling its close, so a single 'presets' entry that only stepped back to the list would leave
+  // the card open with nothing registered, and the next press would take the ⚙ panel with it.)
+  // It passes no press handler: a tap outside lands on the popup's scrim, whose dismiss is
+  // dismissPresets — the same ladder, reached from the third route.
+  // ⚠ The popup's own dismiss STAYS the laddered handler even though the question's entry always
+  // answers Escape and Back first: one dismiss function for all three routes is what keeps them
+  // provably identical, and the scrim tap genuinely needs both branches.
+  useLayer(pendingDeleteId !== null, clearPendingDelete, 'presets-delete')
 
-  // Modal a11y contract, part 2 of 2 (part 1 = the focus-on-open effects above) is trapModalTab,
-  // imported from the shared contract and put on each scrim's onKeyDown below. Every modal in the
-  // app shares it now — these four, the run breakdown, and the shared ConfirmModal — which is why
-  // it no longer lives in this component; see components/modalContract for what it does and why.
-
-  // Save Defaults confirmation popup (Q7). PORTALED to #root — deliberately OUTSIDE the popover
-  // card (the ⚙ trigger's aria-controls menu), so its DOM is invisible to the press-drag controller
-  // (a drag-release on popup content can never drag-dismiss the panel) and it escapes the card's
-  // overflow/max-height context (a true centered modal — scrim + the popover's own card/shadow
-  // language). data-settings-modal marks the whole tree (scrim included) "inside" for App's
-  // settings click-outside handler (the same marker as the manager and Changelog popups below, and
-  // the three ConfirmModals — one guard covers every modal); the scrim itself cancels the POPUP only
-  // (target===currentTarget, so card clicks never do), and Escape + Android Back + any settings
-  // close also cancel (the effects above, plus this whole component unmounting). The card itself is
+  // Save Defaults confirmation popup (Q7). components/Popup portals it to #root — deliberately
+  // OUTSIDE the popover card (the ⚙ trigger's aria-controls menu), so its DOM is invisible to the
+  // press-drag controller (a drag-release on popup content can never drag-dismiss the panel) and it
+  // escapes the card's overflow/max-height context (a true centered popup — scrim + the popover's
+  // own card/shadow language). While it is open it is the top of the app's stack, so a press on it —
+  // scrim included — is never offered to the ⚙ panel underneath as a press "outside" the panel;
+  // every dismiss route cancels the POPUP only, and closing the panel cancels it too (this whole
+  // component unmounting). The card itself is
   // the shared DefaultsCard (Q5 round-6 — the one place the four rows, their recipes, and the
   // dirty-row accent live; see its header comment): row labels are Title Case (the ⚙ panel's label
   // tier, Q6) with every paired aria-label mirroring its visible text exactly — no case drift to
@@ -711,93 +646,62 @@ export function SettingsPanel({
   // ESCAPE DISCARDS THE FIELD'S EDIT (round 15, B6 — both this field and the AoX screen's own moved
   // off normalize-commit together, so Escape means one thing app-wide). Escape on the field is the
   // smaller undo; the discard for the WHOLE popup is any dismiss route — a second Escape, with the
-  // field no longer focused, reaching the popup's capture-phase handler, a scrim tap, or Android
-  // Back. (Q2: the popup's Cancel button, which used to be a fourth way to say that, is gone.)
-  const saveDefaultsJsx =
-    saveDefaultsOpen &&
-    createPortal(
-      <div
-        data-settings-modal
-        role="presentation"
-        className={MODAL_SCRIM_CLASS}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setSaveDefaultsOpen(false)
-        }}
-        onKeyDown={trapModalTab}
-      >
-        <DefaultsCard
-          cardRef={saveDefaultsCardRef}
-          titleId="save-defaults-title"
-          title="Save current settings as your defaults?"
-          subline="Also saved from the mode screens:"
-          prefs={pendPrefs}
-          seed={pendSeed}
-          setPrefs={setPendPrefs}
-          onSave={commitSaveDefaults}
-        />
-      </div>,
-      document.getElementById('root')!,
-    )
+  // field no longer focused, a scrim tap, or Android Back. (The popup's Cancel button, which used
+  // to be a fourth way to say that, is gone.)
+  const saveDefaultsJsx = saveDefaultsOpen && (
+    <Popup id="save-defaults" onDismiss={closeSaveDefaults}>
+      <DefaultsCard
+        titleId="save-defaults-title"
+        title="Save current settings as your defaults?"
+        subline="Also saved from the mode screens:"
+        prefs={pendPrefs}
+        seed={pendSeed}
+        setPrefs={setPendPrefs}
+        onSave={commitSaveDefaults}
+      />
+    </Popup>
+  )
   // The defaults manager popup (Q12, made editable in Q5 round-6): the footer link's window onto
-  // the defaults — the same portal / scrim recipes and the same modal contract as the Save popup
-  // (focus-on-open, capture Escape with the text-entry guard, close with settings, Android Back,
-  // the shared trapModalTab + data-settings-modal marker), rendering the SAME shared DefaultsCard
-  // in manage mode. It seeds from the EFFECTIVE defaults (defPrefs — forward-merged, so a legacy
+  // the defaults — the same shared popup shell as the Save popup, rendering the SAME shared
+  // DefaultsCard in manage mode. It seeds from the EFFECTIVE defaults (defPrefs — forward-merged, so a legacy
   // snapshot missing a field shows factory, never undefined) and rests read-only with NO button row
   // at all (round 21, Q5); edit any row and it goes dirty — a full-width Save, the restricted-write
   // note, the accent-tier value highlights (see DefaultsCard, which argues why that row lost its
   // Cancel in Q2). Title, subline, and footnote adapt to whether
   // a snapshot exists: with none saved the card is the clearly-labelled FACTORY view, and Save from
   // there CREATES the snapshot.
-  const manageDefaultsJsx =
-    manageDefaultsOpen &&
-    createPortal(
-      <div
-        data-settings-modal
-        role="presentation"
-        className={MODAL_SCRIM_CLASS}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setManageDefaultsOpen(false)
-        }}
-        onKeyDown={trapModalTab}
-      >
-        <DefaultsCard
-          cardRef={manageDefaultsCardRef}
-          titleId="manage-defaults-title"
-          manage
-          title={savedDefaults ? 'Your saved defaults' : 'Default settings'}
-          subline={
-            savedDefaults
-              ? undefined
-              : "These are the factory defaults — you haven't saved your own."
-          }
-          note={
-            savedDefaults
-              ? 'Every ⚙ menu setting is also part of the snapshot, captured as it was when you saved.'
-              : undefined
-          }
-          prefs={managePrefs}
-          seed={defPrefs}
-          setPrefs={setManagePrefs}
-          onSave={commitManageDefaults}
-        />
-      </div>,
-      document.getElementById('root')!,
-    )
+  const manageDefaultsJsx = manageDefaultsOpen && (
+    <Popup id="manage-defaults" onDismiss={closeManageDefaults}>
+      <DefaultsCard
+        titleId="manage-defaults-title"
+        manage
+        title={savedDefaults ? 'Your saved defaults' : 'Default settings'}
+        subline={
+          savedDefaults ? undefined : "These are the factory defaults — you haven't saved your own."
+        }
+        note={
+          savedDefaults
+            ? 'Every ⚙ menu setting is also part of the snapshot, captured as it was when you saved.'
+            : undefined
+        }
+        prefs={managePrefs}
+        seed={defPrefs}
+        setPrefs={setManagePrefs}
+        onSave={commitManageDefaults}
+      />
+    </Popup>
+  )
   // The Clear confirm, Full Reset and Reset Settings popups render at the foot of this component's
-  // fragment as <ConfirmModal>s (Q7 round 21) — see there for the copy. The portal, the scrim, the
-  // whole modal contract and the single rose-tier confirm button all live in that component now;
-  // this file keeps only the open booleans and the confirm/cancel callbacks. (The cancel callbacks
-  // outlived the Cancel BUTTON, which Q2 removed: they are what the scrim tap, Escape and Android
-  // Back call.)
+  // fragment as <ConfirmModal>s — see there for the copy. The card and its single rose-tier confirm
+  // button live in that component; this file keeps only the open booleans and the confirm/cancel
+  // callbacks. (The cancel callbacks outlived the Cancel BUTTON: they are what the scrim tap, Escape
+  // and Android Back call.)
 
   // Changelog popup (Q6): the plain-words what-changed list (src/changelog, newest day first),
-  // opened from the footer's Changelog link — the same portal / scrim / card recipes and the same
-  // modal contract as the popups above (focus-on-open, capture Escape, close with settings, Android
-  // Back, the shared trapModalTab + data-settings-modal marker). It carries NO dismiss control at
-  // all as of round 21 (Q5): the scrim tap, Escape and Android Back already dismiss it, and the
-  // owner wanted the row back. CHANGELOG renders AS-IS: round-8 Q8 dropped the
-  // render-time slice and moved the ten-day cap to the data itself (see the charter in
+  // opened from the footer's Changelog link — the same shared popup shell and card recipes as the
+  // popups above. It carries NO dismiss control at all: the scrim tap, Escape and Android Back
+  // already dismiss it, and the owner wanted the row back. CHANGELOG renders AS-IS: the ten-day cap
+  // lives in the data itself (see the charter in
   // src/changelog), so what the module holds is exactly what a visitor downloads and exactly what
   // draws here — no entry ships only to be refused. The list sits inside its own scroll region on
   // the shared settings recipe (Q5 round-7, components/scrollRegion): the card owns py-4 only while
@@ -809,35 +713,23 @@ export function SettingsPanel({
   // user's Date Format setting; the bullet list is the guide's UL idiom (list-disc + the
   // --mut-color marker). The card is heading row → list and NOTHING else — the heading row
   // gained the app's version on its right on 2026-08-10 (the note at the row explains the markup and
-  // why the id moved onto a span), and it is still one row: round-8 Q8 added a
-  // one-line "Shows the last ten days with updates." notice below the scroller, and the
-  // owner removed it (round-9) on the rule that this popup answers WHAT CHANGED, while how the app
+  // why the id moved onto a span), and it is still one row: a one-line "Shows the last ten days
+  // with updates." notice once sat below the scroller, and the owner removed it on the rule that this popup answers WHAT CHANGED, while how the app
   // keeps its history is documentation — so the ten-day cap is explained in How to Play (the
   // Updates section) and nowhere else. Don't re-add it here. With zero focusable controls the
   // shared trapModalTab pins focus on the dialog card (its degenerate branch) rather than letting
   // Tab walk out to the panel beneath.
-  const changelogJsx =
-    changelogOpen &&
-    createPortal(
+  const changelogJsx = changelogOpen && (
+    <Popup id="changelog" onDismiss={closeChangelog}>
       <div
-        data-settings-modal
-        role="presentation"
-        className={MODAL_SCRIM_CLASS}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setChangelogOpen(false)
-        }}
-        onKeyDown={trapModalTab}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="changelog-title"
+        style={MODAL_CARD_SHADOW}
+        className={MODAL_CARD_CLASS}
       >
-        <div
-          ref={changelogCardRef}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="changelog-title"
-          style={MODAL_CARD_SHADOW}
-          className={MODAL_CARD_CLASS}
-        >
-          {/* THE HEADING ROW: "What's new" left, the app's version right (2026-08-10). This popup is
+        {/* THE HEADING ROW: "What's new" left, the app's version right (2026-08-10). This popup is
               the version's ONLY home — not the ⚙ panel's "Last Updated" row, which has no space for
               it and which the owner will not give a second line to. Here it costs nothing: it sits
               in the panel someone opens to ask what changed, which is the same question.
@@ -868,66 +760,51 @@ export function SettingsPanel({
               paid for it, not two. Every value above clears WCAG AA for normal text (4.5).
               items-baseline, not items-center: the version's baseline sits on the heading's, which is
               what makes two different type sizes read as one line. */}
-          <div className="px-4 flex items-baseline justify-between gap-2">
-            <span id="changelog-title" className="text-sm font-semibold text-(--tx-50)">
-              What's new
-            </span>
-            <span className="text-xs tabular-nums text-(--tx-200-80)">v{APP_VERSION}</span>
-          </div>
-          <div
-            ref={changelogScrollRef}
-            className={`${SCROLL_REGION_CLASS} max-h-[55vh] space-y-3 ${scrollFadeClass(changelogScrolledFromTop, changelogAtBottom)}`}
-          >
-            {CHANGELOG.map((en) => {
-              const [yy, mo, da] = en.date.split('-').map(Number)
-              return (
-                <div key={en.date} className="space-y-1">
-                  <div className="text-xs font-semibold text-(--tx-100-80)">
-                    {fmt(yy, mo, da, numericFormatOf(dateFormat))}
-                  </div>
-                  <ul className="list-disc pl-4 space-y-1 marker:text-(--mut-color) text-xs text-(--tx-200-80)">
-                    {en.items.map((it, i) => (
-                      <li key={i}>{it}</li>
-                    ))}
-                  </ul>
-                </div>
-              )
-            })}
-          </div>
+        <div className="px-4 flex items-baseline justify-between gap-2">
+          <span id="changelog-title" className="text-sm font-semibold text-(--tx-50)">
+            What's new
+          </span>
+          <span className="text-xs tabular-nums text-(--tx-200-80)">v{APP_VERSION}</span>
         </div>
-      </div>,
-      document.getElementById('root')!,
-    )
+        <div
+          ref={changelogScrollRef}
+          className={`${SCROLL_REGION_CLASS} max-h-[55vh] space-y-3 ${scrollFadeClass(changelogScrolledFromTop, changelogAtBottom)}`}
+        >
+          {CHANGELOG.map((en) => {
+            const [yy, mo, da] = en.date.split('-').map(Number)
+            return (
+              <div key={en.date} className="space-y-1">
+                <div className="text-xs font-semibold text-(--tx-100-80)">
+                  {fmt(yy, mo, da, numericFormatOf(dateFormat))}
+                </div>
+                <ul className="list-disc pl-4 space-y-1 marker:text-(--mut-color) text-xs text-(--tx-200-80)">
+                  {en.items.map((it, i) => (
+                    <li key={i}>{it}</li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </Popup>
+  )
 
-  // The preset manager (4C): the same portal / scrim recipes and the same modal contract as the
-  // four above (focus-on-open — owned by the card itself, see the note beside the other four —
-  // capture Escape with the text-entry guard, close with settings, Android Back, the shared
-  // trapModalTab + data-settings-modal marker). The card is components/PresetManager, which holds
-  // the whole surface: the list, the rename fields, the reorder handles, and the delete confirmation
-  // it swaps itself into rather than stacking a second dialog on top of.
-  // ⚠ THE SCRIM TAP GOES THROUGH dismissPresets, NOT STRAIGHT TO THE CLOSE (Q2) — the third of the
-  // three routes that share this card's dismissal ladder, so a tap outside while the delete question
-  // is up returns to the list exactly as Escape and Back do.
-  const presetsJsx =
-    presetsOpen &&
-    createPortal(
-      <div
-        data-settings-modal
-        role="presentation"
-        className={MODAL_SCRIM_CLASS}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) dismissPresets()
-        }}
-        onKeyDown={trapModalTab}
-      >
-        <PresetManager
-          pendingDeleteId={pendingDeleteId}
-          setPendingDeleteId={setPendingDeleteId}
-          screensFresh={screensFresh}
-        />
-      </div>,
-      document.getElementById('root')!,
-    )
+  // The preset manager: the same shared popup shell as the four above. The card is
+  // components/PresetManager, which holds the whole surface: the list, the rename fields, the
+  // reorder handles, and the delete confirmation it swaps itself into.
+  // ⚠ ITS DISMISS IS dismissPresets, NOT THE STRAIGHT CLOSE — the card's dismissal ladder, so a tap
+  // outside while the delete question is up returns to the list exactly as Escape and Back do
+  // (those two reach the question's own stack entry first; see useLayer above).
+  const presetsJsx = presetsOpen && (
+    <Popup id="presets" onDismiss={dismissPresets}>
+      <PresetManager
+        pendingDeleteId={pendingDeleteId}
+        setPendingDeleteId={setPendingDeleteId}
+        screensFresh={screensFresh}
+      />
+    </Popup>
+  )
 
   return (
     <>
@@ -1365,15 +1242,9 @@ export function SettingsPanel({
                   flushSync lands the revert BEFORE the blur, so the commit that follows re-reads
                   the restored year and is a no-op. currentTarget is captured first because it is
                   only valid during dispatch.
-                  AND KEEP THE PANEL OPEN: the panel's Escape handler (App's, a document keydown in
-                  the BUBBLE phase) decides "is this press mine?" by asking what has focus — and
-                  blur() has already run by then, so it saw an empty answer and closed the panel out
-                  from under the edit. stopPropagation says plainly that this input consumed the
-                  press. It works because that listener is on DOCUMENT and BUBBLES: React 19
-                  attaches its own listener at the root container, so stopping the native event
-                  there means document never sees it. The four MODAL Escape handlers are
-                  capture-phase and still fire first, which is correct — they carve text inputs out
-                  themselves.
+                  AND KEEP THE PANEL OPEN: Escape also closes the top open layer — this panel
+                  (components/overlayStack) — but that rule stands aside while a text box has the
+                  keyboard, which is what leaves this press to the box.
                   Escape still BLURS, deliberately. It keeps the pair the author wrote (Enter = keep
                   it and let go, Escape = discard it and let go), it drops the numeric keyboard on a
                   phone, and it leaves a second Escape free to close the panel — a dismissal ladder,
@@ -1399,7 +1270,6 @@ export function SettingsPanel({
                   }
                   if (e.key === 'Escape') {
                     const el = e.currentTarget
-                    e.stopPropagation()
                     flushSync(() => yearRange.min.setValue(String(minY)))
                     el.blur()
                   }
@@ -1430,7 +1300,6 @@ export function SettingsPanel({
                   }
                   if (e.key === 'Escape') {
                     const el = e.currentTarget
-                    e.stopPropagation()
                     flushSync(() => yearRange.max.setValue(String(maxY)))
                     el.blur()
                   }
@@ -1830,7 +1699,7 @@ export function SettingsPanel({
         title="Full Reset this preset?"
         body="Wipes this preset's stats and all-time bests, and returns every ⚙ setting and each mode's setup to your saved defaults — the launch defaults for anything you haven't saved. The saved defaults themselves are kept, and no other preset is touched. Your shared Lookup history is cleared too."
         confirmLabel="Full Reset"
-        backButtonId="full-reset"
+        id="full-reset"
       />
       <ConfirmModal
         open={resetSettingsConfirmOpen}
@@ -1839,7 +1708,7 @@ export function SettingsPanel({
         title="Reset Settings for this preset?"
         body="Restores this preset's ⚙ settings — Display, Dates, Stats (Amnesic included) and Default Mode — plus Flash speed, both Blitz timers and the MoX run length, to your saved defaults, or the launch defaults if you've saved none. Your stats and all-time bests are untouched — unless this switches Amnesic, which does exactly what flipping that switch yourself does — and you stay on the page you're on."
         confirmLabel="Reset Settings"
-        backButtonId="reset-settings-confirm"
+        id="reset-settings-confirm"
       />
       {/* Confirm labels above deliberately REPEAT the action verb ("Full Reset" / "Reset
           Settings"), so screen-reader users hear the same words on the trigger and on the
@@ -1852,7 +1721,7 @@ export function SettingsPanel({
         title="Clear your saved defaults?"
         body="This only forgets the snapshot — your current settings stay as they are, and the launch defaults take over. Saved defaults are per-preset, so no other preset is affected."
         confirmLabel="Clear"
-        backButtonId="clear-defaults"
+        id="clear-defaults"
       />
     </>
   )

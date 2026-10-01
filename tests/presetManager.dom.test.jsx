@@ -818,9 +818,8 @@ describe('deleting', () => {
     openManager()
     tap(rowButton('Timed', 'delete'))
     // ★ ONE DIALOG, NOT TWO STACKED. The card swaps its own view (components/PresetManager argues
-    // why nested modals were refused: two capture-phase Escape handlers on document would take each
-    // other down). So the list's title is GONE while the question is up, and there is still exactly
-    // one scrim marked for App's click-outside rule.
+    // why the question is asked in place rather than in a second popup). So the list's title is GONE
+    // while the question is up, and there is still exactly one scrim.
     expect(queryModalCard('presets')).toBeNull()
     expect(confirmCard()).toBeTruthy()
     expect(document.querySelectorAll('[data-settings-modal]')).toHaveLength(1)
@@ -881,7 +880,7 @@ describe('deleting', () => {
 
   // ⚠ ANDROID BACK IS THE ROUTE THAT NEEDED MORE THAN THE SHARED HANDLER, and this is the case that
   // proves it: a real Back press POPS its overlay entry before calling the close (components/
-  // useBackButton's popstate listener), so a single 'presets' entry whose close merely stepped back
+  // overlayStack's popstate listener), so a single 'presets' entry whose close merely stepped back
   // would leave the card open with nothing registered — and the SECOND press would find 'settings' on
   // top and take the whole ⚙ panel down with the card. The confirmation therefore registers its own
   // entry ('presets-delete'), and the last two assertions here are what would fail without it.

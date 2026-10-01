@@ -52,18 +52,18 @@
 //     no box (min/max/snap 2–1000/1 mirror the normalizeAoxN clamp; junk/empty reverts,
 //     the editor's contract, rather than the box's junk→10 fallback);
 //   • buttons: the Save card is an action card — a full-width Save, always; the manager rests
-//     read-only with NO button row at all (round 21, Q5 — the scrim tap, Escape and Android
-//     Back are its dismiss routes) and grows that same Save only once something is dirty.
-//     ★★ NEITHER CARD HAS A CANCEL ANY MORE, AS OF Q2 — the owner's call, app-wide: "you can just
+//     read-only with NO button row at all (the scrim tap, Escape and Android Back are its dismiss
+//     routes) and grows that same Save only once something is dirty.
+//     ★★ NEITHER CARD HAS A CANCEL ANY MORE — the owner's call, app-wide: "you can just
 //     tap outside or press esc so it's just a noise button." It was a bare `onClick={onClose}`,
 //     i.e. the third spelling of a dismiss the scrim tap, Escape and Android Back already spell
-//     (all three registered by the callers in components/SettingsPanel), so it bought nothing and
+//     (all three the shared popup shell's, components/Popup), so it bought nothing and
 //     spent half the widest row on the card. There is nothing to "discard" that leaving does not
 //     discard: this card edits only the caller's pending snapshot, which dies with the popup on
 //     EVERY dismiss route, and the seed is re-read from the live/saved values on the next open.
 //     ⚠ WHICH IS WHY THIS COMPONENT NO LONGER TAKES AN onClose PROP AT ALL. It was that button's
-//     only reader; the callers' close callbacks are still very much alive, just wired straight to
-//     the three dismiss routes instead of down through here;
+//     only reader; the callers' close callbacks are still very much alive, just handed to the
+//     popup shell instead of down through here;
 //   • the footnote slot: the manager shows `note` while clean and the restricted-write
 //     warning ("Saving here updates only these values.") while dirty — the manager's Save
 //     writes ONLY these four values, so the swap appears exactly when it becomes relevant;
@@ -73,20 +73,20 @@
 // btn-solid accent tier (the AoX box swaps its surface-tray surface whole for btn-solid +
 // border-transparent so the rendered height never changes; the readouts take
 // SliderValueEditor's accent pill).
-// Stateless by design — the popup lifecycle (portal, scrim, Escape, Back, focus) stays with
-// the callers, which are both in components/SettingsPanel; edits touch only the caller's pending
-// snapshot via setPrefs.
+// Stateless by design — the popup lifecycle (portal, scrim, Escape, Back, focus) is the shared
+// shell's (components/Popup), which both callers in components/SettingsPanel wrap this card in;
+// edits touch only the caller's pending snapshot via setPrefs.
 import { useRef } from 'react'
 import type { PrefDefaults } from '../store/userDefaults.js'
 import { normalizeAoxN } from '../store/userDefaults.js'
 import { NUM_INPUT_BASE, NUM_INPUT_CLASS } from './controlClasses.js'
+import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { fmtBlitzT, fmtFlashT, SLIDER_READOUT_WIDEST } from '../lib/modeFormat.js'
 import SliderValueEditor from './SliderValueEditor.jsx'
 
 const NUM_INPUT_DIRTY_CLASS = NUM_INPUT_BASE + ' btn-solid border border-transparent'
 function DefaultsCard({
-  cardRef,
   titleId,
   title,
   subline,
@@ -97,7 +97,6 @@ function DefaultsCard({
   setPrefs,
   onSave,
 }: {
-  cardRef: React.RefObject<HTMLDivElement | null>
   titleId: string
   title: string
   subline?: string
@@ -131,13 +130,12 @@ function DefaultsCard({
   const { scrolledFromTop, atBottom } = useScrollEdgeState(rowsRef, true, headRef, footRef)
   return (
     <div
-      ref={cardRef}
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      style={{ boxShadow: '0 0 8px rgba(0,0,0,0.12)' }}
-      className="card rounded-2xl py-4 w-full max-w-[20rem] space-y-3 flex flex-col max-h-[calc(100dvh_-_2rem)] focus:outline-hidden"
+      style={MODAL_CARD_SHADOW}
+      className={`${MODAL_CARD_CLASS} flex flex-col max-h-[calc(100dvh_-_2rem)]`}
     >
       {/* The three space-y-3 rhythms below reproduce the single card-level one the flat card had:
           title→subline, the gaps between the four rows, and note→buttons were all this same gap,
@@ -160,10 +158,10 @@ function DefaultsCard({
                 WITHOUT committing since round 2, and the ⚙ Year Range boxes since round 14. Escape
                 now means one thing in every box you can type a NUMBER into — Enter keeps the edit
                 and lets go, Escape throws it away and lets go, and the container is left for a
-                second Escape (here, the popup's own capture-phase handler once the field is empty
-                of focus). DISMISSING the popup — that second Escape, a tap on the scrim, Android
-                Back — is what discards the WHOLE popup now that Q2 has taken the Cancel button
-                away; this is the field.
+                second Escape (here, the popup's, once the field no longer has the keyboard).
+                DISMISSING the popup — that second Escape, a tap on the scrim, Android Back — is
+                what discards the WHOLE popup now that the Cancel button is gone; this is the
+                field.
                 ★ AND SINCE ROUND 17 IT IS APP-WIDE: the Lookup date box (components/LookupCard)
                 was the one text field outside the contract, and it is on it now — so neither this
                 note nor the guide's Keyboard Input bullet names an exception any more.
@@ -176,13 +174,9 @@ function DefaultsCard({
                 the blur below fires reads the reverted value React has already queued instead of a
                 stale render closure. The year boxes' commit parses a text mirror and clamps it
                 against the other field, which no updater can express — hence flushSync there.
-                ⚠ IT STOPS PROPAGATION, and that was already true and still is: it blurs the field,
-                and without the stop the same native event would reach the document-level settings
-                Escape handler AFTER the blur — its input-has-focus skip no longer applies, and it
-                would slam the whole panel (and this popup) shut on what the user meant as a
-                keyboard dismiss. The popup's OWN Escape handler is capture-phase and so runs
-                BEFORE this one, where the field still holds focus and its text-entry guard bails —
-                which is what leaves the press to the field. */}
+                ⚠ NOTHING ELSE ANSWERS THIS PRESS: Escape closes the top open layer
+                (components/overlayStack) only when no text box has the keyboard, which is what
+                leaves the first press to the field and the second to the popup. */}
           {manage ? (
             <SliderValueEditor
               value={+normalizeAoxN(prefs.aoxN)}
@@ -219,7 +213,6 @@ function DefaultsCard({
                   commitAoxN()
                   e.currentTarget.blur()
                 } else if (e.key === 'Escape') {
-                  e.stopPropagation()
                   const at = aoxNAtFocusRef.current
                   setPrefs((p) => ({ ...p, aoxN: at }))
                   e.currentTarget.blur()
