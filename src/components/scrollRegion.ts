@@ -350,6 +350,21 @@ export function holdScrollRegion(from: Element | null): (() => void) | undefined
 //     (It used to answer every geometry change by revealing the wanted row — which threw a player who
 //     had scrolled down the list back to the selection — while a shrinking box, which changes no
 //     row's size, revealed nothing and let the selected row slide out under the fold.)
+//     ★ EXACTLY, HOWEVER MANY TIMES IT HAPPENS — a window dragged to a new size is a geometry change
+//     per frame. Two things make that true, and each was once a way the list crept:
+//       – THE SPACERS ARE RESIZED BEFORE THE POSITION IS PUT BACK. The rows change size by
+//         themselves; the two spacers are this hook's, drawn from the last measurement, and stay the
+//         old size until React draws them again. Putting the position back in between sets a number
+//         of pixels into content that is about to change height above the view: the browser then
+//         keeps whatever row that showed in place as the spacer resizes (scroll anchoring), or cuts
+//         the position short near the end of a list that is momentarily too short — and reports
+//         either as a scroll, which is taken for the player's. So a reported resize commits the new
+//         measurement first (flushSync), and only then moves the list.
+//       – THE POSITION IS REMEMBERED IN ROWS, and a browser only ever holds a scroller at a pixel
+//         position it can show: on a whole pixel, and no further than the end of the content. Read
+//         back and divided by the row size at every change, that rounding adds up, and a list at
+//         the very end comes back short of it. So the remembered rows are kept for as long as the
+//         list is where they put it, and only a scroll that really moves it replaces them.
 const WINDOW_FIRST_BATCH = 60
 // At least this many rows are kept drawn beyond each edge of the viewport, and never less than one
 // viewport's worth: a fling scrolls on the compositor ahead of the next render, and the rows it
@@ -369,8 +384,10 @@ export interface RowWindow {
 // nothing to measure against (see above), and every row is drawn.
 type RowMetrics = { rowHeight: number; pitch: number }
 // The geometry and the position as last seen — what a geometry change is compared against, because
-// by the time the browser reports a resize the old numbers are gone from the element.
-type RowView = RowMetrics & { clientHeight: number; scrollTop: number }
+// by the time the browser reports a resize the old numbers are gone from the element. `rows` is the
+// position in the list's own unit: how many rows are scrolled past the top of the view, fractions
+// included — the one number about the position that a change of row size does not change.
+type RowView = RowMetrics & { clientHeight: number; scrollTop: number; rows: number }
 
 /**
  * Scroll `el` the least it has to for the band of its content from `top` to `top + height` (content
@@ -415,8 +432,21 @@ export function useWindowedRows<T extends HTMLElement>(
     let pitch = 0
     let rowHeight = 0
     // Note the position (and the geometry it was read under) for the next geometry change.
+    // The rows last noted STAND while the list is where they put it — to the pixel the browser
+    // could give them: a whole one, and never past the end of the content. Anything else is a
+    // scroll that moved the list, and the rows are read off where it is now.
     const see = () => {
-      seenRef.current = { rowHeight, pitch, clientHeight: el.clientHeight, scrollTop: el.scrollTop }
+      const scrollTop = el.scrollTop
+      const was = seenRef.current
+      const end = Math.max(el.scrollHeight - el.clientHeight, 0)
+      const held = was !== null && Math.abs(Math.min(was.rows * pitch, end) - scrollTop) < 1
+      seenRef.current = {
+        rowHeight,
+        pitch,
+        clientHeight: el.clientHeight,
+        scrollTop,
+        rows: held ? was.rows : scrollTop / pitch,
+      }
     }
     const sync = () => {
       if (pitch <= 0) return
@@ -425,6 +455,7 @@ export function useWindowedRows<T extends HTMLElement>(
       const rows = Math.ceil(el.clientHeight / pitch)
       setView((prev) => (prev.first === first && prev.rows === rows ? prev : { first, rows }))
     }
+    // Read the rows' size off the page, and hand it to the spacers (which are drawn from it)…
     const measure = () => {
       const [a, b] = el.querySelectorAll<HTMLElement>('[data-row]')
       const top = a?.getBoundingClientRect()
@@ -432,6 +463,13 @@ export function useWindowedRows<T extends HTMLElement>(
       // Two drawn rows are always neighbours, so the difference of their tops IS the pitch.
       pitch = a && b ? b.getBoundingClientRect().top - top!.top : 0
       if (!(pitch > 0)) pitch = 0
+      const next = { rowHeight, pitch }
+      setMetrics((prev) =>
+        prev && prev.rowHeight === next.rowHeight && prev.pitch === next.pitch ? prev : next,
+      )
+    }
+    // …then put the list back where it was, against what was last seen.
+    const settle = () => {
       // ★ THE GEOMETRY CHANGED UNDER A LIST THAT WAS ALREADY ON SCREEN (the third part of the rule
       // at the top of this section).
       const was = seenRef.current
@@ -443,7 +481,7 @@ export function useWindowedRows<T extends HTMLElement>(
       ) {
         // The row at the top of the view stays at the top: the same number of rows scrolled past,
         // at the rows' new size. (A box that only changed height needs nothing — scrollTop held.)
-        if (was.pitch !== pitch) el.scrollTop = (was.scrollTop / was.pitch) * pitch
+        if (was.pitch !== pitch) el.scrollTop = was.rows * pitch
         // …and the wanted row stays in view if it was whole in view.
         const wanted = revealIndexRef.current
         const wasTop = wanted * was.pitch
@@ -454,14 +492,13 @@ export function useWindowedRows<T extends HTMLElement>(
         )
           scrollBandIntoView(el, wanted * pitch, rowHeight)
       }
-      const next = { rowHeight, pitch }
-      setMetrics((prev) =>
-        prev && prev.rowHeight === next.rowHeight && prev.pitch === next.pitch ? prev : next,
-      )
       sync()
     }
     syncRef.current = sync
+    // At mount, and when the list's length changes, this is inside a layout effect: React draws the
+    // spacers from the measurement before the browser paints, and cannot be asked to any sooner.
     measure()
+    settle()
     // ★ A SCROLL RE-DRAWS THE WINDOW INSIDE THE SCROLL EVENT (flushSync), not on React's own
     // schedule. Left to the scheduler the new rows arrive a frame after the scroll that needed
     // them, and a hard fling or a scrollbar drag — which can cross more than the margin of rows
@@ -470,7 +507,13 @@ export function useWindowedRows<T extends HTMLElement>(
     // only ever called from the event: a flushSync inside a layout effect is an error.
     const onScroll = () => flushSync(sync)
     el.addEventListener('scroll', onScroll, { passive: true })
-    const ro = new ResizeObserver(measure)
+    // ★ A REPORTED RESIZE COMMITS THE MEASUREMENT BEFORE IT MOVES THE LIST (flushSync — the rule at
+    // the top of this section says why), and commits the move too, so the rows it lands on are drawn
+    // in the frame that shows it. The observer calls from outside React, which is what allows it.
+    const ro = new ResizeObserver(() => {
+      flushSync(measure)
+      flushSync(settle)
+    })
     ro.observe(el)
     return () => {
       el.removeEventListener('scroll', onScroll)

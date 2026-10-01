@@ -278,6 +278,155 @@ describe('the geometry changes under the list', () => {
   })
 })
 
+// ── …and it keeps it EXACTLY, however many times the geometry changes ───────────────────────────
+// Dragging a window's edge is a change of geometry per frame, so "about right" adds up. With the
+// list scrolled to row 36, a window taken 800 → 600 → 800 three times walked the top row 36 → 35 →
+// 34 → 33, and further and faster near the end of the list.
+//
+// ⚠ IT TAKES A BROWSER'S SCROLLER TO SHOW IT, and jsdom's is a stored number. So these cases stand
+// one up (`browserScroller`): the three things a real engine does to a scroll position that a stored
+// number does not, each of which was a way the list crept —
+//   • it ANCHORS: it remembers the first row in view, and when that row has been moved by content
+//     above it changing height, the next layout moves the position by the same amount — so that
+//     what was in view stays where it was — and reports it as a scroll. (Not when the rows
+//     themselves changed size: a change to the remembered row is a change the engine stands back
+//     from.) The list's top spacer is content above the view, and it is the hook's own to resize:
+//     put the position back BEFORE the spacer is redrawn at the new row size, and the engine then
+//     "corrects" it by the spacer's change;
+//   • it CLAMPS: a position cannot be past the end of the content as the page describes it now;
+//   • it SNAPS: a position is held on a whole pixel, so a position read back is a rounded one.
+// A position set by script is reported as a scroll a frame later too, like any other.
+describe('the geometry changes again and again', () => {
+  const topSpacer = () => {
+    const first = list().firstElementChild
+    return first?.getAttribute('role') === 'presentation' ? px(first) : 0
+  }
+  // The list's content height as the page describes it NOW, at the rows' current size.
+  const contentNow = () =>
+    spacers().reduce((sum, s) => sum + px(s), 0) +
+    drawn().reduce(
+      (sum, li) => sum + geo.row + (li.className.includes('mt-2') ? geo.pitch - geo.row : 0),
+      0,
+    )
+  // Where a drawn row's top is in the content, as the page describes it now (null: not drawn).
+  const rowTopNow = (index) => {
+    const indexes = drawnIndexes()
+    if (!indexes.includes(index)) return null
+    const gapAboveFirst = indexes[0] > 0 ? geo.pitch - geo.row : 0
+    return topSpacer() + gapAboveFirst + (index - indexes[0]) * geo.pitch
+  }
+  function browserScroller() {
+    const ul = list()
+    let at = 0
+    let reported = at
+    let anchor = null // the first row in view at the last layout: its index, its top, the row size
+    const clamp = (y) => Math.round(Math.min(Math.max(y, 0), Math.max(contentNow() - geo.view, 0)))
+    const layout = () => {
+      const top = anchor && rowTopNow(anchor.index)
+      if (top !== null && anchor && anchor.pitch === geo.pitch && anchor.row === geo.row)
+        at += top - anchor.top
+      at = clamp(at)
+      const index = drawnIndexes().find((i) => rowTopNow(i) >= at)
+      anchor =
+        index === undefined
+          ? null
+          : { index, top: rowTopNow(index), pitch: geo.pitch, row: geo.row }
+    }
+    Object.defineProperty(ul, 'scrollHeight', { configurable: true, get: contentNow })
+    Object.defineProperty(ul, 'scrollTop', {
+      configurable: true,
+      get() {
+        layout()
+        return at
+      },
+      set(y) {
+        layout()
+        at = clamp(y)
+        anchor = null // a position set outright is not held to the row that was in view before it
+        layout()
+      },
+    })
+    // The end of a frame: lay out, and report the position if it is not where it was last reported.
+    return () =>
+      act(() => {
+        layout()
+        if (at !== reported) fireEvent.scroll(ul)
+        reported = at
+      })
+  }
+  let frame
+  const mount = () => {
+    render(<Host />)
+    frame = browserScroller()
+  }
+  const playerScrollsTo = (y) => {
+    scrollTo(y)
+    frame()
+  }
+  const changeGeometry = (change) => {
+    resized(change)
+    frame()
+  }
+  const topRow = () => Math.floor(list().scrollTop / geo.pitch)
+
+  it('the rows changing size, back and forth: the same row stays at the top every time', () => {
+    mount()
+    playerScrollsTo(36 * PITCH + 5) // row 36 at the top, a little of it scrolled past
+    for (let i = 0; i < 3; i++) {
+      changeGeometry({ pitch: 35, row: 28 }) // a shorter window: a smaller font, smaller rows
+      expect(topRow()).toBe(36)
+      changeGeometry({ pitch: PITCH, row: ROW }) // and back
+      expect(list().scrollTop).toBe(36 * PITCH + 5) // exactly where the player left it
+    }
+  })
+
+  it('the same far down a long list, where the spacer above the view is most of the content', () => {
+    mount()
+    playerScrollsTo(2000 * PITCH + 12)
+    for (let i = 0; i < 3; i++) {
+      changeGeometry({ pitch: 50, row: 40 })
+      expect(list().scrollTop).toBe(2000 * 50 + 15) // the same 0.3 of a row past row 2000
+      changeGeometry({ pitch: PITCH, row: ROW })
+      expect(list().scrollTop).toBe(2000 * PITCH + 12)
+    }
+  })
+
+  it('a run of sizes that do not divide evenly: whole-pixel rounding does not add up', () => {
+    mount()
+    playerScrollsTo(1003) // 25.075 rows
+    for (let i = 0; i < 20; i++) {
+      for (const pitch of [37, 33, 41]) {
+        changeGeometry({ pitch, row: pitch - 8 })
+        expect(topRow()).toBe(25)
+      }
+      changeGeometry({ pitch: PITCH, row: ROW })
+      expect(list().scrollTop).toBe(1003)
+    }
+  })
+
+  it('a list at the very end comes back to the very end', () => {
+    mount()
+    const end = HISTORY.length * PITCH - (PITCH - ROW) - VIEW
+    playerScrollsTo(end)
+    for (let i = 0; i < 3; i++) {
+      // Smaller rows in the same box: the end of the content is fewer rows down than the list was.
+      changeGeometry({ pitch: 37, row: 29 })
+      expect(list().scrollTop).toBe(HISTORY.length * 37 - 8 - VIEW) // held at the new end
+      changeGeometry({ pitch: PITCH, row: ROW })
+      expect(list().scrollTop).toBe(end)
+    }
+  })
+
+  it('a scroll the player makes between two changes is what the next change keeps', () => {
+    mount()
+    playerScrollsTo(36 * PITCH + 5)
+    changeGeometry({ pitch: 35, row: 28 })
+    playerScrollsTo(60 * 35 + 7) // on to row 60, at the new size
+    changeGeometry({ pitch: PITCH, row: ROW })
+    expect(list().scrollTop).toBe(60 * PITCH + 8) // row 60 and the same fifth of a row
+  })
+})
+
 describe('where there is nothing to measure', () => {
   it('draws every row — correct, and only as slow as the list is long', () => {
     layout = false // every size reads 0: a layout-free environment, or a list that is not displayed
