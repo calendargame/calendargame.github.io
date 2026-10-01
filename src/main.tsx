@@ -38,7 +38,7 @@ import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogSignature, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
 import { usePresets } from './store/presets.js'
 import { activeDataId, selectAmnesic, discardParkedStats } from './store/amnesic.js'
-import { setPresetAmnesic } from './store/presetControl.js'
+import { setPresetAmnesic, commitOpenedPreset } from './store/presetControl.js'
 import { openBrowsingSession } from './store/browsingSession.js'
 import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/settings.js'
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
@@ -1693,16 +1693,20 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // above catches the activeDataId change and remounts the six screens — which is why this effect
       // sits AFTER that subscription in source order. (On a genuine cold open there is no session copy
       // left to discard anyway: the browser cleared sessionStorage when it closed the session.)
+      // ★ …AND THE PRESET THIS OPEN LANDED IN IS WRITTEN DOWN FIRST (commitOpenedPreset): the "Open in"
+      // pin is applied at hydrate, in memory only, and the reload that may follow reads the device.
       useEffect(()=>{
         if(!openBrowsingSession())return;
+        commitOpenedPreset();
         for(const p of usePresets.getState().presets)setPresetAmnesic(p.id,storedAmnesicDefault(p.id));
       },[]);
       // ★ COLD-OPEN PAGE (round-21 Q3). `mode` starts "classic" only for the first paint; this
       // one-shot boot effect immediately moves it to the ACTIVE preset's session page — set if a
       // reload preserved it this session — else its `defaultMode` ⚙ setting (a true cold open, where
       // sessionStorage was cleared by the full close). The app-global "open in" pin has ALREADY
-      // been applied by store/presets' hydrate `merge`, so `usePresets.getState().activeId` is the
-      // right preset here with no switchPreset needed. switchMode('classic') on the common factory
+      // been applied by store/presets' hydrate `merge` (on a fresh open only — a reload stays on
+      // the preset it was on), so `usePresets.getState().activeId` is the right preset here with no
+      // switchPreset needed. switchMode('classic') on the common factory
       // path is a same-value setMode → React bails, no re-render. Empty deps: a boot effect, so a
       // mid-session switchMode is never fought (the subscription above owns switches).
       // ⚠ AFTER the amnesic reseed above: if that reseed flips the active preset's Amnesic flag it

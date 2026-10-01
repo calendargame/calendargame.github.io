@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { guardedStorage, readItem, writeItem, removeItem } from './storageHealth.js'
+import { browsingSessionOpen } from './browsingSession.js'
 
 // store/presets.ts — THE PRESET REGISTRY, and the storage layer every per-preset store sits on.
 //
@@ -103,10 +104,14 @@ export type Preset = {
   amnesic: boolean
 }
 
-// The app-GLOBAL "open in" pin (round-21 Q3): which preset a fresh app open lands in.
-//   'last'      → the preset that was active when the app last closed (today's behaviour — the
-//                 persisted `activeId` is used as-is).
+// The app-GLOBAL "open in" pin: which preset a FRESH app open lands in.
+//   'last'      → the preset that was active when the app last closed (the persisted `activeId` is
+//                 used as-is).
 //   <preset id> → always open in THAT preset, whatever was active last time.
+// ★ A FRESH OPEN ONLY. A reload — pull-to-refresh, the app's own update reload, the error card's
+// Reload — is the same browsing session (store/browsingSession), and it stays on the preset the
+// player was on, whatever the pin says: a guest playing in an Amnesic preset must not be dropped
+// into the pinned (permanent) one by a refresh.
 // It lives HERE, on the registry, and not in useSettings, because useSettings is per-preset — a
 // "which preset" preference cannot live inside a preset. It is NOT captured by Save Defaults
 // (SavedDefaults carries settings/prefs/amnesic only — no registry field is in any of those), by
@@ -238,12 +243,14 @@ export function normalizeRegistry(
   return { presets, activeId, nextId: Math.max(claimed, maxId + 1), openInPreset }
 }
 
-// Resolve a normalized registry's ACTIVE preset against its "open in" pin — the whole of what the
-// pin does. 'last' (or a pin that normalizeRegistry already collapsed to 'last') keeps the
-// persisted `activeId`; a live pin overrides it. Pure and total, so index.html's boot script can
-// mirror it in three lines and the store's `merge` can apply it once at hydrate.
-export const resolveOpenInActiveId = (reg: PresetRegistryValues): number =>
-  reg.openInPreset !== 'last' && reg.presets.some((p) => p.id === reg.openInPreset)
+// Resolve a normalized registry's ACTIVE preset for this page load — the whole of what the "open in"
+// pin does. On a FRESH open a live pin overrides the persisted `activeId`; 'last' (or a pin that
+// normalizeRegistry already collapsed to 'last') keeps it. On a RELOAD (`freshOpen` false) the
+// persisted `activeId` stands, pin or no pin — it is the preset the player was on. Pure and total,
+// so index.html's boot script can mirror it in three lines and the store's `merge` can apply it once
+// at hydrate.
+export const resolveOpenInActiveId = (reg: PresetRegistryValues, freshOpen: boolean): number =>
+  freshOpen && reg.openInPreset !== 'last' && reg.presets.some((p) => p.id === reg.openInPreset)
     ? reg.openInPreset
     : reg.activeId
 
@@ -322,15 +329,25 @@ export const usePresets = create<PresetRegistryState>()(
       // version field is here so that a future shape change HAS a gate to hang off; the
       // unconditional screen below is what guards the go-forward path, and it is the one that runs
       // on every load at every version.
-      // ★ THE "OPEN IN" PIN IS APPLIED HERE, once, at hydrate: `activeId` becomes the pinned preset
-      // when one is set and still exists, else the persisted `activeId` (= 'last'). Doing it in
-      // `merge` rather than in an App effect is what keeps index.html's boot script — which paints
-      // the active preset's theme before any module loads and resolves the pin the same way — and
+      // ★ THE "OPEN IN" PIN IS APPLIED HERE, once, at hydrate — and only on a FRESH open (the
+      // browsing-session marker is absent; it is set by App's boot effect, after this): `activeId`
+      // becomes the pinned preset when one is set and still exists, else the persisted `activeId`.
+      // On a reload the marker is there and the persisted `activeId` stands. Doing it in `merge`
+      // rather than in an App effect is what keeps index.html's boot script — which paints the
+      // active preset's theme before any module loads and resolves the pin the same way — and
       // every per-preset store's own hydration agreeing on the active preset from the first frame,
       // with no post-mount switchPreset and no theme flash.
+      // ⚠ A pin that MOVED the active preset is only in memory after this (hydration writes
+      // nothing). App's cold-open effect writes it down (store/presetControl's commitOpenedPreset),
+      // so the reload that follows finds the preset this open landed in rather than the one the
+      // last visit ended on.
       merge: (persisted, current) => {
         const norm = normalizeRegistry(persisted as Partial<PresetRegistryValues> | undefined)
-        return { ...current, ...norm, activeId: resolveOpenInActiveId(norm) }
+        return {
+          ...current,
+          ...norm,
+          activeId: resolveOpenInActiveId(norm, !browsingSessionOpen()),
+        }
       },
     },
   ),

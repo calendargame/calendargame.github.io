@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
+import { openBrowsingSession } from '../src/store/browsingSession.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const html = readFileSync(join(root, 'index.html'), 'utf8')
@@ -160,6 +161,19 @@ describe('index.html boot theme script', () => {
     seedRegistry(1, [1, 2], 2) // active is 1, but the pin says open in 2
     runBootScript()
     expect(painted()).toBe('nebula')
+  })
+
+  // ★ …ON A FRESH OPEN ONLY. A reload is the same browsing session and stays on the preset the
+  // player was on, so the script must not paint the pinned preset's theme then. The session is
+  // marked open through the REAL module, so the key the script reads is pinned to the one the app
+  // writes.
+  it('on a RELOAD ignores the pin and paints the preset the player was on', () => {
+    seedSettings(1, { useSystem: false, manualTheme: 'parchment' })
+    seedSettings(2, { useSystem: false, manualTheme: 'nebula' })
+    seedRegistry(1, [1, 2], 2)
+    openBrowsingSession() // the first boot of this session has happened
+    runBootScript()
+    expect(painted()).toBe('parchment')
   })
 
   it('ignores an openInPreset that names no preset and uses the persisted activeId', () => {

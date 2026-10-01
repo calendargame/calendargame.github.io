@@ -27,10 +27,12 @@ import {
   switchPreset,
   deletePreset,
   setOpenInPreset,
+  commitOpenedPreset,
   setPresetAmnesic,
   activePreset,
   isPresetFactory,
 } from '../src/store/presetControl.js'
+import { openBrowsingSession, forgetBrowsingSession } from '../src/store/browsingSession.js'
 import { writeSessionMode } from '../src/store/sessionMode.js'
 import { writeSessionRound } from '../src/store/sessionRound.js'
 import { useSettings } from '../src/store/settings.js'
@@ -301,6 +303,33 @@ describe('the "open in" pin', () => {
     fresh = await reopenApp()
     expect(fresh.usePresets.getState().activeId).toBe(1)
     expect(fresh.usePresets.getState().openInPreset).toBe('last')
+  })
+
+  it('a RELOAD is not a fresh open: the pin is not applied, the preset you were on stays', async () => {
+    createPreset('Timed') // preset 2
+    setOpenInPreset(2) // pinned to 2, while on preset 1
+    openBrowsingSession() // this browsing session is open (App's boot effect marks it)
+    const reloaded = await reopenApp()
+    expect(reloaded.usePresets.getState().activeId).toBe(1)
+    expect(reloaded.usePresets.getState().openInPreset).toBe(2) // the pin itself is untouched
+    // …and after a real close (the browser clears the session) the pin applies again.
+    forgetBrowsingSession()
+    const fresh = await reopenApp()
+    expect(fresh.usePresets.getState().activeId).toBe(2)
+  })
+
+  it('commitOpenedPreset writes down a pin-moved preset, and only that', async () => {
+    const disk = () => JSON.parse(localStorage.getItem('cg-presets-v1') ?? 'null')?.state
+    // A device with no registry gains none.
+    commitOpenedPreset()
+    expect(disk()).toBeUndefined()
+    createPreset('Timed')
+    setOpenInPreset(2)
+    const fresh = await reopenApp() // a fresh open: memory says 2, the device still says 1
+    expect(fresh.usePresets.getState().activeId).toBe(2)
+    expect(disk().activeId).toBe(1)
+    fresh.control.commitOpenedPreset()
+    expect(disk().activeId).toBe(2)
   })
 
   it('deleting the pinned preset drops the pin back to "last"', async () => {

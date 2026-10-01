@@ -22,8 +22,8 @@ import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults } from './progress.js'
 import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 
-// store/presetControl.ts — the six things you can DO to the set of presets, and the only place
-// allowed to do them.
+// store/presetControl.ts — the things you can DO to the set of presets, and the only place allowed
+// to do them.
 //
 // WHY THIS IS NOT IN store/presets.ts. The registry file holds a saved value and the storage layer
 // that reads it; this file holds the operations, because three of them (switching, deleting,
@@ -47,7 +47,7 @@ import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
 //
 // ★ AND ONE QUESTION, NOT A SEVENTH OPERATION: `isPresetFactory(id, …)` (round 22, Q1) asks whether a
 // preset holds anything a player could miss, so the delete flow can skip its confirmation for one
-// that holds nothing. It reads the same four stores and the same key machinery the six operations
+// that holds nothing. It reads the same four stores and the same key machinery the operations
 // write through — which is precisely why it belongs here and not in the component that asks it: an
 // answer derived from a second, parallel idea of what a preset IS could disagree with what
 // deletePreset actually removes, and the direction that disagreement destroys data is the one a
@@ -446,6 +446,28 @@ export function setOpenInPreset(value: number | 'last'): boolean {
   if (value !== 'last' && !reg.presets.some((p) => p.id === value)) return false
   usePresets.getState().applyRegistry({ ...reg, openInPreset: value })
   return true
+}
+
+/**
+ * Write down the preset this app open LANDED in, when the "open in" pin moved it — called once per
+ * fresh open, by src/main.tsx's cold-open effect.
+ *
+ * WHY IT IS NEEDED. The pin is applied in the registry's hydrate `merge` (store/presets), and
+ * hydration writes nothing: after a pinned open, memory says "preset 2" while the device still says
+ * whatever the last visit ended on. A reload must stay on the preset the player is on, and a reload
+ * reads the device — so without this line a refresh right after a pinned open would land in the
+ * LAST visit's preset, which is neither where the player is nor where the pin points.
+ * ⚠ ONLY WHEN THE DEVICE DISAGREES, and only when it holds a registry at all: a device that has
+ * never created a second preset has no registry entry, the default one says nothing a missing one
+ * does not, and this must not be the thing that creates it.
+ * A registry edit and nothing else — `activeId` does not move in memory, so nothing rehydrates and
+ * nothing remounts.
+ */
+export function commitOpenedPreset(): void {
+  const { presets, activeId, nextId, openInPreset } = usePresets.getState()
+  const stored = readStoredRegistry()
+  if (stored && stored.activeId !== activeId)
+    usePresets.getState().applyRegistry({ presets, activeId, nextId, openInPreset })
 }
 
 /** Rename a preset. An empty or whitespace-only name falls back to the default one. */

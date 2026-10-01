@@ -1,5 +1,4 @@
 // store/browsingSession.ts — is this boot a GENUINE cold open, or a reload inside the same session?
-// (round 23 Q2)
 //
 // ★ THE OWNER'S RULE, which this file is the whole mechanism for: "only truly closing the app starts
 // fresh." A reload — Safari's pull-to-refresh, the app's own auto-update reload, the Reload button on
@@ -10,9 +9,10 @@
 // reloads for free, because it lives in sessionStorage (store/sessionMode, store/sessionRound,
 // store/sessionHistory, store/sessionGuide, the Amnesic session stats, the session Lookup overflow):
 // a reload keeps sessionStorage and a real close clears it, and nothing has to notice either. The one
-// thing that has to ACT on a cold open is the Amnesic reseed (src/main.tsx — guest mode reverts to
-// each preset's saved default on the next open), and a boot effect cannot tell a reload from a cold
-// open by itself: both mount <App/> from scratch.
+// things that have to ACT on a cold open are the Amnesic reseed (src/main.tsx — guest mode reverts to
+// each preset's saved default on the next open) and the "Open in" pin (store/presets — a fresh open
+// lands in the pinned preset, a reload stays where the player was), and neither can tell a reload
+// from a cold open by itself: both boot the page from scratch.
 // Round 21 ran the reseed on every mount and called a reload "a reopen"; the owner reversed that.
 // So the question is asked of sessionStorage itself: the marker below is written on the first boot of
 // a session and survives every reload of it, so its ABSENCE is exactly "the browser started a new
@@ -25,7 +25,25 @@
 // ⚠ ⚠ UNVERIFIABLE FROM HERE: that swiping the installed iOS app away clears its sessionStorage (the
 // expected behaviour — a new process, a new browsing session). The owner checks it on his device.
 
+// ⚠ index.html's pre-React boot script reads this key too (it has to resolve the preset a load opens
+// in before any module exists — see browsingSessionOpen below); tests/bootTheme.dom runs that script
+// against this file's marker, so the two spellings cannot drift.
 const MARKER = 'cg-browsing-session-v1'
+
+/**
+ * Is this browsing session ALREADY open — i.e. is this page load a reload inside it rather than a
+ * fresh open? A pure read, for the one thing that has to know BEFORE the app has booted: the
+ * "Open in" pin (store/presets' hydrate `merge`, and index.html's boot script beside it), which
+ * decides the preset a FRESH OPEN lands in and must leave a reload on the preset the player was on.
+ * False in a browser that refuses sessionStorage, for the reason given in the header.
+ */
+export function browsingSessionOpen(): boolean {
+  try {
+    return window.sessionStorage.getItem(MARKER) !== null
+  } catch {
+    return false
+  }
+}
 
 /**
  * Mark this browsing session as open, and say whether it was ALREADY open. true = a genuine cold
@@ -34,13 +52,13 @@ const MARKER = 'cg-browsing-session-v1'
  * double effect) answers false, which is correct — the first call already acted.
  */
 export function openBrowsingSession(): boolean {
+  const cold = !browsingSessionOpen()
   try {
-    const cold = window.sessionStorage.getItem(MARKER) === null
     window.sessionStorage.setItem(MARKER, '1')
-    return cold
   } catch {
-    return true
+    /* storage refused — every load is a cold open here (see the header) */
   }
+  return cold
 }
 
 /**
