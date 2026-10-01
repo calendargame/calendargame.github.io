@@ -1384,13 +1384,14 @@ export default function GuidePage({
           The same rule decides what happens to the date that was waiting when the screen itself
           comes back — after a reload, a switch to another preset and back, or a guest&apos;s
           Amnesic interlude. Your history returns exactly as it was. The waiting date returns too,
-          with one exception: if that mode&apos;s timing is showing when you come back and you had
-          not yet answered the date — no wrong answer, no Reveal, no Show Codes — a new date is
-          drawn instead. Its timer starts again when the screen comes back, so the old date would
-          have recorded a time that left out however long you had already looked at it. With timing
-          hidden no time is recorded, so the same date is waiting, even if you had not played
-          anything yet. (An unanswered date is also redrawn if a date setting was changed while you
-          were away — the same as changing it with the date on screen.)
+          with one exception: if a time could be recorded for it when you come back — that
+          mode&apos;s timing is showing and Save Stats is on — and you had not yet answered the date
+          (no wrong answer, no Reveal, no Show Codes), a new date is drawn instead. Its timer starts
+          again when the screen comes back, so the old date would have recorded a time that left out
+          however long you had already looked at it. With timing hidden, or with Save Stats off, no
+          time is recorded, so the same date is waiting, even if you had not played anything yet.
+          (An unanswered date is also redrawn if a date setting was changed while you were away —
+          the same as changing it with the date on screen.)
         </p>
         <Subhead>The breakdown (Blitz, MoX)</Subhead>
         <p>

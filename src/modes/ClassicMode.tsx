@@ -91,7 +91,7 @@ function ClassicMode({
     getInitialStats: () => useProgress.getState().stats.classic,
     getInitialState: () =>
       restoredEngine(parked, {
-        timingShown: !timingOff,
+        timeRecorded: !timingOff && saveStats,
         config: dateConfig,
         newDate: () => genDate(minY, maxY),
       }),

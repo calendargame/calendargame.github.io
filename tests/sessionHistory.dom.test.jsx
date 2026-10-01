@@ -366,6 +366,28 @@ describe('the question that was waiting', () => {
     expect(readDate()).toBe(waiting)
   })
 
+  // Timing shown is only half of "a time could be recorded": with Save Stats off nothing is, so
+  // there is nothing to protect and the question the player was on must still be there. (The rule
+  // used to look at timing alone and redrew it.) Save Stats coming back ON later is its own door,
+  // pinned in tests/settingsPanel.lifecycle.
+  describe.each(WAYS_BACK)('Save Stats OFF with timing shown — %s', (_, comeBack) => {
+    it('the same unanswered question returns: no time can be recorded for it', () => {
+      showClassicTiming(true)
+      act(() => useSettings.getState().setSaveStats(false))
+      const waiting = readDate()
+      comeBack()
+      expect(readDate()).toBe(waiting)
+    })
+  })
+
+  it('Save Stats turned ON in between, with timing shown, regenerates it — decided as the screen comes back', () => {
+    showClassicTiming(true)
+    act(() => useSettings.getState().setSaveStats(false))
+    const waiting = readDate() // parked while nothing counted
+    guestInterlude(() => act(() => useSettings.getState().setSaveStats(true))) // the shared switch
+    expect(readDate()).not.toBe(waiting)
+  })
+
   it('a date setting changed under a parked history: an unanswered question is redrawn under the new one', () => {
     const waiting = readDate() // timing hidden — on its own this question would return
     guestInterlude(() =>

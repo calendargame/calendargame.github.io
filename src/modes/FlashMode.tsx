@@ -114,7 +114,7 @@ function FlashMode({
     getInitialStats: () => useProgress.getState().stats.flash,
     getInitialState: () =>
       restoredEngine(parked, {
-        timingShown: !timingOff,
+        timeRecorded: !timingOff && saveStats,
         config: dateConfig,
         newDate: () => genDate(minY, maxY),
       }),

@@ -315,8 +315,9 @@ export function useMountedDataId(): string {
 // What a screen says about the question it would draw RIGHT NOW, for the restore to judge the parked
 // one against.
 interface LiveQuestion {
-  // Is this mode's timing shown (not hidden) at this mount?
-  timingShown: boolean
+  // Would a first-try answer here record a solve time, as things stand at this mount — is this
+  // mode's timing shown AND Save Stats on? (Either one off, and nothing is recorded.)
+  timeRecorded: boolean
   // The date settings a question drawn now is drawn under — the same values, spelled the same way,
   // that the screen parks as `config` (and that its settings-close effect regenerates on).
   config: string
@@ -351,14 +352,16 @@ export function readParkedHistory(
  * ★ THE LIVE-QUESTION RULE (the owner's, and it holds for a reload, a preset switch and an Amnesic
  * interlude alike). The history comes back exactly; the question that was WAITING comes back only
  * when nothing could be gained from having seen it:
- *   • it is REGENERATED when a time could still be recorded for it — timing is shown in this mode
- *     NOW (it may have been toggled since the park), and the question is unanswered with no wrong
- *     answer, Reveal or Show Codes. The engine's clock starts again at every mount, so the same
- *     question returning there would hand the player a solve time that left out however long they
- *     had already looked at it;
- *   • otherwise THE SAME QUESTION RETURNS — timing hidden records no time, and a question already
- *     answered wrong, revealed or shown its codes records none either — including on a screen with
- *     no history at all;
+ *   • it is REGENERATED when a time could still be recorded for it — this mode's timing is shown
+ *     and Save Stats is on NOW (either may have been changed since the park), and the question is
+ *     unanswered with no wrong answer, Reveal or Show Codes. The engine's clock starts again at
+ *     every mount, so the same question returning there would hand the player a solve time that left
+ *     out however long they had already looked at it;
+ *   • otherwise THE SAME QUESTION RETURNS — timing hidden records no time, Save Stats off records
+ *     nothing at all, and a question already answered wrong, revealed or shown its codes records no
+ *     time either — including on a screen with no history at all. (Each of the two switches has its
+ *     own door for the moment it comes back ON over a question that was kept: useStatsHideToggles
+ *     and useSaveStatsOnRegen, above.)
  *   • and an unanswered question drawn under DIFFERENT date settings is regenerated too (the settings
  *     are shared by a preset's two stats copies, so a guest can change them under a parked history) —
  *     which is only what changing those settings does to a question on screen.
@@ -369,7 +372,7 @@ export function readParkedHistory(
  */
 export function restoredEngine(back: RestoredHistory | null, live: LiveQuestion): GameState | null {
   if (!back) return null
-  if (!live.timingShown && back.config === live.config) return back.engine
+  if (!live.timeRecorded && back.config === live.config) return back.engine
   return gameReducer(back.engine, { type: 'REGEN_DATE', nextDate: live.newDate() })
 }
 

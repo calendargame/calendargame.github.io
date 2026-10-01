@@ -169,7 +169,7 @@ function DeductionMode({
   // …and the question each silo was waiting on comes back, or is regenerated, by modeHooks'
   // live-question rule.
   const liveQuestion = (newDate: () => DedPuzzle) => ({
-    timingShown: !timingOff,
+    timeRecorded: !timingOff && saveStats,
     config: dateConfig,
     newDate,
   })
