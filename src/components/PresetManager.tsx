@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { flushSync } from 'react-dom'
 import {
   BOTTOM_EDGE_BAND_PX,
   SCROLL_REGION_CLASS,
   readShadeRampPx,
+  scrollBandIntoView,
   scrollEdgeGaps,
   scrollFadeClass,
   useScrollEdgeState,
@@ -272,13 +273,20 @@ const DELETE_BTN_CLASS =
 // bare ≡ says "drag", where a boxed one reads as one more thing to tap. What it keeps is everything
 // a control needs that is not decoration: a hit area wider and taller than its 14px glyph
 // (`self-stretch` takes the row's full height, px-3 gives it ~38px of width), a grab cursor for a
-// mouse, and a FOCUS RING for the keyboard route (index.css's .kbd-ring): the grip is Tab-reachable
-// and its ↑/↓ move a preset, and with no border or fill of its own there is nothing else that could
-// show the keyboard is on it. The ring is drawn for keyboard focus only (:focus-visible), so
-// grabbing the grip with a finger or a mouse — which also focuses it, see beginDrag — draws none.
+// mouse, and a FOCUS RING for the keyboard route (GRIP_KBD_RING — index.css's .kbd-ring): the grip
+// is Tab-reachable and its ↑/↓ move a preset, and with no border or fill of its own there is nothing
+// else that could show the keyboard is on it.
 // The glyph is quieter than the text (--tx-200-80) because it is furniture until it is held.
 const GRIP_CLASS =
-  'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab kbd-ring'
+  'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab'
+// ★ THE RING IS FOR THE KEYBOARD, AND A GRAB IS NOT THE KEYBOARD. The class draws on :focus-visible,
+// which is the browser's own guess at "the keyboard put focus here" — and the guess is wrong for a
+// grab: a press on the grip focuses it from script (beginDrag says why it has to), and a browser
+// treats a scripted focus as keyboard focus whenever the keyboard was the last thing used. So after
+// one Tab or arrow inside the card, grabbing a row with a finger or a mouse drew the ring on it.
+// The card therefore says which it was: the ring class is left off the one grip that a pointer
+// press focused, until that grip loses focus or takes a key (pointerGripId, in the component).
+const GRIP_KBD_RING = 'kbd-ring'
 // Each cell's on-screen column in the row's five-column grid, all on the first row track — the
 // placement that lets the markup order (above) differ from the order on screen.
 const ROW_COL = {
@@ -359,6 +367,35 @@ export default function PresetManager({
   // last measured fade painted on a region that is no longer mounted.
   const listRef = useRef<HTMLDivElement | null>(null)
   const { scrolledFromTop, atBottom } = useScrollEdgeState(listRef, pendingDelete === null)
+
+  // One ref per row, keyed by the preset's ID rather than its index — an index is exactly what a
+  // reorder changes, and a ref keyed by the wrong thing would measure the wrong row on the NEXT
+  // drag's pointerdown. The callback ref on the row adds/removes its own entry, so a deleted
+  // preset's detached node cannot linger in the map.
+  const rowRefs = useRef(new Map<number, HTMLDivElement>())
+  // ★ BRING A PRESET'S ROW INTO THE PART OF THE LIST THAT IS ON SCREEN AND CLEAR OF ITS EDGE FADES —
+  // the least scroll that does it (components/scrollRegion's scrollBandIntoView, the same call
+  // Lookup's history and the dropdown cursor make). The list is unlimited, so a row can be changed
+  // while it is — or as it becomes — out of view, and two things here do exactly that: a keyboard
+  // move (the row leaves, and the focus ring with it) and the width-cap note growing the row being
+  // typed into (on the last row in view, the note opened below the visible edge). The row's
+  // position is its rect against the list's, plus how far the list is scrolled: content coordinates.
+  const revealRow = (id: number) => {
+    const list = listRef.current
+    const row = rowRefs.current.get(id)
+    if (!list || !row) return
+    const rect = row.getBoundingClientRect()
+    const top = rect.top - list.getBoundingClientRect().top - list.clientTop + list.scrollTop
+    scrollBandIntoView(list, top, rect.height)
+  }
+  // The row being typed into, whenever its note appears. A layout effect: the scroll lands in the
+  // frame that draws the note.
+  const cappedRowId = editing && nameWidthCapped ? editing.id : null
+  useLayoutEffect(() => {
+    if (cappedRowId !== null) revealRow(cappedRowId)
+  }, [cappedRowId])
+  // The preset whose grip a POINTER press focused, or null (GRIP_KBD_RING argues it).
+  const [pointerGripId, setPointerGripId] = useState<number | null>(null)
 
   // ── Renaming ────────────────────────────────────────────────────────────────────────────────
 
@@ -524,12 +561,6 @@ export default function PresetManager({
     setDrag(next)
   }
 
-  // One ref per row, keyed by the preset's ID rather than its index — an index is exactly what a
-  // reorder changes, and a ref keyed by the wrong thing would measure the wrong row on the NEXT
-  // drag's pointerdown. The callback ref below adds/removes its own entry, so a deleted preset's
-  // detached node cannot linger in the map.
-  const rowRefs = useRef(new Map<number, HTMLDivElement>())
-
   // ★ WHERE THE DRAGGED ROW IS DRAWN, for a pointer at viewport y `pointerY` — the one place the
   // pointer, the list's scroll position and lib/presetReorder's clamp meet. The row follows the
   // finger exactly, EXCEPT that clampDragCenter keeps it between the first and last slot (the fix
@@ -637,6 +668,8 @@ export default function PresetManager({
     // the handle un-focused — silently breaking the "focus survives a reorder" accessibility claim
     // for every route EXCEPT the keyboard one. Calling focus() here is unaffected by preventDefault
     // — only the browser's OWN implicit behaviour was ever suppressed, never a programmatic call.
+    // …and it is a POINTER's focus, so this grip draws no keyboard ring for it (GRIP_KBD_RING).
+    setPointerGripId(p.id)
     e.currentTarget.focus()
     e.preventDefault()
     // Every row's center, converted from the viewport to the list's content coordinates (the ★★
@@ -711,14 +744,16 @@ export default function PresetManager({
   // nothing here to guard (matching the design's own call not to grow a disabled visual state the
   // handle never had). preventDefault keeps the arrow keys from also scrolling the modal's own
   // scroll region (components/scrollRegion) in addition to, or instead of, moving the row.
+  // ★ THE LIST FOLLOWS THE ROW. A moved row can land outside the part of the list that is on screen
+  // — in a list of thirty, a few presses carried the row, and the ring that says where the keyboard
+  // is, out of sight. flushSync commits the move first, so revealRow measures the row where it now
+  // is. (Any key on the grip is the keyboard in use, so the ring is its again.)
   const onHandleKeyDown = (p: Preset) => (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      movePreset(p.id, -1)
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      movePreset(p.id, 1)
-    }
+    setPointerGripId(null)
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+    e.preventDefault()
+    flushSync(() => movePreset(p.id, e.key === 'ArrowUp' ? -1 : 1))
+    revealRow(p.id)
   }
 
   // The live transform for the row at `index`/`id` — the dragged row tracks the pointer exactly,
@@ -954,8 +989,9 @@ export default function PresetManager({
                 role="button"
                 tabIndex={0}
                 aria-label={`Reorder ${p.name}, position ${i + 1} of ${presets.length}`}
-                className={`${ROW_COL.grip} ${GRIP_CLASS}`}
+                className={`${ROW_COL.grip} ${GRIP_CLASS} ${pointerGripId === p.id ? '' : GRIP_KBD_RING}`}
                 style={{ touchAction: 'none' }}
+                onBlur={() => setPointerGripId(null)}
                 onPointerDown={beginDrag(p, i)}
                 onPointerMove={onDragMove}
                 onPointerUp={endDrag}

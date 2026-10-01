@@ -616,6 +616,137 @@ describe('reordering', () => {
     })
   })
 
+  // ── The list follows a row that is moved or annotated ─────────────────────────────────────────
+  // The list is unlimited, so it scrolls — and jsdom lays nothing out, so each row is given a rect
+  // from its CURRENT place in the list (40px rows, minus how far the list is scrolled) and the list
+  // a box two rows tall. What is proved is the arithmetic and the wiring; how it looks is a device
+  // question.
+  describe('the list follows the row', () => {
+    const ROW = 40
+    const list = () => rowOf('Preset 1').parentElement.parentElement
+    const layOut = (names, { viewRows = 2, heights = {} } = {}) => {
+      const region = list()
+      region.getBoundingClientRect = () => ({
+        top: 0,
+        bottom: viewRows * ROW,
+        height: viewRows * ROW,
+      })
+      Object.defineProperty(region, 'clientHeight', { configurable: true, value: viewRows * ROW })
+      for (const name of names) {
+        const outer = rowOf(name).parentElement
+        outer.getBoundingClientRect = () => {
+          const top = [...region.children].indexOf(outer) * ROW - region.scrollTop
+          const height = heights[name] ?? ROW
+          return { top, bottom: top + height, height }
+        }
+      }
+    }
+
+    it('a keyboard move scrolls the list just far enough to keep the moved row whole in view', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+        createPreset('Fourth')
+      })
+      openManager()
+      layOut(['Preset 1', 'Timed', 'Guest', 'Fourth'])
+      const down = () =>
+        act(() => fireEvent.keyDown(reorderHandle('Preset 1'), { key: 'ArrowDown' }))
+      const up = () => act(() => fireEvent.keyDown(reorderHandle('Preset 1'), { key: 'ArrowUp' }))
+      down() // second row: still inside the two-row view
+      expect(list().scrollTop).toBe(0)
+      down() // third row (80 … 120): below the fold → its bottom is brought to the edge
+      expect(listedNames()).toEqual(['Timed', 'Guest', 'Preset 1', 'Fourth'])
+      expect(list().scrollTop).toBe(40)
+      down() // fourth row (120 … 160)
+      expect(list().scrollTop).toBe(80)
+      up() // back to the third row (80 … 120): already in view, nothing moves
+      expect(list().scrollTop).toBe(80)
+      up()
+      up() // the first row: above the view → its top is brought to the edge
+      expect(listedNames()).toEqual(['Preset 1', 'Timed', 'Guest', 'Fourth'])
+      expect(list().scrollTop).toBe(0)
+    })
+
+    it('a key that moves nothing scrolls nothing', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      layOut(['Preset 1', 'Timed', 'Guest'])
+      act(() => {
+        list().scrollTop = 40
+      })
+      act(() => fireEvent.keyDown(reorderHandle('Guest'), { key: 'Home' }))
+      expect(list().scrollTop).toBe(40)
+    })
+
+    it('the width-cap note appearing on a row at the foot of the view is scrolled into view', () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      // The capped row is the taller one: the note takes a second line under its name box.
+      layOut(['Preset 1', 'Timed', 'Guest'], { heights: { Timed: 58 } })
+      presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((c) => ({
+        text: c,
+        capped: true,
+      }))
+      const box = nameBoxes()[1] // the second row: 40 … 98 with its note, in a view 80 tall
+      act(() => {
+        fireEvent.focus(box)
+        fireEvent.change(box, { target: { value: 'Timed Runs' } })
+      })
+      expect(screen.getByText("That's as long as this name can display.")).toBeTruthy()
+      expect(list().scrollTop).toBe(18)
+    })
+  })
+
+  // ── The grip's ring is the keyboard's ─────────────────────────────────────────────────────────
+  // The ring draws on :focus-visible, and a browser counts a SCRIPTED focus as keyboard focus once
+  // the keyboard has been used — which a grab is (the press focuses the grip from script). So the
+  // card leaves the ring class off the one grip a pointer press focused, until it loses focus or
+  // takes a key. jsdom has no :focus-visible, so the class is the contract.
+  describe('the grip draws no keyboard ring for a pointer grab', () => {
+    const ring = (name) => /(^|\s)kbd-ring(\s|$)/.test(reorderHandle(name).className)
+    const grab = (name) => {
+      const e = new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })
+      Object.defineProperty(e, 'pointerId', { value: 3 })
+      Object.defineProperty(e, 'isPrimary', { value: true })
+      Object.defineProperty(e, 'pointerType', { value: 'mouse' })
+      act(() => reorderHandle(name).dispatchEvent(e))
+    }
+
+    it('a grab takes the ring off that grip alone; losing focus gives it back', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      expect(ring('Preset 1')).toBe(true)
+      grab('Preset 1')
+      expect(document.activeElement).toBe(reorderHandle('Preset 1')) // the grab still focuses it
+      expect(ring('Preset 1')).toBe(false)
+      expect(ring('Timed')).toBe(true)
+      act(() => reorderHandle('Timed').focus()) // Tab on to the next grip
+      expect(ring('Preset 1')).toBe(true)
+      expect(ring('Timed')).toBe(true)
+    })
+
+    it('a key pressed on a grabbed grip is the keyboard again — the ring is back', () => {
+      act(() => {
+        createPreset('Timed')
+      })
+      openManager()
+      grab('Preset 1')
+      expect(ring('Preset 1')).toBe(false)
+      act(() => fireEvent.keyDown(reorderHandle('Preset 1'), { key: 'ArrowDown' }))
+      expect(listedNames()).toEqual(['Timed', 'Preset 1'])
+      expect(ring('Preset 1')).toBe(true)
+    })
+  })
+
   describe('the handle`s own structure', () => {
     it('touch-action:none sits on the handle only — never the row, never the list container', () => {
       openManager()
