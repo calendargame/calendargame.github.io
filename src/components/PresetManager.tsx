@@ -273,20 +273,20 @@ const DELETE_BTN_CLASS =
 // bare ≡ says "drag", where a boxed one reads as one more thing to tap. What it keeps is everything
 // a control needs that is not decoration: a hit area wider and taller than its 14px glyph
 // (`self-stretch` takes the row's full height, px-3 gives it ~38px of width), a grab cursor for a
-// mouse, and a FOCUS RING for the keyboard route (GRIP_KBD_RING — index.css's .kbd-ring): the grip
+// mouse, and a FOCUS RING for the keyboard route (index.css's .kbd-ring): the grip
 // is Tab-reachable and its ↑/↓ move a preset, and with no border or fill of its own there is nothing
 // else that could show the keyboard is on it.
 // The glyph is quieter than the text (--tx-200-80) because it is furniture until it is held.
-const GRIP_CLASS =
-  'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab'
-// ★ THE RING IS FOR THE KEYBOARD, AND A GRAB IS NOT THE KEYBOARD. The class draws on :focus-visible,
+// ★ THE RING IS FOR THE KEYBOARD, AND A GRAB IS NOT THE KEYBOARD. The ring draws on :focus-visible,
 // which is the browser's own guess at "the keyboard put focus here" — and the guess is wrong for a
 // grab: a press on the grip focuses it from script (beginDrag says why it has to), and a browser
 // treats a scripted focus as keyboard focus whenever the keyboard was the last thing used. So after
 // one Tab or arrow inside the card, grabbing a row with a finger or a mouse drew the ring on it.
-// The card therefore says which it was: the ring class is left off the one grip that a pointer
-// press focused, until that grip loses focus or takes a key (pointerGripId, in the component).
-const GRIP_KBD_RING = 'kbd-ring'
+// The card therefore says which it was: the one grip a pointer press focused carries
+// `data-pointer-focus` until it loses focus or takes a key (pointerGripId, in the component), and
+// index.css draws no ring on a grip so marked — neither its own nor the browser's default one.
+const GRIP_CLASS =
+  'shrink-0 self-stretch flex items-center justify-center px-3 rounded-xl text-(--tx-200-80) cursor-grab kbd-ring'
 // Each cell's on-screen column in the row's five-column grid, all on the first row track — the
 // placement that lets the markup order (above) differ from the order on screen.
 const ROW_COL = {
@@ -394,7 +394,7 @@ export default function PresetManager({
   useLayoutEffect(() => {
     if (cappedRowId !== null) revealRow(cappedRowId)
   }, [cappedRowId])
-  // The preset whose grip a POINTER press focused, or null (GRIP_KBD_RING argues it).
+  // The preset whose grip a POINTER press focused, or null (GRIP_CLASS argues it).
   const [pointerGripId, setPointerGripId] = useState<number | null>(null)
 
   // ── Renaming ────────────────────────────────────────────────────────────────────────────────
@@ -668,7 +668,7 @@ export default function PresetManager({
     // the handle un-focused — silently breaking the "focus survives a reorder" accessibility claim
     // for every route EXCEPT the keyboard one. Calling focus() here is unaffected by preventDefault
     // — only the browser's OWN implicit behaviour was ever suppressed, never a programmatic call.
-    // …and it is a POINTER's focus, so this grip draws no keyboard ring for it (GRIP_KBD_RING).
+    // …and it is a POINTER's focus, so this grip draws no keyboard ring for it (GRIP_CLASS).
     setPointerGripId(p.id)
     e.currentTarget.focus()
     e.preventDefault()
@@ -989,9 +989,12 @@ export default function PresetManager({
                 role="button"
                 tabIndex={0}
                 aria-label={`Reorder ${p.name}, position ${i + 1} of ${presets.length}`}
-                className={`${ROW_COL.grip} ${GRIP_CLASS} ${pointerGripId === p.id ? '' : GRIP_KBD_RING}`}
+                className={`${ROW_COL.grip} ${GRIP_CLASS}`}
+                data-pointer-focus={pointerGripId === p.id || undefined}
                 style={{ touchAction: 'none' }}
-                onBlur={() => setPointerGripId(null)}
+                // (Only its OWN mark: grabbing this grip takes focus from whichever grip had it, and
+                // that one's blur arrives after the grab has marked this one.)
+                onBlur={() => setPointerGripId((held) => (held === p.id ? null : held))}
                 onPointerDown={beginDrag(p, i)}
                 onPointerMove={onDragMove}
                 onPointerUp={endDrag}

@@ -690,6 +690,13 @@ button:focus,select:focus{outline:none}
    one is tuned to be subtle (about half-transparent in every theme), which suits a hover-like hint
    and is too faint for the only sign of where the keyboard is. */
 .kbd-ring:focus-visible{outline:2px solid var(--tx-50);outline-offset:-2px}
+/* …EXCEPT ON A GRIP A POINTER PRESS FOCUSED. A grab focuses the grip from script, and a browser
+   counts a scripted focus as keyboard focus (:focus-visible) once the keyboard has been used — so
+   without this, grabbing a row after one Tab drew the keyboard's ring on it. The component marks
+   the grip the press focused (components/PresetManager), and a marked grip draws no ring at all:
+   not this one, and not the browser's default one, which a div (unlike a button) would otherwise
+   get the moment this rule's outline is taken away. */
+.kbd-ring[data-pointer-focus]:focus-visible{outline:none}
 /* The mode-selector dropdown (the only [data-select-group] portal) has a theme-INVARIANT frosted-light
    surface with dark text (CustomSelect's portaled listbox), so the per-theme ring tuned for the app
    surfaces would vanish on it — pin its ring to the fixed dark brand accent in every theme. */
