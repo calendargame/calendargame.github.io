@@ -1,5 +1,5 @@
 // AoxMode — the MEAN-of-X screen: a timed run of N questions averaged, its own Best standing, and
-// the Allow Mistakes / One-By-One sub-modes. Extracted verbatim from main.tsx (Q1 phase 1); it was
+// the Allow Mistakes / One-By-One sub-modes. Extracted verbatim from main.tsx (the main.tsx split); it was
 // already a module-level sibling of App taking everything through props, so nothing about its
 // behaviour changes by living here.
 //
@@ -142,7 +142,7 @@ function AoxMode({
   const oneByOne = useModePrefs((s) => s.aoxOneByOne),
     setOneByOne = useModePrefs((s) => s.setAoxOneByOne) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
-    setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
+    setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
   // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — see modes/modeHooks' useMountedDataId
   // for why a round is parked and restored ONLY against the copy it was played on (round 23).
   const dataId = useMountedDataId()
@@ -151,7 +151,7 @@ function AoxMode({
   // format (random→'random' bucket), leapChance, janFebChance, julianChance, year range,
   // useJulian — the SAME dimensions as Blitz/Sudden (and as How-to-Play documents). The original
   // app omitted julianChance here only (an inconsistency: it changes the Julian-date mix, a real
-  // difficulty dimension when the range spans pre-1582); fixed C2 — store/progress.ts migrates
+  // difficulty dimension when the range spans pre-1582); since fixed — store/progress.ts migrates
   // saved v1 keys so no recorded Best is orphaned.
   const bestKey = `${n}|${allowMistakes}|${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
   // The configuration a run begun (or restored) RIGHT NOW is played under — see RunConfig.
@@ -209,7 +209,7 @@ function AoxMode({
     getInitialState: () => parkedRun?.engine ?? null,
   })
   const { state, correct, overrideAvail, overridden } = eng
-  // Android Back closes AoX's Show-Codes panel (Q1) — see the same hook in the other modes.
+  // Android Back closes AoX's Show-Codes panel — see the same hook in the other modes.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   const S = state.stats
   const doneCount = S.good // credited solves this run
@@ -230,7 +230,7 @@ function AoxMode({
   const [revealFlowing, setRevealFlowing] = useState(false)
   // ★ A RESOLVED MISS WAITS ON "Next" UNLESS IT IS AUTO-ADVANCING — the whole rule, stated as the
   // exception rather than a list of the cases that wait. Only ONE path moves a miss on by itself: a
-  // plain non-One-by-One Reveal flashes the answer, then auto-advances (owner's call, C2: a reveal
+  // plain non-One-by-One Reveal flashes the answer, then auto-advances (owner's call: a reveal
   // doesn't need to pause when the run flows date-to-date on its own). Everything else that leaves a
   // miss on screen starts nothing, so it must offer Next: a Show Codes (you need time to read them), a
   // One-by-One Reveal (One-by-One pauses between dates by design), a press that takes the completing
@@ -306,7 +306,7 @@ function AoxMode({
   // (a press retracted a credit — on a browsed card, on the card behind the live one, or on the held
   // completing solve) → the floor restored, as if the run never completed — and when there was no
   // record before the run, none after it (engine/bestMap's fileBest removes the key, as Blitz does).
-  // Before the C2 fix only the live-edge
+  // Before that fix only the live-edge
   // reversal rolled back (rollbackBest, gated on !inBack), so a back-browse un-credit left a
   // FABRICATED Best standing on a run with fewer than n credits — and a mid-done settings change
   // (key moved) dodged even that. ★ markers need nothing here: each is read off the record's run id,
@@ -318,7 +318,7 @@ function AoxMode({
   // times), and a clean module makes it analyzable. The exhaustive-deps directives ALSO had to
   // move: in the original one-liner the closing brace, the dep array and the trailing directive
   // all shared a line, so one comment covered everything; prettier splits them, and a line
-  // directive only covers the line it sits on. Q1 is a verbatim move, so these are repositioned
+  // directive only covers the line it sits on. The main.tsx split is a verbatim move, so these are repositioned
   // and annotated, never restructured. ▶ Queued for proper review as its own item.
   useEffect(() => {
     if (runPhase === 'running' && doneCount >= runN) {
@@ -380,13 +380,13 @@ function AoxMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
-  // Settings reconcile now fires on the ⚙ popover CLOSE (Q2) — the useSettingsCloseEffect is below,
+  // Settings reconcile now fires on the ⚙ popover CLOSE — the useSettingsCloseEffect is below,
   // after reset() is defined (a RUNNING or ENDED run resets, an idle run regenerates its hidden date).
 
   // Freshness for App's isFullyReset (the random date is excluded). aoxN compares NORMALIZED
-  // against its EFFECTIVE default — the saved personal default when one exists (Q7,
-  // store/userDefaults) — so a Full Reset restoring a personal N still reads fresh; the other
-  // config fields (Allow Mistakes, One-by-One, the visual-only timingOff — Q8) stay factory-fixed
+  // against its EFFECTIVE default — the saved personal default when one exists
+  // (store/userDefaults) — so a Full Reset restoring a personal N still reads fresh; the other
+  // config fields (Allow Mistakes, One-by-One, the visual-only timingOff) stay factory-fixed
   // (they aren't capturable, and Full Reset returns them to their launch constants).
   const defAoxN = useUserDefaults((s) => effectivePrefDefaults(s.saved).aoxN)
   const aoxIsFreshLocal =
@@ -432,7 +432,7 @@ function AoxMode({
   const fwdDisabled =
     state.forwardStack.length === 0 || runPhase === 'idle' || runPhase === 'running'
   // Override availability is the engine's, unchanged (`overrideAvail` above) — and it is NOT gated on
-  // the live `saveStats`, which is the same call C2 made: gating it made Override more forgiving when
+  // the live `saveStats`, which is the same call Blitz made: gating it made Override more forgiving when
   // Save Stats was ON than OFF, which is backwards. AoX feeds the engine saveStats:true, so the hook's
   // frozen Save-Stats gate is always true here and the whole condition reduces to "is there a card to
   // toggle" — a wrong, a Reveal, a Show Codes, a held credit, an already-overridden card, or the card
@@ -452,7 +452,7 @@ function AoxMode({
   const scoreDisplay = runPhase === 'idle' ? '0/0' : `${doneCount}/${S.played}`
   const accuracyDisplay = fmtAccuracyPct(doneCount, S.played)
   const date = state.date
-  // The timing trio (Last/Mean/Median) carries a VISUAL-ONLY hide toggle (Q8): tap any of the
+  // The timing trio (Last/Mean/Median) carries a VISUAL-ONLY hide toggle: tap any of the
   // three to blank them all. There is NO engine timingOff and NO reset arm — AoX always tracks
   // (saveStats:true above), so hiding can never desync. Hiding suppresses only the trio of a run
   // that is STILL GOING; an ENDED run (`isLocked` — done OR failed) always shows its times regardless
@@ -541,7 +541,7 @@ function AoxMode({
   // answer; then continue the run. One-by-One pauses on a "Next" button (awaitingNext) so you see
   // the answer before the next hidden date. Non-One-by-One FLOWS: flash the answer for FLASH_MS so
   // it's visible (a same-render advance would batch the reveal away, painting nothing), then
-  // auto-advance — the next date streams in on its own, like a correct answer. (C2 Q4 + the
+  // auto-advance — the next date streams in on its own, like a correct answer. (The
   // reveal-flash refinement, owner 2026-06-13.)
   const onReveal = () => {
     eng.reveal()
@@ -564,7 +564,7 @@ function AoxMode({
   }
   // Show Codes (Allow Mistakes on) counts a miss + opens the panel; it always pauses on "Next"
   // (you need time to read the codes — it arms no auto-advance, so awaitingNext holds). Allow Mistakes
-  // off fails the run. (C2 Q4 — Show Codes intentionally keeps the Next pause, unlike Reveal.)
+  // off fails the run. (Show Codes intentionally keeps the Next pause, unlike Reveal.)
   const onShowCodes = (open: boolean) => {
     eng.showCodes(open)
     if (open && !allowMistakes && isRunning) setRunPhase('failed')
@@ -572,7 +572,7 @@ function AoxMode({
   // Advance past a show-coded / One-by-One-revealed miss (Allow Mistakes on) — the run continues.
   // Closes the codes panel if open, loads the next date (the miss was already counted), One-by-One
   // hides it until Continue — by the question counter moving, like every advance (`shown`).
-  // (Non-One-by-One Reveal auto-advances instead — see onReveal.) (C2 Q4.)
+  // (Non-One-by-One Reveal auto-advances instead — see onReveal.)
   const onNext = () => {
     if (state.calcOpen) eng.showCodes(false)
     eng.doNew()
@@ -667,7 +667,7 @@ function AoxMode({
     [],
   )
 
-  // On the ⚙ popover CLOSE (Q2), reconcile AoX against the new settings: a RUNNING or ENDED
+  // On the ⚙ popover CLOSE, reconcile AoX against the new settings: a RUNNING or ENDED
   // (done/failed) run RESETS as if Reset was pressed — its recorded Best config is now stale, so the
   // run on screen always matches the current settings — while an idle run regenerates its (hidden)
   // next date. Deferred to close so adjusting several settings doesn't churn the run/date (and the
@@ -793,7 +793,7 @@ function AoxMode({
               The wrapper below restates it so the input inherits the row's height through it; the 'Ao'
               span opts back out with self-center (a stretched span rides its text at the top). */}
       <div className="mt-3 flex items-stretch gap-2 flex-nowrap">
-        {/* The run-length field (Q18): the shared boxed-numeric idiom (NUM_INPUT_CLASS) + the
+        {/* The run-length field: the shared boxed-numeric idiom (NUM_INPUT_CLASS) + the
                 popup N field's validation trio — digits only while typing, blur and Enter
                 normalize-commit with the shared clamp (normalizeAoxN), and ESCAPE DISCARDS.
                 text-xs on the 'Mo' span too, so "Mo10" reads as one flush token.

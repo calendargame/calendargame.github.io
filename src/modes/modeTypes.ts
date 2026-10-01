@@ -1,4 +1,4 @@
-// Shared types for App and the five mode screens. Extracted verbatim from main.tsx (Q1 phase 1)
+// Shared types for App and the five mode screens. Extracted verbatim from main.tsx (the main.tsx split)
 // so the screens can move out into their own modules without each re-declaring the contract.
 import type { Question } from '../engine/gameReducer.js'
 import type { FormatId } from '../lib/format.js'
@@ -28,7 +28,7 @@ export interface ModeProps {
   janFebChance: string
   julianChance: string
   settingsOpen?: boolean //  the ⚙ popover open state — modes defer their settings side-effects to its CLOSE
-  clockPaused?: boolean //  Q11: true while the rotate-back overlay covers the app — the countdown modes (Flash, Blitz) freeze their live clocks for its duration
+  clockPaused?: boolean //  true while the rotate-back overlay covers the app — the countdown modes (Flash, Blitz) freeze their live clocks for its duration
   onFreshChange?: (fresh: boolean) => void
 }
 export interface DedOpts {

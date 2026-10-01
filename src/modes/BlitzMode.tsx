@@ -1,6 +1,6 @@
 // BlitzMode — the countdown screen: Per Round and Per Question timing, the Allow Mistakes
 // sudden-death variant, and Best Score/Streak rebuilt from the pre-round record. Extracted verbatim from
-// main.tsx (Q1 phase 1); it was already a module-level sibling of App taking everything through
+// main.tsx (the main.tsx split); it was already a module-level sibling of App taking everything through
 // props, so nothing about its behaviour changes by living here.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
@@ -107,7 +107,7 @@ interface BlitzRoundSnapshot {
 // = the engine + a countdown (Per Round `blitzSec` / Per Question `qSec`) + Best Score/
 // Streak tracking. Begin = engine.resetStats() (fresh round) + start timer; answering uses
 // the engine; a round ends on the clock or on a wrong with Allow Mistakes off (either
-// timing sub-mode — the two toggles are fully independent, C3a). Best is reconciled in an
+// timing sub-mode — the two toggles are fully independent). Best is reconciled in an
 // effect while a round is over — rebuilt from the pre-round record each time, so a field the round
 // beats is tagged with its id and an Override that drops the round hands the field back to the
 // round that held it before (engine/blitzBest).
@@ -136,7 +136,7 @@ function BlitzMode({
   const allowMistakes = useModePrefs((s) => s.blitzAllowMistakes),
     setAllowMistakes = useModePrefs((s) => s.setBlitzAllowMistakes) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.blitzTimingOff),
-    setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY (Q8) — blanks the timing trio, the engine clock never stops (no arm/reset)
+    setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY — blanks the timing trio, the engine clock never stops (no arm/reset)
   // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON, read once — every parked-round read, write and
   // discard below uses it (modes/modeHooks' useMountedDataId argues why, round 23).
   const dataId = useMountedDataId()
@@ -147,7 +147,7 @@ function BlitzMode({
   // The per-config Best silo keys. blitzBk leads with an m/n Allow-Mistakes marker (both
   // per-round variants share the one blitzBest map); suddenBk has NO AM segment — for
   // per-question, AM-ness is the MAP split (suddenBest = sudden death, suddenAmBest = Allow
-  // Mistakes on, C3a), because the two record shapes differ (score-only vs score+streak).
+  // Mistakes on), because the two record shapes differ (score-only vs score+streak).
   const dateConfig = `${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
   const blitzBk = `${allowMistakes ? 'm' : 'n'}${blitzSec}|${dateConfig}`
   const suddenBk = `${qSec}|${dateConfig}`
@@ -219,7 +219,7 @@ function BlitzMode({
   const suddenBarRef = useRef<HTMLSpanElement | null>(null),
     suddenTimeRef = useRef<HTMLSpanElement | null>(null)
   // Blitz all-time bests persist across reloads (Stage D1): from the progress store — per-round
-  // (blitzBest), per-Q sudden death (suddenBest), and per-Q + Allow Mistakes (suddenAmBest, C3a).
+  // (blitzBest), per-Q sudden death (suddenBest), and per-Q + Allow Mistakes (suddenAmBest).
   // Their ★ markers are not stored anywhere: each is DERIVED from the record's own round id (see
   // `roundId` below and engine/roundId's isNewBest).
   const blitzBest = useProgress((s) => s.blitzBest),
@@ -243,10 +243,10 @@ function BlitzMode({
   // (snapshotted at Begin), serving two jobs from one snapshot: (a) the reconcile's BASE — every
   // reconcile rebuilds the round's record from these (engine/blitzBest), so an Override that drops
   // THIS round's score can never pull a Best below the earlier round it overwrote, and hands the
-  // field back to that round (C2 — cross-round Best rollback; round 23 — its holder too);
+  // field back to that round (the cross-round Best rollback; round 23 — its holder too);
   // (b) the resume-REVERT — when an Override credits a misclick and RESUMES the round, the Best the
   // interrupted round provisionally saved is rolled back wholesale to these records (it re-saves
-  // only when the round genuinely ends). (C2 Q2-A.)
+  // only when the round genuinely ends).
   // ★ THE KEYS ARE THE ROUND'S, NOT THE SCREEN'S (round 23). The round is filed under the config
   // it was PLAYED under — `blitzBk`/`suddenBk` below are the live settings, and they move the moment
   // a setting is changed in the ⚙ panel, while the round waits for the panel to close before it
@@ -277,7 +277,7 @@ function BlitzMode({
   // Stats toggle, which now gates only the DISPLAY (a dimmed strip of "—"), whether a Best is recorded,
   // and whether Override shows while off. Always-tracking keeps the misclick-rescue credit
   // integrity-safe in practice mode (good ≤ played — played is always incremented on the wrong),
-  // so an unscored question can't hit the good>played landmine. (C2 Q2-B; was `saveStats`.)
+  // so an unscored question can't hit the good>played landmine. (It was `saveStats`.)
   const eng = useGameEngine({
     label: 'blitz',
     genDate,
@@ -291,13 +291,13 @@ function BlitzMode({
     // ever restores the incoming copy's own round and cannot pull in the one just left.
     getInitialState: () => parkedRound?.engine ?? null,
   }) // Blitz: timing always tracked
-  // Override availability is uniform — NOT gated on the live `saveStats` (owner's call, C2: gating
+  // Override availability is uniform — NOT gated on the live `saveStats` (owner's call: gating
   // it made Override more forgiving when Save Stats is ON than OFF, which is backwards). Blitz
   // always-tracks internally (saveStats:true above), so the engine's overrideAvail (which uses the
   // frozen effective save-stats, always true here) is correct in both states; the credit is just
   // invisible in practice mode (stats dimmed, no Best recorded).
   const { state, correct, overrideAvail, overridden } = eng
-  // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+  // Android Back closes the Show-Codes panel of the ACTIVE mode. Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
@@ -402,7 +402,7 @@ function BlitzMode({
 
   // Countdown loop (Per Round drains the round clock; Per Question drains the question clock). On 0
   // the round ends — per-round timeout shows the answer with no stat (lockReveal); per-Q timeout
-  // counts a miss (timeoutMiss). Gated off while the rotate-back overlay pauses the clock (Q11) so
+  // counts a miss (timeoutMiss). Gated off while the rotate-back overlay pauses the clock so
   // the round can't drain — or expire — behind the overlay.
   useEffect(() => {
     if (!active || clockPaused) return
@@ -430,7 +430,7 @@ function BlitzMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- clockRemainAt / paintClock / endRound are behavior-stable (they close over only the deps listed, stable setters and refs); excluded so their identity change doesn't restart the countdown. `state.countedWrong` needs no dep of its own: `eng` carries `state`, so every engine change already re-runs this with a fresh closure.
   }, [active, perQ, blitzSec, qSec, eng, clockPaused])
 
-  // Rotate-overlay clock freeze (Q11). The countdown math above ALREADY carries pause
+  // Rotate-overlay clock freeze. The countdown math above ALREADY carries pause
   // bookkeeping — blitzPausedAcc is subtracted from the round's elapsed, qPausedAcc extends
   // the question deadline (designed in with the clocks, dormant until now) — and this effect
   // is what engages it: while the rotate-back overlay covers the app (clockPaused), stamp the
@@ -495,7 +495,7 @@ function BlitzMode({
   // Arm the running sub-mode's clock with `r` seconds left — the one home for the stamp (pause
   // bookkeeping cleared, display redrawn). Per Round: the round started (blitzSec − r) ago. Per
   // Question: the deadline is r from now. Begin arms a full clock; a correct answer and an in-round
-  // Override credit that ADVANCED (C3a) arm a FRESH question clock; a resume arms what the ended
+  // Override credit that ADVANCED arm a FRESH question clock; a resume arms what the ended
   // round has left — its frozen stamp, or, for a 'toggle' end, the stamp charged for the gap.
   const armClock = (r: number) => {
     const now = performance.now()
@@ -542,7 +542,7 @@ function BlitzMode({
       // AM on the component does NOTHING — the engine has marked the wrong, counted played,
       // broken the streak, and stayed on the question: per-round keeps its countdown, and
       // per-Q keeps the SAME draining question clock (no refresh) until a correct answer or an
-      // Override credit advances (C3a).
+      // Override credit advances.
       if (!allowMistakes) {
         eng.lockReveal()
         endRound('answer') // the live card is now a resolved miss — crediting it resumes the round
@@ -556,8 +556,8 @@ function BlitzMode({
   // record's id, goes out with it) — safe to branch on the live prefs, the toggles are idle-locked; (2) re-arm the clock with whatever the caller says is
   // left. An 'answer' end passes Per Round its frozen stamp (the countdown continues WHERE IT
   // STOPPED) and Per Question a fresh qSec on the already-advanced next date (restoring the
-  // pre-rewrite behaviour the Blitz mode-untangle dropped — original 7176a50 did exactly this; C2
-  // Q2-A); a 'toggle' end passes the stamp CHARGED for the gap, in both sub-modes, because its live
+  // pre-rewrite behaviour the Blitz mode-untangle dropped — original 7176a50 did exactly this);
+  // a 'toggle' end passes the stamp CHARGED for the gap, in both sub-modes, because its live
   // card never left the screen and no fresh date was drawn.
   const resumeRound = (remain: number) => {
     const snap = prevRoundBestRef.current
@@ -647,7 +647,7 @@ function BlitzMode({
       endRound('toggle')
     } else if (active && perQ && advances) {
       // A fresh question clock for the fresh date, exactly as a correct answer grants one — a new date
-      // must never inherit the drained clock of the one before it (C3a). This is the ONLY in-round arm
+      // must never inherit the drained clock of the one before it. This is the ONLY in-round arm
       // a press makes: a toggle on any card that is not the live one leaves the live question's clock
       // alone, which is what stops Override ⇄ Undo refilling it a press at a time.
       armClock(qSec)
@@ -700,20 +700,20 @@ function BlitzMode({
   // this teardown was missed in the Blitz migration). Without it the hidden rAF countdown kept
   // draining behind display:none: a per-question timeout would count a phantom MISS in absentia,
   // and the round would end + reconcile a Best for play the user walked away from. The ended
-  // (timerDone) state DOES survive a detour, like AoX's done run. (C2 fix; pinned in blitz.dom.)
+  // (timerDone) state DOES survive a detour, like AoX's done run. (Pinned in blitz.dom.)
   // ⚠ Both directives below are repositioned, not new behaviour — same cause as the other
   // extracted modes: in main.tsx's one-line style the call, the closing brace and the dep array
   // shared a line, so a single trailing directive covered all of it. Prettier splits them and a
   // line directive only covers its own line. The set-state disable is new for the reason recorded
   // in FlashMode: the React Compiler never analyzed this component inside main.tsx, so the rule
-  // was silent there. Q1 is a verbatim move; ▶ queued for proper review as its own item.
+  // was silent there. The main.tsx split is a verbatim move; ▶ queued for proper review as its own item.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!visible && active) resetRound()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
-  // On the ⚙ popover CLOSE (Q2), reconcile Blitz against the new settings: an ACTIVE round OR an
+  // On the ⚙ popover CLOSE, reconcile Blitz against the new settings: an ACTIVE round OR an
   // ENDED round (timerDone) RESETS as if Reset was pressed — its config (and any recorded Best) is now
   // stale. This RESTORES the documented "a settings change ends an active Blitz round" behavior the
   // mode-untangle dropped (BlitzMode had no settings effect; AoX does this via its own close-effect)
@@ -747,7 +747,7 @@ function BlitzMode({
   // its own holder — so an Override that raises a Best and its Undo that lowers it again land exactly
   // where the record stood, ★ included (the ★ is read off the ids; nothing else to restore). Three-way
   // by sub-mode (safe on live prefs — the toggles are idle-locked): per-round → blitzBest; per-Q +
-  // Allow Mistakes → suddenAmBest, the SAME BlitzBest shape + reconcile (C3a); per-Q sudden death →
+  // Allow Mistakes → suddenAmBest, the SAME BlitzBest shape + reconcile; per-Q sudden death →
   // suddenBest (score only).
   // ★ FILED UNDER THE ROUND'S OWN KEYS (prevRoundBestRef.blitzBk / suddenBk), never the live
   // `blitzBk`/`suddenBk` — see prevRoundBestRef for why the two can differ while a round is ended. The
@@ -835,7 +835,7 @@ function BlitzMode({
     else discardSessionRound(dataId, 'blitz')
   }, [timerDone, active, showTimerDate, state, endKind, clockPaused, roundId, dataId])
 
-  // Both toggles are bare idle-gated flips — fully independent since C3a (the old auto-off
+  // Both toggles are bare idle-gated flips — fully independent since Per Question gained Allow Mistakes (the old auto-off
   // coupling died with the sudden-death-only per-Q). The idle lock (also mirrored by the
   // pointer-events dim on the buttons) is what makes the live-prefs branching above safe.
   const togglePerQ = () => {
@@ -848,8 +848,8 @@ function BlitzMode({
   }
 
   // Freshness for App's isFullyReset. The two timer lengths compare against their EFFECTIVE
-  // defaults — the saved personal defaults when they exist (Q7, store/userDefaults); the
-  // excluded config (perQ, allowMistakes, the visual-only timingOff — Q8) stays factory-fixed
+  // defaults — the saved personal defaults when they exist (store/userDefaults); the
+  // excluded config (perQ, allowMistakes, the visual-only timingOff) stays factory-fixed
   // (not capturable), so each compares to its launch constant (Full Reset returns them all).
   const defBlitzSec = useUserDefaults((s) => effectivePrefDefaults(s.saved).blitzSec)
   const defBlitzQSec = useUserDefaults((s) => effectivePrefDefaults(s.saved).blitzQSec)
@@ -899,9 +899,9 @@ function BlitzMode({
     timerDone
   const timerBusy = active
   // Streak is hidden only in per-Q sudden death: there a wrong ends the round, so streak
-  // always equals score. With Allow Mistakes on it behaves exactly like per-round (C3a).
+  // always equals score. With Allow Mistakes on it behaves exactly like per-round.
   const showStreak = !perQ || allowMistakes
-  // The timing trio (Last/Mean/Median) carries a VISUAL-ONLY hide toggle (Q8): tap any of the
+  // The timing trio (Last/Mean/Median) carries a VISUAL-ONLY hide toggle: tap any of the
   // three to blank them all. Unlike Classic/Flash/Deduction there is NO engine timingOff and NO
   // "Enable and Reset Stats?" arm — Blitz always tracks (saveStats:true above), so hiding can never
   // desync (structurally desync-proof). (Persisted as blitzTimingOff — excluded from the defaults

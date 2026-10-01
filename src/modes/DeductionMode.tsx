@@ -1,5 +1,5 @@
 // DeductionMode — the puzzle screen (Day / Month / Year sub-modes, each its own engine silo).
-// Extracted verbatim from main.tsx (Q1 phase 1); it was already a module-level sibling of App
+// Extracted verbatim from main.tsx (the main.tsx split); it was already a module-level sibling of App
 // taking everything through props, so nothing about its behaviour changes by living here.
 import { useEffect, useState } from 'react'
 import type { ModeProps } from './modeTypes.js'
@@ -203,7 +203,7 @@ function DeductionMode({
   useParkedHistory(dataId, 'dedYear', yearEng.state, showing('year'), parkedScreen, panelOpen)
   const eng = dedType === 'month' ? monthEng : dedType === 'year' ? yearEng : dayEng
   const { state, correct, overrideAvail, overridden } = eng
-  // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+  // Android Back closes the Show-Codes panel of the ACTIVE mode. Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
@@ -243,7 +243,7 @@ function DeductionMode({
   // from answerGrid's colSpanClass and the same number feeds the hit-padding maths (sub-group 1B).
   const centerLastSpan = (index: number, total: number) =>
     total > 0 && index === total - 1 && total % 3 === 1 ? 3 : 1
-  // Can the range support a Year puzzle? Since the Q1 phase-1 split this screen is the only copy
+  // Can the range support a Year puzzle? Since the main.tsx split this screen is the only copy
   // in src — App's twin moved here with it. tests/dateGen.dom keeps a deliberately INDEPENDENT
   // model of this rule to drive its fuzz (the project's standing oracle rule: a reference model
   // that shares code with the implementation cannot disagree with it, and disagreement is the
@@ -300,7 +300,7 @@ function DeductionMode({
   // time rather than behaviour changes — same cause as FlashMode's: inside main.tsx's dense
   // legacy style the React Compiler never analyzed this component, so the rule was silent
   // (verified: linting HEAD's main.tsx reported it ZERO times). A clean module makes the
-  // component analyzable and the rule fires on byte-identical code. Q1 phase 1 is a VERBATIM
+  // component analyzable and the rule fires on byte-identical code. The main.tsx split is a VERBATIM
   // MOVE, so the pattern is preserved and annotated rather than restructured.
   // These two are the "a setting changed and made this sub-option impossible, so turn it off"
   // effects — genuine external-sync against the settings store, mirroring what App itself does
@@ -324,7 +324,7 @@ function DeductionMode({
   // Settings-change regen: regen ALL three engines' live puzzle (each no-ops on a burned or
   // browsed date), matching App's "regen the current + cleanse FRESH non-current" on a
   // format / random-format / leap / Jan-Feb / Julian-chance / range / calendar change.
-  // Defer the global-settings regen to the ⚙ popover CLOSE (Q2). The cross-toggles below stay
+  // Defer the global-settings regen to the ⚙ popover CLOSE. The cross-toggles below stay
   // immediate — they're mode-LOCAL (toggled outside the popover), so they'd never see a close transition.
   const regenAllSilos = () => {
     dayEng.regenDate()
@@ -353,7 +353,7 @@ function DeductionMode({
     scoringOff === false &&
     enableResetOpen === false &&
     flash === null
-  // Q2 / Q7 — the Reset Stats confirmation popup (resets the ACTIVE sub-type's silo).
+  // The Reset Stats confirmation popup (resets the ACTIVE sub-type's silo).
   const {
     confirmOpen: resetStatsOpen,
     onResetTap,
@@ -364,7 +364,7 @@ function DeductionMode({
     onFreshChange?.(deductionIsFresh)
   }, [deductionIsFresh, onFreshChange])
   const date = state.date as DedPuzzle
-  // Flash-validity rule (Q13, the general form): a flash only renders on a grid with the
+  // Flash-validity rule (the general form): a flash only renders on a grid with the
   // button count it was born in. Advancing on a correct (or an Override credit) can CHANGE
   // the layout — Year 2↔5 under both crosses, Day 7↔4 across Oct 1582 — and the carried
   // pulse would repaint on an unrelated button; deriving per commit suppresses it in the
@@ -420,8 +420,8 @@ function DeductionMode({
           you turned off yourself renders BLANK, from `off` inside statsArr. See StatPanel. */}
       <StatPanel stats={statsArr} dimmed={!saveStats} />
       <div className="mt-3">
-        {/* Reset Stats — static caption; the confirmation is the shared ConfirmModal below (Q7
-            round 21). The `S` shortcut routes through this same onClick. */}
+        {/* Reset Stats — static caption; the confirmation is the shared ConfirmModal below
+            (round 21). The `S` shortcut routes through this same onClick. */}
         <button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={onResetTap}>
           Reset Stats
         </button>
@@ -445,7 +445,7 @@ function DeductionMode({
         id="enable-reset-stats-deduction"
       />
       <div className="mt-5">
-        {/* Day/Month/Year trio pinned to exact page center (Q10): minmax(0,1fr) side tracks.
+        {/* Day/Month/Year trio pinned to exact page center: minmax(0,1fr) side tracks.
                 Bare 1fr means minmax(auto,1fr) — on narrow screens an occupied side's min-w-20
                 toggle can refuse to shrink below its floor, so that track outgrows the empty one
                 and shoves the trio ~5px off center (Month/Year). A 0 minimum keeps the two side
@@ -538,9 +538,9 @@ function DeductionMode({
             )}
           </div>
           {/* key=gridEpoch — Deduction's puzzle grids remount on reset, same snap-clean as the
-                  weekday modes' keyed WeekdayAnswer (Q9; see its doc comment). */}
+                  weekday modes' keyed WeekdayAnswer (see its doc comment). */}
           <div key={state.gridEpoch} className="mt-4">
-            {/* Both-crosses 2-option Year (Q14): overlay the real grid on an invisible inert
+            {/* Both-crosses 2-option Year: overlay the real grid on an invisible inert
                     full-window sizer so the answer panel holds that layout's height — the New/‹›/
                     Reveal/Override row must not move a pixel as puzzles alternate 2↔5. The real
                     grid self-centers in that space (the 5-layout's visual centroid; top/bottom-

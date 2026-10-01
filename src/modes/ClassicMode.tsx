@@ -1,4 +1,4 @@
-// ClassicMode — the untimed weekday screen. Extracted verbatim from main.tsx (Q1 phase 1); it was
+// ClassicMode — the untimed weekday screen. Extracted verbatim from main.tsx (the main.tsx split); it was
 // already a module-level sibling of App taking everything through props, so nothing about its
 // behaviour changes by living here.
 import { useEffect, useState } from 'react'
@@ -98,7 +98,7 @@ function ClassicMode({
   })
   const { state, correct, overrideAvail, overridden } = eng
   useParkedHistory(dataId, 'classic', state, visible, { config: dateConfig }, settingsOpen ?? false)
-  // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+  // Android Back closes the Show-Codes panel of the ACTIVE mode. Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
@@ -139,7 +139,7 @@ function ClassicMode({
   // Julian-chance / year-range change regens an UNANSWERED live date; a useJulian toggle
   // keeps it (live useJulian flows through to the answer + codes). REGEN_DATE no-ops on a
   // burned or browsed date, so we just fire it on the relevant changes.
-  // Defer the live-date regen to the ⚙ popover CLOSE (Q2) — batched, no per-keystroke timer churn.
+  // Defer the live-date regen to the ⚙ popover CLOSE — batched, no per-keystroke timer churn.
   useSettingsCloseEffect(settingsOpen ?? false, dateSettings, () => eng.regenDate())
   // …and so does Save Stats coming back on while this mode's timing is shown (modeHooks).
   useSaveStatsOnRegen(settingsOpen ?? false, saveStats, timingOff, () => eng.regenDate())
@@ -151,7 +151,7 @@ function ClassicMode({
     scoringOff === false &&
     enableResetOpen === false &&
     flash === null
-  // Q2 / Q7 — the Reset Stats confirmation popup.
+  // The Reset Stats confirmation popup.
   const {
     confirmOpen: resetStatsOpen,
     onResetTap,

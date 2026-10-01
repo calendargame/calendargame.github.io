@@ -111,7 +111,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // components/WeekdayAnswer (the Dots grid itself) and components/GuidePage's DotDiagram, which
     // derives its diagram from the same data. What App DOES hold is the dotRotation SETTING, passed
     // straight to the four weekday modes, plus the one stricter reading of it the top bar's mark
-    // needs: the mark only turns while inputStyle is 'dots' (Q3, round 20 — see the W5Logo call
+    // needs: the mark only turns while inputStyle is 'dots' (round 20 — see the W5Logo call
     // site for why). Nothing from lib/dotLayout is imported here — W5Logo applies DOT_MARK_ROTATION.
     // WeekdayAnswer -> src/components/WeekdayAnswer.tsx. NOT imported here: all five mode screens
     // render their own, and App renders none.
@@ -152,7 +152,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // FLASH_MS + the shared mode-screen hooks -> src/modes/modeHooks.ts, consumed there by the five
     // screens; nothing here reaches into src/modes for them. The one that is NOT mode-specific,
     // useSettingsCloseEffect, lives in src/components/useSettingsCloseEffect.ts — App reaches it
-    // only INDIRECTLY now, through components/useUpdateCheck (the Q7 update-check reset moved in
+    // only INDIRECTLY now, through components/useUpdateCheck (the update-check reset moved in
     // there with the rest of that interaction), so it is no longer imported here.
 
     // computeHasCredit, markBtns, mkBtnsWithCorrect → src/engine/answerButtons.js. NOT imported here
@@ -179,7 +179,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // skips its artificial 500ms hold and shows only as long as the real boot takes. It still
     // waits for css-ready + mount, so even the manual path's genuinely network-cold boot (caches
     // wiped) can never reveal an unstyled frame — post-update, the splash always shows only real
-    // boot time. The consumed value is also shared (skipHoldConsumedRef in App) with the Q2
+    // boot time. The consumed value is also shared (skipHoldConsumedRef in App) with the
     // build-change flash effect: a boot that just came through the real Updating flow lands on a
     // changed build stamp by definition, and it must RESTAMP silently — the screen already showed,
     // and a second one back-to-back is exactly what the flash must never add. try/catch
@@ -348,7 +348,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // And the compile events are readable without a build: run babel over this file with
     // babel-plugin-react-compiler and a `logger`, which is how the 271/68 above were measured.)
 
-    // The two update-signal dots' getSnapshot functions (Q6), for the useSyncExternalStore reads in
+    // The two update-signal dots' getSnapshot functions, for the useSyncExternalStore reads in
     // App. Module scope, so each is ONE stable function identity for the life of the page: React
     // compares the snapshot it gets against the last one with Object.is, and both return a plain
     // boolean, so a re-read that finds no change re-renders nothing. Inlining these as arrows in the
@@ -356,7 +356,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const readGearDot=()=>readUpdateDot(GEAR_DOT_KEY);
     const readChangelogDot=()=>readUpdateDot(CHANGELOG_DOT_KEY);
 
-    // Q3 auto-update loop breaker: the count of consecutive auto-update attempts, persisted in
+    // The auto-update loop breaker: the count of consecutive auto-update attempts, persisted in
     // sessionStorage (it survives same-tab reloads — exactly the shape of the failure loop — but not a
     // fresh open). Counted up when the boot check engages the Updating flow, cleared on success
     // (controllerchange) and on any boot that finds no waiting worker; after 2 failed attempts the
@@ -370,14 +370,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const writeUpdateAttempts=(n: number)=>{try{sessionStorage.setItem(UPDATE_ATTEMPTS_KEY,String(n));}catch{/* best-effort */}};
     const clearUpdateAttempts=()=>{try{sessionStorage.removeItem(UPDATE_ATTEMPTS_KEY);}catch{/* best-effort */}};
 
-    // Q3 min-hold: the guaranteed minimum time the "Updating…" screen stays visible, shared by BOTH
+    // The min-hold: the guaranteed minimum time the "Updating…" screen stays visible, shared by BOTH
     // update paths so they feel identical — the AUTO path gates its reload on it (makeUpdateReloadGate
     // below) and the manual Check-for-updates button waits it out before forceReloadLatest. Without a
     // hold, activating an already-waiting worker completes in tens of ms and the reload outraces
     // React's paint of the overlay — the owner never saw the screen (1s picked 2026-07-13).
     const MIN_UPDATING_MS=1000;
 
-    // Q7: how long the manual applier waits for the service-worker handoff (controllerchange) before
+    // How long the manual applier waits for the service-worker handoff (controllerchange) before
     // giving up and reaching for forceReloadLatest. A FAILURE bound, not a display duration — the
     // Updating screen is up the whole time either way. Generous, because a slow phone finishing an
     // install at 6s is a real success and cutting it off would wipe the offline copy for nothing;
@@ -416,7 +416,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
 
     // BootOverlay -> src/components/BootOverlay.tsx, imported at top (and re-exported at the bottom of
     // this file, which is how tests/bootFlowDriver.dom reaches it). BOOT_TRACE_ANIMATED — the flag that
-    // parks the animated trace, Backlog B2 — is a module-private const INSIDE that same file: not
+    // parks the animated trace (a backlog item) — is a module-private const INSIDE that same file: not
     // imported here, not exported, not re-exported. Flip it there.
 
     // RotateOverlay -> src/components/RotateOverlay.tsx, imported at top.
@@ -523,7 +523,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const janFebChance=useSettings(s=>s.janFebChance);
       const julianChance=useSettings(s=>s.julianChance);
       const applySettingsStore=useSettings(s=>s.applySettings);
-      // Personal defaults (Q7 Save Defaults): `saved` is the user's snapshot (null = none). The
+      // Personal defaults (Save Defaults): `saved` is the user's snapshot (null = none). The
       // EFFECTIVE defaults derived from it feed Reset Settings, Full Reset, settingsAtDefaults,
       // and the gear's "modified" indicator; the mode components read their own slices for their
       // freshness checks. Survives Full Reset by design (see store/userDefaults).
@@ -615,7 +615,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         if(meta)(meta as HTMLMetaElement).content=statusTint;
         document.documentElement.style.background=statusTint;
       },[activeTheme,anyModalOpen]);
-      // Q11 portrait lock, the non-Android half: the manifest's orientation:'portrait'
+      // The portrait lock, the non-Android half: the manifest's orientation:'portrait'
       // (vite.config.js webManifest) hard-locks installs only on Android, so on every platform
       // that ignores it (iOS foremost) App covers a sideways screen with RotateOverlay. Gate =
       // ALL of: a touch device (isTouch — desktop windows are never blocked), CSS landscape, and
@@ -962,7 +962,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // live full-strength-shadow bug on every cold start of a fresh install — a shape that is
         // only ever noticed once, and cheaper to make impossible than to re-notice.
         const el=appScrollRef.current;if(!el){paint(0,0,0);return;}
-        // ROUND 11 Q4 — the container is handed to observeScrollExtent rather than watched with a
+        // ROUND 11 — the container is handed to observeScrollExtent rather than watched with a
         // plain ResizeObserver, because it is the thing the CONTENT hangs off. `absolute inset-0`
         // pins its own box to the viewport BY CONSTRUCTION, so an observer on the box alone was
         // watching the one number no content change can move, and every mask froze the moment
@@ -997,15 +997,15 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //     the scroller inline, and clears the guide's saved position with it).
       //   • THIS effect owns the load-time invariant, and since round 13 that is TWO writes, not
       //     one write plus belt-and-braces. `mode` starts "classic" for the first paint (a cold
-      //     open then moves to the preset's Default Mode, a reload to its session page — round-21
-      //     Q3), and html/body/#root are clamped in every mode now, so a non-zero ROOT scrollTop
+      //     open then moves to the preset's Default Mode, a reload to its session page — round
+      //     21), and html/body/#root are clamped in every mode now, so a non-zero ROOT scrollTop
       //     would permanently offset the fixed layout — the original concern, unchanged.
       //     ⚠ `appScrollRef.current.scrollTop=0` IS NOW LOAD-BEARING — do not trim it as the
       //     defence-in-depth it used to be. History scroll restoration on a reload replays the
       //     offsets the last session left, and the surface a reader could actually have scrolled is
       //     no longer the document (which can no longer move at all): it is this container. A
       //     reload from a scrolled How to Play hands its offset straight back, into a fresh
-      //     instance that is painting from the top (Classic first, then whichever page Q3 restores,
+      //     instance that is painting from the top (Classic first, then whichever page the cold-open effect restores,
       //     whose own scroll ref is a fresh 0) — i.e. a screen scrolled to a position that belongs
       //     to a page it is not showing at that instant. Zeroing it here is the whole of
       //     "a fresh load starts at the top".
@@ -1057,14 +1057,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // settingsOpen is declared here — above the keyboard effect that toggles it (G key) — so it's
       // not read before its declaration (the compiler flags accessing a binding before it's declared).
       const [settingsOpen,setSettingsOpen]=useState(false);
-      // Q3: the "Updating…" overlay (BootOverlay updating) — three triggers: the Settings "Check for
-      // updates" button raises it once a check has FOUND something (Q7's applier below — never on a
+      // The "Updating…" overlay (BootOverlay updating) — three triggers: the Settings "Check for
+      // updates" button raises it once a check has FOUND something (the applier below — never on a
       // press that turns out to have nothing to get), the auto-update-on-open effect below shows it
       // for at least MIN_UPDATING_MS while a WAITING new version activates (both cleared by their
-      // reload), and the Q2 build-change flash effect shows it for exactly that hold — no reload —
+      // reload), and the build-change flash effect shows it for exactly that hold — no reload —
       // when a boot detects an update that already landed silently (cleared by its own hold-end).
       const [updating,setUpdating]=useState(false);
-      // Q3 Loading screen: remove index.html's #boot splash once BOTH are true —
+      // The Loading screen: remove index.html's #boot splash once BOTH are true —
       //   • it has been VISIBLE ≥0.5s (bootHoldRemaining, anchored to the __bootShownAt rAF stamp — not
       //     navigation start), so a fast cached load doesn't flash it for a single frame (which read
       //     like a glitch); on a slow load it has already served its time → the hold clamps to 0; and
@@ -1079,15 +1079,15 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //     a SW-cached load React commits before the CSS lands. In dev/tests no preload link exists
       //     (CSS arrives through the JS module graph before mount) → the querySelector check is ready.
       // When an update-overlay path below has claimed the handoff (updateEngagedRef — the auto-update
-      // flow or the Q2 build-change flash), finish leaves #boot alone — the Updating overlay replaces
+      // flow or the build-change flash), finish leaves #boot alone — the Updating overlay replaces
       // it (the updating effect), never a frame with neither.
       const updateEngagedRef=useRef(false);
       // The raw consumed cg-skip-boot-hold value, written by the boot-hold effect below (which owns
-      // the flag's one-per-boot consumption) and read by the Q2 build-change flash effect after it —
+      // the flag's one-per-boot consumption) and read by the build-change flash effect after it —
       // same-kind effects run in declaration order, so the write is always ahead of the read.
       const skipHoldConsumedRef=useRef(false);
       // Set by the auto-update flow's engage(): a gated reload is coming (success or the safety net),
-      // so the Updating overlay must stay up until that navigation — the Q2 flash's hold-end checks
+      // so the Updating overlay must stay up until that navigation — the build-change flash's hold-end checks
       // this before revealing the app (the rare same-boot overlap: a freshly-downloaded new build
       // AND an even newer version already waiting).
       const updateReloadPendingRef=useRef(false);
@@ -1103,7 +1103,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //     for a caller that unmounts when the panel closes — the rule is stated in full at the top
       //     of that file, and the suite cannot enforce it.
       //   • THE APPLIER — applyUpdate, right here, because it is App's machinery end to end:
-      //     setUpdating (the Updating overlay), updateReloadPendingRef (shared with the Q2
+      //     setUpdating (the Updating overlay), updateReloadPendingRef (shared with the
       //     build-change flash below), makeUpdateReloadGate, markSkipBootHold and forceReloadLatest.
       //     Once it TAKES an update it is terminal: every route out of it navigates. (It declines
       //     one while a save is unsaved — see the ★ note at its definition.)
@@ -1119,7 +1119,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // off to at all, or no controllerchange within UPDATE_HANDOFF_MS. Having promised an update,
       // the button must produce one.
       // The round-7 class — an asset whose bytes changed while its precache revision did not, which
-      // Workbox will never re-download — is now handled a step earlier and better: Q10b's
+      // Workbox will never re-download — is now handled a step earlier and better: round 11's
       // scripts/precacheIntegrity.mjs FAILS THE BUILD unless every revision in dist/sw.js is the
       // md5 of the file actually shipped, so such a build cannot exist to be installed. A client
       // still carrying one from round 7 is cured by the next deploy through this same gentle path
@@ -1143,7 +1143,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         updateReloadPendingRef.current=true; // the overlay is owned through to a navigation now
         setUpdating(true);
         // No service worker at all (unsupported, blocked, or a registration that failed — the state
-        // Q10a now reports): there is nothing to hand off to, so the hammer IS the update path.
+        // the registration effect now reports): there is nothing to hand off to, so the hammer IS the update path.
         if(!reg){window.setTimeout(forceReloadLatest,MIN_UPDATING_MS);return true;}
         // `settled` = this applier is FINISHED — it has either navigated (the gate's reload) or given
         // up (the handoff deadline below, which hands over to forceReloadLatest). Nothing it started
@@ -1163,7 +1163,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // job. Only when there is none do we go to the network, and update() is used here as the
         // APPLIER it is: it fetches + installs, and the new worker arrives as `waiting` (or as
         // `installing` we then wait out). A resolved update() that produces neither is the failed
-        // install reproduced in the Q7 research; the safety net below covers it.
+        // install reproduced in round 11's research; the safety net below covers it.
         if(reg.waiting)handOff(reg.waiting);
         else reg.update().then(()=>{
           if(reg.waiting){handOff(reg.waiting);return;}
@@ -1183,7 +1183,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         let cssFallbackId: number | undefined;
         const finish=()=>{if(!disposed&&!updateEngagedRef.current)dismissBootSplash();};
         // Consume the skip flag unconditionally (it must never linger) and share the raw value with
-        // the Q2 build-change flash effect below via skipHoldConsumedRef (its silent-restamp
+        // the build-change flash effect below via skipHoldConsumedRef (its silent-restamp
         // suppression), but only HONOR it for the hold when no update attempt is pending: on the
         // safety-retry boot (worker still waiting, attempts>0) the 500ms hold is what covers the
         // async getRegistration→updateEngagedRef claim — skipping it there could reveal the app for
@@ -1212,7 +1212,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         },bootHoldRemaining(window.__bootShownAt,performance.now(),skippedHold&&readUpdateAttempts()===0));
         return ()=>{disposed=true;window.clearTimeout(id);if(cssFallbackId!==undefined)window.clearTimeout(cssFallbackId);window.removeEventListener('app-css-ready',finish);};
       },[]);
-      // Q3 auto-update-on-open: in PRODUCTION only, register the SW (src/sw.ts, DYNAMICALLY imported so
+      // Auto-update-on-open: in PRODUCTION only, register the SW (src/sw.ts, DYNAMICALLY imported so
       // the registration never runs in dev/tests and its chunk never loads there; registering also kicks off src/sw.ts's
       // background registration.update() prefetch) and — IN PARALLEL, since this check needs only the
       // browser's registration, never that module — look for a new version that installed on a previous
@@ -1231,7 +1231,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // reload → the splash shows only as long as the real boot takes → the app. Cold-open only — NO
       // resume/focus re-check (owner's call). All SW behaviour is on-device. This flow only covers an
       // update still WAITING at boot; the other half — one whose activation completed BETWEEN
-      // sessions, so nothing is waiting here — is the Q2 build-change flash effect below. The whole flow is wrapped
+      // sessions, so nothing is waiting here — is the build-change flash effect below. The whole flow is wrapped
       // in the sessionStorage attempt counter (the loop breaker — see readUpdateAttempts): after 2
       // straight failed attempts the flow is SKIPPED, the counter cleared, and the app renders on the
       // old version instead of looping Updating→reload forever.
@@ -1252,7 +1252,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // Without both halves this effect leaks a live listener onto navigator.serviceWorker — a
         // global that outlives the component — holding its gate and closure alive for the page's life.
         let onControllerChange: (()=>void) | null=null;
-        import('./sw.js').catch(err=>captureError(err,{where:'sw-module-import'})); // Q10a: never swallowed — a chunk that won't load means NO service worker at all (see the note above)
+        import('./sw.js').catch(err=>captureError(err,{where:'sw-module-import'})); // never swallowed — a chunk that won't load means NO service worker at all (see the note above)
         navigator.serviceWorker.getRegistration().then(reg=>{
           if(cancelled)return;
           const waiting=reg?.waiting;
@@ -1270,7 +1270,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           const engage=()=>{
             if(cancelled)return;
             writeUpdateAttempts(attempts+1);
-            updateReloadPendingRef.current=true; // the overlay is now owned through to this flow's reload — the Q2 flash's hold-end must not drop it
+            updateReloadPendingRef.current=true; // the overlay is now owned through to this flow's reload — the build-change flash's hold-end must not drop it
             setUpdating(true); // #boot comes down only after this commits (the updating effect below)
             // The reload gate (armed now, released by whichever handoff arrives): both the success
             // reload and the safety reload go through it, so both honor the min-hold, fire at most
@@ -1301,7 +1301,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // evicted Safari tab's fresh download reads the same). Detection is the plain-localStorage
       // build stamp (lib/buildStamp): every boot compares the stored stamp against this build's
       // DEPLOY_TS and then RESTAMPS — the one detection per boot, and where everything else that
-      // reacts to a build change (the Q6 update-signal dots) hooks in. On a mismatch the SAME
+      // reacts to a build change (the update-signal dots) hooks in. On a mismatch the SAME
       // Updating screen holds for MIN_UPDATING_MS — no reload; hold-end reveals the app — under the
       // auto flow's exact discipline: claim the #boot handoff synchronously (the boot-hold effect
       // must leave the splash to the overlay), engage only once the real stylesheet has applied
@@ -1314,7 +1314,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ruled out). If the auto flow engages during the hold (an even newer version already
       // waiting), hold-end defers to its reload (updateReloadPendingRef) instead of revealing the
       // app for a moment before the navigation.
-      // The two update-signal dots (Q6) ARE the PERSISTED flags (src/changelog), read live rather
+      // The two update-signal dots ARE the PERSISTED flags (src/changelog), read live rather
       // than mirrored: the detection below marks the GEAR flag on every build change and the CHANGELOG
       // flag only when the newest entry actually changed (2026-08-10), opening Settings
       // retires the gear's (toggleSettings, immediately below), and the first tap on the footer's
@@ -1330,7 +1330,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // beside appCssApplied at the top of this file) so their identity is stable across renders.
       const gearDot=useSyncExternalStore(subscribeUpdateDot,readGearDot);
       const changelogDot=useSyncExternalStore(subscribeUpdateDot,readChangelogDot);
-      // THE ONE WAY TO OPEN SETTINGS, and the only place the gear's update dot (Q6) is retired.
+      // THE ONE WAY TO OPEN SETTINGS, and the only place the gear's update dot is retired.
       // ★ WHY THIS IS A CALLBACK AND NOT AN EFFECT. The retirement used to be
       // `useEffect(()=>{if(settingsOpen&&gearDot){clearUpdateDot(…);setGearDot(false);}},[settingsOpen,gearDot])`,
       // which is a setState run synchronously inside an effect body — react-hooks/set-state-in-effect,
@@ -1425,7 +1425,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         return()=>{cancelled=true;if(holdId!==undefined)window.clearTimeout(holdId);if(engageOnCss)window.removeEventListener('app-css-ready',engageOnCss);};
       },[]);
       // The update paths' #boot handoff (paired with updateEngagedRef above — the auto-update flow
-      // and the Q2 build-change flash): remove the splash only AFTER the Updating overlay has
+      // and the build-change flash): remove the splash only AFTER the Updating overlay has
       // COMMITTED — effects run post-commit, so by now the overlay is in the DOM and there is never
       // a frame with neither splash nor overlay. A no-op for the manual Check-for-updates trigger
       // (#boot is long gone by then; dismissBootSplash is idempotent).
@@ -1503,7 +1503,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         if(dataKey==='H'){e.preventDefault();switchMode(m=>m==='guide'?(prevNonGuideModeRef.current||'classic'):'guide');setSettingsOpen(false);return;}
         // Category 3c: G — toggle settings popover. ⚠ Unlike the mode letters and H, which REPLACE
         // the screen and take any mode-screen modal with it (that mode's own `confirmOpen && !visible`
-        // render guard drops it), G opening the panel while a non-panel modal is up — Q7's per-mode
+        // render guard drops it), G opening the panel while a non-panel modal is up — the per-mode
         // Reset-Stats / "Enable and Reset Stats?" ConfirmModals, or the run breakdown — would slide
         // the panel in UNDER that modal's z-60 scrim, visible and reachable only by the controls
         // beneath the finger. So G no-ops while a popup is open AND the panel is not: settingsOpen
@@ -1524,7 +1524,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           return;
         }
       };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[switchMode,toggleSettings,settingsOpen]);
-      // Q4: install the global press-drag-release input controller (slide-off-to-cancel on every button
+      // Install the global press-drag-release input controller (slide-off-to-cancel on every button
       // + answer-grid drag-to-select). One set of document pointer listeners; cleanup on unmount.
       useEffect(()=>installPointerGestures(),[]);
       // Round 18: the other app-wide input rule, installed the same way — entering any box you can
@@ -1634,7 +1634,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const [flashResetKey,setFlashResetKey]=useState(0); // ditto for FlashMode
       const [blitzResetKey,setBlitzResetKey]=useState(0); // ditto for BlitzMode
       const [deductionResetKey,setDeductionResetKey]=useState(0); // ditto for DeductionMode
-      // ditto for GuidePage, whose one piece of state is the open panel (Q6, round 9 — it joined
+      // ditto for GuidePage, whose one piece of state is the open panel (round 9 — it joined
       // the always-mounted screens so that panel, and the reading position, survive a detour into
       // a game mode; Full Reset is the one thing that must still close it).
       const [guideResetKey,setGuideResetKey]=useState(0);
@@ -1833,7 +1833,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           setSettingsOpen(false);
         }};
       useLayer(settingsOpen, ()=>setSettingsOpen(false), 'settings', pressOutsideSettings);
-      // Close-on-drag-activate (Q5 rework): the pointer controller dispatches a bubbling "drag-dismiss"
+      // Close-on-drag-activate: the pointer controller dispatches a bubbling "drag-dismiss"
       // CustomEvent from a drag-clicked member of a data-drag-dismiss menu (lib/pointerGestures) — the
       // settings popover card is the only such menu. Closing here is exactly a normal close, so the
       // settings apply-on-close pass (useSettingsCloseEffect) fires naturally. Installed once; the ref
@@ -1849,8 +1849,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // else retires it, so this is the only pointer you need.
       // Restores the settings the ⚙ panel owns — the 16 menu values + the 2 year-range text mirrors —
       // AND the four capturable mode-screen prefs (Flash speed, both Blitz timers, the AoX run length)
-      // to their EFFECTIVE defaults: the user's saved personal defaults when they exist (Q7,
-      // store/userDefaults), the factory launch values otherwise. This is the exact MIRROR of Save
+      // to their EFFECTIVE defaults: the user's saved personal defaults when they exist
+      // (store/userDefaults), the factory launch values otherwise. This is the exact MIRROR of Save
       // Defaults, which copies the same 20-value unit the other way — live → the snapshot.
       // ★ 20 IS THE SNAPSHOT'S SIZE, NOT THE GEAR'S. Keep the two apart:
       //   20 RESTORED / SAVED = the 16 store settings (round 21 added `defaultMode`) + the 4
@@ -1919,8 +1919,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // tests/settingsPanel.defaults.dom.
       // ⚠ THE GUARD IS NOW THE ONLY THING MAKING THE DIMMED BUTTON INERT, the same shape as
       // openFullResetConfirm's in the panel. Round 14 wrote it as defense in depth behind a
-      // pointer-events-none className that stopped taps while CSS could not stop a keyboard; B7
-      // (round 15) removed that className so the not-allowed cursor could paint at all — a
+      // pointer-events-none className that stopped taps while CSS could not stop a keyboard; round
+      // 15 removed that className so the not-allowed cursor could paint at all — a
       // pointer-events:none element is never hit-tested — leaving this line to refuse the pointer,
       // the keyboard and an assistive-technology press alike (components/controlClasses'
       // NOT_OFFERED_BTN_CLASS records why). Without it a dimmed Reset Settings still rewrote the
@@ -1936,7 +1936,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // confirmClearDefaults and their close callbacks) -> components/SettingsPanel, with the
       // state they drive.
       // Full Reset — back to the launch state, where "launch" honors the user's SAVED personal
-      // defaults (Q7): the ⚙ panel and the four captured mode prefs restore to the
+      // defaults: the ⚙ panel and the four captured mode prefs restore to the
       // store/userDefaults snapshot when one exists, everything else to factory (and the snapshot
       // itself survives — clearing it is the Save Defaults popup's job, never Full Reset's).
       // The five always-mounted mode components own ALL
@@ -1992,7 +1992,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // now-default prefs. The store holds no "last mode" and never has — WHICH mode you were on
         // is plain useState in App, which is the whole reason a cold start always opens Classic.
         resetModePrefs();
-        // …then push the four SAVED personal defaults (Flash speed, both Blitz timers, the AoX run length — Q7,
+        // …then push the four SAVED personal defaults (Flash speed, both Blitz timers, the AoX run length —
         // store/userDefaults, which deliberately SURVIVES Full Reset) back over that factory reset,
         // still before the remount-key bumps. Everything else in modePrefs (Per-Round/Question,
         // Deduction sub-type, Allow Mistakes, One-by-One, show/hide toggles) stays factory. A no-op
@@ -2040,7 +2040,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // thing in components/overlayStack that closes it.
       useBackButton(mode==='guide', ()=>switchMode(prevNonGuideModeRef.current||'classic'), 'guide');
       // True when the whole ⚙ PANEL sits at its EFFECTIVE defaults — the user's saved personal
-      // defaults when they exist (Q7, store/userDefaults), the factory launch values otherwise.
+      // defaults when they exist (store/userDefaults), the factory launch values otherwise.
       // ⚠ NOT "every store value": at
       // least one of the theme trio is ALWAYS excluded (BOTH darkTheme and lightTheme while Use
       // System is Off), which is the whole point of themeAtDefaults just below —
@@ -2081,8 +2081,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // both offered, permanently. Comparing only the live pair is both the honest definition and
       // the fix, and it retires the whole class of dormant-value false positives.
       const themeAtDefaults=useSystem?(darkTheme===defSettings.darkTheme&&lightTheme===defSettings.lightTheme):(manualTheme===defSettings.manualTheme);
-      // ★★ AMNESIC IS THE LAST TERM, AND ADDING IT WAS A BUG FIX RATHER THAN A WIDENING (round-22
-      // Q5). Save Defaults CAPTURES the flag (components/SettingsPanel's commitSaveDefaults writes
+      // ★★ AMNESIC IS THE LAST TERM, AND ADDING IT WAS A BUG FIX RATHER THAN A WIDENING (round
+      // 22). Save Defaults CAPTURES the flag (components/SettingsPanel's commitSaveDefaults writes
       // the live value into the snapshot) and both reset buttons RESTORE it (resetSettings above),
       // so it was always one of the values "your defaults" covers — but it was the one value this
       // expression did not compare. The consequence was not cosmetic: `settingsModified` is this
@@ -2107,7 +2107,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // nothing, which is the dormant-theme false positive one store over.
       const amnesicAtDefault=amnesic===effectiveAmnesicDefault(savedDefaults);
       const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&dotRotation===defSettings.dotRotation&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&amnesicAtDefault&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
-      // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator (Q8), the Save
+      // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator, the Save
       // Defaults dim AND the Reset Settings dim. True when live state diverges from the effective
       // defaults in EITHER store — any menu setting, either year BOX, or any of the four capturable
       // mode-screen prefs.
@@ -2123,7 +2123,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // it through the freshness flags instead, which also cover the thirteen non-capturable ones.
       // Sharing that one term is what puts Full Reset on the SAME reading of a half-typed year as
       // the other three offers (round 15, the owner's call — see the note above it).
-      // ⚠ LOOKUP HISTORY IS STILL A TERM HERE (Q1, round 20; the owner's explicit call, overriding an
+      // ⚠ LOOKUP HISTORY IS STILL A TERM HERE (round 20; the owner's explicit call, overriding an
       // earlier "Full Reset no longer touches it" draft this comment used to describe). Full Reset
       // still clears it — see fullReset above, which now calls clearLookupHistory() — so it still
       // belongs in "would pressing the button right now do anything". `displayLookupHistory` is used
@@ -2162,10 +2162,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
             the screen edge against a 15.59px gutter on the left. That asymmetry WAS the visible
             symptom, and it is why "just add a fourth control" was never an option.
 
-            WHAT THIS ROW COSTS NOW (round 21) — the row structure is unchanged from Q6 (ONE
+            WHAT THIS ROW COSTS NOW (round 21) — the row structure is unchanged from round 20 (ONE
             flat flex container; three controls `shrink-0`, content-sized; the FOURTH — the preset
             switcher — `flex-1 min-w-0`, consuming whatever the other three and their gaps do not).
-            What Q10 changed is ONE fixed cost: the mode selector's trigger is now pinned to its
+            What round 21 changed is ONE fixed cost: the mode selector's trigger is now pinned to its
             OWN dropdown's outer width (triggerMatchesDropdown, components/CustomSelect) — the
             owner wanted the closed button as wide as the open menu, and since the menu's rows use
             a bigger text tier and more padding than the trigger, "both size to content" could
@@ -2173,12 +2173,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
             (+34.72), which is the measured outer width of its `width:max-content` dropdown
             ("How to Play" at the row's `text-[15px]` + `pl-4 pr-4` + ✓-column + `gap-2.5`, inside
             the panel's `p-1`). THE DROPDOWN ITSELF DID NOT MOVE — measured 142.02px both before
-            and after Q10 (the `dropdownWidth` default stays `'content'` for the mode selector).
+            and after round 21 (the `dropdownWidth` default stays `'content'` for the mode selector).
             FIXED (the three shrink-0 controls + three gaps, measured 360×800, root 15.6px):
                 logo 24.00 + gap 5.84 + mode 142.02 + gap 5.84 + ⚙ 40.25 + gap 5.84  = 223.79
-                                        └─ was 107.30 pre-Q10 (fixed sum was 189.08)
+                                        └─ was 107.30 before round 21 (fixed sum was 189.08)
             FLOATS: the preset switcher gets whatever is left of the row's 328.81px content box —
-            328.81 − 223.79 = 105.02px at 360×800 (down from 139.73px pre-Q10; the mode selector's
+            328.81 − 223.79 = 105.02px at 360×800 (down from 139.73px before round 21; the mode selector's
             +34.72 came straight out of here). The ⚙'s right edge still lands at 344.40 — 15.59px
             from the screen edge, matching the left gutter, i.e. the row still fits with no
             horizontal overflow (scrollWidth == clientWidth, measured, at both sizes below).
@@ -2189,13 +2189,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
             ancestors, so it clips rather than pushes. A growing fixed sum costs the switcher
             display room, never the row its fit.
 
-            Q10's COST TO THE NAME CELL WAS PAID IN GROUP C, not carried forward as a flag. The
+            THAT COST TO THE NAME CELL WAS PAID IN THE SAME ROUND, not carried forward as a flag. The
             mode trigger's +34.72px came straight out of the switcher's flex-1 share (its trigger is
             ~105px at 360×800 now, not ~140px), which left the OLD 6em name-cell floor (~82px at
             text-sm) wider than the trigger's usable inner width once `px-2.5` + `pr-6` (the chevron
             lane) come out — so a near-floor name clipped UNDER the ▲▼ on the tightest 360-wide
             layout, and the live pixel cap (lib/presetNameWidth, which measures that cell's rect)
-            read the inflated floor and let over-wide names through. Group C dropped PRESET_NAME_COL
+            read the inflated floor and let over-wide names through. The same round dropped PRESET_NAME_COL
             to 4.5em (~61px at text-sm), which sits inside the tightest usable width with margin —
             re-verified in the layout engine at 360×900, where the cell clears the chevron by 19px.
             The floor's full derivation now lives beside the constant in components/PresetSwitcher;
@@ -2205,12 +2205,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
             ⚠ AND CHROMIUM IS NOT AN IPHONE. Glyph advances differ, the system UI stack differs, and
             ONLY THE OWNER'S DEVICE can confirm the real thing. What is claimed here is that the
             arithmetic is no longer guesswork, not that the phone has agreed. (All of the numbers
-            in this block, Q6's and Q10's included, are a REAL headless-Chromium measurement of the
+            in this block, round 20's and round 21's included, are a REAL headless-Chromium measurement of the
             dev build — not the paper arithmetic components/PresetSwitcher's own history warns
             against trusting on its own.)
 
-            ⚠ --bar-h IS UNCHANGED BY ALL OF THIS, and that was checked rather than assumed — Q10
-            re-measured it at 56.594px, byte-identical to pre-Q10, because Q10 only sets a
+            ⚠ --bar-h IS UNCHANGED BY ALL OF THIS, and that was checked rather than assumed — round 21
+            re-measured it at 56.594px, byte-identical to before, because it only sets a
             `min-width` on the mode trigger (its height is untouched) and the width-mirror it adds
             is `position:absolute`, out of flow. The row's height has always been set by the pill
             controls (py-2 + text-sm + 1px borders = 37.09px) and never by the 19.5px wordmark that
@@ -2309,7 +2309,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   preset the numbers on screen belong to).
                   It is a CustomSelect, so it inherits the mode selector's press-drag gesture and
                   its portaled panel wholesale; components/PresetSwitcher argues why reuse is a
-                  hard requirement rather than a preference, and — since Q6 — why its trigger is
+                  hard requirement rather than a preference, and — since round 20 — why its trigger is
                   the ONE control in this row that GROWS rather than sizing to content, with a
                   MINIMUM name-cell width rather than the fixed one it shipped with. wrapperRef is
                   REQUIRED there and feeds the ⚙ press-outside exclusion above — see that handler.
@@ -2340,7 +2340,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   keeps treating taps inside the mode dropdown the same way it treated taps
                   on the original <select>. showChevron renders the same ▲▼ indicator.
                   The menu always opens DOWNWARD, with no prop and no longer any flip logic to
-                  say so (Q8, round 11 deleted round-8's auto-flip): the trigger sits IN the bar
+                  say so (round 11 deleted round-8's auto-flip): the trigger sits IN the bar
                   the flip measured the space above against, so that space was structurally
                   negative and the branch was unreachable. This trigger is also WHY the panel can
                   be viewport-fixed and measured once per open — fixed chrome is the one place no
@@ -2366,14 +2366,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   here rather than needing a wrapping div of its own — this IS this file's own div
                   already, so there is nothing to stand in for. */}
               <div className="relative shrink-0" ref={settingsRef}>
-                {/* C2: the ⚙ is a press-drag trigger — pointerdown OPENS the panel so you can drag straight
+                {/* The ⚙ is a press-drag trigger — pointerdown OPENS the panel so you can drag straight
                     into it + release on a control. aria-controls names its menu (the popover card,
                     id="settings-popover") so the pointer controller pairs the gesture with THIS panel,
                     resolved live by id (a press that CLOSES the panel pairs with nothing → inert). The
                     isPrimary/button guard mirrors the controller's pointer latch: a second finger or a
                     right-click must not toggle. onClick is kept for keyboard/tests; the controller
                     suppresses the trigger's click on a real press so it doesn't double-toggle.
-                    gear-modified (Q8, the flush inside-bottom violet bar — index.css) marks live state ≠
+                    gear-modified (the flush inside-bottom violet bar — index.css) marks live state ≠
                     the saved defaults while the panel is CLOSED (the open gear is solid purple, no
                     bar); the CORNER UpdateDot marks an update landed since the panel was last opened
                     (opening clears the flag — toggleSettings, which BOTH handlers below call — so it
@@ -2543,7 +2543,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // Julian months come first in the cell labels (e.g., Aug/Dec, Jan/Nov).
     // MethodBreakdownSection (the whole Show Codes panel: button, Expander, freeze contract) →
     // src/components/MethodBreakdown.jsx. THE COMPONENT IS NOT IMPORTED HERE: this file renders no
-    // codes panel at all any more — all five went with the mode screens (AoX included since Q5,
+    // codes panel at all any more — all five went with the mode screens (AoX included since
     // round 8) and Lookup's lives inside components/LookupCard. What App does import from that module
     // is the `CodeDate` TYPE alone, and only to type the lookupCalcDate it threads to LookupCard.
     // The ordering rules described just above are implemented there, not here.
@@ -2561,10 +2561,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const rootEl = typeof document !== "undefined" ? document.getElementById("root") : null;
     if (rootEl) createRoot(rootEl).render(<ErrorBoundary><App/></ErrorBoundary>);
 
-    // Real-user error reporting (C1). DEPLOYED builds only. This flag is the BUILD-time half —
+    // Real-user error reporting. DEPLOYED builds only. This flag is the BUILD-time half —
     // import.meta.env.PROD is false in `vite dev`, so dev never reports — but it is true for a
     // locally-SERVED production build too, so initObservability() adds the runtime half and refuses
-    // on a loopback host (Q9). Lazy-loads the Sentry SDK as its own chunk (see
+    // on a loopback host. Lazy-loads the Sentry SDK as its own chunk (see
     // src/observability/sentry.ts); the error boundaries above call captureError() on a crash.
     if (rootEl && import.meta.env.PROD) initObservability();
 
@@ -2574,7 +2574,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     if (rootEl && import.meta.env.DEV) reportWebVitals();
 
     // Exported for the Step-6 characterization tests (the mode-untangle safety net). randomDate +
-    // makeDedPuzzle are the real date/puzzle generators — exported for the C2 date-generation fuzz
+    // makeDedPuzzle are the real date/puzzle generators — exported for the date-generation fuzz
     // (tests/dateGen.dom), which drives them across every settings combination to prove no setting can
     // produce a malformed or unanswerable question. bootHoldRemaining is the pure boot-splash hold
     // calculation (tests/bootSplash.dom). makeUpdateReloadGate + consumeSkipBootHold are the

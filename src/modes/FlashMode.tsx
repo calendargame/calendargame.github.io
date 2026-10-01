@@ -1,4 +1,4 @@
-// FlashMode — the brief-reveal timed weekday screen. Extracted verbatim from main.tsx (Q1 phase 1);
+// FlashMode — the brief-reveal timed weekday screen. Extracted verbatim from main.tsx (the main.tsx split);
 // it was already a module-level sibling of App taking everything through props, so nothing about its
 // behaviour changes by living here.
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -128,7 +128,7 @@ function FlashMode({
     { ui: { showTimerDate }, config: dateConfig },
     settingsOpen ?? false,
   )
-  // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
+  // Android Back closes the Show-Codes panel of the ACTIVE mode. Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
@@ -181,9 +181,9 @@ function FlashMode({
   // behaviour change. In main.tsx this effect was one dense line and the React Compiler never
   // analyzed the component, so the rule was silent (verified: linting HEAD's main.tsx reports the
   // rule ZERO times). Extracting the component into a clean module makes it analyzable, and the
-  // rule fires for the first time on code that is byte-identical. Q1 phase 1 is a VERBATIM MOVE, so
+  // rule fires for the first time on code that is byte-identical. The main.tsx split is a VERBATIM MOVE, so
   // the pattern is preserved exactly and suppressed with this note rather than restructured —
-  // restructuring live timer logic inside a "pure move" is precisely what Q1 forbids. The pattern
+  // restructuring live timer logic inside a "pure move" is precisely what that split forbids. The pattern
   // itself is a defensible external-sync (mirroring a store-driven settings change into a local
   // countdown mirror while at rest), which is why MethodBreakdown.tsx carries the same disable.
   // ▶ The newly-surfaced findings from all five mode extractions are queued for review as their
@@ -216,7 +216,7 @@ function FlashMode({
   }
 
   // rAF countdown of the reveal-time label while showing (cosmetic; matches App's loop).
-  // Gated off while the rotate-back overlay pauses the clock (Q11) so the frozen number
+  // Gated off while the rotate-back overlay pauses the clock so the frozen number
   // can't tick behind the overlay.
   useEffect(() => {
     if (!(active && flashPhase === 'show') || clockPaused) return
@@ -230,7 +230,7 @@ function FlashMode({
     return () => cancelAnimationFrame(raf)
   }, [active, flashPhase, clockPaused])
 
-  // Rotate-overlay clock freeze (Q11): a LIVE flash (phase "show", deadline armed) must not
+  // Rotate-overlay clock freeze: a LIVE flash (phase "show", deadline armed) must not
   // burn its reveal window behind the rotate-back overlay. Pause = freezeFlash's bar-pinning
   // trick WITHOUT the teardown: cancel the auto-hide timer, remember the remaining ms, pin the
   // bar mid-sweep (the rAF number loop above is gated off while paused, so bar + number freeze
@@ -384,7 +384,7 @@ function FlashMode({
 
   // Freshness for App's isFullyReset (Flash owns its state now): engine fresh + Flash's own
   // fields. flashMs (and the idle countdown mirror) compare against the EFFECTIVE default —
-  // the saved personal default when one exists (Q7, store/userDefaults).
+  // the saved personal default when one exists (store/userDefaults).
   const defFlashMs = useUserDefaults((s) => effectivePrefDefaults(s.saved).flashMs)
   const flashIsFresh =
     engineFresh(state) &&
@@ -408,7 +408,7 @@ function FlashMode({
   // Show Codes work read-only on it, matching Classic. (The gate used to hide all three while
   // browsing — the grid's green/red marks rendered but the date itself read "—" with the
   // review tools dead while Override stayed ENABLED on the invisible question. An original-app
-  // wart, contradicting How-to-Play's "Back — the answer is shown". C2 fix; Back is disabled
+  // wart, contradicting How-to-Play's "Back — the answer is shown". Since fixed; Back is disabled
   // while a flash is active, so inBack never overlaps a live flash.)
   const inBack = state.backDepth > 0
   const optionsDisabled = !active || state.locked || state.calcOpen || state.calcPenaltyActive
@@ -428,7 +428,7 @@ function FlashMode({
     }
     setShowTimerDate(false)
   }
-  // Q2 / Q7 — the Reset Stats confirmation popup (Flash's reset also tears the live flash down).
+  // The Reset Stats confirmation popup (Flash's reset also tears the live flash down).
   const {
     confirmOpen: resetStatsOpen,
     onResetTap,
@@ -448,8 +448,8 @@ function FlashMode({
           you turned off yourself renders BLANK, from `off` inside statsArr. See StatPanel. */}
       <StatPanel stats={statsArr} dimmed={!saveStats} />
       <div className="mt-3">
-        {/* Reset Stats — static caption; the confirmation is the shared ConfirmModal below (Q7
-            round 21). The `S` shortcut routes through this same onClick. */}
+        {/* Reset Stats — static caption; the confirmation is the shared ConfirmModal below
+            (round 21). The `S` shortcut routes through this same onClick. */}
         <button type="button" data-key="S" className={RESET_STATS_BTN_CLASS} onClick={onResetTap}>
           Reset Stats
         </button>

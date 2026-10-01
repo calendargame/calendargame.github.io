@@ -1,4 +1,4 @@
-// Shared mode-screen hooks, extracted verbatim from main.tsx (Q1 phase 1). These are the pieces of
+// Shared mode-screen hooks, extracted verbatim from main.tsx (the main.tsx split). These are the pieces of
 // per-mode chrome deduped out of the five screens during the Stage-C mode-untangle: they move
 // together because every screen uses some subset and none of them belongs to any one screen.
 import * as React from 'react'
@@ -194,7 +194,7 @@ export function useStatsHideToggles({
 // (engineFresh) has nothing to clear, so a tap is a harmless no-op and the popup never opens. The
 // `S` keyboard shortcut routes through the same onClick via .click() (see the keyboard effect), so
 // it opens the popup identically. Leaving the mode drops a pending confirm (the popup portals to
-// #root, so a hidden mode's would otherwise sit over the visible one). (Q2 / Q7.)
+// #root, so a hidden mode's would otherwise sit over the visible one).
 export function useResetStatsConfirm(resetFn: () => void, hasData: boolean, visible: boolean) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const closeConfirm = () => setConfirmOpen(false)
