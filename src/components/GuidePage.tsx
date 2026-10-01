@@ -15,6 +15,7 @@ import { DOT_CELLS, DOT_GRID_SIZE, DIAGONAL_DOT_SCALE, type DotCell } from '../l
 import { selectionSuppressesToggle } from '../lib/selectionGuard.js'
 import { useSettings } from '../store/settings.js'
 import { readGuidePlace, writeGuidePlace, discardGuidePlace } from '../store/sessionGuide.js'
+import { onPageHidden } from '../lib/pageHidden.js'
 import {
   ACCORDION_EASE_CSS,
   accordionEase,
@@ -353,25 +354,19 @@ export default function GuidePage({
   // The open section — seeded from the place parked before a reload (store/sessionGuide), so a reload
   // reopens the section the reader had open; App seeds the offset from the same place. Read once.
   const [open, setOpen] = useState<string | null>(() => readGuidePlace()?.open ?? null)
-  // THE PLACE, PARKED FOR A RELOAD (round 23 Q11 — store/sessionGuide argues the lifecycle): the open
-  // section and the reading offset, written when the page hides (`pagehide`, which every reload fires,
-  // and `visibilitychange` → hidden) and discarded when this screen unmounts, which a reload never
-  // does. The listeners are registered once per mount and read the latest open section through a ref
-  // written after every commit, so they park what was on screen, never an uncommitted render.
+  // THE PLACE, PARKED FOR A RELOAD (store/sessionGuide argues the lifecycle): the open section and the
+  // reading offset, written when the page hides (lib/pageHidden — every reload, and a tab going to
+  // the background) and discarded when this screen unmounts, which a reload never does. The listener
+  // is registered once per mount and reads the latest open section through a ref written after every
+  // commit, so it parks what was on screen, never an uncommitted render.
   const openRef = useRef(open)
   useEffect(() => {
     openRef.current = open
   })
   useEffect(() => {
-    const park = () => writeGuidePlace({ open: openRef.current, y: readingOffset() })
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') park()
-    }
-    window.addEventListener('pagehide', park)
-    document.addEventListener('visibilitychange', onVisibilityChange)
+    const stop = onPageHidden(() => writeGuidePlace({ open: openRef.current, y: readingOffset() }))
     return () => {
-      window.removeEventListener('pagehide', park)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
+      stop()
       discardGuidePlace()
     }
   }, [readingOffset])
@@ -896,8 +891,9 @@ export default function GuidePage({
           <li>
             <b>Back (&lt;)</b> — return to the previous date. The answer is shown and the card is
             locked; no stat penalty. You can go back through everything you have played this visit
-            in Classic, Flash, and Deduction (a reload keeps it; a preset switch starts it over); in
-            Blitz and MoX, through the current round or run once it has ended.
+            in Classic, Flash, and Deduction (a reload keeps it, and each preset keeps its own while
+            you are in another); in Blitz and MoX, through the current round or run once it has
+            ended.
           </li>
           <li>
             Every history entry shows the correct answer in green; a wrong guess appears as dimmed
@@ -993,14 +989,17 @@ export default function GuidePage({
             Stats; the Reset button in Flash, Blitz and MoX; or Begin in Blitz and MoX), a Full
             Reset, and closing the app. In Blitz and MoX, also changing a setting the round or run
             depends on (it resets when you close the ⚙ menu) and leaving the mode while a round or
-            run is still going. In Classic, Flash and Deduction the history belongs to this visit: a
-            reload keeps it, every date&apos;s Override state included, and switching presets or
-            turning Amnesic on or off starts it over (your stats are kept). After a very long
-            sitting — a thousand dates or more in one mode — a reload may bring back only the most
-            recent of them (about three thousand in Classic and Flash, one to two thousand in
-            Deduction); your scores and the date numbers are unaffected. A Blitz round or MoX run
-            that has <i>ended</i> comes back after a reload too, and is the one thing that also
-            comes back after a preset switch, with every date&apos;s Override state.
+            run is still going. In Classic, Flash and Deduction the history belongs to this visit
+            and to its preset: a reload keeps it, every date&apos;s Override state included;
+            switching presets sets it aside and it is there when you switch back; and turning
+            Amnesic on sets yours aside for the guest and gives it back when Amnesic goes off (the
+            guest&apos;s own is discarded with the rest of their session). After a very long sitting
+            — a thousand dates or more in one mode — only the most recent of them may come back
+            (about three thousand in Classic and Flash, one to two thousand in Deduction); your
+            scores and the date numbers are unaffected. A Blitz round or MoX run that has{' '}
+            <i>ended</i> comes back the same ways, with every date&apos;s Override state — unless a
+            setting it was played under was changed in the meantime, in which case it is not brought
+            back (the bests it set are kept).
           </li>
         </UL>
         <p>Override in the run modes:</p>
@@ -1148,10 +1147,11 @@ export default function GuidePage({
             of its name in the list, so you can see which ones forget before you switch into one.
           </li>
           <li>
-            Switching clears the screens, including a Blitz round or an MoX run in progress — every
-            screen has to be re-read from the copy of your stats that is now live. A round or run
-            that has already <i>ended</i> is the exception: that preset keeps it, and it is still on
-            screen when you switch back, until you press Reset or close the app.
+            Switching re-reads every screen from the copy of your stats that is now live, so a Blitz
+            round or an MoX run still in progress is ended by it. What a preset had on its screens
+            otherwise waits for you: a round or run that has already <i>ended</i>, and the dates you
+            can browse back through in Classic, Flash and Deduction, are still there when you switch
+            back, until you press Reset or close the app.
           </li>
           <li>
             A long name is cut short with an … so the bar can never be pushed wider than the screen.
@@ -1362,6 +1362,18 @@ export default function GuidePage({
           When timing stats are off, leaving and returning to one of these modes preserves the
           current question exactly as you left it — same date, same answers, codes panel in the same
           state.
+        </p>
+        <p>
+          The same rule decides what happens to the date that was waiting when the screen itself
+          comes back — after a reload, a switch to another preset and back, or a guest&apos;s
+          Amnesic interlude. Your history returns exactly as it was. The waiting date returns too,
+          with one exception: if that mode&apos;s timing is showing when you come back and you had
+          not yet answered the date — no wrong answer, no Reveal, no Show Codes — a new date is
+          drawn instead. Its timer starts again when the screen comes back, so the old date would
+          have recorded a time that left out however long you had already looked at it. With timing
+          hidden no time is recorded, so the same date is waiting, even if you had not played
+          anything yet. (An unanswered date is also redrawn if a date setting was changed while you
+          were away — the same as changing it with the date on screen.)
         </p>
         <Subhead>The breakdown (Blitz, MoX)</Subhead>
         <p>
@@ -2130,9 +2142,9 @@ export default function GuidePage({
             preserved; the new range applies to the next date.
           </li>
           <li>
-            While browsing back, settings-driven regen always preserves your history: the date you
-            were viewing and any forward entries are pushed back to history before the live slot is
-            regenerated.
+            While browsing back, a settings-driven regen leaves your history alone: the date you are
+            viewing and everything between it and the live date stay exactly where they are, and
+            only the unanswered live date waiting at the front is replaced.
           </li>
           <li>
             In Blitz rounds and MoX runs (active or just ended), a range change resets the round/run
@@ -2330,7 +2342,9 @@ export default function GuidePage({
         <UL>
           <li>Score, accuracy, streak, and your solve times.</li>
           <li>
-            The question history you browse with Back and Forward, and any round or run on screen.
+            The question history you browse with Back and Forward, and any round or run on screen —
+            the guest&apos;s, that is. Your own are set aside when Amnesic goes on and are back when
+            it goes off.
           </li>
           <li>
             All-time bests — Blitz score and streak, Per Question sudden-death score, and MoX mean
@@ -2501,15 +2515,18 @@ export default function GuidePage({
           <li>
             Any timed round or run on screen &mdash; whether still in progress <i>or</i> ended but
             not yet Reset. An <i>ended</i> run is kept as you switch presets and return, the same as
-            the page above; only a fresh close of the app, or a manual Reset, clears it. A run still{' '}
-            <i>in progress</i> is discarded on a preset switch. Either way, only a Best it already
-            recorded persists.
+            the page above; a fresh close of the app or a manual Reset clears it, and so does a
+            change to any setting it was played under while it was set aside (a guest changing the
+            setup during an Amnesic interlude, say). A run still <i>in progress</i> is discarded on
+            a preset switch. Either way, only a Best it already recorded persists.
           </li>
           <li>
             <b>The dates you can browse back through</b> in Classic, Flash and Deduction, each with
-            how you answered it and whether it is overridden. A reload keeps them; a preset switch,
-            turning Amnesic on or off, a Reset or a Full Reset starts the history over. The stats
-            those dates earned are saved separately and are not affected.
+            how you answered it and whether it is overridden — and Deduction&apos;s puzzle filters
+            with them. A reload keeps them; each preset keeps its own while you are in another; and
+            yours are set aside during a guest&apos;s Amnesic interlude and returned after it. A
+            Reset or a Full Reset starts the history over, and deleting a preset takes its history
+            with it. The stats those dates earned are saved separately and are not affected.
           </li>
           <li>
             <b>Your place in this guide</b> — the open section and how far down you had read. A
@@ -2846,7 +2863,8 @@ export default function GuidePage({
           decides. When a run ends its score stays on screen — changing only when you override one
           of its dates — until you press Reset. Leaving MoX mid-run resets it; a run that has ended
           — completed or failed — stays on screen when you come back, from another mode or from
-          another preset, until you press Reset or Full Reset, or close the app.
+          another preset, until you press Reset or Full Reset, close the app, or change a setting it
+          was played under.
         </p>
         <p>
           Bests are tracked per exact configuration: MoX run length, Allow Mistakes, Date Format (or

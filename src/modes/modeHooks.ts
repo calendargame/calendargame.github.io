@@ -3,11 +3,12 @@
 // together because every screen uses some subset and none of them belongs to any one screen.
 import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import type { GameState } from '../engine/gameReducer.js'
+import { gameReducer } from '../engine/gameReducer.js'
+import type { GameState, Question } from '../engine/gameReducer.js'
 import type { GameEngine, FlashState } from './modeTypes.js'
 import { calcLast, calcAvg, calcMed } from '../engine/stats.js'
 import { fittedParkedText, restoreParkedText } from '../engine/parkedHistory.js'
-import type { RestoredHistory } from '../engine/parkedHistory.js'
+import type { ParkedScreen, RestoredHistory } from '../engine/parkedHistory.js'
 import { fmtAccuracyPct, truncTime, fmtTime } from '../lib/modeFormat.js'
 import { usePresets } from '../store/presets.js'
 import { activeDataId } from '../store/amnesic.js'
@@ -54,9 +55,9 @@ export function engineFresh(s: GameState) {
   )
 }
 // Nothing played on this engine since it was made, whatever stats it hydrated: no history, and a live
-// question nobody has touched (no flags set, nothing on the card: never wrong, never overridden — the
-// round 23 Q6 record that replaced the four flags the old Override machinery kept here). Such an engine
-// has nothing a reload could bring back, so useParkedHistory parks nothing for it.
+// question nobody has touched (no flags set, nothing on the card: never wrong, never overridden).
+// Such an engine holds only the question it is waiting on — which useParkedHistory still parks (with
+// timing hidden that question comes back), marked as holding no play.
 function engineUntouched(s: GameState) {
   return (
     s.stack.length === 0 &&
@@ -238,8 +239,8 @@ export function useChangeEffect(deps: React.DependencyList, fn: () => void) {
 // ★ THE STATS COPY THIS SCREEN WAS MOUNTED ON — store/amnesic's activeDataId ("1:saved" /
 // "1:session"), read ONCE at mount and never again. Every parked round (store/sessionRound) and
 // parked history (store/sessionHistory) a screen reads, writes or discards is keyed by it, so a round
-// or a history is only ever parked against — and restored against — the copy it was PLAYED on
-// (round 23 Q2). Fixed for the life of the mount is exactly right, not a shortcut: any change of copy
+// or a history is only ever parked against — and restored against — the copy it was PLAYED on.
+// Fixed for the life of the mount is exactly right, not a shortcut: any change of copy
 // (a preset switch, an Amnesic toggle) remounts every mode screen (src/main.tsx's subscription on
 // activeDataId), so a mount's engine never belongs to any other copy.
 export function useMountedDataId(): string {
@@ -247,16 +248,30 @@ export function useMountedDataId(): string {
   return dataId
 }
 
-// ── A CASUAL MODE'S HISTORY ACROSS A RELOAD (round 23 Q11) ────────────────────────────────────────
-// The two halves a Classic / Flash / Deduction engine needs: the read at mount and the park while
-// mounted. The whole design — when it is written, when it is retired, what comes back, the size
-// budgets — is argued in store/sessionHistory (the storage) and engine/parkedHistory (the engine).
+// ── A CASUAL MODE'S HISTORY, KEPT FOR THE BROWSING SESSION ────────────────────────────────────────
+// The halves a Classic / Flash / Deduction engine needs: the read at mount, the park, and the one
+// function that tells every mounted casual screen to park. The whole design — when a history is
+// written, what retires it, the size budgets — is argued in store/sessionHistory (the storage) and
+// engine/parkedHistory (the engine).
+
+// What a screen says about the question it would draw RIGHT NOW, for the restore to judge the parked
+// one against.
+interface LiveQuestion {
+  // Is this mode's timing shown (not hidden) at this mount?
+  timingShown: boolean
+  // The date settings a question drawn now is drawn under — the same values, spelled the same way,
+  // that the screen parks as `config` (and that its settings-close effect regenerates on).
+  config: string
+  // Draw one.
+  newDate: () => Question
+}
 
 /**
  * This (stats copy, silo)'s parked history, restored over the silo's SAVED stats — the very stats the
  * engine would otherwise hydrate from (getInitialStats) — or null to start from those stats as
- * before. Read ONCE, in a screen's useState initializer, before its engine (useGameEngine's
- * getInitialState) and any of its own fields the snapshot carries.
+ * before. Read ONCE, in a screen's useState initializer, before its engine and any of its own fields
+ * the snapshot carries (a screen's fields can decide what its engine draws — Deduction's filters —
+ * so the two are read here and the engine's first state is settled separately, below).
  */
 export function readParkedHistory(
   dataId: string,
@@ -272,41 +287,104 @@ export function readParkedHistory(
 }
 
 /**
- * Park this engine (and the screen's own fields, `ui`) whenever the page is hidden — `pagehide`, which
- * every reload fires, and `visibilitychange` → hidden, which a backgrounded tab the browser may later
- * discard fired on its way out — and throw the park away when the screen unmounts, which a reload
- * never does and every other departure (a preset switch, an Amnesic toggle, Full Reset, a crash)
- * does. An untouched engine parks nothing: its stats are saved already, there is no history to bring
- * back, and the reload's new question is as good as the one it replaces.
- * The latest state is held in a ref written after every commit, so the listeners — registered once
- * per mount — park what was last on screen, never a render that did not commit.
+ * The engine's FIRST STATE from a restored history (useGameEngine's getInitialState) — null when
+ * nothing was restored.
+ *
+ * ★ THE LIVE-QUESTION RULE (the owner's, and it holds for a reload, a preset switch and an Amnesic
+ * interlude alike). The history comes back exactly; the question that was WAITING comes back only
+ * when nothing could be gained from having seen it:
+ *   • it is REGENERATED when a time could still be recorded for it — timing is shown in this mode
+ *     NOW (it may have been toggled since the park), and the question is unanswered with no wrong
+ *     answer, Reveal or Show Codes. The engine's clock starts again at every mount, so the same
+ *     question returning there would hand the player a solve time that left out however long they
+ *     had already looked at it;
+ *   • otherwise THE SAME QUESTION RETURNS — timing hidden records no time, and a question already
+ *     answered wrong, revealed or shown its codes records none either — including on a screen with
+ *     no history at all;
+ *   • and an unanswered question drawn under DIFFERENT date settings is regenerated too (the settings
+ *     are shared by a preset's two stats copies, so a guest can change them under a parked history) —
+ *     which is only what changing those settings does to a question on screen.
+ * All three are ONE engine action, REGEN_DATE: the rule the app already had for "turning timing back
+ * on" and for a date-setting change — it keeps a question that has been used, and reaches the live
+ * question even when the history came back browsed to an earlier card (gameReducer). This function
+ * only decides whether to ask.
+ */
+export function restoredEngine(back: RestoredHistory | null, live: LiveQuestion): GameState | null {
+  if (!back) return null
+  if (!live.timingShown && back.config === live.config) return back.engine
+  return gameReducer(back.engine, { type: 'REGEN_DATE', nextDate: live.newDate() })
+}
+
+// Every mounted casual engine's park, and whether its screen is the one in use.
+const parkers = new Set<{ inUse: () => boolean; park: () => void }>()
+
+/**
+ * Park every mounted casual history NOW — each under the stats copy its screen was mounted on.
+ * src/main.tsx calls it at the two moments a screen is about to go away without the player asking
+ * for a clean start: the page being hidden (a reload, the background), and the stats copy underneath
+ * the screens being swapped (a preset switch, an Amnesic toggle).
+ * ★ THE SCREEN IN USE PARKS LAST. store/sessionHistory holds every history together to one budget,
+ * and each write makes room for itself by dropping others — so the last one written is the one that
+ * always survives, and that has to be the history the player is looking at, not whichever screen
+ * happened to mount last.
+ */
+export function parkCasualHistories(): void {
+  const all = [...parkers]
+  for (const p of all) if (!p.inUse()) p.park()
+  for (const p of all) if (p.inUse()) p.park()
+}
+
+/**
+ * Register this engine (and the screen's own fields beside it) to be parked by parkCasualHistories,
+ * and retire its slot whenever the engine itself is RESET.
+ *   `inUse`  — is this the engine the player is looking at (the visible screen; for Deduction, the
+ *              sub-type on show)?
+ *   `screen` — what is parked beside the engine: the screen's on/off fields and the date settings a
+ *              question is drawn under here right now (engine/parkedHistory's ParkedScreen).
+ *   `settingsOpen` — is the ⚙ panel open? A date setting changed in the panel reaches the question on
+ *              screen only when the panel CLOSES (each screen's useSettingsCloseEffect), so while it
+ *              is open the question on screen still belongs to the settings as they were when it
+ *              opened — and those are the ones parked with it.
+ * EVERY engine parks, played-in or not: with timing hidden the question on screen must come back too,
+ * and that includes a screen nobody has answered anything on. The slot is marked with whether it
+ * holds anything beyond that waiting question (store/sessionHistory).
+ * ⚠ NOTHING IS PARKED ON UNMOUNT — store/sessionHistory argues why — so the cleanup only withdraws
+ * the registration.
+ * The latest state is held in a ref written after every commit, so a park writes what was last on
+ * screen, never a render that did not commit.
  */
 export function useParkedHistory(
   dataId: string,
   silo: HistorySilo,
   state: GameState,
-  ui?: unknown,
+  inUse: boolean,
+  screen: ParkedScreen,
+  settingsOpen: boolean,
 ): void {
-  const latest = useRef({ state, ui })
+  const latest = useRef({ state, inUse, screen })
   useEffect(() => {
-    latest.current = { state, ui }
+    const config = settingsOpen ? latest.current.screen.config : screen.config
+    latest.current = { state, inUse, screen: { ...screen, config } }
   })
   useEffect(() => {
-    const park = () => {
-      const { state: s, ui: u } = latest.current
-      const text = engineUntouched(s) ? null : fittedParkedText(s, u, SLOT_BUDGET)
-      if (text === null) discardSessionHistory(dataId, silo)
-      else writeSessionHistory(dataId, silo, text)
+    const parker = {
+      inUse: () => latest.current.inUse,
+      park: () => {
+        const { state: s, screen: sc } = latest.current
+        const text = fittedParkedText(s, sc, SLOT_BUDGET)
+        if (text === null) return discardSessionHistory(dataId, silo)
+        const holdsPlay = !engineUntouched(s) || Object.values(sc.ui ?? {}).some(Boolean)
+        writeSessionHistory(dataId, silo, text, holdsPlay)
+      },
     }
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') park()
-    }
-    window.addEventListener('pagehide', park)
-    document.addEventListener('visibilitychange', onVisibilityChange)
+    parkers.add(parker)
     return () => {
-      window.removeEventListener('pagehide', park)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      discardSessionHistory(dataId, silo)
+      parkers.delete(parker)
     }
   }, [dataId, silo])
+  // ★ A RESET RETIRES THE PARK IN THE SAME BREATH. Reset Stats, "Enable and Reset Stats" and Flash's
+  // Reset all clear the engine's history, and `gridEpoch` moves on exactly those (gameReducer). A
+  // park standing from an earlier hide describes the history that was just cleared; nothing may
+  // bring it back, so it goes now rather than waiting to be overwritten by the next park.
+  useChangeEffect([state.gridEpoch], () => discardSessionHistory(dataId, silo))
 }

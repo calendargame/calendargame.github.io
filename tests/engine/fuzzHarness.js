@@ -494,13 +494,17 @@ export const PROFILES = {
     pComplete: 0.35,
     pHold: 0.35,
   },
-  // ── The reload round trip (round 23 Q11) ──
-  // A casual mode's history is parked when the page hides and restored on the reload (store/
-  // sessionHistory). These profiles reload mid-play, often, on the casual surface (no RESET_ROUND and
-  // no timeouts: Classic/Flash/Deduction never send them), hydrated half the time — and demand the
-  // restored state be the state parked, under the exact oracle and, in the first, the independent
-  // reference model too. The second forgets the oldest cards before some reloads, as the size budget
-  // does, over long sequences where the history is deep enough to cut.
+  // ── The restore round trip (store/sessionHistory) ──
+  // A casual mode's history is parked when its screen is about to go away — a reload, a preset
+  // switch, an Amnesic interlude — and restored when the screen comes back. These profiles restore
+  // mid-play, often, on the casual surface (no RESET_ROUND and no timeouts: Classic/Flash/Deduction
+  // never send them), hydrated half the time — and demand the restored state be the state parked,
+  // under the exact oracle and, in the first, the independent reference model too. Half the restores
+  // (pRestoreRegen) then apply the LIVE-QUESTION RULE's regeneration, exactly as a screen whose
+  // timing is shown does at mount (modes/modeHooks' restoredEngine): the one REGEN_DATE action, on a
+  // state that may have come back browsed to an earlier card. The second profile forgets the oldest
+  // cards before some restores, as the size budget does, over long sequences where the history is
+  // deep enough to cut.
   'reload-ref': {
     name: 'reload-ref',
     seedBase: 12_000_000,
@@ -510,6 +514,7 @@ export const PROFILES = {
     pHydrate: 0.5,
     referenceModel: true,
     pReload: 0.08,
+    pRestoreRegen: 0.5,
     weights: {
       ANSWER: 5,
       OVERRIDE: 5,
@@ -539,6 +544,7 @@ export const PROFILES = {
     strongOracle: true,
     pHydrate: 0.5,
     pReload: 0.05,
+    pRestoreRegen: 0.5,
     pTrim: 0.5,
     weights: {
       ANSWER: 5,
@@ -674,11 +680,19 @@ export function freshCov() {
     retoggle: 0, //    the same card pressed three times running (consecutive presses hit one card)
     hydrated: 0, //    sequences seeded with a prior-session baseline (the hydration net)
     timedOutBehind: 0, // a timed-out card was the one the button would otherwise mean (history tail / browsed)
-    reloads: 0, //     parked + restored mid-sequence (engine/parkedHistory's reload round trip)
+    reloads: 0, //     parked + restored mid-sequence (engine/parkedHistory's restore round trip)
     reloadsDeep: 0, // …while browsed back, i.e. with the live card parked as the isLive forward entry
     forgotten: 0, //   …after forgetting some of the oldest cards (forgetOldestCards, the size budget)
+    restoreRegen: 0, // a restore whose live question was then REGENERATED (the live-question rule)
+    restoreKept: 0, //  …and one whose live question was USED, so the same question came back
+    regenBrowsing: 0, // a regen that replaced the live question while it waited in the forward stack
   }
 }
+
+// Is the LIVE question a Deduction puzzle? It is the question on screen at the live edge, and the
+// `isLive` entry at the bottom of the forward stack while browsing — the reference model's live slot
+// either way.
+const liveIsPuzzle = (state) => !!(state.backDepth > 0 ? state.forwardStack[0] : state.date).type
 
 export function runSequence(seed, steps, cov, profile) {
   const rnd = mulberry32(seed)
@@ -740,7 +754,12 @@ export function runSequence(seed, steps, cov, profile) {
         state = forgetOldestCards(state, k)
         cov.forgotten++
       }
-      const back = restoreParked(JSON.parse(parkedText(state)), state.stats, useJulian, 'classic')
+      const back = restoreParked(
+        JSON.parse(parkedText(state, { config: '' })),
+        state.stats,
+        useJulian,
+        'classic',
+      )
       const same = back && isDeepStrictEqual(back.engine, JSON.parse(JSON.stringify(state)))
       if (!same)
         return {
@@ -759,6 +778,38 @@ export function runSequence(seed, steps, cov, profile) {
       state = back.engine
       cov.reloads++
       if (state.backDepth > 0) cov.reloadsDeep++
+      // THE LIVE-QUESTION RULE: a screen whose timing is shown regenerates the restored live question
+      // (one REGEN_DATE, exactly as modes/modeHooks' restoredEngine dispatches it) — which swaps an
+      // UNUSED question, wherever it sits, and keeps a used one. Nothing scored may move either way,
+      // so the oracle, the reference model and every invariant are held to the result at once.
+      if (profile.pRestoreRegen && chance(rnd, profile.pRestoreRegen)) {
+        const before = state
+        state = gameReducer(state, { type: 'REGEN_DATE', nextDate: randDate(rnd) })
+        if (state === before) cov.restoreKept++
+        else {
+          cov.restoreRegen++
+          if (state.backDepth > 0) cov.regenBrowsing++
+        }
+        if (model) applyRefModel(model, 'REGEN', null, { liveDedAfter: liveIsPuzzle(state) })
+        const broken = [
+          ...checkGameInvariants(state, useJulian),
+          ...(state.stats === before.stats ? [] : ['RESTORE REGEN: the stats moved']),
+          ...(profile.strongOracle ? checkStrongScoreOracle(state, priorHistory) : []),
+          ...(model ? compareRefModel(model, state, overridePlan(state)) : []),
+        ]
+        if (broken.length)
+          return {
+            ok: false,
+            profile: profile.name,
+            seed,
+            step: i,
+            violations: broken,
+            action: 'RESTORE REGEN',
+            prevStats: before.stats,
+            nowStats: state.stats,
+            recent,
+          }
+      }
     }
     const saveStats = chance(rnd, profile.pSaveStats)
     const tracking = chance(rnd, profile.pTracking)
@@ -857,18 +908,20 @@ export function runSequence(seed, steps, cov, profile) {
     // side just needs priorHistory cleared here.)
     if (action.type === 'RESET') priorHistory = []
     // Reference model: apply the same action with its exogenous DISPLAY facts — isCorrect from the
-    // PRE-action question (the one the user acted on), and the on-screen question kind before/after
-    // (nextDed for plain advances; liveDedAfter for the view-ruled RESET/REGEN keep-vs-replace).
+    // PRE-action question (the one the user acted on), and the question kind before/after
+    // (nextDed for plain advances; liveDedAfter — the LIVE question's kind, on screen or waiting in
+    // the forward stack — for the view-ruled RESET/REGEN keep-vs-replace).
     // See referenceModel.js for the independence boundary.
     if (model) {
       applyRefModel(model, kind, action, {
         isCorrect:
           action.type === 'ANSWER' ? action.idx === correctIndexOf(prev.date, useJulian) : null,
         nextDed: action.nextDate ? !!action.nextDate.type : undefined,
-        liveDedAfter: !!state.date.type,
+        liveDedAfter: liveIsPuzzle(state),
       })
       cov.refChecks++
     }
+    if (kind === 'REGEN' && state !== prev && state.backDepth > 0) cov.regenBrowsing++
     if (state.stats.good > 0) cov.good++
     if (state.stack.length > cov.maxStack) cov.maxStack = state.stack.length
     if (state.stats.times.length > cov.maxTimes) cov.maxTimes = state.stats.times.length

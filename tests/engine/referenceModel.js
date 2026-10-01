@@ -268,10 +268,11 @@ export function applyRefModel(m, kind, action, ctx) {
       return
     }
     case 'REGEN': {
-      // Swaps an untouched live date in place (kept when burned/revealed/credited — a view rule; the
-      // screen says what's displayed now). Browsing never regenerates, and the on-screen date
-      // mid-browse is the BROWSED entry — only sync the live slot's identity at the live edge.
-      if (m.cursor === 0) live.ded = ctx.liveDedAfter
+      // Swaps an untouched LIVE question in place (kept when burned/revealed/credited — a view rule;
+      // the driver says which question the live slot holds now). It is the live question wherever the
+      // cursor is: mid-browse the question on screen is a history one, and the live slot is the one
+      // that changes. Nothing scored moves — the model's whole claim about a regen.
+      live.ded = ctx.liveDedAfter
       return
     }
     case 'OVERRIDE': {

@@ -984,25 +984,43 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     // ── REGEN_DATE ───────────────────────────────────────────────────────────────
-    // Swap the live date in place — no history push, no stat change. Used by
-    // performTimingOn (enabling timing/Save Stats) and by regenDecisionFor (a format /
-    // leap / year-range setting change). A BURNED date (wrong/Reveal/Show Codes) is kept
-    // — you haven't used it yet only when it's fresh — and a browsed entry (backDepth>0)
-    // is never regenerated. Bumps questionId so the solve-timer restarts (matches
-    // performTimingOn setting tStartRef).
+    // Swap the LIVE QUESTION's date in place — no history push, no stat change. The one rule behind
+    // every "the unanswered date is regenerated": turning timing back on, a format / leap /
+    // year-range setting change, and a casual history coming back after a reload or a preset switch
+    // while a time could still be recorded for its live question (modes/modeHooks'
+    // readParkedHistory). Bumps questionId so the solve-timer restarts.
+    // A date you have USED is kept: a BURNED one (wrong / Reveal / Show Codes), and a CREDITED card
+    // at the live edge — one that credited without advancing (MoX's held completing solve, or a
+    // crediting Override that held): swapping the date under it would leave its credit (and any
+    // second it put in the mean) attributed to a date the player never saw. (Every overridden live
+    // card is covered too: both of its states lock, and the miss one reveals.)
+    // ★ IT IS THE LIVE QUESTION WHEREVER IT SITS. While you browse history the live question is not
+    // on screen — it waits as the `isLive` entry at the bottom of the forward stack — and it is
+    // regenerated THERE, by the same used-or-not test read off the flags it was parked with. The
+    // browsed card on screen is never touched. (This case used to bail outright, which left the
+    // waiting question alone: a date outside a year range that had just been narrowed, and — once a
+    // history could come back after a reload — a question the player had already read, returning
+    // with a fresh clock.)
     case 'REGEN_DATE': {
       const { nextDate } = action
-      // `liveCredited` joins the bail list for the reason the other terms are on it: you have USED
-      // this date. A credited card at the live edge is one that credited without advancing — AoX's
-      // held completing solve, or a crediting Override that held — and swapping the date under it
-      // would leave its credit (and any second it put in the mean) attributed to a date the player
-      // never saw. It replaces the narrower "holds a recorded time", which missed the same card when
-      // timing was not tracked. No in-app path reaches it (AoX only regenerates while idle), so this
-      // changes no behaviour; it closes the gap rather than trusting the component to. (Every
-      // overridden live card is covered too: both of its states lock, and the miss one reveals.)
-      if (state.countedWrong || state.revealed || state.backDepth > 0 || liveCredited(state))
+      if (state.backDepth === 0) {
+        if (state.countedWrong || state.revealed || liveCredited(state)) return state
+        return { ...state, date: nextDate, questionId: state.questionId + 1 }
+      }
+      const [live, ...ahead] = state.forwardStack
+      const ls = live?.liveState
+      if (!live?.isLive || !ls) return state
+      if (ls.countedWrong || ls.revealed || earnedCredit(live.btns, ls.revealed, ls.countedWrong))
         return state
-      return { ...state, date: nextDate, questionId: state.questionId + 1 }
+      const { btns, hasCredit, solveTime, meta } = live
+      return {
+        ...state,
+        forwardStack: [
+          { ...nextDate, isLive: true, btns, liveState: ls, hasCredit, solveTime, meta },
+          ...ahead,
+        ],
+        questionId: state.questionId + 1,
+      }
     }
 
     // ── LOCK_REVEAL ──────────────────────────────────────────────────────────────

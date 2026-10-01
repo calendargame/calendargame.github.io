@@ -372,10 +372,50 @@ describe('gameReducer — REGEN_DATE', () => {
     expect(regen(burned).date).toBe(DATE)
   })
 
-  it('never regenerates while browsing history', () => {
-    let s = answer(initEngine(DATE), C) // advance → stack has the prior Q
-    s = back(s) // backDepth > 0
-    expect(regen(s).date).toBe(s.date) // unchanged
+  // ★ WHILE BROWSING, the live question is not on screen — it waits at the bottom of the forward
+  // stack — and it is the one a regen is about. (The case used to bail outright, leaving the waiting
+  // question as it was: a date outside a just-narrowed year range, or — after a reload — a question
+  // the player had already read, back with a fresh clock.)
+  const OTHER = { y: 2031, m: 3, d: 9, _fmt: 'numeric-ymd', _jul: false }
+  const regenOther = (s) => gameReducer(s, { type: 'REGEN_DATE', nextDate: OTHER })
+
+  it('while browsing: the browsed card is untouched, and the UNUSED live question behind it is replaced', () => {
+    const s = back(answer(initEngine(DATE), C)) // one card of history, the live one (NEXT) untouched
+    const r = regenOther(s)
+    expect(r.date).toBe(s.date) // the card on screen: unchanged
+    expect(r.backDepth).toBe(1)
+    expect(r.stats).toBe(s.stats)
+    expect(r.questionId).toBe(s.questionId + 1) // the solve-timer restarts for the new question
+    const f = forward(r)
+    expect(f.date).toEqual(OTHER) // …and Forward now arrives at the new one
+    expect(f.persistBtns).toEqual({})
+    expect(f.locked).toBe(false)
+    expect(checkGameInvariants(r, false)).toEqual([])
+    expect(checkGameInvariants(f, false)).toEqual([])
+  })
+
+  it('while browsing: a live question that was USED (burned / revealed / credited) is kept', () => {
+    const played = answer(initEngine(DATE), C)
+    for (const use of [
+      (q) => answer(q, wOf(q)), // a wrong answer
+      (q) => reveal(q),
+      (q) => answer(q, cOf(q), { complete: true }), // a credit held on the live card
+    ]) {
+      const browsing = back(use(played))
+      expect(browsing.backDepth).toBe(1)
+      expect(regenOther(browsing)).toBe(browsing)
+    }
+  })
+
+  it('while browsing two cards deep: still the live question, at the bottom of the forward stack', () => {
+    let s = answer(initEngine(DATE), C)
+    s = answer(s, cOf(s))
+    s = back(back(s))
+    const r = regenOther(s)
+    expect(r.forwardStack).toHaveLength(2)
+    expect(r.forwardStack[1]).toBe(s.forwardStack[1]) // the browsed-past history card: untouched
+    expect(r.forwardStack[0]).toMatchObject({ ...OTHER, isLive: true })
+    expect(checkGameInvariants(r, false)).toEqual([])
   })
 })
 

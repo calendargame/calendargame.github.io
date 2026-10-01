@@ -11,6 +11,7 @@ import {
   useResetStatsConfirm,
   useMountedDataId,
   readParkedHistory,
+  restoredEngine,
   useParkedHistory,
 } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
@@ -37,6 +38,7 @@ import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { useBackButton } from '../components/useBackButton.js'
+import { parkedFlag } from '../engine/parkedHistory.js'
 
 // ============================================================
 // DeductionMode — the Deduction game mode on the shared engine (mode-untangle Step 4).
@@ -67,9 +69,23 @@ function DeductionMode({
 }: ModeProps) {
   const dedType = useModePrefs((s) => s.dedType),
     setDedType = useModePrefs((s) => s.setDedType) // persisted (mode-prefs store)
-  const [abCrossOnly, setAbCrossOnly] = useState(false)
-  const [julCrossOnly, setJulCrossOnly] = useState(false)
-  const [monthOnly1582, setMonthOnly1582] = useState(false)
+  // Each silo's HISTORY is kept for the browsing session (store/sessionHistory): parked per silo
+  // (useParkedHistory below), read back once here, keyed by the stats copy this screen is mounted on.
+  // Read FIRST, because the parks also carry this screen's three puzzle filters, and the filters
+  // decide what each engine draws.
+  const dataId = useMountedDataId()
+  const [parkedDay] = useState(() => readParkedHistory(dataId, 'dedDay', useJulian))
+  const [parkedMonth] = useState(() => readParkedHistory(dataId, 'dedMonth', useJulian))
+  const [parkedYear] = useState(() => readParkedHistory(dataId, 'dedYear', useJulian))
+  // ★ THE THREE PUZZLE FILTERS COME BACK WITH THE HISTORY. They are this screen's own state, saved
+  // nowhere else, and each engine's waiting puzzle was drawn under them — so a history restored
+  // without them left a filter's puzzle on screen under a filter button reading "off". Every silo
+  // parks the same three (they are one fact about the screen), so any silo that came back can supply
+  // them; parkedFlag accepts nothing but a real `true`.
+  const parkedUi = (parkedDay ?? parkedMonth ?? parkedYear)?.ui
+  const [abCrossOnly, setAbCrossOnly] = useState(() => parkedFlag(parkedUi, 'abCrossOnly'))
+  const [julCrossOnly, setJulCrossOnly] = useState(() => parkedFlag(parkedUi, 'julCrossOnly'))
+  const [monthOnly1582, setMonthOnly1582] = useState(() => parkedFlag(parkedUi, 'monthOnly1582'))
   const timingOff = useModePrefs((s) => s.dedTimingOff),
     setTimingOff = useModePrefs((s) => s.setDedTimingOff) // persisted; timing hidden by default (feeds all three engines)
   const scoringOff = useModePrefs((s) => s.dedScoringOff),
@@ -112,12 +128,27 @@ function DeductionMode({
 
   // Lifetime stats persist per sub-mode (Stage D1): each silo hydrates from its own saved slice
   // on mount and mirrors changes back to the store.
-  // …and each silo's HISTORY survives a reload (round 23 Q11): parked per silo when the page hides
-  // (useParkedHistory below), read back once here, keyed by the stats copy this screen is mounted on.
-  const dataId = useMountedDataId()
-  const [parkedDay] = useState(() => readParkedHistory(dataId, 'dedDay', useJulian))
-  const [parkedMonth] = useState(() => readParkedHistory(dataId, 'dedMonth', useJulian))
-  const [parkedYear] = useState(() => readParkedHistory(dataId, 'dedYear', useJulian))
+  // The date settings a puzzle is drawn under on this screen — ONE list, read by the parks (as the
+  // settings each waiting puzzle belongs to) and by the settings-close regen below. (The filters are
+  // parked beside it as the screen's own fields, and a filter change regenerates at once.)
+  const dateSettings = [
+    randomFormat,
+    dateFormat,
+    leapChance,
+    janFebChance,
+    julianChance,
+    minY,
+    maxY,
+    useJulian,
+  ]
+  const dateConfig = dateSettings.join('|')
+  // …and the question each silo was waiting on comes back, or is regenerated, by modeHooks'
+  // live-question rule.
+  const liveQuestion = (newDate: () => DedPuzzle) => ({
+    timingShown: !timingOff,
+    config: dateConfig,
+    newDate,
+  })
   const dayEng = useGameEngine({
     label: 'dedDay',
     genDate: genDay,
@@ -127,7 +158,11 @@ function DeductionMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.dedDay,
-    getInitialState: () => parkedDay?.engine ?? null,
+    getInitialState: () =>
+      restoredEngine(
+        parkedDay,
+        liveQuestion(() => genDay(minY, maxY)),
+      ),
   })
   const monthEng = useGameEngine({
     label: 'dedMonth',
@@ -138,7 +173,11 @@ function DeductionMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.dedMonth,
-    getInitialState: () => parkedMonth?.engine ?? null,
+    getInitialState: () =>
+      restoredEngine(
+        parkedMonth,
+        liveQuestion(() => genMonth(minY, maxY)),
+      ),
   })
   const yearEng = useGameEngine({
     label: 'dedYear',
@@ -149,11 +188,18 @@ function DeductionMode({
     saveStats,
     timingOff,
     getInitialStats: () => useProgress.getState().stats.dedYear,
-    getInitialState: () => parkedYear?.engine ?? null,
+    getInitialState: () =>
+      restoredEngine(
+        parkedYear,
+        liveQuestion(() => genYear(minY, maxY)),
+      ),
   })
-  useParkedHistory(dataId, 'dedDay', dayEng.state)
-  useParkedHistory(dataId, 'dedMonth', monthEng.state)
-  useParkedHistory(dataId, 'dedYear', yearEng.state)
+  const parkedScreen = { ui: { abCrossOnly, julCrossOnly, monthOnly1582 }, config: dateConfig }
+  const panelOpen = settingsOpen ?? false
+  const showing = (type: string) => visible && dedType === type
+  useParkedHistory(dataId, 'dedDay', dayEng.state, showing('day'), parkedScreen, panelOpen)
+  useParkedHistory(dataId, 'dedMonth', monthEng.state, showing('month'), parkedScreen, panelOpen)
+  useParkedHistory(dataId, 'dedYear', yearEng.state, showing('year'), parkedScreen, panelOpen)
   const eng = dedType === 'month' ? monthEng : dedType === 'year' ? yearEng : dayEng
   const { state, correct, overrideAvail, overridden } = eng
   // Android Back closes the Show-Codes panel of the ACTIVE mode (Q1). Gated on `visible` so only
@@ -279,15 +325,11 @@ function DeductionMode({
   // format / random-format / leap / Jan-Feb / Julian-chance / range / calendar change.
   // Defer the global-settings regen to the ⚙ popover CLOSE (Q2). The cross-toggles below stay
   // immediate — they're mode-LOCAL (toggled outside the popover), so they'd never see a close transition.
-  useSettingsCloseEffect(
-    settingsOpen ?? false,
-    [randomFormat, dateFormat, leapChance, janFebChance, julianChance, minY, maxY, useJulian],
-    () => {
-      dayEng.regenDate()
-      monthEng.regenDate()
-      yearEng.regenDate()
-    },
-  )
+  useSettingsCloseEffect(panelOpen, dateSettings, () => {
+    dayEng.regenDate()
+    monthEng.regenDate()
+    yearEng.regenDate()
+  })
   // Toggle-change regen: a relevant Deduction toggle regens the ACTIVE engine's puzzle (the
   // toggles only render in their own sub-mode, so the active engine is always the right one).
   useChangeEffect([abCrossOnly, julCrossOnly, monthOnly1582], () => eng.regenDate())

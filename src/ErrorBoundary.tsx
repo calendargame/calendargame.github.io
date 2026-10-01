@@ -81,6 +81,9 @@ interface ModeErrorBoundaryProps {
   children?: ReactNode
   active?: boolean
   mode?: string
+  // Called once when this mode's screen crashes — for anything the screen kept that would come back
+  // at its next mount and crash it again (a casual mode's parked history; src/main.tsx).
+  onCrash?: () => void
 }
 
 // Per-mode safety net. Each always-mounted mode component is wrapped in one of these so a
@@ -93,6 +96,8 @@ interface ModeErrorBoundaryProps {
 //   • keyed by the mode's reset key in App: Full Reset bumps that key, remounting this boundary
 //     fresh (clearing the error) along with the mode component — so Full Reset also recovers a
 //     crashed mode, on top of the explicit Reload button.
+//   • `onCrash`: the Reload button only recovers a mode whose crash does not come back with the
+//     page, so whatever the screen kept for its next mount is dropped the moment the crash is caught.
 // Uses the app's own theme classes (a logic crash doesn't take out the already-loaded CSS).
 export class ModeErrorBoundary extends Component<ModeErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ModeErrorBoundaryProps) {
@@ -112,6 +117,7 @@ export class ModeErrorBoundary extends Component<ModeErrorBoundaryProps, ErrorBo
       mode: this.props.mode,
       componentStack: info.componentStack,
     })
+    this.props.onCrash?.()
   }
 
   render() {

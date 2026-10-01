@@ -200,10 +200,12 @@ describe('switching presets, with the app running', () => {
   })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════
-  // A RUN IN PROGRESS IS NOT SAVED DATA, so it does not travel and it does not come back. The
-  // observable is Classic's history: after one answered question Back is offered and Override is
-  // armed; on the far side of a switch both must be dead, because the screen is a new one.
-  it('a run in progress does not survive the switch — in either direction', () => {
+  // A CASUAL HISTORY IS ONE PRESET'S, so it does not TRAVEL: the observable is Classic's history —
+  // after one answered question Back is offered and Override is armed; on the far side of a switch
+  // both must be dead, because the screen is a new one over another preset's data. It is not thrown
+  // away either: it is kept for the browsing session, per preset (store/sessionHistory), and is
+  // waiting when the player switches back. (tests/sessionHistory.dom pins that side in full.)
+  it('a history does not travel with the switch — and is waiting on the way back', () => {
     mountApp()
     pinReadableQuestions()
     pressNew()
@@ -213,21 +215,18 @@ describe('switching presets, with the app running', () => {
 
     const p2 = createPreset()
     openPreset(p2.id)
-    pinReadableQuestions()
-    pressNew()
     expect(isOffered(ctrl('<'))).toBe(false)
     expect(isOffered(ctrl('Override'))).toBe(false)
     expect(statValue('Score')).toBe('0/0')
 
-    // Back on preset 1 the STATS return from disk, but the run does not: a fresh, unanswered
-    // question, with nothing behind it.
+    // Back on preset 1 the STATS return from disk and the history returns with them: the answered
+    // card is behind the question that was waiting.
     openPreset(1)
-    pinReadableQuestions()
-    pressNew()
     expect(statValue('Score')).toBe('1/1')
-    expect(isOffered(ctrl('<'))).toBe(false)
-    expect(isOffered(ctrl('Override'))).toBe(false)
-    expect(readDate()).not.toEqual(answered)
+    expect(isOffered(ctrl('<'))).toBe(true)
+    expect(isOffered(ctrl('Override'))).toBe(true)
+    tap(ctrl('<'))
+    expect(readDate()).toEqual(answered)
   })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════

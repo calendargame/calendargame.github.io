@@ -43,7 +43,10 @@ import { openBrowsingSession } from './store/browsingSession.js'
 import { useSettings, readStoredDefaultMode, isDefaultMode } from './store/settings.js'
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
 import { discardSessionRounds } from './store/sessionRound.js'
-import { discardSessionHistories } from './store/sessionHistory.js'
+import { discardSessionHistories, discardSessionHistory } from './store/sessionHistory.js'
+import type { HistorySilo } from './store/sessionHistory.js'
+import { parkCasualHistories } from './modes/modeHooks.js'
+import { onPageHidden } from './lib/pageHidden.js'
 import { useStorageHealth, showStorageNotice } from './store/storageHealth.js'
 import { readGuidePlace, discardGuidePlace } from './store/sessionGuide.js'
 import { useModePrefs } from './store/modePrefs.js'
@@ -232,6 +235,21 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // AND the real stylesheet has applied) and the auto-update path (the Updating overlay replaces
     // it). Optional-chained: tests don't create #boot, and a repeat call is a no-op.
     const dismissBootSplash=()=>{document.getElementById('boot')?.remove();};
+
+    // ★ A CASUAL MODE SCREEN THAT CRASHES FORGETS WHAT IT PARKED (store/sessionHistory). A parked
+    // history is restored at the screen's next mount, and it outlives a reload — so a history that
+    // somehow broke its screen would come back after the error card's Reload and break it again, for
+    // the rest of the browsing session. The mode's error boundary calls this the moment it catches
+    // (ErrorBoundary's onCrash): the parks of the stats copy on screen — the only copy a mounted
+    // screen ever holds — for that mode's silos. The stats themselves are saved and untouched; the
+    // screen comes back with them and a fresh question.
+    const forgetCrashedHistory=(...silos: HistorySilo[])=>()=>{
+      const dataId=activeDataId(usePresets.getState());
+      for(const silo of silos)discardSessionHistory(dataId,silo);
+    };
+    const forgetClassicHistory=forgetCrashedHistory('classic');
+    const forgetFlashHistory=forgetCrashedHistory('flash');
+    const forgetDeductionHistory=forgetCrashedHistory('dedDay','dedMonth','dedYear');
 
     // The boot effects' shared "has the real stylesheet applied?" check: true once the preload-swapped
     // CSS link (vite.config.js bootCssPreload) has stamped __cssReady, or when no preload link exists
@@ -1663,12 +1681,23 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // the scroll-ownership layout effect never re-runs to seat the incoming reader at the top. Both
       // extra lines are gated on a real active-preset change, so a bare Amnesic toggle of the preset
       // you are already on is untouched.
+      // ★ AND THE CASUAL HISTORIES ARE PARKED FIRST (parkCasualHistories; store/sessionHistory argues
+      // the lifecycle). This is the one moment that can be done right: the outgoing screens are still
+      // mounted, each still holding the stats copy it was mounted on, so each parks under ITS OWN
+      // copy — and whoever caused the swap gets the last word after this returns (a preset delete
+      // removes the deleted preset's parks; an Amnesic toggle discards the guest copy's). The
+      // remounted screens then read whatever is parked for the INCOMING copy: its own history, as it
+      // was left earlier this session.
       useEffect(()=>usePresets.subscribe((s,prev)=>{
         if(activeDataId(s)===activeDataId(prev))return;
+        parkCasualHistories();
         if(s.activeId!==prev.activeId)switchMode(readSessionMode(s.activeId)??readStoredDefaultMode(s.activeId));
         remountScreens();
         if(s.activeId!==prev.activeId&&appScrollRef.current)appScrollRef.current.scrollTop=0;
       }),[remountScreens,switchMode]);
+      // …and the same park when the PAGE is going away or to the background — a reload, the app's
+      // own update reload, a tab the browser may discard (lib/pageHidden).
+      useEffect(()=>onPageHidden(parkCasualHistories),[]);
       // ★ COLD-OPEN AMNESIC RESEED (round-21 Q1; round 23 Q2 made it a GENUINE cold open only). An
       // Amnesic flag is a SESSION toggle: guest mode is temporary by construction, so when the app is
       // truly opened afresh EVERY preset's Amnesic flag is reset to that preset's own saved default
@@ -1964,12 +1993,15 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // Reset button never reaches here: it drives the mode's own idle transition, whose mirror
         // effect discards the park itself.
         discardSessionRounds(usePresets.getState().activeId);
-        // …and this preset's casual histories parked for a reload (round 23 Q11, store/sessionHistory),
-        // for the same reason: the remount below is of the SAME stats copy, and its new screens read
-        // their parked history in the render that comes before the old screens' unmount would have
-        // discarded it. (The progress reset above already makes any such history disagree with the
-        // saved stats, which refuses it — but a card answered with Save Stats off is parked over stats
-        // of zero, which a reset leaves matching, and a Full Reset must not rest on that.)
+        // …and this preset's parked casual histories (store/sessionHistory), for the same reason: the
+        // remount below is of the SAME stats copy, and its new screens read whatever is parked for it.
+        // Both copies', like the rounds above. (The progress reset already makes a played history
+        // disagree with the saved stats, which refuses it — but a card answered with Save Stats off
+        // is parked over stats of zero, which a reset leaves matching, and a Full Reset must not rest
+        // on that.) It is the LAST word on them: nothing parks between here and the remount — a
+        // screen parks when the page hides or the stats copy is swapped, never when it unmounts — so
+        // nothing can bring back what this just cleared. (resetSettings above may have flipped
+        // Amnesic, which parks the outgoing screens; that is before this line, and under it.)
         discardSessionHistories(usePresets.getState().activeId);
         // How to Play is in the six for its ONE piece of state, the open panel: it used to be
         // conditionally rendered, so leaving it dropped that for free — now that it stays mounted
@@ -2414,16 +2446,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
           <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="MoX" active={mode==="aox"}>
             <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
           </ModeErrorBoundary>
-          <ModeErrorBoundary key={"classic-"+classicResetKey} mode="Classic" active={mode==="classic"}>
+          <ModeErrorBoundary key={"classic-"+classicResetKey} mode="Classic" active={mode==="classic"} onCrash={forgetClassicHistory}>
             <ClassicMode visible={mode==="classic"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
           </ModeErrorBoundary>
-          <ModeErrorBoundary key={"flash-"+flashResetKey} mode="Flash" active={mode==="flash"}>
+          <ModeErrorBoundary key={"flash-"+flashResetKey} mode="Flash" active={mode==="flash"} onCrash={forgetFlashHistory}>
             <FlashMode visible={mode==="flash"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"blitz-"+blitzResetKey} mode="Blitz" active={mode==="blitz"}>
             <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
           </ModeErrorBoundary>
-          <ModeErrorBoundary key={"deduction-"+deductionResetKey} mode="Deduction" active={mode==="deduction"}>
+          <ModeErrorBoundary key={"deduction-"+deductionResetKey} mode="Deduction" active={mode==="deduction"} onCrash={forgetDeductionHistory}>
             <DeductionMode visible={mode==="deduction"} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} settingsOpen={settingsOpen} onFreshChange={setDeductionIsFresh}/>
           </ModeErrorBoundary>
           {/* Lookup is the one FIT-TO-SCREEN mode: its wrapper takes the screenful the flex column

@@ -1,5 +1,5 @@
 // store/sessionGuide.ts — How to Play's PLACE (its open section and how far down you had read), kept
-// across a RELOAD (round 23 Q11).
+// across a RELOAD.
 //
 // THE OWNER'S RULE (store/browsingSession): "only truly closing the app starts fresh." The guide
 // already held its place through every detour inside the app — it stays mounted (the open section is
@@ -8,12 +8,13 @@
 // every section closed. This keeps the two for the session's lifetime, and a real close still clears
 // them (the browser drops sessionStorage).
 //
-// ★ THE SAME LIFECYCLE AS A CASUAL MODE'S PARKED HISTORY (store/sessionHistory argues it in full):
-//   • WRITTEN WHEN THE PAGE IS HIDDEN — `pagehide` (every reload fires it) and `visibilitychange` →
-//     hidden (a backgrounded tab the browser may later discard fired that on its way out). Never on
-//     scroll: the offset is only needed when the page goes away, so a reader's scrolling costs
-//     nothing. GuidePage parks; App hands it the reading offset (main.tsx's readGuideOffset, the one
-//     place that knows it — live while the guide is on screen, remembered while it is not).
+// ★ ITS LIFECYCLE:
+//   • WRITTEN WHEN THE PAGE IS HIDDEN (lib/pageHidden) — `pagehide` (every reload fires it) and
+//     `visibilitychange` → hidden (a backgrounded tab the browser may later discard fired that on its
+//     way out). Never on scroll: the offset is only needed when the page goes away, so a reader's
+//     scrolling costs nothing. GuidePage parks; App hands it the reading offset (main.tsx's
+//     readGuideOffset, the one place that knows it — live while the guide is on screen, remembered
+//     while it is not).
 //   • RETIRED WHEN THE GUIDE UNMOUNTS — which a reload never does, and a crash onto the error card
 //     does (so a place that somehow broke the guide cannot come back and break it again).
 //   • AND DISCARDED BY main.tsx's remountScreens, the preset switch's and Full Reset's shared
