@@ -8,10 +8,11 @@
 // came to document opposite meanings for the same character.
 //
 // The two halves worth reading twice:
-//   • THE WCA HALF (regulation 9f1) must come through the rewrite bit-for-bit — truncTime drops the
-//     third decimal, fmtTime rounds it, and neither may drift a hundredth. The sweeps below assert
-//     the sub-minute output against the ORIGINAL expressions rather than against hand-written
-//     strings, so they would catch a re-implementation that merely looks equivalent.
+//   • THE WCA HALF (regulation 9f1) — truncTime drops the third decimal, fmtTime rounds it, and
+//     neither may drift a hundredth. The sweeps below assert the sub-minute output against an
+//     independent statement of each rule (toFixed's own rounding; the measured time's digits with
+//     the last two struck), so they would catch an implementation that merely looks equivalent —
+//     which is what truncTime's first one was.
 //   • THE CARRY, which is the trap the minutes shape introduced. Quantizing AFTER the split prints
 //     "1m 60.00s" for 119.999. Both formatters therefore reduce to whole hundredths first.
 //
@@ -94,21 +95,53 @@ describe('the minute/hour boundary carries correctly', () => {
   })
 })
 
-// ★ THE WCA HALF (regulation 9f1), asserted against the ORIGINAL expressions. Before the minutes
-// shape these were literally `(Math.floor(t * 100) / 100).toFixed(2) + 's'` and `t.toFixed(2) + 's'`;
-// the rewrite must not have moved a single hundredth below 60s.
+// ★ THE WCA HALF (regulation 9f1). fmtTime is asserted against its ORIGINAL expression
+// (`t.toFixed(2) + 's'`), which the minutes shape must not have moved a hundredth below 60s.
+// truncTime is NOT asserted against its original (`Math.floor(t * 100) / 100`), because that
+// expression was the bug: it truncated the double rather than the measured time, and showed a 0.29s
+// solve as "0.28s". It is asserted against the decimal digits of the time itself.
 describe('WCA truncation / rounding is preserved exactly (regulation 9f1)', () => {
   const sweep = []
   for (let c = 0; c < 6000; c += 7) sweep.push(c / 100) // every 0.07s across the sub-minute range
   for (const t of [0.29, 1.13, 8.07, 35.855, 59.994, 0.005, 0.004]) sweep.push(t)
 
-  it('truncTime still drops the third decimal, float quirks and all', () => {
-    for (const t of sweep) {
-      const wanted = `${(Math.floor(t * 100) / 100).toFixed(2)}s`
-      if (Math.floor(t * 100) < 6000) expect(truncTime(t)).toBe(wanted)
+  // The truncation, done on PAPER: write the time out to the 0.1 ms it was measured to and strike
+  // the last two digits. No floating-point arithmetic on the value at all.
+  const struck = (t) => {
+    const [whole, frac] = t.toFixed(4).split('.')
+    return `${Number(whole)}.${frac.slice(0, 2)}s`
+  }
+
+  it('truncTime drops the third decimal of the time that was MEASURED', () => {
+    for (const t of sweep) if (t < 60) expect(truncTime(t)).toBe(struck(t))
+    expect(truncTime(9.999)).toBe('9.99s')
+    expect(truncTime(35.855)).toBe('35.85s')
+  })
+
+  // ★ THE DEFECT, NAMED. 0.29 has no exact double — it is stored a hair below — so truncating the
+  // double printed "0.28s": a hundredth FASTER than the solve. One in every few hundredths has this
+  // shape, so the sweep is every hundredth there is under a minute.
+  it('a time that IS a whole number of hundredths displays as exactly that — never one faster', () => {
+    expect(truncTime(0.29)).toBe('0.29s')
+    for (let c = 0; c < 6000; c++) expect(truncTime(c / 100)).toBe(`${(c / 100).toFixed(2)}s`)
+  })
+
+  it('never displays a time faster than the measured hundredth, anywhere on the 0.1 ms grid', () => {
+    // Every 0.1 ms step across ten seconds, built the way a solve time is (engine/stats: a whole
+    // count of 0.1 ms, divided down to seconds). The displayed hundredths must be the count with
+    // its last two digits struck: never more, and never a hundredth less.
+    for (let k = 0; k < 100000; k += 3) {
+      const shown = truncTime(k / 10000)
+      expect(shown).toBe(
+        `${Math.floor(k / 10000)}.${String(Math.floor(k / 100) % 100).padStart(2, '0')}s`,
+      )
     }
-    // The float quirk itself, named: 0.29 * 100 is 28.999999999999996, so this truncates to 0.28.
-    expect(truncTime(0.29)).toBe('0.28s')
+  })
+
+  it('a time saved before the 0.1 ms grid — the same measurement with float noise on it — reads the same', () => {
+    expect(truncTime(126913.4 / 1000 - 123456.7 / 1000)).toBe('3.45s') // 3.4567 measured
+    expect(truncTime(0.28999999999999998)).toBe('0.29s')
+    expect(truncTime(1.1299999999999999)).toBe('1.13s')
   })
 
   it('fmtTime still rounds exactly as toFixed(2) rounds', () => {

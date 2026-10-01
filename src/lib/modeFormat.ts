@@ -2,6 +2,7 @@
 // the touch probe, and the time / accuracy formatters. Extracted verbatim from main.tsx (Q1 phase
 // 1) so the five mode screens can move into their own modules.
 import type { FormatId } from './format.js'
+import { SOLVE_TIME_UNITS_PER_SECOND } from '../engine/stats.js'
 
 // FORMAT_IDS / rollFormat live at module scope so App's genDate and every mode
 // component can stamp a date's ._fmt at generation time.
@@ -35,7 +36,7 @@ export const SLIDER_READOUT_WIDEST = fmtBlitzT(175) /* "2m 55s" */
 // Time display follows WCA convention (regulation 9f1): individual single times
 // (Last) are truncated to hundredths — the third decimal is dropped, never rounded.
 // Averages, medians, and bests are rounded to nearest hundredth (toFixed(2)).
-// truncTime drops the third decimal; fmtTime rounds via toFixed(2).
+// truncTime drops the third decimal (truncCentis); fmtTime rounds via toFixed(2) (roundCentis).
 //
 // ★ A TIME IS ALWAYS RENDERED AS A TIME — there is no ceiling and no special case, and the em dash
 // therefore means ONE thing: `t == null`, nothing recorded. Both formatters used to return the dash
@@ -81,10 +82,7 @@ const fmtCentis = (c: number) => {
 // it printed before the minutes shape existed. The proof case is on the boundary this change added:
 // (59.995).toFixed(2) is "59.99" — 59.995's double is a hair BELOW the decimal — while
 // 59.995 * 100 is 5999.500000000001, which rounds UP to 6000. Math.round would therefore turn a
-// 59.99s solve into "1m 0.00s". truncTime needs no such helper: Math.floor(t * 100) IS its old
-// expression's numerator, so its own float behaviour (0.29 * 100 = 28.999999999999996, so 0.29
-// truncates to "0.28s" — WCA truncation, floating point, and this app agreeing to be pessimistic)
-// is carried over untouched.
+// 59.99s solve into "1m 0.00s".
 // Exported (not just fmtTime-internal) so anything that needs to COMPARE two times at the same
 // precision the player sees them at — engine/aoxBest.ts's Best-record reconcile, specifically — can
 // reuse this exact quantizer instead of writing a second one that could silently disagree with it on
@@ -93,8 +91,20 @@ export const roundCentis = (t: number) => {
   const [whole, frac] = t.toFixed(2).split('.')
   return Number(whole) * 100 + Number(frac)
 }
-export const truncTime = (t: number | null) =>
-  t == null ? EM_DASH : fmtCentis(Math.floor(t * 100))
+// The TRUNCATING quantizer — whole hundredths with the third decimal dropped (regulation 9f1).
+// ★ IT TRUNCATES THE TIME THAT WAS MEASURED, NOT THE DOUBLE THAT STORES IT. A solve time is a whole
+// number of 0.1 ms (engine/stats' grid — the finest step the clock reports), and most of those have
+// no exact double: 0.29 is stored a hair BELOW 0.29, so the obvious Math.floor(t * 100) sees
+// 28.999999999999996 and prints "0.28s" — a hundredth FASTER than the solve that was measured,
+// which is the one direction a truncated time must never err in. (That expression shipped for
+// years, described as the app "agreeing to be pessimistic"; it was the opposite.) So the time is
+// put back on its grid first — an exact integer count of 0.1 ms — and the truncation is done on
+// that integer. A time saved before the grid existed is the same measurement with a subtraction's
+// float noise on it (3.456699999999997 for 3.4567), and lands on the same integer.
+const SOLVE_TIME_UNITS_PER_CENTI = SOLVE_TIME_UNITS_PER_SECOND / 100
+export const truncCentis = (t: number) =>
+  Math.floor(Math.round(t * SOLVE_TIME_UNITS_PER_SECOND) / SOLVE_TIME_UNITS_PER_CENTI)
+export const truncTime = (t: number | null) => (t == null ? EM_DASH : fmtCentis(truncCentis(t)))
 export const fmtTime = (t: number | null) => (t == null ? EM_DASH : fmtCentis(roundCentis(t)))
 // WCA-consistent accuracy formatter: when there's at least one wrong answer, floor (truncate) the
 // percentage so we never display "100.0%" for 9999/10000 (which rounds up under toFixed). Pure 100%
