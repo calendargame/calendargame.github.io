@@ -248,6 +248,73 @@ describe('a press that starts on the card and ends on the dim closes nothing', (
   })
 })
 
+// …and the other direction is the same rule: a press that began on the dim and was let go over the
+// card also arrives as a click on the scrim, and it used to close the popup — only where the press
+// STARTED was looked at.
+describe('a press that starts on the dim and ends on the card closes nothing', () => {
+  const pressOn = (el) => act(() => fireEvent.pointerDown(el))
+  // The press comes up over `over`; the click that follows lands on `clicked` (the nearest element
+  // holding both ends of the press).
+  const releaseOn = (over, clicked) =>
+    act(() => {
+      fireEvent.pointerUp(over)
+      fireEvent.click(clicked)
+    })
+
+  it('the popup stays; a real tap on the dim afterwards closes it', () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    const scrim = scrims()[0]
+    pressOn(scrim) // the press goes down on the dim…
+    releaseOn(modalCard('changelog'), scrim) // …and comes up over the card
+    expect(queryModalCard('changelog')).not.toBeNull()
+    pressOn(scrim)
+    releaseOn(scrim, scrim) // down and up on the dim
+    expect(queryModalCard('changelog')).toBeNull()
+  })
+
+  it('released on a control inside the card is the same', () => {
+    mountApp()
+    openSettings()
+    openModal('presets')
+    const scrim = scrims()[0]
+    pressOn(scrim)
+    releaseOn(screen.getByRole('textbox', { name: 'Preset name' }), scrim)
+    expect(queryModalCard('presets')).not.toBeNull()
+  })
+
+  it('a touch tap on the dim that wanders a few pixels still closes it', () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    const scrim = scrims()[0]
+    // A finger's events stay on the element it landed on, so every one of these is the scrim's.
+    act(() => {
+      fireEvent.pointerDown(scrim, { pointerType: 'touch', clientX: 20, clientY: 700 })
+      fireEvent.pointerMove(scrim, { pointerType: 'touch', clientX: 23, clientY: 702 })
+      fireEvent.pointerMove(scrim, { pointerType: 'touch', clientX: 25, clientY: 704 })
+      fireEvent.pointerUp(scrim, { pointerType: 'touch', clientX: 25, clientY: 704 })
+      fireEvent.click(scrim, { clientX: 25, clientY: 704 })
+    })
+    expect(queryModalCard('changelog')).toBeNull()
+  })
+
+  it('a press that came up over the card without becoming a click does not disarm the next tap', () => {
+    mountApp()
+    openSettings()
+    openModal('changelog')
+    const scrim = scrims()[0]
+    // A right-click on the card: down and up, and no click follows.
+    act(() => {
+      fireEvent.pointerDown(modalCard('changelog'), { button: 2 })
+      fireEvent.pointerUp(modalCard('changelog'), { button: 2 })
+    })
+    tap(scrim)
+    expect(queryModalCard('changelog')).toBeNull()
+  })
+})
+
 describe('focus goes into a popup and comes back out', () => {
   it('closing a popup returns the keyboard to the control that opened it', () => {
     mountApp()
