@@ -547,73 +547,85 @@ import BlitzMode from './modes/BlitzMode.jsx'
 
       const activeTheme=useSystem?(systemIsDark?darkTheme:lightTheme):manualTheme;
       useEffect(()=>{const mq=window.matchMedia("(prefers-color-scheme: dark)");const h=(e: MediaQueryListEvent)=>setSystemIsDark(e.matches);mq.addEventListener("change",h);return()=>mq.removeEventListener("change",h);},[]);
-      // ★★ THE STATUS BAR UNDER A MODAL (round 21; round 22; round 23) — the app's ONE account
-      // of how the phone's status-bar strip gets its colour. index.css's layout note points here rather
+      // ★★ THE STATUS BAR UNDER A POPUP — the app's ONE account of how the phone's status-bar strip
+      // (clock / wifi / battery) gets its colour. index.css and components/Popup point here rather
       // than keeping a second version; there used to be two, and they contradicted each other.
-      // THE DEFECT: a modal's scrim (`fixed inset-0 z-[60] bg-black/40`) dims the whole page but not
-      // the status bar (clock/wifi/battery), which the browser paints itself, so a bright theme-coloured
-      // strip sits above 40%-darker content — seen by the owner in the INSTALLED home-screen app on his
-      // iPhone.
-      // THREE ATTEMPTS, IN ORDER — read all three before trying a fourth:
-      //   1. Round 21 — <meta name="theme-color"> → the scrimmed colour. Changed nothing on the
-      //      owner's phone. Researched afterwards (round 22): Safari 26+ does not consult theme-color
-      //      at all — the top tint derives from the page itself (Apple Developer Forums thread 801239;
-      //      WebKit bug 301756) — and Apple never documented theme-color for home-screen apps in any
-      //      iOS version, so the premise was never established. The write STAYS (below), on its own
-      //      merits: Android Chrome tints its browser chrome and its installed-app status bar from it,
-      //      and Safari 15–18 read it in browser tabs.
-      //   2. Round 22 — <body>'s inline background-color → the scrimmed colour, on the strength of
-      //      WebKit bug 309956 (runtime body-background changes re-tint the standalone status bar) and
-      //      WebKit composing its "document background colour" html-then-body. Confirmed INERT on the
-      //      owner's installed app (2026-09-23) and DELETED in round 23 — its write, its test cases and
-      //      its containingBlockGuard allowlist entry all went with it.
-      //   3. Round 23 (THIS ONE) — <html>'s background → the scrimmed colour. ★ THE EVIDENCE it rests on,
-      //      answered by the owner on the installed app: CHANGING THE THEME IN ⚙ RE-TINTS THE STATUS BAR
-      //      LIVE. So a live channel exists and the earlier attempts fed it the wrong signal. The one
-      //      thing a theme change did that the modal path did not was re-stamp <html>'s background —
-      //      the modal path deliberately kept <html> on plain --tc — and <html> paints the CANVAS,
-      //      which body's background can never reach past (html always carries its own), which is
-      //      exactly why attempt 2 was inert.
-      // WHAT IS NOT VERIFIED: that attempt 3 fixes the owner's phone. A theme change also repaints
-      // everything else on screen, so the evidence narrows the channel without proving it is <html>.
-      // If this fails too, the next candidate is the fixed top bar's own background (the topmost
-      // fixed element at the status bar's edge, which sits UNDER the scrim at its undimmed --bg1). Do
-      // not re-add a claim here that has not been seen on a device.
-      // ⚠ WHY DIMMING <html> IS INVISIBLE, which it was NOT until this same change: the canvas used to
-      // BE the page background — #root was transparent and body's own box is empty (every child out of
-      // flow, zero height), so the canvas <html> paints was what showed behind the whole app, and
-      // dimming it under a scrim would have doubled the dim across the screen (tc × 0.6 × 0.6 — on the
-      // light themes, plainly visible). index.css now paints the page background on #root itself
-      // (`#root{…background:var(--bg1)}`; --bg1 equals --tc in every theme), and #root is
-      // position:fixed over the whole layout viewport (no viewport-fit=cover, so no safe-area strip
-      // falls outside it). So the canvas sits BEHIND an opaque #root and shows nowhere in normal use:
-      // html,body{overflow:hidden;overscroll-behavior:none} leaves no rubber band to uncover it, and a
-      // modal cannot exist while #boot's opaque z-100 splash is still up. And anywhere it could ever
-      // peek out with a modal up, it wears scrimTheme(tc) — exactly what the scrim over the page
-      // background composites to — so it would read as more scrim, not as a seam.
-      // ★ THE SIGNAL is the app's stack of open things (components/overlayStack): "is any popup
-      // open?", the same answer the popups' own dim is drawn from. However many are stacked, exactly
-      // one of them paints the scrim (the top one), so one dim's worth of tint is right at every
-      // depth, and it lifts only when the LAST popup closes.
+      // THE DEFECT: a popup's scrim (`fixed inset-0 z-[60] bg-black/40`) dims the whole page but not
+      // the status bar, which the phone paints itself — so a bright strip sat above 40%-darker
+      // content, in the INSTALLED home-screen app on the owner's iPhone.
+      //
+      // ★ WHAT iOS ACTUALLY READS — ESTABLISHED ON THE DEVICE, 2026-10-01, AFTER THREE ROUNDS OF
+      // GUESSING. A web app cannot SET the status-bar colour; the phone picks it by looking at the
+      // page, and Apple documents nowhere what it looks at. So a diagnostic painted every candidate a
+      // DIFFERENT vivid colour at once, on the real app's own elements, in the installed app, and the
+      // owner read the answer off the bar. Every line below is a result from that phone:
+      //   • a new SOLID strip fixed at the very top, ABOVE the scrim ……… the bar took ITS colour
+      //     (a 14px one, and one as tall as the top bar — where the bar "blended smoothly into the
+      //     top of the page"; and with all six candidates painted at once the strip's colour won)
+      //   • the theme-color meta tag (set, and removed-and-re-added) ……… no effect
+      //   • <html>'s background ……………………………………………………………… no effect
+      //   • <body>'s background ……………………………………………………………… no effect
+      //   • #root's background (a solid, fixed, full-screen layer) …………… no effect
+      //   • the top bar's background ……………………………………………………… no effect
+      //   • the scrim alone (what the app did) ………………………………… "full bright white"
+      // THE RULE THAT FITS ALL OF IT: the bar takes the colour of the TOPMOST fixed layer touching the
+      // top edge of the screen, AND ONLY IF THAT LAYER IS SOLID. With a popup up that layer is the
+      // scrim, which is see-through — so the phone gets no colour from it and falls back to a bright
+      // default, and it consults NOTHING underneath (the top bar, #root, <html> and <body> were each
+      // painted under the scrim and each ignored). With no popup the topmost solid layer at the top
+      // edge is the top bar, which is why a theme change has always re-tinted the bar live — and why
+      // that observation, true as it was, pointed at the wrong element for a whole round.
+      //
+      // THE FIX: while a popup is up, the top popup's scrim carries a solid strip along its top edge
+      // in exactly the colour the dimmed top bar already shows there (components/Popup draws it;
+      // index.css's `.status-bar-dim` is its geometry). It is invisible on the page — same colour as
+      // what is under it — and it is the topmost solid layer at the top edge, so the bar matches the
+      // dimmed page. This effect's only part in it is the COLOUR: `--status-dim` below.
+      // ⚠ WHAT IS PROVEN AND WHAT IS NOT. Proven on the device: a solid strip on <body>, above the
+      // scrim, 14px or taller. The shipped strip differs in three ways the diagnostic did not cover —
+      // it lives INSIDE the scrim (so a card can draw over it and a tap on it is a tap on the dim), it
+      // is 1rem tall, and its colour arrives through a custom property. Until the owner has confirmed
+      // THIS strip on his phone, treat those three as the first suspects if the bar does not dim.
+      //
+      // THE THREE ATTEMPTS THAT FED IT THE WRONG THING — kept because each LOOKED right, and a fourth
+      // guess would have looked right too. Do not add a mechanism here that has not been seen on a
+      // device; build a diagnostic instead (the one that settled this is public/sbtest.js, first shipped
+      // to the test site in v2.27.1 — in git history once it is removed).
+      //   1. Round 21 — <meta name="theme-color"> → the scrimmed colour. Never consulted by the
+      //      installed iOS app (above). The write STAYS, on its own merits: Android Chrome tints its
+      //      browser chrome and its installed-app status bar from it, and Safari 15–18 read it in
+      //      browser tabs. (Neither of those has been checked on a device by this project.)
+      //   2. Round 22 — <body>'s inline background-color → the scrimmed colour, on the strength of a
+      //      WebKit bug report about runtime body-background changes. Inert; deleted in round 23.
+      //   3. Round 23 (v2.27.0) — <html>'s background → the scrimmed colour, with #root made opaque so
+      //      the dimmed canvas could not show through the page. It rested on "a theme change re-tints
+      //      the bar live, and re-stamping <html> is the one thing a theme change does that a popup does
+      //      not" — but a theme change also recolours the top bar, which is what the phone was reading.
+      //      Inert; the dim and the opaque #root that existed only to hide it are both gone.
+      //
+      // ★ ONE STRIP AT ANY DEPTH: only the TOP popup paints the dim, and the strip rides with the dim,
+      // so however many popups are stacked there is exactly one of each, and both lift when the LAST
+      // popup closes. The theme-color tag follows the same answer — "is any popup open?", asked of
+      // the app's stack of open things (components/overlayStack).
       const anyModalOpen=usePopupOpen();
       useEffect(()=>{
         document.documentElement.setAttribute("data-theme",activeTheme);
         const tc=getComputedStyle(document.documentElement).getPropertyValue("--tc").trim();
-        // tc is '' before the stylesheet applies (tests/dev first pass) → leave both boot stamps as
+        // tc is '' before the stylesheet applies (tests/dev first pass) → leave the boot stamps as
         // index.html's boot script wrote them.
         if(!tc)return;
-        // Both status-bar signals — the scrimmed colour while any modal is up, plain --tc otherwise
-        // (the ★★ note above says which platform reads which). ONE value, computed from the CURRENT
-        // theme on every pass: the effect keys on activeTheme as well as anyModalOpen, so a theme
-        // change under an open popup (Use System Settings following the OS at sunset) re-dims to the
-        // new theme rather than restoring or keeping the old one.
-        // <html>'s stamp also has a job of its own: index.html's boot script stamped the saved theme's
-        // colour on it so no pre-stylesheet frame ever paints white, and without this re-stamp a
-        // runtime theme switch would leave the canvas at the stale boot colour.
-        const statusTint=anyModalOpen?scrimTheme(tc):tc;
+        // <html>'s background is the PAGE background (index.css: nothing else paints one). index.html's
+        // boot script stamped the saved theme's colour on it so no pre-stylesheet frame ever paints
+        // white; without this re-stamp a runtime theme switch would leave the page at the boot colour.
+        document.documentElement.style.background=tc;
+        // The colour the status-bar strip wears: the theme colour through ONE 40% dim, which is what
+        // the top bar under the scrim composites to. Written on every pass, popup or not, so it is
+        // already right when a popup opens and it follows a theme change made under an open one (Use
+        // System Settings following the OS at sunset).
+        const dimmed=scrimTheme(tc);
+        document.documentElement.style.setProperty("--status-dim",dimmed);
         const meta=document.querySelector("meta[name='theme-color']");
-        if(meta)(meta as HTMLMetaElement).content=statusTint;
-        document.documentElement.style.background=statusTint;
+        if(meta)(meta as HTMLMetaElement).content=anyModalOpen?dimmed:tc;
       },[activeTheme,anyModalOpen]);
       // The portrait lock, the non-Android half: the manifest's orientation:'portrait'
       // (vite.config.js webManifest) hard-locks installs only on Android, so on every platform

@@ -86,12 +86,13 @@ const rootChainClasses = [
 
 // The JS half. Rather than enumerate banned property names (which dates the moment CSS adds
 // another containing-block trigger), pin the WHOLE SET of inline style properties the app ever
-// writes to <html> / <body>: two, both harmless. Anything new has to come here and be justified.
-//   • background — <html>'s theme stamp (index.html's boot script, App's theme effect), which App
-//                  also dims to the scrimmed colour while a modal is up (round 23, the
-//                  status-bar signal argued at App's theme effect).
-//   • --bar-h    — the top bar's measured height, a custom property on <html>.
-const ALLOWED_INLINE_PROPS = ['background', '--bar-h']
+// writes to <html> / <body>: three, all harmless. Anything new has to come here and be justified.
+//   • background   — <html>'s theme stamp (index.html's boot script, App's theme effect): the
+//                    page background itself, always the plain theme colour.
+//   • --bar-h      — the top bar's measured height, a custom property on <html>.
+//   • --status-dim — the colour of the status-bar strip a popup's scrim carries, a custom
+//                    property on <html> (the account is at App's theme effect).
+const ALLOWED_INLINE_PROPS = ['background', '--bar-h', '--status-dim']
 const srcFiles = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory()

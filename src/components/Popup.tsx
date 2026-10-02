@@ -23,8 +23,14 @@ import { isTopPopup, usePopupLayer } from './overlayStack.js'
 //     neither does one that started on the dim and was let go over the card.
 //   • ONE DIM, HOWEVER MANY POPUPS ARE OPEN. Only the top popup's scrim paints it, so it always sits
 //     directly under the card in front: the page is darkened once, and a popup that has another
-//     over it is darkened with the page — it reads as waiting, not as a second live card. It is also
-//     why src/main.tsx's status-bar tint is right for any depth: one dim's worth, always.
+//     over it is darkened with the page — it reads as waiting, not as a second live card.
+//   • THE STATUS-BAR STRIP, which rides with that one dim: a solid sliver along the very top of the
+//     top popup's scrim, in the colour the dimmed page already shows there. It is what the phone's
+//     status bar takes its colour from while a popup is up. ★ The whole account — what iOS reads,
+//     how that was finally established on a device, and the three attempts that fed it the wrong
+//     thing — is the ★★ note above App's theme effect in src/main.tsx. Here it is only two rules:
+//     the TOP popup draws it (so there is exactly one, at any depth), and a tap on it is a tap on
+//     the dim.
 //   • FOCUS, BOTH WAYS. The top popup holds the keyboard: its dialog is focused when it opens, and
 //     again whenever the popup above it closes without handing focus back inside it. On close,
 //     focus returns to whatever held it when this popup opened — a control in the popup or the ⚙
@@ -74,6 +80,11 @@ export default function Popup({
   //     on the element it landed on — so a tap on the dim that wanders a few pixels still ends "on
   //     the dim", and a finger that travels further than a tap is not sent as a click at all.
   const pressOnCardRef = useRef(false)
+  // Is this event ON THE DIM — the scrim itself, or the status-bar strip lying along its top edge
+  // (which is part of the dim: same colour, and nothing a player could tell apart from it)?
+  const isDim = (e: { target: EventTarget; currentTarget: EventTarget }) =>
+    e.target === e.currentTarget ||
+    (e.target instanceof Element && e.target.hasAttribute('data-status-bar-dim'))
   // ★ KEEP THE KEYBOARD WHILE ON TOP: focus arriving anywhere outside this popup comes back to its
   // dialog. The stack is asked at the moment of the event, not the `top` this render saw: when a
   // second popup opens over this one, it takes focus before React has re-rendered this one as "no
@@ -152,18 +163,19 @@ export default function Popup({
       role="presentation"
       className={top ? `${MODAL_SCRIM_CLASS} ${MODAL_DIM_CLASS}` : MODAL_SCRIM_CLASS}
       onPointerDown={(e) => {
-        pressOnCardRef.current = e.target !== e.currentTarget
+        pressOnCardRef.current = !isDim(e)
       }}
       onPointerUp={(e) => {
-        if (e.target !== e.currentTarget) pressOnCardRef.current = true
+        if (!isDim(e)) pressOnCardRef.current = true
       }}
       onClick={(e) => {
         const onCard = pressOnCardRef.current
         pressOnCardRef.current = false
-        if (e.target === e.currentTarget && !onCard) onDismiss()
+        if (isDim(e) && !onCard) onDismiss()
       }}
       onKeyDown={trapModalTab}
     >
+      {top && <div data-status-bar-dim className="status-bar-dim" />}
       {children}
     </div>,
     document.getElementById('root')!,
