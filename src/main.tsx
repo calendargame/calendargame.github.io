@@ -581,16 +581,24 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // index.css's `.status-bar-dim` is its geometry). It is invisible on the page — same colour as
       // what is under it — and it is the topmost solid layer at the top edge, so the bar matches the
       // dimmed page. This effect's only part in it is the COLOUR: `--status-dim` below.
-      // ⚠ WHAT IS PROVEN AND WHAT IS NOT. Proven on the device: a solid strip on <body>, above the
-      // scrim, 14px or taller. The shipped strip differs in three ways the diagnostic did not cover —
-      // it lives INSIDE the scrim (so a card can draw over it and a tap on it is a tap on the dim), it
-      // is 1rem tall, and its colour arrives through a custom property. Until the owner has confirmed
-      // THIS strip on his phone, treat those three as the first suspects if the bar does not dim.
+      // ★ CONFIRMED ON THE OWNER'S PHONE (v2.27.2, the installed app, 2026-10-01): "yes it finally
+      // works… And no visual band at the top." The diagnostic proved a solid strip on <body>, above
+      // the scrim, 14px or taller; the shipped strip differs in three ways — it lives INSIDE the scrim
+      // (so a card can draw over it and a tap on it is a tap on the dim), it is 1rem tall, and its
+      // colour arrives through a custom property — and that confirmation covers all three.
+      // ⚠ ONE THING IT CANNOT FIX: the bar follows the page by a split second. The phone re-reads the
+      // page a moment after it changes and eases the bar to the new colour; nothing a page does makes
+      // it read sooner. Fading the dim in so the two move together was offered and DECLINED by the
+      // owner — he does not want how popups appear to change for it.
+      // ⚠ WHAT FOLLOWS FOR ANYTHING NEW: a full-screen see-through layer over the page (another kind
+      // of overlay, a drag layer, a toast backdrop) becomes the topmost fixed layer at the top edge
+      // and will turn the bar bright exactly as the scrim did, unless it carries this same strip.
       //
       // THE THREE ATTEMPTS THAT FED IT THE WRONG THING — kept because each LOOKED right, and a fourth
       // guess would have looked right too. Do not add a mechanism here that has not been seen on a
-      // device; build a diagnostic instead (the one that settled this is public/sbtest.js, first shipped
-      // to the test site in v2.27.1 — in git history once it is removed).
+      // device; build a diagnostic instead (the one that settled this is public/sbtest.js in git
+      // history, commit 1326cf4 — v2.27.1, test site only: one script, loaded only under
+      // /test_version/, that painted each candidate a different colour for a few seconds).
       //   1. Round 21 — <meta name="theme-color"> → the scrimmed colour. Never consulted by the
       //      installed iOS app (above). The write STAYS, on its own merits: Android Chrome tints its
       //      browser chrome and its installed-app status bar from it, and Safari 15–18 read it in
@@ -2594,15 +2602,6 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const rootEl = typeof document !== "undefined" ? document.getElementById("root") : null;
     if (rootEl) createRoot(rootEl).render(<ErrorBoundary><App/></ErrorBoundary>);
 
-    // ⚠ TEMPORARY — the status-bar diagnostic (public/sbtest.js; its header says why it exists).
-    // TEST SITE ONLY: the path check means the live site never requests the file, and a test run
-    // (path "/") never does either. DELETE this block and public/sbtest.js together once the owner
-    // has reported what his iPhone's status bar does.
-    if (rootEl && import.meta.env.PROD && window.location.pathname.startsWith("/test_version/")) {
-      const sbTest = document.createElement("script");
-      sbTest.src = `${import.meta.env.BASE_URL}sbtest.js`;
-      document.head.appendChild(sbTest);
-    }
 
     // Real-user error reporting. DEPLOYED builds only. This flag is the BUILD-time half —
     // import.meta.env.PROD is false in `vite dev`, so dev never reports — but it is true for a

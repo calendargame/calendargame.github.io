@@ -85,6 +85,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-02',
+    items: [
+      'The iPhone status bar now dims along with the rest of the screen when a popup opens in the app installed on your home screen, and brightens again when it closes. It follows a split second behind the page — that part is the phone’s doing.',
+      'On a Windows computer, text on the page is drawn the way it was before the last update again, matching the text in the ⚙ menu and popups.',
+    ],
+  },
+  {
     date: '2026-10-01',
     items: [
       'Rotate Dots, in ⚙ Settings → Display, now has three choices: Standard, 45° CCW and 90° CCW. At 45° the dots are a little smaller so the turned pattern fits; Standard and 90° are exactly as they were. Your choice carries over to your saved defaults and to every preset.',
@@ -230,15 +237,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Lookup now keeps your 100 most recent dates instead of 20, and once there are two or more the History heading shows how many are saved. Older ones still drop off the bottom on their own.',
       'Settings now reads properly with a screen reader: the four On/Off switches and the two Year Range boxes each say which setting they belong to. Before this they had no name of their own, so they all announced alike.',
       'Fixed: on a very short window — or zoomed a long way in — the Save/View defaults box could push its own title and buttons off screen where you could not reach them. It now fits the screen and scrolls inside itself.',
-    ],
-  },
-  {
-    date: '2026-08-07',
-    items: [
-      'In Settings, Leap Year Chance and Jan/Feb Chance on Leap Years now come before the Julian Calendar settings, so the ones most people change sit nearer the top. How to Play covers them in the same new order.',
-      'The mode menu no longer closes itself when the page scrolls — including a scroll that was already gliding when you opened it. Choosing a mode, tapping the page, pressing Esc or going Back all still close it.',
-      'After an update, the brief "Updating" screen now always plays out fully, and the launch straight afterwards goes in without the usual opening pause.',
-      'Fixed: a press on the settings gear or the mode menu button that the browser interrupts no longer opens the menu and shuts it again straight away.',
     ],
   },
 ]
