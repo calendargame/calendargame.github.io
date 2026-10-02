@@ -2582,6 +2582,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const rootEl = typeof document !== "undefined" ? document.getElementById("root") : null;
     if (rootEl) createRoot(rootEl).render(<ErrorBoundary><App/></ErrorBoundary>);
 
+    // ⚠ TEMPORARY — the status-bar diagnostic (public/sbtest.js; its header says why it exists).
+    // TEST SITE ONLY: the path check means the live site never requests the file, and a test run
+    // (path "/") never does either. DELETE this block and public/sbtest.js together once the owner
+    // has reported what his iPhone's status bar does.
+    if (rootEl && import.meta.env.PROD && window.location.pathname.startsWith("/test_version/")) {
+      const sbTest = document.createElement("script");
+      sbTest.src = `${import.meta.env.BASE_URL}sbtest.js`;
+      document.head.appendChild(sbTest);
+    }
+
     // Real-user error reporting. DEPLOYED builds only. This flag is the BUILD-time half —
     // import.meta.env.PROD is false in `vite dev`, so dev never reports — but it is true for a
     // locally-SERVED production build too, so initObservability() adds the runtime half and refuses
