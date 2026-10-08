@@ -422,6 +422,101 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     })
   })
 
+  // ── NEVER HALF A CHARACTER ─────────────────────────────────────────────────────────────────
+  // What a player calls one character can be several of the units a string is counted in: an emoji
+  // is two, a flag is two emoji-sized letters, a family is three people joined by invisible
+  // joiners, an accent can ride behind its letter. Trimming by the unit used to keep the front half
+  // of one — a lone half of an emoji measures narrow, "fits", and was saved into the registry.
+  describe('what is trimmed is whole characters — an emoji, a flag, a family, an accented letter', () => {
+    const GRIN = '\u{1F600}'
+    const FAMILY = '\u{1F468}‍\u{1F469}‍\u{1F467}'
+    const FLAG = '\u{1F1EF}\u{1F1F5}'
+    const THUMB_LIGHT = '\u{1F44D}\u{1F3FB}'
+    const THUMB_MEDIUM = '\u{1F44D}\u{1F3FD}'
+    const E_ACUTE = 'é'
+    // As a real font has it, near enough: an emoji is two letters wide, a joiner is nothing, an
+    // accent adds a little, and HALF an emoji (which no font has a picture for) is one letter.
+    const emojiWidths = (ch) =>
+      ch === '‍' ? 0 : ch === '́' ? 0.5 : ch.codePointAt(0) > 0xffff ? 2 : 1
+    const LONE_HALF = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+
+    it('an emoji that does not fit is refused whole — never its first half', () => {
+      const restore = installFakeCanvas(emojiWidths)
+      mountNameCell(30) // 6 letters: "Weeke" and one more, and an emoji is two
+      const typed = capCandidateToNameRoom(`Weeke${GRIN}`, 'Weeke', false)
+      expect(typed).toEqual({ text: 'Weeke', capped: true })
+      expect(typed.text).not.toMatch(LONE_HALF)
+      // …pasted three at a time into room for one and a half, one whole emoji is kept.
+      expect(capCandidateToNameRoom(`Wee${GRIN}${GRIN}${GRIN}`, 'Wee', false)).toEqual({
+        text: `Wee${GRIN}`,
+        capped: true,
+      })
+      // …and in the middle of a name, where the half used to be left in front of the tail.
+      expect(capCandidateToNameRoom(`We${GRIN}eke`, 'Weeke', false)).toEqual({
+        text: 'Weeke',
+        capped: true,
+      })
+      restore()
+    })
+
+    it('a family is all of its people or none of them', () => {
+      const restore = installFakeCanvas(emojiWidths)
+      mountNameCell(30) // "We" and four letters: two of the three people would fit
+      expect(capCandidateToNameRoom(`We${FAMILY}`, 'We', false)).toEqual({
+        text: 'We',
+        capped: true,
+      })
+      restore()
+    })
+
+    it('a flag is both of its letters or neither', () => {
+      const restore = installFakeCanvas(emojiWidths)
+      mountNameCell(30) // "Week" and two letters: one of the flag's two
+      expect(capCandidateToNameRoom(`Week${FLAG}`, 'Week', false)).toEqual({
+        text: 'Week',
+        capped: true,
+      })
+      restore()
+    })
+
+    it('an accented letter is not kept with its accent taken off', () => {
+      const restore = installFakeCanvas(emojiWidths)
+      mountNameCell(30) // "Weeke" and one letter — but not one letter and its accent
+      expect(capCandidateToNameRoom(`Weeke${E_ACUTE}`, 'Weeke', false)).toEqual({
+        text: 'Weeke',
+        capped: true,
+      })
+      restore()
+    })
+
+    it('what was typed is found between whole characters, not between the halves two of them share', () => {
+      // The two thumbs differ only in their LAST unit, so comparing unit by unit put the start of
+      // the paste inside the first thumb's skin tone.
+      const restore = installFakeCanvas(emojiWidths)
+      mountNameCell(30) // one thumb is four letters wide: room for one, not two
+      const pasted = capCandidateToNameRoom(`${THUMB_MEDIUM}${THUMB_LIGHT}`, THUMB_LIGHT, false)
+      expect(pasted).toEqual({ text: THUMB_LIGHT, capped: true })
+      restore()
+    })
+
+    it('a stored name that already holds half an emoji is left exactly as it is', () => {
+      // An older build could save one. Nothing rewrites stored text: the half is a character of
+      // its own here, kept where it is while the edit around it is judged as usual.
+      const restore = installFakeCanvas(emojiWidths)
+      mountNameCell(30)
+      const OLD = 'Weeke\uD83D'
+      expect(capCandidateToNameRoom('Weke\uD83D', OLD, false)).toEqual({
+        text: 'Weke\uD83D',
+        capped: false,
+      })
+      expect(capCandidateToNameRoom(`W${GRIN}eeke\uD83D`, OLD, false)).toEqual({
+        text: OLD,
+        capped: true,
+      })
+      restore()
+    })
+  })
+
   // ── A NAME THAT IS ALREADY LONGER THAN THE ROOM ───────────────────────────────────────────
   // It can exist: made on a wider screen, or under an older build's looser limit. It is stored as
   // it is and never cut for being touched — `previous` is what the field held before the edit.

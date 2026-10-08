@@ -147,20 +147,35 @@ export const fitsWithinWidth = (measuredWidthPx: number, budgetPx: number): bool
 const fitsEveryRoom = (text: string, rooms: readonly NameRoom[]): boolean =>
   rooms.every((room) => fitsWithinWidth(measureTextWidthPx(text, room.font), room.widthPx))
 
+// ── WHAT ONE CHARACTER IS ─────────────────────────────────────────────────────────────────────
+//
+// ★ EVERYTHING BELOW CUTS AND COMPARES TEXT BY THE CHARACTER A PLAYER SEES, NEVER BY THE UNIT A
+// STRING IS COUNTED IN. They are not the same thing: an emoji is two units, a flag is two
+// emoji-sized letters, a family is several people held together by invisible joiners, a skin tone
+// or an accent rides behind the character it changes. Cutting by the unit kept the front half of
+// one — and half an emoji has no picture, measures narrow, "fits", and was saved into the registry
+// as a broken character. `Intl.Segmenter` is the platform's own answer to "where does one
+// character end", so a name is taken apart into those and only ever put back together from whole
+// ones. (A half that is ALREADY in a stored name, from a build that could make one, comes out as a
+// character of its own and is left where it is: nothing here rewrites text the player did not
+// touch.)
+const characterSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+const charactersOf = (text: string): string[] =>
+  Array.from(characterSegmenter.segment(text), ({ segment }) => segment)
+
 /**
  * Given a candidate that does NOT fit, find the longest PREFIX that does — the same shape as a
- * native `maxLength` truncating an over-length paste rather than refusing the whole edit. A plain
- * character-by-character trim rather than a binary search: preset names are short by the time this
- * ever runs (store/presets' MAX_PRESET_NAME is the outer bound on anything reaching this function
- * at all), so the loop is cheap, and unlike a binary search over a proportional font it never has
- * to reason about whether width is monotonic in some clever partial way — it just is what it is.
+ * native `maxLength` truncating an over-length paste rather than refusing the whole edit — cut
+ * between whole characters (above). A plain character-by-character trim rather than a binary
+ * search: preset names are short by the time this ever runs (store/presets' MAX_PRESET_NAME is the
+ * outer bound on anything reaching this function at all), so the loop is cheap, and unlike a binary
+ * search over a proportional font it never has to reason about whether width is monotonic in some
+ * clever partial way — it just is what it is.
  */
 export function fitTextToRooms(text: string, rooms: readonly NameRoom[]): string {
-  let fitted = text
-  while (fitted.length > 0 && !fitsEveryRoom(fitted, rooms)) {
-    fitted = fitted.slice(0, -1)
-  }
-  return fitted
+  const characters = charactersOf(text)
+  while (characters.length > 0 && !fitsEveryRoom(characters.join(''), rooms)) characters.pop()
+  return characters.join('')
 }
 
 // ── WHAT KIND OF EDIT THIS IS ─────────────────────────────────────────────────────────────────
@@ -169,22 +184,27 @@ export function fitTextToRooms(text: string, rooms: readonly NameRoom[]): string
 // new characters put in somewhere — a typed letter, a paste at the cursor. Everything else (a
 // deletion, a selection typed or pasted over) takes something away. The cap treats the two
 // differently, twice over (capCandidateToNameRoom), so the question is asked in one place. `null`
-// when the edit is not an insertion.
+// when the edit is not an insertion. The three parts are lists of whole characters: two emoji can
+// share their first units, and a split found unit by unit would land inside one of them.
 interface Insertion {
-  head: string
-  inserted: string
-  tail: string
+  head: string[]
+  inserted: string[]
+  tail: string[]
 }
 const asInsertion = (previous: string, candidate: string): Insertion | null => {
-  if (candidate.length <= previous.length) return null
+  const before = charactersOf(previous)
+  const after = charactersOf(candidate)
+  if (after.length <= before.length) return null
   let head = 0
-  while (head < previous.length && previous[head] === candidate[head]) head++
-  const tail = previous.length - head
-  if (tail > 0 && previous.slice(head) !== candidate.slice(-tail)) return null
+  while (head < before.length && before[head] === after[head]) head++
+  const tail = before.length - head
+  for (let i = 1; i <= tail; i++) {
+    if (before[before.length - i] !== after[after.length - i]) return null
+  }
   return {
-    head: candidate.slice(0, head),
-    inserted: candidate.slice(head, candidate.length - tail),
-    tail: candidate.slice(candidate.length - tail),
+    head: after.slice(0, head),
+    inserted: after.slice(head, after.length - tail),
+    tail: after.slice(after.length - tail),
   }
 }
 
@@ -223,9 +243,9 @@ export interface CandidateResult {
  * so there is nothing here to get stuck: this function remembers nothing between calls.
  *
  * ★ AN INSERTION THAT DOES NOT FIT LOSES ITS OWN END, NEVER THE NAME'S. A single typed letter is
- * refused outright, wherever the cursor is; a paste keeps as many of its leading characters as fit,
- * where it was pasted, and the text after the cursor is left alone — what a native `maxLength`
- * does. (Trimming the whole candidate from its end, as this used to, dropped the last letter of
+ * refused outright, wherever the cursor is; a paste keeps as many of its leading characters as fit
+ * — whole ones, see "what one character is" above — where it was pasted, and the text after the
+ * cursor is left alone, what a native `maxLength` does. (Trimming the whole candidate from its end, as this used to, dropped the last letter of
  * the name to make room for one typed in the middle.) An edit that is not an insertion has no
  * "what was added" to trim, and is cut to its longest prefix that fits.
  */
@@ -245,10 +265,9 @@ export function capCandidateToNameRoom(
   }))
   if (fitsEveryRoom(candidate, rooms)) return { text: candidate, capped: false }
   if (!insertion) return { text: fitTextToRooms(candidate, rooms), capped: true }
-  const { head, tail } = insertion
-  let { inserted } = insertion
-  while (inserted.length > 0 && !fitsEveryRoom(head + inserted + tail, rooms)) {
-    inserted = inserted.slice(0, -1)
-  }
-  return { text: head + inserted + tail, capped: true }
+  const { head, inserted, tail } = insertion
+  const fitted = (kept: number) => [...head, ...inserted.slice(0, kept), ...tail].join('')
+  let kept = inserted.length
+  while (kept > 0 && !fitsEveryRoom(fitted(kept), rooms)) kept--
+  return { text: fitted(kept), capped: true }
 }
