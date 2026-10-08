@@ -103,7 +103,8 @@ const manualFrames = () => {
 // Run every frame the app is waiting on, as one animation frame does — and no frame twice: a slot is
 // emptied as it runs, so what is left non-empty is exactly what is still waiting. A tap that opens a
 // section asks for two a frame (the page's glide, and the clock of the section's arrival — a close
-// asks for the glide's alone), and they are handed one timestamp, in the order they were asked for.
+// asks for the glide's alone, and an open that needs no glide for the arrival's alone), and they are
+// handed one timestamp, in the order they were asked for.
 const waitingFrames = (frames) => frames.filter(Boolean)
 const runFrames = (frames, ms) =>
   act(() => {
@@ -687,7 +688,15 @@ describe('tapping a section carries the reading position with it', () => {
       container.querySelector('#guide-sec-overview button').getAttribute('aria-expanded'),
     ).toBe('true') // the tap landed …
     expect(g.writes).toEqual([]) // … and moved nothing
-    expect(frames).toEqual([]) // no writer was even scheduled, for the page or for the header
+    // No writer was scheduled, for the page or for the header: the one thing waiting on a frame is
+    // the section's arrival, which only ever paints — run to its end, the page and the header's own
+    // place are untouched.
+    expect(waitingFrames(frames)).toHaveLength(1)
+    runFrames(frames, 0)
+    runFrames(frames, 60_000)
+    expect(waitingFrames(frames)).toEqual([])
+    expect(g.writes).toEqual([])
+    expect(container.querySelector('#guide-sec-overview button').style.top).toBe('')
   })
 
   it('rides the panels’ own clock and curve, landing exactly on the target', () => {
@@ -915,7 +924,12 @@ describe('tapping a section carries the reading position with it', () => {
     const frames = manualFrames()
     tap(container, 'overview')
     expect(g.writes).toEqual([])
-    expect(frames).toEqual([])
+    // (The one frame asked for is the section's arrival, which paints and moves nothing.)
+    expect(waitingFrames(frames)).toHaveLength(1)
+    runFrames(frames, 0)
+    runFrames(frames, 60_000)
+    expect(waitingFrames(frames)).toEqual([])
+    expect(g.writes).toEqual([])
     expect(g.pos()).toBe(500)
   })
 })
@@ -1020,6 +1034,19 @@ describe('the guide’s edges track the reading position and the content', () =>
     }
     const headShade = (container) =>
       container.querySelector('#guide-head-stats').style.getPropertyValue('--shade')
+    // Tap the section's header and let its opening (or its fold) run to the end: from there the
+    // header answers to its place alone. For as long as its panel is opening a section is still
+    // ARRIVING, and the bar's share rides that clock (the case after next).
+    const tapAndSettle = (container) => {
+      const frames = holdFrames(vi)
+      try {
+        tap(container, 'stats')
+        act(() => frames.at(0))
+        act(() => frames.at(60_000))
+      } finally {
+        frames.restore()
+      }
+    }
 
     it('wears its own shadow while no section is open', () => {
       const { g } = reading()
@@ -1037,7 +1064,7 @@ describe('the guide’s edges track the reading position and the content', () =>
     it('fades it out as the header comes up to dock — the scroll strength times the share kept', () => {
       const { container, g } = reading()
       place = below(300)
-      tap(container, 'stats')
+      tapAndSettle(container)
       place = below(12.25) // (12.25 − 0.5) / (24 − 0.5) = half
       g.scrollTo(1188)
       expect(g.topShade()).toBe('0.500')
@@ -1047,17 +1074,50 @@ describe('the guide’s edges track the reading position and the content', () =>
     it('has NONE while the header is docked, and the header wears the shadow instead', () => {
       const { container, g } = reading()
       place = stuck(0) // just docked: nothing under the header yet — neither shadow
-      tap(container, 'stats')
+      tapAndSettle(container)
       expect([g.topShade(), headShade(container)]).toEqual(['0.000', '0.000'])
       place = stuck(60) // text under the header
       g.scrollTo(960)
       expect([g.topShade(), headShade(container)]).toEqual(['0.000', '1.000'])
     })
 
+    // ★ THE WAY IN, with the header ALREADY on the line when it is tapped — a section closed from
+    // its docked header and opened again. The page does not move, so nothing used to spread the
+    // hand-over: the bar's shadow (and the page's top fade, the same number) went from all to
+    // nothing in the frame of the tap. It goes out over the section's opening, on its curve.
+    it('gives it up when a section is opened on the line — over the opening, not in the frame of the tap', () => {
+      const { container, g } = reading()
+      place = { top: LINE, natural: LINE, floor: LINE + HEAD_H } // closed, flush under the bar
+      const frames = holdFrames(vi)
+      try {
+        tap(container, 'stats')
+        place = stuck(0) // open: docked where it stood
+        expect(g.topShade()).toBe('1.000') // the tap's own frame: nothing has jumped
+        act(() => frames.at(0))
+        expect(g.topShade()).toBe('1.000')
+        let last = 1
+        let largestStep = 0
+        for (let i = 1; i <= 20; i++) {
+          act(() => frames.at((ACCORDION_MS_FLOOR * i) / 20))
+          const now = Number(g.topShade())
+          expect(now).toBeLessThanOrEqual(last)
+          expect(now).toBeCloseTo(1 - accordionEase(i / 20), 3)
+          largestStep = Math.max(largestStep, last - now)
+          last = now
+          expect(headShade(container)).toBe('0.000') // nothing under the header: it wears none
+        }
+        expect(g.topShade()).toBe('0.000')
+        expect(largestStep).toBeLessThan(0.25)
+        expect(frames.pending()).toBe(0)
+      } finally {
+        frames.restore()
+      }
+    })
+
     it('takes it back when the section is closed — over the fold, not in the frame of the tap', () => {
       const { container, g } = reading()
       place = stuck(0)
-      tap(container, 'stats')
+      tapAndSettle(container)
       expect(g.topShade()).toBe('0.000')
       const frames = holdFrames(vi)
       try {
@@ -1077,7 +1137,7 @@ describe('the guide’s edges track the reading position and the content', () =>
     it('takes it back on leaving How to Play with a header docked — the game screens are unaffected', () => {
       const { container, g } = reading()
       place = stuck(60)
-      tap(container, 'stats')
+      tapAndSettle(container)
       g.scrollTo(960)
       expect(g.topShade()).toBe('0.000')
       pressKey('K') // Classic: scrolled to its top, where the bar's own strength is 0
@@ -1091,7 +1151,7 @@ describe('the guide’s edges track the reading position and the content', () =>
     it('near the top of the page the two factors multiply: a faint scroll shadow, faded further', () => {
       const { container, g } = reading()
       place = below(12.25) // the bar keeps half
-      tap(container, 'stats')
+      tapAndSettle(container)
       g.scrollTo(12) // 12px into the page's own 24px ramp: half strength
       expect(g.topShade()).toBe('0.250')
     })
@@ -1102,7 +1162,7 @@ describe('the guide’s edges track the reading position and the content', () =>
     it('a ramp that changes under the open guide is the ramp the next paint uses — for the page`s edge and the header`s place alike', () => {
       const { container, g } = reading()
       place = below(300)
-      tap(container, 'stats')
+      tapAndSettle(container)
       g.scrollTo(12)
       expect(g.topShade()).toBe('0.500') // the page's edge alone: 12px into a 24px ramp
       document.documentElement.style.setProperty('--shade-ramp', '48px') // the screen was turned

@@ -224,14 +224,14 @@ function startScrollWriter(
   raf = requestAnimationFrame(step)
   return cancel
 }
-// startArrival — a section ARRIVING at the line (lib/guideDock), on the fold's clock and curve like
-// the glide that carries it and the header's own offset, but on its own frames — because the
-// arrival outlasts the glide when a reader takes the page over (the header is still coming down,
-// the panel still opening). `onStep` is told how far along the curve it is (0…1) on
-// every frame, and `onEnd` when the clock has run out. It asks for its frame AFTER the header's
-// offset and the scroll writer have asked for theirs (the toggle starts it last), so on every frame
-// it is called with the page and the header already where that frame puts them. Returns the cancel;
-// neither callback is called after it.
+// startArrival — a section ARRIVING (lib/guideDock), on the fold's clock and curve like the glide
+// that carries it and the header's own offset, but on its own frames — because there is an arrival
+// whether or not there is a glide (a header already on the line has none), and it outlasts the glide
+// when a reader takes the page over (the header is still coming down, the panel still opening).
+// `onStep` is told how far along the curve it is (0…1) on every frame, and `onEnd` when the clock
+// has run out. It asks for its frame AFTER the header's offset and the scroll writer have asked for
+// theirs (the toggle starts it last), so on every frame it is called with the page and the header
+// already where that frame puts them. Returns the cancel; neither callback is called after it.
 function startArrival(
   clock: FoldClock,
   onStep: (eased: number) => void,
@@ -607,8 +607,11 @@ export default function GuidePage({
   )
   // What the tracker last wrote for the open header — where a release starts from.
   const openShadesRef = useRef<DockShades>(NO_DOCK)
-  // The release in flight, and the header it is fading (null = none).
-  const releaseRef = useRef<{ header: HTMLElement; cancel: () => void } | null>(null)
+  // The release in flight, the header it is fading, and the strength it last wrote on that header
+  // (null = none).
+  const releaseRef = useRef<{ header: HTMLElement; strength: number; cancel: () => void } | null>(
+    null,
+  )
   // End the release in flight where it stands. `rest`: also put what it was fading at rest — the
   // header shadowless, the bar's share whole — which is right whenever nothing else is about to
   // write them (the guide leaving the screen; another release starting, for the header).
@@ -625,10 +628,11 @@ export default function GuidePage({
     },
     [paintBarShare],
   )
-  // The section still ARRIVING at the line (lib/guideDock) — with the share of its shadow the bar
-  // was keeping at the tap, how far along the motion's clock it is, and where on that clock a reader
-  // took the page over, if one did — and the clock's cancel. And the tracker's own evaluate, which
-  // every frame of that clock asks for: the two strengths are measured, never guessed.
+  // The section still ARRIVING (lib/guideDock) — with the share of its shadow the bar was keeping
+  // at the tap and what its own header still wore, how far along the motion's clock it is, and where
+  // on that clock the page became the reader's — and the clock's cancel. And the tracker's own
+  // evaluate, which every frame of that clock asks for: the two strengths are measured, never
+  // guessed.
   const arrivingRef = useRef<{ id: string; arrival: Arrival; cancel: () => void } | null>(null)
   const trackerRef = useRef<(() => void) | null>(null)
   // Stop the arrival's clock where it stands, and write nothing: what is on screen stays on screen
@@ -852,10 +856,15 @@ export default function GuidePage({
       // then the release already owns the header's shadow and holds the bar's share where it was,
       // so the frame of the tap paints exactly what was on screen. A release still in flight from
       // an earlier tap ends first: its header is put at rest, unless it is the very header being
-      // opened again — the tracker is about to speak for that one.
+      // opened again. That one's arrival (below) takes over both things the release was holding,
+      // exactly where they stand: what is left of the header's shadow, and the bar's share — which
+      // the release therefore stops holding down. (Left held, the bar's shadow and the page's top
+      // fade stayed capped at wherever the fold had got to, for as long as that section was open.)
       const reopening = opens && releaseRef.current?.header.id === headerDomId(id)
       const sharedBefore = Math.min(barShareRef.current.tracked, barShareRef.current.released)
+      const headerBefore = reopening ? (releaseRef.current?.strength ?? 0) : NO_DOCK.header
       endRelease(!reopening)
+      if (reopening) barShareRef.current.released = NO_DOCK.barYield
       const closingHeader = open ? document.getElementById(headerDomId(open)) : null
       if (closingHeader) {
         barShareRef.current.released = sharedBefore
@@ -867,13 +876,55 @@ export default function GuidePage({
             barShareRef.current.released = shades.barYield
             paintBarShare()
             if (done) releaseRef.current = null
+            else if (releaseRef.current) releaseRef.current.strength = shades.header
           },
         )
         // (With no time to take, the release has already landed and cleared itself.)
-        if (scaledMs > 0) releaseRef.current = { header: closingHeader, cancel }
+        if (scaledMs > 0)
+          releaseRef.current = {
+            header: closingHeader,
+            strength: openShadesRef.current.header,
+            cancel,
+          }
       }
       setMotionMs(durationMs)
       setOpen(opens ? id : null)
+      // AN OPENING SECTION IS ARRIVING for the length of this motion (lib/guideDock) — EVERY one,
+      // whether or not the page glides for it: the bar gives its own shadow up over the clock rather
+      // than in the frame of the tap, and the header's shadow answers to the arrival. Each frame of
+      // that clock moves it on and has the tracker measure and write; when the clock has run out the
+      // header is looked at once more, as it stands. `gliding`: the page is being carried to the
+      // line, so the header casts nothing until a reader takes the page over (the glide marks that
+      // on the clock, below); with no glide the page is the reader's from the tap.
+      // ⚠ CALLED AT EVERY WAY OUT OF THIS TAP, AND ONLY THERE — after the glide and the header's own
+      // offset have asked for their frames, so each of its frames finds the page and the header
+      // already where that frame puts them (startArrival). It was once started only on the way out
+      // that had a glide: a header tapped while it was already on the line — every section closed
+      // from its docked header and opened again — had no arrival, and the bar's shadow and the page's
+      // top fade went out in the frame of the tap.
+      // (With no time to take — Reduce Motion — its first frame is its last: the page has landed by
+      // then, and the place answers before anything is painted.)
+      const arrive = (gliding: boolean): void => {
+        if (!opens) return
+        const arrival: Arrival = {
+          from: sharedBefore,
+          headerFrom: headerBefore,
+          progress: 0,
+          takenOverAt: gliding ? null : 0,
+        }
+        const cancelArrival = startArrival(
+          clock,
+          (eased) => {
+            arrival.progress = eased
+            trackerRef.current?.()
+          },
+          () => {
+            arrivingRef.current = null
+            trackerRef.current?.()
+          },
+        )
+        arrivingRef.current = { id, arrival, cancel: cancelArrival }
+      }
       // Scroll coordination needs the scroller's geometry on top of the two panel measurements.
       // TWO preconditions, and they are not the same guard wearing two shapes:
       //   • a scroller to read at all — App's container, which is null only before it mounts.
@@ -889,7 +940,7 @@ export default function GuidePage({
       // Stating the precondition in terms of the GEOMETRY survived the move untouched: a test that
       // wants the writer stands up the extent the glide travels through, which is the same geometry
       // the target is computed from anyway.
-      if (!tapped || !scroller || scroller.scrollHeight <= 0) return
+      if (!tapped || !scroller || scroller.scrollHeight <= 0) return arrive(false)
       // ★ A HEADER TAPPED ABOVE THE LINE IS BROUGHT DOWN TO IT, NOT DROPPED ON IT
       // (startHeaderOffset says what used to happen). Measured here, in the tap, before the commit
       // that opens its panel: how far above the line the tapped header's top stands. Past the band
@@ -958,32 +1009,14 @@ export default function GuidePage({
           closingExpander !== null && closingExpander.getBoundingClientRect().top < tappedRect.top,
         openingH,
       })
-      if (target === null) return
-      // AN OPENING SECTION IS ARRIVING for the length of this motion (lib/guideDock): its header
-      // casts nothing while the glide carries the section to it, and the bar gives its own shadow up
-      // over the clock rather than in the frame of the tap. Each frame of that clock moves it on and
-      // has the tracker measure and write; a reader who takes the page over stops the glide, and is
-      // marked on the clock — from there the header's shadow comes in as the bar's goes on out. When
-      // the clock has run out the header is looked at once more, as it stands.
-      // Started AFTER the glide, so each of its frames finds the page already moved (startArrival).
+      if (target === null) return arrive(false)
+      // The glide. A reader who takes the page over stops it, and is marked on the arrival's clock —
+      // from there the header's shadow comes in as the bar's goes on out.
       scrollWriterRef.current = startScrollWriter(scroller, scrollY, target, clock, () => {
         const arriving = arrivingRef.current
         if (arriving?.id === id) arriving.arrival.takenOverAt = arriving.arrival.progress
       })
-      if (!opens) return
-      const arrival: Arrival = { from: sharedBefore, progress: 0, takenOverAt: null }
-      const cancelArrival = startArrival(
-        clock,
-        (eased) => {
-          arrival.progress = eased
-          trackerRef.current?.()
-        },
-        () => {
-          arrivingRef.current = null
-          trackerRef.current?.()
-        },
-      )
-      arrivingRef.current = { id, arrival, cancel: cancelArrival }
+      arrive(true)
     },
     [
       open,

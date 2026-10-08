@@ -37,7 +37,7 @@ import { KEYBOARD_ATTR } from '../src/lib/keyboardFocus.js'
 import { useSettings } from '../src/store/settings.js'
 import { SCROLLER_CORE_CLASS } from '../src/components/scrollRegion.js'
 import { installGuideScroller } from './helpers/guideScroller.jsx'
-import { setScrollGeometry } from './helpers/scrollGeometry.js'
+import { setScrollGeometry, holdFrames } from './helpers/scrollGeometry.js'
 
 // CustomSelect portals into #root, so the harness must provide one (see app-mount.dom).
 function mountApp() {
@@ -307,10 +307,16 @@ describe('How to Play scrolls the app container — one scroller, every screen',
       expect(seen()).toEqual([1, 1, 1]) // no section open: the bar's edge has its shadow and its fade
 
       // Open the section with its header well below the line: nothing is docked, nothing changes.
+      // (The opening is run to its end — for as long as its panel is opening the section is still
+      // arriving, and what is pinned below is the header answering to its place.)
       at = { top: LINE + 300, natural: LINE + 300, floor: LINE + 2300 }
+      const frames = holdFrames(vi)
       act(() => {
         fireEvent.click(header)
       })
+      act(() => frames.at(0))
+      act(() => frames.at(60_000))
+      frames.restore()
       scrollSo(at)
       expect(header.getAttribute('aria-expanded')).toBe('true')
       expect(seen()).toEqual([1, 1, 1])

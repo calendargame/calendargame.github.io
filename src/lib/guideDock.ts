@@ -63,9 +63,10 @@
 // ── TWO MOMENTS THE POSITION ALONE GETS WRONG ───────────────────────────────────────────────
 // Both follow a tap on a header, and in both the numbers above are true and the picture is not:
 //
-//   ARRIVING — a section is opened and glided to the line. For the length of that motion (the
-//     glide's own clock — components/GuidePage runs the page, the panels, and this on one) the
-//     header and the bar answer to arrivingShades, not to the header's place alone:
+//   ARRIVING — a section is opened. For the length of its opening (the fold's own clock —
+//     components/GuidePage runs the page's glide, the panels, and this on one) the header and the
+//     bar answer to arrivingShades, not to the header's place alone. EVERY open is an arrival,
+//     whether or not the page has to glide to bring the section to the line:
 //       • THE HEADER CASTS NOTHING WHILE THE GLIDE IS CARRYING ITS SECTION TO IT. A header tapped
 //         while its natural spot was ABOVE the line is brought down to the line over the glide, and
 //         whenever its section's top is above where it is drawn it has been carried down from its
@@ -74,10 +75,19 @@
 //         above 0 and the rule above would light its shadow for the length of the glide that is
 //         bringing the section down to meet it, going out as the glide lands. That is a section
 //         being OPENED looking pinned, which is the one thing these headers must never do.
-//       • THE BAR GIVES ITS SHARE UP OVER THE WHOLE GLIDE (arrivingBarYield): from what it was
-//         keeping at the tap to what the header's place says, on the glide's clock — where the
-//         place alone would take it away over the last few pixels before the line, or (for a
-//         header the stick already holds there) in the frame of the tap.
+//       • THE BAR GIVES ITS SHARE UP OVER THE WHOLE OPENING (arrivingBarYield): from what it was
+//         keeping at the tap to what the header's place says, on the fold's clock — where the
+//         place alone would take it away over the last few pixels before the line, or, for a
+//         header that is ALREADY on the line when it is tapped, in the frame of the tap. That last
+//         one is every section closed from its docked header and opened again, and it has no glide
+//         at all: the page is where it should be. (The arrival was once started only with a glide,
+//         and there the bar's shadow and the page's top fade went from all to nothing in one frame.)
+//       • WITH NO GLIDE THE PAGE IS THE READER'S FROM THE TAP (`takenOverAt` 0), so whatever they
+//         scroll under the header while its panel opens comes in over the clock, as below.
+//       • A HEADER OPENED AGAIN WHILE ITS CLOSE WAS STILL LETTING GO (RELEASING, below) has some of
+//         its own shadow left. The arrival takes that over where it stands (`headerFrom`) and lets
+//         it go on out over the clock — the release it interrupts would have — rather than dropping
+//         it in the frame of the tap.
 //       • A READER WHO TAKES THE PAGE OVER MID-GLIDE STOPS THE PAGE, NOT THE ARRIVAL. The header
 //         is still on its way down and the panel is still opening, for the rest of the same clock.
 //         The page has stopped short, though, so text really is under the header now — and from
@@ -168,9 +178,14 @@ export function arrivingBarYield(from: number, place: number, progress: number):
 export interface Arrival {
   /** The share of its shadow the bar was keeping at the tap. */
   from: number
+  /** The header's own strength at the tap: what a close it interrupts had left on it, else 0. */
+  headerFrom: number
   /** How far through the motion's clock, eased on its curve: 0 at the tap, 1 as it ends. */
   progress: number
-  /** The `progress` at which a reader took the page over — null while the glide is carrying it. */
+  /**
+   * The `progress` at which a reader took the page over — null while the glide is carrying it, and
+   * 0 from the start when there is no glide to carry it.
+   */
   takenOverAt: number | null
 }
 
@@ -178,9 +193,10 @@ export interface Arrival {
  * The two strengths while a section is ARRIVING (above). `at` is what the open header's place says
  * (dockShades) and `line` what its place alone allows the bar (lineShare), both measured this
  * frame. The bar's share falls from what it was keeping to `line` over the clock. The header casts
- * nothing while the glide carries its section to it; from the moment a reader takes the page over,
- * what its place says comes in over the rest of the clock, and never by more than the bar has given
- * up.
+ * nothing of its place's while the glide carries its section to it; from the moment a reader has
+ * the page, what its place says comes in over the rest of the clock. What it still had at the tap
+ * goes out over the whole of it. Whichever of the two is the stronger is what it wears — and never
+ * more than the bar has given up.
  */
 export function arrivingShades(arrival: Arrival, at: DockShades, line: number): DockShades {
   const barYield = arrivingBarYield(arrival.from, line, arrival.progress)
@@ -191,7 +207,9 @@ export function arrivingShades(arrival: Arrival, at: DockShades, line: number): 
       : arrival.takenOverAt >= 1
         ? 1
         : Math.max(0, (p - arrival.takenOverAt) / (1 - arrival.takenOverAt))
-  return { header: at.header * Math.min(settled, 1 - barYield), barYield }
+  const leaving = arrival.headerFrom * (1 - p)
+  const coming = at.header * settled
+  return { header: Math.min(Math.max(leaving, coming), 1 - barYield), barYield }
 }
 
 /**

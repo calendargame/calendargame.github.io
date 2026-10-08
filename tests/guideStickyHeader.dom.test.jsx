@@ -132,6 +132,17 @@ const tap = (container, id) =>
   act(() => {
     fireEvent.click(header(container, id))
   })
+// Tap a header and let everything the tap set moving run to its end — the fold, the glide, and (for
+// an open) the section's arrival, which lasts as long as its panel takes to open whether or not the
+// page glides. From there the header answers to its place alone, which is what most of this file
+// is about. (With a test's own frames held, it runs on those.)
+const tapAndSettle = (container, id) => {
+  const held = frames ?? holdFrames(vi)
+  tap(container, id)
+  act(() => held.at(0))
+  act(() => held.at(60_000))
+  if (held !== frames) held.restore()
+}
 // Put the open header somewhere and let the app see it, the way a scroll does.
 const scrollSo = (arrange) => {
   arrange()
@@ -157,7 +168,7 @@ describe('the open section’s header wears a shadow only once text is under it'
 
   it('ramps its shadow in as text scrolls under it, and drops it on the way back', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     for (const [depth, expected] of [
       [1, '0.000'], // the settle pixel: still nothing under it
       [12.5, '0.500'], // halfway up the 24px ramp, past that pixel
@@ -172,7 +183,7 @@ describe('the open section’s header wears a shadow only once text is under it'
 
   it('fades its shadow out over the section’s last stretch, as the foot arrives', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     for (const [room, expected] of [
       [200, '1.000'],
       [24, '1.000'],
@@ -186,7 +197,7 @@ describe('the open section’s header wears a shadow only once text is under it'
 
   it('tracks only the OPEN header, and rests one it stops tracking at 0', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     scrollSo(() => stuck('stats', 30))
     expect(shade(container, 'stats')).toBe('1.000')
     // Every closed header is left alone: it has no room to dock, so nothing is ever written to it
@@ -207,7 +218,7 @@ describe('the open section’s header wears a shadow only once text is under it'
     const ro = installResizeObserver() // BEFORE mount: the tracker builds its observer in an effect
     try {
       const { container } = mount()
-      tap(container, 'stats')
+      tapAndSettle(container, 'stats')
       stuck('stats', 12.5)
       act(() => ro.resize(guide.contentEl))
       expect(shade(container, 'stats')).toBe('0.500')
@@ -219,7 +230,7 @@ describe('the open section’s header wears a shadow only once text is under it'
 
   it('is the same button, with the same state and name, docked or not', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     const before = header(container, 'stats')
     scrollSo(() => stuck('stats', 40))
     const after = header(container, 'stats')
@@ -272,7 +283,7 @@ describe('one shadow: the bar gives its own up while a header is docked against 
   it('an open header far from the line leaves the bar’s shadow alone', () => {
     const { container } = mount()
     below('stats', 300)
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     expect(barKeeps()).toBe(1)
     expect(shade(container, 'stats')).toBe('0.000')
   })
@@ -280,7 +291,7 @@ describe('one shadow: the bar gives its own up while a header is docked against 
   it('the bar’s shadow fades out as the header comes up to dock, and is off once it has', () => {
     const { container } = mount()
     below('stats', 300)
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     for (const [gap, keeps] of [
       [24.5, 1], // a ramp's length away (past the half-pixel that counts as ON the line)
       [12.5, 12 / 23.5],
@@ -295,7 +306,7 @@ describe('one shadow: the bar gives its own up while a header is docked against 
 
   it('docked, the bar keeps none — whether or not text is under the header yet', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     for (const depth of [0, 0.6, 5, 24, 800]) {
       scrollSo(() => stuck('stats', depth))
       expect(barKeeps()).toBe(0)
@@ -304,7 +315,7 @@ describe('one shadow: the bar gives its own up while a header is docked against 
 
   it('the bar’s shadow comes back as a finished section carries its header out under the bar', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     scrollSo(() => stuck('stats', 900, 0))
     expect(barKeeps()).toBe(0)
     for (const [carried, keeps] of [
@@ -321,7 +332,7 @@ describe('one shadow: the bar gives its own up while a header is docked against 
   it('NEVER BOTH: on no frame of a whole scroll through a section are the two shadows on together', () => {
     const { container } = mount()
     below('stats', 400)
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     const frames = [
       ...Array.from({ length: 81 }, (_, i) => () => below('stats', 40 - i * 0.5)), // coming up to dock
       ...Array.from({ length: 80 }, (_, i) => () => stuck('stats', i * 0.75, 600 - i * 0.75)), // reading
@@ -350,7 +361,7 @@ describe('one shadow: the bar gives its own up while a header is docked against 
   // frame after hands a little more of it back.
   it('closing a docked section hands the bar its shadow back over the fold, never in one frame', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     scrollSo(() => stuck('stats', 50))
     expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '1.000'])
     frames = holdFrames(vi)
@@ -381,7 +392,7 @@ describe('one shadow: the bar gives its own up while a header is docked against 
 
   it('switching to another section does the same for the header left behind, under the new one`s rule', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     scrollSo(() => stuck('stats', 50))
     frames = holdFrames(vi)
     below('overview', 300) // the section being opened is far from the line: by place, the bar keeps all
@@ -400,28 +411,59 @@ describe('one shadow: the bar gives its own up while a header is docked against 
     act(() => frames.at(2000))
     act(() => frames.at(2000 + FOLD_MS))
     stuck('stats', 0)
-    tap(container, 'stats') // …and reopen stats, docked
+    tap(container, 'stats') // …and reopen stats, docked: the bar gives its share up over the opening
+    expect(barKeeps()).toBe(1)
+    act(() => frames.at(4000))
+    act(() => frames.at(4000 + FOLD_MS))
     expect(barKeeps()).toBe(0)
+    expect(frames.pending()).toBe(0)
   })
 
-  it('opening the very section that is still letting go takes its shadow straight back', () => {
+  // ★ OPENED AGAIN WHILE IT IS STILL LETTING GO. The close has put the header at its natural spot,
+  // on the line, with nothing under it — so by place the bar keeps none and the header wears none,
+  // and both were put there in the frame of the second tap, from wherever the fold had got to. The
+  // opening takes both over where they stand, and lets them go on out over its own clock.
+  it('opening the very section that is still letting go carries on from exactly what was on screen', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     scrollSo(() => stuck('stats', 50))
     frames = holdFrames(vi)
     tap(container, 'stats') // close…
+    stuck('stats', 0) // (the collapse puts the header back at its natural spot)
     act(() => frames.at(0))
     act(() => frames.at(FOLD_MS / 4)) // …part-way through the fold…
-    tap(container, 'stats') // …open again: it is docked with text under it, as before
-    expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '1.000'])
-    act(() => frames.at(FOLD_MS)) // the abandoned release writes nothing more
-    expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '1.000'])
+    const before = [barKeeps(), shade(container, 'stats')]
+    expect(before[0]).toBeGreaterThan(0)
+    expect(before[0]).toBeLessThan(1)
+    expect(Number(before[1])).toBeGreaterThan(0)
+    tap(container, 'stats') // …open again
+    expect([barKeeps(), shade(container, 'stats')]).toEqual(before) // nothing moves on the tap
+    act(() => frames.at(5000)) // the opening's first frame — its clock starts here
+    expect([barKeeps(), shade(container, 'stats')]).toEqual(before)
+    let [lastBar, lastHeader] = [before[0], Number(before[1])]
+    let largestStep = 0
+    for (let i = 1; i <= 20; i++) {
+      act(() => frames.at(5000 + (FOLD_MS * i) / 20))
+      const [bar, own] = [barKeeps(), Number(shade(container, 'stats'))]
+      expect(bar).toBeLessThanOrEqual(lastBar) // both only ever go out…
+      expect(own).toBeLessThanOrEqual(lastHeader)
+      expect(bar + own).toBeLessThanOrEqual(1.001) // …one shadow's worth between them
+      largestStep = Math.max(largestStep, lastBar - bar, lastHeader - own)
+      ;[lastBar, lastHeader] = [bar, own]
+    }
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '0.000']) // docked, nothing under it
+    expect(largestStep).toBeLessThan(0.25)
+    expect(frames.pending()).toBe(0) // the abandoned release asks for nothing more
+    // …and the release it interrupted is not still holding the bar's share down: once the section
+    // has been read to its end and carries its header out, the bar has all of its shadow again.
+    scrollSo(() => leaving('stats', 30))
+    expect(barKeeps()).toBe(1)
   })
 
   it('leaving the screen mid-fold puts both at rest at once', () => {
     const view = mount()
     const { container } = view
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     scrollSo(() => stuck('stats', 50))
     frames = holdFrames(vi)
     tap(container, 'stats')
@@ -430,6 +472,141 @@ describe('one shadow: the bar gives its own up while a header is docked against 
     expect(barKeeps()).toBeLessThan(1)
     act(() => view.unmount())
     expect(barKeeps()).toBe(1)
+    expect(frames.pending()).toBe(0)
+  })
+})
+
+// ── OPENING A SECTION WHOSE HEADER IS ALREADY ON THE LINE ────────────────────────────────────────
+// Every section closed from its docked header is left exactly there, so this is every close
+// followed by a reopen. The page has nowhere to glide to — and the arrival used to be started only
+// with a glide, so the header answered to its place at once: on the line, where the bar keeps
+// nothing. The bar's shadow, and the page's top fade (the same number), went from all to nothing in
+// the frame of the tap, while the panel took a third of a second to open. An opening is an arrival
+// whether or not the page moves.
+describe('a section opened with its header already on the line hands the bar`s edge over across its opening', () => {
+  const openOnTheLine = () => {
+    const view = mount()
+    guide.setContent(6000)
+    guide.scrollTo(900)
+    closedAt('stats', LINE) // closed, flush under the bar, on a scrolled page
+    frames = holdFrames(vi)
+    guide.clearWrites()
+    tap(view.container, 'stats')
+    stuck('stats', 0) // open: docked where it stood, with nothing under it
+    return view
+  }
+
+  it('the bar gives its shadow up over the opening, never in the frame of the tap', () => {
+    const { container } = openOnTheLine()
+    expect(header(container, 'stats').getAttribute('aria-expanded')).toBe('true')
+    expect(barKeeps()).toBe(1) // the frame of the tap: exactly what was on screen before it
+    act(() => frames.at(0)) // the opening's first frame — its clock starts here
+    expect(barKeeps()).toBe(1)
+    let last = 1
+    let largestStep = 0
+    for (let i = 1; i <= 20; i++) {
+      act(() => frames.at((FOLD_MS * i) / 20))
+      const now = barKeeps()
+      expect(now).toBeLessThanOrEqual(last) // every frame gives a little more up, never any back
+      largestStep = Math.max(largestStep, last - now)
+      last = now
+      expect(shade(container, 'stats')).toBe('0.000') // nothing is under the header: it wears none
+    }
+    expect(last).toBe(0) // open: docked, and the bar keeps none
+    expect(largestStep).toBeLessThan(0.25)
+    expect(frames.pending()).toBe(0) // and it stops asking for frames
+    expect(guide.writes).toEqual([]) // …and the page was never moved: there was no glide
+  })
+
+  it('it is on the opening`s own curve — the bar keeps what the fold has not yet eased through', () => {
+    openOnTheLine()
+    act(() => frames.at(0))
+    for (const t of [0.1, 0.35, 0.6, 0.85]) {
+      act(() => frames.at(FOLD_MS * t))
+      expect(barKeeps()).toBeCloseTo(1 - accordionEase(t), 6)
+    }
+  })
+
+  it('what a reader scrolls under the header while it opens comes in over the same clock, one shadow`s worth between the two', () => {
+    const { container } = openOnTheLine()
+    act(() => frames.at(0))
+    act(() => frames.at(FOLD_MS * 0.2))
+    scrollSo(() => stuck('stats', 40)) // the page is theirs: there is no glide to stop
+    let last = Number(shade(container, 'stats'))
+    // Not the whole shadow at once, though 40px IS under it: only what the bar has given up so far.
+    expect(last).toBeLessThan(1)
+    expect(last).toBeCloseTo(1 - barKeeps(), 3)
+    let largestStep = 0
+    for (let i = 5; i <= 20; i++) {
+      act(() => frames.at((FOLD_MS * i) / 20))
+      const now = Number(shade(container, 'stats'))
+      expect(now).toBeGreaterThanOrEqual(last)
+      expect(now + barKeeps()).toBeLessThanOrEqual(1.001)
+      largestStep = Math.max(largestStep, now - last)
+      last = now
+    }
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '1.000'])
+    expect(largestStep).toBeLessThan(0.25)
+    expect(frames.pending()).toBe(0)
+  })
+
+  it('closed again part-way, it hands back from exactly what was on screen', () => {
+    const { container } = openOnTheLine()
+    act(() => frames.at(0))
+    act(() => frames.at(FOLD_MS * 0.3))
+    const before = barKeeps()
+    expect(before).toBeGreaterThan(0)
+    expect(before).toBeLessThan(1)
+    closedAt('stats', LINE)
+    tap(container, 'stats')
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([before, '0.000'])
+    act(() => frames.at(5000))
+    let last = before
+    for (const t of [0.25, 0.5, 0.75]) {
+      act(() => frames.at(5000 + FOLD_MS * t))
+      expect(barKeeps()).toBeGreaterThanOrEqual(last)
+      last = barKeeps()
+    }
+    act(() => frames.at(5000 + FOLD_MS))
+    // ★ Closed, on the line: page content again, with the bar's whole shadow over it (the owner's
+    // rule — only an OPEN header takes the bar's edge over).
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([1, '0.000'])
+    expect(frames.pending()).toBe(0)
+  })
+
+  it('a header opened far from the line arrives too, and nothing changes: the bar keeps all of its shadow throughout', () => {
+    const { container } = mount()
+    frames = holdFrames(vi)
+    below('stats', 300)
+    tap(container, 'stats')
+    for (const t of [0, 0, 0.3, 0.7, 1]) {
+      act(() => frames.at(FOLD_MS * t))
+      expect([barKeeps(), shade(container, 'stats')]).toEqual([1, '0.000'])
+    }
+    expect(frames.pending()).toBe(0)
+  })
+
+  it('under Reduce Motion the opening takes no time: its first frame is the end state', () => {
+    document.documentElement.style.setProperty('--motion-scale', '0')
+    try {
+      const { container } = openOnTheLine()
+      act(() => frames.at(0))
+      expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '0.000'])
+      expect(frames.pending()).toBe(0)
+    } finally {
+      document.documentElement.style.removeProperty('--motion-scale')
+    }
+  })
+
+  it('the app going to the background part-way ends it: the header answers to its place', () => {
+    openOnTheLine()
+    act(() => frames.at(0))
+    act(() => frames.at(FOLD_MS * 0.3))
+    expect(barKeeps()).toBeGreaterThan(0)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    act(() => void document.dispatchEvent(new Event('visibilitychange')))
+    visibility.mockRestore()
+    expect(barKeeps()).toBe(0)
     expect(frames.pending()).toBe(0)
   })
 })
@@ -766,7 +943,7 @@ describe('a section opened with its header above the line shows no shadow while 
 describe('collapsing from a docked header keeps it under your finger', () => {
   it('steps the page back by exactly the pin depth, before anything else moves it', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     stuck('stats', 140.5)
     guide.scrollTo(900)
     guide.clearWrites()
@@ -778,7 +955,7 @@ describe('collapsing from a docked header keeps it under your finger', () => {
 
   it('moves nothing when the section being closed had nothing scrolled under its header', () => {
     const { container } = mount()
-    tap(container, 'stats')
+    tapAndSettle(container, 'stats')
     stuck('stats', 0)
     guide.scrollTo(900)
     guide.clearWrites()

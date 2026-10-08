@@ -193,6 +193,7 @@ describe('ARRIVING — an opening section answers to the motion`s clock, not to 
     for (const carried of [30, 24, 12.5, 5, 1, 0]) {
       const s = arriving(sticky(LINE - BORDER - carried, 1500), {
         from: 0,
+        headerFrom: 0,
         progress: 0.5,
         takenOverAt: null,
       })
@@ -202,15 +203,15 @@ describe('ARRIVING — an opening section answers to the motion`s clock, not to 
 
   it('the bar gives its share up over the clock, from what it kept to what the place allows', () => {
     const onLine = sticky(LINE - BORDER - 30, 1500)
-    const share = (progress) => arriving(onLine, { from: 1, progress, takenOverAt: null }).barYield
+    const share = (progress) =>
+      arriving(onLine, { from: 1, headerFrom: 0, progress, takenOverAt: null }).barYield
     expect([share(0), share(0.25), share(1)]).toEqual([1, 0.75, 0])
     // Arriving from BELOW the line is the ordinary case: the bar's share lands on the gap's.
     const gap = DOCK_LINE_BAND_PX + (RAMP - DOCK_LINE_BAND_PX) / 2
     const below = sticky(LINE + gap - BORDER, 1500)
-    expect(arriving(below, { from: 1, progress: 1, takenOverAt: null }).barYield).toBeCloseTo(
-      0.5,
-      9,
-    )
+    expect(
+      arriving(below, { from: 1, headerFrom: 0, progress: 1, takenOverAt: null }).barYield,
+    ).toBeCloseTo(0.5, 9)
   })
 
   // ★ THE TAKEOVER. Ending the arrival the moment a reader touched the page, and answering by
@@ -218,8 +219,8 @@ describe('ARRIVING — an opening section answers to the motion`s clock, not to 
   it('a reader taking the page over changes NOTHING on that frame', () => {
     for (const at of [0.05, 0.2, 0.5, 0.9]) {
       const g = carriedHeader(40, at)
-      const before = arriving(g, { from: 1, progress: at, takenOverAt: null })
-      const after = arriving(g, { from: 1, progress: at, takenOverAt: at })
+      const before = arriving(g, { from: 1, headerFrom: 0, progress: at, takenOverAt: null })
+      const after = arriving(g, { from: 1, headerFrom: 0, progress: at, takenOverAt: at })
       expect(after).toEqual(before)
     }
   })
@@ -231,7 +232,12 @@ describe('ARRIVING — an opening section answers to the motion`s clock, not to 
     let worst = 0
     for (let i = 0; i <= FRAMES; i++) {
       const p = TAKEN + ((1 - TAKEN) * i) / FRAMES
-      const s = arriving(carriedHeader(40, p, TAKEN), { from: 1, progress: p, takenOverAt: TAKEN })
+      const s = arriving(carriedHeader(40, p, TAKEN), {
+        from: 1,
+        headerFrom: 0,
+        progress: p,
+        takenOverAt: TAKEN,
+      })
       if (prev) {
         worst = Math.max(
           worst,
@@ -252,16 +258,123 @@ describe('ARRIVING — an opening section answers to the motion`s clock, not to 
 
   it('an arrival nobody interrupts ends on its place too: landed, with nothing under the header', () => {
     const landed = carriedHeader(40, 1)
-    expect(arriving(landed, { from: 1, progress: 1, takenOverAt: null })).toEqual(
+    expect(arriving(landed, { from: 1, headerFrom: 0, progress: 1, takenOverAt: null })).toEqual(
       dockShades(landed, RAMP),
     )
   })
 
   it('a takeover on the very last frame, and a progress outside 0…1, are held to the ends', () => {
     const g = carriedHeader(40, 1, 0.5)
-    expect(arriving(g, { from: 1, progress: 1, takenOverAt: 1 })).toEqual(dockShades(g, RAMP))
-    expect(arriving(g, { from: 1, progress: 2, takenOverAt: 0.5 })).toEqual(dockShades(g, RAMP))
-    expect(arriving(g, { from: 1, progress: -1, takenOverAt: 0.5 }).header).toBe(0)
+    expect(arriving(g, { from: 1, headerFrom: 0, progress: 1, takenOverAt: 1 })).toEqual(
+      dockShades(g, RAMP),
+    )
+    expect(arriving(g, { from: 1, headerFrom: 0, progress: 2, takenOverAt: 0.5 })).toEqual(
+      dockShades(g, RAMP),
+    )
+    expect(arriving(g, { from: 1, headerFrom: 0, progress: -1, takenOverAt: 0.5 }).header).toBe(0)
+  })
+})
+
+// ★ EVERY OPEN IS AN ARRIVAL — and two of them have nothing to do with a glide.
+describe('ARRIVING with no glide — a header already on the line, and one opened again mid-close', () => {
+  const arriving = (g, arrival) => arrivingShades(arrival, dockShades(g, RAMP), lineShare(g, RAMP))
+  // A header at its natural spot, on the line: where a section closed from its docked header is
+  // left, and where it is when it is opened again.
+  const onTheLine = sticky(LINE - BORDER, 1500)
+  // …and the same header with `under` px of its section scrolled up under it.
+  const readUnder = (under) => sticky(LINE - BORDER - under, 1500)
+  const FRAMES = 200
+  const sweep = (shadesAt) => {
+    let prev = null
+    let worst = 0
+    for (let i = 0; i <= FRAMES; i++) {
+      const s = shadesAt(i / FRAMES)
+      if (prev)
+        worst = Math.max(
+          worst,
+          Math.abs(s.header - prev.header),
+          Math.abs(s.barYield - prev.barYield),
+        )
+      expect(s.header + s.barYield).toBeLessThanOrEqual(1 + 1e-12) // one shadow's worth
+      prev = s
+    }
+    return { worst, end: prev }
+  }
+
+  it('by place alone the bar would keep nothing the moment the header is open: that was the snap', () => {
+    expect(dockShades(onTheLine, RAMP)).toEqual({ header: 0, barYield: 0 })
+  })
+
+  it('on the frame of the tap the bar keeps exactly what it kept, and it gives it up over the clock', () => {
+    const at = (progress) =>
+      arriving(onTheLine, { from: 1, headerFrom: 0, progress, takenOverAt: 0 })
+    expect(at(0)).toEqual({ header: 0, barYield: 1 })
+    expect([at(0.25).barYield, at(0.5).barYield, at(0.75).barYield]).toEqual([0.75, 0.5, 0.25])
+    const { worst, end } = sweep(at)
+    expect(worst).toBeLessThan(0.006) // a two-hundredth of the clock: a two-hundredth of the shadow
+    expect(end).toEqual(dockShades(onTheLine, RAMP)) // and it ends on what the place says
+  })
+
+  it('with no glide the page is the reader`s from the tap: what they read under the header comes in over the clock', () => {
+    const g = readUnder(40)
+    expect(dockShades(g, RAMP)).toEqual({ header: 1, barYield: 0 }) // by place: all of it, at once
+    const at = (progress) => arriving(g, { from: 1, headerFrom: 0, progress, takenOverAt: 0 })
+    expect(at(0)).toEqual({ header: 0, barYield: 1 })
+    expect(at(0.5)).toEqual({ header: 0.5, barYield: 0.5 })
+    const { worst, end } = sweep(at)
+    expect(worst).toBeLessThan(0.006)
+    expect(end).toEqual({ header: 1, barYield: 0 })
+    // …where a glide that is still carrying the section shows none of it (null: not taken over).
+    expect(arriving(g, { from: 1, headerFrom: 0, progress: 0.5, takenOverAt: null }).header).toBe(0)
+  })
+
+  // A close hands the header's shadow back to the bar over the fold (RELEASING). Opened again
+  // part-way, the header is on the line with nothing under it: by place both are nothing at once.
+  it.each([0.1, 0.4, 0.8])(
+    'opened again %s of the way through its close: nothing changes on that frame, and both go on out',
+    (q) => {
+      const letGo = releaseShades({ header: 1, barYield: 0 }, q)
+      const at = (progress) =>
+        arriving(onTheLine, {
+          from: letGo.barYield,
+          headerFrom: letGo.header,
+          progress,
+          takenOverAt: 0,
+        })
+      expect(at(0).header).toBeCloseTo(letGo.header, 12)
+      expect(at(0).barYield).toBeCloseTo(letGo.barYield, 12)
+      let prev = at(0)
+      for (let i = 1; i <= FRAMES; i++) {
+        const s = at(i / FRAMES)
+        expect(s.header).toBeLessThanOrEqual(prev.header + 1e-12)
+        expect(s.barYield).toBeLessThanOrEqual(prev.barYield + 1e-12)
+        prev = s
+      }
+      const { worst, end } = sweep(at)
+      expect(worst).toBeLessThan(0.006)
+      expect(end).toEqual({ header: 0, barYield: 0 })
+    },
+  )
+
+  it('what the header had left never exceeds what the bar has given up, wherever the header is', () => {
+    // Half a ramp off the line the place allows the bar half its shadow; a header that came in with
+    // more than the other half is held to it.
+    const gap = DOCK_LINE_BAND_PX + (RAMP - DOCK_LINE_BAND_PX) / 2
+    const off = sticky(LINE + gap - BORDER, 1500)
+    const s = arriving(off, { from: 0, headerFrom: 0.9, progress: 0, takenOverAt: 0 })
+    expect(s.barYield).toBeCloseTo(0.5, 9)
+    expect(s.header).toBeCloseTo(0.5, 9)
+  })
+
+  it('a header that had nothing left is the ordinary arrival, to the last digit', () => {
+    for (const p of [0, 0.3, 0.7, 1])
+      for (const takenOverAt of [null, 0, 0.2]) {
+        const g = readUnder(40)
+        const s = arriving(g, { from: 1, headerFrom: 0, progress: p, takenOverAt })
+        const settled =
+          takenOverAt === null ? 0 : Math.max(0, (p - takenOverAt) / (1 - takenOverAt))
+        expect(s.header).toBeCloseTo(Math.min(settled, 1 - s.barYield), 12)
+      }
   })
 })
 
