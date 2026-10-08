@@ -1,6 +1,6 @@
 import Popup from './Popup.js'
 import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
-import { percentText, useStorageUsage } from '../store/storageUsage.js'
+import { percentSpoken, percentText, useStorageUsage } from '../store/storageUsage.js'
 import type { UsageRow } from '../store/storageUsage.js'
 import { usePresets } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
@@ -62,6 +62,23 @@ function rowLabel(row: UsageRow, presets: Preset[]): string {
 //     few characters go with "Everything else".
 // Largest first, so the line to act on is the first one read.
 const LISTED_AT_LEAST = 5
+
+// ONE PERCENTAGE, AS IT IS SHOWN AND AS IT IS SAID — the ⚙ menu's "Storage used" line, this popup's
+// title, and every row of its breakdown draw their figure through this, so none of them can show
+// one a screen reader stumbles on. `written` is store/storageUsage's own text for the figure
+// (percentText). Almost always that is all there is to draw. The one figure with a sign in it,
+// "<0.1%", is drawn for the eye and hidden from a screen reader, which is given the store's words
+// for it instead (percentSpoken) — in an sr-only span, so nothing on screen moves or changes.
+export function StoragePercent({ written }: { written: string }) {
+  const spoken = percentSpoken(written)
+  if (spoken === null) return written
+  return (
+    <>
+      <span aria-hidden="true">{written}</span>
+      <span className="sr-only">{spoken}</span>
+    </>
+  )
+}
 const holdsSomething = (row: UsageRow): boolean => !('count' in row) || row.count > 0
 
 export default function StorageUsagePopup() {
@@ -86,7 +103,8 @@ export default function StorageUsagePopup() {
     .sort((a, b) => b.chars - a.chars)
   const listed = owners.filter((row, i) => i < LISTED_AT_LEAST || share(row.chars) >= 1)
   const rest = rows.filter((row) => !listed.includes(row)).reduce((sum, row) => sum + row.chars, 0)
-  const shown = (chars: number) => (measured ? percentText(chars, limit) : '')
+  const shown = (chars: number) =>
+    measured ? <StoragePercent written={percentText(chars, limit)} /> : null
   return (
     <Popup id="storage-usage" onDismiss={close} appWide>
       <div
@@ -97,7 +115,7 @@ export default function StorageUsagePopup() {
         className={MODAL_PLAIN_CARD_CLASS}
       >
         <div id="storage-usage-title" className="text-sm font-semibold text-(--tx-50) tabular-nums">
-          Storage used: {figure ?? 'not measured yet'}
+          Storage used: {figure === null ? 'not measured yet' : <StoragePercent written={figure} />}
         </div>
         <div className="text-xs text-(--tx-200-80) space-y-2">
           <p>

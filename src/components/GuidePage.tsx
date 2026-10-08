@@ -2192,7 +2192,9 @@ export default function GuidePage({
             is waiting, and that storage is almost full, whenever any of them is true. Inside the
             menu the <b>Storage used</b> line says the same of itself — it adds &quot;almost
             full&quot; while it is in its warning colour — and reads &quot;not measured yet&quot;
-            while it shows a dash.
+            while it shows a dash. The one figure written with a sign, &quot;&lt;0.1%&quot;, is read
+            as &quot;under 0.1%&quot; wherever it is shown: on that line, in the title of the
+            breakdown it opens, and beside each thing the breakdown lists.
           </li>
           <li>
             The two lists in the top bar say what they are set to, not just what they are: the

@@ -26,6 +26,7 @@ import {
   forgetStorageUsage,
   storageUsed,
   percentText,
+  percentSpoken,
   DOCUMENTED_LIMITS,
   MAX_STORAGE_LIMIT,
   STORAGE_WARN_PERCENT,
@@ -101,9 +102,23 @@ const unmountApp = () => {
   cleanup()
   document.getElementById('root')?.remove()
 }
+// Found by the name a screen reader is given — which never has a "<" in it: the one figure written
+// with that sign is SAID "under 0.1%" (store/storageUsage's percentSpoken).
 const popup = () =>
-  screen.queryByRole('dialog', { name: /^Storage used: (\d+\.\d%|<0\.1%|not measured yet)$/ })
+  screen.queryByRole('dialog', { name: /^Storage used: (\d+\.\d%|under 0\.1%|not measured yet)$/ })
 const line = () => panel().getByRole('button', { name: /^Storage used: / })
+// What an element SHOWS: its text without the words kept for a screen reader alone.
+const shownText = (el) => {
+  const copy = el.cloneNode(true)
+  for (const spoken of copy.querySelectorAll('.sr-only')) spoken.remove()
+  return copy.textContent
+}
+// What it SAYS: its text without what is drawn for the eye alone.
+const spokenText = (el) => {
+  const copy = el.cloneNode(true)
+  for (const drawn of copy.querySelectorAll('[aria-hidden="true"]')) drawn.remove()
+  return copy.textContent
+}
 const gearLit = () => gear().querySelector('[data-update-dot]').getAttribute('data-lit') === 'true'
 // What the gear's dot is saying — which is its colour (components/UpdateDot; index.css).
 const gearReason = () => gear().querySelector('[data-update-dot]').getAttribute('data-reason')
@@ -257,6 +272,15 @@ describe('what is filling the device', () => {
     expect(percentText(1, CHROMIUM)).toBe('<0.1%')
     expect(percentText(9, 10_000)).toBe('<0.1%')
     expect(percentText(10, 10_000)).toBe('0.1%')
+  })
+
+  // "<" has no reliable reading aloud. The one figure written with it has words to be said in its
+  // place; every other figure is said as it is written, so it has none.
+  it('…and is SAID "under 0.1%": the only figure with words of its own', () => {
+    expect(percentSpoken(percentText(1, CHROMIUM))).toBe('under 0.1%')
+    expect(percentSpoken('<0.1%')).toBe('under 0.1%')
+    for (const chars of [0, 10, 1234, 7999, 8000, 10_000, 30_000])
+      expect([chars, percentSpoken(percentText(chars, 10_000))]).toEqual([chars, null])
   })
 })
 
@@ -1538,11 +1562,11 @@ describe('on the mounted app, with a timed question on screen', () => {
 describe('the breakdown names what is saved at every size', () => {
   beforeEach(() => resetAppState())
   afterEach(unmountApp)
-  const rowsShown = () =>
+  const rowItems = () =>
     within(popup())
       .getAllByRole('listitem')
       .filter((li) => !li.closest('.list-disc'))
-      .map((li) => li.textContent)
+  const rowsShown = () => rowItems().map(shownText)
 
   it('an almost-empty device: each thing saved is named, with its share to one decimal beside it', () => {
     useProgress.getState().setModeStats('classic', long(12))
@@ -1566,6 +1590,50 @@ describe('the breakdown names what is saved at every size', () => {
     expect(rows).toHaveLength(4)
     // The app's own few keys are nobody's to clear: they are the one unnamed line, and the last.
     expect(rows.at(-1)).toMatch(/^Everything else(<0\.1|\d+\.\d)%$/)
+  })
+
+  // ★ WHAT IS SHOWN, AND WHAT IS SAID. A device that holds almost nothing shows "<0.1%" in all three
+  // places a percentage is drawn — the ⚙ line, the popup's title, a row of the breakdown — and a
+  // screen reader has no reliable reading of "<": in each of them it is given "under 0.1%" instead,
+  // and what is on screen is exactly what it was.
+  it('"<0.1%" is said "under 0.1%" on the ⚙ line, in the title, and in every row that shows it', () => {
+    useLookupHistory.getState().setHistory([{ id: 'a', y: 2001, m: 1, d: 1 }])
+    mountApp()
+    openSettings()
+    expect(percentText(everything(), CHROMIUM)).toBe('<0.1%') // the whole device, not just a row
+    // The ⚙ line.
+    expect(shownText(line())).toBe('Storage used: <0.1%')
+    expect(spokenText(line())).toBe('Storage used: under 0.1%')
+    expect(panel().getByRole('button', { name: 'Storage used: under 0.1%' })).toBe(line())
+    tap(line())
+    // The popup's title, which is the dialog's name.
+    const title = popup().querySelector('#storage-usage-title')
+    expect(shownText(title)).toBe('Storage used: <0.1%')
+    expect(spokenText(title)).toBe('Storage used: under 0.1%')
+    expect(screen.getByRole('dialog', { name: 'Storage used: under 0.1%' })).toBe(popup())
+    // Every row: it shows what the one rule writes, and says that — or the words for it.
+    const rows = rowItems()
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of rows) {
+      const shown = shownText(row).match(/(<0\.1|\d+\.\d)%$/)[0]
+      expect(shown).toBe('<0.1%') // on this device every owner is that small
+      expect(spokenText(row)).toBe(shownText(row).replace('<0.1%', 'under 0.1%'))
+      expect(spokenText(row)).not.toContain('<')
+    }
+  })
+
+  it('a figure that is a plain number is drawn as text alone — nothing hidden, nothing added', () => {
+    useProgress.getState().setModeStats('classic', long(4000))
+    mountApp()
+    openSettings()
+    expect(percentSpoken(percentText(everything(), CHROMIUM))).toBeNull()
+    expect(line().querySelector('[aria-hidden], .sr-only')).toBeNull()
+    tap(line())
+    const title = popup().querySelector('#storage-usage-title')
+    expect(title.querySelector('[aria-hidden], .sr-only')).toBeNull()
+    const big = rowItems().find((li) => /^Classic solve times/.test(li.textContent))
+    expect(big.querySelector('[aria-hidden], .sr-only')).toBeNull()
+    expect(big.textContent).toMatch(/^Classic solve times \(4,000\)\d+\.\d%$/)
   })
 
   it('largest first; small owners past the first five are gathered, large ones never are', () => {

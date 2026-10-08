@@ -31,6 +31,7 @@ import CustomSelect from './CustomSelect.jsx'
 import { PresetOptionLabel } from './PresetSwitcher.jsx'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { useStorageUsage } from '../store/storageUsage.js'
+import { StoragePercent } from './StorageUsagePopup.jsx'
 import Popup from './Popup.js'
 import { useLayer } from './overlayStack.js'
 import { MODAL_CARD_CLASS } from './modalContract.js'
@@ -1570,8 +1571,10 @@ export function SettingsPanel({
           {/* HOW FULL THE DEVICE'S ROOM FOR THE APP IS (store/storageUsage) — always shown, and a
               tap opens the breakdown (components/StorageUsagePopup, App's). The figure is the
               store's own text for it — one decimal place, by the one rule the popup's title and
-              rows use (percentText) — in tabular figures, so the line keeps its width as the
-              digits change. A dash on a device whose limit could not be measured — there is no
+              rows use (percentText) — drawn the way they draw theirs (StoragePercent, which gives
+              a screen reader words for the one figure written with a sign), in tabular figures, so
+              the line keeps its width as the digits change. A dash on a device whose limit could
+              not be measured — there is no
               honest percentage without one. On a row of its own:
               the metadata row below is already full at a phone's width. From the warning line up
               it wears the warning colour (index.css's .storage-warn), with the words for it for a
@@ -1583,11 +1586,13 @@ export function SettingsPanel({
               className={`select-none rounded-md px-1 -mx-1 underline tabular-nums ${storageWarning ? 'storage-warn' : ''}`}
             >
               Storage used:{' '}
-              {storageFigure ?? (
+              {storageFigure === null ? (
                 <>
                   <span aria-hidden="true">—</span>
                   <span className="sr-only">not measured yet</span>
                 </>
+              ) : (
+                <StoragePercent written={storageFigure} />
               )}
               {storageWarning && <span className="sr-only">, almost full</span>}
             </button>

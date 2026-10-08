@@ -86,6 +86,12 @@ import { captureError } from '../observability/sentry.js'
 //     it is not; only nothing at all is "0.0%";
 //   • the arithmetic is in whole characters, so a figure that sits exactly on a tenth cannot be
 //     nudged to the wrong side of it by a fraction the machine cannot hold.
+// ★ …AND HOW ONE IS SAID (percentSpoken). "<" has no reliable reading aloud — a screen reader may
+// say "less than", name the character, or skip it and read "0.1%", which is a different figure. So
+// the one figure written with it has words to be read in its place, "under 0.1%", and they are
+// kept here beside the rule that writes the figure: whoever shows a percentage shows it through
+// components/StorageUsagePopup's StoragePercent, which asks this file for both. What is on screen
+// does not change.
 // The warning itself compares the count with the line directly (settle) — it is not read back off
 // the text.
 //
@@ -226,6 +232,8 @@ export function readStorageUsage(area: Storage): UsageReading {
   return { used, rows }
 }
 
+// The one figure that is not a number read as it stands — as it is written, and as it is said.
+const UNDER_A_TENTH = { written: '<0.1%', spoken: 'under 0.1%' }
 /**
  * `chars` as a percentage of `limit`, as the app writes one (the header says why it is this rule):
  * one decimal place, the last digit cut and never rounded up; "<0.1%" for something too small to
@@ -233,8 +241,14 @@ export function readStorageUsage(area: Storage): UsageReading {
  */
 export function percentText(chars: number, limit: number): string {
   const tenths = Math.min(1000, Math.floor((chars * 1000) / limit))
-  return chars > 0 && tenths === 0 ? '<0.1%' : `${(tenths / 10).toFixed(1)}%`
+  return chars > 0 && tenths === 0 ? UNDER_A_TENTH.written : `${(tenths / 10).toFixed(1)}%`
 }
+/**
+ * The words a screen reader is given IN PLACE OF a figure percentText wrote — or null when the
+ * figure reads aloud as it is written, which every one but "<0.1%" does.
+ */
+export const percentSpoken = (written: string): string | null =>
+  written === UNDER_A_TENTH.written ? UNDER_A_TENTH.spoken : null
 
 export type StorageUsageState = {
   /** The device's limit, in characters — null until it has been measured (or a refusal taught one). */
