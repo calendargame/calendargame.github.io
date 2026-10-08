@@ -12,8 +12,6 @@ import { describe, it, expect } from 'vitest'
 import {
   dockShades,
   lineShare,
-  onTheLine,
-  goneFromTheLine,
   releaseShades,
   arrivingBarYield,
   arrivingShades,
@@ -168,7 +166,7 @@ describe('dockShades — the hand-off across a whole scroll', () => {
   })
 })
 
-// ── THE THREE MOMENTS THE POSITION ALONE GETS WRONG ─────────────────────────────────────────────
+// ── THE TWO MOMENTS THE POSITION ALONE GETS WRONG ─────────────────────────────────────────────
 describe('ARRIVING — an opening section answers to the motion`s clock, not to its place alone', () => {
   // A header tapped while it stood `above` px over the line, `p` of the way through being brought
   // down to it (the header's own offset runs out on the same clock), with the page stopped where a
@@ -267,52 +265,26 @@ describe('ARRIVING — an opening section answers to the motion`s clock, not to 
   })
 })
 
-describe('RESTING — a closed header left on the line: the bar keeps what its place alone allows', () => {
-  // A closed section is exactly as tall as its header: no room to stick in, nothing under it.
-  const closed = (headerTop) => ({
+describe('lineShare — what a header`s place alone allows the bar', () => {
+  const at = (headerTop) => ({
     lineY: LINE,
     headerTop,
     headerBottom: headerTop + HEAD_H,
     naturalTop: headerTop,
-    floorY: headerTop + HEAD_H,
+    floorY: headerTop + 1500,
   })
 
-  it('on the line the bar keeps none — the same as an open header with nothing under it yet', () => {
-    expect(lineShare(closed(LINE), RAMP)).toBe(0)
-    expect(lineShare(closed(LINE), RAMP)).toBe(
-      dockShades(sticky(LINE - BORDER, 1500), RAMP).barYield,
-    )
-    expect(dockShades(closed(LINE), RAMP).header).toBe(0) // and a closed header casts nothing
-  })
-
-  it('scrolled away either way, the bar`s share comes back over the ramp, and is whole a ramp off', () => {
+  it('none on the line, all of it a ramp`s length off either way, and the ramp between', () => {
     const half = DOCK_LINE_BAND_PX + (RAMP - DOCK_LINE_BAND_PX) / 2
-    expect(lineShare(closed(LINE - half), RAMP)).toBeCloseTo(0.5, 9)
-    expect(lineShare(closed(LINE + half), RAMP)).toBeCloseTo(0.5, 9)
-    expect(lineShare(closed(LINE - RAMP), RAMP)).toBe(1)
-    expect(lineShare(closed(LINE + RAMP + 100), RAMP)).toBe(1)
+    expect(lineShare(at(LINE), RAMP)).toBe(0)
+    expect(lineShare(at(LINE - half), RAMP)).toBeCloseTo(0.5, 9)
+    expect(lineShare(at(LINE + half), RAMP)).toBeCloseTo(0.5, 9)
+    expect(lineShare(at(LINE - RAMP), RAMP)).toBe(1)
+    expect(lineShare(at(LINE + RAMP + 100), RAMP)).toBe(1)
   })
 
   it('a line that cannot be measured leaves the bar alone', () => {
-    expect(lineShare({ ...closed(LINE), lineY: NaN }, RAMP)).toBe(1)
-  })
-
-  it('goneFromTheLine: a ramp`s length off, either way — and never by a line that could not be read', () => {
-    expect(goneFromTheLine(closed(LINE), RAMP)).toBe(false)
-    expect(goneFromTheLine(closed(LINE - RAMP + 1), RAMP)).toBe(false) // still coming back
-    expect(goneFromTheLine(closed(LINE - RAMP), RAMP)).toBe(true)
-    expect(goneFromTheLine(closed(LINE + RAMP), RAMP)).toBe(true)
-    // lineShare says "all of it" for an unreadable line, which is not the header having gone.
-    expect(goneFromTheLine({ ...closed(LINE), lineY: NaN }, RAMP)).toBe(false)
-  })
-
-  it('onTheLine: within the band the two measurements can disagree by, and not a hair more', () => {
-    expect(onTheLine(closed(LINE))).toBe(true)
-    expect(onTheLine(closed(LINE + DOCK_LINE_BAND_PX))).toBe(true)
-    expect(onTheLine(closed(LINE - DOCK_LINE_BAND_PX))).toBe(true)
-    expect(onTheLine(closed(LINE + DOCK_LINE_BAND_PX + 0.01))).toBe(false)
-    expect(onTheLine(closed(LINE - 17))).toBe(false) // part-way under the bar: cut by its edge
-    expect(onTheLine({ ...closed(LINE), lineY: NaN })).toBe(false)
+    expect(lineShare({ ...at(LINE), lineY: NaN }, RAMP)).toBe(1)
   })
 })
 

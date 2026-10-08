@@ -60,9 +60,8 @@
 // The one place both are 0 is a header docked with nothing under it yet — a section just opened —
 // which is exactly the case that must not look pinned.
 //
-// ── THREE MOMENTS THE POSITION ALONE GETS WRONG ─────────────────────────────────────────────
-// All three follow a tap on a header, and in all three the numbers above are true and the picture
-// is not:
+// ── TWO MOMENTS THE POSITION ALONE GETS WRONG ───────────────────────────────────────────────
+// Both follow a tap on a header, and in both the numbers above are true and the picture is not:
 //
 //   ARRIVING — a section is opened and glided to the line. For the length of that motion (the
 //     glide's own clock — components/GuidePage runs the page, the panels, and this on one) the
@@ -96,22 +95,10 @@
 //     fold away. So the hand-back is spread over that same fold (releaseShades): the header's
 //     shadow goes out as the text it was cast on does, and the bar's share rises to meet whatever
 //     the position then says — never above it (the caller takes the smaller of the two).
-//
-//   RESTING — a section is CLOSED with its header on the line (onTheLine), and the header is left
-//     exactly where it was: flush under the bar (the collapse keeps it under the finger). Nothing is
-//     open, so by the rule so far no header is considered at all and the bar is owed its shadow,
-//     and the page its top fade — drawn straight across the top of the header that has just been
-//     left there. But the picture has not changed: a header's top edge is on the line, and what
-//     meets the bar is that clean edge, not text sliding under it. A closed header has nothing
-//     under it, so it casts nothing itself; and the BAR keeps what the header's place alone allows
-//     (lineShare) — nothing while it rests on the line, more as the reader scrolls it away, all of
-//     it a ramp's length off. Exactly what an open header with nothing under it yet does, so
-//     closing a section and opening it again from there changes nothing at the bar.
-//       ⚠ ONLY THE HEADER THAT WAS LEFT THERE, AND ONLY UNTIL IT HAS GONE. Once it is a ramp's
-//       length from the line the caller stops considering it for good. A header that merely
-//       PASSES the line as a reader scrolls a page of closed sections is not resting on it, and if
-//       each one took the bar's shadow as it went by, the shadow and the fade would pulse the
-//       whole way down the page.
+//     ★ AND ONLY AN OPEN HEADER EVER TAKES THE BAR'S EDGE OVER (the owner's rule). Once the fold is
+//     done the header that was closed is page content like any other, wherever it has been left —
+//     flush under the bar included, which is where a section closed from its docked header leaves
+//     it: the bar's shadow and the page's top fade are drawn over it in full.
 import { edgeShade } from '../components/scrollRegion.js'
 
 // A docked header counts as having text under it only past this depth. A section that has just been
@@ -149,10 +136,6 @@ export interface DockShades {
 /** With no header to consider — no section open, or the guide off screen — the bar is unaffected. */
 export const NO_DOCK: DockShades = { header: 0, barYield: 1 }
 
-/** Whether a header's top is on the line — within the band in which the two measurements agree. */
-export const onTheLine = (g: HeaderDockGeometry): boolean =>
-  Math.abs(g.headerTop - g.lineY) <= DOCK_LINE_BAND_PX
-
 /**
  * The share of its shadow the bar keeps by a header's PLACE alone: none with the header's top on the
  * line, all of it a ramp's length away in either direction. A line that cannot be measured (no bar
@@ -162,13 +145,6 @@ export function lineShare(g: HeaderDockGeometry, rampPx: number): number {
   const offset = Math.abs(g.headerTop - g.lineY)
   return Number.isFinite(offset) ? edgeShade(offset, DOCK_LINE_BAND_PX, rampPx) : 1
 }
-
-/**
- * Whether a header has LEFT the line: a ramp's length from it, the bar keeping all of its shadow.
- * Only ever true of a line that was measured — one that cannot be read has not been left.
- */
-export const goneFromTheLine = (g: HeaderDockGeometry, rampPx: number): boolean =>
-  Number.isFinite(g.headerTop - g.lineY) && lineShare(g, rampPx) >= 1
 
 export function dockShades(g: HeaderDockGeometry, rampPx: number): DockShades {
   const depth = g.headerTop - g.naturalTop

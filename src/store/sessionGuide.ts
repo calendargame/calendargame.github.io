@@ -1,5 +1,5 @@
-// store/sessionGuide.ts — How to Play's PLACE (its open section, how far down you had read, and the
-// closed header you had left resting under the bar, if any), kept across a RELOAD.
+// store/sessionGuide.ts — How to Play's PLACE (its open section and how far down you had read), kept
+// across a RELOAD.
 //
 // THE OWNER'S RULE (store/browsingSession): "only truly closing the app starts fresh." The guide
 // already held its place through every detour inside the app — it stays mounted (the open section is
@@ -31,9 +31,7 @@
 // origin reads it. Anything unreadable in it — a build this one has never seen, a hand-edited value —
 // reads as "no place": the guide opens at the top with every section closed, as it always did. A
 // section id this build does not have simply opens nothing, and the offset is clamped by the browser
-// like any other scroll write. `rested` came later than the other two: a place parked without it (an
-// older build's, on this shared origin) reads as one with no header resting, and an older build
-// reading this one's ignores it. Every access is try/catch-wrapped (locked-down browsing throws on the
+// like any other scroll write. Every access is try/catch-wrapped (locked-down browsing throws on the
 // property access, where the place is simply not kept).
 
 const KEY = 'cg-guide-place-v1'
@@ -41,9 +39,6 @@ const KEY = 'cg-guide-place-v1'
 export interface GuidePlace {
   open: string | null // the open section's id, or null when every section is closed
   y: number //           the reading offset, in the app scroller's own scrollTop units
-  // The section whose header a close left resting on the line under the bar, or null — which the
-  // reload puts back on that line, where it is still what meets the bar (lib/guideDock's "RESTING").
-  rested: string | null
 }
 
 /** The guide's place as the last page left it this session, or null to open at the top, all closed. */
@@ -53,10 +48,10 @@ export function readGuidePlace(): GuidePlace | null {
     if (raw === null) return null
     const v: unknown = JSON.parse(raw)
     if (typeof v !== 'object' || v === null) return null
-    const { open, y, rested } = v as Record<string, unknown>
+    const { open, y } = v as Record<string, unknown>
     if (!(open === null || typeof open === 'string')) return null
     if (typeof y !== 'number' || !Number.isFinite(y) || y < 0) return null
-    return { open, y, rested: typeof rested === 'string' ? rested : null }
+    return { open, y }
   } catch {
     return null
   }
