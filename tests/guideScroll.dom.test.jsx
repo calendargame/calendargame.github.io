@@ -43,7 +43,7 @@ import {
 import { forgetBrowsingSession } from '../src/store/browsingSession.js'
 import { installGuideScroller } from './helpers/guideScroller.jsx'
 import { installResizeObserver, holdFrames } from './helpers/scrollGeometry.js'
-import { ACCORDION_MS_FLOOR } from '../src/lib/accordionMotion.js'
+import { ACCORDION_MS_FLOOR, accordionEase } from '../src/lib/accordionMotion.js'
 
 // CustomSelect and the Save Defaults popup portal into #root, so the harness must provide one.
 function mountApp() {
@@ -708,6 +708,92 @@ describe('tapping a section carries the reading position with it', () => {
     expect(g.pos()).toBeGreaterThan(440)
     runFrames(frames, 240)
     expect(g.pos()).toBe(440) // ceil(500 − 60)
+  })
+
+  // ★ ONE CLOCK: THE FOLD'S OWN. The glide used to keep time itself, from the first frame after the
+  // tap — and the browser starts a transition when it is ready to, which after a slow frame was
+  // later: the page ran ahead of the fold for the whole glide. It reads the time off the panel's
+  // own transition now. jsdom has no transitions (every case above runs on the fallback, the tap's
+  // own duration from its first frame), so one is stood up here, on the panel the tap opens.
+  describe('the glide keeps the fold`s own time, read off the panel`s transition', () => {
+    const foldOf = (container, id) =>
+      container.querySelector(`#guide-panel-${id}`).closest('.expander')
+    // The panel's transition, `ms` into a run `duration` long — or over, when `ms` is null.
+    const setFold = (expander, ms, duration = 240, delay = 0) => {
+      expander.getAnimations = () =>
+        ms === null
+          ? []
+          : [
+              { transitionProperty: 'opacity', currentTime: 9999, effect: null }, // not the fold
+              {
+                transitionProperty: 'grid-template-rows',
+                currentTime: ms,
+                effect: { getComputedTiming: () => ({ duration, delay }) },
+              },
+            ]
+    }
+    const open = () => {
+      const { container, g } = readingPage()
+      g.setSeat(60)
+      openingPanelHeight(400)
+      const frames = manualFrames()
+      tap(container, 'overview')
+      return { container, g, frames, fold: foldOf(container, 'overview') }
+    }
+
+    it('a fold the browser has not started yet holds the page still, however many frames go by', () => {
+      const { g, frames, fold } = open()
+      setFold(fold, 0)
+      for (const frameTime of [0, 100, 5000]) runFrames(frames, frameTime)
+      expect(g.pos()).toBe(500)
+      expect(waitingFrames(frames)).not.toEqual([]) // still gliding
+    })
+
+    it('the page is where the fold is — by the fold`s time, not the frame`s', () => {
+      const { g, frames, fold } = open()
+      setFold(fold, 0)
+      runFrames(frames, 0)
+      setFold(fold, 120) // half-way through its 240ms…
+      runFrames(frames, 7) // …on a frame the page's own count would call 7ms in
+      expect(g.pos()).toBeCloseTo(500 - 60 * accordionEase(0.5), 9)
+      setFold(fold, 180)
+      runFrames(frames, 8)
+      expect(g.pos()).toBeCloseTo(500 - 60 * accordionEase(0.75), 9)
+    })
+
+    it('a fold that is over has landed the page, and nothing is asked for again', () => {
+      const { g, frames, fold } = open()
+      setFold(fold, 120)
+      runFrames(frames, 0)
+      setFold(fold, null) // finished: the browser no longer lists it
+      runFrames(frames, 1)
+      expect(g.pos()).toBe(440)
+      expect(waitingFrames(frames)).toEqual([])
+    })
+
+    it('a fold the browser shortened or delayed is followed over ITS length, not the tap`s', () => {
+      const { g, frames, fold } = open()
+      setFold(fold, 50, 100) // a reversed fold: 100ms long, half-way
+      runFrames(frames, 0)
+      expect(g.pos()).toBeCloseTo(500 - 60 * accordionEase(0.5), 9)
+      setFold(fold, 30, 100, 30) // …and one still inside its delay has not begun
+      runFrames(frames, 1)
+      expect(g.pos()).toBe(500)
+    })
+
+    it('when a section above is closing, it is THAT fold the page keeps time with', () => {
+      const { container, g } = readingPage(2500)
+      mockRects((el) => (el.classList.contains('expander') ? 600.5 : 0))
+      tap(container, 'overview')
+      const frames = manualFrames()
+      tap(container, 'buttons')
+      setFold(foldOf(container, 'buttons'), 240) // the opening one says it is done…
+      setFold(foldOf(container, 'overview'), 0) // …the closing one has not started
+      g.clearWrites()
+      runFrames(frames, 0)
+      runFrames(frames, 300)
+      expect(new Set(g.writes)).toEqual(new Set([2500])) // the page has not moved
+    })
   })
 
   it('jumps straight to the end state under Reduce Motion', () => {

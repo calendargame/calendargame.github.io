@@ -118,16 +118,69 @@ function headerPinDepth(id: string): number {
   return g ? Math.max(0, g.headerTop - g.naturalTop) : 0
 }
 
+// foldClock — HOW FAR THROUGH ITS MOTION THIS TAP'S FOLD IS, 0…1, asked once a frame by everything
+// the tap set moving that is not the fold itself: the page's glide, a header being brought down to
+// the line, a closing header's shadows, and an opening section's arrival.
+//
+// ★ IT IS THE FOLD'S OWN CLOCK, READ OFF THE TRANSITION THE BROWSER IS DRAWING THE PANEL WITH. Those
+// four used to keep time themselves — the first animation frame after the tap was their t=0, and
+// the tap's duration their length — on the reasoning that the panel's CSS transition first renders
+// on that same frame. It usually does. But the browser starts a transition when IT is ready to, and
+// after a slow frame — the very frame in which a tall section starts to fold — that was a frame
+// later than the first callback: measured, the page ran two frames ahead of the fold for the whole
+// of the glide, and with eight thousand pixels of section folding that put the tapped header well
+// over a thousand pixels from where the fold had its section. Two clocks started by two parties
+// cannot be kept together by starting them carefully; there has to be one. So:
+//   • `panel` is the panel this tap folds (the closing one when there is one — the taller motion,
+//     and the one whose error is the visible one — else the opening one), and its transition's own
+//     time, as a fraction of its own length, is the answer: 0 while the browser has not started it,
+//     then exactly what is drawn. (Its TIME, not the progress it reports: where an engine puts the
+//     curve — on the effect, or on its keyframes — decides whether that number is already eased.)
+//     That is also right where a second tap REVERSES a fold in flight, which the browser shortens
+//     by its own rule (the transition's duration is then not the one this tap worked out).
+//   • once it has been followed, a panel with no transition has FINISHED: the answer is 1.
+//   • a fold with no time to take (Reduce Motion: --motion-scale 0) is over at once.
+//   • and where there is no transition to follow at all — an engine without one, the layout-less
+//     test environment — it keeps time from its first frame over the tap's own duration, as before.
+// The curve is not this clock's business: each asker eases the answer with accordionEase, the
+// numeric twin of the panels' cubic-bezier.
+interface FoldClock {
+  /** Nothing takes any time: the end state at once. */
+  instant: boolean
+  /** How far through, 0…1, at the frame whose timestamp is `now`. */
+  at: (now: number) => number
+}
+function foldClock(panel: HTMLElement | null, durationMs: number): FoldClock {
+  let start: number | null = null
+  let followed = false
+  const instant = durationMs <= 0
+  return {
+    instant,
+    at: (now) => {
+      if (instant) return 1
+      // (Optional calls: jsdom has no Web Animations.)
+      const fold = panel
+        ?.getAnimations?.()
+        .find((a) => 'transitionProperty' in a && a.transitionProperty === 'grid-template-rows')
+      const elapsed = fold?.currentTime
+      const timing = fold?.effect?.getComputedTiming()
+      if (typeof elapsed === 'number' && timing && typeof timing.duration === 'number') {
+        followed = true
+        const run = elapsed - (timing.delay ?? 0)
+        return timing.duration > 0 ? Math.min(1, Math.max(0, run / timing.duration)) : 1
+      }
+      if (followed) return 1
+      if (start === null) start = now
+      return Math.min(1, (now - start) / durationMs)
+    },
+  }
+}
 // startScrollWriter — the coordinator's per-frame scroll driver, pointed at the element
-// the guide scrolls. Runs the SAME clock and curve as the panel transitions: durationMs
-// is the very value stamped into --expander-ms (pre-multiplied by --motion-scale, so
-// Reduce Motion passes 0 here), and accordionEase is the numeric twin of the panels' CSS
-// cubic-bezier. rAF callbacks fire before a frame's style/paint, so the first callback
-// lands on the same frame the CSS transition first renders — treating its timestamp as
-// t=0 keeps writer and panels in step — and a 0 duration jumps straight to the end state
-// on that first pre-paint callback: the snapped layout and the corrected scroll appear
-// together (the Reduce Motion instant path, which also fixes the old teleport-past-max
-// clamp). Any real user scroll input (touchstart/wheel) cancels the writer instantly —
+// the guide scrolls. Runs on the fold's own clock (foldClock, above) and on its curve:
+// accordionEase is the numeric twin of the panels' CSS cubic-bezier. A fold with no time to
+// take jumps straight to the end state on the first pre-paint callback: the snapped layout
+// and the corrected scroll appear together (the Reduce Motion instant path, which also fixes
+// the old teleport-past-max clamp). Any real user scroll input (touchstart/wheel) cancels the writer instantly —
 // the user always wins — and the returned cancel function serves mid-flight re-toggles,
 // leaving the guide for another mode, the app being backgrounded, and unmount (see
 // scrollWriterRef below). `onTakenOver` is told when it was the READER who ended it — the one
@@ -142,11 +195,10 @@ function startScrollWriter(
   el: HTMLElement,
   from: number,
   to: number,
-  durationMs: number,
+  clock: FoldClock,
   onTakenOver: () => void,
 ): () => void {
   let raf = 0
-  let start: number | null = null
   const cancel = () => {
     cancelAnimationFrame(raf)
     window.removeEventListener('touchstart', takeOver)
@@ -159,8 +211,7 @@ function startScrollWriter(
   window.addEventListener('touchstart', takeOver, { passive: true })
   window.addEventListener('wheel', takeOver, { passive: true })
   const step = (now: number) => {
-    if (start === null) start = now
-    const p = durationMs <= 0 ? 1 : Math.min(1, (now - start) / durationMs)
+    const p = clock.at(now)
     el.scrollTop = from + (to - from) * accordionEase(p)
     if (p < 1) raf = requestAnimationFrame(step)
     else cancel()
@@ -168,24 +219,22 @@ function startScrollWriter(
   raf = requestAnimationFrame(step)
   return cancel
 }
-// startArrival — the clock of a section ARRIVING at the line (lib/guideDock): the same duration and
-// curve as the glide that carries it, the panels, and the header's own offset, on its own frames —
-// because the arrival outlasts the glide when a reader takes the page over (the header is still
-// coming down, the panel still opening). `onStep` is told how far along the curve it is (0…1) on
+// startArrival — a section ARRIVING at the line (lib/guideDock), on the fold's clock and curve like
+// the glide that carries it and the header's own offset, but on its own frames — because the
+// arrival outlasts the glide when a reader takes the page over (the header is still coming down,
+// the panel still opening). `onStep` is told how far along the curve it is (0…1) on
 // every frame, and `onEnd` when the clock has run out. It asks for its frame AFTER the header's
 // offset and the scroll writer have asked for theirs (the toggle starts it last), so on every frame
 // it is called with the page and the header already where that frame puts them. Returns the cancel;
 // neither callback is called after it.
 function startArrival(
-  durationMs: number,
+  clock: FoldClock,
   onStep: (eased: number) => void,
   onEnd: () => void,
 ): () => void {
   let raf = 0
-  let start: number | null = null
   const step = (now: number) => {
-    if (start === null) start = now
-    const p = durationMs <= 0 ? 1 : Math.min(1, (now - start) / durationMs)
+    const p = clock.at(now)
     if (p < 1) {
       onStep(accordionEase(p))
       raf = requestAnimationFrame(step)
@@ -201,18 +250,16 @@ function startArrival(
 // tap itself. Returns the cancel; `write` is never called after it.
 function startShadeRelease(
   from: DockShades,
-  durationMs: number,
+  clock: FoldClock,
   write: (shades: DockShades, done: boolean) => void,
 ): () => void {
-  if (durationMs <= 0) {
+  if (clock.instant) {
     write(releaseShades(from, 1), true)
     return () => {}
   }
   let raf = 0
-  let start: number | null = null
   const step = (now: number) => {
-    if (start === null) start = now
-    const p = Math.min(1, (now - start) / durationMs)
+    const p = clock.at(now)
     write(releaseShades(from, accordionEase(p)), p >= 1)
     if (p < 1) raf = requestAnimationFrame(step)
   }
@@ -229,9 +276,9 @@ function startShadeRelease(
 // motion the header's `top` is therefore written here, inline: `fromPx` at once (in the tap, so the
 // frame of the tap shows the header exactly where it was), then on to `toPx` on the clock and curve
 // the panels and the scroll writer run, and off the header altogether at the end — the stylesheet's
-// own line again. It asks for its frame in the same tap as the scroll writer, so the two are handed
-// one timestamp per frame and agree on every one: while only the glide is moving the page, the
-// header rides its section's top edge exactly, and lands as it lands. `fromPx` equal to `toPx` HOLDS
+// own line again. It reads the same clock as the scroll writer (foldClock), so the two agree on
+// every frame: while only the glide is moving the page, the header rides its section's top edge
+// exactly, and lands as it lands. `fromPx` equal to `toPx` HOLDS
 // the header where it stands for that long (a section closed again while its header was still on
 // its way). Returns the cancel, which leaves `top` as it stands; `onEnd` is told only when it ran
 // to its end.
@@ -239,15 +286,13 @@ function startHeaderOffset(
   header: HTMLElement,
   fromPx: number,
   toPx: number,
-  durationMs: number,
+  clock: FoldClock,
   onEnd: () => void,
 ): () => void {
   let raf = 0
-  let start: number | null = null
   header.style.top = `${fromPx}px`
   const step = (now: number) => {
-    if (start === null) start = now
-    const p = Math.min(1, (now - start) / durationMs)
+    const p = clock.at(now)
     if (p < 1) {
       header.style.top = `${fromPx + (toPx - fromPx) * accordionEase(p)}px`
       raf = requestAnimationFrame(step)
@@ -595,11 +640,11 @@ export default function GuidePage({
     if (rest) header.style.top = ''
   }, [])
   const runHeaderOffset = useCallback(
-    (header: HTMLElement, fromPx: number, toPx: number, durationMs: number) => {
+    (header: HTMLElement, fromPx: number, toPx: number, clock: FoldClock) => {
       endHeaderOffset(header, false)
       headerOffsetsRef.current.set(
         header,
-        startHeaderOffset(header, fromPx, toPx, durationMs, () =>
+        startHeaderOffset(header, fromPx, toPx, clock, () =>
           headerOffsetsRef.current.delete(header),
         ),
       )
@@ -787,6 +832,11 @@ export default function GuidePage({
         getComputedStyle(document.documentElement).getPropertyValue('--motion-scale'),
       )
       const scaledMs = durationMs * (Number.isFinite(scaleRead) ? scaleRead : 1)
+      // …and all of it keeps the fold's own time (foldClock), off the panel this tap folds.
+      const clock = foldClock(
+        closingExpander ?? openingBody?.closest<HTMLElement>('.expander') ?? null,
+        scaledMs,
+      )
       // A SECTION THAT IS CLOSING LETS GO OF ITS SHADOWS OVER ITS OWN FOLD (lib/guideDock's
       // "RELEASING") — this tap's, or the open one a tap on another section swaps out. Started
       // HERE, before the state flips: the tracker's cleanup runs in the commit that follows, and by
@@ -802,7 +852,7 @@ export default function GuidePage({
         barShareRef.current.released = sharedBefore
         const cancel = startShadeRelease(
           { header: openShadesRef.current.header, barYield: sharedBefore },
-          scaledMs,
+          clock,
           (shades, done) => {
             writeShade(closingHeader, shades.header)
             barShareRef.current.released = shades.barYield
@@ -846,7 +896,7 @@ export default function GuidePage({
       // in.
       if (closingHeader && headerOffsetsRef.current.has(closingHeader)) {
         const standsAt = parseFloat(closingHeader.style.top)
-        if (scaledMs > 0) runHeaderOffset(closingHeader, standsAt, standsAt, scaledMs)
+        if (scaledMs > 0) runHeaderOffset(closingHeader, standsAt, standsAt, clock)
         else endHeaderOffset(closingHeader, true)
       }
       const tappedHeader = opens ? document.getElementById(headerDomId(id)) : null
@@ -856,7 +906,7 @@ export default function GuidePage({
           readBarHeight(getComputedStyle(scroller)) -
           tappedHeader.getBoundingClientRect().top
         if (scaledMs > 0 && aboveLine > DOCK_LINE_BAND_PX)
-          runHeaderOffset(tappedHeader, -aboveLine, 0, scaledMs)
+          runHeaderOffset(tappedHeader, -aboveLine, 0, clock)
         else endHeaderOffset(tappedHeader, true)
       }
       const scrollY = scroller.scrollTop
@@ -908,14 +958,14 @@ export default function GuidePage({
       // marked on the clock — from there the header's shadow comes in as the bar's goes on out. When
       // the clock has run out the header is looked at once more, as it stands.
       // Started AFTER the glide, so each of its frames finds the page already moved (startArrival).
-      scrollWriterRef.current = startScrollWriter(scroller, scrollY, target, scaledMs, () => {
+      scrollWriterRef.current = startScrollWriter(scroller, scrollY, target, clock, () => {
         const arriving = arrivingRef.current
         if (arriving?.id === id) arriving.arrival.takenOverAt = arriving.arrival.progress
       })
       if (!opens) return
       const arrival: Arrival = { from: sharedBefore, progress: 0, takenOverAt: null }
       const cancelArrival = startArrival(
-        scaledMs,
+        clock,
         (eased) => {
           arrival.progress = eased
           trackerRef.current?.()
