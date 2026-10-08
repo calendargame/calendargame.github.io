@@ -659,9 +659,11 @@ export default function CustomSelect({
           through names the list then cut short. It is this wrapper's own width (which is the
           trigger's, and so the panel's), the list's own `p-1`, and the very rows the list draws
           (OPTION_ROW_BOX + OptionRowCells), so it cannot disagree with the open list. Out of flow,
-          zero-height and clipped, so however many options there are it adds nothing to any
-          scroller's extent (the ⚙ menu's, for "Open in"); no role, aria-hidden, visibility:hidden,
-          pointer-events:none — invisible to the user, to assistive tech, and to role queries. */}
+          pinned to this wrapper's top, and clipped to no height but its own padding (`height:0`
+          on a border-box cannot go under the `p-1` — a few pixels, well inside the trigger's own
+          height), so however many options there are it adds nothing to any scroller's extent (the
+          ⚙ menu's, for "Open in"); no role, aria-hidden, visibility:hidden, pointer-events:none —
+          invisible to the user, to assistive tech, and to role queries. */}
       {dropdownWidth === 'match-trigger' && (
         <div
           aria-hidden="true"

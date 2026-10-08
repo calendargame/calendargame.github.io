@@ -3499,8 +3499,8 @@ export default function GuidePage({
         <p>
           It still leaves the other mode-screen choices alone: the Deduction sub-type, One-by-One,
           Allow Mistakes, Blitz's Per Round versus Per Question, and the show/hide stat toggles all
-          stay exactly as you have them. Your stats and history are untouched too —<i>unless</i> the{' '}
-          <b>Amnesic</b> restore above actually changes the value, in which case whatever that
+          stay exactly as you have them. Your stats and history are untouched too — <i>unless</i>{' '}
+          the <b>Amnesic</b> restore above actually changes the value, in which case whatever that
           change discards or sets aside (see the paragraph above) is gone the moment you tap, not
           held back until anything closes. Restoring one of the four capturable mode-screen values
           while a MoX run or a Blitz round is going resets that run or round when you close the

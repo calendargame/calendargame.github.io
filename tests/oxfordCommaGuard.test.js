@@ -480,12 +480,6 @@ const NOT_A_LIST = [
   {
     file: 'src/components/GuidePage.tsx',
     phrase:
-      'Your stats and history are untouched too —unless the Amnesic restore above actually changes the value, in which case whatever that change discards or sets aside (see the paragraph above',
-    why: 'the comma opens “in which case …” two words late for the guard (“—unless” is written without a space); “discards or sets aside” is a pair of verbs',
-  },
-  {
-    file: 'src/components/GuidePage.tsx',
-    phrase:
       'When every setting, toggle, stat, best, history entry, and live state in the preset you are on is already where Full Reset would put it, the button dims and locks since tapping it would have no effect',
     why: 'the commas belong to the list in the “When …” half, which has its comma (“…, history entry, and live state”); “dims and locks” is a pair of verbs',
   },
