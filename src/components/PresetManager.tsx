@@ -24,6 +24,7 @@ import {
   renamePreset,
 } from '../store/presetControl.js'
 import { capCandidateToNameRoom } from '../lib/presetNameWidth.js'
+import type { TextRange } from '../lib/presetNameWidth.js'
 import {
   targetIndexForCenter,
   stepsToReorder,
@@ -105,7 +106,10 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // row of its list, and "Open in" and its list, the narrowest governing (a real canvas measurement
 // against real DOM elements in another part of the tree entirely — see that file for the mechanism
 // and why it is not a React prop or a store) — and refuses what does not fit: a typed letter
-// outright, a paste down to as much of its start as fits, the shape `maxLength` gives one.
+// outright, a paste down to as much of its start as fits, the shape `maxLength` gives one. The
+// field also tells it WHAT WAS SELECTED when the edit began (`selectedBeforeEdit`, below), which the
+// text alone cannot always say, and puts the cursor where the cap says it belongs whenever the cap
+// answers with something other than what was typed (`cursorToPlace`).
 // `nameWidthCapped` is what a refusal sets, and it drives the small WIDTH-language note below the
 // field ("That's as long as this name can display.") rather than a character count, because a
 // character count is no longer the true reason.
@@ -395,18 +399,18 @@ export default function PresetManager({
   // that is not — and the moment they can disagree, "which is the real name" has two answers. This
   // shape makes it unrepresentable: a row shows `editing.text` if it is THE row and `p.name`
   // otherwise, so a preset that is not being typed into can only ever show what is saved.
-  // ★ `composingFrom` IS SET ONLY WHILE AN INPUT METHOD IS COMPOSING (Japanese, Chinese, Korean,
-  // a phone's dictation or swipe keyboard on some platforms), and it is the text the field held
-  // when the composition began. A composition is one edit that arrives in pieces, and the pieces
-  // are the keyboard's, not the player's: refusing or trimming one mid-way writes back into a box
-  // the input method is still drawing in, which cancels or garbles what is being composed. So the
-  // pieces are shown as they come and the WHOLE composition is put to the width cap once, when it
-  // ends, against the text it started from. It lives in this object so that it cannot outlive the
-  // edit: whatever clears `editing` clears it.
+  // ★ `composing` IS SET ONLY WHILE AN INPUT METHOD IS COMPOSING (Japanese, Chinese, Korean, a
+  // phone's dictation or swipe keyboard on some platforms), and it is the text the field held when
+  // the composition began, with what was selected in it. A composition is one edit that arrives in
+  // pieces, and the pieces are the keyboard's, not the player's: refusing or trimming one mid-way
+  // writes back into a box the input method is still drawing in, which cancels or garbles what is
+  // being composed. So the pieces are shown as they come and the WHOLE composition is put to the
+  // width cap once, when it ends, against the text it started from. It lives in this object so
+  // that it cannot outlive the edit: whatever clears `editing` clears it.
   const [editing, setEditing] = useState<{
     id: number
     text: string
-    composingFrom?: string
+    composing?: { from: string; replaced: TextRange | null }
   } | null>(null)
   const editingText = (id: number, name: string) => (editing?.id === id ? editing.text : name)
 
@@ -418,10 +422,53 @@ export default function PresetManager({
   // Reset wherever `editing` itself resets — a commit (which is also every blur), a discard — so
   // neither the note nor the refusal can survive past the field it was about.
   const [nameWidthCapped, setNameWidthCapped] = useState(false)
+  // ★ WHAT WAS SELECTED IN THE FIELD WHEN THE EDIT NOW ARRIVING BEGAN — noted from the browser's
+  // own `beforeinput`, the one moment the box still holds the old text and the old selection, and
+  // handed to the width cap with the edit (lib/presetNameWidth's `replaced` says why the text alone
+  // is not enough, and checks the claim before using it). Taken — read and cleared — by the edit
+  // it belongs to, so one edit's selection is never offered to the next. One listener on the card
+  // for every row's field (below, beside the card's ref): the event bubbles, and the name boxes are
+  // the only text boxes the card has.
+  // (A native listener because React's `onBeforeInput` is its own older, narrower event: it does
+  // not fire for a paste or a deletion.)
+  const selectedBeforeEdit = useRef<TextRange | null>(null)
+  const selectionOf = (el: HTMLInputElement): TextRange | null =>
+    el.selectionStart === null || el.selectionEnd === null
+      ? null
+      : { start: el.selectionStart, end: el.selectionEnd }
+  const takeSelectedBeforeEdit = () => {
+    const range = selectedBeforeEdit.current
+    selectedBeforeEdit.current = null
+    return range
+  }
+
+  // ★ WHERE THE CURSOR GOES AFTER THE CAP ANSWERS WITH SOMETHING OTHER THAN WHAT WAS TYPED. The
+  // field is then written back to, and a box that is written to puts its cursor at the end — so a
+  // letter refused in the middle of a name used to throw the cursor to the end of it. The cap says
+  // where it belongs (its `selection`: behind what was kept of a paste, or the selection as it was
+  // before a refused edit), and it is placed in the frame that draws the answer.
+  const cursorToPlace = useRef<{ input: HTMLInputElement; range: TextRange } | null>(null)
+  useLayoutEffect(() => {
+    const place = cursorToPlace.current
+    if (!place) return
+    cursorToPlace.current = null
+    place.input.setSelectionRange(place.range.start, place.range.end)
+  })
   // Put one finished edit to the width cap and show what it answers. `previous` is what the field
-  // held before the edit.
-  const applyNameEdit = (id: number, candidate: string, previous: string) => {
-    const { text, capped } = capCandidateToNameRoom(candidate, previous, nameWidthCapped)
+  // held before the edit, and `replaced` what was selected in it.
+  const applyNameEdit = (
+    input: HTMLInputElement,
+    id: number,
+    previous: string,
+    replaced: TextRange | null,
+  ) => {
+    const { text, capped, selection } = capCandidateToNameRoom(
+      input.value,
+      previous,
+      nameWidthCapped,
+      replaced,
+    )
+    cursorToPlace.current = selection ? { input, range: selection } : null
     setEditing({ id, text })
     setNameWidthCapped(capped)
   }
@@ -446,6 +493,21 @@ export default function PresetManager({
   useEffect(() => {
     cardRef.current?.focus()
   }, [pendingDeleteId])
+  // The `beforeinput` listener `selectedBeforeEdit` is filled by. Its dependency is the VIEW, as
+  // the focus above: each view draws the card, so whichever element that is now, the listener is
+  // on it.
+  const listShown = pendingDeleteId === null
+  useEffect(() => {
+    const card = cardRef.current
+    if (!card) return
+    const note = (e: Event) => {
+      if (e.target instanceof HTMLInputElement) {
+        selectedBeforeEdit.current = selectionOf(e.target)
+      }
+    }
+    card.addEventListener('beforeinput', note)
+    return () => card.removeEventListener('beforeinput', note)
+  }, [listShown])
 
   // The list's scroll region, on the app's shared recipe (components/scrollRegion) — the same
   // treatment the Changelog popup's list wears, for the same reason: a bare max-height clips with
@@ -506,11 +568,16 @@ export default function PresetManager({
   const commitRename = () => {
     if (!editing) return
     // A composition still open when the field is left has not been put to the width cap yet (see
-    // `composingFrom`), so it is now — nothing unjudged is ever saved.
+    // `composing`), so it is now — nothing unjudged is ever saved.
     const text =
-      editing.composingFrom === undefined
+      editing.composing === undefined
         ? editing.text
-        : capCandidateToNameRoom(editing.text, editing.composingFrom, nameWidthCapped).text
+        : capCandidateToNameRoom(
+            editing.text,
+            editing.composing.from,
+            nameWidthCapped,
+            editing.composing.replaced,
+          ).text
     renamePreset(editing.id, text)
     setEditing(null)
     setNameWidthCapped(false)
@@ -1037,9 +1104,9 @@ export default function PresetManager({
                       if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
                     }}
                     onChange={(e) => {
-                      const current = editingText(p.id, p.name)
-                      // Mid-composition: show the piece, judge nothing (see `composingFrom`).
-                      if (editing?.id === p.id && editing.composingFrom !== undefined) {
+                      const replaced = takeSelectedBeforeEdit()
+                      // Mid-composition: show the piece, judge nothing (see `composing`).
+                      if (editing?.id === p.id && editing.composing !== undefined) {
                         setEditing({ ...editing, text: e.target.value })
                         return
                       }
@@ -1047,15 +1114,18 @@ export default function PresetManager({
                       // preset name is drawn (other, separately-mounted controls), not this field's own
                       // room, and refuses what does not fit. See that file and the ★★ note above for
                       // the mechanism and why the cap moved here from a character count.
-                      applyNameEdit(p.id, e.target.value, current)
+                      applyNameEdit(e.target, p.id, editingText(p.id, p.name), replaced)
                     }}
-                    onCompositionStart={() => {
-                      const current = editingText(p.id, p.name)
-                      setEditing({ id: p.id, text: current, composingFrom: current })
+                    onCompositionStart={(e) => {
+                      // The box still holds the text, and the selection, the composition starts from.
+                      const from = editingText(p.id, p.name)
+                      const replaced = selectionOf(e.currentTarget)
+                      setEditing({ id: p.id, text: from, composing: { from, replaced } })
                     }}
                     onCompositionEnd={(e) => {
-                      if (editing?.id !== p.id || editing.composingFrom === undefined) return
-                      applyNameEdit(p.id, e.currentTarget.value, editing.composingFrom)
+                      if (editing?.id !== p.id || editing.composing === undefined) return
+                      const { from, replaced } = editing.composing
+                      applyNameEdit(e.currentTarget, p.id, from, replaced)
                     }}
                     onBlur={commitRename}
                     onKeyDown={(e) => {

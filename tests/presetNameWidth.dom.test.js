@@ -2,7 +2,7 @@
 //
 // presetNameWidth.dom — the DOM/canvas-touching half of lib/presetNameWidth's live typing cap
 // (round 20): reading the live room in every place a preset name is drawn (readNameRooms),
-// measuring text against a canvas (measureTextWidthPx, fitTextToRooms), and the one function
+// measuring text against a canvas (measureTextWidthPx), and the one function
 // components/PresetManager actually calls (capCandidateToNameRoom). tests/presetNameWidth.test.js
 // owns the PURE decision (fitsWithinWidth) with fabricated numbers and no jsdom at all.
 //
@@ -16,7 +16,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   readNameRooms,
   measureTextWidthPx,
-  fitTextToRooms,
   capCandidateToNameRoom,
 } from '../src/lib/presetNameWidth.js'
 import { PRESET_NAME_CELL_SELECTOR } from '../src/components/PresetSwitcher.jsx'
@@ -180,62 +179,26 @@ describe('measureTextWidthPx — degrades to 0 without a real canvas, measures f
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('fitTextToRooms — the maxLength-shaped truncation for a paste-sized change', () => {
-  it('returns the candidate UNCHANGED when it already fits', () => {
-    const restore = installFakeCanvas()
-    expect(fitTextToRooms('Hi', [{ font: ROW_FONT, widthPx: 1000 }])).toBe('Hi')
-    restore()
-  })
-
-  it('trims to the longest prefix that fits, character by character', () => {
-    const restore = installFakeCanvas()
-    // Room for exactly 5 characters at 5px each is 25px.
-    expect(fitTextToRooms('Weekend Mornings', [{ font: ROW_FONT, widthPx: 25 }])).toBe('Weeke')
-    restore()
-  })
-
-  it('trims to what fits EVERY room — the narrowest governs, each in its own font', () => {
-    const restore = installFakeCanvas()
-    // The same 40px holds 10 characters of the button's text and only 8 of the row's.
-    const rooms = [
-      { font: BUTTON_FONT, widthPx: 40 },
-      { font: ROW_FONT, widthPx: 40 },
-    ]
-    expect(fitTextToRooms('Weekend Mornings', rooms)).toBe('Weekend ')
-    // …and the order they are listed in decides nothing.
-    expect(fitTextToRooms('Weekend Mornings', [...rooms].reverse())).toBe('Weekend ')
-    restore()
-  })
-
-  it('trims all the way to empty when even one character does not fit', () => {
-    const restore = installFakeCanvas()
-    expect(fitTextToRooms('W', [{ font: ROW_FONT, widthPx: 1 }])).toBe('')
-    restore()
-  })
-
-  it('without a real canvas (0-width measurement), nothing is ever trimmed', () => {
-    // The documented degradation: a 0-width measurement always "fits" (fitsWithinWidth's own
-    // inclusive-boundary case), so fitTextToRooms never has a reason to cut anything under plain
-    // jsdom — consistent with capCandidateToNameRoom never reporting `capped` there either.
-    expect(fitTextToRooms('Weekend Mornings', [{ font: ROW_FONT, widthPx: 1 }])).toBe(
-      'Weekend Mornings',
-    )
-  })
-})
-
-// ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('capCandidateToNameRoom — the one call components/PresetManager makes', () => {
+  // What the cap answers for the TEXT, which is what most cases here are about: the text to show
+  // and whether anything was refused. Where it puts the cursor, and what it does with the selection
+  // the field hands it, have their own cases at the foot of this block.
+  const judge = (candidate, previous, full, replaced = null) => {
+    const { text, capped } = capCandidateToNameRoom(candidate, previous, full, replaced)
+    return { text, capped }
+  }
+
   it('accepts a candidate that fits the LIVE room, unchanged', () => {
     const restore = installFakeCanvas()
     mountNameCell(50) // 10 characters at 5px
-    expect(capCandidateToNameRoom('Weekend', '', false)).toEqual({ text: 'Weekend', capped: false })
+    expect(judge('Weekend', '', false)).toEqual({ text: 'Weekend', capped: false })
     restore()
   })
 
   it('trims to fit the LIVE room, and reports capped:true', () => {
     const restore = installFakeCanvas()
     mountNameCell(25) // 5 characters
-    expect(capCandidateToNameRoom('Weekend Mornings', '', false)).toEqual({
+    expect(judge('Weekend Mornings', '', false)).toEqual({
       text: 'Weeke',
       capped: true,
     })
@@ -253,11 +216,11 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     document.body.appendChild(button)
     button.appendChild(mountNameCell(91, BUTTON_FONT))
     mountNameCell(68, ROW_FONT)
-    expect(capCandidateToNameRoom('Weekend Mornings', '', false)).toEqual({
+    expect(judge('Weekend Mornings', '', false)).toEqual({
       text: 'Weekend Morni',
       capped: true,
     })
-    expect(capCandidateToNameRoom('Weekend Morni', '', false)).toEqual({
+    expect(judge('Weekend Morni', '', false)).toEqual({
       text: 'Weekend Morni',
       capped: false,
     })
@@ -268,15 +231,23 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     const restore = installFakeCanvas()
     mountNameCell(40, BUTTON_FONT) // 10 characters
     mountNameCell(200, ROW_FONT) // 40
-    expect(capCandidateToNameRoom('Weekend Mornings', '', false).text).toBe('Weekend Mo')
+    expect(judge('Weekend Mornings', '', false).text).toBe('Weekend Mo')
     restore()
   })
 
   it('un-refuses on a backspace: a shorter candidate that now fits comes back capped:false', () => {
     const restore = installFakeCanvas()
     mountNameCell(25)
-    expect(capCandidateToNameRoom('Weekend Mornings', 'Weeke', false).capped).toBe(true)
-    expect(capCandidateToNameRoom('Week', 'Weeke', false)).toEqual({ text: 'Week', capped: false })
+    expect(judge('Weekend Mornings', 'Weeke', false).capped).toBe(true)
+    expect(judge('Week', 'Weeke', false)).toEqual({ text: 'Week', capped: false })
+    restore()
+  })
+
+  it('refuses everything when not even one character fits', () => {
+    const restore = installFakeCanvas()
+    mountNameCell(1)
+    expect(judge('W', '', false)).toEqual({ text: '', capped: true })
+    expect(judge('Weekend', '', false)).toEqual({ text: '', capped: true })
     restore()
   })
 
@@ -285,9 +256,9 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     // path is real, not dead code.
     const restore = installFakeCanvas()
     // A name comfortably under the fallback budget (≈61px, at ≈4.5px a character) is accepted.
-    expect(capCandidateToNameRoom('Weekend', '', false).capped).toBe(false)
+    expect(judge('Weekend', '', false).capped).toBe(false)
     // A name well past it is trimmed, proving the fallback budget is finite and actually applied.
-    const long = capCandidateToNameRoom('W'.repeat(40), '', false)
+    const long = judge('W'.repeat(40), '', false)
     expect(long.capped).toBe(true)
     expect(long.text.length).toBeLessThan(40)
     expect(long.text.length).toBeGreaterThan(0)
@@ -297,7 +268,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
   it('never trims anything without a real canvas — the whole mechanism degrades to a no-op', () => {
     mountNameCell(10) // a tiny live room…
     // …and yet, with no fake canvas installed, every measurement is 0 and therefore "fits".
-    expect(capCandidateToNameRoom('Weekend Mornings', '', false)).toEqual({
+    expect(judge('Weekend Mornings', '', false)).toEqual({
       text: 'Weekend Mornings',
       capped: false,
     })
@@ -315,7 +286,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     const field = (text = '') => {
       const state = { text, full: false }
       const edit = (candidate) => {
-        const { text: next, capped } = capCandidateToNameRoom(candidate, state.text, state.full)
+        const { text: next, capped } = judge(candidate, state.text, state.full)
         state.text = next
         state.full = capped
         return state
@@ -339,14 +310,14 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('a full name refuses an insertion that WOULD fit, anywhere in it, typed or pasted', () => {
       const restore = installFakeCanvas(mixedWidths)
       mountNameCell(ROOM)
-      expect(capCandidateToNameRoom('Weekend i', 'Weekend ', true)).toEqual({
+      expect(judge('Weekend i', 'Weekend ', true)).toEqual({
         text: 'Weekend ',
         capped: true,
       })
-      expect(capCandidateToNameRoom('iWeekend ', 'Weekend ', true).text).toBe('Weekend ')
-      expect(capCandidateToNameRoom('Weeikend ', 'Weekend ', true).text).toBe('Weekend ')
+      expect(judge('iWeekend ', 'Weekend ', true).text).toBe('Weekend ')
+      expect(judge('Weeikend ', 'Weekend ', true).text).toBe('Weekend ')
       // …which is the whole of what `full` changes: the same edit, not full, is taken.
-      expect(capCandidateToNameRoom('Weekend i', 'Weekend ', false)).toEqual({
+      expect(judge('Weekend i', 'Weekend ', false)).toEqual({
         text: 'Weekend i',
         capped: false,
       })
@@ -369,14 +340,14 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
       const restore = installFakeCanvas(mixedWidths)
       mountNameCell(ROOM)
       // Select all, type one letter.
-      expect(capCandidateToNameRoom('A', 'Weekend ', true)).toEqual({ text: 'A', capped: false })
+      expect(judge('A', 'Weekend ', true)).toEqual({ text: 'A', capped: false })
       // Select "end ", type "ly": shorter, fits, no longer full.
-      expect(capCandidateToNameRoom('Weekly', 'Weekend ', true)).toEqual({
+      expect(judge('Weekly', 'Weekend ', true)).toEqual({
         text: 'Weekly',
         capped: false,
       })
       // Select all, paste something too long: cut to what fits, and full.
-      expect(capCandidateToNameRoom('Saturday Night', 'Weekend ', true)).toEqual({
+      expect(judge('Saturday Night', 'Weekend ', true)).toEqual({
         text: 'Saturday ',
         capped: true,
       })
@@ -386,9 +357,9 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('remembers nothing itself — `full` is only ever what the caller hands it', () => {
       const restore = installFakeCanvas(mixedWidths)
       mountNameCell(ROOM)
-      expect(capCandidateToNameRoom('Weekend M', 'Weekend ', false).capped).toBe(true)
+      expect(judge('Weekend M', 'Weekend ', false).capped).toBe(true)
       // A different field, a fresh edit: the refusal above is not carried into it.
-      expect(capCandidateToNameRoom('Wi', 'W', false)).toEqual({ text: 'Wi', capped: false })
+      expect(judge('Wi', 'W', false)).toEqual({ text: 'Wi', capped: false })
       restore()
     })
   })
@@ -398,7 +369,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('a letter typed into the MIDDLE of a name that has no room is refused, the name untouched', () => {
       const restore = installFakeCanvas()
       mountNameCell(50) // 10 characters
-      expect(capCandidateToNameRoom('WeekXend Mo', 'Weekend Mo', false)).toEqual({
+      expect(judge('WeekXend Mo', 'Weekend Mo', false)).toEqual({
         text: 'Weekend Mo',
         capped: true,
       })
@@ -409,12 +380,12 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
       const restore = installFakeCanvas()
       mountNameCell(50)
       // At the end…
-      expect(capCandidateToNameRoom('Weekend Mornings', 'Weekend', false)).toEqual({
+      expect(judge('Weekend Mornings', 'Weekend', false)).toEqual({
         text: 'Weekend Mo',
         capped: true,
       })
       // …and in the middle, where the text after the cursor is kept whole.
-      expect(capCandidateToNameRoom('Week-long end', 'Weekend', false)).toEqual({
+      expect(judge('Week-long end', 'Weekend', false)).toEqual({
         text: 'Week-loend',
         capped: true,
       })
@@ -443,16 +414,16 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('an emoji that does not fit is refused whole — never its first half', () => {
       const restore = installFakeCanvas(emojiWidths)
       mountNameCell(30) // 6 letters: "Weeke" and one more, and an emoji is two
-      const typed = capCandidateToNameRoom(`Weeke${GRIN}`, 'Weeke', false)
+      const typed = judge(`Weeke${GRIN}`, 'Weeke', false)
       expect(typed).toEqual({ text: 'Weeke', capped: true })
       expect(typed.text).not.toMatch(LONE_HALF)
       // …pasted three at a time into room for one and a half, one whole emoji is kept.
-      expect(capCandidateToNameRoom(`Wee${GRIN}${GRIN}${GRIN}`, 'Wee', false)).toEqual({
+      expect(judge(`Wee${GRIN}${GRIN}${GRIN}`, 'Wee', false)).toEqual({
         text: `Wee${GRIN}`,
         capped: true,
       })
       // …and in the middle of a name, where the half used to be left in front of the tail.
-      expect(capCandidateToNameRoom(`We${GRIN}eke`, 'Weeke', false)).toEqual({
+      expect(judge(`We${GRIN}eke`, 'Weeke', false)).toEqual({
         text: 'Weeke',
         capped: true,
       })
@@ -462,7 +433,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('a family is all of its people or none of them', () => {
       const restore = installFakeCanvas(emojiWidths)
       mountNameCell(30) // "We" and four letters: two of the three people would fit
-      expect(capCandidateToNameRoom(`We${FAMILY}`, 'We', false)).toEqual({
+      expect(judge(`We${FAMILY}`, 'We', false)).toEqual({
         text: 'We',
         capped: true,
       })
@@ -472,7 +443,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('a flag is both of its letters or neither', () => {
       const restore = installFakeCanvas(emojiWidths)
       mountNameCell(30) // "Week" and two letters: one of the flag's two
-      expect(capCandidateToNameRoom(`Week${FLAG}`, 'Week', false)).toEqual({
+      expect(judge(`Week${FLAG}`, 'Week', false)).toEqual({
         text: 'Week',
         capped: true,
       })
@@ -482,7 +453,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('an accented letter is not kept with its accent taken off', () => {
       const restore = installFakeCanvas(emojiWidths)
       mountNameCell(30) // "Weeke" and one letter — but not one letter and its accent
-      expect(capCandidateToNameRoom(`Weeke${E_ACUTE}`, 'Weeke', false)).toEqual({
+      expect(judge(`Weeke${E_ACUTE}`, 'Weeke', false)).toEqual({
         text: 'Weeke',
         capped: true,
       })
@@ -494,7 +465,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
       // the paste inside the first thumb's skin tone.
       const restore = installFakeCanvas(emojiWidths)
       mountNameCell(30) // one thumb is four letters wide: room for one, not two
-      const pasted = capCandidateToNameRoom(`${THUMB_MEDIUM}${THUMB_LIGHT}`, THUMB_LIGHT, false)
+      const pasted = judge(`${THUMB_MEDIUM}${THUMB_LIGHT}`, THUMB_LIGHT, false)
       expect(pasted).toEqual({ text: THUMB_LIGHT, capped: true })
       restore()
     })
@@ -505,11 +476,11 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
       const restore = installFakeCanvas(emojiWidths)
       mountNameCell(30)
       const OLD = 'Weeke\uD83D'
-      expect(capCandidateToNameRoom('Weke\uD83D', OLD, false)).toEqual({
+      expect(judge('Weke\uD83D', OLD, false)).toEqual({
         text: 'Weke\uD83D',
         capped: false,
       })
-      expect(capCandidateToNameRoom(`W${GRIN}eeke\uD83D`, OLD, false)).toEqual({
+      expect(judge(`W${GRIN}eeke\uD83D`, OLD, false)).toEqual({
         text: OLD,
         capped: true,
       })
@@ -526,7 +497,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('deleting from it is accepted as typed, not trimmed to what fits', () => {
       const restore = installFakeCanvas()
       mountNameCell(50)
-      expect(capCandidateToNameRoom('Weekend Morning', OLD, false)).toEqual({
+      expect(judge('Weekend Morning', OLD, false)).toEqual({
         text: 'Weekend Morning',
         capped: false,
       })
@@ -536,7 +507,7 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('changing a letter in it, at the same width, is accepted', () => {
       const restore = installFakeCanvas()
       mountNameCell(50)
-      expect(capCandidateToNameRoom('Weekend Evenings', OLD, false)).toEqual({
+      expect(judge('Weekend Evenings', OLD, false)).toEqual({
         text: 'Weekend Evenings',
         capped: false,
       })
@@ -546,16 +517,191 @@ describe('capCandidateToNameRoom — the one call components/PresetManager makes
     it('making it WIDER is refused — back to the width it already had, not down to the room', () => {
       const restore = installFakeCanvas()
       mountNameCell(50)
-      expect(capCandidateToNameRoom(`${OLD}!`, OLD, false)).toEqual({ text: OLD, capped: true })
+      expect(judge(`${OLD}!`, OLD, false)).toEqual({ text: OLD, capped: true })
       restore()
     })
 
     it('once it has been shortened to fit, the ordinary limit is the limit again', () => {
       const restore = installFakeCanvas()
       mountNameCell(50)
-      expect(capCandidateToNameRoom('Weekend Mornings', 'Weekend', false)).toEqual({
+      expect(judge('Weekend Mornings', 'Weekend', false)).toEqual({
         text: 'Weekend Mo',
         capped: true,
+      })
+      restore()
+    })
+  })
+
+  // ── THE TEXT OUTSIDE WHAT WAS REPLACED IS NEVER TOUCHED ───────────────────────────────────
+  // An edit that typed or pasted OVER something used to be cut to its longest prefix that fit, so
+  // a wide letter typed over a narrow one took the LAST letter of the name with it.
+  describe('typing or pasting over a selection loses the new text, never the rest of the name', () => {
+    const mixedWidths = (ch) => (ch === 'M' ? 1.5 : ch === 'i' ? 0.5 : 1)
+    const ROOM = 40 // 8 ordinary letters at 5px: "Weekend " exactly
+
+    it('a wider letter typed over a narrower one is refused — the name keeps its last letter', () => {
+      const restore = installFakeCanvas(mixedWidths)
+      mountNameCell(ROOM)
+      expect(judge('WMekend ', 'Weekend ', false)).toEqual({ text: 'Weekend ', capped: true })
+      // …and a narrower one is simply taken, full or not.
+      expect(judge('Wiekend ', 'Weekend ', true)).toEqual({ text: 'Wiekend ', capped: false })
+      restore()
+    })
+
+    it('…in a name already longer than the room, too: it is not cut for the attempt', () => {
+      const restore = installFakeCanvas(mixedWidths)
+      mountNameCell(ROOM)
+      const OLD = 'Weekend Evenings' // twice the room
+      expect(judge('WMekend Evenings', OLD, false)).toEqual({ text: OLD, capped: true })
+      restore()
+    })
+
+    it('a paste over a selection keeps as much of its start as fits, and everything after it', () => {
+      const restore = installFakeCanvas(mixedWidths)
+      mountNameCell(ROOM)
+      // "ee" selected, "XXXX" pasted: two of the four fit where the two letters were.
+      expect(judge('WXXXXkend ', 'Weekend ', false)).toEqual({ text: 'WXXkend ', capped: true })
+      restore()
+    })
+
+    it('taking away is never refused, even from a full name', () => {
+      const restore = installFakeCanvas(mixedWidths)
+      mountNameCell(ROOM)
+      expect(capCandidateToNameRoom('Weeken', 'Weekend ', true, null)).toEqual({
+        text: 'Weeken',
+        capped: false,
+        selection: null,
+      })
+      restore()
+    })
+  })
+
+  // ── WHAT WAS SELECTED, FROM THE FIELD ─────────────────────────────────────────────────────
+  // "My Weekend " is what "My " typed in front of "Weekend " leaves, and also what selecting all of
+  // it and pasting "My Weekend " leaves. Only the field knows which; it says, and the cap checks.
+  describe('the selection the field hands over decides what the edit was, when it can be true', () => {
+    const ALL = { start: 0, end: 8 } // the whole of "Weekend "
+
+    it('select all, paste something that ENDS with the name: it is a replacement, cut to fit', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(40) // 8 letters
+      expect(judge('My Weekend ', 'Weekend ', false, ALL)).toEqual({
+        text: 'My Weeke',
+        capped: true,
+      })
+      // …on a FULL name as well: something was taken away, so it is measured, not turned away.
+      expect(judge('My Weekend ', 'Weekend ', true, ALL)).toEqual({
+        text: 'My Weeke',
+        capped: true,
+      })
+      // The same text with a bare cursor in front is three letters added to a name with no room.
+      expect(judge('My Weekend ', 'Weekend ', false, { start: 0, end: 0 })).toEqual({
+        text: 'Weekend ',
+        capped: true,
+      })
+      restore()
+    })
+
+    it('select all, paste something that STARTS with the name', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(40)
+      expect(judge('Weekend Two', 'Weekend ', true, ALL)).toEqual({
+        text: 'Weekend ',
+        capped: true,
+      })
+      expect(judge('Weekends!', 'Weekend', true, { start: 0, end: 7 })).toEqual({
+        text: 'Weekends',
+        capped: true,
+      })
+      // Without the selection it reads as "s!" added to a full name, and all of it is refused.
+      expect(judge('Weekends!', 'Weekend', true)).toEqual({ text: 'Weekend', capped: true })
+      restore()
+    })
+
+    it('a selection the new text contradicts is ignored, and the texts are read instead', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(40)
+      // A backspace with a bare cursor: nothing was selected, and a letter is gone.
+      expect(judge('Weeken ', 'Weekend ', true, { start: 6, end: 6 })).toEqual({
+        text: 'Weeken ',
+        capped: false,
+      })
+      // "end" is claimed, but the text in front of it changed: read as a letter added in front.
+      expect(judge('XWeekend ', 'Weekend ', true, { start: 4, end: 7 })).toEqual({
+        text: 'Weekend ',
+        capped: true,
+      })
+      // Nonsense — backwards, out of range, inside a character — is ignored the same way.
+      for (const replaced of [
+        { start: 5, end: 2 },
+        { start: -1, end: 3 },
+        { start: 0, end: 99 },
+      ]) {
+        expect(judge('Weekend i', 'Weekend ', true, replaced)).toEqual({
+          text: 'Weekend ',
+          capped: true,
+        })
+      }
+      const GRIN = '\u{1F600}'
+      expect(judge(`${GRIN}Xab`, `${GRIN}ab`, true, { start: 1, end: 3 })).toEqual({
+        text: `${GRIN}ab`,
+        capped: true,
+      })
+      restore()
+    })
+  })
+
+  // ── WHERE THE CURSOR BELONGS ──────────────────────────────────────────────────────────────
+  // The field is written back to whenever the answer is not what was typed, and a box that is
+  // written to drops its cursor at the end. The cap says where it should be instead.
+  describe('`selection` — where the cursor goes when the answer is not what was typed', () => {
+    it('null when the edit was taken as typed: the cursor is already where the edit left it', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(50)
+      expect(capCandidateToNameRoom('Weeks', 'Week', false, null).selection).toBeNull()
+      restore()
+    })
+
+    it('after a refused letter, the cursor stays where it was typed', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(50) // 10 letters
+      expect(capCandidateToNameRoom('WeekXend Mo', 'Weekend Mo', false, null).selection).toEqual({
+        start: 4,
+        end: 4,
+      })
+      restore()
+    })
+
+    it('after a refused letter typed over a selection, the selection is as it was', () => {
+      const restore = installFakeCanvas((ch) => (ch === 'M' ? 1.5 : 1))
+      mountNameCell(50)
+      expect(
+        capCandidateToNameRoom('WMekend Mo', 'Weekend Mo', false, { start: 1, end: 2 }).selection,
+      ).toEqual({ start: 1, end: 2 })
+      restore()
+    })
+
+    it('after a shortened paste, the cursor is just behind what was kept of it', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(50)
+      expect(capCandidateToNameRoom('Week-long end', 'Weekend', false, null)).toEqual({
+        text: 'Week-loend',
+        capped: true,
+        selection: { start: 7, end: 7 },
+      })
+      restore()
+    })
+
+    it('…counted in the units a text box counts in: an emoji kept is two of them', () => {
+      const GRIN = '\u{1F600}'
+      const restore = installFakeCanvas((ch) => (ch.codePointAt(0) > 0xffff ? 2 : 1))
+      mountNameCell(50) // 10 letters: "Week" and three emoji, each two letters wide
+      expect(
+        capCandidateToNameRoom(`We${GRIN}${GRIN}${GRIN}${GRIN}${GRIN}ek`, 'Week', false, null),
+      ).toEqual({
+        text: `We${GRIN}${GRIN}${GRIN}ek`,
+        capped: true,
+        selection: { start: 8, end: 8 },
       })
       restore()
     })

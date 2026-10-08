@@ -1,7 +1,7 @@
 // fitsWithinWidth — the PURE half of lib/presetNameWidth's live typing cap (round 20).
 //
 // Deliberately apart from every DOM/canvas-touching function in that file (readNameRooms,
-// measureTextWidthPx, fitTextToRooms, capCandidateToNameRoom — all covered in
+// measureTextWidthPx, capCandidateToNameRoom — all covered in
 // tests/presetNameWidth.dom.test.js): this is the one piece of the mechanism that is a plain
 // number comparison, so it is exercised here with FABRICATED widths and no jsdom at all, per the
 // brief's own reasoning — jsdom's canvas measureText cannot be trusted to produce a real number

@@ -333,6 +333,7 @@ describe('renaming', () => {
       'weekend',
       'Preset 1',
       false,
+      null,
     )
     // The field shows the FUNCTION's answer, not the raw keystroke — proving onChange trusts it
     // rather than mirroring the event value straight through.
@@ -355,9 +356,15 @@ describe('renaming', () => {
       'Weekend',
       'Preset 1',
       false,
+      null,
     )
     type(nameBoxes()[0], 'Weeks')
-    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith('Weeks', 'Week', true)
+    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith(
+      'Weeks',
+      'Week',
+      true,
+      null,
+    )
   })
 
   it('focusing a name and leaving it never measures it, and saves it exactly as it was', () => {
@@ -420,6 +427,97 @@ describe('renaming', () => {
     })
   })
 
+  // ★ THE CAP IS TOLD WHAT WAS SELECTED WHEN THE EDIT BEGAN (lib/presetNameWidth's `replaced`) —
+  // the text alone cannot tell "typed in front of the name" from "pasted over all of it". The field
+  // notes it from the browser's own `beforeinput`, which a real edit always fires first and
+  // fireEvent.change does not, so these cases fire it themselves.
+  describe('the cap is told what was selected when the edit began', () => {
+    const beforeInput = (box) =>
+      act(() => void box.dispatchEvent(new InputEvent('beforeinput', { bubbles: true })))
+    const lastReplaced = () => presetNameWidth.capCandidateToNameRoom.mock.lastCall[3]
+
+    it('the selection at `beforeinput` goes with that edit, and with no other', () => {
+      openManager()
+      focus(nameBoxes()[0])
+      nameBoxes()[0].setSelectionRange(0, 8)
+      beforeInput(nameBoxes()[0])
+      type(nameBoxes()[0], 'My Preset 1')
+      expect(lastReplaced()).toEqual({ start: 0, end: 8 })
+      // The next edit arrives without one (it cannot, in a browser): it is not handed the last.
+      type(nameBoxes()[0], 'My Preset 12')
+      expect(lastReplaced()).toBeNull()
+      // A bare cursor is a selection too — an empty one.
+      nameBoxes()[0].setSelectionRange(2, 2)
+      beforeInput(nameBoxes()[0])
+      type(nameBoxes()[0], 'Myy Preset 12')
+      expect(lastReplaced()).toEqual({ start: 2, end: 2 })
+    })
+
+    it('a composition is judged with what was selected when it STARTED, not by its last piece', () => {
+      openManager()
+      focus(nameBoxes()[0])
+      nameBoxes()[0].setSelectionRange(0, 6) // "Preset", selected, then composed over
+      act(() => void fireEvent.compositionStart(nameBoxes()[0]))
+      beforeInput(nameBoxes()[0])
+      type(nameBoxes()[0], 'か 1')
+      nameBoxes()[0].setSelectionRange(1, 1)
+      beforeInput(nameBoxes()[0])
+      type(nameBoxes()[0], 'かな 1')
+      act(() => void fireEvent.compositionEnd(nameBoxes()[0]))
+      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledTimes(1)
+      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
+        'かな 1',
+        'Preset 1',
+        false,
+        { start: 0, end: 6 },
+      )
+    })
+  })
+
+  // ★ THE FIELD IS WRITTEN BACK TO WHENEVER THE CAP ANSWERS WITH SOMETHING ELSE, and a box that is
+  // written to drops its cursor at the end. The cap says where the cursor belongs (`selection`).
+  describe('the cursor is put where the cap says, when the cap changes what was typed', () => {
+    const cursor = (box) => [box.selectionStart, box.selectionEnd]
+
+    it('a refused letter in the middle of a name leaves the cursor in the middle', () => {
+      openManager()
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
+        text: previous,
+        capped: true,
+        selection: { start: 3, end: 3 },
+      }))
+      focus(nameBoxes()[0])
+      type(nameBoxes()[0], 'PreXset 1')
+      expect(nameBoxes()[0].value).toBe('Preset 1')
+      expect(cursor(nameBoxes()[0])).toEqual([3, 3])
+    })
+
+    it('a refused letter typed over a selection leaves the selection as it was', () => {
+      openManager()
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
+        text: previous,
+        capped: true,
+        selection: { start: 1, end: 4 },
+      }))
+      focus(nameBoxes()[0])
+      type(nameBoxes()[0], 'PWet 1')
+      expect(cursor(nameBoxes()[0])).toEqual([1, 4])
+    })
+
+    it('an edit taken as typed is not touched — the browser already put the cursor there', () => {
+      openManager()
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
+        text: candidate,
+        capped: false,
+        selection: null,
+      }))
+      focus(nameBoxes()[0])
+      const placed = vi.spyOn(nameBoxes()[0], 'setSelectionRange')
+      type(nameBoxes()[0], 'PreXset 1')
+      expect(placed).not.toHaveBeenCalled()
+    })
+  })
+
   // ★ AN INPUT METHOD'S COMPOSITION IS ONE EDIT THAT ARRIVES IN PIECES. Refusing or trimming a
   // piece writes back into a box the keyboard is still composing in, so the pieces are shown as
   // they come and the whole composition is put to the cap once, when it ends, against the text it
@@ -459,6 +557,7 @@ describe('renaming', () => {
         'Preset 1かな',
         'Preset 1',
         false,
+        { start: 0, end: 8 }, // the name, all selected on entry (lib/textEntry)
       )
       expect(nameBoxes()[0].value).toBe('Preset 1')
       expect(capNote()).toBeTruthy()
@@ -468,6 +567,7 @@ describe('renaming', () => {
         'Preset 1!',
         'Preset 1',
         true,
+        null,
       )
     })
 
@@ -503,6 +603,7 @@ describe('renaming', () => {
         'Preset 1かな',
         'Preset 1',
         false,
+        { start: 0, end: 8 }, // the name, all selected on entry (lib/textEntry)
       )
       expect(registry().presets[0].name).toBe('Preset 1')
     })
@@ -1320,6 +1421,19 @@ describe('deleting', () => {
     act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
     expect(queryModalCard('presets')).toBeNull() // …and now the card
     expect(isSettingsOpen()).toBe(true) // the panel behind it is untouched
+  })
+
+  // The rename field's `beforeinput` listener hangs on the card, and the question is a view of the
+  // card: after stepping back to the list it must still be there, or the cap is told nothing.
+  it('stepping back to the list leaves the name boxes still telling the cap what was selected', () => {
+    openTheQuestion()
+    act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
+    const box = nameBoxes()[0]
+    act(() => box.focus())
+    box.setSelectionRange(1, 3)
+    act(() => void box.dispatchEvent(new InputEvent('beforeinput', { bubbles: true })))
+    act(() => fireEvent.change(box, { target: { value: 'Pxset 1' } }))
+    expect(presetNameWidth.capCandidateToNameRoom.mock.lastCall[3]).toEqual({ start: 1, end: 3 })
   })
 
   it('a SCRIM TAP steps back to the list, and a second tap closes the card', () => {

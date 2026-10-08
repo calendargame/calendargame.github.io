@@ -11,9 +11,10 @@ import { PRESET_NAME_COL, PRESET_NAME_CELL_SELECTOR } from '../components/Preset
 // place the name is drawn: the preset control in the fixed top bar, a row of the list it opens,
 // and the ⚙ menu's "Open in" control and its list. So every keystroke measures the CANDIDATE text's
 // real rendered pixel width against EACH of those places as it is laid out right now, in that
-// place's own font, and refuses (or truncates, for a paste-shaped change bigger than one
+// place's own font, and refuses (or shortens, for a paste-shaped change bigger than one
 // keystroke) whatever would not fit the narrowest — the same shape as a native `maxLength`
-// refusing a keystroke, just width-based instead of count-based.
+// refusing a keystroke, just width-based instead of count-based. What exactly is refused, and
+// what is never touched, is capCandidateToNameRoom's own note at the foot of this file.
 //   ⚠ IT USED TO MEASURE THE TOP-BAR BUTTON ALONE, and that was the defect: a list row had less
 //   room than the button (and larger text), so a name the button showed whole was cut short with
 //   "…" in the list under it. The list is exactly the button's width and its rows are the
@@ -163,48 +164,82 @@ const characterSegmenter = new Intl.Segmenter(undefined, { granularity: 'graphem
 const charactersOf = (text: string): string[] =>
   Array.from(characterSegmenter.segment(text), ({ segment }) => segment)
 
-/**
- * Given a candidate that does NOT fit, find the longest PREFIX that does — the same shape as a
- * native `maxLength` truncating an over-length paste rather than refusing the whole edit — cut
- * between whole characters (above). A plain character-by-character trim rather than a binary
- * search: preset names are short by the time this ever runs (store/presets' MAX_PRESET_NAME is the
- * outer bound on anything reaching this function at all), so the loop is cheap, and unlike a binary
- * search over a proportional font it never has to reason about whether width is monotonic in some
- * clever partial way — it just is what it is.
- */
-export function fitTextToRooms(text: string, rooms: readonly NameRoom[]): string {
-  const characters = charactersOf(text)
-  while (characters.length > 0 && !fitsEveryRoom(characters.join(''), rooms)) characters.pop()
-  return characters.join('')
-}
-
-// ── WHAT KIND OF EDIT THIS IS ─────────────────────────────────────────────────────────────────
+// ── WHAT THE EDIT WAS ─────────────────────────────────────────────────────────────────────────
 //
-// An INSERTION is an edit that only adds: the text as it was, whole and in order, with one run of
-// new characters put in somewhere — a typed letter, a paste at the cursor. Everything else (a
-// deletion, a selection typed or pasted over) takes something away. The cap treats the two
-// differently, twice over (capCandidateToNameRoom), so the question is asked in one place. `null`
-// when the edit is not an insertion. The three parts are lists of whole characters: two emoji can
-// share their first units, and a split found unit by unit would land inside one of them.
-interface Insertion {
+// Every edit a text box can make is ONE REPLACEMENT: a stretch of the old text (possibly empty)
+// gives way to a run of new characters (possibly empty). A typed letter replaces nothing with one
+// character; a deletion replaces something with nothing; typing or pasting over a selection does
+// both. So an edit is three lists of whole characters — the `head` and `tail` it left alone, and
+// what was `inserted` between them — and `removed`, whether anything of the old text went.
+//
+// ★ THE TEXT ALONE CANNOT ALWAYS SAY WHICH REPLACEMENT IT WAS, AND THE FIELD CAN. With "Weekend" in
+// the box, "My Weekend" is what both of these leave: "My " typed in front of it, and the whole
+// name selected and "My Weekend" pasted over it. Read from the text, the second looks like the
+// first — which is how a paste over everything was once refused whole for "adding to a full name".
+// So the field hands over the stretch that was selected when the edit began (`replaced`, in the
+// old text's own offsets), and that is the answer whenever it is a possible one.
+//   ⚠ IT IS A CLAIM, AND IT IS CHECKED. A selection is where an edit USUALLY lands, not where it
+//   must: a backspace takes the character before a bare cursor, a phone keyboard's correction or
+//   prediction can rewrite a word the cursor is merely inside. So `replaced` is used only when the
+//   new text really is the old text with exactly that stretch swapped out, between whole
+//   characters. When it is not — or none was handed over — the edit is read from the two texts:
+//   the most they share at the start, then the most they share at the end, the smallest change
+//   that explains them.
+export interface TextRange {
+  start: number
+  end: number
+}
+interface Edit {
   head: string[]
   inserted: string[]
   tail: string[]
+  removed: boolean
 }
-const asInsertion = (previous: string, candidate: string): Insertion | null => {
+// How many whole characters come before `offset` — or -1 where it falls inside one, or past the end.
+const charactersBefore = (characters: readonly string[], offset: number): number => {
+  let at = 0
+  for (let count = 0; at <= offset; count++) {
+    if (at === offset) return count
+    if (count === characters.length) break
+    at += characters[count].length
+  }
+  return -1
+}
+const asEdit = (previous: string, candidate: string, replaced: TextRange | null): Edit => {
   const before = charactersOf(previous)
   const after = charactersOf(candidate)
-  if (after.length <= before.length) return null
-  let head = 0
-  while (head < before.length && before[head] === after[head]) head++
-  const tail = before.length - head
-  for (let i = 1; i <= tail; i++) {
-    if (before[before.length - i] !== after[after.length - i]) return null
+  const most = Math.min(before.length, after.length)
+  let sharedStart = 0
+  while (sharedStart < most && before[sharedStart] === after[sharedStart]) sharedStart++
+  let sharedEnd = 0
+  while (
+    sharedEnd < most &&
+    before[before.length - 1 - sharedEnd] === after[after.length - 1 - sharedEnd]
+  ) {
+    sharedEnd++
+  }
+  let head = sharedStart
+  let tail = Math.min(sharedEnd, most - sharedStart)
+  if (replaced) {
+    const claimedHead = charactersBefore(before, replaced.start)
+    const claimedEnd = charactersBefore(before, replaced.end)
+    const claimedTail = before.length - claimedEnd
+    if (
+      claimedHead >= 0 &&
+      claimedEnd >= claimedHead &&
+      claimedHead <= sharedStart &&
+      claimedTail <= sharedEnd &&
+      claimedHead + claimedTail <= most
+    ) {
+      head = claimedHead
+      tail = claimedTail
+    }
   }
   return {
     head: after.slice(0, head),
     inserted: after.slice(head, after.length - tail),
     tail: after.slice(after.length - tail),
+    removed: head + tail < before.length,
   }
 }
 
@@ -215,6 +250,11 @@ export interface CandidateResult {
   /** Whether anything had to be refused. The field hands it back as `full` on its next edit, and
    *  it drives the width-language note in PresetManager. */
   capped: boolean
+  /** Where the cursor belongs in `text` when it is not what the box was showing — the box is being
+   *  written back to, and a write leaves the cursor at the end unless it is put somewhere. After a
+   *  shortened paste, just behind what was kept of it; after a refusal, what was selected before.
+   *  `null` when `text` is the candidate and the cursor is already where the edit left it. */
+  selection: TextRange | null
 }
 
 /**
@@ -222,40 +262,58 @@ export interface CandidateResult {
  * every place a name is drawn (falling back to the safe minimum above when none can be measured),
  * measures the candidate against each, and returns what the field should actually show.
  *
+ * ★★ THE RULE, IN ONE PLACE. An edit replaces a stretch of the name with a run of new characters
+ * ("what the edit was", above), and:
+ *   • THE TEXT OUTSIDE THAT STRETCH IS NEVER TOUCHED. An edit loses its own end, never the name's.
+ *   • WHAT DOES NOT FIT COMES OFF THE END OF THE NEW RUN, a whole character at a time ("what one
+ *     character is", above) — a paste keeps as much of its start as fits, where it was pasted, the
+ *     shape a native `maxLength` gives one.
+ *   • IF NONE OF THE NEW RUN FITS, THE EDIT DID NOT HAPPEN: the name is exactly what it was, and so
+ *     is the selection. A single typed letter is the plain case — refused outright, wherever the
+ *     cursor is. A letter typed over a selection that will not fit in its place is the other, and
+ *     it does not delete the selection on its way out.
+ *   • TAKING AWAY IS NEVER REFUSED. An edit that adds nothing is the player's own deletion and is
+ *     kept as made, whatever it measures.
+ * (It used to read the edit from the text alone and cut anything that was not a pure insertion to
+ * its longest prefix that fit — so a wide letter typed over a narrow one dropped the LAST letter of
+ * the name, and saved it that way.)
+ *
  * ★ `previous` IS WHAT THE FIELD HELD BEFORE THIS EDIT, AND IT IS WHY A NAME THAT IS ALREADY TOO
  * LONG IS NEVER CUT FOR BEING TOUCHED. A stored name can be wider than today's room — it was made
  * on a wider screen, or under an older build's looser limit — and it is kept exactly as it is: the
  * places that draw it shorten it with "…" on screen (PresetOptionLabel's `truncate`), and nothing
- * rewrites what is stored. Without `previous`, the first keystroke in such a name — fixing one
- * letter, deleting one — would trim it to a prefix that fits, throwing away a tail the player
- * never touched. So in each place the limit is the room OR the width the name already had there,
- * whichever is larger: an edit may shorten an over-long name, or keep its width, and is refused
- * only for making it wider than both.
+ * rewrites what is stored. So in each place the limit is the room OR the width the name already
+ * had there, whichever is larger: an edit may shorten an over-long name, or keep its width, and is
+ * refused only for making it wider than both.
  *
  * ★ `full` IS THIS FUNCTION'S OWN LAST `capped`, HANDED BACK, AND IT IS WHY A REFUSED LETTER IS
  * NOT FOLLOWED BY A NARROWER ONE THAT SLIPS IN. Width decides what fits, and letters are not one
  * width: with room for "Weekend " and no room for the "M" after it, the "i" four letters later
- * does fit, and typing "Weekend Mornings" used to leave "Weekend i" in the box. So once an
- * insertion has been refused the name is FULL, and every further insertion is refused whatever its
- * width, until an edit takes something away — a deletion, or a selection typed or pasted over,
- * which is measured as usual and, if it fits, is no longer full. The caller keeps the flag beside
- * the pending text and drops both together (a commit, a discard, the field losing the keyboard),
- * so there is nothing here to get stuck: this function remembers nothing between calls.
+ * does fit, and typing "Weekend Mornings" used to leave "Weekend i" in the box. So once something
+ * has been refused the name is FULL, and every edit that only adds is refused whatever its width,
+ * until an edit takes something away — a deletion, or a selection typed or pasted over, which is
+ * measured as usual and, if it fits, is no longer full. The caller keeps the flag beside the
+ * pending text and drops both together (a commit, a discard, the field losing the keyboard), so
+ * there is nothing here to get stuck: this function remembers nothing between calls.
  *
- * ★ AN INSERTION THAT DOES NOT FIT LOSES ITS OWN END, NEVER THE NAME'S. A single typed letter is
- * refused outright, wherever the cursor is; a paste keeps as many of its leading characters as fit
- * — whole ones, see "what one character is" above — where it was pasted, and the text after the
- * cursor is left alone, what a native `maxLength` does. (Trimming the whole candidate from its end, as this used to, dropped the last letter of
- * the name to make room for one typed in the middle.) An edit that is not an insertion has no
- * "what was added" to trim, and is cut to its longest prefix that fits.
+ * ★ `replaced` IS THE STRETCH OF `previous` THAT WAS SELECTED WHEN THE EDIT BEGAN, or `null` when
+ * the field cannot say. See "what the edit was".
  */
 export function capCandidateToNameRoom(
   candidate: string,
   previous: string,
   full: boolean,
+  replaced: TextRange | null,
 ): CandidateResult {
-  const insertion = asInsertion(previous, candidate)
-  if (full && insertion) return { text: previous, capped: true }
+  const { head, inserted, tail, removed } = asEdit(previous, candidate, replaced)
+  if (inserted.length === 0) return { text: candidate, capped: false, selection: null }
+  const headLength = head.join('').length
+  const refused: CandidateResult = {
+    text: previous,
+    capped: true,
+    selection: { start: headLength, end: previous.length - tail.join('').length },
+  }
+  if (full && !removed) return refused
   const measured = readNameRooms()
   const rooms = (
     measured.length > 0 ? measured : [{ font: FALLBACK_FONT, widthPx: FALLBACK_BUDGET_PX }]
@@ -263,11 +321,11 @@ export function capCandidateToNameRoom(
     font: room.font,
     widthPx: Math.max(room.widthPx, measureTextWidthPx(previous, room.font)),
   }))
-  if (fitsEveryRoom(candidate, rooms)) return { text: candidate, capped: false }
-  if (!insertion) return { text: fitTextToRooms(candidate, rooms), capped: true }
-  const { head, inserted, tail } = insertion
-  const fitted = (kept: number) => [...head, ...inserted.slice(0, kept), ...tail].join('')
+  const withKept = (kept: number) => [...head, ...inserted.slice(0, kept), ...tail].join('')
   let kept = inserted.length
-  while (kept > 0 && !fitsEveryRoom(fitted(kept), rooms)) kept--
-  return { text: fitted(kept), capped: true }
+  while (kept > 0 && !fitsEveryRoom(withKept(kept), rooms)) kept--
+  if (kept === inserted.length) return { text: candidate, capped: false, selection: null }
+  if (kept === 0) return refused
+  const caret = headLength + inserted.slice(0, kept).join('').length
+  return { text: withKept(kept), capped: true, selection: { start: caret, end: caret } }
 }
