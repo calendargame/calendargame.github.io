@@ -31,7 +31,7 @@
 // UI font differ there; only the owner's device can confirm the real thing.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { screen, cleanup, within } from '@testing-library/react'
-import { PRESET_NAME_CELL_SELECTOR } from '../src/components/PresetSwitcher.jsx'
+import { PRESET_NAME_CELL_SELECTOR } from '../src/lib/presetNameWidth.js'
 import {
   mountApp,
   resetAppState,
@@ -261,11 +261,12 @@ describe('the width cuts that paid for the fourth control', () => {
   })
 
   // ★ THE CONTROL, ITS LIST, "Open in", AND ITS LIST AGREE WITH MANAGE PRESETS BY CONSTRUCTION.
-  // A preset's name may be as long as the narrowest place it is shown, and lib/presetNameWidth
-  // learns the places from ONE hook: the cell PresetOptionLabel draws every name in. So the claim
-  // to hold is that all four places wear it — while their lists are CLOSED, which is the state they
-  // are in when a name is being typed (a closed list is measured through its hidden row gauge).
-  it('every place a preset name is drawn wears the one hook the name limit measures', () => {
+  // The rename field says when a name is too long for the narrowest place it is shown, and
+  // lib/presetNameWidth learns the places from ONE hook: the cell PresetOptionLabel draws every
+  // name in. So the claim to hold is that all four places wear it — while their lists are CLOSED,
+  // which is the state they are in when a name is being typed (a closed list is measured through
+  // its hidden row gauge).
+  it('every place a preset name is drawn wears the one hook the measurement reads', () => {
     mountApp()
     openSettings()
     const cellsIn = (el) => [...el.querySelectorAll(PRESET_NAME_CELL_SELECTOR)]

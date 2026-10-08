@@ -2347,8 +2347,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
             ~105px at 360×800 now, not ~140px), which left the OLD 6em name-cell floor (~82px at
             text-sm) wider than the trigger's usable inner width once `px-2.5` + `pr-6` (the chevron
             lane) come out — so a near-floor name clipped UNDER the ▲▼ on the tightest 360-wide
-            layout, and the live pixel cap (lib/presetNameWidth, which measures that cell's rect)
-            read the inflated floor and let over-wide names through. The same round dropped PRESET_NAME_COL
+            layout, and lib/presetNameWidth, which measures that cell's rect, read the inflated
+            floor as room the name did not have. The same round dropped PRESET_NAME_COL
             to 4.5em (~61px at text-sm), which sits inside the tightest usable width with margin —
             re-verified in the layout engine at 360×900, where the cell clears the chevron by 19px.
             The floor's full derivation now lives beside the constant in components/PresetSwitcher;

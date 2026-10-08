@@ -15,10 +15,10 @@ import {
   usePresets,
   presetKey,
   normalizeRegistry,
+  readStoredRegistry,
   makePresetRegistryDefaults,
   PRESET_STORE_KEYS,
   FIRST_PRESET_ID,
-  MAX_PRESET_NAME,
 } from '../src/store/presets.js'
 import {
   createPreset,
@@ -222,24 +222,39 @@ describe('the registry', () => {
     expect(
       normalizeRegistry({ presets: [{ id: 7, name: 'A' }], activeId: 7, nextId: 99 }).nextId,
     ).toBe(99)
-    // Names are trimmed, capped and never empty.
+    // Names are trimmed and never empty — and never cut: a name has no length limit.
     expect(
       normalizeRegistry({ presets: [{ id: 2, name: '   ' }], activeId: 2 }).presets[0].name,
     ).toBe('Preset 2')
+    expect(normalizeRegistry({ presets: [{ id: 2, name: 7 }], activeId: 2 }).presets[0].name).toBe(
+      'Preset 2',
+    )
+    const book = 'All work and no play. '.repeat(5_000)
     expect(
-      normalizeRegistry({ presets: [{ id: 2, name: 'x'.repeat(80) }], activeId: 2 }).presets[0]
-        .name,
-    ).toHaveLength(MAX_PRESET_NAME)
+      normalizeRegistry({ presets: [{ id: 2, name: ` ${book}` }], activeId: 2 }).presets[0].name,
+    ).toBe(book.trim())
   })
 
-  it('renaming trims, caps, and refuses to leave a preset nameless', () => {
+  it('renaming trims, refuses to leave a preset nameless, and cuts nothing', () => {
     expect(renamePreset(1, '  Mornings  ')).toBe(true)
     expect(activePreset().name).toBe('Mornings')
     renamePreset(1, '   ')
     expect(activePreset().name).toBe('Preset 1')
     renamePreset(1, 'y'.repeat(80))
-    expect(activePreset().name).toHaveLength(MAX_PRESET_NAME)
+    expect(activePreset().name).toBe('y'.repeat(80))
     expect(renamePreset(99, 'nobody')).toBe(false)
+  })
+
+  it('a name of any length is stored whole, and comes back whole from the device', () => {
+    // Forty-one emoji: the old ceiling of 40 string units fell in the MIDDLE of the twentieth, and
+    // stored its first half. With no ceiling there is no cut, so there is no half to make.
+    const emoji = '🎉'.repeat(41)
+    renamePreset(1, emoji)
+    expect(activePreset().name).toBe(emoji)
+    expect(readStoredRegistry().presets[0].name).toBe(emoji)
+    const book = 'All work and no play. '.repeat(5_000) + 'The end'
+    renamePreset(1, book)
+    expect(readStoredRegistry().presets[0].name).toBe(book)
   })
 })
 

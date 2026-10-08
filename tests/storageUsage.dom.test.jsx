@@ -48,6 +48,7 @@ import { useSettings } from '../src/store/settings.js'
 import { useLookupHistory } from '../src/store/lookupHistory.js'
 import {
   createPreset,
+  renamePreset,
   switchPreset,
   deletePreset,
   setPresetAmnesic,
@@ -1323,6 +1324,25 @@ describe('on the mounted app', () => {
       .getAllByRole('listitem')
       .map((li) => li.textContent)
     expect(rows.some((t) => /^Preset 1: Classic solve times \(9,000\)\d+\.\d%$/.test(t))).toBe(true)
+  })
+
+  it('a preset with a very long name is named by its start, in a row that may break anywhere', () => {
+    const book = 'All work and no play. '.repeat(20_000).trim()
+    renamePreset(1, book)
+    createPreset('Weekend')
+    useProgress.getState().setModeStats('classic', long(9000))
+    mountApp()
+    openSettings()
+    tap(line())
+    const row = within(popup())
+      .getAllByRole('listitem')
+      .find((li) => li.textContent.includes('Classic solve times'))
+    expect(row.textContent).toMatch(
+      new RegExp(`^${book.slice(0, 80)}…: Classic solve times \\(9,000\\)\\d+\\.\\d%$`),
+    )
+    expect(row.firstElementChild.className).toContain('wrap-anywhere')
+    expect(row.firstElementChild.className).toContain('min-w-0')
+    expect(popup().textContent.length).toBeLessThan(3000)
   })
 
   it('the storage-full notice opens on top of it, and closes first', () => {

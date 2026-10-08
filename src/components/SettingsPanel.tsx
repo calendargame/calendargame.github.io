@@ -29,6 +29,7 @@ import ConfirmModal from './ConfirmModal.jsx'
 import PresetManager from './PresetManager.jsx'
 import CustomSelect from './CustomSelect.jsx'
 import { PresetOptionLabel } from './PresetSwitcher.jsx'
+import { nameAsQuoted } from '../lib/presetNameText.js'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { useStorageUsage } from '../store/storageUsage.js'
 import { StoragePercent } from './StorageUsagePopup.jsx'
@@ -915,9 +916,9 @@ export function SettingsPanel({
           <div className="space-y-2">
             <GroupLabel>Global</GroupLabel>
             <div className="text-xs text-(--tx-200-80)">
-              You are on <b>{activePresetName}</b>. The three buttons at the foot of this card, and
-              your saved defaults, belong to that preset alone. The two settings here apply to the
-              whole app.
+              You are on <b className="wrap-anywhere">{nameAsQuoted(activePresetName)}</b>. The
+              three buttons at the foot of this card, and your saved defaults, belong to that preset
+              alone. The two settings here apply to the whole app.
             </div>
             {/* OPEN IN (round 21) — where a fresh app open lands. "Last used" is today's
                 behaviour (the preset that was active when the app last closed); pick a preset to

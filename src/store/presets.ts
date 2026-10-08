@@ -145,39 +145,6 @@ export type PresetRegistryValues = {
   openInPreset: OpenInPreset
 }
 
-// ★★ HOW LONG A PRESET NAME MAY BE — round 20 CHANGED WHAT THIS NUMBER IS FOR, and that is
-// worth stating before the number itself. It used to be DERIVED, pinned exactly to the switcher's
-// then-FIXED display cell (6em at text-sm, ≈12 characters) so that a typed name could never
-// truncate under ordinary conditions. Round 20 made that cell FLEXIBLE — it now grows with the top bar
-// (components/PresetSwitcher's PRESET_NAME_COL is a MINIMUM width today, not a fixed one) — and
-// put a LIVE, PIXEL-MEASURED cap on the one place a name is actually typed (the rename field,
-// components/PresetManager, measured against the room in every place a name is currently shown,
-// a row of the switcher's list included — see lib/presetNameWidth for the mechanism). That live cap is what answers "how many characters fit
-// right now", and it is a moving target by construction: the same name that fits a wide phone can
-// overflow a narrow one, and this constant cannot chase a number that changes per device.
-//
-// ★ SO THIS CONSTANT'S JOB NARROWED TO ONE THING: screening a name this app did NOT just watch get
-// typed — one that arrived from localStorage (an older build, a smaller-cap build, a tampered or
-// truncated payload) or cross-device sync, none of which ever passed through the live typing UI at
-// all. `normalizePresetName` is the enforcement point (it slices on every read, not only on typed
-// input), and it needs SOME hard ceiling independent of any measurement, because there is no live
-// switcher cell to measure against a value that is being loaded, only one it is about to be shown
-// in.
-// ⚠ SO IT IS DELIBERATELY MORE GENEROUS THAN ANY SINGLE DEVICE'S TYPING CAP, not equal to it. The
-// switcher's widest realistic budget — the top bar's own max-w-[30rem] (480px) container, at the
-// fluid root's largest size — comes out to roughly 25 characters of headroom by the same em-based
-// arithmetic PRESET_NAME_COL used to use (fixed chrome ~230px of a ~442px content box at the
-// clamp's tall-and-wide end, leaving ~212px ÷ ~8.3px/char ≈ 25). 40 clears that with real margin —
-// enough that a name honestly typed against a generous device's live cap is never retroactively
-// shortened here — while still being a firm, bounded ceiling against a payload nobody typed: it
-// caps storage size and render cost the same way the old 12 did, just at a number chosen for what
-// this screen is FOR now rather than for a pixel budget it no longer owns.
-// ⚠ LOWERING IT IS RETROACTIVE, BY DESIGN, UNCHANGED FROM BEFORE. normalizePresetName slices on
-// every read, so a name saved under an older, longer cap is shortened the next time the registry
-// hydrates rather than being kept as a value this screen decided it would rather not trust. That
-// is the honest behaviour — the alternative is a stored name with no ceiling at all.
-export const MAX_PRESET_NAME = 40
-
 export const defaultPresetName = (id: number): string => `Preset ${id}`
 
 // Fresh defaults via a FACTORY (the same reasoning as makeProgressDefaults): the nested array must
@@ -199,9 +166,16 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
   openInPreset: 'last',
 })
 
-// A player-typed name, made safe to store and to render: trimmed, length-capped, and never empty.
+// A name, made safe to store: its outer spaces trimmed, and never empty — one that is empty, all
+// spaces, or not text at all becomes the default name for its preset.
+// ★ THERE IS NO LENGTH LIMIT, AND NOTHING HERE CUTS A NAME. A name is whatever the player typed or
+// pasted, a whole book included; the places that show it shorten what they DRAW (lib/presetNameText,
+// and the ellipsis in components/PresetSwitcher), never what is stored. So no part of a name is
+// ever sliced off by the unit a string is counted in — which is the only way half an emoji was
+// ever made. Two presets may share a name; nothing depends on names being different (a preset is
+// its id).
 export const normalizePresetName = (name: string, id: number): string =>
-  (typeof name === 'string' ? name.trim().slice(0, MAX_PRESET_NAME) : '') || defaultPresetName(id)
+  (typeof name === 'string' ? name.trim() : '') || defaultPresetName(id)
 
 // ★ THE REGISTRY IS READ FROM UNTRUSTED STORAGE, exactly as store/lookupHistory's own list is, and
 // it gets the same treatment for the same reason: the screen is UNCONDITIONAL, not version-gated,

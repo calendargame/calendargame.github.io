@@ -673,9 +673,9 @@ export default function CustomSelect({
       )}
       {/* THE HIDDEN ROW GAUGE ('match-trigger' only) — the list, laid out at the trigger's width
           while it is closed, so that what a row has room for can be MEASURED without opening it.
-          lib/presetNameWidth reads the preset name cells in here to learn how long a name may be:
-          the list is where a name has the least room, and a limit taken from the button alone let
-          through names the list then cut short. It is this wrapper's own width (which is the
+          lib/presetNameWidth reads the preset name cells in here to learn whether a name is cut
+          short: the list is where a name has the least room, and a reading taken from the button
+          alone called names whole that the list then cut. It is this wrapper's own width (which is the
           trigger's, and so the panel's), the list's own `p-1`, and the very rows the list draws
           (OPTION_ROW_BOX + OptionRowCells), so it cannot disagree with the open list. Out of flow,
           pinned to this wrapper's top, and clipped to no height but its own padding (`height:0`

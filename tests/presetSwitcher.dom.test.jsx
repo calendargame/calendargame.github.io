@@ -22,11 +22,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createRef } from 'react'
 import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react'
-import PresetSwitcher, {
-  PRESET_NAME_COL,
+import PresetSwitcher, { PRESET_NAME_COL } from '../src/components/PresetSwitcher.jsx'
+import { usePresets, makePresetRegistryDefaults } from '../src/store/presets.js'
+import {
   PRESET_NAME_CELL_SELECTOR,
-} from '../src/components/PresetSwitcher.jsx'
-import { usePresets, makePresetRegistryDefaults, MAX_PRESET_NAME } from '../src/store/presets.js'
+  refreshNameRooms,
+  useNameRooms,
+} from '../src/lib/presetNameWidth.js'
+import { NAME_DRAWN_UNITS } from '../src/lib/presetNameText.js'
 import { createPreset, renamePreset, setPresetAmnesic } from '../src/store/presetControl.js'
 
 // A device that has never been played on and has never seen presets: nothing saved, one preset.
@@ -262,10 +265,10 @@ describe('the control must not size itself to its longest option', () => {
     // ★ AND NOT IN A LIST ROW — the open list's, or the hidden gauge's that stands in for it while
     // it is closed. A row is exactly as wide as the trigger and its label cell already fills it, so
     // a floor there holds nothing open; in a row with less room than the floor it would push the
-    // name past the row's edge, and the gauge would report room the row does not have — the limit
-    // on a name's length is read from that cell.
+    // name past the row's edge, and the gauge would report room the row does not have — whether a
+    // name is cut is read from that cell.
     act(() => {
-      createPreset('W'.repeat(MAX_PRESET_NAME)) // the widest name the store will accept
+      createPreset('W'.repeat(60)) // far wider than any cell
       createPreset('Hi')
     })
     mount()
@@ -282,8 +285,8 @@ describe('the control must not size itself to its longest option', () => {
   })
 
   it('marks every cell with the DOM hook lib/presetNameWidth reads across the component boundary', () => {
-    // data-preset-name-cell is what PRESET_NAME_CELL_SELECTOR (this file) and
-    // lib/presetNameWidth's readNameRooms agree on — proven here against the REAL rendered
+    // data-preset-name-cell is what lib/presetNameWidth's PRESET_NAME_CELL_SELECTOR and its
+    // readNameRooms agree on — proven here against the REAL rendered
     // control, not a hand-built stand-in (tests/presetNameWidth.dom owns the fabricated-DOM cases
     // for the measurement itself). EVERY place this control draws a name is found by it: the
     // trigger's stacked cells, and the rows of the list — which are there to be measured while the
@@ -305,6 +308,34 @@ describe('the control must not size itself to its longest option', () => {
     expect(found).toHaveLength(6)
   })
 
+  it('every name cell hands itself to the room watcher as it mounts, and takes itself back out', async () => {
+    // Nothing here asks for a reading: the cells arriving is what causes one, and the cells going
+    // is what causes the next. (jsdom gives no element a width, so the cells are given one.)
+    const element = window.Element.prototype
+    const original = element.getBoundingClientRect
+    element.getBoundingClientRect = function () {
+      return this.matches(PRESET_NAME_CELL_SELECTOR) ? { width: 77 } : original.call(this)
+    }
+    let rooms = null
+    function Reader() {
+      rooms = useNameRooms()
+      return null
+    }
+    try {
+      render(<Reader />)
+      expect(rooms).toEqual([])
+      const switcher = mount()
+      await act(() => Promise.resolve()) // the read a mounting cell queues behind its render
+      expect(rooms.map((room) => room.widthPx)).toEqual([77])
+      switcher.unmount()
+      await act(() => Promise.resolve())
+      expect(rooms).toEqual([])
+    } finally {
+      element.getBoundingClientRect = original
+      act(() => refreshNameRooms())
+    }
+  })
+
   it('puts `truncate` on the NAME rather than on the cell', () => {
     // A flex container's own text-overflow never fires — the ellipsis rule applies to a block box's
     // inline content, and this cell's children are flex items. On the cell it would clip with no
@@ -321,22 +352,60 @@ describe('the control must not size itself to its longest option', () => {
     }
   })
 
-  it("the store's own ceiling still bounds a name this control never watched get typed", () => {
-    // Since round 20, MAX_PRESET_NAME no longer promises "fits the cell without truncating" — the LIVE
-    // typing-time cap (lib/presetNameWidth, exercised against components/PresetManager's rename
-    // field) is what makes that promise now, for names typed through the app. What MAX_PRESET_NAME
-    // still guarantees is the coarser one: nothing reaching this control's `options` array, however
-    // it got there, is unbounded — createPreset here stands in for any route that was never typed
-    // through the live UI (store/presets argues the real list: an old build, a tampered payload).
-    let p2
+  it('a name of any length is drawn on one line, in full up to what a slot could ever show', () => {
+    // Nothing limits a name (store/presets), so the control has to cope with any: the text it is
+    // handed is the WHOLE name for anything a slot could show — the ellipsis is CSS's, on the
+    // `truncate` span — and the same in the trigger, the list, and the hidden gauge.
+    const name = 'A name much longer than the control: ' + 'x'.repeat(200)
     act(() => {
-      p2 = createPreset('x'.repeat(80))
+      createPreset(name)
     })
-    expect(p2.name).toHaveLength(MAX_PRESET_NAME)
     mount()
     openMenu()
-    for (const opt of options())
-      expect(nameCell(optionWrapper(opt)).textContent.length).toBeLessThanOrEqual(MAX_PRESET_NAME)
+    const drawn = [
+      ...triggerWrappers(),
+      ...options().map(optionWrapper),
+      ...gaugeRows().map(optionWrapper),
+    ]
+      .map(nameCell)
+      .map((cell) => cell.firstElementChild.textContent)
+      .filter((text) => text !== 'Preset 1')
+    expect(drawn).toEqual([name, name, name])
+  })
+
+  it('a pasted book is drawn as its start and an ellipsis — never handed to the page whole', () => {
+    // A browser has to shape every character of a line before it can clip it, in every cell that
+    // draws it; a book in each would stall every frame (lib/presetNameText).
+    const book = 'All work and no play. '.repeat(50_000) // 1,100,000 characters
+    act(() => {
+      createPreset(book)
+    })
+    expect(usePresets.getState().presets[1].name).toBe(book.trim()) // stored whole
+    mount()
+    openMenu()
+    const cells = document.querySelectorAll(PRESET_NAME_CELL_SELECTOR)
+    expect(cells).toHaveLength(6)
+    for (const cell of cells)
+      expect(cell.textContent.length).toBeLessThanOrEqual(NAME_DRAWN_UNITS + 1)
+    const shown = nameCell(optionWrapper(options()[1])).textContent
+    expect(shown.endsWith('…')).toBe(true)
+    expect(book.startsWith(shown.slice(0, -1))).toBe(true)
+    // …and nowhere else on the page either: the accessible names come from the same text.
+    expect(document.body.textContent).not.toContain(book.slice(0, NAME_DRAWN_UNITS + 2))
+  })
+
+  it('an amnesic preset with a very long name is spoken from the same bounded text', () => {
+    const book = 'All work and no play. '.repeat(50_000)
+    let preset
+    act(() => {
+      preset = createPreset(book)
+      setPresetAmnesic(preset.id, 'full')
+    })
+    mount()
+    openMenu()
+    const spoken = options()[1].querySelector('.sr-only').textContent
+    expect(spoken.endsWith('…, amnesic')).toBe(true)
+    expect(spoken.length).toBeLessThanOrEqual(NAME_DRAWN_UNITS + 1 + ', amnesic'.length)
   })
 })
 

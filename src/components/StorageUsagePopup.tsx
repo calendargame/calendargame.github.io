@@ -7,6 +7,7 @@ import type { Preset } from '../store/presets.js'
 import { resetStatsFreesRoom, useActiveAmnesicMode } from '../store/amnesic.js'
 import { amnesicLabel } from './settingsOptions.js'
 import { modeNames } from '../lib/modes.js'
+import { nameAsQuoted } from '../lib/presetNameText.js'
 
 // StorageUsagePopup — what is using the device's room for this app, and how to get some back.
 //
@@ -36,12 +37,17 @@ const TIMES_OWNER: Record<string, string> = {
 const count = (n: number): string => n.toLocaleString('en-US')
 
 // A row's name, in the words the app uses for the thing. A preset is named only when there is more
-// than one to tell apart; one that is no longer in the list is said to be so.
+// than one to tell apart; one that is no longer in the list is said to be so. The name is quoted
+// (lib/presetNameText): a very long one is its start and an ellipsis, so a row stays a few lines.
 function rowLabel(row: UsageRow, presets: Preset[]): string {
   if (row.kind === 'lookup') return `Lookup history (${count(row.count)})`
   if (row.kind === 'other') return 'Everything else'
   const preset = presets.find((p) => p.id === row.presetId)
-  const who = preset ? (presets.length > 1 ? `${preset.name}: ` : '') : 'A deleted preset: '
+  const who = preset
+    ? presets.length > 1
+      ? `${nameAsQuoted(preset.name)}: `
+      : ''
+    : 'A deleted preset: '
   if (row.kind === 'preset') return `${who}Bests, settings, and saved defaults`
   return `${who}${TIMES_OWNER[row.silo] ?? row.silo} solve times (${count(row.count)})`
 }
@@ -137,7 +143,7 @@ export default function StorageUsagePopup() {
                 key={`${row.kind}:${'presetId' in row ? row.presetId : ''}:${'silo' in row ? row.silo : ''}`}
                 className="flex justify-between gap-3"
               >
-                <span>{rowLabel(row, presets)}</span>
+                <span className="min-w-0 wrap-anywhere">{rowLabel(row, presets)}</span>
                 <span className="tabular-nums whitespace-nowrap">{shown(row.chars)}</span>
               </li>
             ))}

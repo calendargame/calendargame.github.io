@@ -1,24 +1,55 @@
 // @vitest-environment jsdom
 //
-// presetNameWidth.dom — the DOM/canvas-touching half of lib/presetNameWidth's live typing cap
-// (round 20): reading the live room in every place a preset name is drawn (readNameRooms),
-// measuring text against a canvas (measureTextWidthPx), and the one function
-// components/PresetManager actually calls (capCandidateToNameRoom). tests/presetNameWidth.test.js
-// owns the PURE decision (fitsWithinWidth) with fabricated numbers and no jsdom at all.
+// presetNameWidth.dom — the DOM/canvas-touching half of lib/presetNameWidth: reading the live room
+// in every place a preset name is drawn (readNameRooms), measuring text against a canvas
+// (measureTextWidthPx), the decision the rename field's note is drawn from (isCutSomewhere), and
+// how the rooms are kept current (watchNameCell, useNameRooms). tests/presetNameWidth.test.js owns
+// the PURE comparison (fitsWithinWidth) with fabricated numbers and no jsdom at all.
 //
 // ⚠⚠ jsdom HAS NO LAYOUT ENGINE AND NO CANVAS. Neither fact is assumed here — both are PROVED, in
 // the first two cases below, because the rest of this file's coverage depends on knowing exactly
 // how each degrades: getBoundingClientRect always reports 0 (so readNameRooms must find nothing
 // on a real cell the same as on a missing one, unless a test fakes the rect), and
 // HTMLCanvasElement.getContext('2d') returns null rather than throwing (tests/setup/dom.js
-// silences the "not implemented" warning that call would otherwise log on every keystroke).
-import { describe, it, expect, afterEach, vi } from 'vitest'
+// silences the "not implemented" warning that call would otherwise log).
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { createElement } from 'react'
+import { render, cleanup, act } from '@testing-library/react'
+
+// The module makes its one ResizeObserver as it loads, and the harness's does nothing — so before
+// anything is imported, this file swaps in one that remembers what it was handed and can be made to
+// report by hand (the last case in the file).
+const resizeObservers = vi.hoisted(() => {
+  const made = []
+  window.ResizeObserver = class {
+    constructor(report) {
+      this.report = report
+      this.observed = new Set()
+      made.push(this)
+    }
+    observe(el) {
+      this.observed.add(el)
+    }
+    unobserve(el) {
+      this.observed.delete(el)
+    }
+    disconnect() {
+      this.observed.clear()
+    }
+  }
+  return made
+})
+
 import {
+  PRESET_NAME_CELL_SELECTOR,
   readNameRooms,
   measureTextWidthPx,
-  capCandidateToNameRoom,
+  isCutSomewhere,
+  refreshNameRooms,
+  watchNameCell,
+  useNameRooms,
 } from '../src/lib/presetNameWidth.js'
-import { PRESET_NAME_CELL_SELECTOR } from '../src/components/PresetSwitcher.jsx'
+import { NAME_DRAWN_UNITS } from '../src/lib/presetNameText.js'
 
 // A fake 2D context whose measureText is a simple, controllable function of the text AND THE FONT
 // — a third of the font's pixel size per character, so 15px text is 5px a character and 12px text
@@ -118,14 +149,13 @@ describe('readNameRooms — the cross-component DOM read', () => {
   })
 
   it('is empty when no element matches the selector at all', () => {
-    // Nothing mounted — the documented fallback path capCandidateToNameRoom takes.
+    // Nothing mounted: there is no place to be cut in.
     expect(readNameRooms()).toEqual([])
   })
 
   it('skips a matched element reporting a non-positive width (plain unmocked jsdom)', () => {
     // A real cell, but with jsdom's own always-zero rect (no mock) — the case this suite hits by
-    // default whenever the real controls are mounted alongside PresetManager, and exactly why the
-    // fallback exists rather than only covering "cannot find the element at all".
+    // default whenever the real controls are mounted: a width of nothing is not a room.
     const cell = document.createElement('span')
     cell.setAttribute('data-preset-name-cell', 'true')
     document.body.appendChild(cell)
@@ -133,9 +163,8 @@ describe('readNameRooms — the cross-component DOM read', () => {
   })
 
   it('counts a cell wherever it is mounted — a list row is a place a name is drawn', () => {
-    // The defect this file's rewrite is for: the read used to be scoped to the top-bar button
-    // (`[data-select-trigger] …`) and deliberately could not see a row of the list, the one place a
-    // name has the least room.
+    // The read used to be scoped to the top-bar button (`[data-select-trigger] …`) and could not
+    // see a row of the list, the one place a name has the least room.
     const row = document.createElement('div')
     row.setAttribute('data-select-row-gauge', '')
     document.body.appendChild(row)
@@ -146,7 +175,7 @@ describe('readNameRooms — the cross-component DOM read', () => {
   it('keeps ONE room per font — the narrowest cell set in it', () => {
     // Every preset has a cell in each place, all the same width there; and two places can share a
     // font at different widths (the top bar's list and "Open in"'s). The narrowest is the only one
-    // that can refuse a name the others would take.
+    // that can cut a name the others would show whole.
     mountNameCell(200, ROW_FONT)
     mountNameCell(68, ROW_FONT)
     mountNameCell(120, ROW_FONT)
@@ -179,531 +208,211 @@ describe('measureTextWidthPx — degrades to 0 without a real canvas, measures f
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('capCandidateToNameRoom — the one call components/PresetManager makes', () => {
-  // What the cap answers for the TEXT, which is what most cases here are about: the text to show
-  // and whether anything was refused. Where it puts the cursor, and what it does with the selection
-  // the field hands it, have their own cases at the foot of this block.
-  const judge = (candidate, previous, full, replaced = null) => {
-    const { text, capped } = capCandidateToNameRoom(candidate, previous, full, replaced)
-    return { text, capped }
+describe('isCutSomewhere — is this name shown cut short in at least one place', () => {
+  let restoreCanvas = () => {}
+  afterEach(() => restoreCanvas())
+  const withCanvas = (unitsOf) => {
+    restoreCanvas = installFakeCanvas(unitsOf)
   }
 
-  it('accepts a candidate that fits the LIVE room, unchanged', () => {
-    const restore = installFakeCanvas()
+  it('nothing is cut where no place can be measured — there is nowhere it is being cut', () => {
+    withCanvas()
+    expect(isCutSomewhere('A name of any ordinary length at all', [])).toBe(false)
+  })
+
+  it('turns at the EXACT character that stops fitting, and back at the one that fits again', () => {
+    withCanvas()
     mountNameCell(50) // 10 characters at 5px
-    expect(judge('Weekend', '', false)).toEqual({ text: 'Weekend', capped: false })
-    restore()
+    const rooms = readNameRooms()
+    expect(isCutSomewhere('Weekend Mo', rooms)).toBe(false) // 10: exactly the room
+    expect(isCutSomewhere('Weekend Mor', rooms)).toBe(true) // 11
+    expect(isCutSomewhere('Weekend Mo', rooms)).toBe(false) // …and one taken away again
   })
 
-  it('trims to fit the LIVE room, and reports capped:true', () => {
-    const restore = installFakeCanvas()
-    mountNameCell(25) // 5 characters
-    expect(judge('Weekend Mornings', '', false)).toEqual({
-      text: 'Weeke',
-      capped: true,
-    })
-    restore()
-  })
-
-  // ★ THE DEFECT, AS THE OWNER MET IT: a name the top-bar button showed whole was cut short with
-  // "…" in the list under it. The limit was the button's room alone; a list row is its own place,
-  // with its own room and larger text, and it is the one that governs.
-  it('refuses a name that fits the BUTTON but not a row of its LIST', () => {
-    const restore = installFakeCanvas()
-    // The button: 91px of room at 4px a character — 22 characters. A list row: 68px at 5px — 13.
-    const button = document.createElement('button')
-    button.setAttribute('data-select-trigger', '')
-    document.body.appendChild(button)
-    button.appendChild(mountNameCell(91, BUTTON_FONT))
-    mountNameCell(68, ROW_FONT)
-    expect(judge('Weekend Mornings', '', false)).toEqual({
-      text: 'Weekend Morni',
-      capped: true,
-    })
-    expect(judge('Weekend Morni', '', false)).toEqual({
-      text: 'Weekend Morni',
-      capped: false,
-    })
-    restore()
+  it('the NARROWEST place governs — a name that fits the button but not a row of its list is cut', () => {
+    withCanvas()
+    mountNameCell(48, BUTTON_FONT) // 12 characters at 4px
+    mountNameCell(50, ROW_FONT) // 10 characters at 5px
+    const rooms = readNameRooms()
+    expect(isCutSomewhere('Weekend Mo', rooms)).toBe(false)
+    expect(isCutSomewhere('Weekend Mor', rooms)).toBe(true) // fits the button, not the row
   })
 
   it('…and the button governs when it is the tighter place — neither is assumed to be', () => {
-    const restore = installFakeCanvas()
-    mountNameCell(40, BUTTON_FONT) // 10 characters
-    mountNameCell(200, ROW_FONT) // 40
-    expect(judge('Weekend Mornings', '', false).text).toBe('Weekend Mo')
-    restore()
+    withCanvas()
+    mountNameCell(32, BUTTON_FONT) // 8 characters at 4px
+    mountNameCell(60, ROW_FONT) // 12 characters at 5px
+    const rooms = readNameRooms()
+    expect(isCutSomewhere('Weekends', rooms)).toBe(false)
+    expect(isCutSomewhere('Weekends!', rooms)).toBe(true)
   })
 
-  it('un-refuses on a backspace: a shorter candidate that now fits comes back capped:false', () => {
-    const restore = installFakeCanvas()
-    mountNameCell(25)
-    expect(judge('Weekend Mornings', 'Weeke', false).capped).toBe(true)
-    expect(judge('Week', 'Weeke', false)).toEqual({ text: 'Week', capped: false })
-    restore()
+  it('is a function of the text alone: a narrower letter after a wide one that did not fit, fits', () => {
+    // The refusal this replaced had to remember that a letter had been turned away. A note has
+    // nothing to remember: each text is judged as it stands.
+    withCanvas((ch) => (ch === 'M' ? 2 : ch === 'i' ? 0.5 : 1))
+    mountNameCell(45) // 9 ordinary letters
+    const rooms = readNameRooms()
+    expect(isCutSomewhere('Weekend ', rooms)).toBe(false) // 8
+    expect(isCutSomewhere('Weekend M', rooms)).toBe(true) // 8 + 2
+    expect(isCutSomewhere('Weekend i', rooms)).toBe(false) // 8 + 0.5
   })
 
-  it('refuses everything when not even one character fits', () => {
-    const restore = installFakeCanvas()
-    mountNameCell(1)
-    expect(judge('W', '', false)).toEqual({ text: '', capped: true })
-    expect(judge('Weekend', '', false)).toEqual({ text: '', capped: true })
-    restore()
+  it('measures the name as a slot lays it out: a run of spaces is drawn as one', () => {
+    // A canvas gives every space its width; the screen folds a run of them (and tabs, and line
+    // breaks) into a single space. Measured raw, this name would be 13 wide and "cut".
+    withCanvas()
+    mountNameCell(50) // 10 characters
+    const rooms = readNameRooms()
+    expect(isCutSomewhere('Week    end', rooms)).toBe(false) // drawn as "Week end": 8
+    expect(isCutSomewhere('Week\t\n end', rooms)).toBe(false)
+    expect(isCutSomewhere('Week ends on', rooms)).toBe(true) // 12 real characters
+    // A no-break space is not folded: it is there to be drawn.
+    expect(isCutSomewhere('Week\u00a0\u00a0\u00a0\u00a0end', rooms)).toBe(true)
   })
 
-  it('falls back to the safe minimum budget when no cell can be read at all', () => {
-    // Nothing mounted, matching PresetManager standalone in a test with no top bar — the fallback
-    // path is real, not dead code.
-    const restore = installFakeCanvas()
-    // A name comfortably under the fallback budget (≈61px, at ≈4.5px a character) is accepted.
-    expect(judge('Weekend', '', false).capped).toBe(false)
-    // A name well past it is trimmed, proving the fallback budget is finite and actually applied.
-    const long = judge('W'.repeat(40), '', false)
-    expect(long.capped).toBe(true)
-    expect(long.text.length).toBeLessThan(40)
-    expect(long.text.length).toBeGreaterThan(0)
-    restore()
+  it('without a canvas nothing can be measured, so nothing is called cut', () => {
+    mountNameCell(10)
+    expect(isCutSomewhere('A name far wider than ten pixels', readNameRooms())).toBe(false)
   })
 
-  it('never trims anything without a real canvas — the whole mechanism degrades to a no-op', () => {
-    mountNameCell(10) // a tiny live room…
-    // …and yet, with no fake canvas installed, every measurement is 0 and therefore "fits".
-    expect(judge('Weekend Mornings', '', false)).toEqual({
-      text: 'Weekend Mornings',
-      capped: false,
+  describe('a name too long to be drawn whole is cut, and is not measured to find that out', () => {
+    it('one unit past what a name slot draws: cut, whatever it would have measured', () => {
+      const measured = []
+      withCanvas((ch) => (measured.push(ch), 0)) // every character is zero wide: it would all "fit"
+      mountNameCell(50)
+      const rooms = readNameRooms()
+      expect(isCutSomewhere('​'.repeat(NAME_DRAWN_UNITS), rooms)).toBe(false)
+      expect(measured).toHaveLength(NAME_DRAWN_UNITS)
+      measured.length = 0
+      expect(isCutSomewhere('​'.repeat(NAME_DRAWN_UNITS + 1), rooms)).toBe(true)
+      expect(measured).toHaveLength(0)
+    })
+
+    it('a pasted book costs the same as a long name: not one character of it is measured', () => {
+      const measured = []
+      withCanvas((ch) => (measured.push(ch), 1))
+      mountNameCell(50)
+      expect(isCutSomewhere('x'.repeat(1_000_000), readNameRooms())).toBe(true)
+      expect(measured).toHaveLength(0)
+    })
+
+    it('…even where no place can be measured: the slots still draw only its start', () => {
+      expect(isCutSomewhere('x'.repeat(NAME_DRAWN_UNITS + 1), [])).toBe(true)
     })
   })
+})
 
-  // ── ONCE A LETTER HAS BEEN REFUSED, THE NAME IS FULL ──────────────────────────────────────
-  // Width decides what fits, and letters are not one width — so after a wide letter was refused, a
-  // narrower one typed later used to slip in. `full` is the cap's own last `capped`, handed back.
-  describe('once an insertion has been refused, every insertion is, until something is taken away', () => {
-    // A wide "M", a narrow "i", everything else ordinary: in room for 9 ordinary letters,
-    // "Weekend " (8) fits, "Weekend M" (9.5) does not, and "Weekend i" (8.5) would.
-    const mixedWidths = (ch) => (ch === 'M' ? 1.5 : ch === 'i' ? 0.5 : 1)
-    const ROOM = 45 // 9 ordinary letters at 5px
-    // A field, as components/PresetManager drives it: the text and the cap's last answer.
-    const field = (text = '') => {
-      const state = { text, full: false }
-      const edit = (candidate) => {
-        const { text: next, capped } = judge(candidate, state.text, state.full)
-        state.text = next
-        state.full = capped
-        return state
-      }
-      return {
-        state,
-        edit,
-        type: (letters) => [...letters].forEach((ch) => edit(state.text + ch)),
-      }
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('the rooms are kept current, and whatever is drawn from them follows', () => {
+  // A stand-in for anything that draws from the rooms: it shows how many it was last handed and
+  // counts how often it was drawn.
+  let draws = 0
+  function Reader() {
+    const rooms = useNameRooms()
+    draws++
+    return createElement('output', null, rooms.map((r) => r.widthPx).join(','))
+  }
+  const shown = () => document.querySelector('output').textContent
+  // A real cell, mounted by React with the ref the app's cells use, and given a width.
+  const widths = new Map()
+  function Cell({ id }) {
+    return createElement('span', {
+      'data-preset-name-cell': 'true',
+      'data-font': ROW_FONT,
+      'data-cell': id,
+      ref: watchNameCell,
+    })
+  }
+  const original = window.Element.prototype.getBoundingClientRect
+  beforeEach(() => {
+    draws = 0
+    widths.clear()
+    window.Element.prototype.getBoundingClientRect = function () {
+      return { width: widths.get(this.dataset?.cell) ?? 0 }
     }
+  })
+  afterEach(() => {
+    cleanup()
+    window.Element.prototype.getBoundingClientRect = original
+    act(() => refreshNameRooms())
+  })
+  // Everything queued behind a render (the read a mounting cell asks for) has run.
+  const settled = () => act(() => Promise.resolve())
 
-    it('typing "Weekend Mornings" stops at "Weekend " — no later, narrower letter slips in', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      const box = field()
-      box.type('Weekend Mornings')
-      expect(box.state).toEqual({ text: 'Weekend ', full: true })
-      restore()
-    })
-
-    it('a full name refuses an insertion that WOULD fit, anywhere in it, typed or pasted', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      expect(judge('Weekend i', 'Weekend ', true)).toEqual({
-        text: 'Weekend ',
-        capped: true,
-      })
-      expect(judge('iWeekend ', 'Weekend ', true).text).toBe('Weekend ')
-      expect(judge('Weeikend ', 'Weekend ', true).text).toBe('Weekend ')
-      // …which is the whole of what `full` changes: the same edit, not full, is taken.
-      expect(judge('Weekend i', 'Weekend ', false)).toEqual({
-        text: 'Weekend i',
-        capped: false,
-      })
-      restore()
-    })
-
-    it('a deletion ends it: the name is no longer full, and the next letter is measured again', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      const box = field()
-      box.type('Weekend M')
-      expect(box.state).toEqual({ text: 'Weekend ', full: true })
-      expect(box.edit('Weekend')).toEqual({ text: 'Weekend', full: false })
-      box.type('s')
-      expect(box.state).toEqual({ text: 'Weekends', full: false })
-      restore()
-    })
-
-    it('typing over a selection is not an insertion: what replaces it is measured as usual', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      // Select all, type one letter.
-      expect(judge('A', 'Weekend ', true)).toEqual({ text: 'A', capped: false })
-      // Select "end ", type "ly": shorter, fits, no longer full.
-      expect(judge('Weekly', 'Weekend ', true)).toEqual({
-        text: 'Weekly',
-        capped: false,
-      })
-      // Select all, paste something too long: cut to what fits, and full.
-      expect(judge('Saturday Night', 'Weekend ', true)).toEqual({
-        text: 'Saturday ',
-        capped: true,
-      })
-      restore()
-    })
-
-    it('remembers nothing itself — `full` is only ever what the caller hands it', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      expect(judge('Weekend M', 'Weekend ', false).capped).toBe(true)
-      // A different field, a fresh edit: the refusal above is not carried into it.
-      expect(judge('Wi', 'W', false)).toEqual({ text: 'Wi', capped: false })
-      restore()
-    })
+  it('a cell that mounts is read without anyone asking, and one that leaves is read out again', async () => {
+    widths.set('a', 80)
+    const view = render(createElement(Reader))
+    expect(shown()).toBe('')
+    view.rerender(
+      createElement('div', null, createElement(Reader), createElement(Cell, { id: 'a' })),
+    )
+    await settled()
+    expect(shown()).toBe('80')
+    view.rerender(createElement('div', null, createElement(Reader)))
+    await settled()
+    expect(shown()).toBe('')
   })
 
-  // ── AN INSERTION THAT DOES NOT FIT LOSES ITS OWN END, NEVER THE NAME'S ───────────────────
-  describe('what does not fit is taken off the insertion, not off the end of the name', () => {
-    it('a letter typed into the MIDDLE of a name that has no room is refused, the name untouched', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50) // 10 characters
-      expect(judge('WeekXend Mo', 'Weekend Mo', false)).toEqual({
-        text: 'Weekend Mo',
-        capped: true,
-      })
-      restore()
-    })
-
-    it('a paste keeps as much of its start as fits, where it was pasted', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50)
-      // At the end…
-      expect(judge('Weekend Mornings', 'Weekend', false)).toEqual({
-        text: 'Weekend Mo',
-        capped: true,
-      })
-      // …and in the middle, where the text after the cursor is kept whole.
-      expect(judge('Week-long end', 'Weekend', false)).toEqual({
-        text: 'Week-loend',
-        capped: true,
-      })
-      restore()
-    })
+  it('a window resize reads the rooms again', async () => {
+    widths.set('a', 80)
+    render(createElement('div', null, createElement(Reader), createElement(Cell, { id: 'a' })))
+    await settled()
+    expect(shown()).toBe('80')
+    widths.set('a', 42) // a rotation: the same cell, narrower
+    act(() => void window.dispatchEvent(new Event('resize')))
+    expect(shown()).toBe('42')
   })
 
-  // ── NEVER HALF A CHARACTER ─────────────────────────────────────────────────────────────────
-  // What a player calls one character can be several of the units a string is counted in: an emoji
-  // is two, a flag is two emoji-sized letters, a family is three people joined by invisible
-  // joiners, an accent can ride behind its letter. Trimming by the unit used to keep the front half
-  // of one — a lone half of an emoji measures narrow, "fits", and was saved into the registry.
-  describe('what is trimmed is whole characters — an emoji, a flag, a family, an accented letter', () => {
-    const GRIN = '\u{1F600}'
-    const FAMILY = '\u{1F468}‍\u{1F469}‍\u{1F467}'
-    const FLAG = '\u{1F1EF}\u{1F1F5}'
-    const THUMB_LIGHT = '\u{1F44D}\u{1F3FB}'
-    const THUMB_MEDIUM = '\u{1F44D}\u{1F3FD}'
-    const E_ACUTE = 'é'
-    // As a real font has it, near enough: an emoji is two letters wide, a joiner is nothing, an
-    // accent adds a little, and HALF an emoji (which no font has a picture for) is one letter.
-    const emojiWidths = (ch) =>
-      ch === '‍' ? 0 : ch === '́' ? 0.5 : ch.codePointAt(0) > 0xffff ? 2 : 1
-    const LONE_HALF = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
-
-    it('an emoji that does not fit is refused whole — never its first half', () => {
-      const restore = installFakeCanvas(emojiWidths)
-      mountNameCell(30) // 6 letters: "Weeke" and one more, and an emoji is two
-      const typed = judge(`Weeke${GRIN}`, 'Weeke', false)
-      expect(typed).toEqual({ text: 'Weeke', capped: true })
-      expect(typed.text).not.toMatch(LONE_HALF)
-      // …pasted three at a time into room for one and a half, one whole emoji is kept.
-      expect(judge(`Wee${GRIN}${GRIN}${GRIN}`, 'Wee', false)).toEqual({
-        text: `Wee${GRIN}`,
-        capped: true,
-      })
-      // …and in the middle of a name, where the half used to be left in front of the tail.
-      expect(judge(`We${GRIN}eke`, 'Weeke', false)).toEqual({
-        text: 'Weeke',
-        capped: true,
-      })
-      restore()
-    })
-
-    it('a family is all of its people or none of them', () => {
-      const restore = installFakeCanvas(emojiWidths)
-      mountNameCell(30) // "We" and four letters: two of the three people would fit
-      expect(judge(`We${FAMILY}`, 'We', false)).toEqual({
-        text: 'We',
-        capped: true,
-      })
-      restore()
-    })
-
-    it('a flag is both of its letters or neither', () => {
-      const restore = installFakeCanvas(emojiWidths)
-      mountNameCell(30) // "Week" and two letters: one of the flag's two
-      expect(judge(`Week${FLAG}`, 'Week', false)).toEqual({
-        text: 'Week',
-        capped: true,
-      })
-      restore()
-    })
-
-    it('an accented letter is not kept with its accent taken off', () => {
-      const restore = installFakeCanvas(emojiWidths)
-      mountNameCell(30) // "Weeke" and one letter — but not one letter and its accent
-      expect(judge(`Weeke${E_ACUTE}`, 'Weeke', false)).toEqual({
-        text: 'Weeke',
-        capped: true,
-      })
-      restore()
-    })
-
-    it('what was typed is found between whole characters, not between the halves two of them share', () => {
-      // The two thumbs differ only in their LAST unit, so comparing unit by unit put the start of
-      // the paste inside the first thumb's skin tone.
-      const restore = installFakeCanvas(emojiWidths)
-      mountNameCell(30) // one thumb is four letters wide: room for one, not two
-      const pasted = judge(`${THUMB_MEDIUM}${THUMB_LIGHT}`, THUMB_LIGHT, false)
-      expect(pasted).toEqual({ text: THUMB_LIGHT, capped: true })
-      restore()
-    })
-
-    it('a stored name that already holds half an emoji is left exactly as it is', () => {
-      // An older build could save one. Nothing rewrites stored text: the half is a character of
-      // its own here, kept where it is while the edit around it is judged as usual.
-      const restore = installFakeCanvas(emojiWidths)
-      mountNameCell(30)
-      const OLD = 'Weeke\uD83D'
-      expect(judge('Weke\uD83D', OLD, false)).toEqual({
-        text: 'Weke\uD83D',
-        capped: false,
-      })
-      expect(judge(`W${GRIN}eeke\uD83D`, OLD, false)).toEqual({
-        text: OLD,
-        capped: true,
-      })
-      restore()
-    })
+  it('a reading that matches the last one draws nothing again', async () => {
+    widths.set('a', 80)
+    render(createElement('div', null, createElement(Reader), createElement(Cell, { id: 'a' })))
+    await settled()
+    const before = draws
+    act(() => void window.dispatchEvent(new Event('resize')))
+    act(() => refreshNameRooms())
+    expect(draws).toBe(before)
   })
 
-  // ── A NAME THAT IS ALREADY LONGER THAN THE ROOM ───────────────────────────────────────────
-  // It can exist: made on a wider screen, or under an older build's looser limit. It is stored as
-  // it is and never cut for being touched — `previous` is what the field held before the edit.
-  describe('a name already longer than the room is never cut for being edited', () => {
-    const OLD = 'Weekend Mornings' // 16 characters, in room for 10
-
-    it('deleting from it is accepted as typed, not trimmed to what fits', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50)
-      expect(judge('Weekend Morning', OLD, false)).toEqual({
-        text: 'Weekend Morning',
-        capped: false,
-      })
-      restore()
-    })
-
-    it('changing a letter in it, at the same width, is accepted', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50)
-      expect(judge('Weekend Evenings', OLD, false)).toEqual({
-        text: 'Weekend Evenings',
-        capped: false,
-      })
-      restore()
-    })
-
-    it('making it WIDER is refused — back to the width it already had, not down to the room', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50)
-      expect(judge(`${OLD}!`, OLD, false)).toEqual({ text: OLD, capped: true })
-      restore()
-    })
-
-    it('once it has been shortened to fit, the ordinary limit is the limit again', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50)
-      expect(judge('Weekend Mornings', 'Weekend', false)).toEqual({
-        text: 'Weekend Mo',
-        capped: true,
-      })
-      restore()
-    })
+  it('a font that has finished loading draws again even though no room changed', async () => {
+    // jsdom has no document.fonts. The same text is a different width in a font that has only just
+    // arrived, so this one event must reach the readers whatever the rooms say.
+    const fonts = new EventTarget()
+    Object.defineProperty(document, 'fonts', { configurable: true, value: fonts })
+    try {
+      widths.set('a', 80)
+      render(createElement('div', null, createElement(Reader), createElement(Cell, { id: 'a' })))
+      await settled()
+      const before = draws
+      act(() => void fonts.dispatchEvent(new Event('loadingdone')))
+      expect(draws).toBe(before + 1)
+    } finally {
+      cleanup() // the last reader lets go of document.fonts before it is taken away
+      delete document.fonts
+    }
   })
 
-  // ── THE TEXT OUTSIDE WHAT WAS REPLACED IS NEVER TOUCHED ───────────────────────────────────
-  // An edit that typed or pasted OVER something used to be cut to its longest prefix that fit, so
-  // a wide letter typed over a narrow one took the LAST letter of the name with it.
-  describe('typing or pasting over a selection loses the new text, never the rest of the name', () => {
-    const mixedWidths = (ch) => (ch === 'M' ? 1.5 : ch === 'i' ? 0.5 : 1)
-    const ROOM = 40 // 8 ordinary letters at 5px: "Weekend " exactly
-
-    it('a wider letter typed over a narrower one is refused — the name keeps its last letter', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      expect(judge('WMekend ', 'Weekend ', false)).toEqual({ text: 'Weekend ', capped: true })
-      // …and a narrower one is simply taken, full or not.
-      expect(judge('Wiekend ', 'Weekend ', true)).toEqual({ text: 'Wiekend ', capped: false })
-      restore()
-    })
-
-    it('…in a name already longer than the room, too: it is not cut for the attempt', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      const OLD = 'Weekend Evenings' // twice the room
-      expect(judge('WMekend Evenings', OLD, false)).toEqual({ text: OLD, capped: true })
-      restore()
-    })
-
-    it('a paste over a selection keeps as much of its start as fits, and everything after it', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      // "ee" selected, "XXXX" pasted: two of the four fit where the two letters were.
-      expect(judge('WXXXXkend ', 'Weekend ', false)).toEqual({ text: 'WXXkend ', capped: true })
-      restore()
-    })
-
-    it('taking away is never refused, even from a full name', () => {
-      const restore = installFakeCanvas(mixedWidths)
-      mountNameCell(ROOM)
-      expect(capCandidateToNameRoom('Weeken', 'Weekend ', true, null)).toEqual({
-        text: 'Weeken',
-        capped: false,
-        selection: null,
-      })
-      restore()
-    })
-  })
-
-  // ── WHAT WAS SELECTED, FROM THE FIELD ─────────────────────────────────────────────────────
-  // "My Weekend " is what "My " typed in front of "Weekend " leaves, and also what selecting all of
-  // it and pasting "My Weekend " leaves. Only the field knows which; it says, and the cap checks.
-  describe('the selection the field hands over decides what the edit was, when it can be true', () => {
-    const ALL = { start: 0, end: 8 } // the whole of "Weekend "
-
-    it('select all, paste something that ENDS with the name: it is a replacement, cut to fit', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(40) // 8 letters
-      expect(judge('My Weekend ', 'Weekend ', false, ALL)).toEqual({
-        text: 'My Weeke',
-        capped: true,
-      })
-      // …on a FULL name as well: something was taken away, so it is measured, not turned away.
-      expect(judge('My Weekend ', 'Weekend ', true, ALL)).toEqual({
-        text: 'My Weeke',
-        capped: true,
-      })
-      // The same text with a bare cursor in front is three letters added to a name with no room.
-      expect(judge('My Weekend ', 'Weekend ', false, { start: 0, end: 0 })).toEqual({
-        text: 'Weekend ',
-        capped: true,
-      })
-      restore()
-    })
-
-    it('select all, paste something that STARTS with the name', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(40)
-      expect(judge('Weekend Two', 'Weekend ', true, ALL)).toEqual({
-        text: 'Weekend ',
-        capped: true,
-      })
-      expect(judge('Weekends!', 'Weekend', true, { start: 0, end: 7 })).toEqual({
-        text: 'Weekends',
-        capped: true,
-      })
-      // Without the selection it reads as "s!" added to a full name, and all of it is refused.
-      expect(judge('Weekends!', 'Weekend', true)).toEqual({ text: 'Weekend', capped: true })
-      restore()
-    })
-
-    it('a selection the new text contradicts is ignored, and the texts are read instead', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(40)
-      // A backspace with a bare cursor: nothing was selected, and a letter is gone.
-      expect(judge('Weeken ', 'Weekend ', true, { start: 6, end: 6 })).toEqual({
-        text: 'Weeken ',
-        capped: false,
-      })
-      // "end" is claimed, but the text in front of it changed: read as a letter added in front.
-      expect(judge('XWeekend ', 'Weekend ', true, { start: 4, end: 7 })).toEqual({
-        text: 'Weekend ',
-        capped: true,
-      })
-      // Nonsense — backwards, out of range, inside a character — is ignored the same way.
-      for (const replaced of [
-        { start: 5, end: 2 },
-        { start: -1, end: 3 },
-        { start: 0, end: 99 },
-      ]) {
-        expect(judge('Weekend i', 'Weekend ', true, replaced)).toEqual({
-          text: 'Weekend ',
-          capped: true,
-        })
-      }
-      const GRIN = '\u{1F600}'
-      expect(judge(`${GRIN}Xab`, `${GRIN}ab`, true, { start: 1, end: 3 })).toEqual({
-        text: `${GRIN}ab`,
-        capped: true,
-      })
-      restore()
-    })
-  })
-
-  // ── WHERE THE CURSOR BELONGS ──────────────────────────────────────────────────────────────
-  // The field is written back to whenever the answer is not what was typed, and a box that is
-  // written to drops its cursor at the end. The cap says where it should be instead.
-  describe('`selection` — where the cursor goes when the answer is not what was typed', () => {
-    it('null when the edit was taken as typed: the cursor is already where the edit left it', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50)
-      expect(capCandidateToNameRoom('Weeks', 'Week', false, null).selection).toBeNull()
-      restore()
-    })
-
-    it('after a refused letter, the cursor stays where it was typed', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50) // 10 letters
-      expect(capCandidateToNameRoom('WeekXend Mo', 'Weekend Mo', false, null).selection).toEqual({
-        start: 4,
-        end: 4,
-      })
-      restore()
-    })
-
-    it('after a refused letter typed over a selection, the selection is as it was', () => {
-      const restore = installFakeCanvas((ch) => (ch === 'M' ? 1.5 : 1))
-      mountNameCell(50)
-      expect(
-        capCandidateToNameRoom('WMekend Mo', 'Weekend Mo', false, { start: 1, end: 2 }).selection,
-      ).toEqual({ start: 1, end: 2 })
-      restore()
-    })
-
-    it('after a shortened paste, the cursor is just behind what was kept of it', () => {
-      const restore = installFakeCanvas()
-      mountNameCell(50)
-      expect(capCandidateToNameRoom('Week-long end', 'Weekend', false, null)).toEqual({
-        text: 'Week-loend',
-        capped: true,
-        selection: { start: 7, end: 7 },
-      })
-      restore()
-    })
-
-    it('…counted in the units a text box counts in: an emoji kept is two of them', () => {
-      const GRIN = '\u{1F600}'
-      const restore = installFakeCanvas((ch) => (ch.codePointAt(0) > 0xffff ? 2 : 1))
-      mountNameCell(50) // 10 letters: "Week" and three emoji, each two letters wide
-      expect(
-        capCandidateToNameRoom(`We${GRIN}${GRIN}${GRIN}${GRIN}${GRIN}ek`, 'Week', false, null),
-      ).toEqual({
-        text: `We${GRIN}${GRIN}${GRIN}ek`,
-        capped: true,
-        selection: { start: 8, end: 8 },
-      })
-      restore()
-    })
+  it('a cell changing size is heard through ONE ResizeObserver that every cell is handed to', async () => {
+    widths.set('a', 80)
+    widths.set('b', 90)
+    render(
+      createElement(
+        'div',
+        null,
+        createElement(Reader),
+        createElement(Cell, { id: 'a' }),
+        createElement(Cell, { id: 'b' }),
+      ),
+    )
+    await settled()
+    expect(shown()).toBe('80')
+    const watching = resizeObservers.filter((observer) => observer.observed.size > 0)
+    expect(watching).toHaveLength(1)
+    expect(watching[0].observed.size).toBe(2)
+    widths.set('a', 61) // one cell is narrower now, and only the browser's observer knows
+    act(() => watching[0].report())
+    expect(shown()).toBe('61')
+    cleanup()
+    expect(watching[0].observed.size).toBe(0) // a cell that is gone is no longer watched
   })
 })

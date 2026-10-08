@@ -19,13 +19,11 @@
 // the list's scroll region ever shows its fades, and whether a newly created preset scrolls into
 // view are ALL DEVICE QUESTIONS and only the owner's iPhone can answer them. What is asserted below
 // is the structure and the behaviour those outcomes rest on.
-// ⚠ AND — SPECIFICALLY FOR THE RENAME FIELD'S WIDTH CAP (round 20) — lib/presetNameWidth's own
-// measurement is MOCKED in this file rather than exercised for real: jsdom has no canvas either
-// (verified in tests/presetNameWidth.dom, which owns the real mechanism end to end, fake canvas and
-// all), so what belongs here is narrower — does PresetManager's onChange call that function with
-// the typed candidate and TRUST its answer, does the width-language note track `capped` for the
-// right row and no other, does it clear on commit and on discard. The measurement itself is a
-// different file's claim to make.
+// ⚠ AND — SPECIFICALLY FOR THE RENAME FIELD'S "CUT SHORT" NOTE — jsdom has no canvas and no widths,
+// so no name is ever too long for anything here unless a case says how wide things are. The cases
+// that are about the note do exactly that, through tests/helpers/nameRooms: the real app, with the
+// name cells given a width and text a width per character. Nothing of lib/presetNameWidth is
+// mocked; tests/presetNameWidth.dom owns the measurement itself, in every font and place.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -49,7 +47,7 @@ import {
   isOffered,
   isDimmed,
 } from './helpers/settingsPanel.jsx'
-import { usePresets, PRESET_STORE_KEYS, presetKey, MAX_PRESET_NAME } from '../src/store/presets.js'
+import { usePresets, PRESET_STORE_KEYS, presetKey } from '../src/store/presets.js'
 import {
   createPreset,
   renamePreset,
@@ -59,15 +57,8 @@ import {
 import { useSettings } from '../src/store/settings.js'
 import { hasSessionRound } from '../src/store/sessionRound.js'
 import { KEYBOARD_ATTR } from '../src/lib/keyboardFocus.js'
-
-// The mock: onChange's ONE call into lib/presetNameWidth, controllable per test. Defaults to
-// "everything fits, unchanged" (the shape every case that is not ABOUT the cap wants), so cases
-// which do not mention it at all keep typing exactly what they type — the behaviour before the live width cap, and
-// the same reason a mock with a sane default beats a mock every case must configure.
-const presetNameWidth = vi.hoisted(() => ({
-  capCandidateToNameRoom: vi.fn((candidate) => ({ text: candidate, capped: false })),
-}))
-vi.mock('../src/lib/presetNameWidth.js', () => presetNameWidth)
+import { installNameRooms, PX_PER_CHARACTER } from './helpers/nameRooms.js'
+import { NAME_DRAWN_UNITS, NAME_QUOTED_CHARACTERS } from '../src/lib/presetNameText.js'
 
 // ── Reaching the card ─────────────────────────────────────────────────────────────────────────
 
@@ -122,17 +113,20 @@ const reorderHandle = (name) =>
   })
 const registry = () => usePresets.getState()
 
+// The layout a case about the "cut short" note installs (tests/helpers/nameRooms) — taken down
+// again after every case, installed or not.
+let nameRooms = null
+const layOutNameCells = (widthPx) => {
+  nameRooms = installNameRooms(widthPx)
+  return nameRooms
+}
+
 beforeEach(() => {
   resetAppState()
-  // Back to the "everything fits, unchanged" default before every case — a test that configures
-  // its own answer does so inside itself, and must not leak it into the next one.
-  presetNameWidth.capCandidateToNameRoom.mockReset()
-  presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
-    text: candidate,
-    capped: false,
-  }))
 })
 afterEach(() => {
+  nameRooms?.restore()
+  nameRooms = null
   cleanup()
   document.getElementById('root')?.remove()
   resetAppState()
@@ -187,6 +181,83 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
     // The section's own text, read off the block the button lives in — the name sits inside a <b>,
     // so it is only whole at the section level.
     expect(managePresetsButton().parentElement.textContent).toContain('You are on Mornings.')
+  })
+
+  // ★ A NAME HAS NO LENGTH LIMIT, SO EVERYTHING THAT QUOTES ONE HAS TO COPE WITH A BOOK. The rename
+  // box holds the whole name; everything else on this card and in the panel behind it shows a
+  // bounded part of it (lib/presetNameText), so no sentence can push a button out of reach and no
+  // screen is handed a million characters to lay out.
+  describe('a preset whose name is a pasted book', () => {
+    const BOOK = 'All work and no play. '.repeat(50_000).trim() // 1,099,999 characters
+    const QUOTED = BOOK.slice(0, NAME_QUOTED_CHARACTERS) + '…'
+    const withABook = () => {
+      act(() => {
+        renamePreset(1, BOOK)
+        createPreset('Timed')
+        useSettings.getState().setSaveStats(false) // preset 1 holds something: deleting it asks
+      })
+    }
+
+    it('its own box holds every character of it', () => {
+      withABook()
+      openManager()
+      expect(nameBoxes()[0].value).toBe(BOOK)
+    })
+
+    it('the ⚙ menu`s "You are on …" quotes its start, and may break it anywhere', () => {
+      withABook()
+      openManager()
+      const section = managePresetsButton().parentElement
+      const quoted = section.querySelector('b')
+      expect(quoted.textContent).toBe(QUOTED)
+      expect(quoted.className).toContain('wrap-anywhere')
+      expect(section.textContent).toContain(`You are on ${QUOTED}. The three buttons`)
+    })
+
+    it('the delete question quotes its start — as the preset going, and as the one that opens', () => {
+      withABook()
+      act(() => {
+        switchPreset(2)
+        useSettings.getState().setSaveStats(false)
+      })
+      openManager()
+      // Preset 2 is the one you are on; deleting it opens the book.
+      tap(within(rowOf('Timed')).getByRole('button', { name: 'Delete Timed' }))
+      const [going, opens] = confirmCard().querySelectorAll('b')
+      expect(going.textContent).toBe('Timed')
+      expect(opens.textContent).toBe(QUOTED)
+      expect(opens.className).toContain('wrap-anywhere')
+      act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
+      // …and the book itself going.
+      tap(within(rowOf(BOOK)).getByRole('button', { name: /^Delete / }))
+      expect(confirmCard().querySelector('b').textContent).toBe(QUOTED)
+      expect(confirmCard().textContent.length).toBeLessThan(600)
+      expect(within(confirmCard()).getByRole('button', { name: 'Delete' })).toBeTruthy()
+    })
+
+    it('the row`s two controls name it by a bounded start, never by all of it', () => {
+      withABook()
+      openManager()
+      const row = rowOf(BOOK)
+      for (const control of [
+        within(row).getByRole('button', { name: /^Delete / }),
+        within(row).getByRole('button', { name: /^Reorder / }),
+      ]) {
+        const name = control.getAttribute('aria-label')
+        expect(name.length).toBeLessThan(NAME_DRAWN_UNITS + 60)
+        expect(name).toContain(BOOK.slice(0, 200))
+      }
+    })
+
+    it('nothing on the page outside its box carries the book', () => {
+      withABook()
+      openManager()
+      // No run of it longer than a name slot draws is anywhere in the page's text.
+      expect(document.body.textContent).not.toContain(BOOK.slice(0, NAME_DRAWN_UNITS + 2))
+      expect(document.body.textContent).toContain(BOOK.slice(0, NAME_QUOTED_CHARACTERS))
+      for (const el of document.querySelectorAll('[aria-label]'))
+        expect(el.getAttribute('aria-label').length).toBeLessThan(NAME_DRAWN_UNITS + 60)
+    })
   })
 
   it('lists every preset in registry order, marks the active one, and SAYS which are amnesic', () => {
@@ -263,10 +334,13 @@ describe('renaming', () => {
   const enter = (box) => act(() => fireEvent.keyDown(box, { key: 'Enter' }))
   const escape = (box) => act(() => fireEvent.keyDown(box, { key: 'Escape' }))
   const focus = (box) => act(() => box.focus())
-  // The EXACT note text, never a loose substring — "display" alone also matches unrelated prose
-  // elsewhere in the mounted app (the ⚙ panel's date-format copy, the guide). This is also the
-  // width-language claim itself: the whole point is that it never mentions a character count.
-  const capNote = () => screen.queryByText("That's as long as this name can display.")
+  // The note, as it is on screen (the visible copy — a screen reader is given the same words through
+  // the card's live region, below).
+  const NOTE = 'Some places will show this name cut short.'
+  const cutNote = () => within(card()).queryByText(NOTE, { ignore: '[aria-live]' })
+  const announced = () => card().querySelector('[aria-live]').textContent
+  // Room for exactly ten characters in the narrowest place a name is shown.
+  const TEN = 10 * PX_PER_CHARACTER
 
   it('Enter commits, and a blur commits', () => {
     openManager()
@@ -313,366 +387,180 @@ describe('renaming', () => {
     expect(registry().presets[0].name).toBe('Half')
   })
 
-  // ── The live, pixel-width typing cap (round 20) ─────────────────────────────────────────
+  // ── Nothing is refused, and a note says when a name will be cut short ───────────────────────
   //
-  // lib/presetNameWidth is MOCKED for this whole file (see the ⚠ at the top) — these cases are
-  // about the WIRING: does every keystroke reach it with the raw candidate, does the field show
-  // what it returns rather than the raw typed text, does the width-language note track its
-  // `capped` flag for the right row and clear at the right moments. tests/presetNameWidth.dom owns
-  // whether the real measurement is CORRECT.
-  it('calls the width cap on every keystroke, with the typed candidate, and shows what it returns', () => {
+  // The field used to refuse the keystroke that would not fit where names are shown. It is a plain
+  // text box now: these cases are that nothing typed is ever altered, and that the note follows the
+  // text and the room exactly (tests/presetNameWidth.dom owns the measurement itself).
+  it('takes whatever is typed or pasted, however long, and saves exactly that', () => {
     openManager()
-    presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
-      text: candidate.toUpperCase(), // a deliberately-wrong echo, so the field must be SHOWING it
-      capped: false,
-    }))
+    layOutNameCells(TEN)
+    const long = 'A name far longer than anywhere could ever show: ' + 'x'.repeat(500)
     focus(nameBoxes()[0])
-    type(nameBoxes()[0], 'weekend')
-    // …with what the field held BEFORE the keystroke beside it: the saved name, on the first one.
-    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
-      'weekend',
-      'Preset 1',
-      false,
-      null,
-    )
-    // The field shows the FUNCTION's answer, not the raw keystroke — proving onChange trusts it
-    // rather than mirroring the event value straight through.
-    expect(nameBoxes()[0].value).toBe('WEEKEND')
+    type(nameBoxes()[0], long)
+    expect(nameBoxes()[0].value).toBe(long)
+    enter(nameBoxes()[0])
+    expect(registry().presets[0].name).toBe(long)
   })
 
-  // ★ A NAME ALREADY LONGER THAN THE ROOM IS NEVER CUT FOR BEING EDITED, and the cap can only keep
-  // that promise if it is told what the field held before each edit (lib/presetNameWidth's
-  // `previous`): the saved name on the first keystroke, and the pending text — what the cap itself
-  // last answered — on every one after it, never the saved name again.
-  it('hands the cap what the field held before each keystroke — the pending text, once there is one', () => {
+  it('the field has no length limit of its own, and takes an emoji whole', () => {
     openManager()
-    presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
-      text: candidate.slice(0, 4),
-      capped: candidate.length > 4,
-    }))
+    layOutNameCells(TEN)
+    expect(nameBoxes()[0].hasAttribute('maxlength')).toBe(false)
+    const name = 'Weekend Mornings 👨‍👩‍👧🇨🇦'
     focus(nameBoxes()[0])
-    type(nameBoxes()[0], 'Weekend')
-    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith(
-      'Weekend',
-      'Preset 1',
-      false,
-      null,
-    )
-    type(nameBoxes()[0], 'Weeks')
-    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith(
-      'Weeks',
-      'Week',
-      true,
-      null,
-    )
+    type(nameBoxes()[0], name)
+    enter(nameBoxes()[0])
+    expect(registry().presets[0].name).toBe(name)
   })
 
-  it('focusing a name and leaving it never measures it, and saves it exactly as it was', () => {
-    // The route by which a stored name longer than today's room would otherwise be silently
-    // shortened: tap into it, tap away.
-    const stored = 'A name made on a much wider screen'
+  it('the note appears at the exact character that stops fitting, and goes at the one that fits', () => {
+    openManager()
+    layOutNameCells(TEN)
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend Mo') // ten: exactly the room
+    expect(cutNote()).toBeNull()
+    type(nameBoxes()[0], 'Weekend Mor') // eleven
+    expect(cutNote()).toBeTruthy()
+    expect(nameBoxes()[0].value).toBe('Weekend Mor') // …and the letter went in all the same
+    type(nameBoxes()[0], 'Weekend Morn')
+    expect(cutNote()).toBeTruthy()
+    type(nameBoxes()[0], 'Weekend Mo') // back to ten
+    expect(cutNote()).toBeNull()
+  })
+
+  it('is about the name the text would be SAVED as: a trailing space, or an emptied box, raise nothing', () => {
+    openManager()
+    layOutNameCells(TEN)
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend Mo') // exactly the room
+    type(nameBoxes()[0], 'Weekend Mo ') // …and the space before the next word: trimmed on saving
+    expect(cutNote()).toBeNull()
+    type(nameBoxes()[0], '   Weekend Mo   ')
+    expect(cutNote()).toBeNull()
+    type(nameBoxes()[0], 'Weekend Mo x')
+    expect(cutNote()).toBeTruthy()
+    // An emptied box is about to be "Preset 1" again — eight characters, which fit here…
+    type(nameBoxes()[0], '')
+    expect(cutNote()).toBeNull()
+    // …and do not where there is room for seven.
+    nameRooms.resize(7 * PX_PER_CHARACTER)
+    expect(cutNote()).toBeTruthy()
+  })
+
+  it('is there the moment a stored name that is already too long is focused', () => {
     act(() => {
-      renamePreset(1, stored)
+      renamePreset(1, 'A name made on a much wider screen')
     })
     openManager()
+    layOutNameCells(TEN)
+    expect(cutNote()).toBeNull() // nothing is being edited
     focus(nameBoxes()[0])
-    expect(nameBoxes()[0].value).toBe(stored)
+    expect(cutNote()).toBeTruthy()
+    // …and leaving it changes nothing about what is stored.
     enter(nameBoxes()[0])
-    expect(presetNameWidth.capCandidateToNameRoom).not.toHaveBeenCalled()
-    expect(registry().presets[0].name).toBe(stored)
+    expect(registry().presets[0].name).toBe('A name made on a much wider screen')
+    expect(cutNote()).toBeNull()
   })
 
-  // ★ ONCE A LETTER HAS BEEN REFUSED THE NAME IS FULL. The rule is the cap's own
-  // (tests/presetNameWidth.dom); what this component owes it is its last answer handed back as the
-  // third argument, and that answer dropped whenever the edit it belonged to is over — or a name
-  // would stay "full" into the next rename and refuse its first letter.
-  describe('the cap is told whether its last answer was a refusal, and never a stale one', () => {
-    const refuseOver = (n) =>
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
-        text: candidate.slice(0, n),
-        capped: candidate.length > n,
-      }))
-    const lastFull = () => presetNameWidth.capCandidateToNameRoom.mock.lastCall[2]
-
-    it('true on the edit after a refusal, false again after one that was not refused', () => {
-      openManager()
-      refuseOver(4)
-      focus(nameBoxes()[0])
-      type(nameBoxes()[0], 'Week')
-      expect(lastFull()).toBe(false)
-      type(nameBoxes()[0], 'Weeke') // refused
-      expect(lastFull()).toBe(false)
-      type(nameBoxes()[0], 'Weeki')
-      expect(lastFull()).toBe(true)
-      type(nameBoxes()[0], 'Wee') // a deletion, which the cap accepts
-      expect(lastFull()).toBe(true)
-      type(nameBoxes()[0], 'Weed')
-      expect(lastFull()).toBe(false)
-    })
-
-    it.each([
-      ['saved with Enter', (box) => enter(box)],
-      ['thrown away with Escape', (box) => escape(box)],
-      ['left by a blur', (box) => act(() => box.blur())],
-    ])('false on the first edit after a full name was %s', (_how, leave) => {
-      openManager()
-      refuseOver(4)
-      focus(nameBoxes()[0])
-      type(nameBoxes()[0], 'Weekend')
-      expect(capNote()).toBeTruthy()
-      leave(nameBoxes()[0])
-      focus(nameBoxes()[0])
-      type(nameBoxes()[0], 'Wed')
-      expect(lastFull()).toBe(false)
-    })
-  })
-
-  // ★ THE CAP IS TOLD WHAT WAS SELECTED WHEN THE EDIT BEGAN (lib/presetNameWidth's `replaced`) —
-  // the text alone cannot tell "typed in front of the name" from "pasted over all of it". The field
-  // notes it from the browser's own `beforeinput`, which a real edit always fires first and
-  // fireEvent.change does not, so these cases fire it themselves.
-  describe('the cap is told what was selected when the edit began', () => {
-    const beforeInput = (box) =>
-      act(() => void box.dispatchEvent(new InputEvent('beforeinput', { bubbles: true })))
-    const lastReplaced = () => presetNameWidth.capCandidateToNameRoom.mock.lastCall[3]
-
-    it('the selection at `beforeinput` goes with that edit, and with no other', () => {
-      openManager()
-      focus(nameBoxes()[0])
-      nameBoxes()[0].setSelectionRange(0, 8)
-      beforeInput(nameBoxes()[0])
-      type(nameBoxes()[0], 'My Preset 1')
-      expect(lastReplaced()).toEqual({ start: 0, end: 8 })
-      // The next edit arrives without one (it cannot, in a browser): it is not handed the last.
-      type(nameBoxes()[0], 'My Preset 12')
-      expect(lastReplaced()).toBeNull()
-      // A bare cursor is a selection too — an empty one.
-      nameBoxes()[0].setSelectionRange(2, 2)
-      beforeInput(nameBoxes()[0])
-      type(nameBoxes()[0], 'Myy Preset 12')
-      expect(lastReplaced()).toEqual({ start: 2, end: 2 })
-    })
-
-    it('a composition is judged with what was selected when it STARTED, not by its last piece', () => {
-      openManager()
-      focus(nameBoxes()[0])
-      nameBoxes()[0].setSelectionRange(0, 6) // "Preset", selected, then composed over
-      act(() => void fireEvent.compositionStart(nameBoxes()[0]))
-      beforeInput(nameBoxes()[0])
-      type(nameBoxes()[0], 'か 1')
-      nameBoxes()[0].setSelectionRange(1, 1)
-      beforeInput(nameBoxes()[0])
-      type(nameBoxes()[0], 'かな 1')
-      act(() => void fireEvent.compositionEnd(nameBoxes()[0]))
-      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledTimes(1)
-      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
-        'かな 1',
-        'Preset 1',
-        false,
-        { start: 0, end: 6 },
-      )
-    })
-  })
-
-  // ★ THE FIELD IS WRITTEN BACK TO WHENEVER THE CAP ANSWERS WITH SOMETHING ELSE, and a box that is
-  // written to drops its cursor at the end. The cap says where the cursor belongs (`selection`).
-  describe('the cursor is put where the cap says, when the cap changes what was typed', () => {
-    const cursor = (box) => [box.selectionStart, box.selectionEnd]
-
-    it('a refused letter in the middle of a name leaves the cursor in the middle', () => {
-      openManager()
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
-        text: previous,
-        capped: true,
-        selection: { start: 3, end: 3 },
-      }))
-      focus(nameBoxes()[0])
-      type(nameBoxes()[0], 'PreXset 1')
-      expect(nameBoxes()[0].value).toBe('Preset 1')
-      expect(cursor(nameBoxes()[0])).toEqual([3, 3])
-    })
-
-    it('a refused letter typed over a selection leaves the selection as it was', () => {
-      openManager()
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
-        text: previous,
-        capped: true,
-        selection: { start: 1, end: 4 },
-      }))
-      focus(nameBoxes()[0])
-      type(nameBoxes()[0], 'PWet 1')
-      expect(cursor(nameBoxes()[0])).toEqual([1, 4])
-    })
-
-    it('an edit taken as typed is not touched — the browser already put the cursor there', () => {
-      openManager()
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
-        text: candidate,
-        capped: false,
-        selection: null,
-      }))
-      focus(nameBoxes()[0])
-      const placed = vi.spyOn(nameBoxes()[0], 'setSelectionRange')
-      type(nameBoxes()[0], 'PreXset 1')
-      expect(placed).not.toHaveBeenCalled()
-    })
-  })
-
-  // ★ AN INPUT METHOD'S COMPOSITION IS ONE EDIT THAT ARRIVES IN PIECES. Refusing or trimming a
-  // piece writes back into a box the keyboard is still composing in, so the pieces are shown as
-  // they come and the whole composition is put to the cap once, when it ends, against the text it
-  // started from.
-  describe('a composition is judged once, when it ends', () => {
-    const composeStart = (box) => act(() => void fireEvent.compositionStart(box))
-    const composeEnd = (box) => act(() => void fireEvent.compositionEnd(box))
-
-    it('shows every piece as it comes, and asks the cap nothing until the end', () => {
-      openManager()
-      presetNameWidth.capCandidateToNameRoom.mockImplementation(() => ({
-        text: 'REFUSED',
-        capped: true,
-      }))
-      focus(nameBoxes()[0])
-      composeStart(nameBoxes()[0])
-      type(nameBoxes()[0], 'Preset 1k')
-      type(nameBoxes()[0], 'Preset 1か')
-      expect(nameBoxes()[0].value).toBe('Preset 1か')
-      expect(presetNameWidth.capCandidateToNameRoom).not.toHaveBeenCalled()
-      expect(capNote()).toBeNull()
-    })
-
-    it('at the end, the whole composition goes to the cap against the text it started from', () => {
-      openManager()
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
-        text: previous, // the cap refuses the lot
-        capped: true,
-      }))
-      focus(nameBoxes()[0])
-      composeStart(nameBoxes()[0])
-      type(nameBoxes()[0], 'Preset 1か')
-      type(nameBoxes()[0], 'Preset 1かな')
-      composeEnd(nameBoxes()[0])
-      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledTimes(1)
-      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
-        'Preset 1かな',
-        'Preset 1',
-        false,
-        { start: 0, end: 8 }, // the name, all selected on entry (lib/textEntry)
-      )
-      expect(nameBoxes()[0].value).toBe('Preset 1')
-      expect(capNote()).toBeTruthy()
-      // …and ordinary typing is judged keystroke by keystroke again afterwards.
-      type(nameBoxes()[0], 'Preset 1!')
-      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith(
-        'Preset 1!',
-        'Preset 1',
-        true,
-        null,
-      )
-    })
-
-    it.each([
-      ['isComposing', { isComposing: true }],
-      ['key code 229', { keyCode: 229 }],
-    ])(
-      'Enter and Escape pressed to the input method (%s) neither save nor discard',
-      (_how, init) => {
-        openManager()
-        focus(nameBoxes()[0])
-        composeStart(nameBoxes()[0])
-        type(nameBoxes()[0], 'Preset 1かな')
-        act(() => void fireEvent.keyDown(nameBoxes()[0], { key: 'Enter', ...init }))
-        expect(registry().presets[0].name).toBe('Preset 1') // not saved
-        act(() => void fireEvent.keyDown(nameBoxes()[0], { key: 'Escape', ...init }))
-        expect(nameBoxes()[0].value).toBe('Preset 1かな') // not discarded
-        expect(document.activeElement).toBe(nameBoxes()[0])
-      },
-    )
-
-    it('a composition still open when the field is left is judged before it is saved', () => {
-      openManager()
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
-        text: previous,
-        capped: true,
-      }))
-      focus(nameBoxes()[0])
-      composeStart(nameBoxes()[0])
-      type(nameBoxes()[0], 'Preset 1かな')
-      act(() => nameBoxes()[0].blur())
-      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
-        'Preset 1かな',
-        'Preset 1',
-        false,
-        { start: 0, end: 8 }, // the name, all selected on entry (lib/textEntry)
-      )
-      expect(registry().presets[0].name).toBe('Preset 1')
-    })
-  })
-
-  it('shows a WIDTH-language note exactly while the field is capped, never a character count', () => {
+  it('follows the room while the field is open — a rotation, a resize', () => {
     openManager()
-    presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
-      text: candidate.slice(0, 5),
-      capped: candidate.length > 5,
-    }))
+    const cells = layOutNameCells(TEN)
     focus(nameBoxes()[0])
-    type(nameBoxes()[0], 'Week')
-    expect(capNote()).toBeNull() // fits — no note yet
-    type(nameBoxes()[0], 'Weekend')
-    expect(capNote()).toBeTruthy()
-    // …and a backspace back under budget un-refuses it, exactly like `capped` going false again.
-    type(nameBoxes()[0], 'Week')
-    expect(capNote()).toBeNull()
+    type(nameBoxes()[0], 'Weekend Mornings') // sixteen
+    expect(cutNote()).toBeTruthy()
+    cells.resize(16 * PX_PER_CHARACTER) // the screen turned: there is room now
+    expect(cutNote()).toBeNull()
+    cells.resize(15 * PX_PER_CHARACTER)
+    expect(cutNote()).toBeTruthy()
   })
 
-  it('clears the note on commit (Enter) and on discard (Escape)', () => {
+  it('goes on commit (Enter) and on discard (Escape)', () => {
     openManager()
-    presetNameWidth.capCandidateToNameRoom.mockReturnValue({ text: 'Weeke', capped: true })
+    layOutNameCells(TEN)
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'Weekend Mornings')
-    expect(capNote()).toBeTruthy()
+    expect(cutNote()).toBeTruthy()
     enter(nameBoxes()[0])
-    expect(capNote()).toBeNull()
+    expect(cutNote()).toBeNull()
 
     focus(nameBoxes()[0])
-    type(nameBoxes()[0], 'Weekend Mornings')
-    expect(capNote()).toBeTruthy()
+    expect(cutNote()).toBeTruthy() // the saved name is too long, and its field is open again
     escape(nameBoxes()[0])
-    expect(capNote()).toBeNull()
+    expect(cutNote()).toBeNull()
   })
 
-  it("does not leak one row's capped note onto another row", () => {
+  it("is only ever under the row being typed into, never another row's", () => {
     act(() => {
       createPreset('Timed')
     })
     openManager()
-    presetNameWidth.capCandidateToNameRoom.mockReturnValue({ text: 'Weeke', capped: true })
+    layOutNameCells(TEN)
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'Weekend Mornings')
-    expect(capNote()).toBeTruthy()
-    // Moving to the second row blurs the first (which commits and clears the flag via
-    // commitRename) before this row's own onFocus seeds a fresh edit — onFocus never calls the
-    // width cap at all, only onChange does, so there is nothing here FOR a leak to ride in on.
+    expect(within(rowOf('Weekend Mornings')).queryByText(NOTE)).toBeTruthy()
+    // Moving to the second row blurs the first, which commits it: the long name is saved, and the
+    // note is about the row the keyboard is in now, whose name fits.
     focus(nameBoxes()[1])
-    expect(capNote()).toBeNull()
+    expect(cutNote()).toBeNull()
+    expect(listedNames()).toEqual(['Weekend Mornings', 'Timed'])
   })
 
-  it('the trimmed text is what actually gets SAVED, exactly as typed for a fit that never trims', () => {
+  it('is said to a screen reader once per appearance, through one polite live region', () => {
     openManager()
-    presetNameWidth.capCandidateToNameRoom.mockReturnValue({ text: 'Weeke', capped: true })
+    layOutNameCells(TEN)
+    const region = card().querySelector('[aria-live]')
+    expect(region.getAttribute('aria-live')).toBe('polite')
+    expect(card().querySelectorAll('[aria-live]')).toHaveLength(1)
+    // The region is there BEFORE there is anything to say: a region that arrives with its words
+    // already in it is not reliably read.
+    expect(announced()).toBe('')
     focus(nameBoxes()[0])
-    type(nameBoxes()[0], 'Weekend Mornings')
-    enter(nameBoxes()[0])
-    expect(registry().presets[0].name).toBe('Weeke')
+    type(nameBoxes()[0], 'Weekend Mor')
+    expect(announced()).toBe(NOTE)
+    // More typing while the note stays is the same element with the same words — nothing a screen
+    // reader would say again.
+    const words = region.firstChild
+    type(nameBoxes()[0], 'Weekend Morni')
+    expect(region.firstChild).toBe(words)
+    type(nameBoxes()[0], 'Weekend')
+    expect(announced()).toBe('')
+    type(nameBoxes()[0], 'Weekend Mor')
+    expect(announced()).toBe(NOTE) // a new appearance
+    // The copy on screen is not read as well.
+    expect(cutNote().getAttribute('aria-hidden')).toBe('true')
   })
 
-  it('maxLength stays on the element as a coarser, independent backstop', () => {
-    // The store's own hard ceiling (store/presets' MAX_PRESET_NAME) — no longer sized to fit the
-    // switcher exactly, but still the last line of defence if the live width cap cannot run at
-    // all. The width cap is mocked in this file, so this case only pins the ATTRIBUTE itself, not
-    // which of the two cuts actually catches a given keystroke.
+  it('a pasted book goes in, and its note costs no measuring at all', () => {
     openManager()
-    expect(nameBoxes()[0].getAttribute('maxlength')).toBe(String(MAX_PRESET_NAME))
+    layOutNameCells(TEN)
+    const measure = vi.fn(() => ({ width: 0 }))
+    const getContext = window.HTMLCanvasElement.prototype.getContext
+    window.HTMLCanvasElement.prototype.getContext = () => ({ font: '', measureText: measure })
+    try {
+      const book = 'All work and no play. '.repeat(5_000) // 110,000 characters
+      focus(nameBoxes()[0])
+      type(nameBoxes()[0], book)
+      expect(nameBoxes()[0].value).toBe(book)
+      expect(cutNote()).toBeTruthy()
+      expect(measure.mock.calls.every(([text]) => text.length < 1000)).toBe(true)
+    } finally {
+      window.HTMLCanvasElement.prototype.getContext = getContext
+    }
+  })
+
+  it('a key pressed to an input method is not a verdict on the rename', () => {
+    // Enter picks the composed text and Escape abandons it; neither saves or discards the name.
+    openManager()
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'にほ')
+    act(() => fireEvent.keyDown(nameBoxes()[0], { key: 'Enter', isComposing: true }))
+    expect(registry().presets[0].name).toBe('Preset 1')
+    act(() => fireEvent.keyDown(nameBoxes()[0], { key: 'Escape', keyCode: 229 }))
+    expect(nameBoxes()[0].value).toBe('にほ')
+    type(nameBoxes()[0], '日本')
+    enter(nameBoxes()[0])
+    expect(registry().presets[0].name).toBe('日本')
   })
 
   it('an empty name falls back to the default one rather than saving a nameless preset', () => {
@@ -883,18 +771,15 @@ describe('reordering', () => {
       expect(grip).not.toMatch(/outline-/)
     })
 
-    it('the width-cap note sits under the NAME, in the row`s own grid, not under the ✕', () => {
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((c) => ({
-        text: c.slice(0, 3),
-        capped: true,
-      }))
+    it('the cut-short note sits under the NAME, in the row`s own grid, not under the ✕', () => {
       openManager()
+      layOutNameCells(3 * PX_PER_CHARACTER)
       const box = nameBoxes()[0]
       act(() => {
         fireEvent.focus(box)
         fireEvent.change(box, { target: { value: 'Weekend' } })
       })
-      const note = within(rowOf('Wee')).getByText("That's as long as this name can display.")
+      const note = within(rowOf('Weekend')).getByText('Some places will show this name cut short.')
       expect(note.className).toMatch(/col-start-2/)
     })
   })
@@ -965,24 +850,28 @@ describe('reordering', () => {
       expect(list().scrollTop).toBe(40)
     })
 
-    it('the width-cap note appearing on a row at the foot of the view is scrolled into view', () => {
+    it('the cut-short note appearing on a row at the foot of the view is scrolled into view', () => {
       act(() => {
         createPreset('Timed')
         createPreset('Guest')
       })
       openManager()
-      // The capped row is the taller one: the note takes a second line under its name box.
-      layOut(['Preset 1', 'Timed', 'Guest'], { heights: { Timed: 58 } })
-      presetNameWidth.capCandidateToNameRoom.mockImplementation((c) => ({
-        text: c,
-        capped: true,
-      }))
+      layOutNameCells(6 * PX_PER_CHARACTER)
       const box = nameBoxes()[1] // the second row: 40 … 98 with its note, in a view 80 tall
+      // The row with the note is the taller one: the note takes a second line under its name box.
+      // (Laid out by the name it is ABOUT to have: rows are found by what their box holds.)
       act(() => {
         fireEvent.focus(box)
+      })
+      layOut(['Preset 1', 'Timed', 'Guest'], { heights: { Timed: 58 } })
+      act(() => {
         fireEvent.change(box, { target: { value: 'Timed Runs' } })
       })
-      expect(screen.getByText("That's as long as this name can display.")).toBeTruthy()
+      expect(
+        within(card()).getByText('Some places will show this name cut short.', {
+          ignore: '[aria-live]',
+        }),
+      ).toBeTruthy()
       expect(list().scrollTop).toBe(18)
     })
   })
@@ -1421,19 +1310,6 @@ describe('deleting', () => {
     act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
     expect(queryModalCard('presets')).toBeNull() // …and now the card
     expect(isSettingsOpen()).toBe(true) // the panel behind it is untouched
-  })
-
-  // The rename field's `beforeinput` listener hangs on the card, and the question is a view of the
-  // card: after stepping back to the list it must still be there, or the cap is told nothing.
-  it('stepping back to the list leaves the name boxes still telling the cap what was selected', () => {
-    openTheQuestion()
-    act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
-    const box = nameBoxes()[0]
-    act(() => box.focus())
-    box.setSelectionRange(1, 3)
-    act(() => void box.dispatchEvent(new InputEvent('beforeinput', { bubbles: true })))
-    act(() => fireEvent.change(box, { target: { value: 'Pxset 1' } }))
-    expect(presetNameWidth.capCandidateToNameRoom.mock.lastCall[3]).toEqual({ start: 1, end: 3 })
   })
 
   it('a SCRIM TAP steps back to the list, and a second tap closes the card', () => {

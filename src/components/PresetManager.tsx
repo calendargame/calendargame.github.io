@@ -12,7 +12,7 @@ import {
 } from './scrollRegion.js'
 import { MODAL_CARD_CLASS } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
-import { usePresets, MAX_PRESET_NAME } from '../store/presets.js'
+import { usePresets, normalizePresetName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { useSessionAmnesic } from '../store/sessionAmnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
@@ -23,8 +23,8 @@ import {
   movePreset,
   renamePreset,
 } from '../store/presetControl.js'
-import { capCandidateToNameRoom } from '../lib/presetNameWidth.js'
-import type { TextRange } from '../lib/presetNameWidth.js'
+import { isCutSomewhere, useNameRooms } from '../lib/presetNameWidth.js'
+import { nameAsDrawn, nameAsQuoted } from '../lib/presetNameText.js'
 import {
   targetIndexForCenter,
   stepsToReorder,
@@ -95,42 +95,24 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // player out of the round they are in. The new row appears at the foot of the list; the switcher in
 // the top bar is how you go to it.
 //
-// ★★ RENAMING IS CAPPED AT THE INPUT, AND — SINCE ROUND 20 — BY WIDTH RATHER THAN BY COUNT.
-// It used to be a character count, twice over (a `maxLength` for the browser's own enforcement,
-// plus a `slice` in onChange for the paste-shaped write maxLength does not cover). That worked only
-// because the switcher's display cell was ALSO a fixed count of characters; once the cell became
-// flexible (components/PresetSwitcher), a character cap stopped answering the question that
-// actually matters — "will this fit where it is shown, RIGHT NOW, on THIS device" — so onChange
-// calls lib/presetNameWidth's capCandidateToNameRoom on every keystroke, which measures the
-// candidate against the LIVE room in every place a preset name is drawn — the top bar's control, a
-// row of its list, and "Open in" and its list, the narrowest governing (a real canvas measurement
-// against real DOM elements in another part of the tree entirely — see that file for the mechanism
-// and why it is not a React prop or a store) — and refuses what does not fit: a typed letter
-// outright, a paste down to as much of its start as fits, the shape `maxLength` gives one. The
-// field also tells it WHAT WAS SELECTED when the edit began (`selectedBeforeEdit`, below), which the
-// text alone cannot always say, and puts the cursor where the cap says it belongs whenever the cap
-// answers with something other than what was typed (`cursorToPlace`).
-// `nameWidthCapped` is what a refusal sets, and it drives the small WIDTH-language note below the
-// field ("That's as long as this name can display.") rather than a character count, because a
-// character count is no longer the true reason.
-// ★ ONCE A LETTER HAS BEEN REFUSED THE NAME IS FULL, AND NOTHING MORE GOES IN — not even a narrower
-// letter that would have fit, which is how typing "Weekend Mornings" once left "Weekend i" in the
-// box. The rule is the cap's (lib/presetNameWidth's `full`); what this component does is hand
-// `nameWidthCapped` back to it on the next edit. So the note and the refusal are ONE fact: nothing
-// can be added exactly while the note is showing, and both end together — on an edit that takes
-// something away and fits, on a commit, on a discard, on the field losing the keyboard.
-// ★ A NAME THAT IS ALREADY LONGER THAN THE ROOM IS LEFT ALONE. It can exist — made on a wider
-// screen, or under an older build's looser limit — and it stays stored exactly as it is, shown
-// shortened with "…" wherever it does not fit and whole in this field. Editing it never cuts it
-// for being touched: the cap is handed what the field held before the keystroke, and refuses only
-// an edit that makes the name WIDER than it already was (lib/presetNameWidth's `previous`). The
-// commit below does not measure at all, so focusing such a name and leaving it changes nothing.
-// ⚠ `maxLength={MAX_PRESET_NAME}` STAYS ON THE ELEMENT, as a SEPARATE, coarser backstop — the
-// store's own hard ceiling (store/presets argues why it is now a generous, device-independent
-// number rather than a pixel-tuned one), reached only if the width cap somehow fails to fire (a
-// browser with canvas disabled, say). In ordinary use the width cap is reached first, well under
-// it. Layering them is the same "no one cut alone covers every case" reasoning this field always
-// used, just with a different pair of cuts.
+// ★★ A NAME MAY BE ANY LENGTH, AND THE FIELD NEVER REFUSES OR ALTERS WHAT IS TYPED. The rename
+// field is a plain text box: whatever is typed, pasted, composed by an input method, or dictated
+// goes in exactly as the browser put it there, and is saved as it is (store/presets'
+// normalizePresetName only trims the outer spaces and names an empty one). It used to refuse the
+// keystroke that would not fit where names are shown; the owner replaced that with a note.
+// ★ THE NOTE ("Some places will show this name cut short.") sits under the field while the text in
+// it does not fit the narrowest place a preset name is shown — the top bar's control, a row of its
+// list, "Open in", or a row of its list (lib/presetNameWidth measures the real cells, each in its
+// own font). It is DRAWN FROM THE TEXT AND THE ROOMS, with no flag behind it: it appears at the
+// exact character that stops fitting, goes at the one that fits again, follows a rotation or a
+// resize while the field is open, and is there at once for a stored name that is already too long
+// when its field is entered. The name is shown with an ellipsis in those places either way
+// (components/PresetSwitcher); nothing here measures on a commit, so entering and leaving a field
+// changes nothing.
+// ★ IT IS SAID ONCE EACH TIME IT APPEARS, to a screen reader, through the card's one polite live
+// region (below, after the list) — which holds the note's words exactly while the note is on
+// screen, so staying on through further typing announces nothing more. The visible copy is hidden
+// from a screen reader so the words are not met twice.
 //
 // ★★ MOVING IS A DEDICATED DRAG HANDLE, AS OF ROUND 20 — REPLACING THE ↑/↓ PAIR THIS COMMENT
 // USED TO ARGUE AGAINST A DRAG FOR. The owner's call, made explicit rather than re-litigated here:
@@ -200,6 +182,10 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // something a player can observe from inside this app, so putting it in a confirmation would be
 // spending a reader's attention on a fact that cannot help them decide.
 // ============================================================
+
+// What the note under a name's field says while that name does not fit everywhere it is shown. True
+// wherever it is cut — one place or all of them — so it says "some places", not which.
+const CUT_SHORT_NOTE = 'Some places will show this name cut short.'
 
 // THE ROW'S TWO ICONS — DeleteIcon (the ✕) and ReorderHandleIcon (the grip) — both inline SVG drawn
 // in currentColor, the house pattern (W5Logo, GuidePage's dot diagram): no icon font, no external
@@ -399,79 +385,21 @@ export default function PresetManager({
   // that is not — and the moment they can disagree, "which is the real name" has two answers. This
   // shape makes it unrepresentable: a row shows `editing.text` if it is THE row and `p.name`
   // otherwise, so a preset that is not being typed into can only ever show what is saved.
-  // ★ `composing` IS SET ONLY WHILE AN INPUT METHOD IS COMPOSING (Japanese, Chinese, Korean, a
-  // phone's dictation or swipe keyboard on some platforms), and it is the text the field held when
-  // the composition began, with what was selected in it. A composition is one edit that arrives in
-  // pieces, and the pieces are the keyboard's, not the player's: refusing or trimming one mid-way
-  // writes back into a box the input method is still drawing in, which cancels or garbles what is
-  // being composed. So the pieces are shown as they come and the WHOLE composition is put to the
-  // width cap once, when it ends, against the text it started from. It lives in this object so
-  // that it cannot outlive the edit: whatever clears `editing` clears it.
-  const [editing, setEditing] = useState<{
-    id: number
-    text: string
-    composing?: { from: string; replaced: TextRange | null }
-  } | null>(null)
+  const [editing, setEditing] = useState<{ id: number; text: string } | null>(null)
   const editingText = (id: number, name: string) => (editing?.id === id ? editing.text : name)
 
-  // ★ WHETHER THE MOST RECENT EDIT HAD TO BE REFUSED — the name is full. It shows the
-  // width-language note beside the field (below), and it is handed back to the width cap on the
-  // next edit, which refuses every further insertion while it is set (the ★ note above this
-  // component). One flag, not one per row, for the identical reason `editing` itself is one value:
-  // only one field can hold the keyboard, so only one field can ever be the one this is about.
-  // Reset wherever `editing` itself resets — a commit (which is also every blur), a discard — so
-  // neither the note nor the refusal can survive past the field it was about.
-  const [nameWidthCapped, setNameWidthCapped] = useState(false)
-  // ★ WHAT WAS SELECTED IN THE FIELD WHEN THE EDIT NOW ARRIVING BEGAN — noted from the browser's
-  // own `beforeinput`, the one moment the box still holds the old text and the old selection, and
-  // handed to the width cap with the edit (lib/presetNameWidth's `replaced` says why the text alone
-  // is not enough, and checks the claim before using it). Taken — read and cleared — by the edit
-  // it belongs to, so one edit's selection is never offered to the next. One listener on the card
-  // for every row's field (below, beside the card's ref): the event bubbles, and the name boxes are
-  // the only text boxes the card has.
-  // (A native listener because React's `onBeforeInput` is its own older, narrower event: it does
-  // not fire for a paste or a deletion.)
-  const selectedBeforeEdit = useRef<TextRange | null>(null)
-  const selectionOf = (el: HTMLInputElement): TextRange | null =>
-    el.selectionStart === null || el.selectionEnd === null
-      ? null
-      : { start: el.selectionStart, end: el.selectionEnd }
-  const takeSelectedBeforeEdit = () => {
-    const range = selectedBeforeEdit.current
-    selectedBeforeEdit.current = null
-    return range
-  }
-
-  // ★ WHERE THE CURSOR GOES AFTER THE CAP ANSWERS WITH SOMETHING OTHER THAN WHAT WAS TYPED. The
-  // field is then written back to, and a box that is written to puts its cursor at the end — so a
-  // letter refused in the middle of a name used to throw the cursor to the end of it. The cap says
-  // where it belongs (its `selection`: behind what was kept of a paste, or the selection as it was
-  // before a refused edit), and it is placed in the frame that draws the answer.
-  const cursorToPlace = useRef<{ input: HTMLInputElement; range: TextRange } | null>(null)
-  useLayoutEffect(() => {
-    const place = cursorToPlace.current
-    if (!place) return
-    cursorToPlace.current = null
-    place.input.setSelectionRange(place.range.start, place.range.end)
-  })
-  // Put one finished edit to the width cap and show what it answers. `previous` is what the field
-  // held before the edit, and `replaced` what was selected in it.
-  const applyNameEdit = (
-    input: HTMLInputElement,
-    id: number,
-    previous: string,
-    replaced: TextRange | null,
-  ) => {
-    const { text, capped, selection } = capCandidateToNameRoom(
-      input.value,
-      previous,
-      nameWidthCapped,
-      replaced,
-    )
-    cursorToPlace.current = selection ? { input, range: selection } : null
-    setEditing({ id, text })
-    setNameWidthCapped(capped)
-  }
+  // ★ THE NOTE UNDER THE FIELD BEING TYPED INTO — whether its text, saved as it stands, would be
+  // shown cut short somewhere (the ★ note above this component). Nothing is stored for it: it is
+  // worked out from the pending text and the rooms on every render, and the rooms re-render this
+  // card when they change.
+  // ⚠ IT IS ASKED ABOUT THE NAME THE TEXT WOULD BECOME, not the raw text: a space typed after a
+  // name that just fits is trimmed on saving and must not raise the note, and an emptied box is
+  // about to be "Preset N" again.
+  const nameRooms = useNameRooms()
+  const cutRowId =
+    editing && isCutSomewhere(normalizePresetName(editing.text, editing.id), nameRooms)
+      ? editing.id
+      : null
 
   // The delete confirmation's subject, resolved from the id the caller holds. An ID and not the
   // preset object: the registry can be rewritten under this card (another row renamed, one moved),
@@ -493,22 +421,6 @@ export default function PresetManager({
   useEffect(() => {
     cardRef.current?.focus()
   }, [pendingDeleteId])
-  // The `beforeinput` listener `selectedBeforeEdit` is filled by. Its dependency is the VIEW, as
-  // the focus above: each view draws the card, so whichever element that is now, the listener is
-  // on it.
-  const listShown = pendingDeleteId === null
-  useEffect(() => {
-    const card = cardRef.current
-    if (!card) return
-    const note = (e: Event) => {
-      if (e.target instanceof HTMLInputElement) {
-        selectedBeforeEdit.current = selectionOf(e.target)
-      }
-    }
-    card.addEventListener('beforeinput', note)
-    return () => card.removeEventListener('beforeinput', note)
-  }, [listShown])
-
   // The list's scroll region, on the app's shared recipe (components/scrollRegion) — the same
   // treatment the Changelog popup's list wears, for the same reason: a bare max-height clips with
   // nothing to say that anything scrolls, which is worse than the overflow it hides. `active` is
@@ -543,7 +455,7 @@ export default function PresetManager({
   // the least scroll that does it (components/scrollRegion's scrollBandIntoView, the same call
   // Lookup's history and the dropdown cursor make). The list is unlimited, so a row can be changed
   // while it is — or as it becomes — out of view, and two things here do exactly that: a keyboard
-  // move (the row leaves, and the focus ring with it) and the width-cap note growing the row being
+  // move (the row leaves, and the focus ring with it) and the cut-short note growing the row being
   // typed into (on the last row in view, the note opened below the visible edge). The row's
   // position is its rect against the list's, plus how far the list is scrolled: content coordinates.
   const revealRow = (id: number) => {
@@ -556,31 +468,18 @@ export default function PresetManager({
   }
   // The row being typed into, whenever its note appears. A layout effect: the scroll lands in the
   // frame that draws the note.
-  const cappedRowId = editing && nameWidthCapped ? editing.id : null
   useLayoutEffect(() => {
-    if (cappedRowId !== null) revealRow(cappedRowId)
-  }, [cappedRowId])
+    if (cutRowId !== null) revealRow(cutRowId)
+  }, [cutRowId])
   // ── Renaming ────────────────────────────────────────────────────────────────────────────────
 
-  // Commit whatever is pending. store/presetControl's renamePreset normalizes (trim, cap, and an
-  // empty or whitespace-only name falls back to "Preset N"), so this deliberately does NOT
-  // pre-screen the text: one place decides what a name may be, and it is the store's.
+  // Commit whatever is pending. store/presetControl's renamePreset normalizes (outer spaces
+  // trimmed, and an empty or whitespace-only name falls back to "Preset N"), so this deliberately
+  // does NOT pre-screen the text: one place decides what a name may be, and it is the store's.
   const commitRename = () => {
     if (!editing) return
-    // A composition still open when the field is left has not been put to the width cap yet (see
-    // `composing`), so it is now — nothing unjudged is ever saved.
-    const text =
-      editing.composing === undefined
-        ? editing.text
-        : capCandidateToNameRoom(
-            editing.text,
-            editing.composing.from,
-            nameWidthCapped,
-            editing.composing.replaced,
-          ).text
-    renamePreset(editing.id, text)
+    renamePreset(editing.id, editing.text)
     setEditing(null)
-    setNameWidthCapped(false)
   }
 
   // ⚠ THE ESCAPE DISCARD MUST BE FLUSHED BEFORE THE BLUR, and this is the ⚙ Year Range boxes' bug
@@ -595,10 +494,7 @@ export default function PresetManager({
   // text box has the keyboard, which is what leaves this press to the field. A second Escape, with
   // nothing focused, dismisses the card: the app's dismissal ladder.
   const discardRename = (el: HTMLInputElement) => {
-    flushSync(() => {
-      setEditing(null)
-      setNameWidthCapped(false)
-    })
+    flushSync(() => setEditing(null))
     el.blur()
   }
 
@@ -973,14 +869,15 @@ export default function PresetManager({
           Delete this preset?
         </div>
         <div className="text-xs text-(--tx-200-80)">
-          <b>{pendingDelete.name}</b> and everything in it go for good: its stats, its all-time
-          bests, its per-mode setup, every ⚙ setting it holds, and its saved defaults. No other
-          preset is touched, and this cannot be undone.
+          <b className="wrap-anywhere">{nameAsQuoted(pendingDelete.name)}</b> and everything in it
+          go for good: its stats, its all-time bests, its per-mode setup, every ⚙ setting it holds,
+          and its saved defaults. No other preset is touched, and this cannot be undone.
         </div>
         {pendingDelete.id === activeId && (
           <div className="text-xs text-(--tx-200-80)">
-            You are on this preset, so deleting it opens <b>{successor.name}</b> and clears the
-            screen — a MoX run or Blitz round in progress included.
+            You are on this preset, so deleting it opens{' '}
+            <b className="wrap-anywhere">{nameAsQuoted(successor.name)}</b> and clears the screen —
+            a MoX run or Blitz round in progress included.
           </div>
         )}
         {/* ONE BUTTON, AND IT IS THE DESTRUCTIVE ONE — the way back to the list is every
@@ -1052,7 +949,7 @@ export default function PresetManager({
               >
                 {/* THE ROW IS A GRID, NOT A FLEX ROW — four columns, ✕ · name · ✓ · grip on
               screen (both orders are argued at DELETE_BTN_CLASS above), and a SECOND ROW that only
-              the width-cap note ever occupies, placed under the name box in the name's own column.
+              the cut-short note ever occupies, placed under the name box in the name's own column.
               As a flex row the note had to live outside it with a hand-tuned indent; the ✕ in
               front of the name is a width no fixed indent can know, so the grid does the lining up
               instead. `items-center` works per row track, so the note appearing never moves the
@@ -1075,9 +972,9 @@ export default function PresetManager({
                       />
                     </>
                   )}
-                  {/* THE NAME, AS A TEXT BOX            >
-              {/* THE NAME, AS A TEXT BOX — the rename IS the field, with no edit mode to enter and no
-                pencil to find.
+                  {/* THE NAME, AS A TEXT BOX — the rename IS the field, with no edit mode to enter and
+                no pencil to find. It always holds the STORED name, whole, however long (the box
+                scrolls sideways); it has no `maxLength` and its onChange takes the text as it comes.
                 ⚠ IT NAMES ITSELF "Preset name" AND NOTHING MORE, deliberately. A textbox's VALUE is
                 read out with it, so the row's own name is already spoken and a label carrying it as
                 well ("Name of Weekend") would say it twice and would change under the typing. The
@@ -1089,7 +986,6 @@ export default function PresetManager({
                   <input
                     type="text"
                     aria-label="Preset name"
-                    maxLength={MAX_PRESET_NAME}
                     value={editingText(p.id, p.name)}
                     onFocus={() => {
                       // Seed the pending edit from the SAVED name.
@@ -1103,30 +999,7 @@ export default function PresetManager({
                       // which is the likeliest way anyone would ever meet it.
                       if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
                     }}
-                    onChange={(e) => {
-                      const replaced = takeSelectedBeforeEdit()
-                      // Mid-composition: show the piece, judge nothing (see `composing`).
-                      if (editing?.id === p.id && editing.composing !== undefined) {
-                        setEditing({ ...editing, text: e.target.value })
-                        return
-                      }
-                      // lib/presetNameWidth — measures the candidate against the live room wherever a
-                      // preset name is drawn (other, separately-mounted controls), not this field's own
-                      // room, and refuses what does not fit. See that file and the ★★ note above for
-                      // the mechanism and why the cap moved here from a character count.
-                      applyNameEdit(e.target, p.id, editingText(p.id, p.name), replaced)
-                    }}
-                    onCompositionStart={(e) => {
-                      // The box still holds the text, and the selection, the composition starts from.
-                      const from = editingText(p.id, p.name)
-                      const replaced = selectionOf(e.currentTarget)
-                      setEditing({ id: p.id, text: from, composing: { from, replaced } })
-                    }}
-                    onCompositionEnd={(e) => {
-                      if (editing?.id !== p.id || editing.composing === undefined) return
-                      const { from, replaced } = editing.composing
-                      applyNameEdit(e.currentTarget, p.id, from, replaced)
-                    }}
+                    onChange={(e) => setEditing({ id: p.id, text: e.target.value })}
                     onBlur={commitRename}
                     onKeyDown={(e) => {
                       // A key pressed while an input method is composing belongs to the input method:
@@ -1183,12 +1056,12 @@ export default function PresetManager({
                 withheld controls elsewhere in this app are kept out of it by a selector rather than
                 by coordination (see that file's own gestureTarget comment). The accessible name
                 carries the CURRENT POSITION so a screen reader announces a new value after a
-                keyboard move — this app uses no aria-live (SettingsPanel's Check-for-updates button
-                argues why), so a changed name on a still-FOCUSED element is what gets announced. */}
+                keyboard move: a changed name on a still-FOCUSED element is announced as it changes,
+                with nothing else to wire. */}
                   <div
                     role="button"
                     tabIndex={0}
-                    aria-label={`Reorder ${p.name}, position ${i + 1} of ${presets.length}`}
+                    aria-label={`Reorder ${nameAsDrawn(p.name)}, position ${i + 1} of ${presets.length}`}
                     className={`${ROW_COL.grip} ${GRIP_CLASS}`}
                     style={{ touchAction: 'none' }}
                     onPointerDown={beginDrag(p, i)}
@@ -1203,25 +1076,25 @@ export default function PresetManager({
                 constants says why the two orders differ). */}
                   <button
                     type="button"
-                    aria-label={`Delete ${p.name}`}
+                    aria-label={`Delete ${nameAsDrawn(p.name)}`}
                     aria-disabled={!canDelete || undefined}
                     onClick={() => pressDelete(p.id)}
                     className={`${ROW_COL.delete} ${DELETE_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS} ${held ? HELD_PIECE_CLASS : ''}`}
                   >
                     <DeleteIcon />
                   </button>
-                  {/* THE WIDTH-CAP NOTE — WIDTH LANGUAGE, NEVER A CHARACTER COUNT, because a character
-                count is no longer the true reason a keystroke stopped landing (lib/presetNameWidth,
-                and the ★★ note above this component). Shown only for the row currently being typed
-                into, only while its most recent edit actually had to be refused — it disappears
-                the moment a backspace brings the candidate back under budget, on the same `capped`
-                flag that trim reports. It takes the grid's second row, starting under the name box
-                (column 2) and running to the row's end. Same visual tier as the "cannot be deleted"
-                note below, for the same reason: a small fact about why a control just did what it
-                did. */}
-                  {editing?.id === p.id && nameWidthCapped && (
-                    <div className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[0.6875rem] text-(--tx-300-60)">
-                      That&apos;s as long as this name can display.
+                  {/* THE CUT-SHORT NOTE (the ★ note above this component) — only for the row being
+                typed into, only while its text would be shown cut short somewhere. It takes the
+                grid's second row, starting under the name box (column 2) and running to the row's
+                end. Same visual tier as the "cannot be deleted" note below: a small fact about what
+                the app is doing with this row. aria-hidden: a screen reader is told through the
+                card's live region, once, and would otherwise meet the words twice. */}
+                  {cutRowId === p.id && (
+                    <div
+                      aria-hidden="true"
+                      className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[0.6875rem] text-(--tx-300-60)"
+                    >
+                      {CUT_SHORT_NOTE}
                     </div>
                   )}
                 </div>
@@ -1229,6 +1102,12 @@ export default function PresetManager({
             )
           })}
         </div>
+      </div>
+      {/* THE CARD'S LIVE REGION — always here, so that its text CHANGING is what a screen reader
+          hears: the note's words the moment the note appears, and nothing while it stays. Polite:
+          it waits for whatever is being read (the letter just typed) to finish. */}
+      <div aria-live="polite" className="sr-only">
+        {cutRowId !== null && CUT_SHORT_NOTE}
       </div>
       {/* The reason behind the dimmed ✕, shown only while it is dimmed. A withheld control states
           THAT it is unavailable; nothing about it can state WHY, and "the last one won't delete" is
