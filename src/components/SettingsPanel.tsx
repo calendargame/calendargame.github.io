@@ -729,7 +729,7 @@ export function SettingsPanel({
   // Updates section) and nowhere else. Don't re-add it here. With zero focusable controls Tab
   // keeps the keyboard on the dialog card (the no-control case of components/overlayStack's Tab
   // rule) rather than letting it walk out to the panel beneath.
-  const storagePercent = useStorageUsage((u) => u.percent)
+  const storageFigure = useStorageUsage((u) => u.figure)
   const storageWarning = useStorageUsage((u) => u.warning)
   const openStorageUsage = useStorageUsage((u) => u.openPopup)
   const changelogJsx = changelogOpen && (
@@ -1576,9 +1576,11 @@ export function SettingsPanel({
             </a>
           </div>
           {/* HOW FULL THE DEVICE'S ROOM FOR THE APP IS (store/storageUsage) — always shown, and a
-              tap opens the breakdown (components/StorageUsagePopup, App's). A dash on a device
-              whose limit could not be measured — there is no honest percentage without one. On a
-              row of its own:
+              tap opens the breakdown (components/StorageUsagePopup, App's). The figure is the
+              store's own text for it — one decimal place, by the one rule the popup's title and
+              rows use (percentText) — in tabular figures, so the line keeps its width as the
+              digits change. A dash on a device whose limit could not be measured — there is no
+              honest percentage without one. On a row of its own:
               the metadata row below is already full at a phone's width. From the warning line up
               it wears the warning colour (index.css's .storage-warn), with the words for it for a
               screen reader — colour alone says nothing to one. */}
@@ -1586,16 +1588,14 @@ export function SettingsPanel({
             <button
               type="button"
               onClick={openStorageUsage}
-              className={`select-none rounded-md px-1 -mx-1 underline ${storageWarning ? 'storage-warn' : ''}`}
+              className={`select-none rounded-md px-1 -mx-1 underline tabular-nums ${storageWarning ? 'storage-warn' : ''}`}
             >
               Storage used:{' '}
-              {storagePercent === null ? (
+              {storageFigure ?? (
                 <>
                   <span aria-hidden="true">—</span>
                   <span className="sr-only">not measured yet</span>
                 </>
-              ) : (
-                `${storagePercent}%`
               )}
               {storageWarning && <span className="sr-only">, almost full</span>}
             </button>

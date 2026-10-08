@@ -71,9 +71,23 @@ import { captureError } from '../observability/sentry.js'
 //     limit that has since been shown wrong is put right without waiting for the next start.
 // And never while a save is being held: the device is full then, and what a measurement would find
 // is the room the held save is about to take.
-// ⚠ A DEVICE THAT COULD NOT BE MEASURED has no percentage, and none is shown: `percent` is null, the
+// ⚠ A DEVICE THAT COULD NOT BE MEASURED has no percentage, and none is shown: `figure` is null, the
 // ⚙ line shows a dash, and there is no warning. That includes a device that holds nothing and will
 // take nothing: a limit is always more than zero, so a percentage is always a number.
+//
+// ★ HOW A PERCENTAGE IS WRITTEN — ONE RULE, IN ONE PLACE (percentText). The ⚙ line, the popup's
+// title, and every row of the breakdown show one decimal place, and all of them get their text
+// from that one function:
+//   • THE LAST DIGIT IS CUT, NEVER ROUNDED UP, so a figure is shown only once it has been reached.
+//     Rounded, 79.96% would read "80.0%" with no warning beside it, and 99.96% would read "100.0%"
+//     on a device that still takes a save. Cut, "80.0%" or more is on screen exactly when the
+//     warning is, and "100.0%" exactly when the device is full;
+//   • SOMETHING UNDER A TENTH OF A PERCENT READS "<0.1%". "0.0%" beside a thing that is there says
+//     it is not; only nothing at all is "0.0%";
+//   • the arithmetic is in whole characters, so a figure that sits exactly on a tenth cannot be
+//     nudged to the wrong side of it by a fraction the machine cannot hold.
+// The warning itself compares the count with the line directly (settle) — it is not read back off
+// the text.
 //
 // ★ THE POPUP OPENS BY ITSELF ONCE PER UPWARD CROSSING — and never while the player is busy
 // (lib/playerBusy: a flash, run or round under way, a timed question waiting, or a text box in use).
@@ -212,15 +226,21 @@ export function readStorageUsage(area: Storage): UsageReading {
   return { used, rows }
 }
 
-/** A whole-number percentage of `limit`, never above 100. */
-export const usagePercent = (used: number, limit: number): number =>
-  Math.min(100, Math.round((used / limit) * 100))
+/**
+ * `chars` as a percentage of `limit`, as the app writes one (the header says why it is this rule):
+ * one decimal place, the last digit cut and never rounded up; "<0.1%" for something too small to
+ * show a digit; never above "100.0%".
+ */
+export function percentText(chars: number, limit: number): string {
+  const tenths = Math.min(1000, Math.floor((chars * 1000) / limit))
+  return chars > 0 && tenths === 0 ? '<0.1%' : `${(tenths / 10).toFixed(1)}%`
+}
 
 export type StorageUsageState = {
   /** The device's limit, in characters — null until it has been measured (or a refusal taught one). */
   limit: number | null
-  /** How much of the limit is used, as a whole number — null while the limit is not known. */
-  percent: number | null
+  /** How much of the limit is used, as it is shown (percentText) — null while the limit is not known. */
+  figure: string | null
   /** At or past the line: the ⚙ line wears the warning colour and the gear its dot. */
   warning: boolean
   /** What is filling the device, as read when the popup last opened. */
@@ -265,7 +285,7 @@ const measureOwed = (): boolean =>
 
 export const useStorageUsage = create<StorageUsageState>()((set, get) => ({
   limit: null,
-  percent: null,
+  figure: null,
   warning: false,
   rows: [],
   popupOpen: false,
@@ -284,21 +304,22 @@ export const useStorageUsage = create<StorageUsageState>()((set, get) => ({
   closePopup: () => set({ popupOpen: false }),
 }))
 
-// Turn the count into what is shown — the percentage, the warning — then see whether the popup is due.
+// Turn the count into what is shown — the figure, the warning — then see whether the popup is due.
 function settle(area: Storage): void {
   if (settling) return // a marker written below is counted by the door; this pass picks it up
   settling = true
   let limit: number | null
-  let percent: number | null
+  let figure: string | null
   let warning: boolean
   try {
     for (;;) {
       limit = known?.limit ?? null
-      percent = limit === null ? null : usagePercent(used, limit)
-      warning = percent !== null && percent >= STORAGE_WARN_PERCENT
+      figure = limit === null ? null : percentText(used, limit)
+      // The count against the line, in whole characters — never the figure, which has lost digits.
+      warning = limit !== null && used * 100 >= STORAGE_WARN_PERCENT * limit
       // ⚠ With no limit there is no reading, and no reading is not "back under the line": a crossing
       // already announced stays announced until a percentage says otherwise.
-      if (warning || percent === null || !warned(area)) break
+      if (warning || limit === null || !warned(area)) break
       // Back under the line: the crossing is over, and a later rise is a new one.
       warnedHere = false
       removeItem(area, WARNED_KEY)
@@ -307,10 +328,10 @@ function settle(area: Storage): void {
     settling = false
   }
   const shown = useStorageUsage.getState()
-  if (shown.limit !== limit || shown.percent !== percent || shown.warning !== warning)
+  if (shown.limit !== limit || shown.figure !== figure || shown.warning !== warning)
     useStorageUsage.setState({
       limit,
-      percent,
+      figure,
       warning,
       // An open popup keeps its list in step with its headline.
       ...(shown.popupOpen ? { rows: readStorageUsage(area).rows } : null),
@@ -479,7 +500,7 @@ export function forgetStorageUsage(limit: number | null = DOCUMENTED_LIMITS[0]):
   warnedHere = false
   useStorageUsage.setState({
     limit: null,
-    percent: null,
+    figure: null,
     warning: false,
     rows: [],
     popupOpen: false,

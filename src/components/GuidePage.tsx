@@ -2284,11 +2284,11 @@ export default function GuidePage({
           Clear dims and locks until you&apos;ve saved your own defaults, the same way the three
           buttons above it do. Those two sit in the gaps between the three buttons above rather than
           under them. Below the block: your Contact email; then <b>Storage used</b> on a line of its
-          own — how much of this device&apos;s room for the app is in use, as a percentage (a dash
-          if the app could not measure the device), and a tap on it opens the breakdown (see Saved
-          Progress); then a last line with the Last Updated timestamp at the left edge, the{' '}
-          <b>Changelog</b> link at the right edge, and <b>Check for updates</b> midway between the
-          two.
+          own — how much of this device&apos;s room for the app is in use, as a percentage to one
+          decimal place (a dash if the app could not measure the device), and a tap on it opens the
+          breakdown (see Saved Progress); then a last line with the Last Updated timestamp at the
+          left edge, the <b>Changelog</b> link at the right edge, and <b>Check for updates</b>{' '}
+          midway between the two.
         </p>
         <p>
           Each of those three buttons greys out whenever pressing it would do nothing — there is
@@ -2962,19 +2962,23 @@ export default function GuidePage({
         </UL>
         <p>
           A device gives the app a fixed amount of room for all of this, and the ⚙ menu always shows
-          how much of it is in use: <b>Storage used</b>, at the foot of the menu. Tap it to see what
-          is using the room — the solve times of each mode that saves them (
+          how much of it is in use: <b>Storage used</b>, at the foot of the menu, as a percentage to
+          one decimal place — &quot;Storage used: 0.3%&quot;. The last digit is never rounded up: a
+          figure appears only once it has been reached, so the line reads 80.0% exactly when the
+          warning below begins, and 100.0% only when the room is all used. Anything in use but
+          smaller than a tenth of a percent reads &quot;&lt;0.1%&quot;, never &quot;0.0%&quot;. Tap
+          the line to see what is using the room — the solve times of each mode that saves them (
           {modeList('classic', 'deduction', 'flash')}; Deduction&apos;s three puzzle types
-          separately), the Lookup history, each preset&apos;s other data. The list is largest first;
-          anything holding 1% or more is named, and so are the largest few however little they hold
-          — though never something with nothing in it, such as a mode you have not played — with
-          whatever is left gathered into one last line, &quot;Everything else&quot;. Under it is
-          what you can clear to get some room back: <b>Clear History</b> in Lookup, deleting a
-          preset you no longer use, and <b>Reset Stats</b> in a mode — that last one only while the
-          preset&apos;s Amnesic is <b>Off</b>. On Stats Only or Full, Reset Stats clears that
-          session&apos;s numbers and leaves the saved solve times where they are, so it makes no
-          room; the popup says so there instead of offering it, and says what does (set Amnesic to
-          Off first, then Reset Stats).
+          separately), the Lookup history, each preset&apos;s other data — each with its own share
+          of the room beside it, written the same way. The list is largest first; anything holding
+          1% or more is named, and so are the largest few however little they hold — though never
+          something with nothing in it, such as a mode you have not played — with whatever is left
+          gathered into one last line, &quot;Everything else&quot;. Under it is what you can clear
+          to get some room back: <b>Clear History</b> in Lookup, deleting a preset you no longer
+          use, and <b>Reset Stats</b> in a mode — that last one only while the preset&apos;s Amnesic
+          is <b>Off</b>. On Stats Only or Full, Reset Stats clears that session&apos;s numbers and
+          leaves the saved solve times where they are, so it makes no room; the popup says so there
+          instead of offering it, and says what does (set Amnesic to Off first, then Reset Stats).
         </p>
         <p>
           How much room a device gives is something the app has to measure. It does that the first

@@ -25,7 +25,7 @@ import {
   announceStorageWarning,
   forgetStorageUsage,
   storageUsed,
-  usagePercent,
+  percentText,
   DOCUMENTED_LIMITS,
   MAX_STORAGE_LIMIT,
   STORAGE_WARN_PERCENT,
@@ -102,7 +102,7 @@ const unmountApp = () => {
   document.getElementById('root')?.remove()
 }
 const popup = () =>
-  screen.queryByRole('dialog', { name: /^Storage used: (\d+%|not measured yet)$/ })
+  screen.queryByRole('dialog', { name: /^Storage used: (\d+\.\d%|<0\.1%|not measured yet)$/ })
 const line = () => panel().getByRole('button', { name: /^Storage used: / })
 const gearLit = () => gear().querySelector('[data-update-dot]').getAttribute('data-lit') === 'true'
 // What the gear's dot is saying — which is its colour (components/UpdateDot; index.css).
@@ -228,14 +228,64 @@ describe('what is filling the device', () => {
     expect(readStorageUsage(localStorage).used).toBe(0)
   })
 
-  it('a percentage is a whole number and never reads above 100', () => {
-    expect(usagePercent(0, CHROMIUM)).toBe(0)
-    expect(usagePercent(CHROMIUM * 0.796, CHROMIUM)).toBe(80)
-    expect(usagePercent(CHROMIUM * 3, CHROMIUM)).toBe(100)
+  it('a percentage is shown to one decimal place, and never reads above 100', () => {
+    expect(percentText(0, CHROMIUM)).toBe('0.0%')
+    expect(percentText(3, 1000)).toBe('0.3%')
+    expect(percentText(1234, 10_000)).toBe('12.3%')
+    expect(percentText(CHROMIUM, CHROMIUM)).toBe('100.0%')
+    expect(percentText(CHROMIUM * 3, CHROMIUM)).toBe('100.0%')
+  })
+
+  // Rounded, 79.96% would read "80.0%" with no warning beside it, and 99.96% would read "100.0%"
+  // on a device that still takes a save.
+  it('the last digit is cut, never rounded up: a figure is shown only once it is reached', () => {
+    expect(percentText(7996, 10_000)).toBe('79.9%')
+    expect(percentText(7999, 10_000)).toBe('79.9%')
+    expect(percentText(8000, 10_000)).toBe('80.0%')
+    expect(percentText(9996, 10_000)).toBe('99.9%')
+    expect(percentText(CHROMIUM - 1, CHROMIUM)).toBe('99.9%')
+    // Exact at every tenth, on a real limit: the arithmetic is in whole characters.
+    for (let tenths = 1; tenths <= 1000; tenths++) {
+      const reached = Math.ceil((tenths * SAFARI) / 1000)
+      expect(percentText(reached, SAFARI)).toBe(`${(tenths / 10).toFixed(1)}%`)
+      if (tenths > 1)
+        expect(percentText(reached - 1, SAFARI)).toBe(`${((tenths - 1) / 10).toFixed(1)}%`)
+    }
+  })
+
+  it('something under a tenth of a percent reads "<0.1%", never "0.0%": only nothing is zero', () => {
+    expect(percentText(1, CHROMIUM)).toBe('<0.1%')
+    expect(percentText(9, 10_000)).toBe('<0.1%')
+    expect(percentText(10, 10_000)).toBe('0.1%')
   })
 })
 
 describe('the count is kept by the storage door, and is right the moment a change lands', () => {
+  // The figure and the warning are two readings of one count, and must never disagree: "80.0%" with
+  // no warning, or the warning beside "79.9%". Checked either side of the line, on a device whose
+  // limit makes neither 79.9% nor 80% a whole number of characters.
+  it('the warning is on exactly when the figure reads 80.0% or more', () => {
+    const limit = 1_000_003
+    freshPage(limit)
+    const line80 = Math.ceil((STORAGE_WARN_PERCENT * limit) / 100)
+    const at = (chars) => {
+      empty()
+      fill(chars - everything())
+      refreshStorageUsage()
+      expect(storageUsed()).toBe(chars)
+      return usage()
+    }
+    // 79.96% — rounded, this read "80.0%" (and as a whole number, "80%") with the warning off.
+    expect(at(Math.round(limit * 0.7996))).toMatchObject({ figure: '79.9%', warning: false })
+    expect(at(line80 - 1)).toMatchObject({ figure: '79.9%', warning: false })
+    expect(at(line80)).toMatchObject({ figure: '80.0%', warning: true })
+    for (let chars = line80 - 600; chars <= line80 + 600; chars += 7) {
+      const { figure, warning } = at(chars)
+      expect(parseFloat(figure) >= STORAGE_WARN_PERCENT).toBe(warning)
+      expect(warning).toBe(chars >= line80)
+    }
+  })
+
   it('follows every save and removal without reading the device again', () => {
     watch()
     const passes = vi.spyOn(Storage.prototype, 'key')
@@ -260,14 +310,14 @@ describe('the count is kept by the storage door, and is right the moment a chang
   describe('after each way of making room, on a filled device', () => {
     beforeEach(() => freshPage(40_000))
     const shownIsTrue = () => {
-      expect(usage().percent).toBe(usagePercent(everything(), 40_000))
-      expect(usage().warning).toBe(usage().percent >= STORAGE_WARN_PERCENT)
+      expect(usage().figure).toBe(percentText(everything(), 40_000))
+      expect(usage().warning).toBe(everything() * 100 >= STORAGE_WARN_PERCENT * 40_000)
     }
 
     it('Reset Stats', () => {
       watch()
       useProgress.getState().setModeStats('classic', long(6500))
-      expect(usage()).toMatchObject({ percent: 100, warning: true })
+      expect(usage()).toMatchObject({ figure: '100.0%', warning: true })
       useProgress.getState().setModeStats('classic', long(0))
       shownIsTrue()
       expect(usage().warning).toBe(false)
@@ -321,7 +371,7 @@ describe('the count is kept by the storage door, and is right the moment a chang
       expect(line().className).toContain('storage-warn')
       act(() => useProgress.getState().setModeStats('classic', long(0)))
       expect(line().className).not.toContain('storage-warn')
-      expect(line().textContent).toBe(`Storage used: ${usagePercent(everything(), held)}%`)
+      expect(line().textContent).toBe(`Storage used: ${percentText(everything(), held)}`)
       expect(storageUsed()).toBe(everything()) // the boot's own markers included
       expect(gearLit()).toBe(false)
     })
@@ -700,7 +750,7 @@ describe('the limit', () => {
     freshPage(null)
     fill()
     refreshStorageUsage()
-    expect(usage()).toMatchObject({ limit: null, percent: null, warning: false, popupOpen: false })
+    expect(usage()).toMatchObject({ limit: null, figure: null, warning: false, popupOpen: false })
   })
 
   // Safari's documented allowance — the size the old assumed figure got wrong by half — and one
@@ -720,7 +770,7 @@ describe('the limit', () => {
         expect(usage().limit).toBeLessThanOrEqual(limit)
         expect(usage().limit).toBeGreaterThan(limit - 4200)
       }
-      expect(usage().percent).toBe(usagePercent(everything(), usage().limit))
+      expect(usage().figure).toBe(percentText(everything(), usage().limit))
       expect(localStorage.getItem(SCRATCH_KEY)).toBeNull()
       expect(localStorage.getItem(LIMIT_KEY)).toBe(String(usage().limit))
       // …and it is not measured again: not when ⚙ or the popup opens, not on the next page.
@@ -746,11 +796,11 @@ describe('the limit', () => {
       return realSetItem.call(this, key, value)
     })
     measureStorageLimit() // the app's start
-    expect(usage()).toMatchObject({ limit: null, percent: null, warning: false })
+    expect(usage()).toMatchObject({ limit: null, figure: null, warning: false })
     mountApp()
     pressKey('Escape') // the storage-full notice, if the app's first save was refused
     openSettings() // …and ⚙ tries again
-    expect(usage()).toMatchObject({ limit: null, percent: null, warning: false })
+    expect(usage()).toMatchObject({ limit: null, figure: null, warning: false })
     expect(line().textContent).toBe('Storage used: —not measured yet')
     tap(line())
     expect(popup().querySelector('#storage-usage-title').textContent).toBe(
@@ -766,7 +816,11 @@ describe('the limit', () => {
     deviceLimit(SAFARI)
     measureStorageLimit()
     expect(usage().limit).toBe(SAFARI)
-    expect(usage()).toMatchObject({ percent: 99, warning: true, popupOpen: false })
+    expect(usage()).toMatchObject({
+      figure: expect.stringMatching(/^99\.\d%$/),
+      warning: true,
+      popupOpen: false,
+    })
     watch() // the app is on screen, and nobody is busy
     expect(usage().popupOpen).toBe(true)
   })
@@ -782,7 +836,7 @@ describe('the limit', () => {
     expect(usage().limit).toBeNull()
     usage().openPopup() // "Storage used: —", tapped
     expect(usage()).toMatchObject({ limit: SAFARI, popupOpen: true })
-    expect(usage().percent).toBe(usagePercent(everything(), SAFARI))
+    expect(usage().figure).toBe(percentText(everything(), SAFARI))
   })
 
   it('it is not taken while a round, run or flash is under way, or while a save is held', () => {
@@ -813,7 +867,7 @@ describe('the limit', () => {
     expect(useStorageHealth.getState().unsaved).toBe(true)
     // What the device held when it said no — short of the truth by up to the refused save.
     expect(usage().limit).toBe(everything())
-    expect(usage().percent).toBe(100)
+    expect(usage().figure).toBe('100.0%')
     expect(localStorage.getItem(LIMIT_KEY)).toMatch(/^\d+\?$/)
     measureStorageLimit()
     expect(usage().limit).toBe(everything()) // not measured while a save is held
@@ -821,11 +875,11 @@ describe('the limit', () => {
     forgetStorageHealth()
     freshPage(null)
     refreshStorageUsage()
-    expect(usage().percent).toBe(100)
+    expect(usage().figure).toBe('100.0%')
     measureStorageLimit()
     expect(usage().limit).toBeLessThanOrEqual(limit)
     expect(usage().limit).toBeGreaterThan(limit - 4200)
-    expect(usage().percent).toBe(99)
+    expect(usage().figure).toMatch(/^99\.\d%$/)
     expect(localStorage.getItem(LIMIT_KEY)).toBe(String(usage().limit))
   })
 
@@ -851,7 +905,7 @@ describe('the limit', () => {
     const taught = usage().limit
     expect(taught).toBe(everything())
     expect(taught).toBeGreaterThan(LIMIT * 0.9)
-    expect(usage().percent).toBe(100)
+    expect(usage().figure).toBe('100.0%')
     const marker = localStorage.getItem(LIMIT_KEY)
     expect(marker).toMatch(/^\d+\?$/)
 
@@ -859,8 +913,8 @@ describe('the limit', () => {
     expect(useStorageHealth.getState().unsaved).toBe(false)
     expect(usage().limit).toBe(taught)
     expect(localStorage.getItem(LIMIT_KEY)).toBe(marker)
-    expect(usage().percent).toBe(usagePercent(everything(), LIMIT))
-    expect(usage().percent).toBeLessThan(10)
+    expect(usage().figure).toBe(percentText(everything(), LIMIT))
+    expect(parseFloat(usage().figure)).toBeLessThan(10)
     expect(usage().warning).toBe(false)
 
     measureStorageLimit() // the next time ⚙ opens: measured properly, and remembered as such
@@ -888,7 +942,7 @@ describe('the limit', () => {
     writeItem(localStorage, 'cg-big', 'y'.repeat(5000)) // one of the app's own, as it loaded
     expect(useStorageHealth.getState().unsaved).toBe(true)
     watch()
-    expect(usage()).toMatchObject({ limit: everything(), percent: 100 })
+    expect(usage()).toMatchObject({ limit: everything(), figure: '100.0%' })
   })
 
   it('usage found above the remembered limit means the limit was wrong: it is measured again', () => {
@@ -930,7 +984,7 @@ describe('the limit', () => {
     freshPage(null) // the next page, on a device whose remembered limit is gone
     deviceLimit(CHROMIUM)
     watch()
-    expect(usage().percent).toBeNull()
+    expect(usage().figure).toBeNull()
     expect(localStorage.getItem(WARNED_KEY)).toBe('1')
     measureStorageLimit()
     expect(usage()).toMatchObject({ warning: true, popupOpen: false })
@@ -999,7 +1053,7 @@ describe('the popup opens by itself once per upward crossing of the line', () =>
     expect(usage()).toMatchObject({ warning: false, popupOpen: false })
     fill()
     refreshStorageUsage()
-    expect(usage().percent).toBeGreaterThanOrEqual(STORAGE_WARN_PERCENT)
+    expect(parseFloat(usage().figure)).toBeGreaterThanOrEqual(STORAGE_WARN_PERCENT)
     expect(usage()).toMatchObject({ warning: true, popupOpen: true })
     usage().closePopup()
     refreshStorageUsage()
@@ -1154,16 +1208,23 @@ describe('the popup opens by itself once per upward crossing of the line', () =>
 })
 
 describe('on the mounted app', () => {
-  it('⚙ always shows "Storage used: N%", and tapping it opens the breakdown as a stacked popup', () => {
-    useProgress.getState().setModeStats('classic', long(40))
+  it('⚙ always shows "Storage used: N.N%", and tapping it opens the breakdown as a stacked popup', () => {
+    useProgress.getState().setModeStats('classic', long(4000))
     mountApp()
     expect(popup()).toBeNull()
     openSettings()
-    expect(line().textContent).toMatch(/^Storage used: \d+%$/)
+    // One decimal place, in figures that all take the same width, so the line does not shift as
+    // it counts.
+    expect(line().textContent).toBe(`Storage used: ${percentText(everything(), CHROMIUM)}`)
+    expect(line().textContent).toMatch(/^Storage used: \d+\.\d%$/)
+    expect(line().className).toContain('tabular-nums')
     expect(line().className).not.toContain('storage-warn')
     tap(line())
     const card = popup()
     expect(card).not.toBeNull()
+    const title = card.querySelector('#storage-usage-title')
+    expect(title.textContent).toBe(`Storage used: ${percentText(everything(), CHROMIUM)}`)
+    expect(title.className).toContain('tabular-nums')
     // The shared popup shell: its scrim, and the status-bar strip of the popup in front.
     const scrim = card.closest('[data-settings-modal]')
     expect(scrim.querySelector('[data-status-bar-dim]')).not.toBeNull()
@@ -1237,7 +1298,7 @@ describe('on the mounted app', () => {
     const rows = within(popup())
       .getAllByRole('listitem')
       .map((li) => li.textContent)
-    expect(rows.some((t) => /^Preset 1: Classic solve times \(9,000\)\d+%$/.test(t))).toBe(true)
+    expect(rows.some((t) => /^Preset 1: Classic solve times \(9,000\)\d+\.\d%$/.test(t))).toBe(true)
   })
 
   it('the storage-full notice opens on top of it, and closes first', () => {
@@ -1431,10 +1492,10 @@ describe('on the mounted app, with a timed question on screen', () => {
     freshPage(null)
     deviceLimit(SAFARI)
     mountApp()
-    expect(usage().percent).toBeNull()
+    expect(usage().figure).toBeNull()
     openSettings()
     expect(usage().limit).toBe(SAFARI)
-    expect(line().textContent).toBe(`Storage used: ${usagePercent(everything(), SAFARI)}%`)
+    expect(line().textContent).toBe(`Storage used: ${percentText(everything(), SAFARI)}`)
   })
 
   it('on a device that cannot be measured the line shows a dash, and says why', () => {
@@ -1483,22 +1544,28 @@ describe('the breakdown names what is saved at every size', () => {
       .filter((li) => !li.closest('.list-disc'))
       .map((li) => li.textContent)
 
-  it('an almost-empty device: each thing saved is named, with "<1%" beside it', () => {
+  it('an almost-empty device: each thing saved is named, with its share to one decimal beside it', () => {
     useProgress.getState().setModeStats('classic', long(12))
     useLookupHistory.getState().setHistory([{ id: 'a', y: 2001, m: 1, d: 1 }])
     mountApp()
     openSettings()
     tap(line())
     const rows = rowsShown()
-    expect(rows).toContain('Classic solve times (12)<1%')
-    expect(rows).toContain('Lookup history (1)<1%')
-    expect(rows.some((t) => /^Bests, settings and saved defaults<1%$/.test(t))).toBe(true)
+    // Each owner's own figure, by the one rule the headline uses — "<0.1%" for the smallest, and
+    // never "0.0%" beside something that is there.
+    const { rows: owners } = readStorageUsage(localStorage)
+    const share = (kind) => percentText(owners.find((row) => row.kind === kind).chars, CHROMIUM)
+    expect(rows).toContain(`Classic solve times (12)${share('times')}`)
+    expect(rows).toContain(`Lookup history (1)${share('lookup')}`)
+    expect(rows).toContain(`Bests, settings and saved defaults${share('preset')}`)
+    expect(share('lookup')).toBe('<0.1%')
+    for (const row of rows) expect(row).toMatch(/(<0\.1|[1-9]\d*\.\d|0\.[1-9])%$/)
     expect(rows.join('|')).not.toMatch(/Everything saved/)
     // A mode nobody has played is not named: "Flash solve times (0)" would be a line about nothing.
     expect(rows.join('|')).not.toMatch(/\(0\)/)
     expect(rows).toHaveLength(4)
     // The app's own few keys are nobody's to clear: they are the one unnamed line, and the last.
-    expect(rows.at(-1)).toBe('Everything else<1%')
+    expect(rows.at(-1)).toMatch(/^Everything else(<0\.1|\d+\.\d)%$/)
   })
 
   it('largest first; small owners past the first five are gathered, large ones never are', () => {
@@ -1512,7 +1579,7 @@ describe('the breakdown names what is saved at every size', () => {
     openSettings()
     tap(line())
     const rows = rowsShown()
-    expect(rows[0]).toMatch(/^Preset 1: Classic solve times \(9,000\)\d+%$/)
+    expect(rows[0]).toMatch(/^Preset 1: Classic solve times \(9,000\)\d+\.\d%$/)
     expect(rows.at(-1)).toMatch(/^Everything else/)
     expect(rows.length).toBe(6) // the five largest, and the rest in one line
   })

@@ -1,6 +1,6 @@
 import Popup from './Popup.js'
 import { MODAL_CARD_SHADOW, MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
-import { useStorageUsage } from '../store/storageUsage.js'
+import { percentText, useStorageUsage } from '../store/storageUsage.js'
 import type { UsageRow } from '../store/storageUsage.js'
 import { usePresets } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
@@ -10,7 +10,7 @@ import { modeNames } from '../lib/modes.js'
 
 // StorageUsagePopup — what is using the device's room for this app, and how to get some back.
 //
-// One popup, two ways in: the "Storage used: N%" line in ⚙ opens it, and it opens BY ITSELF once
+// One popup, two ways in: the "Storage used: N.N%" line in ⚙ opens it, and it opens BY ITSELF once
 // when the reading first passes the warning line (store/storageUsage decides when, and remembers
 // that it did). It is the EARLY warning; components/StorageFullNotice is the late one, for a save
 // the device has already refused, and takes precedence — this popup does not open by itself while
@@ -67,14 +67,16 @@ const holdsSomething = (row: UsageRow): boolean => !('count' in row) || row.coun
 export default function StorageUsagePopup() {
   const open = useStorageUsage((s) => s.popupOpen)
   const close = useStorageUsage((s) => s.closePopup)
-  const percent = useStorageUsage((s) => s.percent)
+  const figure = useStorageUsage((s) => s.figure)
   const warning = useStorageUsage((s) => s.warning)
   const rows = useStorageUsage((s) => s.rows)
   const limit = useStorageUsage((s) => s.limit)
   const presets = usePresets((s) => s.presets)
   const amnesic = useActiveAmnesicMode()
   if (!open) return null
-  // Each owner's share of the WHOLE allowance, so the shares add up to the headline.
+  // Each owner's share of the WHOLE allowance, written by the rule the headline is written by
+  // (store/storageUsage's percentText): each is cut at its last digit, so together they come to the
+  // headline or a little under it, and never to more.
   // ⚠ On a device whose limit could not be measured (store/storageUsage) there is no whole to take
   // a share of: the owners are listed with no figure beside them, and the card says why.
   const measured = limit !== null
@@ -84,8 +86,7 @@ export default function StorageUsagePopup() {
     .sort((a, b) => b.chars - a.chars)
   const listed = owners.filter((row, i) => i < LISTED_AT_LEAST || share(row.chars) >= 1)
   const rest = rows.filter((row) => !listed.includes(row)).reduce((sum, row) => sum + row.chars, 0)
-  const shown = (chars: number) =>
-    !measured ? '' : share(chars) < 1 ? '<1%' : `${Math.round(share(chars))}%`
+  const shown = (chars: number) => (measured ? percentText(chars, limit) : '')
   return (
     <Popup id="storage-usage" onDismiss={close} appWide>
       <div
@@ -96,8 +97,8 @@ export default function StorageUsagePopup() {
         style={MODAL_CARD_SHADOW}
         className={MODAL_PLAIN_CARD_CLASS}
       >
-        <div id="storage-usage-title" className="text-sm font-semibold text-(--tx-50)">
-          Storage used: {percent === null ? 'not measured yet' : `${percent}%`}
+        <div id="storage-usage-title" className="text-sm font-semibold text-(--tx-50) tabular-nums">
+          Storage used: {figure ?? 'not measured yet'}
         </div>
         <div className="text-xs text-(--tx-200-80) space-y-2">
           <p>
