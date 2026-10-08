@@ -42,7 +42,7 @@ function rowLabel(row: UsageRow, presets: Preset[]): string {
   if (row.kind === 'other') return 'Everything else'
   const preset = presets.find((p) => p.id === row.presetId)
   const who = preset ? (presets.length > 1 ? `${preset.name}: ` : '') : 'A deleted preset: '
-  if (row.kind === 'preset') return `${who}Bests, settings and saved defaults`
+  if (row.kind === 'preset') return `${who}Bests, settings, and saved defaults`
   return `${who}${TIMES_OWNER[row.silo] ?? row.silo} solve times (${count(row.count)})`
 }
 
@@ -121,13 +121,13 @@ export default function StorageUsagePopup() {
           <p>
             {warning
               ? 'This device is running out of room for Calendar Game’s saved data. Once it is full, new answers can’t be saved until some room is made.'
-              : 'Calendar Game keeps your stats, history and settings on this device, which gives it a fixed amount of room.'}
+              : 'Calendar Game keeps your stats, history, and settings on this device, which gives it a fixed amount of room.'}
           </p>
           {!measured && (
             <p>
               How much room this device gives couldn&apos;t be measured, so there are no percentages
               to show. The app tries again each time it starts, and each time you open ⚙ with no
-              flash, run or round under way.
+              flash, run, or round under way.
             </p>
           )}
           <p className="font-semibold text-(--tx-100-90)">What is using it</p>

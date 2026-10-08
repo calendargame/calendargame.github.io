@@ -372,7 +372,7 @@ describe('the count is kept by the storage door, and is right the moment a chang
       expect(usage().warning).toBe(false)
     })
 
-    it('on the mounted app: the line, its colour and the gear dot are right at once', () => {
+    it('on the mounted app: the line, its colour, and the gear dot are right at once', () => {
       useProgress.getState().setModeStats('classic', long(6500))
       // ⚠ THE LIMIT IS NOT THE 40,000 THIS GROUP REMEMBERS ONCE ⚙ HAS OPENED. The device holds more
       // than that, so the remembered limit reads as wrong and opening ⚙ measures it afresh. A
@@ -488,7 +488,7 @@ describe('the count is kept by the storage door, and is right the moment a chang
   // src/changelog may import nothing, so it writes its own keys and names each to the door; the
   // build stamp goes through the door outright. (Before: neither was heard of until the next page
   // load or the popup opening, and the count was short — or long — by exactly those keys.)
-  it('the update dots, the changelog’s seen-stamp and the build stamp are counted as they land', () => {
+  it('the update dots, the changelog’s seen-stamp, and the build stamp are counted as they land', () => {
     watch()
     const passes = vi.spyOn(Storage.prototype, 'key')
     const exact = () => {
@@ -863,7 +863,7 @@ describe('the limit', () => {
     expect(usage().figure).toBe(percentText(everything(), SAFARI))
   })
 
-  it('it is not taken while a round, run or flash is under way, or while a save is held', () => {
+  it('it is not taken while a round, run, or flash is under way, or while a save is held', () => {
     freshPage(null)
     deviceLimit(SAFARI)
     watch()
@@ -1198,7 +1198,7 @@ describe('the popup opens by itself once per upward crossing of the line', () =>
     expect(usage().popupOpen).toBe(true)
   })
 
-  it('…but not from a round, a run or a flash: that keeps running behind the menu', async () => {
+  it('…but not from a round, a run, or a flash: that keeps running behind the menu', async () => {
     const { rerender } = render(<Clock live />)
     fill()
     refreshStorageUsage()
@@ -1581,7 +1581,7 @@ describe('the breakdown names what is saved at every size', () => {
     const share = (kind) => percentText(owners.find((row) => row.kind === kind).chars, CHROMIUM)
     expect(rows).toContain(`Classic solve times (12)${share('times')}`)
     expect(rows).toContain(`Lookup history (1)${share('lookup')}`)
-    expect(rows).toContain(`Bests, settings and saved defaults${share('preset')}`)
+    expect(rows).toContain(`Bests, settings, and saved defaults${share('preset')}`)
     expect(share('lookup')).toBe('<0.1%')
     for (const row of rows) expect(row).toMatch(/(<0\.1|[1-9]\d*\.\d|0\.[1-9])%$/)
     expect(rows.join('|')).not.toMatch(/Everything saved/)

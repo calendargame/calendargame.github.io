@@ -168,7 +168,7 @@ describe('the settings panel — opening and closing by every route (group 1)', 
     expect(isSettingsOpen()).toBe(true)
   })
 
-  it('the G key, every mode letter, How to Play, Escape and Android Back each close an open panel', async () => {
+  it('the G key, every mode letter, How to Play, Escape, and Android Back each close an open panel', async () => {
     const routes = [
       ['the G key', 'key'],
       ['Escape', 'escape'],

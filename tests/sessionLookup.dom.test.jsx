@@ -139,7 +139,7 @@ describe('on the app', () => {
     document.getElementById('root')?.remove()
   })
 
-  it('a reload keeps the looked-up date, its answer, the selected row and the open codes', () => {
+  it('a reload keeps the looked-up date, its answer, the selected row, and the open codes', () => {
     lookup('7/4/1776')
     lookup('3/14/1592') // two rows; the newest is selected
     act(() => fireEvent.click(screen.getByText('July 4, 1776'))) // select the OLDER row

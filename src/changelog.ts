@@ -30,6 +30,12 @@
 //     now stacks" line was deleted because round 10 reverted it and no player ever saw it.
 //     Lines already SHIPPED on an earlier day are settled history — never reordered or reworded
 //     to suit a later rule.
+//     ONE EXCEPTION, MADE ONCE (the owner's instruction, 2026-10-07): the Oxford-comma sweep added
+//     the comma before the final "and" / "or" of every list of three or more, in every entry here
+//     and in the archive. PUNCTUATION ONLY — not a word moved — and done in a release whose newest
+//     entry was a new one, so the changelog dot (keyed on the newest entry's text, below) saw
+//     nothing but real news. tests/oxfordCommaGuard now holds every new line to the same comma, so
+//     the sweep never needs repeating; it is not a licence to reword settled lines.
 //   • ★ A DEPLOY WITH NOTHING VISIBLE STILL GETS AN ENTRY. The owner's rule, set during round 15
 //     and live from round 15 onward; round 16 is the round that finally wrote it HERE, because this
 //     charter — not the backlog — is the copy a builder actually reads, and he asked for it to be
@@ -96,17 +102,17 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-06',
     items: [
-      'Amnesic, in ⚙ Settings → Stats, now has three choices: Off, Stats Only and Full. Full is what Amnesic always was. On Stats Only your Blitz and MoX bests are your real saved ones and a new best is kept for good, while everything in the stats strip is for the session only and Lookup history saves as normal.',
+      'Amnesic, in ⚙ Settings → Stats, now has three choices: Off, Stats Only, and Full. Full is what Amnesic always was. On Stats Only your Blitz and MoX bests are your real saved ones and a new best is kept for good, while everything in the stats strip is for the session only and Lookup history saves as normal.',
       'The A that marked an amnesic preset is gone, so a preset’s name has its full room back. Instead, a dashed outline goes round whatever won’t be kept: the stats strip on Stats Only and Full, and the Best line too on Full.',
       '⚙ Settings now always shows a “Storage used” line near the bottom. Tap it to see what is taking the space and what you can clear. If you ever reach 80% it turns amber, the ⚙ button shows an amber dot, and the breakdown opens once by itself at a moment when you aren’t mid-question.',
-      'The modes are now listed Classic, Deduction, Flash, MoX, Blitz — in the mode menu, in Default Mode, in Save Defaults and throughout How to Play. The letter keys are unchanged.',
+      'The modes are now listed Classic, Deduction, Flash, MoX, Blitz — in the mode menu, in Default Mode, in Save Defaults, and throughout How to Play. The letter keys are unchanged.',
       'The ⚙ menu and every popup now have a fully solid background, so nothing behind them shows through. The drop-down lists keep their frosted look.',
       'In How to Play, a section you open now settles in the same spot its title pins at, flush under the top bar, and the shadow sits under whichever edge the text is sliding beneath.',
       'In ⚙ Settings → Manage Presets, the ✕ is now drawn dead centre, and a row you drag no longer carries a pill around the whole row — only its ✕ button and name box lift. The other rows now make way at the halfway point in both directions.',
       'The preset list at the top of the screen now widens to show every name in full.',
       'An answered date now remembers which calendar it was judged in, so browsing back to it always shows an answer and codes that agree, even if you changed Julian Calendar in between. A February 29 that the regular calendar doesn’t have is replaced with a new date when you switch Julian off before answering it.',
-      'While the ⚙ menu, a drop-down list or a popup is open, no key reaches the page behind it any more. The mode letters, H and G still work.',
-      'Keyboard: Tab and Shift+Tab now stay inside the ⚙ menu and walk all of its controls; the preset list, the mode list and Open in all open with Enter or Space; and a ring now shows where the keyboard is, anywhere in the app. The ring never appears for a tap or a click, and the game’s shortcut keys don’t trigger it.',
+      'While the ⚙ menu, a drop-down list, or a popup is open, no key reaches the page behind it any more. The mode letters, H, and G still work.',
+      'Keyboard: Tab and Shift+Tab now stay inside the ⚙ menu and walk all of its controls; the preset list, the mode list, and Open in all open with Enter or Space; and a ring now shows where the keyboard is, anywhere in the app. The ring never appears for a tap or a click, and the game’s shortcut keys don’t trigger it.',
       'Which preset you are on, and its Amnesic setting, now belong to the window you are in, so two windows no longer change each other and a reload always comes back to the same place.',
       'In MoX, the tag in the breakdown now reads Same Run or Different Runs.',
       'The Reset Stats and storage popups now say exactly what they clear for the Amnesic setting you are on.',
@@ -127,12 +133,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
-      'Rotate Dots, in ⚙ Settings → Display, now has three choices: Standard, 45° CCW and 90° CCW. At 45° the dots are a little smaller so the turned pattern fits; Standard and 90° are exactly as they were. Your choice carries over to your saved defaults and to every preset.',
+      'Rotate Dots, in ⚙ Settings → Display, now has three choices: Standard, 45° CCW, and 90° CCW. At 45° the dots are a little smaller so the turned pattern fits; Standard and 90° are exactly as they were. Your choice carries over to your saved defaults and to every preset.',
       'Every solve time is now kept, so Mean and Median cover all of your times instead of only the newest 1,000. Times an earlier version had already dropped can’t be brought back.',
       'Lookup history is now unlimited instead of stopping at the newest 100, and the list stays smooth however long it grows.',
-      'Only really closing the app starts things fresh now. A reload keeps your Back and Forward history in Classic, Flash and Deduction, your place in How to Play, and whatever is on screen in Lookup. A Blitz round or MoX run still in progress is the exception: a reload ends it.',
+      'Only really closing the app starts things fresh now. A reload keeps your Back and Forward history in Classic, Flash, and Deduction, your place in How to Play, and whatever is on screen in Lookup. A Blitz round or MoX run still in progress is the exception: a reload ends it.',
       'Switching presets no longer clears anything either. Each preset keeps its own Back and Forward history for when you return, and How to Play and Lookup stay exactly as you left them. The same goes for turning Amnesic on or off.',
-      'When you come back to a date you hadn’t answered — after a reload, a preset switch or a guest — you get a new date if a time could still be recorded for it, so a time can never be set on a date you’d already seen. With timing stats hidden or Save Stats off, the same date is waiting for you.',
+      'When you come back to a date you hadn’t answered — after a reload, a preset switch, or a guest — you get a new date if a time could still be recorded for it, so a time can never be set on a date you’d already seen. With timing stats hidden or Save Stats off, the same date is waiting for you.',
       'A guest playing in Amnesic can no longer change your bests. Your finished Blitz round or MoX run is put aside while they play and comes back when Amnesic goes off — unless a setting it was played under was changed, in which case it isn’t brought back and its bests stay as they were.',
       'Whether a Blitz round or MoX run counts is now decided once, by Save Stats at the moment it first ends. A practice round can never be recorded afterwards, and a recorded one stays recorded.',
       'In Blitz, the ★ next to a best now means what it means in MoX: the round on screen set it. It stays while that round is on screen, including after a preset switch or a reload, and goes if an Override takes the best away.',
@@ -141,33 +147,33 @@ export const CHANGELOG: ChangelogEntry[] = [
       'In ⚙ Settings → Manage Presets, each row is now ✕ on the left, then the name, with a plain ≡ grip on the right. A row you drag can no longer slide off the list or show a white band, and holding it near the top or bottom scrolls a long list for you.',
       'In How to Play, the title of the section you’re reading now stays pinned under the top bar as you scroll through it.',
       'Lookup lost its two dividing lines, and Show Codes now sits directly under the answer.',
-      'Popups now stack properly. Esc, Back or a tap outside closes only the one on top — including a dropdown list inside ⚙ Settings, which used to take the whole menu with it — and the page behind is dimmed once however many are open.',
+      'Popups now stack properly. Esc, Back, or a tap outside closes only the one on top — including a dropdown list inside ⚙ Settings, which used to take the whole menu with it — and the page behind is dimmed once however many are open.',
       'If your device runs out of storage, the app now tells you with a “Your progress isn’t being saved” popup and carries on. Your newest answers are kept until you close or reload the app, are saved by themselves as soon as there is room, and Check for updates waits until then.',
       'Another attempt at dimming the iPhone status bar along with the rest of the screen when a popup opens in the app installed on your home screen.',
-      'How to Play has been checked line by line against the app again, and the Amnesic, Saved Progress, Lookup and keyboard sections were corrected.',
+      'How to Play has been checked line by line against the app again, and the Amnesic, Saved Progress, Lookup, and keyboard sections were corrected.',
       'Fixed: Last could show a time a hundredth of a second faster than the one you actually got.',
       'Fixed: in Deduction, turning timing stats back on gave a new puzzle only in the sub-mode on screen. All three now get one.',
       'Fixed: changing a date setting during a live flash in Flash swapped the date underneath it.',
       'Fixed: a best of 0, or an empty MoX best, could be left behind after an Override took a first score back, keeping Full Reset lit.',
       'Fixed: the run breakdown in Blitz and MoX could reopen by itself when you left the mode and came back.',
       'Fixed: in Lookup, a date the app refused left the previous date’s codes open under the error, and the arrow keys could change Lookup behind an open popup.',
-      'Fixed: pressing a popup’s button with a mouse, sliding off to cancel and letting go on the dimmed area closed the popup.',
+      'Fixed: pressing a popup’s button with a mouse, sliding off to cancel, and letting go on the dimmed area closed the popup.',
     ],
   },
   {
     date: '2026-09-23',
     items: [
-      'Override is now a switch you can flip as often as you like, in every mode. After you override a date the button reads Undo — press it and that date goes back to exactly how you answered it, red highlights and all, with your score, streak and times following. Every date you’ve played remembers this for as long as it’s in your history, so you can browse back to one and flip it again.',
+      'Override is now a switch you can flip as often as you like, in every mode. After you override a date the button reads Undo — press it and that date goes back to exactly how you answered it, red highlights and all, with your score, streak, and times following. Every date you’ve played remembers this for as long as it’s in your history, so you can browse back to one and flip it again.',
       'A finished Blitz round or MoX run you come back to after switching presets brings every date’s Override or Undo with it.',
       'In Blitz and MoX a tap of Override or Undo can now end a round or run as well as rescue one. A Blitz round that a tap ended keeps its date on screen and its clock running until you put it right, and with Allow Mistakes on in MoX, taking the credit off a run’s final solve hands the run back with a Next button. How to Play has the full rules.',
       'A failed MoX run now opens its breakdown too — tap the stats strip, just like a finished run — and a failed run always shows its times.',
-      'Each row of the run breakdown now shows that date’s day of the week as one letter (the key is in How to Play), and fastest, slowest, missed, shown and overridden now sit before the time, so the times line up in one column.',
+      'Each row of the run breakdown now shows that date’s day of the week as one letter (the key is in How to Play), and fastest, slowest, missed, shown, and overridden now sit before the time, so the times line up in one column.',
       'In ⚙ Settings the Global and Per-preset headings are now centered, with a heavier line across the menu splitting it into its two halves.',
       'Popups no longer carry a Cancel button. The one button left on a popup is the one that goes ahead — Delete, Reset Stats, Full Reset, Save — and to back out you tap outside the box, press Esc, or use Back, exactly the way the Changelog and the saved-defaults popup already closed.',
       'In ⚙ Settings → Manage Presets, backing out of a delete question now takes you back to the list of presets with the popup still open, instead of closing the whole thing. Back out again from there and it closes.',
       'Deleting a preset you’ve never used — nothing played, nothing changed, nothing saved — no longer asks first. A preset with anything in it, including a round or run still going, still asks.',
       'Each mode’s Reset Stats popup now also says that no other preset is touched, and Reset Settings and Full Reset now say exactly what they restore.',
-      'How to Play has been checked line by line against the app, and the Stats, Override, Blitz and MoX sections in particular now say exactly what each number and button does.',
+      'How to Play has been checked line by line against the app, and the Stats, Override, Blitz, and MoX sections in particular now say exactly what each number and button does.',
       'Another attempt at dimming the iPhone status bar along with the rest of the screen when a popup opens in the app installed on your home screen. An earlier note said this already worked; in the installed app it didn’t.',
       'If this update arrives while a finished Blitz round or MoX run is waiting on screen, dates you’d already overridden in it come back without your original wrong highlights — the older version never kept them. Your score and times are unaffected.',
       'Fixed: turning Amnesic on by itself could not be saved as a default. Now it can, and it lights up Reset Settings and Full Reset like any other change.',
@@ -184,7 +190,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Within a single visit each preset also remembers the page you were last on, so leaving a preset and coming back returns you to it. Fully closing the app sends each preset back to its Default Mode.',
       'Every reset now asks first, with a popup that says exactly what it will clear and whether it affects only this preset or the whole app — Full Reset, Reset Settings, each mode’s Reset Stats, and Clear Saved Defaults. The old “tap again to confirm” buttons are gone.',
       'A finished Blitz round or MoX run now stays on its results page when you switch presets and come back. Only pressing Reset, or fully closing the app, clears it — the way it worked before presets.',
-      'The Changelog, the saved-defaults popup and the run breakdown no longer carry a Close button: tap outside the box, press Esc, or use Back. The confirmation popups keep their Cancel and Save.',
+      'The Changelog, the saved-defaults popup, and the run breakdown no longer carry a Close button: tap outside the box, press Esc, or use Back. The confirmation popups keep their Cancel and Save.',
       'The Dot Layout switch, in Settings → Display, is now called Rotate Dots CCW, so its name says what it does.',
       'The run breakdown is now titled for the mode it belongs to — Mean Breakdown in MoX, and Round Breakdown or Run Breakdown in Blitz.',
       'The mode picker at the top of the screen is now exactly as wide as the menu it opens, and the preset picker beside it fills the space that leaves.',
@@ -208,10 +214,10 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-09-08',
     items: [
-      'The app can now hold several separate set-ups at once, called presets. Each one keeps its own settings, stats, bests, saved defaults and lookup history, so a preset you practise in and a preset you experiment in never touch each other. Switch between them with the new picker at the top of the screen — press and slide down to it, the same way the mode picker works. Make, rename, reorder and delete presets under ⚙ Settings → Manage Presets.',
+      'The app can now hold several separate set-ups at once, called presets. Each one keeps its own settings, stats, bests, saved defaults, and lookup history, so a preset you practise in and a preset you experiment in never touch each other. Switch between them with the new picker at the top of the screen — press and slide down to it, the same way the mode picker works. Make, rename, reorder, and delete presets under ⚙ Settings → Manage Presets.',
       'The top of the screen is rearranged to make room for that picker: logo on the far left, then the preset picker, then the mode picker, with the gear on the far right. The "Calendar Game" wordmark has gone to pay for the space.',
       'Any preset can be made Amnesic, under ⚙ Settings → Stats. While that is on, the preset records nothing — no stats, no bests, no lookup history — and everything from the session goes when the app closes. It is there for handing your phone to someone else, or for playing without it counting. Presets with it on are marked with an A in the picker.',
-      'When a Blitz or MoX run finishes, tapping its row of stats now opens the whole run question by question, with your fastest and slowest marked and the mean, fastest and slowest shown together.',
+      'When a Blitz or MoX run finishes, tapping its row of stats now opens the whole run question by question, with your fastest and slowest marked and the mean, fastest, and slowest shown together.',
       'AoX is now called MoX, and "average" is now "mean" everywhere it appeared. A cubing average throws away your fastest and slowest solve before averaging, and this app has never done that — so the old name was quietly claiming something the maths does not do. Nothing about the maths or your saved bests has changed, only the words.',
       'A new Dot Layout setting, under ⚙ Settings → Display, turns the seven dots a quarter turn: the weekday triples can run down the two side columns as before, or along the top and bottom rows. The mark in the top left corner turns with them.',
       'Buttons are easier to hit. Every button now covers its whole rectangle instead of stopping at its rounded corners, and the gap between two buttons splits evenly between them. The blank spaces stay blank on purpose, so sliding your finger onto one to cancel a press still works.',
@@ -251,9 +257,9 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-08-09',
     items: [
       'Stats you have hidden by tapping them now leave an empty box instead of a crossed-out one. A dash now means one thing only — nothing recorded yet — and when Save Stats is off the whole strip dims together, so you can still see at a glance which stats you hid yourself. Nothing is crossed out anywhere any more.',
-      'How to Play has a new Accessibility section: what the app does for screen readers, keyboards and reduced-motion settings — and, said plainly, where it still falls short.',
+      'How to Play has a new Accessibility section: what the app does for screen readers, keyboards, and reduced-motion settings — and, said plainly, where it still falls short.',
       'With Reduce Motion turned on, a few animations that used to play anyway now hold still as well: the dots on the Updating screen, and the colour fades on buttons.',
-      'Typing in a Year Range box now counts as a change straight away, for everything the Settings menu does about it: the violet bar under the ⚙ button, Save Defaults, Reset Settings and Full Reset all react to the typing instead of waiting for you to leave the box. Dates still come from the stored range until the year counts.',
+      'Typing in a Year Range box now counts as a change straight away, for everything the Settings menu does about it: the violet bar under the ⚙ button, Save Defaults, Reset Settings, and Full Reset all react to the typing instead of waiting for you to leave the box. Dates still come from the stored range until the year counts.',
       'The three buttons at the foot of the Settings menu now tell a screen reader when they are unavailable, instead of only looking grey — and on a computer the pointer shows the not-allowed cursor over them.',
       'Fixed: in Lookup, tapping a row in the History list now shows you which row you tapped. The row is tinted and gets a coloured edge down its left side. Tapping always did put that date back in the box above, but nothing on screen changed to say which one you had picked. On a computer, resting the pointer on a row now lights it up too, on every colour theme.',
       'Fixed: pressing Esc in a Year Range box now throws away what you typed and puts the stored year back. It used to do the opposite and keep the year you were trying to discard.',

@@ -154,7 +154,7 @@ describe('answer hit areas — the rendered grid and its padding describe one sh
     expect(Array.from(cluster.children).map((b) => b.getAttribute('aria-label'))).toEqual([...DAY])
   })
 
-  it('Deduction — Day, Month and Year all agree with their own rendered shapes', () => {
+  it('Deduction — Day, Month, and Year all agree with their own rendered shapes', () => {
     mountApp()
     switchToDeduction()
     for (const sub of ['Day', 'Month', 'Year']) {

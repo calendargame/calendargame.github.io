@@ -426,7 +426,7 @@ describe.each([
 })
 
 describe('the fuzz reaches what it is for', () => {
-  it('seals, deletes and strands all really happen across the seeds', () => {
+  it('seals, deletes, and strands all really happen across the seeds', () => {
     let strands = 0
     let removals = 0
     let chunks = 0

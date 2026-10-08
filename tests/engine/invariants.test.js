@@ -209,7 +209,7 @@ describe('checkGameInvariants — the per-card Override record', () => {
     stack: [...s.stack.slice(0, -1), { ...tail(s), ...patch }],
   })
 
-  it('real toggles leave healthy records — history, live, browsed and parked', () => {
+  it('real toggles leave healthy records — history, live, browsed, and parked', () => {
     expect(checkGameInvariants(retroCredited(), false)).toEqual([])
     expect(checkGameInvariants(liveUncredited(), false)).toEqual([])
     const one = answer(initEngine(DATE), C) // a card behind, then the live card held and overridden

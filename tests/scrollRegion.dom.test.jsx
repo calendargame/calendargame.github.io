@@ -432,7 +432,7 @@ describe('a scroll region’s fade class is committed inside the scroll event', 
   const history = Array.from({ length: 12 }, (_, i) => entry(i))
   const fades = (el) => el.className.split(/\s+/).filter((c) => c.startsWith('fade-scroll-'))
 
-  it('scrolling off the top edge, into the middle and down to the end', () => {
+  it('scrolling off the top edge, into the middle, and down to the end', () => {
     const { container } = render(<LookupCard history={history} />)
     const list = container.querySelector('ul')
     act(() => {

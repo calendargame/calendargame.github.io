@@ -1093,7 +1093,7 @@ export default function GuidePage({
           </li>
           <li>
             Opening anything puts the keyboard away. Start typing in a box, then open the ⚙ panel,
-            the mode menu, Show Codes or this guide, and the keyboard closes with it instead of
+            the mode menu, Show Codes, or this guide, and the keyboard closes with it instead of
             sitting on top of what you opened. What you typed is <i>kept</i> — the box commits it
             exactly as if you had tapped away from it. <Kbd>Esc</Kbd> is what throws an edit away.
           </li>
@@ -1165,7 +1165,7 @@ export default function GuidePage({
         </UL>
         <Subhead>Reset Stats (casual modes)</Subhead>
         <p>
-          Clears your stats, all-time bests and question history for the current mode (Deduction
+          Clears your stats, all-time bests, and question history for the current mode (Deduction
           only resets the current sub-type's), for the preset you are on. The other modes keep
           theirs, and no other preset is touched. While the preset&apos;s Amnesic is on Stats Only
           or Full, the stats on screen are that session&apos;s, and those are all it clears: your
@@ -1208,7 +1208,7 @@ export default function GuidePage({
             counts. In {modeNames('classic', 'deduction', 'flash')} that score is your lifetime
             total, so browsing back to the card you just answered on a 471/501 shows <b>Q501</b> —
             the 501st card you have ever played, not the first of this sitting. Anything with its
-            own Score box is numbered on its own: Deduction's Day, Month and Year each count
+            own Score box is numbered on its own: Deduction's Day, Month, and Year each count
             separately, and in {modeNames('aox', 'blitz')} — where Begin and Reset clear the score —
             the numbering restarts at Q1 with it. Reset Stats likewise re-starts the count along
             with the score it clears.
@@ -1280,7 +1280,7 @@ export default function GuidePage({
           </li>
           <li>
             <b>Undo</b> — when the button reads Undo, tapping it puts that date back the way you
-            answered it: its original right/wrong marks, its own solve time, and your score, streak
+            answered it: its original right/wrong marks, its own solve time, and your score, streak,
             and mean with it. Then it reads Override again. You can switch back and forth as many
             times as you like, forever. A second tap within about a third of a second of the first
             is ignored, so a quick double-tap can&apos;t override and then immediately undo it — tap
@@ -1289,7 +1289,7 @@ export default function GuidePage({
           <li>
             There is no time limit and nothing is ever used up. Every date in your history remembers
             how you answered it and whether it is overridden — so you can answer more questions,
-            browse away and come back to it, and the button still reads Undo there and still works.
+            browse away, and come back to it, and the button still reads Undo there and still works.
             What clears these dates is what clears the history itself. In every mode: a Reset (Reset
             Stats; the Reset button in {modeNames('flash', 'aox', 'blitz')}; or Begin in{' '}
             {modeNames('aox', 'blitz')}), a Full Reset, and closing the app. In{' '}
@@ -1344,7 +1344,7 @@ export default function GuidePage({
           <li>
             Because the button works both ways, a tap can also end a run or round that is still
             going (a flip to wrong with Allow Mistakes off) and then put it back. In Blitz the clock
-            tells you which happened. A round that ended because its date was answered, revealed or
+            tells you which happened. A round that ended because its date was answered, revealed, or
             show-coded has that answer on screen, so its clock stops while it waits; crediting that
             date resumes Per Round from exactly the time it had left, and Per Question with a fresh
             question clock on the next date. A round a tap ended still has its live date on screen,
@@ -1442,8 +1442,8 @@ export default function GuidePage({
           </li>
           <li>saved defaults;</li>
           <li>
-            its <b>Amnesic</b> setting — each preset is on Off, Stats Only or Full in its own right,
-            whichever one you happen to be on.
+            its <b>Amnesic</b> setting — each preset is on Off, Stats Only, or Full in its own
+            right, whichever one you happen to be on.
           </li>
         </UL>
         <p>
@@ -1663,7 +1663,7 @@ export default function GuidePage({
           </li>
           <li>
             <b>A blank box</b> — that group is hidden. The label stays so you know what it is.
-            Hiding is usually just hiding: Score, Accuracy and Streak keep recording in every mode,
+            Hiding is usually just hiding: Score, Accuracy, and Streak keep recording in every mode,
             and so do the timing stats in {modeNames('aox', 'blitz')}, so tapping brings the
             up-to-date numbers back. The timing stats in{' '}
             {modeNames('classic', 'deduction', 'flash')} are the exception — hiding those genuinely
@@ -1978,11 +1978,11 @@ export default function GuidePage({
             modifier (Ctrl/Cmd/Alt/Shift) is held.
           </li>
           <li>
-            The answer keys, the Game Actions and the Lookup keys above are ignored while the ⚙
-            menu, a popup or a list (the mode selector, the preset list, <b>Open in</b>) is open,
+            The answer keys, the Game Actions, and the Lookup keys above are ignored while the ⚙
+            menu, a popup, or a list (the mode selector, the preset list, <b>Open in</b>) is open,
             too — whatever is behind one is out of the keyboard&apos;s reach until you close it, so
-            an answer, a New, a Back, an Override or an Undo can't be pressed through it, and on
-            Lookup the arrows, <Kbd>Backspace</Kbd> and <Kbd>Delete</Kbd> leave the page behind it
+            an answer, a New, a Back, an Override, or an Undo can't be pressed through it, and on
+            Lookup the arrows, <Kbd>Backspace</Kbd>, and <Kbd>Delete</Kbd> leave the page behind it
             alone. That goes for a button you had just pressed on the page as well: opening the ⚙
             menu or a popup takes the keyboard off it, so <Kbd>Enter</Kbd> and <Kbd>Space</Kbd>{' '}
             can&apos;t press it again from behind, and closing gives the keyboard back to it. The
@@ -1993,7 +1993,7 @@ export default function GuidePage({
             own popup (such as a Reset Stats question or a breakdown) is open. The two popups those
             keys can&apos;t take with them are the ones that belong to no screen — the &quot;Your
             progress isn&apos;t being saved&quot; notice and the <b>Storage used</b> breakdown:
-            while one of them is up the mode letters, <Kbd>H</Kbd> and <Kbd>G</Kbd> do nothing
+            while one of them is up the mode letters, <Kbd>H</Kbd>, and <Kbd>G</Kbd> do nothing
             either, until you close it.
           </li>
           <li>
@@ -2159,7 +2159,7 @@ export default function GuidePage({
         </Lead>
         <p>
           This describes what the app does, not what any particular screen reader says about it.
-          Wording varies between VoiceOver, TalkBack, NVDA and the rest, and the site hasn&apos;t
+          Wording varies between VoiceOver, TalkBack, NVDA, and the rest, and the site hasn&apos;t
           been tested against each of them.
         </p>
         <p>
@@ -2265,20 +2265,20 @@ export default function GuidePage({
           </li>
           <li>
             Wherever the keyboard is, the control it is on is outlined — on the game screens,
-            Lookup, this guide and the top bar as much as in the ⚙ menu and the popups: a solid ring
-            just inside its edge — white on a filled button (a purple one, a rose one, a day you
-            have answered), following the circle of an answer dot, round the handle on a slider, and
-            round the outside of a time readout, which is no bigger than its digits. It is drawn
+            Lookup, this guide, and the top bar as much as in the ⚙ menu and the popups: a solid
+            ring just inside its edge — white on a filled button (a purple one, a rose one, a day
+            you have answered), following the circle of an answer dot, round the handle on a slider,
+            and round the outside of a time readout, which is no bigger than its digits. It is drawn
             only while you are finding your way by keyboard, which means after <Kbd>Tab</Kbd> or{' '}
             <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd>, or an arrow key that moves you from one control to the
             next (along a setting&apos;s options, through a list, on a slider). A tap or a click
             never draws it, on anything, and puts it out if it was showing. So does a shortcut, the
             moment it does something: the answer keys, the Game Actions, the Lookup keys, the mode
-            letters, <Kbd>H</Kbd> and <Kbd>G</Kbd> never start it, and put it out — so playing with
+            letters, <Kbd>H</Kbd>, and <Kbd>G</Kbd> never start it, and put it out — so playing with
             the number keys and a mouse never lights a ring on the button you last clicked, and
             after <Kbd>Tab</Kbd> and a choice from the mode list the ring on the Mode button is gone
             with your first answer. <Kbd>Enter</Kbd>, <Kbd>Space</Kbd>, a key that does nothing
-            where you are and anything typed in a box leave things as they are. A control that is
+            where you are, and anything typed in a box leave things as they are. A control that is
             greyed out and marked unavailable can still be reached, and its ring is <i>dotted</i>{' '}
             rather than solid: the keyboard is there, and pressing will do nothing. Nothing inside
             an open list is outlined, in the top bar or in the menu: the soft grey box on an option
@@ -2305,7 +2305,7 @@ export default function GuidePage({
           <li>
             The mode selector is a list of modes. Once it&apos;s open, ↑ and ↓ move through it,{' '}
             <Kbd>Home</Kbd> and <Kbd>End</Kbd> jump to the ends, <Kbd>Enter</Kbd> chooses, and{' '}
-            <Kbd>Esc</Kbd>, <Kbd>Tab</Kbd> or <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> closes it and leaves
+            <Kbd>Esc</Kbd>, <Kbd>Tab</Kbd>, or <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> closes it and leaves
             the keyboard on its button. While it&apos;s closed, <Kbd>Tab</Kbd> opens it from
             anywhere on the page, and <Kbd>Enter</Kbd> or <Kbd>Space</Kbd> opens it when the
             keyboard is on its button.
@@ -2322,7 +2322,7 @@ export default function GuidePage({
           <li>
             Whatever is open closes one layer at a time, the one in front first. With a list open
             over the ⚙ menu, a popup open over the menu, or the &quot;isn&apos;t being saved&quot;
-            notice open over another popup, <Kbd>Esc</Kbd>, your device&apos;s Back and a tap
+            notice open over another popup, <Kbd>Esc</Kbd>, your device&apos;s Back, and a tap
             outside each close only the one in front — do it again for the one behind it. However
             many popups are open the screen is dimmed once, behind the popup in front, and a popup
             waiting underneath is dimmed with the page. Closing a popup hands the keyboard back to
@@ -2368,7 +2368,7 @@ export default function GuidePage({
             timer value you can&apos;t type into right now, and — in Manage Presets — <b>✕</b> when
             only one preset is left. The reorder grip at the end of each row never greys out; it has
             no end it cannot move toward. The rest of the game&apos;s buttons — Reveal, Override /
-            Undo, <b>&lt;</b> and <b>&gt;</b> — are only dimmed, so they still read as ordinary
+            Undo, <b>&lt;</b>, and <b>&gt;</b> — are only dimmed, so they still read as ordinary
             buttons even when pressing one would do nothing.
           </li>
         </UL>
@@ -2386,7 +2386,7 @@ export default function GuidePage({
           section at the top holds the two settings that apply to the whole app; a heavier line
           across the menu, with <b>Per-preset</b> centred under it, marks everything below as
           belonging to the preset you are on, grouped into three categories. Those two centred
-          headings are the only ones of their kind — <b>Display</b>, <b>Dates</b> and <b>Stats</b>{' '}
+          headings are the only ones of their kind — <b>Display</b>, <b>Dates</b>, and <b>Stats</b>{' '}
           sit inside the second half rather than beside it. The Save Defaults and Reset buttons stay
           at the bottom.
         </Lead>
@@ -2422,7 +2422,7 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          At the foot of the menu, in one block: <b>Save Defaults</b>, <b>Reset Settings</b> and{' '}
+          At the foot of the menu, in one block: <b>Save Defaults</b>, <b>Reset Settings</b>, and{' '}
           <b>Full Reset</b> (see the Data section), and directly under them the{' '}
           <b>View Saved Defaults</b> and <b>Clear Saved Defaults</b> links — both always there;
           Clear dims and locks until you&apos;ve saved your own defaults, the same way the three
@@ -2556,7 +2556,7 @@ export default function GuidePage({
           </li>
           <li>
             <b>45° CCW</b> — the same seven dots turned an eighth of a turn, so the pattern stands
-            on a corner: Wed at the top, Sat at the left, Mon at the right and Thu at the bottom,
+            on a corner: Wed at the top, Sat at the left, Mon at the right, and Thu at the bottom,
             with Tue between Wed and Mon and Fri between Sat and Thu. The two runs now slant along
             the diagonals. The whole pattern — dots and the spaces between them — is drawn at about
             four-fifths of the usual size, because a turned square needs more room than the same
@@ -2581,14 +2581,14 @@ export default function GuidePage({
           <b>The logo turns with it — but only while Dots is your Input.</b> The mark at the top
           left of every screen <i>is</i> this seven-dot layout, so turning the dots turns that mark
           too (by the same amount, and at 45° shrunk the same way), whenever Input is set to Dots —
-          on every page, including the ones with no weekday dots of their own (Deduction, Lookup and
-          this guide), where Rotate Dots is locked but the mark still shows the rotation you chose.
-          While Input is set to Buttons the mark stays upright on every page: with Buttons there are
-          no dots anywhere in the app for a turned mark to correspond to. What can&apos;t follow
-          even when Dots is your Input are the pictures your device saved earlier: the home-screen
-          icon, the launch screen and the link preview image are fixed image files, so those keep
-          the upright logo whatever you choose here. The full-screen launch screen and the{' '}
-          <b>Rotate back to portrait</b> screen keep the upright mark to match them.
+          on every page, including the ones with no weekday dots of their own (Deduction, Lookup,
+          and this guide), where Rotate Dots is locked but the mark still shows the rotation you
+          chose. While Input is set to Buttons the mark stays upright on every page: with Buttons
+          there are no dots anywhere in the app for a turned mark to correspond to. What can&apos;t
+          follow even when Dots is your Input are the pictures your device saved earlier: the
+          home-screen icon, the launch screen, and the link preview image are fixed image files, so
+          those keep the upright logo whatever you choose here. The full-screen launch screen and
+          the <b>Rotate back to portrait</b> screen keep the upright mark to match them.
         </p>
       </GuideSection>
       <GuideSection
@@ -2886,7 +2886,7 @@ export default function GuidePage({
           <li>
             <b>Stats Only</b> — for playing around without it counting. The stats strip starts from
             zero and is thrown away when the app closes, in every mode: score, accuracy, streak
-            (both numbers — the best streak too) and every solve time. Your saved stats are set
+            (both numbers — the best streak too), and every solve time. Your saved stats are set
             aside, untouched, and are back when you return to Off. The <b>Bests</b> in{' '}
             {modeNames('aox', 'blitz')} are the exception — they stay your real, saved ones. You see
             them, you can beat them, and a new one is saved for good the moment you set it.
@@ -3048,7 +3048,7 @@ export default function GuidePage({
           A session&apos;s numbers last for the browsing session, and it is the browser that decides
           when one ends. A refresh or a reload does not end it — come straight back and the session
           is still going, with the preset still on Stats Only or Full, any finished round still on
-          screen and the dates you played still there to browse back through. Closing the app does.
+          screen, and the dates you played still there to browse back through. Closing the app does.
         </p>
         <p>
           On a phone there is no way to tell that apart from the inside. An app the system shuts
@@ -3131,7 +3131,7 @@ export default function GuidePage({
           is on screen — so the line shows a percentage from the first moment you can see it. If the
           figure later proves wrong (the device refuses a save, or holds more than the measurement
           said it could), the app measures again the next time it starts, or the next time you open
-          ⚙ or this breakdown with no flash, run or round under way. If a device can&apos;t be
+          ⚙ or this breakdown with no flash, run, or round under way. If a device can&apos;t be
           measured at all there is no percentage to give: the line shows a dash, and the
           breakdown&apos;s title reads &quot;not measured yet&quot; and lists what is saved with no
           figures beside it.
@@ -3141,13 +3141,13 @@ export default function GuidePage({
           once (an update&apos;s dot is light blue; with both, it is amber), and that same breakdown
           opens by itself — once each time the number climbs to 80%, so if you make room and it
           later fills up again, you are told again. It never opens while you are in the middle of
-          something: a Flash, a MoX run or a Blitz round under way, a question you are being timed
+          something: a Flash, a MoX run, or a Blitz round under way, a question you are being timed
           on (also while you browse back from it to an earlier one), or a box you are typing in. It
-          waits for the next moment you are free — or until you open ⚙, unless a flash, run or round
-          is still running behind the menu. Tapping the amber line yourself counts as having been
-          told; and if the device is already full, the &quot;isn&apos;t being saved&quot; notice
-          speaks instead and the breakdown does not open on top of it. After that it stays out of
-          your way, but the colour and the dot stay until the number is back under 80%.
+          waits for the next moment you are free — or until you open ⚙, unless a flash, run, or
+          round is still running behind the menu. Tapping the amber line yourself counts as having
+          been told; and if the device is already full, the &quot;isn&apos;t being saved&quot;
+          notice speaks instead and the breakdown does not open on top of it. After that it stays
+          out of your way, but the colour and the dot stay until the number is back under 80%.
         </p>
         <p>
           If this device ever runs out of room for the app&apos;s saved data, a popup tells you so.
@@ -3177,7 +3177,7 @@ export default function GuidePage({
           place in this guide are all still there afterward. A run or round still in progress is
           not; a reload stops it, just as a preset switch does — and a Flash date that was still
           showing goes back to Begin, as it does when you leave the mode. Nor does anything that was
-          open over the page come back: the ⚙ menu, a popup and an open list are all closed after a
+          open over the page come back: the ⚙ menu, a popup, and an open list are all closed after a
           reload, and your device&apos;s Back then leaves the app, as it does from any page with
           nothing open.
         </p>
@@ -3256,7 +3256,7 @@ export default function GuidePage({
         <p>
           All three, and the saved defaults they read and write, belong to{' '}
           <b>the preset you are on</b> and reach no other one. A second preset has its own defaults,
-          its own settings and its own stats, and none of these buttons can touch them — see{' '}
+          its own settings, and its own stats, and none of these buttons can touch them — see{' '}
           <b>Presets</b>. They act only on the <b>Per-preset</b> half of the ⚙ menu; the{' '}
           <b>Global</b> section at the top (the <b>Open in</b> setting) is outside every one of them
           — it is not captured by Save Defaults and not moved by either Reset.
@@ -3288,7 +3288,7 @@ export default function GuidePage({
           </li>
           <li>
             This preset&apos;s <b>Amnesic</b> value (⚙ &rarr; Stats) at the moment you save — Off,
-            Stats Only or Full — captured silently alongside the rest; it is not shown or editable
+            Stats Only, or Full — captured silently alongside the rest; it is not shown or editable
             in this popup, or in <b>View Saved Defaults</b> below. It is also the value the preset
             starts on every time the app is opened afresh.
           </li>
@@ -3527,10 +3527,10 @@ export default function GuidePage({
           </li>
           <li>
             A reload keeps the page as you had it — the date in the box, its answer, the selected
-            row (scrolled back into view, wherever in the list it is) and Show Codes open or closed.
-            So does switching presets, changing Amnesic, or deleting a preset: the page, like its
-            history list, is the same one in every preset. Closing the app or a Full Reset starts it
-            empty again; closing the app leaves the history list as it was.
+            row (scrolled back into view, wherever in the list it is), and Show Codes open or
+            closed. So does switching presets, changing Amnesic, or deleting a preset: the page,
+            like its history list, is the same one in every preset. Closing the app or a Full Reset
+            starts it empty again; closing the app leaves the history list as it was.
           </li>
           <li>
             Nothing in Lookup is frozen at the moment you look it up: the answer and every history
@@ -3870,7 +3870,7 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
       </p>
       <UL>
         <li>
-          A round that ended because its date was <b>answered, revealed or show-coded</b> has that
+          A round that ended because its date was <b>answered, revealed, or show-coded</b> has that
           answer on screen, so its clock stops while it waits. Credit that date and Per Round
           resumes with exactly the time it had left; Per Question moves on to the next date with a
           fresh question clock. Either way, fixing a misclick costs you nothing, and waiting before

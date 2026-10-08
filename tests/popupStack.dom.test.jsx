@@ -136,7 +136,7 @@ describe('two popups at once — the storage-full notice over Manage Presets', (
   // work under a ⚙ popup or a mode screen's popup because the press takes that popup WITH it; under
   // the notice the same press used to change the page behind the dim (H opened How to Play there and
   // gave it the keyboard, and Back then closed the guide from under the notice).
-  it('a mode letter, H and G do nothing while the notice is up; it is closed first', () => {
+  it('a mode letter, H, and G do nothing while the notice is up; it is closed first', () => {
     openNoticeOverPresets()
     for (const key of ['F', 'H', 'G']) pressKey(key)
     expect(currentMode()).toBe('Classic')

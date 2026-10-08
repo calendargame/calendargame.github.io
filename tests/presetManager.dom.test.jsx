@@ -1174,7 +1174,7 @@ describe('reordering', () => {
     // ★ A move or a lift can arrive before the render that follows the press. Found in real
     // Chromium: a press and its first moves dispatched in ONE task moved nothing, because the
     // handlers read the rendered drag, which did not exist yet. They read the live one now.
-    it('a press, a move and a lift in one task still reorder — nothing waits for a render', () => {
+    it('a press, a move, and a lift in one task still reorder — nothing waits for a render', () => {
       act(() => {
         createPreset('Timed')
       })
@@ -1631,7 +1631,7 @@ describe('deleting', () => {
 // card's own spacing. The picture itself is checked in a real browser each round.
 describe('the list reaches one card gap past its rows, above and below', () => {
   const css = readFileSync(resolve('src/index.css'), 'utf8')
-  it('padding, cancelling margins and the cap`s allowance are one number — the card`s row gap', () => {
+  it('padding, cancelling margins, and the cap`s allowance are one number — the card`s row gap', () => {
     openManager()
     const region = nameBoxes()[0].closest('.overflow-y-auto')
     const classes = [...region.classList]

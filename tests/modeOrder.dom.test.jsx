@@ -50,7 +50,7 @@ const EXPECTED = [
 const labels = (pages) => pages.map((p) => p.label)
 
 describe('lib/modes — the page list', () => {
-  it('lists the pages in the agreed order, each with its id, name and letter', () => {
+  it('lists the pages in the agreed order, each with its id, name, and letter', () => {
     expect(PAGES.map((p) => [p.id, p.label, p.key])).toEqual(EXPECTED)
   })
 
@@ -77,7 +77,7 @@ describe('lib/modes — the page list', () => {
 
   it('names several modes in the list’s order whatever order they are asked for in', () => {
     expect(modeNames('blitz', 'aox')).toBe('MoX and Blitz')
-    expect(modeNames('flash', 'deduction', 'classic')).toBe('Classic, Deduction and Flash')
+    expect(modeNames('flash', 'deduction', 'classic')).toBe('Classic, Deduction, and Flash')
     expect(modeNames('blitz')).toBe('Blitz')
     expect(modeList('aox', 'blitz', 'flash', 'classic')).toBe('Classic, Flash, MoX, Blitz')
   })

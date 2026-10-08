@@ -110,7 +110,7 @@ describe('lib/keyboardFocus — is the keyboard what is being used?', () => {
     other.remove()
   })
 
-  it('Enter, Space and Escape press or close what is there: they change nothing either way', () => {
+  it('Enter, Space, and Escape press or close what is there: they change nothing either way', () => {
     press(button)
     for (const k of ['Enter', ' ', 'Escape', 'Backspace', 'Delete']) key(k, button)
     expect(byKeyboard()).toBe(false)

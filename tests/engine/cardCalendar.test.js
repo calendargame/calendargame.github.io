@@ -141,7 +141,7 @@ describe('every judging action stamps the calendar in force, once', () => {
 })
 
 describe('the reported defect — drawn under one setting, answered under the other, browsed back', () => {
-  it('the green, the codes calendar and the breakdown letter are all the calendar it was ANSWERED in', () => {
+  it('the green, the codes calendar, and the breakdown letter are all the calendar it was ANSWERED in', () => {
     // Drawn with Julian on; the player switches it off, then answers what is now correct.
     let s = answer(initEngine(hastings(true)), G, false)
     expect(s.stats.good).toBe(1) // judged by the setting at the answer, as before
@@ -268,7 +268,7 @@ describe('a Deduction puzzle is judged in the calendar it was built in', () => {
 })
 
 describe('a card nothing has judged carries no calendar', () => {
-  it('a Reset, a kept date and a regenerated date are all unstamped', () => {
+  it('a Reset, a kept date, and a regenerated date are all unstamped', () => {
     let s = answer(initEngine(hastings(true)), OTHER, true)
     s = gameReducer(s, { type: 'RESET', timingOff: true, nextDate: MODERN })
     expect(s.card.jul).toBeUndefined()

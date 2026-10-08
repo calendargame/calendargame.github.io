@@ -196,7 +196,7 @@ describe('the width cuts that paid for the fourth control', () => {
     expect(row().className.split(/\s+/)).toContain('gap-1.5')
   })
 
-  it("keeps the logo, mode selector and gear content-sized — only the switcher's wrapper grows", () => {
+  it("keeps the logo, mode selector, and gear content-sized — only the switcher's wrapper grows", () => {
     mountApp()
     // Round 20's invariant, replacing the old "neither group may shrink" one: the bar's failure mode is
     // still deliberately "spill", not "squash" for three of the four controls — a truncated mode

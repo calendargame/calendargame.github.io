@@ -63,7 +63,7 @@ describe('height guard — the fluid-root system cannot shrink a pixel height', 
     expect(violations).toEqual([])
   })
 
-  it('the pattern catches heights and spares widths, offsets, type sizes and relative units', () => {
+  it('the pattern catches heights and spares widths, offsets, type sizes, and relative units', () => {
     const banned = ['h-[64px]', 'min-h-[40px]', 'max-h-[440px]']
     const legal = [
       'min-w-[125px]',

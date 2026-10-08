@@ -24,7 +24,7 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 ### 2026-08-07
 
 - In Settings, Leap Year Chance and Jan/Feb Chance on Leap Years now come before the Julian Calendar settings, so the ones most people change sit nearer the top. How to Play covers them in the same new order.
-- The mode menu no longer closes itself when the page scrolls — including a scroll that was already gliding when you opened it. Choosing a mode, tapping the page, pressing Esc or going Back all still close it.
+- The mode menu no longer closes itself when the page scrolls — including a scroll that was already gliding when you opened it. Choosing a mode, tapping the page, pressing Esc, or going Back all still close it.
 - After an update, the brief "Updating" screen now always plays out fully, and the launch straight afterwards goes in without the usual opening pause.
 - Fixed: a press on the settings gear or the mode menu button that the browser interrupts no longer opens the menu and shuts it again straight away.
 
@@ -36,12 +36,12 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 - The Julian Calendar setting no longer changes any Lookup answer. It only picks which calendar Show Codes teaches.
 - Check for updates now really checks. The link reads "Checking…" while it looks, then answers "Up to date" or "No connection" in the same spot, and installs something only when there genuinely is a new version — so a press with nothing to get no longer throws away the copy that lets the app work offline.
 - Opening the mode menu just after flicking the page no longer closes it again straight away: a scroll that was already gliding is left to finish, while a scroll you start with the menu open still closes it.
-- Going back to the app from another page no longer sends How to Play to the top. A fresh launch, a reload and a Full Reset still start there.
+- Going back to the app from another page no longer sends How to Play to the top. A fresh launch, a reload, and a Full Reset still start there.
 - Fixed: the fades and shadows at the edges of a scrolling area now keep up when content grows or shrinks under them — opening Show Codes in Lookup, or a How to Play section — instead of holding the old answer until you next scroll.
 
 ### 2026-07-28
 
-- Input, Julian Chance, Leap Year Chance and Jan/Feb Chance are now drawn as one connected strip of buttons in the settings menu, matching Date Format and the themes.
+- Input, Julian Chance, Leap Year Chance, and Jan/Feb Chance are now drawn as one connected strip of buttons in the settings menu, matching Date Format and the themes.
 - A greyed-out setting now greys out all in one piece, instead of fading button by button.
 - Opening a How to Play section no longer leaves a sliver of the section above it peeking out under the bar — except right at the bottom of the guide, where there is no page left to scroll.
 - The shadow under the top bar now follows your scrolling instead of switching on and off, so it settles the instant the page does — including when you tap the status bar to jump to the top.

@@ -104,7 +104,7 @@
        runs before any module can load — so tests/bootTheme.dom pins them against the real
        `presetKey`, `resolveActiveId`, browsing-session marker and session record, and fails if
        either side drifts.
-       ⚠ A registry that is missing, unparseable or naming a preset with no saved settings falls
+       ⚠ A registry that is missing, unparseable, or naming a preset with no saved settings falls
        through to the OS default, which is the same graceful landing this script has always had for
        a missing payload; store/presets' normalizeRegistry repairs the registry itself moments later,
        and App's theme effect then repaints. Getting the first frame wrong on a tampered registry is

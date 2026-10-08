@@ -950,8 +950,8 @@ export default function PresetManager({
         Presets
       </div>
       <div className="px-4 text-xs text-(--tx-200-80)">
-        Each preset keeps its own stats, bests, settings and theme. Everything the ⚙ menu does — its
-        settings, Reset Settings, Full Reset — reaches only the preset you are on.
+        Each preset keeps its own stats, bests, settings, and theme. Everything the ⚙ menu does —
+        its settings, Reset Settings, Full Reset — reaches only the preset you are on.
       </div>
       <div className="flow-root">
         <div

@@ -94,7 +94,7 @@ describe('the engine: a casual question keeps the player busy while it waits unj
 
   // A round, a run, a flash: busy for as long as it lasts, whatever is recorded and whatever card
   // is showing — a judged card inside a live round used to read as a free moment.
-  it('a round, run or flash under way is busy throughout — recorded or not, judged card or not', async () => {
+  it('a round, run, or flash under way is busy throughout — recorded or not, judged card or not', async () => {
     const { result, rerender } = renderHook((props) => useGameEngine(props), {
       initialProps: { ...timed, play: 'live', timingOff: true, saveStats: false },
     })

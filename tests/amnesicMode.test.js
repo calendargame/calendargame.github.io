@@ -14,7 +14,7 @@ import {
 // record) is tests/sessionAmnesic.dom's.
 
 describe('the three values', () => {
-  it('are Off, Stats Only and Full, least amnesic first', () => {
+  it('are Off, Stats Only, and Full, least amnesic first', () => {
     expect(AMNESIC_MODES).toEqual(['off', 'stats', 'full'])
     for (const mode of AMNESIC_MODES) expect(isAmnesicMode(mode)).toBe(true)
     for (const not of [true, false, null, undefined, 'on', 'Full', 1, {}])

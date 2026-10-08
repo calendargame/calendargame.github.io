@@ -151,7 +151,7 @@ describe('containing-block guard — nothing may make html/body/#root the fixed 
     expect(classAttr(/<body[^>]*>/, decoy)).toBe('transform')
   })
 
-  it('src/index.css declares none of the six on html, body or #root', () => {
+  it('src/index.css declares none of the six on html, body, or #root', () => {
     expect(scanRules(css, 'src/index.css')).toEqual([])
   })
 
@@ -159,7 +159,7 @@ describe('containing-block guard — nothing may make html/body/#root the fixed 
     expect(inlineStyleBlocks.flatMap((b) => scanRules(b, 'index.html <style>'))).toEqual([])
   })
 
-  it('no Tailwind transform/filter/contain utility sits on html, body or #root', () => {
+  it('no Tailwind transform/filter/contain utility sits on html, body, or #root', () => {
     expect(
       rootChainClasses.filter(([, cls]) => BANNED_CLASSES.test(cls)).map(([el]) => el),
     ).toEqual([])

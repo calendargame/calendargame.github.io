@@ -1302,7 +1302,7 @@ const MODAL_CLOSE_ROUTES = {
       throw new Error(
         `closeModal(${key}, 'dismiss'): this modal has grown a "${btn.textContent.trim()}" button. ` +
           'Round 21 removed every standalone Close and round 22 every Cancel — a dismiss is the scrim ' +
-          'tap, Escape or Back. If the button is intended, teach this route about it.',
+          'tap, Escape, or Back. If the button is intended, teach this route about it.',
       )
     return act(() => fireEvent.keyDown(document.body, { key: 'Escape' }))
   },

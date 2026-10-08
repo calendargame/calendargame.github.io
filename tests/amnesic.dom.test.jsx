@@ -282,7 +282,7 @@ describe('Full: an amnesic preset never writes its saved progress down', () => {
   // by an exclusion list — store/amnesic only ever repoints the progress store — so this is the
   // case that would catch that construction being widened by accident.
   for (const mode of ['stats', 'full'])
-    it(`${mode}: keeps every setting, the mode setup and the saved defaults — and keeps writing them down`, () => {
+    it(`${mode}: keeps every setting, the mode setup, and the saved defaults — and keeps writing them down`, () => {
       useSettings.getState().setUseSystem(false)
       useSettings.getState().setManualTheme('nebula')
       useModePrefs.getState().setBlitzSec(45)
@@ -1182,7 +1182,7 @@ describe('the Amnesic pill in the ⚙ panel', () => {
     openSettings('key')
   }
 
-  it('is one picker of exactly Off, Stats Only and Full, directly under Save Stats', () => {
+  it('is one picker of exactly Off, Stats Only, and Full, directly under Save Stats', () => {
     openPanel()
     expect(pickerPills('Amnesic').map((pill) => pill.textContent)).toEqual([
       'Off',
@@ -1364,7 +1364,7 @@ describe('an amnesic preset cannot reach its permanent solve-time chunks', () =>
 
   // Under Stats Only a Best IS written into the permanent main key — beside the sealed layout, not
   // through it: the stats in that text, with their sealed-chunk record, go back exactly as they came.
-  it('★ Stats Only: a Best is saved without one chunk being read, listed, written or deleted', () => {
+  it('★ Stats Only: a Best is saved without one chunk being read, listed, written, or deleted', () => {
     seedPermanent()
     const [chunks, minusBests, statsText] = [chunkBytes(), parkedMinusBests(), parkedStatsText()]
     expect(JSON.parse(parked()).state.stats.classic.sealed).toBeDefined() // it IS a sealed save

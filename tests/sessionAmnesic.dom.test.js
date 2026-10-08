@@ -455,7 +455,7 @@ describe('two tabs', () => {
     expect(amnesicModeOf(1)).toBe('off')
   })
 
-  it('what the shared registry still does: the list, the names, the order, the last preset and the Open in pin', () => {
+  it('what the shared registry still does: the list, the names, the order, the last preset, and the Open in pin', () => {
     const p2 = createPreset('Timed') // tab A
     switchTab('B')
     expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Preset 1', 'Timed'])

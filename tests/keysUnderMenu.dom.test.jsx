@@ -22,7 +22,7 @@
 // layout fact it asks (tests/setup/dom.js, offsetParent), no game key did anything in any DOM test,
 // so "the key was ignored" was true of every key in every state and proved nothing.
 //
-// What the menu deliberately does NOT block is pinned here too: the mode letters, H and G (they
+// What the menu deliberately does NOT block is pinned here too: the mode letters, H, and G (they
 // close the menu or leave the page — documented, and standing on tests in settingsPanel.defaults),
 // the arrow keys along a setting's own options, Escape, and typing in the menu's boxes.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -390,7 +390,7 @@ describe('the keyboard stays in the ⚙ menu while it is open', () => {
 })
 
 describe('an open dropdown list blocks the page`s keys like the menu does', () => {
-  it('0–9, N, R, C and ← do nothing behind the open mode list; its own keys still work', () => {
+  it('0–9, N, R, C, and ← do nothing behind the open mode list; its own keys still work', () => {
     mountApp()
     pressKey(correctKey())
     expect(statValue('Score')).toBe('1/1')
@@ -426,7 +426,7 @@ describe('an open dropdown list blocks the page`s keys like the menu does', () =
 // A list in the top bar belongs to no screen and no menu, so nothing a mode letter, H or G does
 // used to take it away: it stayed open over the new page, still holding the keyboard — or under a
 // ⚙ menu that Escape then closed FIRST, though the list was the thing on top.
-describe('a mode letter, H or G closes an open top-bar list as it acts', () => {
+describe('a mode letter, H, or G closes an open top-bar list as it acts', () => {
   const presetList = () => screen.getByRole('button', { name: /^Preset,/ })
   const openPresetList = () => act(() => void fireEvent.click(presetList()))
 
@@ -458,7 +458,7 @@ describe('a mode letter, H or G closes an open top-bar list as it acts', () => {
   it.each([
     ['the mode list', () => tapModeMenu()],
     ['the preset list', () => openPresetList()],
-  ])('%s, over the open menu: G, a mode letter and H close both', (_name, openList) => {
+  ])('%s, over the open menu: G, a mode letter, and H close both', (_name, openList) => {
     mountApp()
     for (const [key, lands] of [
       ['G', null],

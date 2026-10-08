@@ -219,7 +219,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     document.getElementById('root')?.remove()
   })
 
-  it('one tap returns every value the panel shows, both year boxes and the four capturable mode prefs to their defaults', () => {
+  it('one tap returns every value the panel shows, both year boxes, and the four capturable mode prefs to their defaults', () => {
     mountApp()
     openSettings()
     const atDefaults = panelValues() // the launch state, read through the panel itself
@@ -276,7 +276,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     expect(prefs(CAPTURABLE)).toEqual(DIVERGED_CAPTURABLE)
   })
 
-  it('leaves the snapshot, the stats, the history, the mode, the non-capturable prefs and the screen in play exactly as they were', () => {
+  it('leaves the snapshot, the stats, the history, the mode, the non-capturable prefs, and the screen in play exactly as they were', () => {
     // The negative half of the reach, item by item — the list Reset Settings must NOT touch.
     act(() => {
       const s = useSettings.getState()
@@ -384,7 +384,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
   })
 })
 
-describe('⚙ Full Reset — reach, outcomes and the confirmation popup (net group 8)', () => {
+describe('⚙ Full Reset — reach, outcomes, and the confirmation popup (net group 8)', () => {
   beforeEach(() => {
     resetAppState()
   })

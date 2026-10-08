@@ -59,6 +59,8 @@ export const PAGE_BY_KEY: Readonly<Record<string, Page>> = Object.fromEntries(
 // Several practice modes named in a row, in the list's order whatever order they were asked for.
 // How to Play's sentences are built with these two so a reorder re-words them:
 //   modeNames('blitz', 'aox')              -> "MoX and Blitz"          (running text)
+//   modeNames('flash', 'classic', 'deduction') -> "Classic, Deduction, and Flash" (three or more
+//     take the comma before "and" — the app's one rule for a list, tests/oxfordCommaGuard)
 //   modeList('flash', 'classic', 'deduction') -> "Classic, Deduction, Flash" (a bracketed list)
 const labelsOf = (ids: readonly PracticeModeId[]): string[] =>
   PRACTICE_MODES.filter((m) => ids.includes(m.id)).map((m) => m.label)
@@ -66,5 +68,8 @@ export const modeList = (...ids: PracticeModeId[]): string => labelsOf(ids).join
 export function modeNames(...ids: PracticeModeId[]): string {
   const names = labelsOf(ids)
   if (names.length <= 1) return names.join('')
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  const last = names[names.length - 1]
+  return names.length === 2
+    ? `${names[0]} and ${last}`
+    : `${names.slice(0, -1).join(', ')}, and ${last}`
 }

@@ -3,7 +3,7 @@
 // The Q# card-number badge — the small label at the top-right of the date card (sub-group 3A).
 //
 // THE DEFECT THIS FILE EXISTS FOR. The badge used to be the card's 1-based slot in THIS SESSION's
-// browsable history (`stack.length + 1`). In Classic, Deduction and Flash the SCORE is hydrated
+// browsable history (`stack.length + 1`). In Classic, Deduction, and Flash the SCORE is hydrated
 // from saved progress at mount while the history stack deliberately starts empty, so the badge and
 // the Score box it sits beside had never agreed: a player 500 cards in answered one, pressed <,
 // and read "Q1" next to a Score of "471/501".

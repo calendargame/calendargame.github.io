@@ -471,7 +471,7 @@ describe('index.css — the rules the move re-hosted, and the clamps it made per
     expect(srcFile('components', 'GuidePage.tsx')).toContain('data-guide')
   })
 
-  it('clamps html, body and #root unconditionally — nothing releases them in any mode', () => {
+  it('clamps html, body, and #root unconditionally — nothing releases them in any mode', () => {
     // The release was four rules and a caveat (overscroll-behavior-y had to flip none → contain,
     // because `none` kills iOS ≥16.4's rubber-band outright as well as pull-to-refresh). All five
     // are gone, and the owner's hard no-pull-to-refresh constraint stops being a rule that has to

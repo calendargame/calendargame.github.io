@@ -693,7 +693,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
   // `disabled`, which would have removed them from the tab order instead of explaining them. The
   // first case below is that half, and it asserts all three facets together on purpose.
 
-  it('a not-offered footer button is DRAWN, ANNOUNCED and still reachable — all three of them', () => {
+  it('a not-offered footer button is DRAWN, ANNOUNCED, and still reachable — all three of them', () => {
     // The three facets have to be one assertion: they are three statements of a single fact, and
     // every way of splitting them up lets a real bug through. Greyed but announced live is what round 15
     // fixed; announced dead but pressable is what round 14 fixed; and either one alone passes a

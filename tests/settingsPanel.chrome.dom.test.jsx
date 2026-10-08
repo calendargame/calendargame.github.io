@@ -142,7 +142,7 @@ describe('G11 — Check for updates: one state, four surfaces', () => {
     sessionStorage.clear()
   })
 
-  it('reads its resting label, is operable and is underlined when nothing has been asked', () => {
+  it('reads its resting label, is operable, and is underlined when nothing has been asked', () => {
     globalThis.fetch = serveBuildId(OWN_ID)
     mountApp()
     openSettings()

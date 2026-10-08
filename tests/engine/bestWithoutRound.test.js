@@ -140,7 +140,7 @@ describe('with one writer, rebuilding from the store is rebuilding from the snap
       }
     }
   })
-  it('MoX: 300 random runs, completed, retracted and re-credited', () => {
+  it('MoX: 300 random runs, completed, retracted, and re-credited', () => {
     const rnd = mulberry32(99)
     let stored
     for (let run = 1; run <= 300; run++) {

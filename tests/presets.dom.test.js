@@ -983,7 +983,7 @@ describe('is a preset factory-fresh', () => {
   // carrying no version at all — asks, even when every value in it reads as factory. (The store's
   // migrate would squeeze a newer shape into one this build can draw, by dropping what it does not
   // recognise; "I dropped it" is not "it was empty".)
-  it('a stray key, a newer build`s copy and an unversioned copy all ask', () => {
+  it('a stray key, a newer build`s copy, and an unversioned copy all ask', () => {
     const stray = other('Stray')
     localStorage.setItem(
       presetKey(PRESET_STORE_KEYS.settings, stray),
