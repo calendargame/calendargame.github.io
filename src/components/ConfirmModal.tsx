@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import Popup from './Popup.js'
-import { MODAL_CARD_SHADOW, MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
+import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
 import { RESET_BTN_CLASS } from './controlClasses.js'
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -64,7 +64,6 @@ export default function ConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        style={MODAL_CARD_SHADOW}
         className={MODAL_PLAIN_CARD_CLASS}
       >
         <div id={titleId} className="text-sm font-semibold text-(--tx-50)">

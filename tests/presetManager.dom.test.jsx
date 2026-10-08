@@ -1007,7 +1007,8 @@ describe('reordering', () => {
       expect(rule('held-piece')).not.toMatch(/box-shadow/)
       // The shadow box: behind the row's cells, the theme's own shadow, every side.
       expect(rule('held-shadow')).toMatch(/z-index:-1/)
-      expect(rule('held-shadow')).toMatch(/box-shadow:0 3px 12px rgb\(var\(--shadow-elev-c\)/)
+      expect(rule('held-shadow')).toMatch(/box-shadow:var\(--shadow-lifted\)/)
+      expect(css).toMatch(/--shadow-lifted:0 \.1875rem \.75rem rgb\(var\(--shadow-elev-c\)/)
       // The bare marks: the card's colour and nothing that could be seen against it.
       expect(rule('held-ink')).toBe('background:var(--card-bg);box-shadow:0 0 0 2px var(--card-bg)')
       // held-piece has to out-rank the resting surface fills, so it comes after them.
@@ -1515,16 +1516,18 @@ describe('the list reaches one card gap past its rows, above and below', () => {
     expect(mask('fade-scroll-bottom')).toBe(`linear-gradient(to bottom,${BOTTOM})`)
     expect(mask('fade-scroll-both')).toBe(`linear-gradient(to bottom,${TOP},${BOTTOM})`)
     // Every other scroller has no reach, and its fades are the plain ones they always were.
-    expect(code).toContain(':root{--fade-h:24px;--fade-reach:0px}')
+    expect(code).toContain(':root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-reach:0px}')
     expect(code.match(/--fade-reach:/g)).toHaveLength(1)
   })
   it('the shadow it makes room for needs no more than that gap on the side it is cut closest', () => {
-    // 0 3px 12px: it reaches 12 − 3 = 9px above a piece and 12 + 3 = 15px below. The gap is 12px,
-    // so the top is whole and the bottom loses only the last 3px of the blur's tail.
-    const shadow = /\.held-shadow\{[^}]*box-shadow:0 (\d+)px (\d+)px /.exec(css)
+    // The LIFTED shadow, 0 .1875rem .75rem: it reaches .75 − .1875 = .5625rem above a piece and
+    // .75 + .1875 = .9375rem below. The gap is .75rem (LIST_REACH_CLASS's --fade-reach, the same
+    // unit), so the top is whole and the bottom loses only the last .1875rem of the blur's tail.
+    const shadow = /--shadow-lifted:0 ([\d.]+)rem ([\d.]+)rem /.exec(css)
     expect(shadow).not.toBeNull()
     const [down, blur] = [Number(shadow[1]), Number(shadow[2])]
-    expect(blur - down).toBeLessThanOrEqual(12)
-    expect(blur + down - 12).toBeLessThanOrEqual(3)
+    const gap = 0.75 // py-3 / [--fade-reach:0.75rem], pinned on the region by the first test here
+    expect(blur - down).toBeLessThanOrEqual(gap)
+    expect(blur + down - gap).toBeLessThanOrEqual(0.1875)
   })
 })

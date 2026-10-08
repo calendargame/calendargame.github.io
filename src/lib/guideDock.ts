@@ -41,7 +41,7 @@
 //              in as a finished section slides away under the bar. The caller multiplies the bar's
 //              ordinary scroll-driven strength by it.
 //
-// The ramp is the app's one "near a boundary" distance (--fade-h, components/scrollRegion's
+// The ramp is the app's one "near a boundary" distance (--shade-ramp, components/scrollRegion's
 // edgeShade), so both shadows speak the language every other boundary shadow speaks.
 //
 // A header casts a shadow only while it is STUCK (depth > 0 and room > 0), and a stuck header's top

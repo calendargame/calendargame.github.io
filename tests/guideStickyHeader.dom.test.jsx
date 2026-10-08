@@ -83,7 +83,7 @@ beforeEach(() => {
     return rect(0, 0)
   })
   // index.css is not loaded, so the ramp distance is stood up at its real value.
-  document.documentElement.style.setProperty('--fade-h', '24px')
+  document.documentElement.style.setProperty('--shade-ramp', '24px')
 })
 let guide = null
 // The app's frames, held and run by hand (helpers/scrollGeometry's holdFrames) — set by a test that
@@ -99,7 +99,7 @@ afterEach(() => {
   guide = null
   rectSpy.mockRestore()
   cleanup()
-  document.documentElement.style.removeProperty('--fade-h')
+  document.documentElement.style.removeProperty('--shade-ramp')
 })
 
 const mount = () => {
@@ -525,26 +525,24 @@ describe('index.css — .guide-head', () => {
     expect(rule).toContain('background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1)')
   })
 
-  // ★ WHICH HEADER MAY SIT ABOVE WHICH FEATHER. The guide's two edge fades are fixed strips that
-  // come after the page in the DOM, so they paint over anything that is not lifted.
-  //   • a CLOSED header is page content: under both strips, so its title feathers at the top and
-  //     bottom edges like the panel border beside it. (Lifting every header left each title
-  //     running full-strength to the edge and stopping dead.)
-  //   • the OPEN header is the one that pins, and a pinned header sits inside the top strip — so it
-  //     alone is lifted over that one…
-  //   • …and nothing is lifted over the BOTTOM strip, where nothing ever pins.
-  it('lifts ONLY the open header over the top feather, and nothing over the bottom one', () => {
-    expect(rule).not.toContain('z-index')
-    const openRule = cssCode.match(/\.guide-head\[aria-expanded="true"\]\{([^}]*)\}/)?.[1]
-    expect(openRule).toBe('z-index:1')
-    const top = cssCode.match(/\.doc-fade-top\{([^}]*)\}/)?.[1]
-    const bottom = cssCode.match(/\.doc-fade-bottom\{([^}]*)\}/)?.[1]
-    expect(top).not.toContain('z-index')
-    expect(bottom).toContain('z-index:2')
-    // …and the header that carries aria-expanded IS the .guide-head element, so the selector lands.
-    const { container } = mount()
-    for (const head of container.querySelectorAll('.guide-head'))
-      expect(head.hasAttribute('aria-expanded')).toBe(true)
+  // ★ NO HEADER IS LIFTED OVER A FEATHER, AND THE DOCKED ONE IS NOT SPARED BY STACKING. The order
+  // is one line, the same for every header and in every engine: section content < header (1) <
+  // the guide's two fades (2). A header that is not docked is page content, and its title feathers
+  // at the edges like the panel border beside it.
+  // The DOCKED header is spared for a different reason altogether: the top feather is OFF while a
+  // header is docked — the bar hands it over with its shadow (tests/docScroll pins that on the
+  // mounted app). The OPEN header used to be lifted over the top strip instead (a z-index on
+  // [aria-expanded="true"], the strip left at none), which one browser engine honoured and another
+  // did not: on an iPhone the fade bled into the top of the docked header. So no rule may single
+  // the open header out again, and no strip may sit under any header.
+  it('lifts no header over either feather — a docked header is spared by the hand-off, not by stacking', () => {
+    expect(rule).toMatch(/(^|;)z-index:1(;|$)/) // over its own section's content, and no higher
+    // …and that is the only stacking any header has: nothing keyed to open, docked, or anything.
+    expect(cssCode.match(/\.guide-head[^{}]*\{[^}]*z-index/g)).toHaveLength(1)
+    for (const strip of ['top', 'bottom'])
+      expect(cssCode.match(new RegExp(`\\.doc-fade-${strip}\\{([^}]*)\\}`))?.[1]).toContain(
+        'z-index:2',
+      )
   })
 
   it('rests shadowless — --shade:0 overrides @property’s visible default', () => {

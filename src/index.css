@@ -327,7 +327,8 @@ input,textarea{user-select:text;-webkit-user-select:text}
    FADE = "content extends past this edge." Implemented as a CSS mask on the
      scroll container itself. Applied conditionally (state-driven) so it only
      appears when content actually overflows past that edge. Top and bottom
-     variants are symmetric (--fade-h each).
+     variants are symmetric (--fade-h each). How to Play's page is the one place
+     drawn another way, for a reason of its own (the .doc-fade-* note below).
    SHADOW (elev-shadow-down/up) = "fixed UI sits at this boundary, content
      slides under it." Applied to the fixed element (bar, sticky footer,
      layered section header), not to the scroll container. Cast away from the
@@ -340,10 +341,22 @@ input,textarea{user-select:text;-webkit-user-select:text}
    tokenized in components/scrollRegion.ts (round 7) — new inner scrollers take
    SCROLL_REGION_CLASS + scrollFadeClass + useScrollEdgeState from there, and
    tests/scrollRegionGuard.test.js fails the suite on any scroller built outside it. */
-/* ONE feather depth for every edge fade in the app — the container masks below AND the
-   guide's fixed doc-fade strips further down. Tokenized in round 8 so no fade site can
-   carry a hardcoded twin that drifts from the rest. It is shared with the settings popover, the
-   changelog and the Lookup scrollers, so it can never be retuned to serve one screen alone. */
+/* ★ TWO DISTANCES, TWO NAMES — they were one token (--fade-h, 24px) until the fades and shadows
+   were given one standard, and they are two different things:
+   --fade-h — HOW DEEP AN EDGE FADE IS, on the screen. ONE depth for every fade in the app: the
+     container masks below AND the guide's two strips further down, so no fade site can carry a
+     twin that drifts from the rest. .75rem — about 12px on a phone, half of what it was: at 24px
+     the fade swallowed most of a row of the ⚙ menu. In rem like every other measure here (it was
+     the app's one fixed-pixel length), so it keeps its proportion to the text on every screen.
+   --shade-ramp — HOW FAR A SCROLLER TRAVELS FROM AN EDGE BEFORE THAT EDGE IS FULLY ASSERTED: the
+     distance --shade (below) climbs from 0 to 1 over, and the distance the guide's bar and a
+     docking section header hand their shadow, and the page's top fade, across (lib/guideDock). A
+     length of SCROLL, not of paint, and it deliberately did NOT shrink with the fade: nothing was
+     wrong with how the boundary shadows come in, and halving it would have made every one of them,
+     and that hand-off, twice as abrupt. 1.5rem is the 24px it always was, in the fluid unit.
+   JS needs both in px, and a custom property hands it the text as written here — so
+   components/scrollRegion's readFadeDepthPx / readShadeRampPx resolve the rem against the root's
+   own font size. They are the only readers. */
 /* ★ --fade-reach: HOW FAR IN FROM THE REGION'S OWN EDGE ITS CONTENT'S EDGE IS — 0 for every scroller
    but one. A region may be made to reach PAST its rows (the Presets popup's list does, by one card
    gap each way, so that a row held at its first or last slot keeps its shadow: the region is what
@@ -351,7 +364,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
    is fully hidden for the reach and feathers from there — rows scrolling by never show in the gap —
    while an edge with nothing past it carries no mask at all, and the gap there is free for the
    shadow. With the reach at 0 these are the plain edge fades they always were. */
-:root{--fade-h:24px;--fade-reach:0px}
+:root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-reach:0px}
 .fade-scroll-top{-webkit-mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)));mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)))}
 .fade-scroll-bottom{-webkit-mask-image:linear-gradient(to bottom,black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)));mask-image:linear-gradient(to bottom,black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)))}
 /* When a container has BOTH top and bottom fades, the two mask-images must be
@@ -359,35 +372,45 @@ input,textarea{user-select:text;-webkit-user-select:text}
    mask-image declarations from separate classes). The combined gradient fades
    both edges at once. */
 .fade-scroll-both{-webkit-mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)),black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)));mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)),black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)))}
-/* The guide's two edge fades — ⚠ KEPT, AND DELIBERATELY NOT THE MASKS ABOVE. Read this before
-   "harmonising" them, because folding the guide onto .fade-scroll-* would compile, would leave
-   every shipped test name passing, and would silently revert round 10's progressive edges on the
-   single page they were built for.
-   They were born because the fade-scroll-* masks sit ON a scroll container and fade its CONTENT
-   box, which was meaningless while the DOCUMENT scrolled the guide (the bottom mask edge would
-   have sat at the end of the whole document, off-screen). Round 13 moved the guide onto #appScroll
-   and that particular reason expired — the container's content box IS the viewport now, so a mask
-   would land in the right place. The strips stay anyway, on the reason that outlived it:
-     • the masks are a BOOLEAN state class. They snap on the moment an edge overflows and off when
-       it is reached, and How to Play is the one screen where that snap is the whole complaint —
-       these two strips are progressive, their opacity being the same continuous --shade (below)
-       that drives the bar's shadow, so the guide's soft edges and the boundary above them ramp on
-       one number and a stopped scroller is already at its final value.
-     • that mix is the design, not an oversight: every OTHER fade site in the app is still the
-       on/off state class it always was, because nobody dwells on a settings popover.
-   position:fixed remains exactly right after the move: the strips paint over the VIEWPORT, and
-   #appScroll's box is `absolute inset-0` — the viewport — so the two boxes coincide by
-   construction. What changed is only that they now sit OUTSIDE the scroller rather than outside
-   the document; the top strip still tucks under the fixed bar, the bottom still hugs the viewport
-   floor, and pointer-events:none keeps both untouchable. JSX mounts them for the whole of guide
-   mode and nothing else — round 10 took the on/off away, so a strip at --shade 0 paints nothing.
+/* The guide's two edge fades — ⚠ KEPT AS STRIPS, AND DELIBERATELY NOT THE MASKS ABOVE. Read this
+   before "harmonising" them: folding the guide onto .fade-scroll-* would compile, would leave
+   every shipped test name passing, and would break the page in the three ways below.
+   A mask sits ON a scroll container and fades whatever is at its box's edge. Everywhere else that
+   is the right thing. On this page it is not, and each reason is about the page, not about history:
+     • THE PAGE'S TOP EDGE IS NOT THE SCROLLER'S. #appScroll's box starts at the top of the screen,
+       BEHIND the fixed bar; the edge the reader sees is the bar's underside, --bar-h further down.
+       A strip is simply placed there (top:var(--bar-h)).
+     • THE TOP FADE HAS TO BE HANDED OFF. While a section's header is docked flush under the bar,
+       the header IS the edge: text slides under the header, and a fade drawn across the header
+       itself would wash out its title. So the top strip's strength is the bar's shadow's — the
+       scroll position's share times what a docked header leaves the bar (lib/guideDock, written by
+       main.tsx's one writer for that edge) — and it is OFF, at opacity 0, for as long as a header
+       is docked, coming back over the same distance as the header leaves. ⚠ That is the WHOLE
+       mechanism: it does not depend on what paints over what. It used to — the open header was
+       lifted above the strip with a z-index, which hid the strip in one browser engine and not in
+       another (where a scroller is a stacking layer of its own, and nothing inside it can be
+       lifted over anything outside it), and there the fade bled into the docked header's top.
+     • THEY ARE PROGRESSIVE. The masks are a BOOLEAN state class: they snap on the moment an edge
+       overflows and off when it is reached, which nobody notices on a popup and which is the whole
+       complaint on the app's one long reading page. A strip's opacity is the continuous --shade
+       (below), so a stopped scroller is already at its final value. (#appScroll's own mask classes
+       are pinned off for the whole of guide mode — main.tsx's edge effect — so the two never
+       stack.)
+   They are the same fade in every other respect: the same depth (--fade-h), and the page's own
+   colour (--bg1) running out to nothing, which over a page of that colour is exactly what a mask
+   fading the content to transparent shows.
+   position:fixed is right because the strips paint over the VIEWPORT, and #appScroll's box is
+   `absolute inset-0` — the viewport — so the two coincide by construction. pointer-events:none
+   keeps both untouchable. JSX mounts them for the whole of guide mode and nothing else: a strip at
+   --shade 0 paints nothing, so there is no on/off to render.
    top:var(--bar-h) is why --bar-h has to be EXACT (round 10 made it fractional): the feather
-   starts precisely where the bar ends, so it covers whatever the bar itself doesn't. While
-   --bar-h rounded up to a whole pixel the strip started ~0.234px low, leaving a sub-pixel band
-   painted by neither — which is what a hairline of the previous panel's border showed through.
-   The bottom strip's z-index:2 is about the guide's section headers — the .guide-head note says
-   which of them may sit above which strip. */
-.doc-fade-top{position:fixed;top:var(--bar-h);left:0;right:0;height:var(--fade-h);pointer-events:none;opacity:var(--shade,1);background:linear-gradient(to bottom,var(--bg1),transparent)}
+   starts precisely where the bar ends. While --bar-h rounded up to a whole pixel the strip started
+   ~0.234px low, leaving a sub-pixel band painted by neither — which is what a hairline of the
+   previous panel's border showed through.
+   z-index:2 on BOTH says the order out loud, the same in every engine: the strips are over the
+   page, every section header included (.guide-head, below, is 1) — a header that is not docked is
+   page content, and softens at the edges like the text round it. */
+.doc-fade-top{position:fixed;top:var(--bar-h);left:0;right:0;height:var(--fade-h);z-index:2;pointer-events:none;opacity:var(--shade,1);background:linear-gradient(to bottom,var(--bg1),transparent)}
 .doc-fade-bottom{position:fixed;bottom:0;left:0;right:0;height:var(--fade-h);z-index:2;pointer-events:none;opacity:var(--shade,1);background:linear-gradient(to top,var(--bg1),transparent)}
 /* --guide-panel-gap — the vertical gap between How-to-Play accordion panels, and the ONE home
    of that number: components/GuidePage lays its section list out with
@@ -429,36 +452,32 @@ input,textarea{user-select:text;-webkit-user-select:text}
      • the fill is the panel's own (--panel-bg) composited over the page (--bg1), which is exactly
        what the wrapper shows behind a transparent header at rest — no visible change there — but
        OPAQUE, so text scrolling under a docked header cannot show through it.
-     • ONLY THE OPEN SECTION'S HEADER IS LIFTED over the guide's fixed top feather (the
-       [aria-expanded="true"] rule below; .doc-fade-top comes later in the DOM, so it paints over
-       anything not lifted). The open header is the one that can dock, and a docked header sits
-       wholly inside that strip, which would otherwise wash its title out. Every CLOSED header
-       stays under both feathers: it is page content, and its title has to soften at the top and
-       bottom edges with the panel border beside it — lifting them all made every title run
-       full-strength to the edge and stop dead while its own border faded.
-     • AND NO HEADER IS LIFTED OVER THE BOTTOM FEATHER, the open one included: nothing docks at the
-       foot of the page, so whatever arrives there is content scrolling into view. .doc-fade-bottom
-       takes z-index:2 — one above the open header — for exactly that.
+     • z-index:1 PUTS A HEADER OVER ITS OWN SECTION'S CONTENT, whatever that content is — the
+       text that slides under it while it is docked — AND UNDER THE GUIDE'S TWO FADES
+       (.doc-fade-*, above, at 2), open or closed alike. A header that is not docked is page
+       content, and its title softens at the top and bottom edges with the panel border beside
+       it. A DOCKED header is not faded for a different reason altogether: the top fade is off
+       while it is docked (the hand-off above), so there is nothing to lift it over.
      • --shade:0 is its resting shadow strength, overriding @property's initial 1 (which is for a
        boundary with no writer at all). GuidePage writes the live value onto the OPEN section's
        header only. ONE SHADOW, UNDER WHICHEVER EDGE THE TEXT IS SLIDING BENEATH: while a header is
        docked the text slides under the HEADER's edge, so the header wears the elev-shadow-down it
-       carries — ramping in over --fade-h once text is actually under it, like every other boundary
-       shadow — and the bar above it wears none; with no header docked the bar's shadow is what the
-       scroll position makes it and the header's is 0. lib/guideDock is that rule, and proves the
-       two are never on together. A closed header never has content under it and rests at 0.
+       carries — ramping in over --shade-ramp once text is actually under it, like every other
+       boundary shadow — and the bar above it wears none, and the page's top fade is off with it;
+       with no header docked the bar's shadow and that fade are what the scroll position makes
+       them and the header's shadow is 0. lib/guideDock is that rule, and proves the two shadows
+       are never on together. A closed header never has content under it and rests at 0.
    The wrapper's rounded corners still clip it, via overflow:clip there — hidden would make the
    wrapper a scroll container of its own, and a sticky box sticks to its NEAREST scroll container. */
-.guide-head{position:sticky;top:0;background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1);--shade:0}
-.guide-head[aria-expanded="true"]{z-index:1}
+.guide-head{position:sticky;top:0;z-index:1;background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1);--shade:0}
 /* The keyboard's focus ring on a header (THE KEYBOARD FOCUS RING, below) sits 5px in: the header is a
    square-cornered button inside a wrapper that clips to rounded corners, and a ring any nearer the
    edge has its own corners cut off by them. */
 .guide-head{--kbd-ring-offset:-5px}
 /* --shade — how strongly a boundary asserts itself, 0…1 (round 10 item B). It is the scroller's
-   distance from that edge, measured in px and divided by --fade-h (the same feather depth the
-   masks use — the app's one "you are near a boundary" ramp, so the shadow and the fade speak
-   about the same distance). components/scrollRegion owns the arithmetic and is the ONE writer;
+   distance from that edge, measured in px and divided by --shade-ramp (the app's one "you are
+   near a boundary" distance — the two-names note at --fade-h, above, says why it is not the
+   fade's depth). components/scrollRegion owns the arithmetic and is the ONE writer;
    every consumer of the four boundary surfaces and the guide's two soft edges reads it here.
 
    WHY, in the owner's words: after tapping the iOS status bar to scroll How to Play to the top,
@@ -516,37 +535,71 @@ input,textarea{user-select:text;-webkit-user-select:text}
    never switched it off. Deleting it is a small win for that setting quite apart from the lag. */
 /* ↑ the `@property --shade` registration this paragraph describes is NOT here: it sits above the
    `@layer components{` opening brace, for the reason set out in the ★★ block there. */
-.elev-shadow-down{box-shadow:0 4px 6px -2px rgb(var(--shadow-elev-c) / calc(var(--shadow-elev-a) * var(--shade,1)))}
-.elev-shadow-up{box-shadow:0 -4px 6px -2px rgb(var(--shadow-elev-c) / calc(var(--shadow-elev-a) * var(--shade,1)))}
+/* ★ THE APP'S SHADOWS — THREE ROLES, AND NOTHING ELSE CASTS ONE. Each says one thing, so a shadow
+   can be read: pick by what the element IS, never by how it looks beside its neighbours.
+     EDGE — "content slides under this fixed edge": .elev-shadow-down / .elev-shadow-up, on the top
+       bar, a docked How-to-Play header, and a popup's or the ⚙ menu's fixed header and footer.
+       Directional, tight, and only as strong as the scroll position makes it (--shade, above).
+       ⚠ The two classes ARE the token: --shade is each element's own (inherits:false), so a
+       recipe stored on :root would be worked out there, once, at full strength.
+     LIFTED — "this is in your hand": --shadow-lifted, worn by .held-shadow (a preset row being
+       dragged). Soft and even, close to the object.
+     FLOATING — "this surface floats above the page": --shadow-float, worn by .float-shadow (every
+       popup's card and the ⚙ menu) and .float-shadow-frost (an open dropdown list). ONE recipe for
+       all of them — they were three (two of them plain black, which no theme could tint and the
+       dark themes could not show at all).
+   ALL THREE ARE THE THEME'S OWN SHADOW COLOUR (--shadow-elev-c / --shadow-elev-a, split for the
+   reason argued above, and kept split here: an unsupported value anywhere in a box-shadow throws
+   the WHOLE declaration away, silently). The tokens sit on :root, which is the element the theme
+   rows land on too (data-theme is stamped on <html>), so each resolves against the theme's pair.
+   LENGTHS ARE rem (16px = 1rem), so a shadow keeps its proportion to the thing casting it on every
+   screen: 4px 6px −2px, 3px 12px, and 6px 24px at a 16px root.
+   TWO THINGS HERE ARE NOT ONE OF THE THREE, each named so it cannot be taken for a stray:
+     --frost-edge — NOT A SHADOW: a half-pixel line round the frosted dropdown list. That panel is
+       a pale, see-through pane; on the two light themes it is nearly the page's own colour and the
+       floating shadow starts below its top edge, so without the line its top and sides have no
+       edge at all. A box-shadow SPREAD only because that draws a line round the corners without
+       taking any room; half a DEVICE pixel, so px, not rem.
+     --shadow-thumb — the ONE deliberate non-theme shadow: a slider's knob is white in every theme,
+       and a white knob needs a neutral shadow under it on every one of them. px, like the knob.
+   What else is drawn with box-shadow and is NOT a shadow keeps its own rule and its own note: the
+   keyboard's ring on a slider knob and the drag ring on an answer dot (rings), and .held-ink's rim
+   (a patch). tests/fadeShadowGuard.test.js fails the suite on a shadow or a fade written anywhere
+   but in these tokens and the rules that own them, in the stylesheet or in markup. */
+:root{--shadow-lifted:0 .1875rem .75rem rgb(var(--shadow-elev-c) / var(--shadow-elev-a));--shadow-float:0 .375rem 1.5rem rgb(var(--shadow-elev-c) / var(--shadow-elev-a));--frost-edge:0 0 0 .5px rgb(0 0 0 / .05);--shadow-thumb:0 .5px 4px rgb(0 0 0 / .3)}
+.elev-shadow-down{box-shadow:0 .25rem .375rem -.125rem rgb(var(--shadow-elev-c) / calc(var(--shadow-elev-a) * var(--shade,1)))}
+.elev-shadow-up{box-shadow:0 -.25rem .375rem -.125rem rgb(var(--shadow-elev-c) / calc(var(--shadow-elev-a) * var(--shade,1)))}
+.float-shadow{box-shadow:var(--shadow-float)}
+.float-shadow-frost{box-shadow:var(--shadow-float),var(--frost-edge)}
 .card{background:var(--card-bg);border:1px solid var(--card-bd)}
 .panel{background:var(--panel-bg);border:1px solid var(--panel-bd)}
 .thin{border:1px solid var(--thin-bd)}
 /* ★ THE DASHED OUTLINE — "these numbers are for this session only" (Amnesic). It marks WHAT IS
-   TEMPORARY, ON THE PAGE ITSELF: the stats strip while the preset is on Stats Only or Full
-   (components/StatPanel), and the Best readouts too under Full (components/BestReadout). It
-   replaced a letter "A" beside the preset's name, which said that something about the preset was
-   amnesic and cost the name its width; this says WHICH numbers, where they are, and tells the two
-   kinds apart for free — a dashed strip over plain Bests is Stats Only, both dashed is Full.
+   TEMPORARY, ON THE PAGE ITSELF: the stats strip while the preset is on Stats Only or Full, and
+   the Best readouts too under Full. It replaced a letter "A" beside the preset's name, which said
+   that something about the preset was amnesic and cost the name its width; this says WHICH
+   numbers, where they are, and tells the two kinds apart for free — a frame round the strip with
+   the Bests left outside it is Stats Only, a frame round both is Full.
+   ★ ONE FRAME, ONE SHAPE. Whatever is temporary is inside a single frame, and the frame is always
+   the same one: on the page column's own edges, never wider, with the strip's radius. The class
+   goes on the smallest element that holds exactly the temporary parts — the strip, the Best
+   readouts' row, or the group that holds the two (components/StatPanel decides, and says when
+   each). The strip and the readouts used to wear a frame EACH, and the readouts' sat 4px outside
+   the column with a tighter corner, so under Full the page showed two boxes of different widths
+   and shapes for one fact.
    WHY DASHED: a broken line already reads as "provisional — not inked in" (a draft, a cut-out, a
    placeholder), and nothing else in the app is dashed, so it cannot be mistaken for any other state.
    In particular it cannot be mistaken for the KEYBOARD FOCUS RING (further down): that one is solid,
-   brighter, 2px, and only ever on the one control the keyboard is on.
-   ⚠ IT MUST NOT MOVE A PIXEL — the strip and the readouts are the same size and in the same place
-   with it or without. So it is a ::after BORDER on an absolutely-positioned box, which takes no part
-   in layout, never the host's own border-width or padding. On the strip (a .panel) the box sits on
-   the padding edge and the panel's own solid border goes transparent — still 1px wide, so nothing
-   shifts — which makes the dashes the strip's frame rather than a second line inside one.
-   .session-only-outset is for a host with no box of its own (the Best readouts are bare text): the
-   frame is drawn AROUND it, in the gaps that are already there (12px above and below, the page's
-   16px gutter at the sides). It takes a QUARTER of each gap and no more — 3px above and below, so
-   9px of clear space is left to the strip over it and to the row under it (MoX's run-length row
-   starts 12px down; at 6px the dashes sat almost on its boxes), and 4px at the sides.
-   ⚠ THOSE 4px ARE OUTSIDE THE PAGE COLUMN, AND THEY HAVE TO BE. Every card's edge is the column's
-   edge, and so is the first letter of a Best readout — it is bare text, flush with the column. A
-   frame on the column's edge would be drawn through that letter; clearing it means either moving
-   the text in (which the rule above forbids: with the frame or without, nothing moves) or drawing
-   the line just outside it. So the frame is the one dashed line on the page that is not a card's
-   own edge, kept as close to the column as the text allows.
+   brighter, 2px, and only ever on the one control the keyboard is on. --kbd-ring-offset draws that
+   ring 5px in on anything inside the frame (it inherits), so on the strip — which is sometimes one
+   big button, on the frame's own line — the ring sits clear inside the dashes, never on them.
+   ⚠ IT MUST NOT MOVE A PIXEL — everything is the same size and in the same place with it or
+   without. So it is a ::after BORDER on an absolutely-positioned box, which takes no part in
+   layout, never the host's own border-width or padding; the room the readouts' text needs inside
+   the line is padding the readouts' row has in EVERY state (components/BestReadout). The strip is
+   a .panel with a solid border of its own on the very line the dashes take, so that border goes
+   transparent — still 1px wide, so nothing shifts — whether the strip wears the frame or stands
+   at the top of a frame round both.
    ⚠ NOT AN outline: the strip is sometimes one big <button>, and `button:focus{outline:none}`
    below would take an outline off it the moment it was tapped.
    COLOUR: the theme's own label tone, thinned — so it is right in all five themes with no table of
@@ -554,8 +607,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
    pointer-events:none, so the frame never takes a tap meant for the strip. */
 .session-only{position:relative;--kbd-ring-offset:-5px}
 .session-only::after{content:"";position:absolute;inset:0;border:1.5px dashed color-mix(in oklab,var(--tx-200-80) 70%,transparent);border-radius:inherit;pointer-events:none}
-.panel.session-only{border-color:transparent}
-.session-only-outset::after{inset:-.1875rem -.25rem;border-radius:.5rem}
+.panel.session-only,.session-only>.panel{border-color:transparent}
 /* ★ THE .2s BACKGROUND FADE — the app's three interactive surfaces (these two + .btn-solid below)
    all carry it, and all three multiply by --motion-scale (round 16) so Reduce Motion makes the
    fade instant. It is DECORATIVE, checked rather than assumed, and the check is worth keeping:
@@ -587,20 +639,20 @@ input,textarea{user-select:text;-webkit-user-select:text}
      exactly as it did and nothing sliding underneath shows through it. Two background IMAGES, with
      the colour beneath them left alone: the ✕ button's background-color carries a .2s transition
      (.surface-toggle), and changing it would fade the piece through a darker tint as it lifts.
-   .held-shadow — the "picked up" cue: ONE soft, even shadow on every side, on an empty box of the
-     piece's own size and radius drawn behind the row's cells (z-index -1 inside the dragged row,
-     which is its own stacking context while it is held). It is a different thing from
-     elev-shadow-down's "content slides under this fixed edge" and so does not borrow it (that one
-     is directional, with a negative spread that leaves only slivers at the sides, and it scales
-     with --shade, a scroll signal that means nothing here). The theme's own shadow colour and
-     strength, so the violet-glow themes lift in violet like every other elevation in them.
+   .held-shadow — the "picked up" cue: ONE soft, even shadow on every side (--shadow-lifted, the
+     LIFTED role of the app's three shadows, above), on an empty box of the piece's own size and
+     radius drawn behind the row's cells (z-index -1 inside the dragged row, which is its own
+     stacking context while it is held). It is a different thing from elev-shadow-down's "content
+     slides under this fixed edge" and so does not borrow it (that one is directional, with a
+     negative spread that leaves only slivers at the sides, and it scales with --shade, a scroll
+     signal that means nothing here).
    .held-ink — the ✓ and the grip's bars. A patch of the card's colour exactly behind the mark, with
      a 2px rim of the same colour and no shadow: invisible against the card, and what a row passing
      underneath disappears behind instead of drawing its own mark through this one. The rim is a
      box-shadow SPREAD rather than padding so the mark's own box, and the row's layout, do not
      change by a pixel when the row is picked up. */
 .held-piece{background-image:linear-gradient(var(--stgl-bg),var(--stgl-bg)),linear-gradient(var(--card-bg),var(--card-bg))}
-.held-shadow{z-index:-1;pointer-events:none;box-shadow:0 3px 12px rgb(var(--shadow-elev-c) / var(--shadow-elev-a))}
+.held-shadow{z-index:-1;pointer-events:none;box-shadow:var(--shadow-lifted)}
 .held-ink{background:var(--card-bg);box-shadow:0 0 0 2px var(--card-bg)}
 /* .svalue-input — the tap-to-type edit box inside SliderValueEditor's readout cell (round 8).
    The box is OUT OF FLOW (absolutely positioned over the cell), so it can never size that cell:
@@ -741,9 +793,9 @@ button{touch-action:manipulation}
    melts into the white around the button and reads as the button shrinking. With the fill on both
    sides of it, it is a ring in every theme. An answer dot is a circle, and the ring follows it.
    NEVER TO BE TAKEN FOR AMNESIC'S DASHED FRAME (.session-only): that one is dashed, thin and
-   muted, this one solid and bright — and where a control wears both (the stats strip, when the
-   whole strip is one button) the ring is drawn 5px in, clear inside the dashes, instead of on top
-   of them (.session-only's own rule sets that). (That one is a ::after border and this one an outline, so neither switches the other
+   muted, this one solid and bright — and where a control sits on the frame's line (the stats
+   strip, when the whole strip is one button) the ring is drawn 5px in, clear inside the dashes,
+   instead of on top of them (.session-only's own rule sets that). (That one is a ::after border and this one an outline, so neither switches the other
    off.)
    ONE CONTROL TAKES IT ON THE OUTSIDE (.ring-outside): the tap-to-type readout beside a slider
    (components/SliderValueEditor) is a button exactly the size of its digits — no padding for a
@@ -1122,8 +1174,8 @@ html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
 .expander-open{grid-template-rows:1fr}
 .expander>div{min-height:0;overflow:hidden}
 input[type="range"]{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;border:none;outline:none;background:linear-gradient(to right,#a855f7 0%,#7c3aed var(--rng-fill,50%),var(--panel-bd) var(--rng-fill,50%));}
-input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:14px;border-radius:7px;background:#fff;cursor:pointer;border:none;box-shadow:0 0.5px 4px rgba(0,0,0,.3);margin-top:-4.5px;}
-input[type="range"]::-moz-range-thumb{width:22px;height:14px;border-radius:7px;background:#fff;cursor:pointer;border:none;box-shadow:0 0.5px 4px rgba(0,0,0,.3);}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:14px;border-radius:7px;background:#fff;cursor:pointer;border:none;box-shadow:var(--shadow-thumb);margin-top:-4.5px;}
+input[type="range"]::-moz-range-thumb{width:22px;height:14px;border-radius:7px;background:#fff;cursor:pointer;border:none;box-shadow:var(--shadow-thumb);}
 input[type="range"]::-webkit-slider-runnable-track{height:5px;border-radius:3px;}
 input[type="range"]::-moz-range-track{height:5px;border-radius:3px;background:transparent;}
 input[type="range"]:disabled{opacity:.4;cursor:not-allowed;}

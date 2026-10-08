@@ -74,13 +74,13 @@ describe('How to Play scrolls the app container — one scroller, every screen',
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
-    document.documentElement.style.setProperty('--fade-h', '24px')
+    document.documentElement.style.setProperty('--shade-ramp', '24px')
   })
   afterEach(() => {
     cleanup()
     document.getElementById('root')?.remove()
     document.documentElement.scrollTop = 0
-    document.documentElement.style.removeProperty('--fade-h')
+    document.documentElement.style.removeProperty('--shade-ramp')
   })
 
   // ── REPLACES: "stamps data-doc-scroll on <html> in guide mode only" ────────────────────────
@@ -254,6 +254,88 @@ describe('How to Play scrolls the app container — one scroller, every screen',
     })
     expect(shade(bar)).toBeGreaterThan(nearTheTop)
     expect(shade(top)).toBe(shade(bar))
+  })
+
+  // ★ THE TOP FADE BELONGS TO THE SAME HAND-OFF AS THE BAR'S SHADOW. While an open section's
+  // header is docked flush under the bar, the header IS the edge — the bar's shadow is off, and so
+  // is the page's top fade, which would otherwise be drawn across the docked header itself (it
+  // was, on an iPhone: the shadow had been handed over and the fade had not). It comes back as the
+  // header leaves, over the same distance, because it is the same number: the one the bar's shadow
+  // gets, written by the bar's one writer. This is the mounted app, not the guide alone — the
+  // number is App's product of two inputs (its own scroll position, the guide's dock tracker).
+  it('takes the page’s top fade off while a section header is docked, and brings it back as the header leaves', () => {
+    const LINE = 72
+    const HEAD_H = 44
+    let at = null // the open header's place: { top, natural, floor }, in viewport y
+    const rectSpy = vi
+      .spyOn(Element.prototype, 'getBoundingClientRect')
+      .mockImplementation(function () {
+        const rect = (top, bottom) => ({
+          height: bottom - top,
+          width: 0,
+          top,
+          left: 0,
+          right: 0,
+          bottom,
+          x: 0,
+          y: top,
+        })
+        if (at && this.id === 'guide-head-overview') return rect(at.top, at.top + HEAD_H)
+        if (at && this.id === 'guide-sec-overview') return rect(at.natural, at.floor)
+        return rect(0, 0)
+      })
+    try {
+      const { container } = mountApp()
+      pressKey('H')
+      const el = scrollContainer(container)
+      el.style.setProperty('--bar-h', `${LINE}px`)
+      const bar = container.querySelector('.htp-sticky-bar')
+      const top = container.querySelector('.doc-fade-top')
+      const bottom = container.querySelector('.doc-fade-bottom')
+      const header = container.querySelector('#guide-sec-overview button')
+      // Deep in the page, far from both ends: by scroll position alone every edge is at full.
+      const scrollSo = (place) => {
+        at = place
+        setScrollGeometry(el, { scrollTop: 900, scrollHeight: 4000, clientHeight: 768 })
+        act(() => {
+          fireEvent.scroll(el)
+        })
+      }
+      const seen = () => [shade(bar), shade(top), shade(bottom)]
+
+      scrollSo(null)
+      expect(seen()).toEqual([1, 1, 1]) // no section open: the bar's edge has its shadow and its fade
+
+      // Open the section with its header well below the line: nothing is docked, nothing changes.
+      at = { top: LINE + 300, natural: LINE + 300, floor: LINE + 2300 }
+      act(() => {
+        fireEvent.click(header)
+      })
+      scrollSo(at)
+      expect(header.getAttribute('aria-expanded')).toBe('true')
+      expect(seen()).toEqual([1, 1, 1])
+
+      // DOCKED, nothing under the header yet — and then with text sliding under it. The header is
+      // the edge now: no bar shadow, NO TOP FADE. The bottom edge is nobody's hand-off and stays.
+      scrollSo({ top: LINE, natural: LINE, floor: LINE + 2000 })
+      expect(seen()).toEqual([0, 0, 1])
+      scrollSo({ top: LINE, natural: LINE - 400, floor: LINE + 1600 })
+      expect(header.style.getPropertyValue('--shade')).toBe('1.000') // the header wears the shadow
+      expect(seen()).toEqual([0, 0, 1])
+
+      // LEAVING — the section's foot carries the header up under the bar. The fade returns with
+      // the bar's shadow, step for step: part-way while the header is part-way out, whole once it
+      // has gone. Never a jump, because it is never anything but the bar's own number.
+      scrollSo({ top: LINE - 12, natural: LINE - 3000, floor: LINE - 12 + HEAD_H })
+      const partWay = shade(top)
+      expect(partWay).toBeGreaterThan(0)
+      expect(partWay).toBeLessThan(1)
+      expect(shade(bar)).toBe(partWay)
+      scrollSo({ top: LINE - 40, natural: LINE - 3000, floor: LINE - 40 + HEAD_H })
+      expect(seen()).toEqual([1, 1, 1])
+    } finally {
+      rectSpy.mockRestore()
+    }
   })
 
   // ── REPLACES: "drives the scroll state from the container — never the document" ────────────

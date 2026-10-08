@@ -1208,12 +1208,12 @@ describe('Settings — the sticky footer’s progressive boundary shadow (round 
     resetAppState()
     // index.css is not loaded in jsdom, so the ramp distance the writer reads is stood up by hand
     // at its real value — and BEFORE the mount, since the hook reads it once when it attaches.
-    document.documentElement.style.setProperty('--fade-h', '24px')
+    document.documentElement.style.setProperty('--shade-ramp', '24px')
   })
   afterEach(() => {
     cleanup()
     document.getElementById('root')?.remove()
-    document.documentElement.style.removeProperty('--fade-h')
+    document.documentElement.style.removeProperty('--shade-ramp')
   })
 
   const footer = () => document.querySelector('.popover-sticky-footer')

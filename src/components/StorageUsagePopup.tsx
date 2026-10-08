@@ -1,5 +1,5 @@
 import Popup from './Popup.js'
-import { MODAL_CARD_SHADOW, MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
+import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
 import { percentText, useStorageUsage } from '../store/storageUsage.js'
 import type { UsageRow } from '../store/storageUsage.js'
 import { usePresets } from '../store/presets.js'
@@ -94,7 +94,6 @@ export default function StorageUsagePopup() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="storage-usage-title"
-        style={MODAL_CARD_SHADOW}
         className={MODAL_PLAIN_CARD_CLASS}
       >
         <div id="storage-usage-title" className="text-sm font-semibold text-(--tx-50) tabular-nums">

@@ -123,7 +123,7 @@ import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 // name; the owner dropped it (an arbitrary letter, and it cost every amnesic preset part of its
 // name's width — "it doesn't make sense to require names to be shorter for amnesic presets"). What
 // is temporary is marked on the page itself instead, where the numbers are: the dashed outline
-// (index.css's .session-only) on the stats strip, and on the Best readouts under Full. So a row is
+// (index.css's .session-only) round the stats strip, and round the Best readouts too under Full. So a row is
 // its name and nothing else, and the name has the whole cell.
 // ★ A SCREEN READER STILL HEARS IT, for every preset in the list and not only the one you are on —
 // the outline is on the screen you are looking at, and a list is where you choose where to go:

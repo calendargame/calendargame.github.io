@@ -193,11 +193,11 @@ function Region({ geometry, active = true }) {
 
 describe('the resting states — nothing to scroll means nothing to signal', () => {
   beforeEach(() => {
-    document.documentElement.style.setProperty('--fade-h', '24px')
+    document.documentElement.style.setProperty('--shade-ramp', '24px')
   })
   afterEach(() => {
     cleanup()
-    document.documentElement.style.removeProperty('--fade-h')
+    document.documentElement.style.removeProperty('--shade-ramp')
   })
 
   it.each(RESTING_GEOMETRIES)(
@@ -262,14 +262,14 @@ describe('the app scroller — content changes with no scroll event (round 11)',
   beforeEach(() => {
     localStorage.clear()
     useSettings.getState().resetToFactory()
-    document.documentElement.style.setProperty('--fade-h', '24px')
+    document.documentElement.style.setProperty('--shade-ramp', '24px')
     ro = installResizeObserver() // BEFORE mount — the app builds its observers in layout effects
   })
   afterEach(() => {
     cleanup()
     ro.restore()
     document.getElementById('root')?.remove()
-    document.documentElement.style.removeProperty('--fade-h')
+    document.documentElement.style.removeProperty('--shade-ramp')
   })
 
   it('watches the mode-content wrapper, not only the pinned box', () => {

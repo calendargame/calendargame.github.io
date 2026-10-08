@@ -951,7 +951,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // also asks "how much content is there" — see round 11 below.
       // What it drives, in two languages (round 10 item B):
       //   • CONTINUOUS — the bar's boundary shadow, and in guide mode the two doc-fade strips, all
-      //     via the 0…1 --shade written straight onto those elements. Strength is a function of
+      //     via the 0…1 --shade written straight onto those elements (the top strip's is the bar's
+      //     own, the ★ note below). Strength is a function of
       //     position, so a stopped scroller is already at its final value, which is what killed the
       //     shadow that used to linger after the page had stopped dead.
       //   • BOOLEAN — the container's own fade-scroll-* masks, which are state classes and so still
@@ -979,7 +980,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // already applied, and the indicators are right on the FIRST painted frame. As a passive
       // effect it would evaluate after the paint, so returning to a scrolled guide flashed one
       // frame with no bar shadow and no top fade.
-      // ★ THE BAR'S SHADOW HAS TWO INPUTS, AND ONE WRITER (paintBarShade). `edge` is the strength
+      // ★ THE BAR'S EDGE HAS TWO INPUTS, AND ONE WRITER (paintBarShade). `edge` is the strength
       // the scroll position gives it — the effect below, the same on every screen. `yield` is the
       // share of that the bar KEEPS, which is 1 everywhere except How to Play with a section open:
       // there the open section's header docks flush under the bar, the text slides under the
@@ -989,8 +990,19 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // scroll event, in no particular order — so each one stores its number and BOTH repaint the
       // product. Whichever runs second writes the final value, and it is the same value either way,
       // before the frame is painted.
+      // ★ AND THE ONE NUMBER GOES TO BOTH THINGS THE BAR'S EDGE SAYS: its shadow, and — on How to
+      // Play — the page's top fade (.doc-fade-top), which sits against that same edge. They are two
+      // cues about one fact (text is sliding under THIS edge), so a docked header that takes the
+      // edge over takes both: the fade is off for exactly as long as the bar's shadow is, and
+      // returns with it as the header leaves. Written here and nowhere else, which is what makes it
+      // impossible for the fade to be left on over a docked header — it once was, while only the
+      // shadow was handed over, and it washed out the top of the docked header on an iPhone.
       const barShadeRef=useRef({edge:0,yield:1});
-      const paintBarShade=useCallback(()=>writeShade(htpStickyBarRef.current,barShadeRef.current.edge*barShadeRef.current.yield),[]);
+      const paintBarShade=useCallback(()=>{
+        const shade=barShadeRef.current.edge*barShadeRef.current.yield;
+        writeShade(htpStickyBarRef.current,shade);
+        writeShade(docFadeTopRef.current,shade);
+      },[]);
       const yieldBarShade=useCallback((share: number)=>{barShadeRef.current.yield=share;paintBarShade();},[paintBarShade]);
       useLayoutEffect(()=>{
         const rampPx=readShadeRampPx();
@@ -1000,7 +1012,6 @@ import BlitzMode from './modes/BlitzMode.jsx'
           const top=edgeShade(gaps.top,0,rampPx);
           barShadeRef.current.edge=top;
           paintBarShade();
-          writeShade(docFadeTopRef.current,top);
           writeShade(docFadeBottomRef.current,edgeShade(gaps.bottom,BOTTOM_EDGE_BAND_PX,rampPx));
           return gaps;
         };
@@ -2359,7 +2370,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
             it, the <h1> below says what the name became).
             elev-shadow-down is UNCONDITIONAL — the bar is always this screen's top boundary, and
             how strongly it says so is the 0…1 --shade the edge effect writes onto this element
-            (0 at rest, ramping to full over the first --fade-h of scroll). The class used to be
+            (0 at rest, ramping to full over the first --shade-ramp of scroll). The class used to be
             toggled and cross-faded by a CSS transition, which is what left a shadow visibly
             fading out after a status-bar tap had already stopped the page dead.
             HtP-only bar pb-2.5: absorbs half (10px) of the 20px gap that sits between the title
@@ -2630,13 +2641,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
         </div>
         </div>
         {/* The guide's two soft edges — ⚠ KEPT ACROSS ROUND 13, and the reason changed. They exist
-            because How to Play's edges are PROGRESSIVE: each strip's opacity is the same continuous
-            --shade the edge effect writes onto the bar, so the whole screen's boundaries ramp on
-            one number. The container's own fade-scroll-* masks are boolean state classes and are
-            pinned off in guide mode (see the edge effect) precisely so these two are not doubled by
-            a feather that snaps. Folding them into the shared masks would compile and would leave
-            every shipped test name green — and would silently revert round 10 on the one page it
-            was built for. index.css carries the same warning at the rules.
+            because How to Play's edges are PROGRESSIVE: each strip's opacity is a continuous
+            --shade — the top strip's the very number the bar's shadow gets (so it is off while a
+            section header is docked under the bar), the bottom strip's the bottom edge's own. The
+            container's own fade-scroll-* masks are boolean state classes and are pinned off in
+            guide mode (see the edge effect) precisely so these two are not doubled by a feather
+            that snaps. Folding them into the shared masks would compile and would leave every
+            shipped test name green — and would break the page three ways; index.css says which, at
+            the rules.
             position:fixed survives the move untouched: it paints over the VIEWPORT, and the
             scroller's box is `absolute inset-0` — the viewport — so the strips sit exactly over its
             edges while living outside it. The top strip tucks under the fixed bar at --bar-h, the

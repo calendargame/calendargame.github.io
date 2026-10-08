@@ -11,8 +11,14 @@
 //   …with Save Stats off, the strip is DIMMED and never dashed (nothing is being recorded at all,
 //   so there are no numbers on it to mark); the Best readouts keep theirs on Full.
 //
-// This file pins that table in every mode, the words that say the same thing to a screen reader,
-// and — as far as a test without a layout engine can — that the outline cannot move a pixel.
+// ★ AND IT IS ONE FRAME. "Dashed" means INSIDE the frame, and there is never more than one frame
+// on a screen: round the strip alone, round the Best readouts alone, or — when both are the
+// session's — ONE frame round the two together, drawn by the group that holds them. (They used to
+// wear a frame each, of two different widths and corners.)
+//
+// This file pins that table in every mode, which element draws the frame, the words that say the
+// same thing to a screen reader, and — as far as a test without a layout engine can — that the
+// outline cannot move a pixel.
 // ⚠ WHAT IT CANNOT SEE: jsdom lays nothing out and paints nothing. That the outline looks calm and
 // unmistakable in all five themes, and that the strip and the readouts measure the same with it as
 // without, were checked in a real browser at 390×844 (the round's gate); what is pinned here is the
@@ -22,7 +28,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, act, fireEvent } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import StatPanel from '../src/components/StatPanel.jsx'
-import BestReadout from '../src/components/BestReadout.jsx'
 import { setPresetAmnesic, createPreset, switchPreset } from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
@@ -42,16 +47,31 @@ const strip = () => {
   const value = [...document.querySelectorAll('[data-statval]')].find((el) => !isHidden(el))
   return value.closest('.panel')
 }
+// THE GROUP the strip and its Best readouts are the two children of.
+const group = () => strip().parentElement
 // THE VISIBLE Best readout — the row that holds a "Best …:" label — or null in a mode without one.
+// It is the strip's sibling in the group, found from the label up and never by a class.
 const bestReadout = () => {
   const label = [...document.querySelectorAll('div')].find(
     (el) => !isHidden(el) && /^s*Best (Score|Mean):/.test(el.firstChild?.nodeValue ?? ''),
   )
   if (!label) return null
-  for (let n = label; n; n = n.parentElement) if (/(^|\s)mt-3(\s|$)/.test(n.className)) return n
-  throw new Error('a Best label with no readout row round it')
+  for (let n = label; n; n = n.parentElement) if (n.parentElement === group()) return n
+  throw new Error('a Best label that is not in the strip’s group')
 }
-const dashed = (el) => el.classList.contains('session-only')
+// DASHED = inside the frame: the element, or one it sits in, wears the class.
+const dashed = (el) => el.closest('.session-only') !== null
+// WHICH ELEMENT DRAWS THE FRAME on the screen that is showing — and that there is only one.
+const frameHost = () => {
+  const hosts = [...document.querySelectorAll('.session-only')].filter((el) => !isHidden(el))
+  expect(hosts.length).toBeLessThanOrEqual(1) // never two frames
+  const [host] = hosts
+  if (!host) return null
+  if (host === strip()) return 'strip'
+  if (host === group()) return 'group'
+  if (host === bestReadout()) return 'bests'
+  throw new Error('the frame is on an element that is none of the three')
+}
 const says = (el, words) =>
   [...el.querySelectorAll('.sr-only')].some((s) => s.textContent === words)
 const press = (key) => act(() => fireEvent.keyDown(window, { key }))
@@ -104,6 +124,7 @@ describe('the dashed outline, mode by mode and value by value', () => {
       for (const mode of ['off', 'stats', 'full', 'off']) {
         setAmnesic(mode)
         seen[mode] = {
+          frame: frameHost(),
           strip: dashed(strip()),
           stripSays: says(strip(), STRIP_WORDS),
           bests: hasBests ? dashed(bestReadout()) : null,
@@ -112,9 +133,12 @@ describe('the dashed outline, mode by mode and value by value', () => {
       }
       const none = hasBests ? false : null
       expect(seen).toEqual({
-        off: { strip: false, stripSays: false, bests: none, bestsSay: none },
-        stats: { strip: true, stripSays: true, bests: none, bestsSay: none },
+        off: { frame: null, strip: false, stripSays: false, bests: none, bestsSay: none },
+        // Stats Only: the frame is the strip's own — the Bests under it are outside.
+        stats: { frame: 'strip', strip: true, stripSays: true, bests: none, bestsSay: none },
+        // Full: ONE frame round both, where there are Bests; the strip's alone where there are not.
         full: {
+          frame: hasBests ? 'group' : 'strip',
           strip: true,
           stripSays: true,
           bests: hasBests ? true : null,
@@ -134,6 +158,8 @@ describe('the dashed outline, mode by mode and value by value', () => {
       expect(dashed(strip())).toBe(true)
       act(() => useSettings.getState().setSaveStats(false))
       expect(dashed(strip())).toBe(false)
+      // What is left to mark is the Bests alone, on Full — so the frame is the readouts' own.
+      expect(frameHost()).toBe(mode === 'full' ? 'bests' : null)
       expect(strip().className).toContain('opacity-50')
       expect(says(strip(), DIM_WORDS)).toBe(true)
       expect(says(strip(), STRIP_WORDS)).toBe(false)
@@ -172,13 +198,14 @@ describe('the dashed outline, mode by mode and value by value', () => {
     const button = screen.getByRole('button', { name: 'Show round breakdown' })
     expect(button).toBe(strip())
     expect(dashed(button)).toBe(true)
+    expect(frameHost()).toBe('strip')
     const described = document.getElementById(button.getAttribute('aria-describedby'))
     expect(described.textContent).toBe(STRIP_WORDS)
     expect(button.contains(described)).toBe(true)
   })
 })
 
-// ── The two components on their own ───────────────────────────────────────────────────────────
+// ── The block on its own ──────────────────────────────────────────────────────────────────────
 describe('the outline costs no layout', () => {
   beforeEach(() => resetAppState())
   afterEach(cleanup)
@@ -187,43 +214,74 @@ describe('the outline costs no layout', () => {
     { label: 'Score', value: '3/4' },
     { label: 'Accuracy', value: '75%' },
   ]
-  // Everything about an element that could size or place it, as jsdom can see it: its tag, its
-  // class list with the two outline classes set aside, and its children that are in the flow.
+  const BESTS = <div>Best Score: 12</div>
+  // Everything about the block that could size or place anything in it, as jsdom can see it: every
+  // element's tag and class list, with the frame's class set aside, and its children that are in
+  // the flow (the screen-reader words are positioned out of it).
   const shape = (el) => ({
     tag: el.tagName,
-    classes: [...el.classList].filter((c) => !c.startsWith('session-only')).sort(),
-    inFlow: [...el.children]
-      .filter((c) => !c.classList.contains('sr-only'))
-      .map((c) => c.outerHTML),
+    classes: [...el.classList].filter((c) => c !== 'session-only').sort(),
+    text: [...el.childNodes].filter((c) => c.nodeType === 3).map((c) => c.nodeValue),
+    inFlow: [...el.children].filter((c) => !c.classList.contains('sr-only')).map(shape),
+  })
+  const block = (amnesic, dimmed, bests) => {
+    cleanup()
+    act(() => setPresetAmnesic(1, amnesic))
+    return render(<StatPanel stats={STATS} dimmed={dimmed} bests={bests} />).container.firstChild
+  }
+  const frames = (root) =>
+    [root, ...root.querySelectorAll('*')].filter((el) => el.classList.contains('session-only'))
+
+  it('the strip and its Bests are the same elements, classes, and cells whatever is framed', () => {
+    const plain = shape(block('off', false, BESTS))
+    // Stats Only: the strip wears the frame. Full: the group does, round both.
+    const statsOnly = block('stats', false, BESTS)
+    expect(frames(statsOnly)).toEqual([statsOnly.firstChild])
+    expect(shape(statsOnly)).toEqual(plain)
+    const full = block('full', false, BESTS)
+    expect(frames(full)).toEqual([full])
+    expect(shape(full)).toEqual(plain)
+    // The only things added are positioned out of the flow.
+    expect([...full.querySelectorAll('.sr-only')].map((c) => c.textContent)).toEqual([
+      STRIP_WORDS,
+      BEST_WORDS,
+    ])
+    // Save Stats off: the dim's own classes and dashes are the same with or without a frame, and
+    // on Full the frame is the Best readouts' own.
+    const dimmedPlain = shape(block('off', true, BESTS))
+    const dimmedFull = block('full', true, BESTS)
+    expect(frames(dimmedFull)).toEqual([dimmedFull.lastChild])
+    expect(shape(dimmedFull)).toEqual(dimmedPlain)
   })
 
-  it('the strip is the same element, classes and cells with the outline as without', () => {
-    const plain = shape(render(<StatPanel stats={STATS} dimmed={false} />).container.firstChild)
-    cleanup()
-    act(() => setPresetAmnesic(1, 'stats'))
-    const root = render(<StatPanel stats={STATS} dimmed={false} />).container.firstChild
-    expect(dashed(root)).toBe(true)
-    expect(shape(root)).toEqual(plain)
-    // The only thing added is positioned out of the flow.
-    const added = [...root.children].filter((c) => c.classList.contains('sr-only'))
-    expect(added.map((c) => c.textContent)).toEqual([STRIP_WORDS])
+  it('a mode with no Bests has the same block, and its frame is the strip’s alone', () => {
+    const plain = shape(block('off', false, undefined))
+    expect(plain.inFlow).toHaveLength(1) // the strip, and no empty row under it
+    for (const amnesic of ['stats', 'full']) {
+      const root = block(amnesic, false, undefined)
+      expect(frames(root)).toEqual([root.firstChild])
+      expect(shape(root)).toEqual(plain)
+    }
   })
 
-  it('a Best readout is the same element, classes and content with the outline as without', () => {
-    const row = (
-      <BestReadout>
-        <div>Best Score: 12</div>
-      </BestReadout>
-    )
-    const plain = shape(render(row).container.firstChild)
-    cleanup()
-    act(() => setPresetAmnesic(1, 'full'))
-    const root = render(row).container.firstChild
-    expect(dashed(root)).toBe(true)
-    expect(shape(root)).toEqual(plain)
-    cleanup()
-    act(() => setPresetAmnesic(1, 'stats')) // kept on Stats Only: no outline
-    expect(dashed(render(row).container.firstChild)).toBe(false)
+  // ★ ONE SHAPE, ON THE COLUMN'S EDGES. Whichever of the three elements wears the frame, the frame
+  // is that element's own box (inset:0) with that element's own radius (inherit) — so the three
+  // have to be the column's width and carry the strip's radius, and the group may add no box of
+  // its own. The readouts' text is kept inside the line by padding the row has in every state.
+  it('the three elements that can wear the frame share one radius, and none is wider than the column', () => {
+    const root = block('full', false, BESTS)
+    const [stripEl, bestsEl] = root.children
+    for (const el of [root, stripEl, bestsEl]) {
+      const classes = [...el.classList]
+      expect(classes).toContain('rounded-2xl')
+      // No negative margin and no fixed width: a block box in the column is the column's width.
+      expect(classes.filter((c) => /^-m|^w-(?!full$)|^min-w|^max-w/.test(c))).toEqual([])
+    }
+    // The group is the strip's place on the page and nothing else: no padding, no border.
+    expect([...root.classList].sort()).toEqual(['mt-4', 'rounded-2xl', 'session-only'])
+    // The readouts' row: its text starts inside the line, framed or not.
+    expect([...bestsEl.classList]).toEqual(expect.arrayContaining(['px-3', 'py-1.5', 'mt-1.5']))
+    expect([...block('off', false, BESTS).lastChild.classList]).toEqual([...bestsEl.classList])
   })
 
   // ★ THE RULES THEMSELVES. The frame is a ::after box positioned out of the flow; the host gains
@@ -236,29 +294,25 @@ describe('the outline costs no layout', () => {
       expect(at, selector).toBeGreaterThan(-1)
       return css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at))
     }
-    // (…and where the keyboard's focus ring sits on a host that wears the frame: clear inside it.)
+    // (…and where the keyboard's focus ring sits on a control on the frame's line: clear inside it.
+    // A custom property, so it reaches the strip when the frame is the group's.)
     expect(rule('.session-only')).toBe('position:relative;--kbd-ring-offset:-5px')
-    expect(rule('.panel.session-only')).toBe('border-color:transparent')
+    // The strip's own solid border steps aside for the dashes, wearing the frame or under one.
+    expect(rule('.panel.session-only,.session-only>.panel')).toBe('border-color:transparent')
     const frame = Object.fromEntries(
       rule('.session-only::after')
         .split(';')
         .map((d) => [d.slice(0, d.indexOf(':')), d.slice(d.indexOf(':') + 1)]),
     )
     expect(frame.position).toBe('absolute') // out of the flow: it cannot push anything
+    expect(frame.inset).toBe('0') // the host's own box — never outside it
     expect(frame['pointer-events']).toBe('none') // and it never takes a tap meant for the strip
     expect(frame.border).toMatch(/dashed/) // dashed — the keyboard's focus ring is solid
     expect(frame['border-radius']).toBe('inherit')
-    // The readouts' frame is drawn AROUND the row, in the gaps already there.
-    expect(rule('.session-only-outset::after')).toMatch(/^inset:-/)
-    // …and every rule with the class in its selector is one of the four above.
+    // …and every rule with the class in its selector is one of the three above: ONE frame shape.
     const selectors = [...css.matchAll(/\n([^\n{}]*session-only[^\n{}]*)\{/g)].map((m) => m[1])
     expect(selectors.sort()).toEqual(
-      [
-        '.panel.session-only',
-        '.session-only',
-        '.session-only-outset::after',
-        '.session-only::after',
-      ].sort(),
+      ['.panel.session-only,.session-only>.panel', '.session-only', '.session-only::after'].sort(),
     )
   })
 })

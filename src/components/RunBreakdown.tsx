@@ -5,7 +5,7 @@ import type { RunBreakdown as RunBreakdownData, SolveMark } from '../engine/runB
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import Popup from './Popup.js'
-import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
+import { MODAL_CARD_CLASS } from './modalContract.js'
 
 // ─────────────────────────────────────────────────────────────────────────
 // components/RunBreakdown — an ended run or round, solve by solve.
@@ -91,7 +91,6 @@ export default function RunBreakdown({
         role="dialog"
         aria-modal="true"
         aria-labelledby="run-breakdown-title"
-        style={MODAL_CARD_SHADOW}
         className={MODAL_CARD_CLASS}
       >
         <div className="px-4 flex items-baseline justify-between gap-2">

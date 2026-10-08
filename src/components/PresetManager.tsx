@@ -4,13 +4,13 @@ import { flushSync } from 'react-dom'
 import {
   BOTTOM_EDGE_BAND_PX,
   SCROLL_REGION_CLASS,
-  readShadeRampPx,
+  readFadeDepthPx,
   scrollBandIntoView,
   scrollEdgeGaps,
   scrollFadeClass,
   useScrollEdgeState,
 } from './scrollRegion.js'
-import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
+import { MODAL_CARD_CLASS } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
 import { usePresets, MAX_PRESET_NAME } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
@@ -773,7 +773,7 @@ export default function PresetManager({
       startScrollTop: scrollTop,
       transformY: 0,
       // NaN where no stylesheet is served (jsdom): no fade there, so no inset — and no reach.
-      fadeDepth: readShadeRampPx() || 0,
+      fadeDepth: readFadeDepthPx() || 0,
       reach: (list && parseFloat(getComputedStyle(list).paddingTop)) || 0,
     })
   }
@@ -866,7 +866,6 @@ export default function PresetManager({
         role="dialog"
         aria-modal="true"
         aria-labelledby="preset-manager-title"
-        style={MODAL_CARD_SHADOW}
         className={`${MODAL_CARD_CLASS} px-4`}
       >
         <div id="preset-manager-title" className="text-sm font-semibold text-(--tx-50)">
@@ -911,7 +910,6 @@ export default function PresetManager({
       role="dialog"
       aria-modal="true"
       aria-labelledby="preset-manager-title"
-      style={MODAL_CARD_SHADOW}
       className={MODAL_CARD_CLASS}
     >
       <div id="preset-manager-title" className="px-4 text-sm font-semibold text-(--tx-50)">

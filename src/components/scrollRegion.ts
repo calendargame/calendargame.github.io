@@ -89,9 +89,9 @@ export const isScrolledFromTop = (gaps: ScrollEdgeGaps): boolean => gaps.top > 0
 
 // gap → --shade, the 0…1 strength of that edge's boundary shadow (index.css). The band is that
 // edge's "arrived" tolerance, so the ramp starts where the boolean flips and the two can never
-// contradict each other: shade > 0 exactly when the edge is live. rampPx is --fade-h, read once
-// per listener attach — CSS cannot do this arithmetic itself (calc() has no length ÷ length), so
-// the number crosses into JS rather than being duplicated as a literal.
+// contradict each other: shade > 0 exactly when the edge is live. rampPx is --shade-ramp, read
+// once per listener attach — CSS cannot do this arithmetic itself (calc() has no length ÷ length),
+// so the number crosses into JS rather than being duplicated as a literal.
 // If rampPx fails to parse the ramp DEGRADES TO THE BOOLEAN — full strength the moment the edge
 // is live — which is the pre-round-10 behaviour, never a missing shadow.
 export function edgeShade(gap: number, band: number, rampPx: number): number {
@@ -100,16 +100,29 @@ export function edgeShade(gap: number, band: number, rampPx: number): number {
   return span > 0 ? Math.min((gap - band) / span, 1) : 1
 }
 
-// --fade-h is a literal px token on :root (index.css), so it cannot fail to parse anywhere that
-// serves the stylesheet; the guard in edgeShade covers the environment that serves none (jsdom).
-export const readShadeRampPx = (): number =>
-  parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-h'))
+// ── The two edge distances, in px (index.css's :root, where the two are told apart) ─────────
+// Both tokens are written in rem, and a custom property reaches JS as the TEXT written in the
+// stylesheet (".75rem"), not as a resolved length — parseFloat alone would hand back 0.75 and call
+// it pixels. So a rem is resolved here against the root's own font size, which is what a rem is; a
+// px value passes straight through. Nothing else is accepted: any other unit, and the environment
+// that serves no stylesheet at all (jsdom), reads NaN, which every caller already treats as "no
+// distance known" — edgeShade degrades to the boolean, the fade-depth callers take 0.
+const readRootLengthPx = (token: string): number => {
+  const root = getComputedStyle(document.documentElement)
+  const match = /^(-?[\d.]+)(px|rem)$/.exec(root.getPropertyValue(token).trim())
+  if (!match) return NaN
+  return parseFloat(match[1]) * (match[2] === 'rem' ? parseFloat(root.fontSize) : 1)
+}
+/** How far a scroller travels from an edge before that edge's --shade reaches 1. */
+export const readShadeRampPx = (): number => readRootLengthPx('--shade-ramp')
+/** How deep an edge fade is drawn — what a row has to clear to be whole on screen. */
+export const readFadeDepthPx = (): number => readRootLengthPx('--fade-h')
 
 // The ONE way --shade reaches the DOM. A custom property set straight on the element, NOT React
 // state: a state update per scroll frame would re-render the whole host component to move a
 // shadow. This write invalidates style for one element and touches no layout (box-shadow and
 // opacity are paint-only), and it is skipped outright when the rounded value has not changed —
-// which is most frames, since a scroller more than --fade-h from both edges sits pinned at 1 and
+// which is most frames, since a scroller more than --shade-ramp from both edges sits pinned at 1 and
 // one at rest sits pinned at 0. So there is no rAF throttle and deliberately so: scroll events
 // are already coalesced to at most one per frame, and deferring the write by a frame would put
 // the shadow one frame behind the content — reintroducing, in miniature, the lag this replaced.
@@ -426,7 +439,7 @@ type RowView = RowMetrics & { clientHeight: number; scrollTop: number; rows: num
  */
 export function scrollBandIntoView(el: HTMLElement, top: number, height: number): void {
   // No fade depth to read where no stylesheet is served.
-  const margin = readShadeRampPx() || 0
+  const margin = readFadeDepthPx() || 0
   if (top - margin < el.scrollTop) el.scrollTop = top - margin
   else if (top + height + margin > el.scrollTop + el.clientHeight)
     el.scrollTop = top + height + margin - el.clientHeight

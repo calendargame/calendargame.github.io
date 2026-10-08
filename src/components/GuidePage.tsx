@@ -1006,9 +1006,10 @@ export default function GuidePage({
             section you&apos;re in and tap it closed from anywhere in it. The title picks up a soft
             shadow only once the text starts scrolling underneath it, and loses it again when you
             scroll back up; while a title is docked, the bar&apos;s own shadow steps aside for it,
-            so the shadow is always under whichever edge the text is sliding beneath. Closing a
-            section from its docked title leaves the title right where it is while the section folds
-            away below it.
+            so the shadow is always under whichever edge the text is sliding beneath. The soft fade
+            at the top of this page steps aside with it — a docked title is never faded — and
+            returns as the title leaves. Closing a section from its docked title leaves the title
+            right where it is while the section folds away below it.
           </li>
           <li>
             The guide holds its place while you're in the app: switch to a mode, play, and come back
@@ -1566,8 +1567,9 @@ export default function GuidePage({
             <b>A dashed outline round the whole strip</b> — the numbers are being recorded, but only
             for this visit: the preset is on Amnesic: Stats Only or Full, and the strip is gone when
             the app closes. It always goes round the entire strip, never a single box, and in{' '}
-            {modeNames('aox', 'blitz')} the same outline round the Best readouts means the same
-            thing about them (Full only). See <b>Stats &mdash; Amnesic</b>.
+            {modeNames('aox', 'blitz')} on Full the one outline goes round the strip and the Best
+            readouts under it together, because neither will be kept. See{' '}
+            <b>Stats &mdash; Amnesic</b>.
           </li>
         </UL>
         <p>
@@ -2150,8 +2152,8 @@ export default function GuidePage({
             is where the keyboard is, and the ring stays on the list&apos;s button. None of this is
             the dashed outline Amnesic puts round numbers that won&apos;t be kept — that one is
             dashed and fainter, marks numbers rather than a control, and has nothing to do with the
-            keyboard; where the stats strip wears it and has the keyboard too, the solid ring sits
-            just inside the dashes.
+            keyboard; where the stats strip is inside it and has the keyboard too, the solid ring
+            sits just inside the dashes.
           </li>
           <li>
             The ⚙ menu itself is not a dialog — it&apos;s a menu hanging off its button — but it
@@ -2770,16 +2772,17 @@ export default function GuidePage({
         </p>
         <Subhead>The dashed outline</Subhead>
         <p>
-          Whatever on the screen is not going to be kept wears a dashed outline, so you never have
-          to remember which value a preset is on:
+          Whatever on the screen is not going to be kept sits inside one dashed outline, so you
+          never have to remember which value a preset is on:
         </p>
         <UL>
           <li>
-            On <b>Stats Only</b>, the stats strip is outlined, on every mode&apos;s screen. The Best
-            readouts under it in {modeNames('aox', 'blitz')} are not — those are being kept.
+            On <b>Stats Only</b>, the outline goes round the stats strip, on every mode&apos;s
+            screen. The Best readouts under it in {modeNames('aox', 'blitz')} are left outside it —
+            those are being kept.
           </li>
           <li>
-            On <b>Full</b>, the stats strip and the Best readouts are both outlined.
+            On <b>Full</b>, one outline goes round the stats strip and the Best readouts together.
           </li>
           <li>
             On <b>Off</b>, nothing is.
@@ -2787,11 +2790,11 @@ export default function GuidePage({
         </UL>
         <p>
           With Save Stats off the strip is dimmed instead, with no outline: nothing is being counted
-          at all then, so there are no numbers on it to call temporary. (On Full the Best readouts
-          keep their outline — they are still showing the session&apos;s Bests.) The outline changes
-          nothing else: every box stays exactly where it is and works exactly as it did. Nothing is
-          drawn beside a preset&apos;s name in the preset lists; see <b>Accessibility</b> for what a
-          screen reader says there instead.
+          at all then, so there are no numbers on it to call temporary. (On Full the outline is then
+          drawn round the Best readouts alone — they are still showing the session&apos;s Bests.)
+          The outline changes nothing else: every box stays exactly where it is and works exactly as
+          it did. Nothing is drawn beside a preset&apos;s name in the preset lists; see{' '}
+          <b>Accessibility</b> for what a screen reader says there instead.
         </p>
         <Subhead>What it forgets</Subhead>
         <UL>

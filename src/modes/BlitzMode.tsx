@@ -21,7 +21,7 @@ import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import BlitzBestRow from '../components/BlitzBestRow.jsx'
-import BestReadout from '../components/BestReadout.jsx'
+import { BEST_COLUMN_CLASS } from '../components/BestReadout.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
@@ -1057,6 +1057,22 @@ function BlitzMode({
         dimmed={!saveStats}
         onActivate={breakdownAvail ? () => setBreakdownOpen(true) : null}
         activateLabel={perQ ? 'Show run breakdown' : 'Show round breakdown'}
+        // The Best readouts, in the row under the strip (components/BestReadout, which StatPanel
+        // renders): one record per sub-mode, and sudden death's is a score alone.
+        bests={
+          !perQ ? (
+            <BlitzBestRow rec={bScore} roundId={roundId} />
+          ) : allowMistakes ? (
+            <BlitzBestRow rec={saScore} roundId={roundId} />
+          ) : (
+            <div className="flex flex-wrap items-start gap-4">
+              <div className={BEST_COLUMN_CLASS}>
+                Best Score: {sScore?.score ?? '—'}
+                {isNewBest(sScore?.roundId, roundId) && <NewBestStar />}
+              </div>
+            </div>
+          )
+        }
       />
       {/* Mounted only while up — see the component header, and the twin site in modes/AoxMode. */}
       {breakdownOpen && (
@@ -1066,18 +1082,6 @@ function BlitzMode({
           fmtDate={fmtDate}
           title={perQ ? 'Run Breakdown' : 'Round Breakdown'}
         />
-      )}
-      {!perQ && <BlitzBestRow rec={bScore} roundId={roundId} />}
-      {perQ && allowMistakes && <BlitzBestRow rec={saScore} roundId={roundId} />}
-      {perQ && !allowMistakes && (
-        <BestReadout>
-          <div className="flex flex-wrap items-start gap-4">
-            <div className="min-w-[125px]">
-              Best Score: {sScore?.score ?? '—'}
-              {isNewBest(sScore?.roundId, roundId) && <NewBestStar />}
-            </div>
-          </div>
-        </BestReadout>
       )}
       <div className="mt-3 flex gap-2">
         <button

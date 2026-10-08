@@ -369,12 +369,12 @@ describe('G12 — the panel scrolls its list, not itself', () => {
     // real value — and BEFORE the mount, because the hook reads it once when it attaches to the
     // scroller. Without it the ramp degrades to the boolean (full strength the moment the edge is
     // live), which is a real supported fallback and would make the ramp case say nothing.
-    document.documentElement.style.setProperty('--fade-h', '24px')
+    document.documentElement.style.setProperty('--shade-ramp', '24px')
   })
   afterEach(() => {
     cleanup()
     document.getElementById('root')?.remove()
-    document.documentElement.style.removeProperty('--fade-h')
+    document.documentElement.style.removeProperty('--shade-ramp')
   })
 
   it('keeps the list in a scroll region with the footer inside the card but outside it', () => {

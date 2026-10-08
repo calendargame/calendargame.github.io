@@ -33,7 +33,7 @@ import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scro
 import { useStorageUsage } from '../store/storageUsage.js'
 import Popup from './Popup.js'
 import { useLayer } from './overlayStack.js'
-import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
+import { MODAL_CARD_CLASS } from './modalContract.js'
 import {
   WRITTEN_FORMATS,
   NUMERIC_FORMATS,
@@ -739,7 +739,6 @@ export function SettingsPanel({
         role="dialog"
         aria-modal="true"
         aria-labelledby="changelog-title"
-        style={MODAL_CARD_SHADOW}
         className={MODAL_CARD_CLASS}
       >
         {/* THE HEADING ROW: "What's new" left, the app's version right (2026-08-10). This popup is
@@ -824,19 +823,13 @@ export function SettingsPanel({
       {/* ★ THE CARD IS THE FIRST CHILD OF THIS FRAGMENT AND HAS NO WRAPPER. It renders at the bar's
           slot, and it is `absolute left-4 right-4 top-full` against the bar's `relative` inner
           wrapper — an extra div here would become the containing block and detach the panel.
-          Elevation + bottom cushion (Calendar Game, refined 2026-06-09): this popover is a FLOATING
-          OVERLAY (it pops over the page, which stays live and undimmed behind it — only a popup
-          dims the page), so it uses the app's even, all-around overlay
-          shadow — the SAME visual language as the dropdown menus (CustomSelect) — NOT the
-          directional `elev-shadow-down` (that one is the scroll-BOUNDARY cue for fixed
-          bars/headers/footers, the wrong language for a free-floating panel). It's OFFSET-FREE
-          (`0 0 8px`, vs the dropdowns' downward-offset shadow) so the shadow extends EQUALLY on all
-          four sides — the panel is inset against the screen edge on every side and must read as
-          symmetric. It's SUBTLE (12% black, the app's overlay-shadow color) because the card's fill
-          + 1px card border already separate it (the shadow only adds a gentle lift). That fill is
-          SOLID in every theme (--card-bg, index.css), so nothing on the page behind shows through
-          this panel; and SMALL (8px blur) so it stays clearly contained inside the 1rem gap (vs
-          the dropdowns' 28px blur, which would overflow the cushion and clip at the screen edge).
+          Elevation + bottom cushion: this popover is a FLOATING surface (it pops over the page,
+          which stays live and undimmed behind it — only a popup dims the page), so it wears the
+          FLOATING shadow (`float-shadow`, index.css's three shadow roles) — the same one as every
+          popup's card and every dropdown list — NOT the directional `elev-shadow-down` (that one
+          is the scroll-BOUNDARY cue for fixed bars/headers/footers, the wrong language for a
+          free-floating panel). Its fill is SOLID in every theme (--card-bg, index.css), so nothing
+          on the page behind shows through this panel.
           Bottom cushion: the calc uses REM, not px, so it matches the rem-based side insets EXACTLY
           — left-4/right-4 = 1rem, and the app's root font is FLUID (html{font-size:clamp(...)}), so
           1rem ≠ 16px; a hardcoded px cushion would NOT equal the sides and would drift per-device.
@@ -876,8 +869,7 @@ export function SettingsPanel({
         aria-label="Settings menu"
         tabIndex={-1}
         data-drag-dismiss
-        style={MODAL_CARD_SHADOW}
-        className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card py-4 space-y-4 flex flex-col max-h-[calc(100dvh_-_var(--bar-h)_-_0.5rem_-_1rem_-_env(safe-area-inset-bottom))]"
+        className="absolute left-4 right-4 top-full mt-2 z-50 rounded-2xl card float-shadow py-4 space-y-4 flex flex-col max-h-[calc(100dvh_-_var(--bar-h)_-_0.5rem_-_1rem_-_env(safe-area-inset-bottom))]"
       >
         <div
           ref={popoverInnerScrollRef}
@@ -1422,7 +1414,7 @@ export function SettingsPanel({
         </div>
         {/* The panel's bottom boundary. elev-shadow-up is UNCONDITIONAL: its strength is the
             --shade the edge hook writes onto this element (0 when the list is scrolled to the end,
-            ramping to full over the last --fade-h of travel), so there is no class to toggle and
+            ramping to full over the last --shade-ramp of travel), so there is no class to toggle and
             nothing left to animate.
             ⚠ .popover-sticky-footer HAS NO CSS RULE ANYWHERE — round 13 removed it, and
             tests/guideScroll.dom separately asserts it is ABSENT from the stylesheet. It reads as

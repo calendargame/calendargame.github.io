@@ -28,6 +28,7 @@
 // hanging out of both ends of a scrim that cannot scroll. Nothing pinned that before.
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, cleanup, act, fireEvent } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
 import LookupCard from '../src/components/LookupCard.jsx'
 import DefaultsCard from '../src/components/DefaultsCard.jsx'
 import { setScrollGeometry } from './helpers/scrollGeometry.js'
@@ -38,6 +39,8 @@ import {
   isAtBottom,
   isScrolledFromTop,
   edgeShade,
+  readFadeDepthPx,
+  readShadeRampPx,
 } from '../src/components/scrollRegion.js'
 
 // The saved entry shape (store/progress): the date the user typed and nothing else — every
@@ -97,8 +100,59 @@ describe('Lookup history on the shared scroll-region recipe (round 7)', () => {
   })
 })
 
+// ── THE TWO EDGE DISTANCES, AS JS READS THEM ─────────────────────────────────────────────────
+// index.css writes both in rem (the fade's depth was the app's one fixed-pixel measure until the
+// fades were given one standard), and a custom property reaches JS as the text in the stylesheet —
+// so a bare parseFloat would read ".75rem" as three-quarters of a PIXEL: an edge shadow at full
+// strength after a hair of scroll, a dragged row let in under the fade. The readers resolve the
+// rem against the root's own font size; and they are two readers because the tokens are two
+// things (how deep a fade is drawn; how far a scroller travels before an edge is fully asserted).
+describe('the fade depth and the shade ramp reach JS in px, whatever unit the stylesheet writes', () => {
+  const root = document.documentElement
+  afterEach(() => {
+    for (const p of ['--fade-h', '--shade-ramp', 'font-size']) root.style.removeProperty(p)
+  })
+
+  it('resolves rem against the root font size, and passes px through', () => {
+    root.style.setProperty('font-size', '16.5px')
+    root.style.setProperty('--fade-h', '.75rem')
+    root.style.setProperty('--shade-ramp', '1.5rem')
+    expect(readFadeDepthPx()).toBeCloseTo(12.375, 6)
+    expect(readShadeRampPx()).toBeCloseTo(24.75, 6)
+    root.style.setProperty('--fade-h', '12px')
+    root.style.setProperty('--shade-ramp', ' 24px ')
+    expect([readFadeDepthPx(), readShadeRampPx()]).toEqual([12, 24])
+  })
+
+  it('reads each token and not the other', () => {
+    root.style.setProperty('--fade-h', '7px')
+    expect(readFadeDepthPx()).toBe(7)
+    expect(readShadeRampPx()).toBeNaN()
+    root.style.removeProperty('--fade-h')
+    root.style.setProperty('--shade-ramp', '9px')
+    expect(readShadeRampPx()).toBe(9)
+    expect(readFadeDepthPx()).toBeNaN()
+  })
+
+  it('answers NaN — "no distance known" — where nothing usable is served', () => {
+    expect(readFadeDepthPx()).toBeNaN() // no stylesheet at all
+    for (const value of ['2em', '10%', 'calc(1rem + 2px)', 'rem', '']) {
+      root.style.setProperty('--shade-ramp', value)
+      expect(readShadeRampPx(), value).toBeNaN()
+    }
+  })
+
+  it('the stylesheet gives both in rem: the fade half as deep as it was, the ramp unchanged', () => {
+    const css = readFileSync('src/index.css', 'utf8')
+    expect(css).toContain(':root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-reach:0px}')
+    // …and each is declared exactly once.
+    expect(css.match(/--fade-h:/g)).toHaveLength(1)
+    expect(css.match(/--shade-ramp:/g)).toHaveLength(1)
+  })
+})
+
 describe('the edge arithmetic — ONE owner for both indicator languages (round 10 item B)', () => {
-  const RAMP = 24 // --fade-h, the app's one "you are near a boundary" distance
+  const RAMP = 24 // --shade-ramp, the app's one "you are near a boundary" distance
 
   it('collapses both gaps when there is nothing to scroll, with a 1px slack for fractional layout', () => {
     // A region that fits exactly has no edges to signal. Without the slack, a fractional content
@@ -137,13 +191,13 @@ describe('the edge arithmetic — ONE owner for both indicator languages (round 
     expect(edgeShade(gaps.top, 0, RAMP)).toBeCloseTo(0.5 / RAMP, 6)
   })
 
-  it('ramps over --fade-h and CLAMPS to [0, 1] — never past full, never below nothing', () => {
+  it('ramps over --shade-ramp and CLAMPS to [0, 1] — never past full, never below nothing', () => {
     expect(edgeShade(0, 0, RAMP)).toBe(0)
     expect(edgeShade(6, 0, RAMP)).toBe(0.25)
     expect(edgeShade(RAMP, 0, RAMP)).toBe(1)
     expect(edgeShade(100000, 0, RAMP)).toBe(1) // clamped, not 4166
     expect(edgeShade(-12, 0, RAMP)).toBe(0)
-    // The bottom's ramp spans band → --fade-h, so it also reaches exactly 1 at the feather depth.
+    // The bottom's ramp spans band → --shade-ramp, so it also reaches exactly 1 at the ramp's end.
     expect(edgeShade(RAMP, BOTTOM_EDGE_BAND_PX, RAMP)).toBe(1)
     expect(edgeShade(14, BOTTOM_EDGE_BAND_PX, RAMP)).toBe(0.5)
   })
@@ -268,7 +322,7 @@ const SHORT_VIEWPORT = { scrollTop: 0, scrollHeight: 172, clientHeight: 88 }
 describe('the shared defaults card caps itself against a short viewport (round 13)', () => {
   afterEach(() => {
     cleanup()
-    document.documentElement.style.removeProperty('--fade-h')
+    document.documentElement.style.removeProperty('--shade-ramp')
   })
 
   it('caps against the VIEWPORT in fluid units, and the column is allowed to give', () => {
@@ -320,14 +374,16 @@ describe('the shared defaults card caps itself against a short viewport (round 1
   })
 
   it('the two boundaries speak the directional scroll language, not the card’s own lift', () => {
-    // The card keeps the offset-free 0 0 8px lift that says "free-floating panel"; a scroll
-    // boundary is a different statement and takes the directional pair (the ⚙ popover in main.tsx
-    // argues the distinction out loud). Unconditional classes — strength is the --shade below.
+    // The card keeps the FLOATING shadow that says "this surface floats above the page"; a scroll
+    // boundary is a different statement and takes the EDGE pair (index.css's three shadow roles
+    // argue the distinction out loud). Unconditional classes — strength is the --shade below.
     const { container } = render(defaultsCard())
     const scroller = scrollerOf(container)
     expect(scroller.previousElementSibling.className).toContain('elev-shadow-down')
     expect(scroller.nextElementSibling.className).toContain('elev-shadow-up')
-    expect(container.querySelector('[role="dialog"]').style.boxShadow).toContain('0 0 8px')
+    const card = container.querySelector('[role="dialog"]')
+    expect(card.classList.contains('float-shadow')).toBe(true)
+    expect(card.style.boxShadow).toBe('') // the class is the whole of it: no literal beside it
   })
 
   // "The cap is invisible on every ordinary screen" — no mask, both boundaries written to a
@@ -335,7 +391,7 @@ describe('the shared defaults card caps itself against a short viewport (round 1
   // against the hook in tests/scrollExtent.dom for all four of its callers; what this file owes is
   // the proof that this card is wired to that hook, which the live-edge test below is.
   it('at the viewport that produced the bug, the rows scroll and each boundary takes its turn', () => {
-    document.documentElement.style.setProperty('--fade-h', '24px')
+    document.documentElement.style.setProperty('--shade-ramp', '24px')
     const { container } = render(defaultsCard())
     const scroller = scrollerOf(container)
     const head = scroller.previousElementSibling

@@ -144,7 +144,7 @@ export const buttonStateClass = (
 }
 // BASE_BTN — the shared answer-button className. Worn as-is by every weekday grid; Deduction
 // derives its own text-sm variant from it (see `baseBtn` in DeductionMode).
-export const BASE_BTN = 'w-full rounded-2xl border px-4 py-3 text-base shadow-xs select-none'
+export const BASE_BTN = 'w-full rounded-2xl border px-4 py-3 text-base select-none'
 // ANSWER_GRID_GAP — the ONE gutter every gap-spaced answer grid wears: the weekday grid below
 // (worn by Classic/Flash/AoX/Blitz through the single WeekdayAnswer) and all three Deduction
 // sub-mode grids plus the Year sizer strut. Deduction's Day and Year used to run gap-2 while

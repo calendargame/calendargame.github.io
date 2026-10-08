@@ -752,7 +752,9 @@ export default function CustomSelect({
             aria-label={ariaLabel}
             // The options' scroll region inside carries the p-1 (below); this box is the frosted
             // frame, a flex column so that region can shrink to the maxHeight and scroll.
-            className="rounded-2xl overflow-hidden flex flex-col"
+            // float-shadow-frost: the FLOATING shadow every popup wears, plus the half-pixel edge
+            // line a see-through pane needs (index.css's three shadow roles say why).
+            className="rounded-2xl overflow-hidden flex flex-col float-shadow-frost"
             // position:FIXED (round 11) — the panel is pinned to the viewport, not to whatever
             // #root's positioning happens to make its containing block. #root is fixed in app mode
             // and static in guide mode, which is what made the same absolute panel obey two
@@ -768,7 +770,6 @@ export default function CustomSelect({
               background: 'rgba(245,245,247,0.50)',
               WebkitBackdropFilter: 'blur(28px) saturate(120%)',
               backdropFilter: 'blur(28px) saturate(120%)',
-              boxShadow: '0 6px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.05)',
               // 'content' (the mode selector, default) keeps its max-content sizing, clamped to
               // 90vw; 'match-trigger' (the preset lists) is the trigger wrapper's live width from
               // measurePanel, to the pixel — the same column as the button it hangs from.

@@ -129,7 +129,7 @@ beforeEach(() => {
   // index.css is not loaded here, so the ramp distance the shade writer reads is stood up by hand
   // at its real value. Without it the ramp degrades to the boolean — the documented fallback, and
   // what the one test that clears it checks.
-  document.documentElement.style.setProperty('--fade-h', '24px')
+  document.documentElement.style.setProperty('--shade-ramp', '24px')
 })
 afterEach(() => {
   guide?.restore()
@@ -143,7 +143,7 @@ afterEach(() => {
   document.documentElement.scrollTop = 0
   // (The docking line a seating test stands up is written on the scroll box — guide.setSeat — and
   // dies with the tree cleanup() takes down.)
-  for (const prop of ['--fade-h', '--bar-h', '--motion-scale'])
+  for (const prop of ['--shade-ramp', '--bar-h', '--motion-scale'])
     document.documentElement.style.removeProperty(prop)
 })
 
@@ -863,7 +863,7 @@ describe('the guide’s edges track the reading position and the content', () =>
   it('falls back to full strength — never to no shadow — if the ramp distance cannot be read', () => {
     // The documented degradation is the pre-round-10 behaviour: on the moment the edge is live, at
     // full strength. A shadow that silently vanished would be the unacceptable failure.
-    document.documentElement.style.removeProperty('--fade-h')
+    document.documentElement.style.removeProperty('--shade-ramp')
     const { container } = mountApp()
     pressKey('H')
     const g = installGuide(container)
@@ -1053,7 +1053,7 @@ describe('index.css — the feather token and the reading line it is NOT derived
       expect(body).toContain('var(--fade-h)')
       expect(body).not.toContain('24px')
     }
-    expect(css).toContain(':root{--fade-h:24px;--fade-reach:0px}') // the single home of the value
+    expect(css).toContain(':root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-reach:0px}') // the single home of the value
   })
 
   it('has ONE docking line — the bar’s underside — and no second token for where a section rests', () => {
@@ -1091,8 +1091,8 @@ describe('index.css — the progressive boundary shadow (round 10 item B)', () =
     // box-shadow declaration is invalid at parse and every boundary shadow in the app disappears.
     // The channels-and-alpha form is pixel-identical and works back to Safari 12.1.
     for (const [re, offset] of [
-      [/\.elev-shadow-down\{([^}]*)\}/, '0 4px 6px -2px'],
-      [/\.elev-shadow-up\{([^}]*)\}/, '0 -4px 6px -2px'],
+      [/\.elev-shadow-down\{([^}]*)\}/, '0 .25rem .375rem -.125rem'],
+      [/\.elev-shadow-up\{([^}]*)\}/, '0 -.25rem .375rem -.125rem'],
     ]) {
       const body = ruleBody(re)
       expect(body).toBe(

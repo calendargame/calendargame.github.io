@@ -1,5 +1,5 @@
 import Popup from './Popup.js'
-import { MODAL_CARD_SHADOW, MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
+import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
 import { useStorageHealth } from '../store/storageHealth.js'
 import { resetStatsFreesRoom, useActiveAmnesicMode } from '../store/amnesic.js'
 import { amnesicLabel } from './settingsOptions.js'
@@ -54,7 +54,6 @@ export default function StorageFullNotice() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="storage-full-title"
-        style={MODAL_CARD_SHADOW}
         className={MODAL_PLAIN_CARD_CLASS}
       >
         <div id="storage-full-title" className="text-sm font-semibold text-(--tx-50)">

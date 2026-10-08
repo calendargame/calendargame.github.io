@@ -33,9 +33,8 @@
 //     Save going off-screen; putting it in the scroller would only have made it
 //     scroll-to-reach. They are also the two boundary surfaces the edge hook shades: a fixed
 //     header above content that scrolls takes elev-shadow-down and a fixed footer below it
-//     elev-shadow-up (the directional scroll-boundary language, never the card's own even
-//     `0 0 8px` lift — see the note at the ⚙ popover card in components/SettingsPanel, which is
-//     where that popover moved in round 14). Both are UNCONDITIONAL classes
+//     elev-shadow-up (the EDGE shadow, never the card's own FLOATING one — index.css's three
+//     shadow roles). Both are UNCONDITIONAL classes
 //     whose strength is the --shade the hook writes, and it writes 0 when there is nothing to
 //     scroll — so on every screen tall enough to hold the card, which is every ordinary one, this
 //     whole treatment renders exactly the card that shipped before it.
@@ -80,7 +79,7 @@ import { Fragment, useRef, type ReactNode } from 'react'
 import type { PrefDefaults } from '../store/userDefaults.js'
 import { normalizeAoxN } from '../store/userDefaults.js'
 import { NUM_INPUT_BASE, NUM_INPUT_CLASS } from './controlClasses.js'
-import { MODAL_CARD_CLASS, MODAL_CARD_SHADOW } from './modalContract.js'
+import { MODAL_CARD_CLASS } from './modalContract.js'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { fmtBlitzT, fmtFlashT, SLIDER_READOUT_WIDEST } from '../lib/modeFormat.js'
 import SliderValueEditor from './SliderValueEditor.jsx'
@@ -331,7 +330,6 @@ function DefaultsCard({
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      style={MODAL_CARD_SHADOW}
       className={`${MODAL_CARD_CLASS} flex flex-col max-h-[calc(100dvh_-_2rem)]`}
     >
       {/* The three space-y-3 rhythms below reproduce the single card-level one the flat card had:

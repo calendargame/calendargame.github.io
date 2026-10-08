@@ -2,6 +2,7 @@ import { useId, useRef, useLayoutEffect, useEffect } from 'react'
 import type { ElementType, ReactNode } from 'react'
 import { fitScale } from '../lib/statFit.js'
 import { useActiveAmnesicMode } from '../store/amnesic.js'
+import BestReadout from './BestReadout.jsx'
 
 // StatPanel — the horizontal stats strip (Score / Accuracy / Streak / Last /
 // Mean / Median) shown under the header in the timed/scored modes.
@@ -9,7 +10,9 @@ import { useActiveAmnesicMode } from '../store/amnesic.js'
 // A presentational shell: it renders whatever `stats` array it's given (each item
 // {label, value, fn?, off?}) as equal-width cells separated by thin dividers.
 // A cell with `fn` renders as a button. (The one thing it reads for itself is the Amnesic value —
-// the fourth signal below.)
+// the fourth signal below.) A round mode's Best readouts ride directly under the strip, as `bests`
+// (components/BestReadout): the strip and the Bests are one block, because the fourth signal is
+// drawn round them together.
 //
 // ★ THE FOUR SIGNALS — one meaning each, and NO STRIKETHROUGH ANYWHERE (three since round 16; the
 // dashed outline is the fourth):
@@ -41,6 +44,13 @@ import { useActiveAmnesicMode } from '../store/amnesic.js'
 //                       temporary, and "nothing is being recorded" is the whole truth. One cue,
 //                       never two stacked. (The Best readouts under it keep theirs: they still
 //                       show real records — components/BestReadout.)
+//                       ★ ONE FRAME, ROUND EXACTLY WHAT IS TEMPORARY. A part is inside it exactly
+//                       when it is the session's, and there is never more than one frame:
+//                         strip temporary, Bests kept or absent .... round the strip
+//                         strip AND Bests temporary (Full) .......... ONE frame round both
+//                         only the Bests (Full, Save Stats off) ..... round the Best readouts
+//                       `frame` below is that table, and whichever element it names — the strip,
+//                       the readouts' row, or the group that holds the two — wears the class.
 // The full table this builds to:
 //   group on, no data ....... the values, which read '—'      plain
 //   group on, has data ...... the values                      plain
@@ -142,6 +152,7 @@ export default function StatPanel({
   dimmed,
   onActivate,
   activateLabel,
+  bests,
 }: {
   stats: StatItem[]
   // Nothing is being recorded (Save Stats off). The dim and the em dashes are ONE fact and are
@@ -168,13 +179,29 @@ export default function StatPanel({
   // The button's accessible name. Required WITH onActivate (the type makes them arrive together)
   // because the strip's own text is six labels and six numbers — a perfectly good name for nothing.
   activateLabel?: string
+  // The mode's Best readouts (MoX, Blitz), shown in the row under the strip — components/BestReadout
+  // is the row, and this component the only one that renders it. Absent on a mode with no Bests.
+  bests?: ReactNode
 }) {
   // HTMLElement, not HTMLDivElement: the root is a <div> or a <button> depending on onActivate, and
   // everything this ref is used for (querySelectorAll for the fit, ResizeObserver) is on HTMLElement.
   const rootRef = useRef<HTMLElement | null>(null)
   // The session's numbers, not kept (see the fourth signal in the header) — unless nothing is being
   // recorded at all, which the dim says on its own.
-  const sessionOnly = useActiveAmnesicMode() !== 'off' && !dimmed
+  const amnesic = useActiveAmnesicMode()
+  const sessionOnly = amnesic !== 'off' && !dimmed
+  // The Bests are the session's under Full and only then (components/BestReadout says why Save
+  // Stats has no say in it).
+  const bestsSessionOnly = bests != null && amnesic === 'full'
+  // WHICH ELEMENT WEARS THE ONE FRAME — the smallest that holds exactly what is temporary.
+  const frame =
+    sessionOnly && bestsSessionOnly
+      ? 'group'
+      : sessionOnly
+        ? 'strip'
+        : bestsSessionOnly
+          ? 'bests'
+          : null
   // The one line a screen reader gets about the strip as a whole, and the element it is read from.
   const note = dimmed
     ? 'Stats are not being saved'
@@ -264,44 +291,49 @@ export default function StatPanel({
       }
     : {}
   return (
-    <Root
-      ref={setRoot}
-      {...rootProps}
-      className={`mt-4 rounded-2xl panel flex overflow-hidden ${onActivate ? ' w-full' : ''}${dimmed ? ' opacity-50' : ''} ${sessionOnly ? 'session-only' : ''}`}
-    >
-      {/* The words that keep the DIM and the DASHED OUTLINE from meaning nothing to a screen reader
+    // THE GROUP — the strip and, on a round mode, its Best readouts. It is here in every mode and
+    // every state, so nothing about the page's layout depends on whether a frame is drawn; it adds
+    // no box of its own (no padding, no border), only the strip's place on the page (mt-4) and the
+    // strip's radius, which the frame takes when it goes round both.
+    <div className={`mt-4 rounded-2xl ${frame === 'group' ? 'session-only' : ''}`}>
+      <Root
+        ref={setRoot}
+        {...rootProps}
+        className={`rounded-2xl panel flex overflow-hidden ${onActivate ? ' w-full' : ''}${dimmed ? ' opacity-50' : ''} ${frame === 'strip' ? 'session-only' : ''}`}
+      >
+        {/* The words that keep the DIM and the DASHED OUTLINE from meaning nothing to a screen reader
           — see the header note. Absolutely positioned by `sr-only`, so it is outside the flex
           flow, adds no cell and costs no layout. First child so it is announced before the readouts
           it qualifies. */}
-      {note && (
-        <span id={noteId} className="sr-only">
-          {note}
-        </span>
-      )}
-      {(() => {
-        const items: ReactNode[] = []
-        for (let i = 0; i < stats.length; i++) {
-          const s = stats[i]
-          // `onActivate` wins outright — see the note on the prop. A cell button here would be a
-          // <button> inside the root <button>.
-          const cellFn = onActivate ? null : s.fn
-          const Tag: ElementType = cellFn ? 'button' : 'div'
-          const props = cellFn ? { type: 'button' as const, onClick: cellFn } : {}
-          items.push(
-            <Tag
-              key={s.label}
-              {...props}
-              className="flex-1 min-w-0 flex flex-col items-center py-2 gap-0.5"
-            >
-              <span className="text-xs text-(--tx-200-80) leading-none whitespace-nowrap">
-                {s.label}
-              </span>
-              {/* The fixed-height value cell — see VALUE_CELL_CLASS. It owns the base type
+        {note && (
+          <span id={noteId} className="sr-only">
+            {note}
+          </span>
+        )}
+        {(() => {
+          const items: ReactNode[] = []
+          for (let i = 0; i < stats.length; i++) {
+            const s = stats[i]
+            // `onActivate` wins outright — see the note on the prop. A cell button here would be a
+            // <button> inside the root <button>.
+            const cellFn = onActivate ? null : s.fn
+            const Tag: ElementType = cellFn ? 'button' : 'div'
+            const props = cellFn ? { type: 'button' as const, onClick: cellFn } : {}
+            items.push(
+              <Tag
+                key={s.label}
+                {...props}
+                className="flex-1 min-w-0 flex flex-col items-center py-2 gap-0.5"
+              >
+                <span className="text-xs text-(--tx-200-80) leading-none whitespace-nowrap">
+                  {s.label}
+                </span>
+                {/* The fixed-height value cell — see VALUE_CELL_CLASS. It owns the base type
                   (text-sm/leading-tight) for BOTH itself and the span inside it, deliberately: `1lh`
                   is only the right height while the two agree, and one declaration cannot disagree
                   with itself. Don't re-add text-sm to the span. */}
-              <div className={VALUE_CELL_CLASS}>
-                {/* data-statval: the auto-fit target. It inherits the cell's base size; the layout
+                <div className={VALUE_CELL_CLASS}>
+                  {/* data-statval: the auto-fit target. It inherits the cell's base size; the layout
                     effect shrinks its inline font-size to fit when the value is too wide, and the
                     cell keeps it on its neighbours' line. `whitespace-nowrap` is load-bearing since
                     the em-dash ceiling came off the time formatters: a time of a minute or more now
@@ -311,23 +343,29 @@ export default function StatPanel({
                     the wrapped width rather than the natural one the fit needs. The text stays plain
                     DOM text — one node, no element children — so it reads normally to screen readers
                     and so `.textContent` is the value and nothing else. */}
-                <span data-statval className="font-semibold tabular-nums whitespace-nowrap">
-                  {s.off ? '' : dimmed ? '—' : s.value}
-                </span>
-              </div>
-              {/* The word that keeps "blank" from meaning "silent" — see the header note. Absolutely
+                  <span data-statval className="font-semibold tabular-nums whitespace-nowrap">
+                    {s.off ? '' : dimmed ? '—' : s.value}
+                  </span>
+                </div>
+                {/* The word that keeps "blank" from meaning "silent" — see the header note. Absolutely
                   positioned by `sr-only`, so it is outside the flex flow and costs no layout. */}
-              {s.off && <span className="sr-only">Off</span>}
-            </Tag>,
-          )
-          if (i < stats.length - 1) {
-            items.push(
-              <div key={`d-${i}`} className="w-px h-8 self-center bg-(--bg-500-20) shrink-0" />,
+                {s.off && <span className="sr-only">Off</span>}
+              </Tag>,
             )
+            if (i < stats.length - 1) {
+              items.push(
+                <div key={`d-${i}`} className="w-px h-8 self-center bg-(--bg-500-20) shrink-0" />,
+              )
+            }
           }
-        }
-        return items
-      })()}
-    </Root>
+          return items
+        })()}
+      </Root>
+      {bests != null && (
+        <BestReadout sessionOnly={bestsSessionOnly} framed={frame === 'bests'}>
+          {bests}
+        </BestReadout>
+      )}
+    </div>
   )
 }

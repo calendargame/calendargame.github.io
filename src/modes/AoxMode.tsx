@@ -33,7 +33,7 @@ import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
-import BestReadout from '../components/BestReadout.jsx'
+import { BEST_COLUMN_CLASS } from '../components/BestReadout.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import RunBreakdown from '../components/RunBreakdown.jsx'
@@ -767,40 +767,42 @@ function AoxMode({
           { label: 'Mean', value: fmtTime(calcAvg(S.times)), off: timeHidden, fn: tFn },
           { label: 'Median', value: fmtTime(calcMed(S.times)), off: timeHidden, fn: tFn },
         ]}
+        // The Best readouts, in the row under the strip (components/BestReadout, which StatPanel
+        // renders — the two are one block, and Amnesic's dashed frame is drawn round them together).
+        // ⚠ EVERY TIME HERE IS WRAPPED IN `whitespace-nowrap`, and it is not decoration. A time of a
+        // minute or more now formats as "1m 2.34s" (lib/modeFormat — the em dash no longer hides a
+        // long one), and that space is a line-break opportunity the old "59.99s" never had.
+        // These four readouts sit in a flex-wrap row of BEST_COLUMN_CLASS columns, so on a
+        // narrow phone a bare value would break across two lines mid-number and read as two numbers.
+        // The label may still wrap — "Best" / "Mean:" is legible; "1m" / "2.34s" is not.
+        bests={
+          <div className="flex flex-wrap items-start gap-4">
+            <div className={BEST_COLUMN_CLASS}>
+              <div>
+                Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
+                {isNewBest(bestData.avgRoundId, runId) && <NewBestStar />}
+              </div>
+              <div className="text-[11px] opacity-70">
+                Median: <span className="whitespace-nowrap">{fmtTime(bestData.avgMed)}</span>
+              </div>
+            </div>
+            <div className={BEST_COLUMN_CLASS}>
+              <div>
+                Best Median: <span className="whitespace-nowrap">{fmtTime(bestData.med)}</span>
+                {isNewBest(bestData.medRoundId, runId) && <NewBestStar />}
+              </div>
+              <div className="text-[11px] opacity-70">
+                Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
+              </div>
+            </div>
+            {bestData.avgRoundId != null && bestData.medRoundId != null && (
+              <span className="shrink-0 ml-auto">
+                {bestData.avgRoundId === bestData.medRoundId ? 'Same Run' : 'Different Runs'}
+              </span>
+            )}
+          </div>
+        }
       />
-      {/* ⚠ EVERY TIME HERE IS WRAPPED IN `whitespace-nowrap`, and it is not decoration. A time of a
-          minute or more now formats as "1m 2.34s" (lib/modeFormat — the em dash no longer hides a
-          long one), and that space is a line-break opportunity the old "59.99s" never had.
-          These four readouts sit in a flex-wrap row of shrinkable min-w-[125px] columns, so on a
-          narrow phone a bare value would break across two lines mid-number and read as two numbers.
-          The label may still wrap — "Best" / "Mean:" is legible; "1m" / "2.34s" is not. */}
-      <BestReadout>
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="min-w-[125px]">
-            <div>
-              Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
-              {isNewBest(bestData.avgRoundId, runId) && <NewBestStar />}
-            </div>
-            <div className="text-[11px] opacity-70">
-              Median: <span className="whitespace-nowrap">{fmtTime(bestData.avgMed)}</span>
-            </div>
-          </div>
-          <div className="min-w-[125px]">
-            <div>
-              Best Median: <span className="whitespace-nowrap">{fmtTime(bestData.med)}</span>
-              {isNewBest(bestData.medRoundId, runId) && <NewBestStar />}
-            </div>
-            <div className="text-[11px] opacity-70">
-              Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
-            </div>
-          </div>
-          {bestData.avgRoundId != null && bestData.medRoundId != null && (
-            <span className="shrink-0 ml-auto">
-              {bestData.avgRoundId === bestData.medRoundId ? 'Same Run' : 'Different Runs'}
-            </span>
-          )}
-        </div>
-      </BestReadout>
       {/* items-stretch, NOT items-center (round 9) — this is the app's ONLY flex row that puts an
               <input> beside a <button>, and neither declares a height: each derives one from its own inner
               line box, and WebKit's machinery for a text control lands ~2px away from its machinery for a

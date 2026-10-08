@@ -29,15 +29,15 @@
 export const MODAL_SCRIM_CLASS = 'fixed inset-0 z-[60] flex items-center justify-center px-4'
 // The dim, worn by the TOP popup's scrim alone (term 5).
 export const MODAL_DIM_CLASS = 'bg-black/40'
-// The card: the popover's own surface language, py-4 only — horizontal padding belongs to the rows
-// and to any inner scroll region, so the scroller's right padding is the text-free lane the iOS
-// overlay scrollbar paints in (components/scrollRegion). It draws no focus ring
-// although term 2 focuses it — a ring on a whole dialog is noise, not information; index.css's
-// keyboard-ring rule leaves a role="dialog" out by name.
-export const MODAL_CARD_CLASS = 'card rounded-2xl py-4 w-full max-w-[20rem] space-y-3'
+// The card: the popover's own surface language — its fill and border (.card), and the FLOATING
+// shadow every surface that floats above the page wears (.float-shadow, index.css's three shadow
+// roles). py-4 only — horizontal padding belongs to the rows and to any inner scroll region, so
+// the scroller's right padding is the text-free lane the iOS overlay scrollbar paints in
+// (components/scrollRegion). It draws no focus ring although term 2 focuses it — a ring on a whole
+// dialog is noise, not information; index.css's keyboard-ring rule leaves a role="dialog" out by
+// name.
+export const MODAL_CARD_CLASS = 'card float-shadow rounded-2xl py-4 w-full max-w-[20rem] space-y-3'
 // The same card for a popup with no inner scroll region — the confirmations and the storage-full
 // notice: padded all round, since there is no scrollbar lane to keep clear.
-export const MODAL_PLAIN_CARD_CLASS = 'card rounded-2xl p-4 w-full max-w-[20rem] space-y-3'
-// The card's elevation. An inline style rather than a class because that is how the popups have
-// always spelled it; sharing the literal is the point.
-export const MODAL_CARD_SHADOW = { boxShadow: '0 0 8px rgba(0,0,0,0.12)' } as const
+export const MODAL_PLAIN_CARD_CLASS =
+  'card float-shadow rounded-2xl p-4 w-full max-w-[20rem] space-y-3'
