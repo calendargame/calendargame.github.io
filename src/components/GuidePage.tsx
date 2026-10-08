@@ -3770,7 +3770,8 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
         independently — they can come from different runs. Beneath each best, the companion metric
         from the run that set it is also shown (e.g. the median from the run that set your best
         mean). A <i>Same Run</i> or <i>Different Runs</i> tag tells you whether your best mean and
-        best median came from the same exceptional run, or from two different strong ones.
+        best median came from the same exceptional run, or from two different strong ones. On a
+        narrow screen the tag is left out when there is no room for it beside the two bests.
       </p>
       <p>
         Bests stay honest under Override: a finished run's record follows its corrected stats —
@@ -4042,7 +4043,8 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
         <li>
           Best score and best streak are tracked independently in Per Round and in Per Question with
           Allow Mistakes on; a <i>Same Round</i> or <i>Different Rounds</i> tag tells you whether
-          they came from the same exceptional round or two different strong ones. Per Question with
+          they came from the same exceptional round or two different strong ones. On a narrow screen
+          the tag is left out when there is no room for it beside the two bests. Per Question with
           Allow Mistakes off keeps a single best score (streak would equal it).
         </li>
       </UL>

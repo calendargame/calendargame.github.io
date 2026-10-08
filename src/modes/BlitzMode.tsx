@@ -21,7 +21,7 @@ import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import BlitzBestRow from '../components/BlitzBestRow.jsx'
-import { BestColumn } from '../components/BestReadout.jsx'
+import { BestColumn, BestLine } from '../components/BestReadout.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
@@ -1065,12 +1065,12 @@ function BlitzMode({
           ) : allowMistakes ? (
             <BlitzBestRow rec={saScore} roundId={roundId} />
           ) : (
-            <div className="flex flex-wrap items-start gap-4">
+            <BestLine>
               <BestColumn>
                 Best Score: {sScore?.score ?? '—'}
                 {isNewBest(sScore?.roundId, roundId) && <NewBestStar />}
               </BestColumn>
-            </div>
+            </BestLine>
           )
         }
       />

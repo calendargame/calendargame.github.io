@@ -35,11 +35,11 @@ import type { ReactNode } from 'react'
 // which every mode's readouts are drawn in, so the row wraps where it always did.
 //
 // ★ THE ROW'S INSET MUST NOT COST THE TAG ITS PLACE ON THE LINE. The readouts sit in a wrapping row
-// with the "Same Run" / "Different Runs" tag pushed to its far end, and the tag drops to a line of
-// its own on a screen too narrow for all three. The inset above takes .75rem off each end of that
+// with the "Same Run" / "Different Runs" tag at its far end (BestLine, below), and the tag is left
+// out on a screen too narrow for all three. The inset above takes .75rem off each end of that
 // line. Taking it out of the columns' least width (125px less the inset, as this once did) only
 // gave it back while a readout was SHORTER than that — a time of a minute or more, or one with its
-// ★, is not, and the tag then wrapped on screens it had never wrapped on.
+// ★, is not, and the tag then lost its place on screens that had always had room for it.
 // So the line is measured exactly as it was before there was an inset, whatever the readouts say:
 //   • a column is at least 125px, as it always was, and hands the next thing on the line .75rem of
 //     its own width (-mr-3) — two columns, the two ends' inset, given back in full;
@@ -48,8 +48,8 @@ import type { ReactNode } from 'react'
 //     cancels the row gap in front of it, so it adds nothing to the line itself.)
 // With room, then, the readouts stand a full gap apart, .75rem in from the frame at both ends. On
 // a screen with none to spare they close up by that much rather than push the tag off the line —
-// the room they had before the inset, used the same way. And the tag wraps where it wrapped before,
-// no sooner and no later.
+// the room they had before the inset, used the same way. And the tag has a place on the line at
+// every width it would have had one with no inset, no narrower and no wider.
 // ⚠ THREE NUMBERS ARE ONE: the row's px-3, the column's -mr-3, and the slack's max-w-3 — and the
 // slack's -ml-4 is the readouts' gap-4. tests/sessionOnlyOutline.dom reads them off the page and
 // holds them together.
@@ -61,6 +61,63 @@ export function BestColumn({ children }: { children: ReactNode }) {
       <div className={BEST_COLUMN_CLASS}>{children}</div>
       <span aria-hidden="true" className={BEST_SLACK_CLASS} />
     </>
+  )
+}
+
+// ── BestLine — THE READOUTS' LINE, AND THE TAG AT THE END OF IT ("Same Run" / "Different Runs" in
+// MoX, "Same Round" / "Different Rounds" in Blitz: did one run set both Bests, or two?).
+//
+// ★ THE TAG IS SHOWN FOR BOTH WORDINGS OR FOR NEITHER, AND IT NEVER TAKES A LINE OF ITS OWN (the
+// owner's rule: "if 'Different Runs' would get cut off or overlap with anything then both go"). It
+// used to drop under the readouts on a narrow phone, making the row a line taller — and the
+// shorter wording stayed up on screens where the longer one dropped, so a new Best could move it.
+// Both halves are true BY LAYOUT here; nothing is measured, and no script decides:
+//   • THE TAG'S PLACE IS ALWAYS THE LONGER WORDING'S WIDTH. The stylesheet draws `longest` in the
+//     place, invisible and no taller than nothing (the ::before, from data-longest — generated
+//     content, so the page's text and what a screen reader hears hold the tag once). The words that
+//     ARE showing sit over it at its far end. Whether there is room is therefore one question with
+//     one answer for the pair, and the readouts stand in the same spot whichever wording is up.
+//   • A PLACE WITH NO ROOM ON THE READOUTS' LINE GOES TO A LINE THAT HAS NO HEIGHT. The line wraps,
+//     as it always did, but the place's own height is nothing (the sizer is h-0, the words are out
+//     of the flow) and there is no gap ACROSS lines here (gap-x only) — so the wrapped line adds
+//     nothing to the row. The place is as tall as the line it is on (self-stretch) and cuts what is
+//     above or below itself (overflow-y-clip): beside the readouts that is their line, and the words
+//     show whole; on a line of its own it is nothing, and they are not drawn. Never cut part-way —
+//     the two cases are the only two — and never over a readout, because a place that is on the
+//     readouts' line is beside them, the line's full gap away.
+//   • THE READOUTS ARE ONE ITEM ON THAT LINE, and keep their own wrapping inside it (a pair of very
+//     long times still goes to two lines, a full gap apart). The item takes whatever the line has
+//     left — all of it once the tag has gone, so the readouts spread out again — and is never cut
+//     for the tag's sake: the line is asked for the readouts at their full width first.
+// ⚠ THE WORDS STAY ON THE PAGE WHEN THEY ARE NOT DRAWN — clipped, not removed — because which run
+// set which Best is as true on a narrow phone as on a wide one, and a screen reader says it. Nothing
+// here takes the keyboard, so there is no invisible stop.
+// tests/bestTag.dom holds the construction together; the widths were measured in a browser.
+const BEST_TAG_PLACE_CLASS =
+  'relative self-stretch shrink-0 overflow-y-clip whitespace-nowrap before:content-[attr(data-longest)] before:invisible before:block before:h-0'
+export interface BestTag {
+  /** The wording to show. */
+  wording: string
+  /** The longer wording of its pair — the room the tag is given, whichever is showing. */
+  longest: string
+}
+export function BestLine({
+  children,
+  tag = null,
+}: {
+  children: ReactNode
+  /** The tag at the end of the line — null (or left out) while there is nothing to compare. */
+  tag?: BestTag | null
+}) {
+  return (
+    <div className="flex flex-wrap items-start gap-x-4">
+      <div className="flex flex-wrap items-start gap-4 grow min-w-0">{children}</div>
+      {tag && (
+        <span data-longest={tag.longest} className={BEST_TAG_PLACE_CLASS}>
+          <span className="absolute top-0 right-0">{tag.wording}</span>
+        </span>
+      )}
+    </div>
   )
 }
 

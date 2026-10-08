@@ -284,13 +284,14 @@ describe('the outline costs no layout', () => {
     expect([...block('off', false, BESTS).lastChild.classList]).toEqual([...bestsEl.classList])
   })
 
-  // ★ THE INSET MUST NOT COST THE TAG ITS PLACE ON THE LINE. The readouts wrap in a row with the
+  // ★ THE INSET MUST NOT COST THE TAG ITS PLACE ON THE LINE. The readouts wrap in a line with the
   // "Same Round" tag at its far end, and the row's inset takes its width off both ends of that line.
   // Each column hands that much back, and a slack after it takes it again whenever the line has it
   // to spare (components/BestReadout's BestColumn) — so the three numbers are one, and the slack
   // adds nothing to the line. jsdom lays nothing out: what is pinned here is that the page is BUILT
-  // that way, in every mode's row; that the tag then wraps exactly where it did before the inset was
-  // measured in a browser, across widths and readouts.
+  // that way, in every mode's row; that the tag then has room at exactly the widths it had before
+  // the inset was measured in a browser, across widths and readouts. (The tag's own place on the
+  // line, and what becomes of it where there is no room, is tests/bestTag.dom.)
   it.each([
     ['Blitz', 'B', 2],
     ['MoX', 'A', 2],
@@ -306,8 +307,11 @@ describe('the outline costs no layout', () => {
         return cls.slice(prefix.length)
       }
       const inset = step(row, 'px-')
-      const line = row.querySelector(':scope > div.flex')
+      // The readouts' own group on the line (components/BestReadout's BestLine): the columns and
+      // their slacks, and nothing else — the tag's place follows the group, the same gap away.
+      const line = row.querySelector(':scope > div.flex > div.flex')
       const gap = step(line, 'gap-')
+      expect(step(line.parentElement, 'gap-x-')).toBe(gap)
       const cells = [...line.children]
       const cols = cells.filter((el) => el.classList.contains('min-w-[125px]'))
       expect(cols).toHaveLength(columns)
@@ -322,11 +326,10 @@ describe('the outline costs no layout', () => {
           expect.arrayContaining(['grow', 'shrink-0', 'basis-0']),
         )
       }
-      // Nothing else on the line but the tag, when there is one.
+      // Nothing else in the group.
       expect(
-        cells.filter((el) => !cols.includes(el) && !cols.includes(el.previousElementSibling))
-          .length,
-      ).toBeLessThanOrEqual(1)
+        cells.filter((el) => !cols.includes(el) && !cols.includes(el.previousElementSibling)),
+      ).toEqual([])
     },
   )
 

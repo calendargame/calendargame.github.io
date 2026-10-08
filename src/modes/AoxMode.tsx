@@ -33,7 +33,7 @@ import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
-import { BestColumn } from '../components/BestReadout.jsx'
+import { BestColumn, BestLine } from '../components/BestReadout.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import RunBreakdown from '../components/RunBreakdown.jsx'
@@ -772,7 +772,7 @@ function AoxMode({
         // ⚠ EVERY TIME HERE IS WRAPPED IN `whitespace-nowrap`, and it is not decoration. A time of a
         // minute or more now formats as "1m 2.34s" (lib/modeFormat — the em dash no longer hides a
         // long one), and that space is a line-break opportunity the old "59.99s" never had.
-        // These four readouts sit in a flex-wrap row of BestColumn columns, so on a
+        // These four readouts sit in a wrapping line of BestColumn columns (BestLine), so on a
         // narrow phone a bare value would break across two lines mid-number and read as two numbers.
         // The label may still wrap — "Best" / "Mean:" is legible; "1m" / "2.34s" is not.
         // ⚠ EACH SUB-LINE IS SIZED IN em, FROM THE LINE ABOVE IT (eleven twelfths of it — what 11px was
@@ -780,7 +780,19 @@ function AoxMode({
         // phone, where text-xs is 9px, the note drew LARGER than the Best it annotates
         // (tests/textSizeGuard).
         bests={
-          <div className="flex flex-wrap items-start gap-4">
+          <BestLine
+            // Did one run set both Bests, or two? Shown in the longer wording's room, and left out
+            // where the line has none (BestLine).
+            tag={
+              bestData.avgRoundId != null && bestData.medRoundId != null
+                ? {
+                    wording:
+                      bestData.avgRoundId === bestData.medRoundId ? 'Same Run' : 'Different Runs',
+                    longest: 'Different Runs',
+                  }
+                : null
+            }
+          >
             <BestColumn>
               <div>
                 Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
@@ -799,12 +811,7 @@ function AoxMode({
                 Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
               </div>
             </BestColumn>
-            {bestData.avgRoundId != null && bestData.medRoundId != null && (
-              <span className="shrink-0 ml-auto">
-                {bestData.avgRoundId === bestData.medRoundId ? 'Same Run' : 'Different Runs'}
-              </span>
-            )}
-          </div>
+          </BestLine>
         }
       />
       {/* items-stretch, NOT items-center (round 9) — this is the app's ONLY flex row that puts an

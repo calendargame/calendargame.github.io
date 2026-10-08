@@ -1,13 +1,14 @@
 import type { BlitzBest } from '../store/progress.js'
 import { isNewBest } from '../engine/roundId.js'
 import { NewBestStar } from './primitives.jsx'
-import { BestColumn } from './BestReadout.jsx'
+import { BestColumn, BestLine } from './BestReadout.jsx'
 
 // BlitzBestRow — the two-field Best Score / Best Streak row with ★ new-best flags and the
 // Same Round / Different Rounds tag, shared by the two BlitzBest-shaped records: per-round
 // (blitzBest) and per-question + Allow Mistakes (suddenAmBest). The tag renders only
 // once BOTH round ids exist: same id = one exceptional round set both, different = two
-// strong ones. (Per-question sudden death keeps its own score-only row — different shape.)
+// strong ones. (Per-question sudden death keeps its own score-only row — different shape.) The tag
+// is given the longer wording's room and is left out where the line has none — BestLine says how.
 // Each ★ is DERIVED, never stored: a field is starred exactly when the round on screen (`roundId`,
 // null when there is none) is the round that set it — engine/roundId's isNewBest, the one rule MoX
 // uses too (round 23).
@@ -16,7 +17,16 @@ import { BestColumn } from './BestReadout.jsx'
 function BlitzBestRow({ rec, roundId }: { rec?: BlitzBest; roundId: number | null }) {
   const showTag = rec && rec.scoreRoundId != null && rec.streakRoundId != null
   return (
-    <div className="flex flex-wrap items-start gap-4">
+    <BestLine
+      tag={
+        showTag
+          ? {
+              wording: rec.scoreRoundId === rec.streakRoundId ? 'Same Round' : 'Different Rounds',
+              longest: 'Different Rounds',
+            }
+          : null
+      }
+    >
       <BestColumn>
         Best Score: {rec?.score ?? '—'}
         {isNewBest(rec?.scoreRoundId, roundId) && <NewBestStar />}
@@ -25,12 +35,7 @@ function BlitzBestRow({ rec, roundId }: { rec?: BlitzBest; roundId: number | nul
         Best Streak: {rec?.streak ?? '—'}
         {isNewBest(rec?.streakRoundId, roundId) && <NewBestStar />}
       </BestColumn>
-      {showTag && (
-        <span className="shrink-0 ml-auto">
-          {rec.scoreRoundId === rec.streakRoundId ? 'Same Round' : 'Different Rounds'}
-        </span>
-      )}
-    </div>
+    </BestLine>
   )
 }
 
