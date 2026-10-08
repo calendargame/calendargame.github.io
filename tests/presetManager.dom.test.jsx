@@ -440,12 +440,54 @@ describe('renaming', () => {
     expect(cutNote()).toBeNull()
     type(nameBoxes()[0], 'Weekend Mo x')
     expect(cutNote()).toBeTruthy()
-    // An emptied box is about to be "Preset 1" again — eight characters, which fit here…
+    // An emptied box is about to be "Preset 1" again — eight characters, which fit here.
     type(nameBoxes()[0], '')
     expect(cutNote()).toBeNull()
-    // …and do not where there is room for seven.
-    nameRooms.resize(7 * PX_PER_CHARACTER)
+  })
+
+  it('a stock name is cut only where even its short form is: "Preset 1" is drawn as "P1"', () => {
+    openManager()
+    layOutNameCells(7 * PX_PER_CHARACTER) // "Preset 1" is eight
+    focus(nameBoxes()[0])
+    expect(nameBoxes()[0].value).toBe('Preset 1') // the box always holds the stored name
+    expect(cutNote()).toBeNull() // …which is shown as "P1", whole
+    type(nameBoxes()[0], 'Preset 1!') // no longer a stock name: nine characters, cut
     expect(cutNote()).toBeTruthy()
+    type(nameBoxes()[0], 'Preset 12') // stock again: "P12"
+    expect(cutNote()).toBeNull()
+    type(nameBoxes()[0], '') // about to be "Preset 1" again
+    expect(cutNote()).toBeNull()
+    nameRooms.resize(1 * PX_PER_CHARACTER) // not even "P1" fits
+    expect(cutNote()).toBeTruthy()
+  })
+
+  it('a stock name drawn short is still the stored name everywhere it is not a name slot', () => {
+    act(() => {
+      createPreset()
+      useSettings.getState().setSaveStats(false) // preset 1 holds something: deleting it asks
+    })
+    openManager()
+    layOutNameCells(7 * PX_PER_CHARACTER)
+    // The slots draw the short forms…
+    expect(screen.getByRole('button', { name: /^Preset,/ }).textContent).toContain('P1')
+    const openIn = within(document.getElementById('settings-popover')).getByRole('button', {
+      name: /^Open in/,
+    })
+    const drawnByOpenIn = [...openIn.parentElement.querySelectorAll('[data-preset-name-cell]')].map(
+      (cell) => cell.firstElementChild.textContent,
+    )
+    expect(drawnByOpenIn).toEqual(['P1', 'P2', 'P1', 'P2']) // its button's stack, and its list
+    // …and nothing else does: the boxes, the two controls beside them, the menu's sentence, and
+    // the delete question all say the stored name.
+    expect(listedNames()).toEqual(['Preset 1', 'Preset 2'])
+    expect(rowButton('Preset 2', 'delete')).toBeTruthy()
+    expect(reorderHandle('Preset 2')).toBeTruthy()
+    expect(managePresetsButton().parentElement.textContent).toContain('You are on Preset 1.')
+    tap(rowButton('Preset 1', 'delete'))
+    const [going, opens] = confirmCard().querySelectorAll('b')
+    expect(going.textContent).toBe('Preset 1')
+    expect(opens.textContent).toBe('Preset 2')
+    expect(registry().presets.map((p) => p.name)).toEqual(['Preset 1', 'Preset 2'])
   })
 
   it('is there the moment a stored name that is already too long is focused', () => {

@@ -1,14 +1,19 @@
 import { useSyncExternalStore } from 'react'
 import { isDrawnWhole } from './presetNameText.js'
+import { shortStockName } from '../store/presets.js'
 
 // lib/presetNameWidth.ts — DOES A PRESET NAME FIT WHERE IT IS SHOWN, RIGHT NOW?
 //
 // ★★ THE RULE, the owner's: a name may be ANY length, and nothing the player types is ever refused
-// or altered. Where a name does not fit it is shown with an ellipsis, and the app says so: the note
-// under the rename field (components/PresetManager) appears at the exact character where the text
-// being typed stops fitting in the narrowest place a name is shown, and goes the moment it fits
-// again (isCutSomewhere). It is a PURE FUNCTION OF THE TEXT AND THE ROOMS: nothing is remembered
-// between calls, so it cannot be left on, or off, by the order things happened in.
+// or altered. Where a name does not fit it is shown with an ellipsis, and the app answers that in
+// two ways, both decided here:
+//   • the note under the rename field (components/PresetManager) appears at the exact character
+//     where the text being typed stops fitting in the narrowest place a name is shown, and goes the
+//     moment it fits again (isCutSomewhere);
+//   • a stock name ("Preset 3") that would be cut is drawn in its short form ("P3") instead
+//     (stockNamesAreCut — components/PresetSwitcher draws it and states the rule).
+// Both are PURE FUNCTIONS OF THE TEXT AND THE ROOMS: nothing is remembered between calls, so
+// neither can be left on, or off, by the order things happened in.
 //
 // ── THE ROOMS ─────────────────────────────────────────────────────────────────────────────────
 //
@@ -36,7 +41,7 @@ import { isDrawnWhole } from './presetNameText.js'
 //   being cut.
 //
 // ★ WHY THE SPLIT INSIDE THIS FILE. The DECISION is pure and tested with fabricated numbers
-// (fitsWithinWidth, and isCutSomewhere built on it); the MEASUREMENT needs a live canvas and
+// (fitsWithinWidth, and the two functions built on it); the MEASUREMENT needs a live canvas and
 // live elements, neither of which jsdom provides — `getContext('2d')` there returns null, and
 // measureTextWidthPx then measures 0, so a test that wants real widths fakes both back in.
 
@@ -195,6 +200,32 @@ const showsInFull = (text: string, rooms: readonly NameRoom[]): boolean => {
  * Is a preset named `name` shown cut short in at least one place? What the note under the rename
  * field is drawn from. `name` is a name as it is STORED (store/presets' normalizePresetName): the
  * field asks about what its text would be saved as, not about the text itself.
+ * ★ A STOCK NAME IS JUDGED BY ITS SHORT FORM. "Preset 3" that does not fit is drawn as "P3"
+ * (stockNamesAreCut, below), so it is cut only where even "P3" is.
  */
-export const isCutSomewhere = (name: string, rooms: readonly NameRoom[]): boolean =>
-  !showsInFull(name, rooms)
+export function isCutSomewhere(name: string, rooms: readonly NameRoom[]): boolean {
+  if (showsInFull(name, rooms)) return false
+  const short = shortStockName(name)
+  return short === null || !showsInFull(short, rooms)
+}
+
+// The last question stockNamesAreCut was asked, and its answer: every name cell on the page asks
+// the same one in the same render.
+let lastStock: { presets: unknown; rooms: unknown; cut: boolean } | null = null
+/**
+ * Would ANY stock name among `presets` be cut in ANY room — written in FULL? One answer for the
+ * whole app: when it is yes, every stock name is drawn in its short form everywhere a name is shown.
+ * ★ IT MEASURES THE FULL NAMES, WHATEVER IS ON SCREEN, and a room's width does not depend on the
+ * text in it (a name cell fills the space its control gives it). So drawing the short forms cannot
+ * change the answer that chose them: no flicker, and the full names are back the moment they fit.
+ */
+export function stockNamesAreCut(
+  presets: readonly { name: string }[],
+  rooms: readonly NameRoom[],
+): boolean {
+  if (lastStock?.presets !== presets || lastStock.rooms !== rooms) {
+    const cut = presets.some((p) => shortStockName(p.name) !== null && !showsInFull(p.name, rooms))
+    lastStock = { presets, rooms, cut }
+  }
+  return lastStock.cut
+}

@@ -1,12 +1,12 @@
 import { use, type RefObject } from 'react'
 import CustomSelect from './CustomSelect.jsx'
 import { InOpenListContext } from './openListContext.js'
-import { usePresets } from '../store/presets.js'
+import { usePresets, shortStockName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { switchPreset } from '../store/presetControl.js'
 import { useSessionAmnesic } from '../store/sessionAmnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
-import { watchNameCell } from '../lib/presetNameWidth.js'
+import { stockNamesAreCut, useNameRooms, watchNameCell } from '../lib/presetNameWidth.js'
 import { nameAsDrawn } from '../lib/presetNameText.js'
 
 // PresetSwitcher — the control that says which preset you are on and moves you to another one.
@@ -110,6 +110,25 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 //   this list — and at the button's width a row spends more of it than the button does (the ✓
 //   column, wider padding) on larger text.
 //
+// ★★ A STOCK NAME THAT WOULD BE CUT IS DRAWN SHORT: "Preset 1" → "P1" (the owner's rule). A stock
+// name is one that reads exactly "Preset <number>" (store/presets' shortStockName — the default
+// names, and any name typed to read the same). On a narrow phone the default name does not fit a
+// row of its own list, and "Pres…" says less than "P1".
+//   • ONE ANSWER FOR THE WHOLE APP. If ANY stock name among the presets would be cut in ANY place a
+//     name is shown, EVERY stock name is drawn short in EVERY such place; otherwise all are drawn
+//     in full. So the button and its list always agree, a list never mixes "Preset 1" with "P10",
+//     and "Open in" matches the top bar.
+//   • IT FOLLOWS THE SCREEN, WITH NOTHING REMEMBERED. The answer is worked out from the full names
+//     and the rooms as they are now (lib/presetNameWidth's stockNamesAreCut), so a rotation or a
+//     wider window brings the full names straight back. What is drawn cannot feed back into it: a
+//     name cell's width comes from its control, never from the text in it.
+//   • DRAWN ONLY. The stored name is never changed. The rename field shows it in full, every
+//     sentence that quotes it quotes it in full, and a screen reader hears it in full — the short
+//     form is hidden from one, with the real name beside it.
+//   • A name the player typed that reads "P1" beside a stock "Preset 1" drawn as "P1" gives two
+//     rows that read alike. Names were never required to differ (two presets may both be called
+//     "Weekend"), so this is that same case and gets no machinery of its own.
+//
 // ── WHAT A PRESET LIST SAYS OF AN AMNESIC PRESET ──────────────────────────────────────────────
 //
 // ★ NOTHING IS DRAWN, AND SOMETHING IS SPOKEN. A preset's row used to carry a small "A" after its
@@ -126,7 +145,8 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 // that follow it. Each preset's value is the session's (store/sessionAmnesic), and one subscription
 // there answers for EVERY preset at once, including the ones you are not on.
 // ⚠ IT IS SPOKEN AS ONE WHOLE PHRASE — "Weekend, amnesic", name included, in an `sr-only` element,
-// with the visible name hidden from a screen reader beside it — rather than a ", amnesic" tail for
+// with the visible name hidden from a screen reader beside it (the same element a stock name drawn
+// short is spoken from: "Preset 1", or "Preset 1, amnesic") — rather than a ", amnesic" tail for
 // the browser to join onto the name. A name assembled from several elements is joined by rules that
 // differ by engine and by each piece's layout: Chromium puts a space between a block-level piece
 // and its neighbour (the name is a flex item, the sr-only span is absolutely positioned), which
@@ -151,7 +171,14 @@ export const PRESET_NAME_COL = '4.5em'
 // measures every cell that wears it, so "Open in" and its list are places a name can be cut by
 // drawing their names with this component, with nothing else to wire.
 export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
-  const spoken = AMNESIC_SPOKEN[useSessionAmnesic((s) => s.modes[p.id] ?? 'off')]
+  const amnesic = AMNESIC_SPOKEN[useSessionAmnesic((s) => s.modes[p.id] ?? 'off')]
+  // The app-wide answer (the ★★ "drawn short" block above): every cell asks the same question in
+  // the same render, and stockNamesAreCut answers it once.
+  const stockShort = stockNamesAreCut(
+    usePresets((s) => s.presets),
+    useNameRooms(),
+  )
+  const short = stockShort ? shortStockName(p.name) : null
   // ★ THE FLOOR IS THE TRIGGER'S, NOT THE LIST'S. In the trigger it is what keeps the name cell
   // from collapsing toward bare content. In a list row there is nothing for it to hold — the row's
   // label cell already fills the row — and in a row with less room than the floor it would push the
@@ -159,7 +186,12 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
   // lib/presetNameWidth, which would then call a name whole that the list is cutting. In the list
   // the cell is exactly the room the row gives it.
   const inOpenList = use(InOpenListContext)
-  const drawn = nameAsDrawn(p.name)
+  // The stored name, as much of it as is ever drawn or said (lib/presetNameText).
+  const full = nameAsDrawn(p.name)
+  const drawn = short === null ? full : nameAsDrawn(short)
+  // What a screen reader is given IN PLACE OF what is drawn — only when the two differ: an amnesic
+  // preset has its words after its name, and a stock name drawn short is said in full.
+  const spoken = amnesic ? `${full}, ${amnesic}` : short !== null ? full : null
   return (
     // The name cell (floor PRESET_NAME_COL, grows past it). `flex` makes it a block-level flex
     // container, so inside the trigger's grid cell AND inside a dropdown row it is the same box
@@ -181,10 +213,10 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
           ⚠ WHAT IS DRAWN IS nameAsDrawn, NOT THE RAW NAME: all of it for any name a slot could
           show, and only the start of a pasted book (lib/presetNameText says why a browser must
           never be handed the whole of one to lay out). */}
-      <span className="truncate" aria-hidden={spoken ? true : undefined}>
+      <span className="truncate" aria-hidden={spoken !== null ? true : undefined}>
         {drawn}
       </span>
-      {spoken && <span className="sr-only">{`${drawn}, ${spoken}`}</span>}
+      {spoken !== null && <span className="sr-only">{spoken}</span>}
     </span>
   )
 }

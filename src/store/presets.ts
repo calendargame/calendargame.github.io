@@ -145,7 +145,23 @@ export type PresetRegistryValues = {
   openInPreset: OpenInPreset
 }
 
-export const defaultPresetName = (id: number): string => `Preset ${id}`
+// ── A stock name, and its short form ──────────────────────────────────────────────────────────
+// A new preset is named "Preset <its number>", and so is one whose name is emptied. A STOCK NAME is
+// any name that reads exactly that way — the word, one space, a whole number written the ordinary
+// way — whoever typed it, and for whichever preset: a name the player typed that reads "Preset 3"
+// is one. Where a stock name would be cut short it is DRAWN in its short form, "P3", and drawn in
+// full again the moment there is room (components/PresetSwitcher has the rule). ★ DRAWN ONLY: what
+// is stored is never the short form, and nothing here changes a name.
+// The default, the test for one, and the short form are all built from the one word below, so they
+// cannot come to disagree about what a stock name looks like.
+const STOCK_NAME_WORD = 'Preset'
+const STOCK_NAME = new RegExp(`^${STOCK_NAME_WORD} ([1-9][0-9]*)$`)
+export const defaultPresetName = (id: number): string => `${STOCK_NAME_WORD} ${id}`
+/** The short form of a stock name ("Preset 12" → "P12") — or null for a name that is not one. */
+export const shortStockName = (name: string): string | null => {
+  const stock = STOCK_NAME.exec(name)
+  return stock && `${STOCK_NAME_WORD[0]}${stock[1]}`
+}
 
 // Fresh defaults via a FACTORY (the same reasoning as makeProgressDefaults): the nested array must
 // be a new one each call, so nothing can alias the registry's list into a reset.

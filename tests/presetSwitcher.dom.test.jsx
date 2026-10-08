@@ -31,6 +31,7 @@ import {
 } from '../src/lib/presetNameWidth.js'
 import { NAME_DRAWN_UNITS } from '../src/lib/presetNameText.js'
 import { createPreset, renamePreset, setPresetAmnesic } from '../src/store/presetControl.js'
+import { installNameRooms, PX_PER_CHARACTER } from './helpers/nameRooms.js'
 
 // A device that has never been played on and has never seen presets: nothing saved, one preset.
 // (The same shape tests/presets.dom starts from — setState MERGES, so applyRegistry survives it.)
@@ -406,6 +407,169 @@ describe('the control must not size itself to its longest option', () => {
     const spoken = options()[1].querySelector('.sr-only').textContent
     expect(spoken.endsWith('…, amnesic')).toBe(true)
     expect(spoken.length).toBeLessThanOrEqual(NAME_DRAWN_UNITS + 1 + ', amnesic'.length)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// The owner's rule: where a default name ("Preset 1") would be cut short it is drawn "P1", and it
+// is "Preset 1" again the moment there is room. Drawn only — nothing stored changes. jsdom has no
+// widths, so the name cells are given one (tests/helpers/nameRooms): text is 5px a character.
+describe('a stock name that would be cut is drawn short', () => {
+  let cells = null
+  const layOut = (characters) => {
+    cells = installNameRooms(characters * PX_PER_CHARACTER)
+  }
+  afterEach(() => {
+    cells?.restore()
+    cells = null
+  })
+  // What each place DRAWS (the text a screen reader is not given instead), in registry order.
+  const drawnIn = (wrappers) => wrappers.map((w) => nameCell(w).firstElementChild.textContent)
+  const everywhere = () => ({
+    button: drawnIn(triggerWrappers()),
+    list: drawnIn(options().map(optionWrapper)),
+    gauge: drawnIn(gaugeRows().map(optionWrapper)),
+  })
+  const allThree = (names) => ({ button: names, list: names, gauge: names })
+  const storedNames = () =>
+    JSON.parse(localStorage.getItem('cg-presets-v1')).state.presets.map((p) => p.name)
+
+  it('with room for the names, they are drawn in full', () => {
+    act(() => {
+      createPreset()
+    })
+    mount()
+    openMenu()
+    layOut(8) // "Preset 1" exactly
+    expect(everywhere()).toEqual(allThree(['Preset 1', 'Preset 2']))
+  })
+
+  it('one character short of the room, EVERY stock name is short in EVERY place', () => {
+    act(() => {
+      createPreset()
+      createPreset('Weekend')
+    })
+    mount()
+    openMenu()
+    layOut(7)
+    // The button, the open list, and the hidden copy of the list all agree; a name that is not a
+    // stock name is left as it is (and shortened by the ellipsis where it has to be).
+    expect(everywhere()).toEqual(allThree(['P1', 'P2', 'Weekend']))
+    // Nothing stored was touched.
+    expect(usePresets.getState().presets.map((p) => p.name)).toEqual([
+      'Preset 1',
+      'Preset 2',
+      'Weekend',
+    ])
+    expect(storedNames()).toEqual(['Preset 1', 'Preset 2', 'Weekend'])
+  })
+
+  it('all or none: one stock name that does not fit shortens the ones that would have', () => {
+    // "Preset 10" is nine characters; "Preset 1" is eight and fits — and a list that read
+    // "Preset 1" above "P10" would be two spellings of one thing.
+    act(() => {
+      createPreset()
+      renamePreset(2, 'Preset 10')
+    })
+    mount()
+    openMenu()
+    layOut(8)
+    expect(everywhere()).toEqual(allThree(['P1', 'P10']))
+    cells.resize(9 * PX_PER_CHARACTER)
+    expect(everywhere()).toEqual(allThree(['Preset 1', 'Preset 10']))
+  })
+
+  it('follows the room both ways, as often as it changes, with nothing remembered', () => {
+    mount()
+    openMenu()
+    layOut(7)
+    expect(everywhere()).toEqual(allThree(['P1']))
+    for (let turn = 0; turn < 3; turn++) {
+      cells.resize(8 * PX_PER_CHARACTER) // a wider screen: the full name is back by itself
+      expect(everywhere()).toEqual(allThree(['Preset 1']))
+      cells.resize(7 * PX_PER_CHARACTER)
+      expect(everywhere()).toEqual(allThree(['P1']))
+    }
+  })
+
+  it('is decided from the FULL names, so drawing the short ones cannot change the answer', () => {
+    // Were it decided from what is on screen, "P1" would fit, the full name would come back, would
+    // not fit, and so on for ever. A second reading of the same rooms changes nothing.
+    mount()
+    openMenu()
+    layOut(7)
+    expect(everywhere()).toEqual(allThree(['P1']))
+    cells.resize(7 * PX_PER_CHARACTER)
+    cells.resize(7 * PX_PER_CHARACTER)
+    expect(everywhere()).toEqual(allThree(['P1']))
+  })
+
+  it('a name the player typed that reads like a default is a stock name; anything else is not', () => {
+    act(() => {
+      renamePreset(1, 'Preset 42')
+      createPreset('Preset 042')
+      createPreset('preset 4')
+      createPreset('Presets 5')
+      createPreset('My Preset 6')
+      createPreset('Preset 7b')
+      createPreset('Preset')
+    })
+    mount()
+    openMenu()
+    layOut(3)
+    expect(everywhere().list).toEqual([
+      'P42',
+      'Preset 042',
+      'preset 4',
+      'Presets 5',
+      'My Preset 6',
+      'Preset 7b',
+      'Preset',
+    ])
+  })
+
+  it('a screen reader still hears the stored name — the short form is not read', () => {
+    act(() => {
+      setPresetAmnesic(createPreset().id, 'full')
+    })
+    mount()
+    openMenu()
+    layOut(7)
+    // The option's name is the sr-only text; the drawn "P1" is hidden from a screen reader.
+    const [first, second] = options()
+    expect(nameCell(optionWrapper(first)).firstElementChild.getAttribute('aria-hidden')).toBe(
+      'true',
+    )
+    expect(first.querySelector('.sr-only').textContent).toBe('Preset 1')
+    expect(second.querySelector('.sr-only').textContent).toBe('Preset 2, amnesic')
+    // (The row you are on has its ✓ in front of its name.)
+    expect(screen.getByRole('option', { name: /^✓ ?Preset 1$/ })).toBe(first)
+    expect(screen.getByRole('option', { name: 'Preset 2, amnesic' })).toBe(second)
+    // …and the closed control says where you are in the same words.
+    expect(screen.getByRole('button', { name: 'Preset, Preset 1' })).toBe(trigger())
+    // With room, nothing is hidden and nothing is added: the name is simply the text.
+    cells.resize(8 * PX_PER_CHARACTER)
+    expect(
+      nameCell(optionWrapper(options()[0])).firstElementChild.hasAttribute('aria-hidden'),
+    ).toBe(false)
+    expect(options()[0].querySelector('.sr-only')).toBeNull()
+  })
+
+  it('"P1" typed as a name beside a stock "Preset 1" drawn short: two rows read alike, as two "Weekend"s do', () => {
+    act(() => {
+      createPreset('P1')
+    })
+    mount()
+    openMenu()
+    layOut(7)
+    expect(everywhere().list).toEqual(['P1', 'P1'])
+    // They are still two presets, told apart by a screen reader and chosen separately.
+    expect(options().map((o) => o.querySelector('.sr-only')?.textContent ?? null)).toEqual([
+      'Preset 1',
+      null,
+    ])
+    fireEvent.click(options()[1])
+    expect(activeId()).toBe(2)
   })
 })
 

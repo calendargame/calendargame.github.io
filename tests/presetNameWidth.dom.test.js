@@ -45,6 +45,7 @@ import {
   readNameRooms,
   measureTextWidthPx,
   isCutSomewhere,
+  stockNamesAreCut,
   refreshNameRooms,
   watchNameCell,
   useNameRooms,
@@ -300,6 +301,59 @@ describe('isCutSomewhere — is this name shown cut short in at least one place'
     it('…even where no place can be measured: the slots still draw only its start', () => {
       expect(isCutSomewhere('x'.repeat(NAME_DRAWN_UNITS + 1), [])).toBe(true)
     })
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('stock names — "Preset 3" that would be cut is drawn "P3"', () => {
+  let restoreCanvas = () => {}
+  afterEach(() => restoreCanvas())
+  const named = (...names) => names.map((name) => ({ name }))
+
+  it('isCutSomewhere judges a stock name by its short form', () => {
+    restoreCanvas = installFakeCanvas()
+    mountNameCell(35) // 7 characters
+    let rooms = readNameRooms()
+    expect(isCutSomewhere('Preset 1', rooms)).toBe(false) // 8, but drawn "P1"
+    expect(isCutSomewhere('Preset 123456', rooms)).toBe(false) // "P123456": 7
+    expect(isCutSomewhere('Preset 1234567', rooms)).toBe(true) // "P1234567": 8
+    expect(isCutSomewhere('Preset 1!', rooms)).toBe(true) // not a stock name: 9
+    document.body.innerHTML = ''
+    mountNameCell(5) // one character: not even "P1"
+    rooms = readNameRooms()
+    expect(isCutSomewhere('Preset 1', rooms)).toBe(true)
+  })
+
+  it('stockNamesAreCut: any stock name, in any room, written in full', () => {
+    restoreCanvas = installFakeCanvas()
+    mountNameCell(48, BUTTON_FONT) // 12 characters at 4px
+    mountNameCell(40, ROW_FONT) // 8 characters at 5px
+    const rooms = readNameRooms()
+    expect(stockNamesAreCut(named('Preset 1', 'Preset 2'), rooms)).toBe(false)
+    expect(stockNamesAreCut(named('Preset 1', 'Preset 10'), rooms)).toBe(true) // 9 in the row
+    // A name that is not a stock name is not this rule's business, however long it is.
+    expect(stockNamesAreCut(named('Preset 1', 'Weekend Mornings'), rooms)).toBe(false)
+    expect(stockNamesAreCut(named('Weekend Mornings'), rooms)).toBe(false)
+    // No rooms, no verdict.
+    expect(stockNamesAreCut(named('Preset 10'), [])).toBe(false)
+  })
+
+  it('answers the same question once: every cell on the page asks it in the same render', () => {
+    const measured = []
+    restoreCanvas = installFakeCanvas((ch) => (measured.push(ch), 1))
+    mountNameCell(40)
+    const rooms = readNameRooms()
+    const presets = named('Preset 1', 'Preset 2', 'Preset 3')
+    expect(stockNamesAreCut(presets, rooms)).toBe(false)
+    const once = measured.length
+    expect(once).toBeGreaterThan(0)
+    for (let cell = 0; cell < 50; cell++) expect(stockNamesAreCut(presets, rooms)).toBe(false)
+    expect(measured.length).toBe(once)
+    // A new list of presets, or new rooms, is a new question.
+    expect(stockNamesAreCut(named('Preset 1', 'Preset 10'), rooms)).toBe(true)
+    document.body.innerHTML = ''
+    mountNameCell(45)
+    expect(stockNamesAreCut(named('Preset 1', 'Preset 10'), readNameRooms())).toBe(false)
   })
 })
 

@@ -16,6 +16,8 @@ import {
   presetKey,
   normalizeRegistry,
   readStoredRegistry,
+  defaultPresetName,
+  shortStockName,
   makePresetRegistryDefaults,
   PRESET_STORE_KEYS,
   FIRST_PRESET_ID,
@@ -233,6 +235,35 @@ describe('the registry', () => {
     expect(
       normalizeRegistry({ presets: [{ id: 2, name: ` ${book}` }], activeId: 2 }).presets[0].name,
     ).toBe(book.trim())
+  })
+
+  it('a stock name is "Preset <number>" exactly, and its short form is "P<number>"', () => {
+    expect(shortStockName('Preset 1')).toBe('P1')
+    expect(shortStockName('Preset 12')).toBe('P12')
+    expect(shortStockName('Preset 1000000')).toBe('P1000000')
+    for (const id of [1, 2, 9, 10, 357])
+      expect(shortStockName(defaultPresetName(id))).toBe(`P${id}`)
+    for (const notStock of [
+      'Preset',
+      'Preset ',
+      'Preset 0',
+      'Preset 01',
+      'Preset 1 ',
+      ' Preset 1',
+      'Preset  1',
+      'preset 1',
+      'PRESET 1',
+      'Presets 1',
+      'Preset 1a',
+      'Preset 1.5',
+      'Preset -1',
+      'My Preset 1',
+      'Preset 1\nPreset 2',
+      'P1',
+      'Weekend',
+      '',
+    ])
+      expect(shortStockName(notStock)).toBeNull()
   })
 
   it('renaming trims, refuses to leave a preset nameless, and cuts nothing', () => {
