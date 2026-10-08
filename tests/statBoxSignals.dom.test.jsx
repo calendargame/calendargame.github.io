@@ -259,6 +259,34 @@ describe('StatPanel — the three signals', () => {
     expect(cellFor('Last').tagName).toBe('BUTTON')
     expect(valueOf('Score')).toBe('')
   })
+
+  // The keyboard ring is drawn from a cell's OWN box. The strip clips its cells to its round
+  // corners, so a square end cell had a square ring cut off by the corner. jsdom lays nothing out,
+  // so this pins the rule the browser draws from: the strip's corner is 1rem with a 1px border, and
+  // the two end cells carry the corner inside that border, on their outer side only.
+  it('the two end cells carry the corner of the strip`s inside edge, and no other cell does', () => {
+    render(<StatPanel stats={withData()} dimmed={false} />)
+    const classes = (el) => el.className.split(/\s+/)
+    expect(classes(strip())).toEqual(expect.arrayContaining(['rounded-2xl', 'panel']))
+    const rounding = cells().map((c) => classes(c).filter((k) => k.startsWith('rounded')))
+    expect(rounding).toEqual([
+      ['rounded-l-[calc(1rem-1px)]'],
+      [],
+      [],
+      [],
+      [],
+      ['rounded-r-[calc(1rem-1px)]'],
+    ])
+  })
+
+  it('a strip of one cell is both ends at once', () => {
+    render(<StatPanel stats={withData().slice(0, 1)} dimmed={false} />)
+    expect(
+      cells()[0]
+        .className.split(/\s+/)
+        .filter((k) => k.startsWith('rounded')),
+    ).toEqual(['rounded-l-[calc(1rem-1px)]', 'rounded-r-[calc(1rem-1px)]'])
+  })
 })
 
 // ── The real screen: the two flags must not collapse back into one ────────────────────────────

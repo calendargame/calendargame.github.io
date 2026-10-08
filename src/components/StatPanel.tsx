@@ -146,6 +146,17 @@ export interface StatItem {
 //   • items/justify ... centre the value in the box on both axes — the alignment fix itself.
 const VALUE_CELL_CLASS =
   'mt-0.5 w-full h-[1lh] text-sm leading-tight flex items-center justify-center'
+// THE END CELLS FOLLOW THE STRIP'S CORNERS. The strip is `rounded-2xl panel` — a 1rem corner with a
+// 1px border — and it clips its cells to that shape, so a cell needs no corner of its own to LOOK
+// right. But the keyboard ring is drawn from the cell's own box (index.css's keyboard focus ring: an
+// outline, inset), and a square box gave the first and the last cell a square ring cut off by the
+// strip's round corner. So the two end cells carry the corner the strip's inside edge has — the
+// strip's radius less its border, the concentric one — on their outer side only, and the ring,
+// which follows its box's radius at whatever inset it is drawn (2px, or 5px inside a dashed
+// frame), runs parallel to the strip's edge. It paints nothing: a cell has no fill or border of its
+// own, and its content is centred well clear of the corner.
+const FIRST_CELL_CORNERS = 'rounded-l-[calc(1rem-1px)]'
+const LAST_CELL_CORNERS = 'rounded-r-[calc(1rem-1px)]'
 
 export default function StatPanel({
   stats,
@@ -323,7 +334,7 @@ export default function StatPanel({
               <Tag
                 key={s.label}
                 {...props}
-                className="flex-1 min-w-0 flex flex-col items-center py-2 gap-0.5"
+                className={`flex-1 min-w-0 flex flex-col items-center py-2 gap-0.5 ${i === 0 ? FIRST_CELL_CORNERS : ''} ${i === stats.length - 1 ? LAST_CELL_CORNERS : ''}`}
               >
                 <span className="text-xs text-(--tx-200-80) leading-none whitespace-nowrap">
                   {s.label}
