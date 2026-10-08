@@ -982,11 +982,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // frame with no bar shadow and no top fade.
       // ★ THE BAR'S EDGE HAS TWO INPUTS, AND ONE WRITER (paintBarShade). `edge` is the strength
       // the scroll position gives it — the effect below, the same on every screen. `yield` is the
-      // share of that the bar KEEPS, which is 1 everywhere except How to Play with a section open:
-      // there the open section's header docks flush under the bar, the text slides under the
-      // HEADER's edge rather than the bar's, and the header wears the shadow instead (GuidePage's
-      // dock tracker measures it and calls yieldBarShade; lib/guideDock is the rule, and proves the
-      // two shadows are never on together). The two inputs arrive from two listeners on the same
+      // share of that the bar KEEPS, which is 1 everywhere except How to Play with a section's
+      // header on the line: an open section's header docks flush under the bar, the text slides
+      // under the HEADER's edge rather than the bar's, and the header wears the shadow instead; and
+      // a section closed from there leaves its header resting on that line, a clean edge with
+      // nothing sliding under the bar at all (GuidePage's dock tracker measures both and calls
+      // yieldBarShade; lib/guideDock is the rule, and proves the two shadows are never on together). The two inputs arrive from two listeners on the same
       // scroll event, in no particular order — so each one stores its number and BOTH repaint the
       // product. Whichever runs second writes the final value, and it is the same value either way,
       // before the frame is painted.

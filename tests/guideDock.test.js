@@ -11,8 +11,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   dockShades,
+  lineShare,
+  onTheLine,
+  goneFromTheLine,
   releaseShades,
   arrivingBarYield,
+  arrivingShades,
   NO_DOCK,
   DOCK_SETTLE_PX,
   DOCK_LINE_BAND_PX,
@@ -164,23 +168,151 @@ describe('dockShades — the hand-off across a whole scroll', () => {
   })
 })
 
-// ── THE TWO MOMENTS THE POSITION ALONE GETS WRONG ───────────────────────────────────────────────
-describe('ARRIVING — a section opened with its header above the line casts nothing during the glide', () => {
-  it('by position alone it would: the stick has carried the header down over its own section', () => {
+// ── THE THREE MOMENTS THE POSITION ALONE GETS WRONG ─────────────────────────────────────────────
+describe('ARRIVING — an opening section answers to the motion`s clock, not to its place alone', () => {
+  // A header tapped while it stood `above` px over the line, `p` of the way through being brought
+  // down to it (the header's own offset runs out on the same clock), with the page stopped where a
+  // reader took it over at `stoppedAt`: its section's top never came further down than that.
+  const carriedHeader = (above, p, stoppedAt = p) => {
+    const headerTop = LINE - above * (1 - p)
+    const naturalTop = LINE - above * (1 - stoppedAt)
+    return {
+      lineY: LINE,
+      headerTop,
+      headerBottom: headerTop + HEAD_H,
+      naturalTop,
+      floorY: naturalTop + 1500,
+    }
+  }
+  const arriving = (g, arrival) => arrivingShades(arrival, dockShades(g, RAMP), lineShare(g, RAMP))
+
+  it('by position alone the header would cast one: the stick has carried it down over its own section', () => {
     // The header's natural spot is 30px above the line (it was half under the bar when tapped).
     expect(dockShades(sticky(LINE - BORDER - 30, 1500), RAMP).header).toBe(1)
   })
 
   it('while the glide carries the section down to it, the header wears none — at every depth', () => {
     for (const carried of [30, 24, 12.5, 5, 1, 0]) {
-      const s = dockShades(sticky(LINE - BORDER - carried, 1500), RAMP, true)
+      const s = arriving(sticky(LINE - BORDER - carried, 1500), {
+        from: 0,
+        progress: 0.5,
+        takenOverAt: null,
+      })
       expect(s).toEqual({ header: 0, barYield: 0 }) // docked on the line: the bar keeps none either
     }
   })
 
-  it('arriving from BELOW the line is the ordinary case: the bar`s share still follows the gap', () => {
+  it('the bar gives its share up over the clock, from what it kept to what the place allows', () => {
+    const onLine = sticky(LINE - BORDER - 30, 1500)
+    const share = (progress) => arriving(onLine, { from: 1, progress, takenOverAt: null }).barYield
+    expect([share(0), share(0.25), share(1)]).toEqual([1, 0.75, 0])
+    // Arriving from BELOW the line is the ordinary case: the bar's share lands on the gap's.
     const gap = DOCK_LINE_BAND_PX + (RAMP - DOCK_LINE_BAND_PX) / 2
-    expect(dockShades(sticky(LINE + gap - BORDER, 1500), RAMP, true).barYield).toBeCloseTo(0.5, 9)
+    const below = sticky(LINE + gap - BORDER, 1500)
+    expect(arriving(below, { from: 1, progress: 1, takenOverAt: null }).barYield).toBeCloseTo(
+      0.5,
+      9,
+    )
+  })
+
+  // ★ THE TAKEOVER. Ending the arrival the moment a reader touched the page, and answering by
+  // place at once, put the header's shadow on and the bar's off in one frame.
+  it('a reader taking the page over changes NOTHING on that frame', () => {
+    for (const at of [0.05, 0.2, 0.5, 0.9]) {
+      const g = carriedHeader(40, at)
+      const before = arriving(g, { from: 1, progress: at, takenOverAt: null })
+      const after = arriving(g, { from: 1, progress: at, takenOverAt: at })
+      expect(after).toEqual(before)
+    }
+  })
+
+  it('from there the header`s shadow comes in, and the bar`s goes on out, with no step', () => {
+    const TAKEN = 0.2
+    const FRAMES = 200
+    let prev = null
+    let worst = 0
+    for (let i = 0; i <= FRAMES; i++) {
+      const p = TAKEN + ((1 - TAKEN) * i) / FRAMES
+      const s = arriving(carriedHeader(40, p, TAKEN), { from: 1, progress: p, takenOverAt: TAKEN })
+      if (prev) {
+        worst = Math.max(
+          worst,
+          Math.abs(s.header - prev.header),
+          Math.abs(s.barYield - prev.barYield),
+        )
+        expect(s.barYield).toBeLessThanOrEqual(prev.barYield + 1e-12) // the bar only ever gives up
+      }
+      expect(s.header + s.barYield).toBeLessThanOrEqual(1 + 1e-12) // one shadow's worth between them
+      prev = s
+    }
+    expect(worst).toBeLessThan(0.02) // a two-hundredth of the clock moves neither by more than this
+    // …and it ends exactly on what the place says: the header on the line, over 32px of its section.
+    const end = carriedHeader(40, 1, TAKEN)
+    expect(prev).toEqual(dockShades(end, RAMP))
+    expect(prev).toEqual({ header: 1, barYield: 0 })
+  })
+
+  it('an arrival nobody interrupts ends on its place too: landed, with nothing under the header', () => {
+    const landed = carriedHeader(40, 1)
+    expect(arriving(landed, { from: 1, progress: 1, takenOverAt: null })).toEqual(
+      dockShades(landed, RAMP),
+    )
+  })
+
+  it('a takeover on the very last frame, and a progress outside 0…1, are held to the ends', () => {
+    const g = carriedHeader(40, 1, 0.5)
+    expect(arriving(g, { from: 1, progress: 1, takenOverAt: 1 })).toEqual(dockShades(g, RAMP))
+    expect(arriving(g, { from: 1, progress: 2, takenOverAt: 0.5 })).toEqual(dockShades(g, RAMP))
+    expect(arriving(g, { from: 1, progress: -1, takenOverAt: 0.5 }).header).toBe(0)
+  })
+})
+
+describe('RESTING — a closed header left on the line: the bar keeps what its place alone allows', () => {
+  // A closed section is exactly as tall as its header: no room to stick in, nothing under it.
+  const closed = (headerTop) => ({
+    lineY: LINE,
+    headerTop,
+    headerBottom: headerTop + HEAD_H,
+    naturalTop: headerTop,
+    floorY: headerTop + HEAD_H,
+  })
+
+  it('on the line the bar keeps none — the same as an open header with nothing under it yet', () => {
+    expect(lineShare(closed(LINE), RAMP)).toBe(0)
+    expect(lineShare(closed(LINE), RAMP)).toBe(
+      dockShades(sticky(LINE - BORDER, 1500), RAMP).barYield,
+    )
+    expect(dockShades(closed(LINE), RAMP).header).toBe(0) // and a closed header casts nothing
+  })
+
+  it('scrolled away either way, the bar`s share comes back over the ramp, and is whole a ramp off', () => {
+    const half = DOCK_LINE_BAND_PX + (RAMP - DOCK_LINE_BAND_PX) / 2
+    expect(lineShare(closed(LINE - half), RAMP)).toBeCloseTo(0.5, 9)
+    expect(lineShare(closed(LINE + half), RAMP)).toBeCloseTo(0.5, 9)
+    expect(lineShare(closed(LINE - RAMP), RAMP)).toBe(1)
+    expect(lineShare(closed(LINE + RAMP + 100), RAMP)).toBe(1)
+  })
+
+  it('a line that cannot be measured leaves the bar alone', () => {
+    expect(lineShare({ ...closed(LINE), lineY: NaN }, RAMP)).toBe(1)
+  })
+
+  it('goneFromTheLine: a ramp`s length off, either way — and never by a line that could not be read', () => {
+    expect(goneFromTheLine(closed(LINE), RAMP)).toBe(false)
+    expect(goneFromTheLine(closed(LINE - RAMP + 1), RAMP)).toBe(false) // still coming back
+    expect(goneFromTheLine(closed(LINE - RAMP), RAMP)).toBe(true)
+    expect(goneFromTheLine(closed(LINE + RAMP), RAMP)).toBe(true)
+    // lineShare says "all of it" for an unreadable line, which is not the header having gone.
+    expect(goneFromTheLine({ ...closed(LINE), lineY: NaN }, RAMP)).toBe(false)
+  })
+
+  it('onTheLine: within the band the two measurements can disagree by, and not a hair more', () => {
+    expect(onTheLine(closed(LINE))).toBe(true)
+    expect(onTheLine(closed(LINE + DOCK_LINE_BAND_PX))).toBe(true)
+    expect(onTheLine(closed(LINE - DOCK_LINE_BAND_PX))).toBe(true)
+    expect(onTheLine(closed(LINE + DOCK_LINE_BAND_PX + 0.01))).toBe(false)
+    expect(onTheLine(closed(LINE - 17))).toBe(false) // part-way under the bar: cut by its edge
+    expect(onTheLine({ ...closed(LINE), lineY: NaN })).toBe(false)
   })
 })
 

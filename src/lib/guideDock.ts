@@ -44,36 +44,50 @@
 // The ramp is the app's one "near a boundary" distance (--shade-ramp, components/scrollRegion's
 // edgeShade), so both shadows speak the language every other boundary shadow speaks.
 //
-// A header casts a shadow only while it is STUCK (depth > 0 and room > 0), and a stuck header's top
-// is on the line (offset 0), where the bar keeps nothing. A header off the line is either not yet
-// docked (depth 0) or being carried out (room 0), and casts nothing. So the two are never on
-// together, at any position — and the function ENFORCES that rather than trusting it: whenever the
-// header's strength is above 0 the bar's share is 0 outright, so no sub-pixel disagreement between
-// two measured rectangles can ever light both.
+// A header casts a shadow only while it is STUCK (depth > 0 and room > 0), and the stylesheet's
+// stick holds a stuck header's top on the line (offset 0), where the bar keeps nothing. A header off
+// the line is either not yet docked (depth 0) or being carried out (room 0), and casts nothing. So
+// the two are never on together, at any position — and the function ENFORCES that rather than
+// trusting it: whenever the header's strength is above 0 the bar's share is 0 outright, so no
+// sub-pixel disagreement between two measured rectangles can ever light both.
+//   ⚠ ONE HEADER IS STUCK AND NOT ON THE LINE: the one tapped while it stood above the line, for the
+//   length of the motion that brings it down (components/GuidePage's startHeaderOffset holds it at a
+//   distance of its own, running out to nothing). That is ARRIVING, below, and it is answered by
+//   arrivingShades — never by this rule alone, which would put the bar's share out in one frame.
 //
 // There is also no position with NEITHER while text is under an edge: off the line the bar keeps a
 // share of its shadow; on the line, the header's shadow is on whenever text is under the header.
 // The one place both are 0 is a header docked with nothing under it yet — a section just opened —
 // which is exactly the case that must not look pinned.
 //
-// ── TWO MOMENTS THE POSITION ALONE GETS WRONG ───────────────────────────────────────────────
-// Both are a tap on a header, and in both the numbers above are true and the picture is not:
+// ── THREE MOMENTS THE POSITION ALONE GETS WRONG ─────────────────────────────────────────────
+// All three follow a tap on a header, and in all three the numbers above are true and the picture
+// is not:
 //
-//   ARRIVING — a section is opened while its header's natural spot is ABOVE the line (the header
-//     was partly under the bar when it was tapped, or the keyboard opened it). The header is
-//     brought down to the line over the glide (components/GuidePage's startHeaderOffset), and
-//     whenever its section's top is above where it is drawn it has been carried down from its
-//     natural spot: all the way, when a section above it is folding at the same time — the fold
-//     runs ahead of the page, and pulls the section's top up past its header — and from the moment
-//     a reader stops the page mid-glide. Then `depth` is above 0 and the rule above would light its
-//     shadow — for the length of the glide that is bringing the section down to meet it, going out
-//     as the glide lands. That is a section being OPENED looking pinned, which is the one thing
-//     these headers must never do. While the glide is in flight the header casts nothing
-//     (dockShades' `arriving`). And the BAR's share, which the header's place alone would take away
-//     over the last few pixels before the line, on a page that was scrolled and showing it in
-//     full, is taken down over the whole glide instead (arrivingBarYield): from what the bar was
-//     keeping at the tap to what the header's place says, on the glide's own clock, so the bar's
-//     shadow is gone as the section lands under its header and not before.
+//   ARRIVING — a section is opened and glided to the line. For the length of that motion (the
+//     glide's own clock — components/GuidePage runs the page, the panels, and this on one) the
+//     header and the bar answer to arrivingShades, not to the header's place alone:
+//       • THE HEADER CASTS NOTHING WHILE THE GLIDE IS CARRYING ITS SECTION TO IT. A header tapped
+//         while its natural spot was ABOVE the line is brought down to the line over the glide, and
+//         whenever its section's top is above where it is drawn it has been carried down from its
+//         natural spot — all the way, when a section above it is folding at the same time (the fold
+//         runs ahead of the page, and pulls the section's top up past its header). Then `depth` is
+//         above 0 and the rule above would light its shadow for the length of the glide that is
+//         bringing the section down to meet it, going out as the glide lands. That is a section
+//         being OPENED looking pinned, which is the one thing these headers must never do.
+//       • THE BAR GIVES ITS SHARE UP OVER THE WHOLE GLIDE (arrivingBarYield): from what it was
+//         keeping at the tap to what the header's place says, on the glide's clock — where the
+//         place alone would take it away over the last few pixels before the line, or (for a
+//         header the stick already holds there) in the frame of the tap.
+//       • A READER WHO TAKES THE PAGE OVER MID-GLIDE STOPS THE PAGE, NOT THE ARRIVAL. The header
+//         is still on its way down and the panel is still opening, for the rest of the same clock.
+//         The page has stopped short, though, so text really is under the header now — and from
+//         that moment its shadow comes IN over what is left of the clock (`takenOverAt`), as the
+//         bar's goes on out. (Ending the arrival there instead, and answering by place at once,
+//         put the header's shadow on and the bar's — and the page's top fade — off in ONE frame.)
+//         The header never takes more than the bar has given up, so the two are one shadow's worth
+//         between them on every frame.
+//     At the end of the clock the header is on the line and both are exactly what the place says.
 //
 //   RELEASING — a section is closed, or swapped for another, from its docked header. The moment it
 //     is no longer the open section nothing is docked, and by position alone the bar is owed its
@@ -82,6 +96,22 @@
 //     fold away. So the hand-back is spread over that same fold (releaseShades): the header's
 //     shadow goes out as the text it was cast on does, and the bar's share rises to meet whatever
 //     the position then says — never above it (the caller takes the smaller of the two).
+//
+//   RESTING — a section is CLOSED with its header on the line (onTheLine), and the header is left
+//     exactly where it was: flush under the bar (the collapse keeps it under the finger). Nothing is
+//     open, so by the rule so far no header is considered at all and the bar is owed its shadow,
+//     and the page its top fade — drawn straight across the top of the header that has just been
+//     left there. But the picture has not changed: a header's top edge is on the line, and what
+//     meets the bar is that clean edge, not text sliding under it. A closed header has nothing
+//     under it, so it casts nothing itself; and the BAR keeps what the header's place alone allows
+//     (lineShare) — nothing while it rests on the line, more as the reader scrolls it away, all of
+//     it a ramp's length off. Exactly what an open header with nothing under it yet does, so
+//     closing a section and opening it again from there changes nothing at the bar.
+//       ⚠ ONLY THE HEADER THAT WAS LEFT THERE, AND ONLY UNTIL IT HAS GONE. Once it is a ramp's
+//       length from the line the caller stops considering it for good. A header that merely
+//       PASSES the line as a reader scrolls a page of closed sections is not resting on it, and if
+//       each one took the bar's shadow as it went by, the shadow and the fade would pulse the
+//       whole way down the page.
 import { edgeShade } from '../components/scrollRegion.js'
 
 // A docked header counts as having text under it only past this depth. A section that has just been
@@ -119,24 +149,37 @@ export interface DockShades {
 /** With no header to consider — no section open, or the guide off screen — the bar is unaffected. */
 export const NO_DOCK: DockShades = { header: 0, barYield: 1 }
 
-export function dockShades(g: HeaderDockGeometry, rampPx: number, arriving = false): DockShades {
-  const depth = g.headerTop - g.naturalTop
-  const room = g.floorY - g.headerBottom
-  const header = arriving
-    ? 0
-    : Math.min(edgeShade(depth, DOCK_SETTLE_PX, rampPx), edgeShade(room, 0, rampPx))
-  if (header > 0) return { header, barYield: 0 }
-  // A line that cannot be measured (no bar to read) leaves the bar's shadow exactly as it is.
+/** Whether a header's top is on the line — within the band in which the two measurements agree. */
+export const onTheLine = (g: HeaderDockGeometry): boolean =>
+  Math.abs(g.headerTop - g.lineY) <= DOCK_LINE_BAND_PX
+
+/**
+ * The share of its shadow the bar keeps by a header's PLACE alone: none with the header's top on the
+ * line, all of it a ramp's length away in either direction. A line that cannot be measured (no bar
+ * to read) leaves the bar's shadow exactly as it is.
+ */
+export function lineShare(g: HeaderDockGeometry, rampPx: number): number {
   const offset = Math.abs(g.headerTop - g.lineY)
-  return {
-    header: 0,
-    barYield: Number.isFinite(offset) ? edgeShade(offset, DOCK_LINE_BAND_PX, rampPx) : 1,
-  }
+  return Number.isFinite(offset) ? edgeShade(offset, DOCK_LINE_BAND_PX, rampPx) : 1
 }
 
 /**
- * The share of its shadow the bar keeps while an opening section is still gliding to the line
- * (ARRIVING, above), `progress` of the way through the glide (0 at the tap, 1 as it lands — the
+ * Whether a header has LEFT the line: a ramp's length from it, the bar keeping all of its shadow.
+ * Only ever true of a line that was measured — one that cannot be read has not been left.
+ */
+export const goneFromTheLine = (g: HeaderDockGeometry, rampPx: number): boolean =>
+  Number.isFinite(g.headerTop - g.lineY) && lineShare(g, rampPx) >= 1
+
+export function dockShades(g: HeaderDockGeometry, rampPx: number): DockShades {
+  const depth = g.headerTop - g.naturalTop
+  const room = g.floorY - g.headerBottom
+  const header = Math.min(edgeShade(depth, DOCK_SETTLE_PX, rampPx), edgeShade(room, 0, rampPx))
+  return header > 0 ? { header, barYield: 0 } : { header: 0, barYield: lineShare(g, rampPx) }
+}
+
+/**
+ * The share of its shadow the bar keeps while an opening section is still on its way to the line
+ * (ARRIVING, above), `progress` of the way through the motion (0 at the tap, 1 as it ends — the
  * caller eases it on the glide's own curve). `from` is the share the bar was keeping at the tap,
  * `place` the share the header's place allows it now. It falls from the one to the other and is
  * never under `place`: a bar that was keeping LESS than the place allows simply follows the place.
@@ -144,6 +187,35 @@ export function dockShades(g: HeaderDockGeometry, rampPx: number, arriving = fal
 export function arrivingBarYield(from: number, place: number, progress: number): number {
   const p = Math.min(1, Math.max(0, progress))
   return place + Math.max(0, from - place) * (1 - p)
+}
+
+export interface Arrival {
+  /** The share of its shadow the bar was keeping at the tap. */
+  from: number
+  /** How far through the motion's clock, eased on its curve: 0 at the tap, 1 as it ends. */
+  progress: number
+  /** The `progress` at which a reader took the page over — null while the glide is carrying it. */
+  takenOverAt: number | null
+}
+
+/**
+ * The two strengths while a section is ARRIVING (above). `at` is what the open header's place says
+ * (dockShades) and `line` what its place alone allows the bar (lineShare), both measured this
+ * frame. The bar's share falls from what it was keeping to `line` over the clock. The header casts
+ * nothing while the glide carries its section to it; from the moment a reader takes the page over,
+ * what its place says comes in over the rest of the clock, and never by more than the bar has given
+ * up.
+ */
+export function arrivingShades(arrival: Arrival, at: DockShades, line: number): DockShades {
+  const barYield = arrivingBarYield(arrival.from, line, arrival.progress)
+  const p = Math.min(1, Math.max(0, arrival.progress))
+  const settled =
+    arrival.takenOverAt === null
+      ? 0
+      : arrival.takenOverAt >= 1
+        ? 1
+        : Math.max(0, (p - arrival.takenOverAt) / (1 - arrival.takenOverAt))
+  return { header: at.header * Math.min(settled, 1 - barYield), barYield }
 }
 
 /**

@@ -26,10 +26,14 @@ import {
 import { observeScrollExtent, readShadeRampPx, writeShade } from './scrollRegion.js'
 import {
   dockShades,
+  lineShare,
+  onTheLine,
+  goneFromTheLine,
   releaseShades,
-  arrivingBarYield,
+  arrivingShades,
   NO_DOCK,
   DOCK_LINE_BAND_PX,
+  type Arrival,
   type DockShades,
   type HeaderDockGeometry,
 } from '../lib/guideDock.js'
@@ -128,9 +132,8 @@ function headerPinDepth(id: string): number {
 // clamp). Any real user scroll input (touchstart/wheel) cancels the writer instantly —
 // the user always wins — and the returned cancel function serves mid-flight re-toggles,
 // leaving the guide for another mode, the app being backgrounded, and unmount (see
-// scrollWriterRef below). `onStep` is told how far along its curve the glide is (0…1) on every
-// frame it writes; `onEnd` is told when the glide is over, however it ended — landed, taken over by
-// the reader, or cancelled — exactly once.
+// scrollWriterRef below). `onTakenOver` is told when it was the READER who ended it — the one
+// ending that leaves the page somewhere the tap did not plan (startArrival's caller, below).
 // ⚠ THE CANCEL LISTENERS STAY ON `window`, deliberately, now that the scrolled thing is
 // not the window. They are not scroll listeners — they are "the reader touched the page"
 // listeners, and a touch or a wheel anywhere on the screen means the same thing whether or
@@ -142,33 +145,56 @@ function startScrollWriter(
   from: number,
   to: number,
   durationMs: number,
-  onStep: (eased: number) => void,
-  onEnd: () => void,
+  onTakenOver: () => void,
 ): () => void {
   let raf = 0
   let start: number | null = null
-  let ended = false
   const cancel = () => {
     cancelAnimationFrame(raf)
-    window.removeEventListener('touchstart', cancel)
-    window.removeEventListener('wheel', cancel)
-    if (ended) return
-    ended = true
-    onEnd()
+    window.removeEventListener('touchstart', takeOver)
+    window.removeEventListener('wheel', takeOver)
   }
-  window.addEventListener('touchstart', cancel, { passive: true })
-  window.addEventListener('wheel', cancel, { passive: true })
+  const takeOver = () => {
+    cancel()
+    onTakenOver()
+  }
+  window.addEventListener('touchstart', takeOver, { passive: true })
+  window.addEventListener('wheel', takeOver, { passive: true })
   const step = (now: number) => {
     if (start === null) start = now
     const p = durationMs <= 0 ? 1 : Math.min(1, (now - start) / durationMs)
-    const eased = accordionEase(p)
-    el.scrollTop = from + (to - from) * eased
-    onStep(eased)
+    el.scrollTop = from + (to - from) * accordionEase(p)
     if (p < 1) raf = requestAnimationFrame(step)
     else cancel()
   }
   raf = requestAnimationFrame(step)
   return cancel
+}
+// startArrival — the clock of a section ARRIVING at the line (lib/guideDock): the same duration and
+// curve as the glide that carries it, the panels, and the header's own offset, on its own frames —
+// because the arrival outlasts the glide when a reader takes the page over (the header is still
+// coming down, the panel still opening). `onStep` is told how far along the curve it is (0…1) on
+// every frame, and `onEnd` when the clock has run out. It asks for its frame AFTER the header's
+// offset and the scroll writer have asked for theirs (the toggle starts it last), so on every frame
+// it is called with the page and the header already where that frame puts them. Returns the cancel;
+// neither callback is called after it.
+function startArrival(
+  durationMs: number,
+  onStep: (eased: number) => void,
+  onEnd: () => void,
+): () => void {
+  let raf = 0
+  let start: number | null = null
+  const step = (now: number) => {
+    if (start === null) start = now
+    const p = durationMs <= 0 ? 1 : Math.min(1, (now - start) / durationMs)
+    if (p < 1) {
+      onStep(accordionEase(p))
+      raf = requestAnimationFrame(step)
+    } else onEnd()
+  }
+  raf = requestAnimationFrame(step)
+  return () => cancelAnimationFrame(raf)
 }
 // startShadeRelease — a closing header letting go of its shadows over the fold of its own panel
 // (lib/guideDock's "RELEASING"): `write` is handed the two strengths for every frame, from exactly
@@ -458,8 +484,9 @@ function DotDiagram() {
 // remembered while it is not. A function, asked at the moment the page hides, for the same reason
 // scrollerRef is a ref.
 // `onBarYield` hands App the share of its own shadow the top bar should keep, 0…1 — 0 while the
-// open section's header is docked against the bar and wearing the shadow itself, 1 whenever no
-// header is docked (the dock tracker below; lib/guideDock is the rule). App owns the bar and the
+// open section's header is docked against the bar and wearing the shadow itself, or a closed one
+// has been left resting there; 1 whenever no header is on the line (the dock tracker below;
+// lib/guideDock is the rule). App owns the bar and the
 // rest of what decides its shadow, so App does the multiplying.
 export default function GuidePage({
   visible,
@@ -473,8 +500,17 @@ export default function GuidePage({
   onBarYield: (share: number) => void
 }) {
   // The open section — seeded from the place parked before a reload (store/sessionGuide), so a reload
-  // reopens the section the reader had open; App seeds the offset from the same place. Read once.
-  const [open, setOpen] = useState<string | null>(() => readGuidePlace()?.open ?? null)
+  // reopens the section the reader had open; App seeds the offset from the same place. Read once
+  // (a state initialiser, never written again).
+  const [parked] = useState(readGuidePlace)
+  const [open, setOpen] = useState<string | null>(parked?.open ?? null)
+  // THE SECTION WHOSE HEADER WAS LEFT RESTING ON THE LINE — closed from its docked header, and still
+  // the thing that meets the bar (lib/guideDock's "RESTING"; the dock tracker below considers it
+  // while nothing is open). Set by the tap that closes a section, cleared by the tap that opens one
+  // and by the tracker once the header has left the line. A ref: nothing is drawn from it. Parked
+  // with the place, because a reload puts the page back exactly where it was — header on the line
+  // and all.
+  const restedRef = useRef<string | null>(parked?.rested ?? null)
   // THE PLACE, PARKED FOR A RELOAD (store/sessionGuide argues the lifecycle): the open section and the
   // reading offset, written when the page hides (lib/pageHidden — every reload, and a tab going to
   // the background) and discarded when this screen unmounts, which a reload never does. The listener
@@ -485,7 +521,9 @@ export default function GuidePage({
     openRef.current = open
   })
   useEffect(() => {
-    const stop = onPageHidden(() => writeGuidePlace({ open: openRef.current, y: readingOffset() }))
+    const stop = onPageHidden(() =>
+      writeGuidePlace({ open: openRef.current, y: readingOffset(), rested: restedRef.current }),
+    )
     return () => {
       stop()
       discardGuidePlace()
@@ -546,11 +584,19 @@ export default function GuidePage({
     },
     [paintBarShare],
   )
-  // The section an opening glide is still carrying to the line (lib/guideDock's "ARRIVING") —
-  // with the share of its shadow the bar was keeping at the tap, and how far along the glide is —
-  // and the tracker's own evaluate, so the glide's end can have the header looked at again.
-  const arrivingRef = useRef<{ id: string; from: number; progress: number } | null>(null)
+  // The section still ARRIVING at the line (lib/guideDock) — with the share of its shadow the bar
+  // was keeping at the tap, how far along the motion's clock it is, and where on that clock a reader
+  // took the page over, if one did — and the clock's cancel. And the tracker's own evaluate, which
+  // every frame of that clock asks for: the two strengths are measured, never guessed.
+  const arrivingRef = useRef<{ id: string; arrival: Arrival; cancel: () => void } | null>(null)
   const trackerRef = useRef<(() => void) | null>(null)
+  // Stop the arrival's clock where it stands, and write nothing: what is on screen stays on screen
+  // for whatever takes over (a tap's release starts from it; a tracker that goes on looking writes
+  // what the place says the next time it looks).
+  const endArrival = useCallback(() => {
+    arrivingRef.current?.cancel()
+    arrivingRef.current = null
+  }, [])
   // The headers whose own distance from the line is being written (startHeaderOffset), each with
   // its cancel: the one being brought down to the line, and any that was closed again on the way
   // and is held where it stood until its panel has folded. A header has one at a time.
@@ -594,8 +640,12 @@ export default function GuidePage({
     // …and a closing header's shadows are put at rest rather than left mid-fade (endRelease): rAF
     // stops while hidden for the release exactly as it does for the glide. A header still on its
     // way to the line is given back to the stylesheet's line for the same reason.
+    // An arrival is ended with them, for the same reason — and the open header, which is still on
+    // screen when it is the APP that was hidden, is looked at again where the stylesheet's line has
+    // now put it.
     if (!visible) {
       cancelScrollWriter()
+      endArrival()
       endRelease(true)
       restHeaderOffsets()
       return
@@ -603,17 +653,20 @@ export default function GuidePage({
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'hidden') return
       cancelScrollWriter()
+      endArrival()
       endRelease(true)
       restHeaderOffsets()
+      trackerRef.current?.()
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       cancelScrollWriter()
+      endArrival()
       endRelease(true)
       restHeaderOffsets()
     }
-  }, [visible, cancelScrollWriter, endRelease, restHeaderOffsets])
+  }, [visible, cancelScrollWriter, endArrival, endRelease, restHeaderOffsets])
   // The toggle coordinator — hooked into the single toggle callback, never pointer
   // events. Everything is measured at tap time, pre-animation: the closing panel's
   // RENDERED height (its grid track — a mid-flight re-toggle reads the interpolated
@@ -643,57 +696,89 @@ export default function GuidePage({
   // panel above it collapsing as this one opens, above all. Both write paint only (two shadow
   // strengths), which is the contract observeScrollExtent's callback must keep.
   // A LAYOUT effect for the same reason as useScrollEdgeState: evaluated after paint, a return to a
-  // guide left mid-section would show one frame of the bar's shadow over a docked header. Only the
-  // OPEN header is tracked — a closed one has no room to dock in (index.css .guide-head) — and the
-  // cleanup stops speaking for it: the bar is owed its whole shadow as far as this header goes, and
-  // the header rests at 0 — UNLESS it is the one a release has just taken over (the toggle below
-  // starts that before this cleanup runs), in which case its shadow is the release's to take down
-  // over the fold, and the bar's share is held by the release too. A section that loses the SCREEN
-  // has no release, so it leaves nothing behind. Off-screen there is nothing to track: a hidden
-  // guide cannot scroll.
+  // guide left mid-section would show one frame of the bar's shadow over a docked header.
+  // ONE HEADER IS CONSIDERED AT A TIME: the OPEN section's — a closed one has no room to dock in
+  // (index.css .guide-head) — or, while nothing is open, the one a close has left RESTING on the
+  // line (restedRef; lib/guideDock argues it). A resting header casts nothing, so only the bar's
+  // share is written for it, from its place alone; its own shadow is the release's to take down
+  // over the fold. It is considered until an EVENT finds it a ramp's length from the line
+  // (goneFromTheLine) — the bar keeping all of its shadow — and then never again: this effect's listeners come off, and a
+  // header that merely passes the line later takes nothing from the bar. (Not on the first look,
+  // which React runs before App has put the page where it was: only a scroll, or the page changing
+  // size, says where the header really is.)
+  // The cleanup stops speaking for the header: the bar is owed its whole shadow as far as this
+  // header goes, and an open header rests at 0 — UNLESS it is the one a release has just taken
+  // over (the toggle below starts that before this cleanup runs), in which case its shadow is the
+  // release's to take down over the fold, and the bar's share is held by the release too. A section
+  // that loses the SCREEN has no release, so it leaves nothing behind. Off-screen there is nothing
+  // to track: a hidden guide cannot scroll.
   useLayoutEffect(() => {
     const scroller = scrollerRef.current
-    const header = visible && open ? document.getElementById(headerDomId(open)) : null
-    if (!open || !scroller || !header) return
-    const rampPx = readShadeRampPx()
+    const id = open ?? restedRef.current
+    const header = visible && id ? document.getElementById(headerDomId(id)) : null
+    if (!id || !scroller || !header) return
+    const resting = open === null
     // Live: the same object answers with the current --bar-h on every read, so a bar that changes
     // height (a rotation, the fluid root font) moves the line with it.
     const scrollerStyle = getComputedStyle(scroller)
     // One object for the component's life (never reassigned): held here so the cleanup writes the
     // same one.
     const share = barShareRef.current
-    const evaluate = () => {
+    const measure = () => {
       // The bar is fixed to the top of the viewport and the scroller's box starts there too, so the
       // bar's underside is the scroller's top plus the bar's height. Unmeasurable (NaN, where no
       // stylesheet is served) leaves the bar's shadow alone — lib/guideDock's own rule.
       const lineY = scroller.getBoundingClientRect().top + readBarHeight(scrollerStyle)
-      const geometry = headerDockGeometry(open, lineY)
-      const arriving = arrivingRef.current?.id === open ? arrivingRef.current : null
-      const shades = geometry ? dockShades(geometry, rampPx, arriving !== null) : NO_DOCK
-      openShadesRef.current = shades
-      writeShade(header, shades.header)
-      share.tracked = arriving
-        ? arrivingBarYield(arriving.from, shades.barYield, arriving.progress)
-        : shades.barYield
+      return headerDockGeometry(id, lineY)
+    }
+    const stop = () => {
+      scroller.removeEventListener('scroll', onEvent)
+      stopExtent()
+      trackerRef.current = null
+    }
+    const evaluate = () => {
+      const geometry = measure()
+      const rampPx = readShadeRampPx()
+      if (resting) {
+        share.tracked = geometry ? lineShare(geometry, rampPx) : NO_DOCK.barYield
+        openShadesRef.current = { header: 0, barYield: share.tracked }
+      } else {
+        const at = geometry ? dockShades(geometry, rampPx) : NO_DOCK
+        const arriving = arrivingRef.current?.id === id ? arrivingRef.current.arrival : null
+        const shades =
+          arriving && geometry ? arrivingShades(arriving, at, lineShare(geometry, rampPx)) : at
+        openShadesRef.current = shades
+        writeShade(header, shades.header)
+        share.tracked = shades.barYield
+      }
       paintBarShare()
+      return geometry
+    }
+    const onEvent = () => {
+      const geometry = evaluate()
+      if (!resting || !geometry || !goneFromTheLine(geometry, readShadeRampPx())) return
+      restedRef.current = null
+      stop()
     }
     trackerRef.current = evaluate
     evaluate()
-    scroller.addEventListener('scroll', evaluate, { passive: true })
-    const stopExtent = observeScrollExtent(scroller, evaluate)
+    scroller.addEventListener('scroll', onEvent, { passive: true })
+    const stopExtent = observeScrollExtent(scroller, onEvent)
     return () => {
-      scroller.removeEventListener('scroll', evaluate)
-      stopExtent()
-      trackerRef.current = null
+      stop()
       openShadesRef.current = NO_DOCK
-      if (releaseRef.current?.header !== header) writeShade(header, NO_DOCK.header)
+      if (!resting && releaseRef.current?.header !== header) writeShade(header, NO_DOCK.header)
       share.tracked = NO_DOCK.barYield
       paintBarShare()
     }
   }, [visible, open, scrollerRef, paintBarShare])
   const toggle = useCallback(
     (id: string) => {
+      // Whatever the last tap set moving stops where it stands — the glide, and the arrival's clock
+      // with it. Neither writes anything on its way out, so everything below reads, and starts
+      // from, exactly what is on screen.
       cancelScrollWriter()
+      endArrival()
       const opens = open !== id
       // COLLAPSING FROM A PINNED HEADER (round 23). The header is pinned under the bar with the
       // section's top edge scrolled away above it, and the collapse is about to shrink that section
@@ -751,25 +836,49 @@ export default function GuidePage({
       // so the frame of the tap paints exactly what was on screen. A release still in flight from
       // an earlier tap ends first: its header is put at rest, unless it is the very header being
       // opened again — the tracker is about to speak for that one.
+      // A header left RESTING on the line (restedRef) lets go the same way when a tap opens some
+      // OTHER section: it was holding the bar's share down, and hands it back over the fold. Opened
+      // again itself, it has nothing to hand back — it goes on being the header on the line.
       const reopening = opens && releaseRef.current?.header.id === headerDomId(id)
       const sharedBefore = Math.min(barShareRef.current.tracked, barShareRef.current.released)
       endRelease(!reopening)
       const closingHeader = open ? document.getElementById(headerDomId(open)) : null
-      if (closingHeader) {
+      const restedId = restedRef.current
+      const lettingGo =
+        closingHeader ??
+        (restedId !== null && restedId !== id
+          ? document.getElementById(headerDomId(restedId))
+          : null)
+      if (lettingGo) {
         barShareRef.current.released = sharedBefore
         const cancel = startShadeRelease(
           { header: openShadesRef.current.header, barYield: sharedBefore },
           scaledMs,
           (shades, done) => {
-            writeShade(closingHeader, shades.header)
+            writeShade(lettingGo, shades.header)
             barShareRef.current.released = shades.barYield
             paintBarShare()
             if (done) releaseRef.current = null
           },
         )
         // (With no time to take, the release has already landed and cleared itself.)
-        if (scaledMs > 0) releaseRef.current = { header: closingHeader, cancel }
+        if (scaledMs > 0) releaseRef.current = { header: lettingGo, cancel }
       }
+      // A close that leaves its header ON THE LINE leaves it RESTING there, for the tracker to go on
+      // considering. Measured now — after the step back above, so a pinned header is already at the
+      // natural spot it will keep. Any other close leaves none (a header left part-way under the
+      // bar is cut by the bar's edge, which is what the bar's shadow and the fade are for), and nor
+      // does a tap that opens a section.
+      const scrollerAtTap = scrollerRef.current
+      const closing =
+        !opens && scrollerAtTap
+          ? headerDockGeometry(
+              id,
+              scrollerAtTap.getBoundingClientRect().top +
+                readBarHeight(getComputedStyle(scrollerAtTap)),
+            )
+          : null
+      restedRef.current = closing && onTheLine(closing) ? id : null
       setMotionMs(durationMs)
       setOpen(opens ? id : null)
       // Scroll coordination needs the scroller's geometry on top of the two panel measurements.
@@ -858,39 +967,36 @@ export default function GuidePage({
         openingH,
       })
       if (target === null) return
-      // While the glide carries an OPENING section to the line its header casts nothing, and the
-      // bar gives its own shadow up over the glide rather than in the frame of the tap (lib/
-      // guideDock's "ARRIVING"): each frame the glide writes moves the bar's share on, from what it
-      // was keeping at the tap toward what the tracker last read off the header's place. When the
-      // glide is over — landed, or taken over by the reader — the header is looked at again as it
-      // stands.
-      if (opens) arrivingRef.current = { id, from: sharedBefore, progress: 0 }
-      scrollWriterRef.current = startScrollWriter(
-        scroller,
-        scrollY,
-        target,
+      // AN OPENING SECTION IS ARRIVING for the length of this motion (lib/guideDock): its header
+      // casts nothing while the glide carries the section to it, and the bar gives its own shadow up
+      // over the clock rather than in the frame of the tap. Each frame of that clock moves it on and
+      // has the tracker measure and write; a reader who takes the page over stops the glide, and is
+      // marked on the clock — from there the header's shadow comes in as the bar's goes on out. When
+      // the clock has run out the header is looked at once more, as it stands.
+      // Started AFTER the glide, so each of its frames finds the page already moved (startArrival).
+      scrollWriterRef.current = startScrollWriter(scroller, scrollY, target, scaledMs, () => {
+        const arriving = arrivingRef.current
+        if (arriving?.id === id) arriving.arrival.takenOverAt = arriving.arrival.progress
+      })
+      if (!opens) return
+      const arrival: Arrival = { from: sharedBefore, progress: 0, takenOverAt: null }
+      const cancelArrival = startArrival(
         scaledMs,
         (eased) => {
-          const arriving = arrivingRef.current
-          if (arriving?.id !== id) return
-          arriving.progress = eased
-          barShareRef.current.tracked = arrivingBarYield(
-            arriving.from,
-            openShadesRef.current.barYield,
-            eased,
-          )
-          paintBarShare()
+          arrival.progress = eased
+          trackerRef.current?.()
         },
         () => {
-          if (arrivingRef.current?.id !== id) return
           arrivingRef.current = null
           trackerRef.current?.()
         },
       )
+      arrivingRef.current = { id, arrival, cancel: cancelArrival }
     },
     [
       open,
       cancelScrollWriter,
+      endArrival,
       endRelease,
       endHeaderOffset,
       runHeaderOffset,
@@ -1116,7 +1222,8 @@ export default function GuidePage({
             so the shadow is always under whichever edge the text is sliding beneath. The soft fade
             at the top of this page steps aside with it — a docked title is never faded — and
             returns as the title leaves. Closing a section from its docked title leaves the title
-            right where it is while the section folds away below it.
+            right where it is while the section folds away below it — still flush under the bar,
+            with no shadow above it and no fade across it, until you scroll it away.
           </li>
           <li>
             The guide holds its place while you're in the app: switch to a mode, play, and come back

@@ -100,6 +100,19 @@ const manualFrames = () => {
   })
   return frames
 }
+// Run every frame the app is waiting on, as one animation frame does — and no frame twice: a slot is
+// emptied as it runs, so what is left non-empty is exactly what is still waiting. A tap that opens a
+// section asks for two a frame (the page's glide, and the clock of the section's arrival — a close
+// asks for the glide's alone), and they are handed one timestamp, in the order they were asked for.
+const waitingFrames = (frames) => frames.filter(Boolean)
+const runFrames = (frames, ms) =>
+  act(() => {
+    frames.forEach((cb, i) => {
+      if (!cb || frames[i] !== cb) return
+      frames[i] = null
+      cb(ms)
+    })
+  })
 
 // Every element reports height h and top 0 unless `taller` claims it. jsdom runs no layout, so the
 // coordinator's panel measurements have to be supplied; a plain function so `this` is the measured
@@ -616,8 +629,8 @@ describe('tapping a section carries the reading position with it', () => {
   // Run the glide the last tap scheduled to completion: the first frame is t=0, and the next is
   // handed a timestamp past any duration this app uses, so it lands exactly on the target.
   const runGlide = (frames) => {
-    act(() => frames.at(-1)(0))
-    act(() => frames.at(-1)(10000))
+    runFrames(frames, 0)
+    runFrames(frames, 10000)
   }
   // The state every case here starts from: a real reading page, the reader partway down it, and
   // the docking line — the bar's underside — stood up at a fractional height, as a real bar's is.
@@ -688,12 +701,12 @@ describe('tapping a section carries the reading position with it', () => {
     openingPanelHeight(400)
     const frames = manualFrames()
     tap(container, 'overview')
-    act(() => frames.at(-1)(0))
+    runFrames(frames, 0)
     expect(g.pos()).toBe(500) // the first frame is the starting position, not a jump
-    act(() => frames.at(-1)(120)) // half of the 240ms clock
+    runFrames(frames, 120) // half of the 240ms clock
     expect(g.pos()).toBeLessThan(455) // well past halfway of the 60px travel
     expect(g.pos()).toBeGreaterThan(440)
-    act(() => frames.at(-1)(240))
+    runFrames(frames, 240)
     expect(g.pos()).toBe(440) // ceil(500 − 60)
   })
 
@@ -707,9 +720,9 @@ describe('tapping a section carries the reading position with it', () => {
     openingPanelHeight(400)
     const frames = manualFrames()
     tap(container, 'overview')
-    act(() => frames.at(-1)(0))
+    runFrames(frames, 0)
     expect(g.pos()).toBe(440)
-    expect(frames.length).toBe(1) // one callback, and no successor
+    expect(frames.length).toBe(2) // one callback each for the page and the arrival, and no successor
   })
 
   it.each(['touchstart', 'wheel'])('lets a real %s cancel the glide where it stands', (type) => {
@@ -719,15 +732,22 @@ describe('tapping a section carries the reading position with it', () => {
     openingPanelHeight(400)
     const frames = manualFrames()
     tap(container, 'overview')
-    act(() => frames.at(-1)(0))
-    act(() => frames.at(-1)(120))
+    runFrames(frames, 0)
+    runFrames(frames, 120)
     const stopped = g.pos()
-    const pending = frames.length
+    const waiting = waitingFrames(frames).length
+    g.clearWrites()
     act(() => {
       fireEvent(window, new Event(type))
     })
-    expect(frames[pending - 1]).toBeNull() // the scheduled frame was cancelled …
-    expect(frames.length).toBe(pending) // … and nothing re-armed
+    // The page's frame is cancelled, and only the page's. What the tap set moving besides runs on to
+    // its end — the section is still opening, its header (tapped above the line here) still coming
+    // down, the bar still giving up its shadow — and none of it moves the page again.
+    expect(waitingFrames(frames)).toHaveLength(waiting - 1)
+    runFrames(frames, 180)
+    runFrames(frames, 240)
+    expect(waitingFrames(frames)).toEqual([])
+    expect(g.writes).toEqual([])
     expect(g.pos()).toBe(stopped)
   })
 
@@ -739,10 +759,10 @@ describe('tapping a section carries the reading position with it', () => {
     openingPanelHeight(400)
     const frames = manualFrames()
     tap(container, 'overview')
-    act(() => frames.at(-1)(0))
+    runFrames(frames, 0)
     const pending = frames.length
     tap(container, 'buttons')
-    expect(frames[pending - 1]).toBeNull() // the first writer's next frame is cancelled
+    expect(waitingFrames(frames.slice(0, pending))).toEqual([]) // the first tap's frames are cancelled
     expect(frames.length).toBeGreaterThan(pending) // and a second writer took over
     runGlide(frames)
     expect(g.pos()).toBeLessThan(500) // the retarget still landed somewhere coherent
@@ -755,13 +775,12 @@ describe('tapping a section carries the reading position with it', () => {
     const { container, g } = readingPage(2500)
     const frames = manualFrames()
     tap(container, 'overview') // pure scenario B: nothing measurable opens, the page shrinks
-    const step = frames.at(-1)
-    expect(step).toBeTypeOf('function')
-    act(() => step(0))
+    expect(waitingFrames(frames)).not.toEqual([])
+    runFrames(frames, 0)
     expect(g.writes).toHaveLength(1)
     const pending = frames.length
     resumeFromBackground()
-    expect(frames[pending - 1]).toBeNull() // cancelled on hide …
+    expect(waitingFrames(frames)).toEqual([]) // cancelled on hide, the arrival's clock with it …
     expect(frames.length).toBe(pending) // … and never re-armed on the way back
     expect(g.writes).toHaveLength(1)
   })
@@ -783,9 +802,9 @@ describe('tapping a section carries the reading position with it', () => {
     const { container, g } = readingPage(2500)
     const frames = manualFrames()
     tap(container, 'overview') // scenario B: nothing measurable opens, the page shrinks
-    act(() => frames.at(-1)(0))
+    runFrames(frames, 0)
     g.clearWrites()
-    g.onWrite(() => frames.at(-1)?.(10000)) // whatever the glide has scheduled RIGHT NOW
+    g.onWrite(() => runFrames(frames, 10000)) // whatever the app is waiting on RIGHT NOW
     pressKey('K')
     // One write, and it is the switch's own reset. A second would be the glide finishing its
     // journey on the screen that had already replaced the guide, with nothing left to undo it.
@@ -903,6 +922,8 @@ describe('the guide’s edges track the reading position and the content', () =>
     }
     const below = (gap) => ({ top: LINE + gap, natural: LINE + gap, floor: LINE + gap + 2000 })
     const stuck = (depth) => ({ top: LINE, natural: LINE - depth, floor: LINE + HEAD_H + 2000 })
+    // A CLOSED section is exactly as tall as its header.
+    const closedAt = (top) => ({ top, natural: top, floor: top + HEAD_H })
     const reading = () => {
       const { container } = mountApp()
       pressKey('H')
@@ -949,24 +970,102 @@ describe('the guide’s edges track the reading position and the content', () =>
       expect([g.topShade(), headShade(container)]).toEqual(['0.000', '1.000'])
     })
 
-    it('takes it back when the section is closed — over the fold, not in the frame of the tap', () => {
+    it('takes it back when a section is closed OFF the line — over the fold, not in the frame of the tap', () => {
       const { container, g } = reading()
-      place = stuck(0)
+      place = below(12.25) // not docked yet: the bar keeps half
       tap(container, 'stats')
-      expect(g.topShade()).toBe('0.000')
+      expect(g.topShade()).toBe('0.500')
       const frames = holdFrames(vi)
       try {
         tap(container, 'stats')
-        expect(g.topShade()).toBe('0.000') // the tap's own frame: nothing has jumped
+        expect(g.topShade()).toBe('0.500') // the tap's own frame: nothing has jumped
         act(() => frames.at(0))
         act(() => frames.at(ACCORDION_MS_FLOOR / 4))
-        expect(Number(g.topShade())).toBeGreaterThan(0)
+        expect(Number(g.topShade())).toBeGreaterThan(0.5)
         expect(Number(g.topShade())).toBeLessThan(1)
         act(() => frames.at(ACCORDION_MS_FLOOR))
         expect(g.topShade()).toBe('1.000')
       } finally {
         frames.restore()
       }
+    })
+
+    // ★ THE PAGE'S TOP FADE OVER A CLOSED HEADER. Closing a section from its docked header leaves
+    // the header exactly where it was — flush under the bar — and the bar used to take its shadow
+    // back there, and the top fade with it (they are one number): drawn across the top of the
+    // header the reader had just been left looking at.
+    it('keeps none while a section closed ON the line rests there, and takes it back as it is scrolled away', () => {
+      const { container, g } = reading()
+      place = stuck(0)
+      tap(container, 'stats')
+      const frames = holdFrames(vi)
+      try {
+        tap(container, 'stats')
+        place = closedAt(LINE)
+        expect(g.topShade()).toBe('0.000')
+        for (const t of [0, 0.25, 0.5, 1]) {
+          act(() => frames.at(ACCORDION_MS_FLOOR * t))
+          expect(g.topShade()).toBe('0.000') // on no frame of the fold, and not after it
+        }
+        expect(frames.pending()).toBe(0)
+      } finally {
+        frames.restore()
+      }
+      place = closedAt(LINE - 12.25) // scrolled half the ramp away: half of it back
+      g.scrollTo(912)
+      expect(g.topShade()).toBe('0.500')
+      place = closedAt(LINE - 200) // gone
+      g.scrollTo(1100)
+      expect(g.topShade()).toBe('1.000')
+      // …and gone for good: brought back onto the line by a scroll, it is a header passing by.
+      place = closedAt(LINE)
+      g.scrollTo(900)
+      expect(g.topShade()).toBe('1.000')
+    })
+
+    it('…and still keeps none after a RELOAD: the header resting on the line is parked with the place', () => {
+      const first = mountApp()
+      pressKey('H')
+      const before = installGuide(first.container)
+      before.setContent(4000)
+      before.setSeat(LINE)
+      dockRects()
+      before.scrollTo(900)
+      place = stuck(0)
+      tap(first.container, 'stats')
+      tap(first.container, 'stats')
+      place = closedAt(LINE)
+      before.scrollTo(901)
+      expect(before.topShade()).toBe('0.000')
+      act(() => {
+        window.dispatchEvent(new Event('pagehide'))
+      })
+      const atPagehide = Array.from({ length: sessionStorage.length }, (_, i) => {
+        const k = sessionStorage.key(i)
+        return [k, sessionStorage.getItem(k)]
+      })
+      before.restore()
+      guide = null
+      first.unmount()
+      document.getElementById('root').remove()
+      sessionStorage.clear()
+      for (const [k, v] of atPagehide) sessionStorage.setItem(k, v)
+      // The new page: straight back into the guide, every section closed, the header on the line.
+      // (The line is the bar's underside, and a bar has no height here until a seat is stood up —
+      // which this page never does: jsdom hands the tracker a snapshot of the scroller's style when
+      // it mounts, where a browser's is live. So the line is at 0, and so is the header.)
+      place = closedAt(0)
+      const { container } = mountApp()
+      const g = installGuide(container)
+      g.setContent(4000)
+      g.scrollTo(900)
+      expect(container.querySelector('#guide-head-stats').getAttribute('aria-expanded')).toBe(
+        'false',
+      )
+      expect(g.topShade()).toBe('0.000')
+      place = closedAt(-200) // scrolled away: the bar's shadow, and the fade, are back
+      g.scrollTo(1100)
+      expect(g.topShade()).toBe('1.000')
     })
 
     it('takes it back on leaving How to Play with a header docked — the game screens are unaffected', () => {

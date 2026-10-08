@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// sessionGuide — round 23: How to Play's place (open section + reading offset), parked in
+// sessionGuide — round 23: How to Play's place (open section, reading offset, and resting header), parked in
 // sessionStorage for a reload (store/sessionGuide). Pins the store alone: what it keeps, that the
 // launch place keeps nothing, and that anything unreadable reads as "no place" rather than throwing.
 // The screen's wiring — parked on pagehide, restored on the reload, cleared by a real close and by a
@@ -15,14 +15,24 @@ afterEach(() => vi.restoreAllMocks())
 describe('the guide place', () => {
   it('reads back what was written, and nothing before that', () => {
     expect(readGuidePlace()).toBe(null)
-    writeGuidePlace({ open: 'stats', y: 412.5 })
-    expect(readGuidePlace()).toEqual({ open: 'stats', y: 412.5 })
-    writeGuidePlace({ open: null, y: 90 }) // every section closed, scrolled down the list
-    expect(readGuidePlace()).toEqual({ open: null, y: 90 })
+    writeGuidePlace({ open: 'stats', y: 412.5, rested: null })
+    expect(readGuidePlace()).toEqual({ open: 'stats', y: 412.5, rested: null })
+    writeGuidePlace({ open: null, y: 90, rested: null }) // every section closed, scrolled down the list
+    expect(readGuidePlace()).toEqual({ open: null, y: 90, rested: null })
+    // …and the closed header that was left resting under the bar, when there is one.
+    writeGuidePlace({ open: null, y: 316, rested: 'stats' })
+    expect(readGuidePlace()).toEqual({ open: null, y: 316, rested: 'stats' })
+  })
+  it.each([
+    ['a place parked before the field existed', '{"open":"stats","y":10}'],
+    ['a resting header that is not a section id', '{"open":"stats","y":10,"rested":7}'],
+  ])('%s reads as a place with no header resting', (_, raw) => {
+    sessionStorage.setItem(KEY, raw)
+    expect(readGuidePlace()).toEqual({ open: 'stats', y: 10, rested: null })
   })
   it('the launch place — all closed, at the top — parks nothing, and clears an older place', () => {
-    writeGuidePlace({ open: 'stats', y: 10 })
-    writeGuidePlace({ open: null, y: 0 })
+    writeGuidePlace({ open: 'stats', y: 10, rested: null })
+    writeGuidePlace({ open: null, y: 0, rested: null })
     expect(sessionStorage.getItem(KEY)).toBe(null)
   })
   it.each([
@@ -38,11 +48,11 @@ describe('the guide place', () => {
     expect(readGuidePlace()).toBe(null)
   })
   it('a refused write removes the place — an older one never comes back instead', () => {
-    writeGuidePlace({ open: 'stats', y: 10 })
+    writeGuidePlace({ open: 'stats', y: 10, rested: null })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('full', 'QuotaExceededError')
     })
-    expect(() => writeGuidePlace({ open: 'blitz', y: 20 })).not.toThrow()
+    expect(() => writeGuidePlace({ open: 'blitz', y: 20, rested: null })).not.toThrow()
     vi.restoreAllMocks()
     expect(readGuidePlace()).toBe(null)
   })
@@ -50,7 +60,7 @@ describe('the guide place', () => {
     vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() => {
       throw new DOMException('denied', 'SecurityError')
     })
-    expect(() => writeGuidePlace({ open: 'stats', y: 10 })).not.toThrow()
+    expect(() => writeGuidePlace({ open: 'stats', y: 10, rested: null })).not.toThrow()
     expect(readGuidePlace()).toBe(null)
     expect(() => discardGuidePlace()).not.toThrow()
   })

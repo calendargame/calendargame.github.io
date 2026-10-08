@@ -385,7 +385,9 @@ input,textarea{user-select:text;-webkit-user-select:text}
        itself would wash out its title. So the top strip's strength is the bar's shadow's — the
        scroll position's share times what a docked header leaves the bar (lib/guideDock, written by
        main.tsx's one writer for that edge) — and it is OFF, at opacity 0, for as long as a header
-       is docked, coming back over the same distance as the header leaves. ⚠ That is the WHOLE
+       is docked, coming back over the same distance as the header leaves. A section CLOSED from
+       its docked header leaves the header resting on that line, and the strip stays off over it
+       until the reader scrolls it away (lib/guideDock's "RESTING"). ⚠ That is the WHOLE
        mechanism: it does not depend on what paints over what. It used to — the open header was
        lifted above the strip with a z-index, which hid the strip in one browser engine and not in
        another (where a scroller is a stacking layer of its own, and nothing inside it can be
