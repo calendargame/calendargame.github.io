@@ -1089,6 +1089,23 @@ describe('the guide’s edges track the reading position and the content', () =>
       g.scrollTo(12) // 12px into the page's own 24px ramp: half strength
       expect(g.topShade()).toBe('0.250')
     })
+
+    // ★ THE RAMP IS READ AS EACH IS PAINTED. It is written in rem against a fluid root font size, so
+    // a rotation changes its length in px under a guide that stays mounted — and both factors were
+    // once worked out with the length read when the guide came on screen.
+    it('a ramp that changes under the open guide is the ramp the next paint uses — for the page`s edge and the header`s place alike', () => {
+      const { container, g } = reading()
+      place = below(300)
+      tap(container, 'stats')
+      g.scrollTo(12)
+      expect(g.topShade()).toBe('0.500') // the page's edge alone: 12px into a 24px ramp
+      document.documentElement.style.setProperty('--shade-ramp', '48px') // the screen was turned
+      g.scrollTo(12)
+      expect(g.topShade()).toBe('0.250')
+      place = below(24.25) // (24.25 − 0.5) / (48 − 0.5) = half, on the new ramp
+      g.scrollTo(900)
+      expect(g.topShade()).toBe('0.500')
+    })
   })
 
   it('watches the guide’s CONTENT, not just the box it sits in', () => {

@@ -418,6 +418,27 @@ describe('the shared defaults card caps itself against a short viewport (round 1
       foot.style.getPropertyValue('--shade'),
     ]).toEqual(['1.000', '0.000'])
   })
+
+  // ★ THE RAMP IS READ WHEN AN EDGE IS PAINTED, NOT WHEN THE REGION STARTED LISTENING. It is
+  // written in rem and the root's font size is fluid, so its length in px changes with a rotation
+  // or a resize — while the region stays mounted, with the distance it read on the way in.
+  it('a ramp that changes under a mounted region is the ramp its next paint uses', () => {
+    document.documentElement.style.setProperty('--shade-ramp', '24px')
+    const { container } = render(defaultsCard())
+    const scroller = scrollerOf(container)
+    const head = scroller.previousElementSibling
+    setScrollGeometry(scroller, SHORT_VIEWPORT)
+    scroller.scrollTop = 12
+    act(() => {
+      fireEvent.scroll(scroller)
+    })
+    expect(head.style.getPropertyValue('--shade')).toBe('0.500') // 12px into a 24px ramp
+    document.documentElement.style.setProperty('--shade-ramp', '48px') // the screen was turned
+    act(() => {
+      fireEvent.scroll(scroller)
+    })
+    expect(head.style.getPropertyValue('--shade')).toBe('0.250')
+  })
 })
 
 // ── The fade arrives in the frame that shows the scroll (round 24) ───────────────────────────────

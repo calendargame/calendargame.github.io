@@ -88,8 +88,8 @@ export const isScrolledFromTop = (gaps: ScrollEdgeGaps): boolean => gaps.top > 0
 
 // gap → --shade, the 0…1 strength of that edge's boundary shadow (index.css). The band is that
 // edge's "arrived" tolerance, so the ramp starts where the boolean flips and the two can never
-// contradict each other: shade > 0 exactly when the edge is live. rampPx is --shade-ramp, read
-// once per listener attach — CSS cannot do this arithmetic itself (calc() has no length ÷ length),
+// contradict each other: shade > 0 exactly when the edge is live. rampPx is --shade-ramp
+// (readShadeRampPx, below) — CSS cannot do this arithmetic itself (calc() has no length ÷ length),
 // so the number crosses into JS rather than being duplicated as a literal.
 // If rampPx fails to parse the ramp DEGRADES TO THE BOOLEAN — full strength the moment the edge
 // is live — which is the pre-round-10 behaviour, never a missing shadow.
@@ -112,7 +112,17 @@ const readRootLengthPx = (token: string): number => {
   if (!match) return NaN
   return parseFloat(match[1]) * (match[2] === 'rem' ? parseFloat(root.fontSize) : 1)
 }
-/** How far a scroller travels from an edge before that edge's --shade reaches 1. */
+/**
+ * How far a scroller travels from an edge before that edge's --shade reaches 1.
+ * ★ READ IT WHEN AN EDGE IS PAINTED, NEVER ONCE AND KEPT. The token is in rem and the root's font
+ * size is fluid (index.css), so its length in px changes whenever the viewport does — a rotation, a
+ * window resized — under regions that stay mounted and listening throughout. A length read when a
+ * listener was attached was the length of a screen that may no longer be there: the bar's shadow
+ * and the guide's fade stood at the wrong strength after a rotation until the screen was left and
+ * re-entered. Every painter is already called for a resize as well as a scroll (observeScrollExtent
+ * watches the region's own box), so reading here is all it takes; and it is two reads of the root's
+ * computed style beside the scroll geometry the same painter has just measured.
+ */
 export const readShadeRampPx = (): number => readRootLengthPx('--shade-ramp')
 /** How deep an edge fade is drawn — what a row has to clear to be whole on screen. */
 export const readFadeDepthPx = (): number => readRootLengthPx('--fade-h')
@@ -278,8 +288,8 @@ export function useScrollEdgeState<T extends HTMLElement>(
       writeShade(bottomEl, 0)
       return
     }
-    const rampPx = readShadeRampPx()
     const evaluate = () => {
+      const rampPx = readShadeRampPx()
       const gaps = scrollEdgeGaps(el.scrollTop, el.scrollHeight, el.clientHeight)
       setAtBottom(isAtBottom(gaps))
       setScrolledFromTop(isScrolledFromTop(gaps))

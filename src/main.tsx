@@ -1006,9 +1006,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
       },[]);
       const yieldBarShade=useCallback((share: number)=>{barShadeRef.current.yield=share;paintBarShade();},[paintBarShade]);
       useLayoutEffect(()=>{
-        const rampPx=readShadeRampPx();
         // One writer for every boundary this screen owns; a ref that isn't mounted is skipped.
+        // The ramp is read HERE, as the edges are painted (components/scrollRegion's
+        // readShadeRampPx says why it cannot be kept from one paint to the next).
         const paint=(scrollTop:number,scrollHeight:number,clientHeight:number)=>{
+          const rampPx=readShadeRampPx();
           const gaps=scrollEdgeGaps(scrollTop,scrollHeight,clientHeight);
           const top=edgeShade(gaps.top,0,rampPx);
           barShadeRef.current.edge=top;
