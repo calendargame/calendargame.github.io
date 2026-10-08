@@ -809,6 +809,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // <html> attribute to keep in step with a React state. It also makes the app's hard
       // no-pull-to-refresh guarantee structural rather than conditional — see index.css.
       const appScrollRef=useRef<HTMLDivElement | null>(null);
+      // …and the same element as STATE, for How to Play, whose dock tracker needs the scroller in an
+      // effect (GuidePage's `scroller` prop argues it: a child's effects run before a parent's ref
+      // is filled, and a ref being filled is not a render). One callback fills both, so they are
+      // the one element by construction; everything in THIS component reads the ref, as it always
+      // has, because it reads it in handlers and in its own effects, after it is attached.
+      const [appScroller,setAppScroller]=useState<HTMLDivElement | null>(null);
+      const attachAppScroll=useCallback((el: HTMLDivElement | null)=>{appScrollRef.current=el;setAppScroller(el);},[]);
       // The guide's two fixed soft edges (index.css .doc-fade-*), refs so the edge effect below can
       // write their --shade. Mounted for the whole of guide mode now that their strength is
       // continuous — a strip at --shade 0 paints nothing, so there is no on/off left to render.
@@ -2581,7 +2588,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
             order, so the app-wide Tab binding and the modals' tab traps (which enumerate
             button,input) are untouched. App focuses it on entry to the guide so the desktop
             keyboard scroll keys work immediately; see that effect for why. */}
-        <div ref={appScrollRef} id="appScroll" tabIndex={-1} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 ${SCROLLER_CORE_CLASS} ${scrollFadeClass(appScrolledFromTop,appAtBottom)}`}>
+        <div ref={attachAppScroll} id="appScroll" tabIndex={-1} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 ${SCROLLER_CORE_CLASS} ${scrollFadeClass(appScrolledFromTop,appAtBottom)}`}>
         {/* Mode-content wrapper. min-h-full + flex column: the scroller above has a definite
             height, so "at least a screenful" gives a mode that wants to FIT the screen (Lookup) a
             definite box to fill, while a mode taller than the screen still grows normally and keeps
@@ -2641,13 +2648,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
               that used to fit exactly). display:none generates no box at all, so the other five
               modes are untouched. `visible` also tells GuidePage to drop any in-flight scroll
               glide — with no unmount to do it, that is now the component's own job.
-              scrollerRef HANDS IT THE SCROLLER (round 13), and that is a real property given up:
-              the coordinator used to need no ref plumbing at all, because the thing it scrolled was
+              `scroller` HANDS IT THE SCROLLER (round 13), and that is a real property given up:
+              the coordinator used to need no plumbing at all, because the thing it scrolled was
               the window and every screen in every browser has one. An overflow div has to be named,
-              so App — which owns the container — passes it down. The ref itself, not its current
-              value: App's own layout effects and GuidePage's toggle read it at different moments,
-              and a value read at render time would be null on the first pass. */}
-          <ModeErrorBoundary key={"guide-"+guideResetKey} mode="How to Play" active={mode==="guide"} onCrash={discardGuidePlace}><GuidePage visible={mode==="guide"} scrollerRef={appScrollRef} readingOffset={readGuideOffset} onBarYield={yieldBarShade}/></ModeErrorBoundary>
+              so App — which owns the container — passes it down: the element itself, from state
+              (appScroller, above), so that its arriving is a render the guide's effects answer. */}
+          <ModeErrorBoundary key={"guide-"+guideResetKey} mode="How to Play" active={mode==="guide"} onCrash={discardGuidePlace}><GuidePage visible={mode==="guide"} scroller={appScroller} readingOffset={readGuideOffset} onBarYield={yieldBarShade}/></ModeErrorBoundary>
         </div>
         </div>
         {/* The guide's two soft edges — ⚠ KEPT ACROSS ROUND 13, and the reason changed. They exist

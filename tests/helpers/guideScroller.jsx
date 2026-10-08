@@ -42,7 +42,7 @@
 // the top, and the net would catch it. (It was true of the document scroller too — a re-clamped
 // document collapsed to a screenful and clamped its offset the same way — so this survived the
 // move as an argument, not just as code.)
-import { useCallback, useRef } from 'react'
+import { useCallback, useState } from 'react'
 import { act, render } from '@testing-library/react'
 import GuidePage from '../../src/components/GuidePage.jsx'
 import { SCROLLER_CORE_CLASS } from '../../src/components/scrollRegion.js'
@@ -213,13 +213,13 @@ export function installGuideScroller(container) {
 
 // ── Mounting the guide on its own ─────────────────────────────────────────────────────────────
 // THE ONE WAY A TEST MAY RENDER GuidePage WITHOUT App, and the reason this file owns it: since
-// round 13 the guide does not know how to scroll itself. App hands it `scrollerRef`, the ref to the
-// one #appScroll box, and the coordinator dereferences that ref on every header tap. A bare
+// round 13 the guide does not know how to scroll itself. App hands it `scroller`, the one
+// #appScroll box, and the coordinator reads it on every header tap. A bare
 // `render(<GuidePage visible />)` therefore hands the coordinator `undefined` and every tap throws
 // — which the suite could not see, because the throw lands AFTER the state flip, so the assertions
 // still passed while the run exited non-zero and the whole second half of the coordinator went
 // unexercised. Making the prop optional would have hidden the same class of mistake in production
-// (App forgetting the ref would silently cost the guide its glides), so the prop stays required and
+// (App forgetting it would silently cost the guide its glides), so the prop stays required and
 // the mount comes here instead, where "how How to Play scrolls" already lives.
 //
 // The harness is App's own shape, minus everything the guide does not read: the scroller carrying
@@ -232,15 +232,17 @@ export function installGuideScroller(container) {
 // hidden standalone guide is not a state this harness can describe. Whether the guide survives
 // being hidden is a MODE question, and mode belongs to App — tests/guideScroll.dom asks it there.
 function GuideHarness({ onBarYield }) {
-  const scrollerRef = useRef(null)
+  // The element in STATE, filled by a callback ref — App's own shape (main.tsx's attachAppScroll),
+  // and the point of it: the guide is told when its scroller arrives.
+  const [scroller, setScroller] = useState(null)
   // App's readGuideOffset, minus the mode it tracks: this harness's guide is always on screen.
-  const readingOffset = useCallback(() => scrollerRef.current?.scrollTop ?? 0, [])
+  const readingOffset = useCallback(() => scroller?.scrollTop ?? 0, [scroller])
   return (
-    <div ref={scrollerRef} id="appScroll" className={`absolute inset-0 ${SCROLLER_CORE_CLASS}`}>
+    <div ref={setScroller} id="appScroll" className={`absolute inset-0 ${SCROLLER_CORE_CLASS}`}>
       <div className="mx-auto px-4 w-full max-w-[30rem] min-h-full flex flex-col pb-3">
         <GuidePage
           visible
-          scrollerRef={scrollerRef}
+          scroller={scroller}
           readingOffset={readingOffset}
           onBarYield={onBarYield}
         />

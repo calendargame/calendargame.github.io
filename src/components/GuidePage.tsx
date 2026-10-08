@@ -6,7 +6,6 @@ import {
   useRef,
   type CSSProperties,
   type ReactNode,
-  type RefObject,
 } from 'react'
 import Expander from './Expander.jsx'
 import { Kbd, SectionLabel, SECTION_LABEL_CLASS } from './primitives.jsx'
@@ -50,7 +49,7 @@ import {
 // then this component drove `window` — the guide released the app's clamps and the
 // DOCUMENT scrolled it, so the thing to move needed no introduction. It now shares
 // #appScroll with every other screen (the reversal is argued at `switchMode` in
-// main.tsx), and an overflow div has to be named, so App passes `scrollerRef`. Every
+// main.tsx), and an overflow div has to be named, so App passes `scroller`. Every
 // read below that used to be a window global — scrollY, innerHeight,
 // document.scrollingElement.scrollHeight — is that element's scrollTop, clientHeight
 // and scrollHeight instead. The arithmetic in lib/accordionMotion did not move a byte:
@@ -174,6 +173,12 @@ function foldClock(panel: HTMLElement | null, durationMs: number): FoldClock {
       return Math.min(1, (now - start) / durationMs)
     },
   }
+}
+// scrollBack — move a scroller back by `px`, at once (the step that keeps a pinned header under the
+// finger as its section closes; the toggle says why). Its own function because the scroller reaches
+// GuidePage as a prop, and the page's position is the one thing about it this screen writes.
+const scrollBack = (el: HTMLElement, px: number): void => {
+  el.scrollTop -= px
 }
 // startScrollWriter — the coordinator's per-frame scroll driver, pointed at the element
 // the guide scrolls. Runs on the fold's own clock (foldClock, above) and on its curve:
@@ -442,7 +447,7 @@ function ModeItems({ items }: { items: Partial<Record<PracticeModeId, ReactNode>
 // label either side; the outermost dots and the bottom label still fit the 180 × 192 frame.
 //   ⚠ A STORE SELECTOR, where every other consumer of this setting takes a prop. It is
 //     forced rather than chosen: GuidePage's props are all about scrolling (`visible`,
-//     `scrollerRef`, `readingOffset`), so a prop would mean opening a settings pipeline through the guide
+//     `scroller`, `readingOffset`), so a prop would mean opening a settings pipeline through the guide
 //     for one decorative SVG at the bottom of it. Selecting here also keeps the
 //     subscription at the leaf — the guide itself does not re-render on a change.
 // Each rotation's grid → its step between neighbouring cells (x, y), per the note above; the 5×5's
@@ -517,27 +522,32 @@ function DotDiagram() {
 // to Play no longer destroys the open panel or the reading position), and it tells the component
 // it has left the screen — the moment a running scroll glide has to be dropped, since there is no
 // unmount left to do it.
-// `scrollerRef` is the element this screen scrolls: App's one #appScroll container, shared with
-// every other screen (round 13). Passed as a REF rather than an element because App fills it on
-// mount, so a value read during render would be null on the first pass — and because the
-// coordinator reads it at tap time, when "current" is the only honest answer.
+// `scroller` is the element this screen scrolls: App's one #appScroll container, shared with
+// every other screen (round 13) — or null on the one render before App has it.
+// ★ THE ELEMENT, HELD IN APP'S STATE — NOT A REF TO IT. It was a ref, on the reasoning that a value
+// read during render is null on the first pass. That is exactly why it must not be one: the dock
+// tracker below needs the scroller in an EFFECT, and on the first commit a parent's ref is filled
+// AFTER its children's effects have run. So a guide that was on screen from the first render with
+// a section already open found no scroller, gave up, and — a ref changing is not a render — was
+// never asked again. As state, the element arriving IS a render, and every effect that names it
+// runs again with it: nothing here depends on who mounts first.
 // `readingOffset` is how far down the reader is, for the place this screen parks for a reload
 // (round 23, below). App owns that number — it is what App restores on the way back into the
 // guide (main.tsx's guideScrollYRef) — so App answers it: live while the guide is on screen,
-// remembered while it is not. A function, asked at the moment the page hides, for the same reason
-// scrollerRef is a ref.
+// remembered while it is not. A function, asked at the moment the page hides: the offset then is
+// the only one worth parking.
 // `onBarYield` hands App the share of its own shadow the top bar should keep, 0…1 — 0 while the
 // open section's header is docked against the bar and wearing the shadow itself, 1 whenever no
 // header is docked (the dock tracker below; lib/guideDock is the rule). App owns the bar and the
 // rest of what decides its shadow, so App does the multiplying.
 export default function GuidePage({
   visible,
-  scrollerRef,
+  scroller,
   readingOffset,
   onBarYield,
 }: {
   visible: boolean
-  scrollerRef: RefObject<HTMLDivElement | null>
+  scroller: HTMLDivElement | null
   readingOffset: () => number
   onBarYield: (share: number) => void
 }) {
@@ -736,7 +746,6 @@ export default function GuidePage({
   // bar's share is held by the release too. A section that loses the SCREEN has no release, so it
   // leaves nothing behind. Off-screen there is nothing to track: a hidden guide cannot scroll.
   useLayoutEffect(() => {
-    const scroller = scrollerRef.current
     const header = visible && open ? document.getElementById(headerDomId(open)) : null
     if (!open || !scroller || !header) return
     // Live: the same object answers with the current --bar-h on every read, so a bar that changes
@@ -774,7 +783,7 @@ export default function GuidePage({
       share.tracked = NO_DOCK.barYield
       paintBarShare()
     }
-  }, [visible, open, scrollerRef, paintBarShare])
+  }, [visible, open, scroller, paintBarShare])
   const toggle = useCallback(
     (id: string) => {
       // Whatever the last tap set moving stops where it stands — the glide, and the arrival's clock
@@ -796,7 +805,7 @@ export default function GuidePage({
       // collapse shortens the page past the reader) from the corrected position. A close of an
       // UNPINNED section, and every open, have a depth of 0 and skip it.
       const pinDepth = opens ? 0 : headerPinDepth(id)
-      if (pinDepth > 0 && scrollerRef.current) scrollerRef.current.scrollTop -= pinDepth
+      if (pinDepth > 0 && scroller) scrollBack(scroller, pinDepth)
       const tapped = document.getElementById(sectionDomId(id))
       const closingExpander = open
         ? (document.getElementById(panelDomId(open))?.closest<HTMLElement>('.expander') ?? null)
@@ -880,7 +889,6 @@ export default function GuidePage({
       // Stating the precondition in terms of the GEOMETRY survived the move untouched: a test that
       // wants the writer stands up the extent the glide travels through, which is the same geometry
       // the target is computed from anyway.
-      const scroller = scrollerRef.current
       if (!tapped || !scroller || scroller.scrollHeight <= 0) return
       // ★ A HEADER TAPPED ABOVE THE LINE IS BROUGHT DOWN TO IT, NOT DROPPED ON IT
       // (startHeaderOffset says what used to happen). Measured here, in the tap, before the commit
@@ -985,7 +993,7 @@ export default function GuidePage({
       endHeaderOffset,
       runHeaderOffset,
       paintBarShare,
-      scrollerRef,
+      scroller,
     ],
   )
   return (

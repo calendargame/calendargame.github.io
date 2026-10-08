@@ -229,6 +229,39 @@ describe('the open section’s header wears a shadow only once text is under it'
   })
 })
 
+// ★ A SECTION THAT IS OPEN ON THE VERY FIRST RENDER IS TRACKED LIKE ANY OTHER. The tracker needs the
+// scroller, and App's scroller is attached AFTER the guide's own effects have run on that first
+// commit — so a guide that was on screen from the first render, with a section already open (the
+// place parked before a reload), found no scroller, gave up, and was never asked again: its docked
+// header cast no shadow and the bar never gave its own up, until some other tap woke it. The app
+// happens to boot with the guide off screen; nothing here may depend on that.
+describe('a section open on the first render — the place parked before a reload', () => {
+  const mountWithStatsOpen = () => {
+    sessionStorage.setItem('cg-guide-place-v1', JSON.stringify({ open: 'stats', y: 400 }))
+    return mount()
+  }
+
+  it('is tracked from the start: its header wears the shadow, and the bar gives its own up', () => {
+    const { container } = mountWithStatsOpen()
+    expect(header(container, 'stats').getAttribute('aria-expanded')).toBe('true')
+    scrollSo(() => stuck('stats', 50))
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '1.000'])
+    scrollSo(() => below('stats', 300))
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([1, '0.000'])
+  })
+
+  it('…and closing it from its docked header hands the bar its shadow back over the fold', () => {
+    const { container } = mountWithStatsOpen()
+    scrollSo(() => stuck('stats', 50))
+    frames = holdFrames(vi)
+    tap(container, 'stats')
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([0, '1.000'])
+    act(() => frames.at(1000))
+    act(() => frames.at(1000 + FOLD_MS))
+    expect([barKeeps(), shade(container, 'stats')]).toEqual([1, '0.000'])
+  })
+})
+
 describe('one shadow: the bar gives its own up while a header is docked against it', () => {
   it('with no section open, the bar keeps all of its shadow', () => {
     mount()
