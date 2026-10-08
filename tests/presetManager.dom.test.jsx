@@ -50,7 +50,12 @@ import {
   isDimmed,
 } from './helpers/settingsPanel.jsx'
 import { usePresets, PRESET_STORE_KEYS, presetKey, MAX_PRESET_NAME } from '../src/store/presets.js'
-import { createPreset, setPresetAmnesic, switchPreset } from '../src/store/presetControl.js'
+import {
+  createPreset,
+  renamePreset,
+  setPresetAmnesic,
+  switchPreset,
+} from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
 import { hasSessionRound } from '../src/store/sessionRound.js'
 import { KEYBOARD_ATTR } from '../src/lib/keyboardFocus.js'
@@ -60,7 +65,7 @@ import { KEYBOARD_ATTR } from '../src/lib/keyboardFocus.js'
 // which do not mention it at all keep typing exactly what they type — the behaviour before the live width cap, and
 // the same reason a mock with a sane default beats a mock every case must configure.
 const presetNameWidth = vi.hoisted(() => ({
-  capCandidateToSwitcherWidth: vi.fn((candidate) => ({ text: candidate, capped: false })),
+  capCandidateToNameRoom: vi.fn((candidate) => ({ text: candidate, capped: false })),
 }))
 vi.mock('../src/lib/presetNameWidth.js', () => presetNameWidth)
 
@@ -121,8 +126,8 @@ beforeEach(() => {
   resetAppState()
   // Back to the "everything fits, unchanged" default before every case — a test that configures
   // its own answer does so inside itself, and must not leak it into the next one.
-  presetNameWidth.capCandidateToSwitcherWidth.mockReset()
-  presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((candidate) => ({
+  presetNameWidth.capCandidateToNameRoom.mockReset()
+  presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
     text: candidate,
     capped: false,
   }))
@@ -317,21 +322,54 @@ describe('renaming', () => {
   // whether the real measurement is CORRECT.
   it('calls the width cap on every keystroke, with the typed candidate, and shows what it returns', () => {
     openManager()
-    presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((candidate) => ({
+    presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
       text: candidate.toUpperCase(), // a deliberately-wrong echo, so the field must be SHOWING it
       capped: false,
     }))
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'weekend')
-    expect(presetNameWidth.capCandidateToSwitcherWidth).toHaveBeenCalledWith('weekend')
+    // …with what the field held BEFORE the keystroke beside it: the saved name, on the first one.
+    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith('weekend', 'Preset 1')
     // The field shows the FUNCTION's answer, not the raw keystroke — proving onChange trusts it
     // rather than mirroring the event value straight through.
     expect(nameBoxes()[0].value).toBe('WEEKEND')
   })
 
+  // ★ A NAME ALREADY LONGER THAN THE ROOM IS NEVER CUT FOR BEING EDITED, and the cap can only keep
+  // that promise if it is told what the field held before each edit (lib/presetNameWidth's
+  // `previous`): the saved name on the first keystroke, and the pending text — what the cap itself
+  // last answered — on every one after it, never the saved name again.
+  it('hands the cap what the field held before each keystroke — the pending text, once there is one', () => {
+    openManager()
+    presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
+      text: candidate.slice(0, 4),
+      capped: candidate.length > 4,
+    }))
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend')
+    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith('Weekend', 'Preset 1')
+    type(nameBoxes()[0], 'Weeks')
+    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith('Weeks', 'Week')
+  })
+
+  it('focusing a name and leaving it never measures it, and saves it exactly as it was', () => {
+    // The route by which a stored name longer than today's room would otherwise be silently
+    // shortened: tap into it, tap away.
+    const stored = 'A name made on a much wider screen'
+    act(() => {
+      renamePreset(1, stored)
+    })
+    openManager()
+    focus(nameBoxes()[0])
+    expect(nameBoxes()[0].value).toBe(stored)
+    enter(nameBoxes()[0])
+    expect(presetNameWidth.capCandidateToNameRoom).not.toHaveBeenCalled()
+    expect(registry().presets[0].name).toBe(stored)
+  })
+
   it('shows a WIDTH-language note exactly while the field is capped, never a character count', () => {
     openManager()
-    presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((candidate) => ({
+    presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
       text: candidate.slice(0, 5),
       capped: candidate.length > 5,
     }))
@@ -347,7 +385,7 @@ describe('renaming', () => {
 
   it('clears the note on commit (Enter) and on discard (Escape)', () => {
     openManager()
-    presetNameWidth.capCandidateToSwitcherWidth.mockReturnValue({ text: 'Weeke', capped: true })
+    presetNameWidth.capCandidateToNameRoom.mockReturnValue({ text: 'Weeke', capped: true })
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'Weekend Mornings')
     expect(capNote()).toBeTruthy()
@@ -366,7 +404,7 @@ describe('renaming', () => {
       createPreset('Timed')
     })
     openManager()
-    presetNameWidth.capCandidateToSwitcherWidth.mockReturnValue({ text: 'Weeke', capped: true })
+    presetNameWidth.capCandidateToNameRoom.mockReturnValue({ text: 'Weeke', capped: true })
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'Weekend Mornings')
     expect(capNote()).toBeTruthy()
@@ -379,7 +417,7 @@ describe('renaming', () => {
 
   it('the trimmed text is what actually gets SAVED, exactly as typed for a fit that never trims', () => {
     openManager()
-    presetNameWidth.capCandidateToSwitcherWidth.mockReturnValue({ text: 'Weeke', capped: true })
+    presetNameWidth.capCandidateToNameRoom.mockReturnValue({ text: 'Weeke', capped: true })
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'Weekend Mornings')
     enter(nameBoxes()[0])
@@ -604,7 +642,7 @@ describe('reordering', () => {
     })
 
     it('the width-cap note sits under the NAME, in the row`s own grid, not under the ✕', () => {
-      presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((c) => ({
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((c) => ({
         text: c.slice(0, 3),
         capped: true,
       }))
@@ -693,7 +731,7 @@ describe('reordering', () => {
       openManager()
       // The capped row is the taller one: the note takes a second line under its name box.
       layOut(['Preset 1', 'Timed', 'Guest'], { heights: { Timed: 58 } })
-      presetNameWidth.capCandidateToSwitcherWidth.mockImplementation((c) => ({
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((c) => ({
         text: c,
         capped: true,
       }))

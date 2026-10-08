@@ -1309,7 +1309,9 @@ export default function GuidePage({
           also argues the one entry of clearPresetStorage it deliberately does not count; the screen
           clear = main.tsx's registry subscription calling remountScreens; the live typing cap that
           replaced the old fixed character count (round 20) = lib/presetNameWidth, measured
-          against components/PresetSwitcher's own rendered cell; store/presets' MAX_PRESET_NAME is
+          against every cell components/PresetSwitcher's PresetOptionLabel draws (the control, a row
+          of its list, and Open in's), the list being exactly its control's width =
+          components/CustomSelect's 'match-trigger'; store/presets' MAX_PRESET_NAME is
           now a separate, more generous backstop for a name this app never watched get typed. */}
       <GuideSection
         id="presets"
@@ -1377,11 +1379,14 @@ export default function GuidePage({
             are still there when you switch back, until you press Reset or close the app.
           </li>
           <li>
-            The list shows each name in full: it is at least as wide as the control it opens from,
-            wider when a name needs it, and stops a small margin short of the edge of the screen —
-            the same in the ⚙ menu&apos;s <b>Open in</b> list. The control in the bar is where a
-            name can be cut short with an …, so the bar can never be pushed wider than the screen;
-            that only happens to a name made on a wider screen than the one you are holding.
+            The mode selector is exactly as wide as its longest mode name needs, and this control
+            fills the rest of the bar. Its list is exactly as wide as the control — one column under
+            it, never reaching across the mode selector — and the same goes for the ⚙ menu&apos;s{' '}
+            <b>Open in</b> list. A row of the list has the same room for a name as the control
+            itself, and a name can only be made as long as fits there (see <b>Rename</b> below), so
+            a name is shown in full everywhere. The one exception is a name that is already longer
+            than that — made on a wider screen than the one you are holding, say. It is kept exactly
+            as it was made, and shown cut short with an … wherever it does not fit.
           </li>
         </UL>
         <Subhead>Making and managing them</Subhead>
@@ -1401,10 +1406,13 @@ export default function GuidePage({
           <li>
             <b>Rename</b> — the name in each row is a box; tap it and it is all selected, so you can
             just type. <Kbd>Enter</Kbd> or tapping away keeps the new name, <Kbd>Esc</Kbd> throws it
-            away. Typing stops taking new characters once the name is as wide as the control at the
-            top left can currently show — that limit moves with the screen, not with a fixed
-            character count, so how many letters fit can differ by device; leave one blank and it
-            goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot; and so on.
+            away. Typing stops taking new characters once the name is as wide as a row of the
+            top-left list can currently show — the room after the row&apos;s ✓, at the width of the
+            control — that limit moves with the screen, not with a fixed character count, so how
+            many letters fit can differ by device. A name that is already longer than that is never
+            shortened for you: it stays as it is, and you can still edit it, as long as the edit
+            does not make it wider. Leave a name blank and it goes back to &quot;Preset 2&quot;,
+            &quot;Preset 3&quot;, and so on.
           </li>
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to

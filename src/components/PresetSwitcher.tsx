@@ -76,35 +76,46 @@ import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 //   the same fill by construction — see that file's option-row rendering for the fix and why it
 //   was needed once this cell stopped being a fixed constant.
 //   THE FLOOR STAYS as the TRIGGER-GRID floor and a defensive one, AND ONLY THERE. The portaled
-//   panel is `dropdownWidth="at-least-trigger"` — never narrower than this trigger's live rendered
-//   width, and wider when its longest name needs it — so a menu row always has something to fill
-//   (the label cell is `flex-1` of a `w-full` row of that panel), and a floor in the menu holds
-//   nothing open; it only made the panel wider than its trigger (PresetOptionLabel says by how
-//   much, and drops it there). It binds in the trigger's own stacked grid, and it is still the
+//   panel is `dropdownWidth="match-trigger"` — exactly this trigger's live rendered width — so a
+//   menu row always has something to fill (the label cell is `flex-1` of a `w-full` row of that
+//   panel), and a floor in the menu holds nothing open; in a row narrower than the floor it would
+//   only push the name out past the row's edge, and make the row report more room than it has
+//   (PresetOptionLabel drops it there). It binds in the trigger's own stacked grid, and it is still the
 //   thing that stops a name cell collapsing toward bare content if the trigger is ever squeezed
 //   toward its own minimum — kept as a "never smaller than this" rather than an "always exactly
 //   this". `em`, not px or rem, for the reason it always was: the root font-size is FLUID
 //   (index.css's clamp), so a px floor would be a fixed number of pixels holding a variable number
 //   of characters, and `em` keeps the floor a fixed number of CHARACTERS at every root size
-//   instead — the same PRESET_NAME_COL floor is roomier in the dropdown's larger text tier than
-//   in the trigger's `text-sm` automatically, with no second constant.
+//   instead.
 //
-// ⚠ NOTE WHAT IS *STILL NOT CONSTRAINED* BY THE BAR: the portaled dropdown panel. It is an overlay
-// (`position:fixed`) that answers to the viewport, not to the bar — at least as wide as this
-// trigger, as wide as its longest name asks, and stopped one gutter short of the screen's right
-// edge (CustomSelect's panelBox) — so nothing it does can widen the bar.
+// ★★ THE TOP BAR'S WIDTH RULE (the owner's, restored after round 24 let the list grow past this
+// control): the Mode button is exactly as wide as its longest mode name needs; THIS control fills
+// what is left of the row; ITS LIST IS EXACTLY THIS CONTROL'S WIDTH — it hangs under the button as
+// one column and can never reach over the Mode button — and the room a name has in that list is
+// what decides how long a name may be, so that nothing is ever cut off. The panel is an overlay
+// (`position:fixed`), so nothing it does can widen the bar either.
 //
-// ⚠⚠ TWO MECHANISMS STILL BOUND A NAME, BUT THEY NO LONGER AGREE BY CONSTRUCTION THE WAY TWO FIXED
-// CONSTANTS DID. store/presets' MAX_PRESET_NAME is now a generous, DEVICE-INDEPENDENT ceiling for
-// names this app never watched get typed — a stored payload, an old build, a tampered value (the
-// full argument is at that constant). The cap that actually governs ordinary TYPING is measured
-// LIVE, against THIS control's own rendered cell, and lives one level up from either file: see
-// lib/presetNameWidth. `PRESET_NAME_CELL_SELECTOR`, exported below beside PRESET_NAME_COL, is the
-// DOM hook that measurement reads — components/PresetManager's rename field is mounted in a
-// completely different part of the tree (a ⚙ modal, not the fixed top bar), so it cannot reach
-// this cell through React props or context; it reads the live element the same way this app
-// already reaches across an unrelated component boundary elsewhere (the game's `[data-key="..."]`
-// shortcuts, the answer grid's `[data-answer-grid]`).
+// ⚠⚠ TWO MECHANISMS BOUND A NAME, AND THEY ARE DIFFERENT KINDS OF BOUND. store/presets'
+// MAX_PRESET_NAME is a generous, DEVICE-INDEPENDENT ceiling for names this app never watched get
+// typed — a stored payload, an old build, a tampered value (the full argument is at that
+// constant). The cap that actually governs ordinary TYPING is measured LIVE, against EVERY PLACE A
+// PRESET NAME IS DRAWN — this control's button, a row of its list, and the ⚙ menu's "Open in" and
+// its list — each in its own font, the narrowest governing; it lives one level up from either
+// file: see lib/presetNameWidth. Every one of those places draws the name with PresetOptionLabel
+// below, whose cell wears `data-preset-name-cell`; `PRESET_NAME_CELL_SELECTOR`, exported beside
+// PRESET_NAME_COL, is that one hook, and it is the whole of what the measurement knows about this
+// file. components/PresetManager's rename field is mounted in a completely different part of the
+// tree (a ⚙ popup, not the fixed top bar), so it cannot reach these cells through React props or
+// context; it reads the live elements the same way this app already reaches across an unrelated
+// component boundary elsewhere (the game's `[data-key="..."]` shortcuts, the answer grid's
+// `[data-answer-grid]`).
+//   ★ THE LIST IS MEASURED WHILE IT IS CLOSED: CustomSelect keeps a hidden copy of a
+//   'match-trigger' list laid out at the trigger's width (its row gauge), drawn by the same row
+//   code as the open list, and the name cells in it are found by the same hook.
+//   ★ AND A ROW GIVES A NAME THE SAME ROOM AS THE BUTTON DOES. A list row is this trigger mirrored
+//   (the ✓ takes on the left exactly what the ▲▼ take on the right — CustomSelect's OPTION_ROW has
+//   the arithmetic, against the `px-2.5 pr-6` + 1px border of the className below), so making the
+//   list the button's width costs a name no room; only the row's larger text does.
 //
 // ── WHAT A PRESET LIST SAYS OF AN AMNESIC PRESET ──────────────────────────────────────────────
 //
@@ -147,39 +158,30 @@ import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 // phone the cell block-fills well past it and the cap allows a correspondingly longer name; the
 // dropdown's larger text tier renders the same 4.5em roomier still, automatically.
 export const PRESET_NAME_COL = '4.5em'
-// The DOM hook lib/presetNameWidth reads to learn this control's LIVE rendered cell width — see
-// the ⚠⚠ block above. Scoped to `[data-select-trigger]` (the trigger button CustomSelect marks
-// with that attribute for `pressDrag`) so it can only ever match one of the seven cells STACKED IN
-// THE TRIGGER, never a row in the portaled dropdown (which carries a DIFFERENT attribute,
-// `data-select-group`, on an entirely separate portaled element) — an ambiguity that would matter
-// if the switcher's own menu happened to be open at the same moment the rename field is measuring,
-// which the ⚙ Presets modal and this control's dropdown can, in fact, both be open at once (the
-// same exclusion that lets pressing this trigger with the ⚙ panel open open the menu instead of
-// closing the panel — see the press-outside note near the top of this file). All seven stacked
-// cells share the exact same rendered width regardless of which is the visible one (that sharing
-// is the whole "stack every option in one grid cell" trick CustomSelect's trigger already relies
-// on), so matching the FIRST one in document order is exactly as correct as matching the selected
-// one, without needing to also filter for `aria-hidden="false"`.
-export const PRESET_NAME_CELL_SELECTOR = '[data-select-trigger] [data-preset-name-cell]'
+// The DOM hook lib/presetNameWidth reads to learn how much room a preset name really has — see the
+// ⚠⚠ block above. It matches EVERY cell PresetOptionLabel draws, wherever that is: the cells
+// stacked in this control's trigger and in "Open in"'s, the rows of either list while it is open,
+// and the rows of the hidden gauge CustomSelect keeps for a closed one. That is the point — a name
+// must fit the narrowest of them, and a place that draws a name cannot be left out of the
+// measurement by forgetting to list it, because drawing the name IS what lists it.
+export const PRESET_NAME_CELL_SELECTOR = '[data-preset-name-cell]'
 
 // ★ ONE PRESET'S ROW, AS EVERY PRESET LIST IN THE APP DRAWS IT — this switcher's, and since round 23
 // the ⚙ panel's "Open in" dropdown, which is the SAME control showing the SAME list (the
 // owner's "learn it once"). Exported rather than copied so the two can never drift: a name that
 // truncates here and overflows there, or an amnesic preset that one list forgets to announce, would
 // be exactly the kind of disagreement this file's history keeps paying for.
-// ⚠ `data-preset-name-cell` COMES ALONG TO "Open in" TOO, AND IS INERT THERE: PRESET_NAME_CELL_SELECTOR
-// is scoped to a `[data-select-trigger]` ancestor, which only this switcher's trigger has (it is the
-// one with pressDrag), so lib/presetNameWidth can never measure the ⚙ panel's copy by mistake.
+// ⚠ `data-preset-name-cell` COMES ALONG TO "Open in" TOO, AND COUNTS THERE: lib/presetNameWidth
+// measures every cell that wears it, so "Open in" and its list are part of the limit by drawing
+// their names with this component, with nothing else to wire.
 export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
   const spoken = AMNESIC_SPOKEN[useSessionAmnesic((s) => s.modes[p.id] ?? 'off')]
   // ★ THE FLOOR IS THE TRIGGER'S, NOT THE LIST'S. In the trigger it is what keeps the name cell
-  // from collapsing toward bare content. In an open list there is nothing for it to hold — the
-  // panel is never narrower than the trigger and the row's label cell fills it — and what it did
-  // instead was SET the panel's width: a row is the floor plus its ✓ column and padding, which at
-  // the list's larger text is a few pixels more than the trigger, so a list of short names
-  // ("Preset 1") came out 5px wider than the button it hangs from. In the list the cell asks for
-  // exactly its name's width, so a list that needs no extra room is its trigger's width to the
-  // pixel, and one that does grows by what the longest name needs.
+  // from collapsing toward bare content. In a list row there is nothing for it to hold — the row's
+  // label cell already fills the row — and in a row with less room than the floor it would push the
+  // name out past the row's right edge, and make the cell report a width the row does not have to
+  // lib/presetNameWidth, which would then let through names the list cannot show. In the list the
+  // cell is exactly the room the row gives it.
   const inOpenList = use(InOpenListContext)
   return (
     // The name cell (floor PRESET_NAME_COL, grows past it — see the ⚠⚠ block above). `flex`
@@ -261,12 +263,10 @@ export default function PresetSwitcher({
       ariaLabel="Preset"
       showChevron
       pressDrag
-      // The portaled menu is never narrower than THIS trigger — which already fills the row's
-      // leftover space (w-full inside main.tsx's flex-1 min-w-0), so there is no narrow dropdown
-      // under a wide trigger — and it is wider whenever a name needs it: a name may be as long as
-      // this trigger can show, and a row shows less of it than the trigger does at the same width
-      // (CustomSelect's panelBox has the whole argument). The mode selector keeps 'content'.
-      dropdownWidth="at-least-trigger"
+      // The portaled menu is EXACTLY this trigger's width (the top bar's width rule, in the ★★
+      // block above): this trigger already fills the row's leftover space (w-full inside main.tsx's
+      // flex-1 min-w-0), and the list is that same column. The mode selector keeps 'content'.
+      dropdownWidth="match-trigger"
       // The mode selector's trigger classes, CHARACTER FOR CHARACTER, plus two the mode selector
       // does NOT wear — the two controls sit side by side in the same bar, so anything that
       // differed without a reason would read as one of them being wrong, and these two have one.

@@ -447,8 +447,8 @@ describe('CustomSelect — the fixed portal panel (position, what closes it, --b
 // ── dropdownWidth + triggerMatchesDropdown ─────────────────────────────────────────────────
 //
 // Two opposite width behaviours the one shared component has to carry: the mode selector's trigger
-// matches its own (unchanged) dropdown, while a preset list is never narrower than its
-// (space-filling) trigger and is as wide as its longest name needs. jsdom lays out nothing and reports every rect as 0, so what is pinned
+// matches its own (unchanged) dropdown, while a preset list is exactly the width of its
+// (space-filling) trigger. jsdom lays out nothing and reports every rect as 0, so what is pinned
 // here is the WIRING — which style each prop produces — not the pixel result (that is verified in a
 // real browser and recorded at src/main.tsx's budget block).
 describe('CustomSelect — width props', () => {
@@ -474,46 +474,112 @@ describe('CustomSelect — width props', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
     expect(panel().style.width).toBe('max-content')
     expect(panel().style.maxWidth).toBe('90vw')
-    // …hung from the trigger's RIGHT edge, with no floor and no left pin.
+    // …hung from the trigger's RIGHT edge.
     expect(panel().style.right).not.toBe('')
-    expect(panel().style.left).toBe('')
-    expect(panel().style.minWidth).toBe('')
   })
 
-  // A preset's name may be as long as its TRIGGER can show, and a list row shows less of a name
-  // than the trigger does at the same width (it spends width on the ✓ column, wider padding and a
-  // larger text tier). So a list exactly as wide as its trigger cut those names short with "…".
-  it("dropdownWidth='at-least-trigger': never narrower than the trigger, as wide as its names need", () => {
-    // Mock the wrapper rect so the panel has a concrete width to floor at (jsdom's real rects are 0).
-    rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-      top: 40,
-      bottom: 63,
-      left: 100,
-      right: 320,
-      x: 100,
-      y: 40,
-      width: 220,
-      height: 23,
-      toJSON: () => ({}),
-    })
-    mountBare({ dropdownWidth: 'at-least-trigger' })
+  // THE TOP BAR'S WIDTH RULE (the owner's): a preset list is EXACTLY as wide as the control it
+  // opens from — one column under it. Round 24 let the list grow to its longest name (pinned by
+  // its left edge, floored at the trigger, capped at the screen), which let it reach over the Mode
+  // button beside it; that is undone, and this is what holds it undone.
+  const TRIGGER_RECT = {
+    top: 40,
+    bottom: 63,
+    left: 100,
+    right: 320,
+    x: 100,
+    y: 40,
+    width: 220,
+    height: 23,
+    toJSON: () => ({}),
+  }
+  it("dropdownWidth='match-trigger': the panel is exactly the trigger's width, to the pixel", () => {
+    // Mock the wrapper rect so the panel has a concrete width to take (jsdom's real rects are 0).
+    rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(TRIGGER_RECT)
+    mountBare({ dropdownWidth: 'match-trigger' })
     fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
-    const style = panel().getAttribute('style')
-    // As wide as its content asks…
-    expect(style).toMatch(/(^|; )width: max-content;/)
-    // …never narrower than the trigger wrapper (220px) — a floor that itself gives way to the
-    // ceiling, because a min-width beats a max-width…
-    expect(style).toMatch(/min-width: min\(220px, [^;]*100vw[^;]*\);/)
-    // …and never past one gutter short of the screen's right edge, measured from where it starts.
-    expect(style).toMatch(/max-width: calc\([^;]*100vw[^;]*\);/)
-    for (const bound of [/min-width: ([^;]*);/, /max-width: ([^;]*);/]) {
-      const value = bound.exec(style)[1]
-      expect(value).toContain('100px') // the trigger's left edge
-      expect(value).toContain('1rem') // the gutter
+    expect(panel().style.width).toBe('220px')
+    // Nothing that could make it any other width: no floor to grow from, no ceiling to grow to,
+    // and no content sizing.
+    expect(panel().style.minWidth).toBe('')
+    expect(panel().style.maxWidth).toBe('')
+    // Hung from the trigger's RIGHT edge like every list here, never pinned by its left to grow
+    // rightward. With the trigger's own width, that puts its left edge on the trigger's too.
+    expect(panel().style.right).not.toBe('')
+    expect(panel().style.left).toBe('')
+  })
+
+  // A list the width of its trigger has only the room its own rows leave a label, so the rows of
+  // a 'match-trigger' list are the trigger MIRRORED — the ✓ takes a lane on the left the size of
+  // the trigger's ▲▼ lane on the right, and the right inset is the trigger's left one — where a
+  // 'content' list, which sizes itself, keeps its roomier row. (The arithmetic against the real
+  // top-bar trigger is tests/presetSwitcher.dom's.)
+  it("a 'match-trigger' row is the compact, mirrored one; a 'content' row is unchanged", () => {
+    const { unmount } = mountBare({ dropdownWidth: 'match-trigger' })
+    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+    const compact = screen.getAllByRole('option')[0]
+    const compactClasses = compact.className.split(/\s+/)
+    expect(compactClasses).toContain('pr-[calc(0.375rem+1px)]')
+    expect(compactClasses).toContain('text-[15px]')
+    for (const roomy of ['pl-4', 'pr-4', 'gap-2.5']) expect(compactClasses).not.toContain(roomy)
+    // (jsdom re-orders a calc()'s terms, so the lane is read as its two terms, not as one string.)
+    const lane = compact.firstElementChild.style.width
+    expect(lane).toMatch(/^calc\(.*\)$/)
+    for (const term of ['1.25rem', '1px']) expect(lane).toContain(term)
+    expect(compact.firstElementChild.style.textAlign).toBe('center')
+    unmount()
+    document.getElementById('root').remove()
+
+    mountBare({})
+    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+    const roomy = screen.getAllByRole('option')[0]
+    for (const c of ['text-[15px]', 'pl-4', 'pr-4', 'gap-2.5', 'flex']) {
+      expect(roomy.className.split(/\s+/)).toContain(c)
     }
-    // Hung from the trigger's LEFT edge, so it grows to the right, where the room is.
-    expect(panel().style.left).toBe('100px')
-    expect(panel().style.right).toBe('')
+    expect(roomy.firstElementChild.style.width).toBe('14px')
+    expect(roomy.firstElementChild.style.textAlign).toBe('left')
+  })
+
+  // What a row of a closed list has room for has to be measurable (lib/presetNameWidth limits a
+  // preset's name to it), so a 'match-trigger' select keeps a hidden copy of its list laid out at
+  // the trigger's width.
+  it("'match-trigger' keeps a hidden row gauge: the list's own rows, at the trigger's width", () => {
+    const { container } = mountBare({ dropdownWidth: 'match-trigger' })
+    // Closed: still zero options, zero listboxes — the gauge carries no role.
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(screen.queryAllByRole('listbox')).toHaveLength(0)
+    const gauge = container.querySelector('[data-select-row-gauge]')
+    expect(gauge).not.toBeNull()
+    expect(gauge.getAttribute('aria-hidden')).toBe('true')
+    expect(gauge.style.visibility).toBe('hidden')
+    expect(gauge.style.pointerEvents).toBe('none')
+    // The trigger wrapper's width (it is the wrapper's child, out of flow), and no height of its
+    // own for any scroller to count.
+    expect(gauge.parentElement).toBe(container.firstElementChild)
+    expect(gauge.style.position).toBe('absolute')
+    expect(gauge.style.width).toBe('100%')
+    expect(gauge.style.height).toBe('0px')
+    expect(gauge.style.overflow).toBe('hidden')
+    // The list's own inset, and one row per option…
+    expect(gauge.className.split(/\s+/)).toContain('p-1')
+    const gaugeRows = [...gauge.children]
+    expect(gaugeRows).toHaveLength(OPTIONS.length)
+    // …each boxed, and its ✓ lane sized, EXACTLY as a row of the open list is.
+    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+    const liveRows = screen.getAllByRole('option')
+    const boxOf = (row) => row.className.split(/\s+/).filter((c) => !/^(bg-|cs-)/.test(c))
+    gaugeRows.forEach((row, i) => {
+      expect(row.className.split(/\s+/)).toEqual(boxOf(liveRows[i]))
+      expect(row.children).toHaveLength(2)
+      expect(row.children[0].style.width).toBe(liveRows[i].children[0].style.width)
+      expect(row.children[1].className).toBe(liveRows[i].children[1].className)
+      expect(row.children[1].textContent).toBe(liveRows[i].children[1].textContent)
+    })
+  })
+
+  it("a 'content' select has no row gauge — its list sizes itself", () => {
+    const { container } = mountBare({ triggerMatchesDropdown: true })
+    expect(container.querySelector('[data-select-row-gauge]')).toBeNull()
   })
 
   it('triggerMatchesDropdown renders a hidden width-mirror that is invisible to roles and the user', () => {

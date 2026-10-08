@@ -64,6 +64,9 @@ const triggerLabel = () => {
 // this control's own fixed-width cell, the element the whole "must not size itself to its longest
 // option" rule hangs off.
 const optionWrapper = (opt) => opt.children[1]
+// The rows of the hidden copy of the list CustomSelect keeps laid out while it is closed (its row
+// gauge) — the same row structure as an option, so optionWrapper reads them too.
+const gaugeRows = () => [...document.querySelector('[data-select-row-gauge]').children]
 const triggerWrappers = () => [...trigger().querySelectorAll(':scope > span > span')]
 const nameCell = (wrapper) => wrapper.firstElementChild
 
@@ -249,17 +252,18 @@ describe('an amnesic preset in the list: nothing drawn, and a word spoken', () =
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('the control must not size itself to its longest option', () => {
-  it('floors the name cell in the TRIGGER, and lets a list row ask for exactly its name', () => {
+  it('floors the name cell in the TRIGGER, and never in a list row', () => {
     // Round 20: the cell used to be exactly PRESET_NAME_COL wide (a `width` style); now it is
     // AT LEAST that wide (a `minWidth` style), and the actual width — how much wider — is jsdom's
     // to not know, since it has no layout engine (main.tsx's budget block and
     // components/PresetSwitcher's own comments are where that arithmetic lives now). What this
     // environment CAN still pin: `width` is gone (the mechanism that made the cell rigid), and
     // `minWidth` is the exported constant on every one of the trigger's stacked cells.
-    // ★ AND NOT IN THE OPEN LIST. There the floor held nothing open — the panel is never narrower
-    // than the trigger — and it SET the panel's width instead: floor + ✓ column + padding, at the
-    // list's larger text, is 5px more than the trigger at 390 wide, so a list holding only
-    // "Preset 1" was drawn wider than the button it hangs from. A row asks for its name's width.
+    // ★ AND NOT IN A LIST ROW — the open list's, or the hidden gauge's that stands in for it while
+    // it is closed. A row is exactly as wide as the trigger and its label cell already fills it, so
+    // a floor there holds nothing open; in a row with less room than the floor it would push the
+    // name past the row's edge, and the gauge would report room the row does not have — the limit
+    // on a name's length is read from that cell.
     act(() => {
       createPreset('W'.repeat(MAX_PRESET_NAME)) // the widest name the store will accept
       createPreset('Hi')
@@ -268,27 +272,87 @@ describe('the control must not size itself to its longest option', () => {
     openMenu()
     const inTrigger = triggerWrappers().map(nameCell)
     const inList = options().map(optionWrapper).map(nameCell)
+    const inGauge = gaugeRows().map(optionWrapper).map(nameCell)
     expect(inTrigger).toHaveLength(3) // 3 presets, each rendered once in the stack…
-    expect(inList).toHaveLength(3) // …and once in the menu
-    for (const cell of [...inTrigger, ...inList]) expect(cell.style.width).toBe('')
+    expect(inList).toHaveLength(3) // …once in the menu…
+    expect(inGauge).toHaveLength(3) // …and once in the menu's hidden gauge
+    for (const cell of [...inTrigger, ...inList, ...inGauge]) expect(cell.style.width).toBe('')
     for (const cell of inTrigger) expect(cell.style.minWidth).toBe(PRESET_NAME_COL)
-    for (const cell of inList) expect(cell.style.minWidth).toBe('')
+    for (const cell of [...inList, ...inGauge]) expect(cell.style.minWidth).toBe('')
   })
 
   it('marks every cell with the DOM hook lib/presetNameWidth reads across the component boundary', () => {
     // data-preset-name-cell is what PRESET_NAME_CELL_SELECTOR (this file) and
-    // lib/presetNameWidth's readSwitcherBudget agree on — proven here against the REAL rendered
-    // trigger, not a hand-built stand-in (tests/presetNameWidth.dom owns the fabricated-DOM cases
-    // for readSwitcherBudget's own fallback behaviour).
+    // lib/presetNameWidth's readNameRooms agree on — proven here against the REAL rendered
+    // control, not a hand-built stand-in (tests/presetNameWidth.dom owns the fabricated-DOM cases
+    // for the measurement itself). EVERY place this control draws a name is found by it: the
+    // trigger's stacked cells, and the rows of the list — which are there to be measured while the
+    // list is CLOSED (the hidden gauge), the state it is in whenever a name is being typed.
+    act(() => {
+      createPreset('Timed')
+    })
     mount()
-    const found = document.querySelector(PRESET_NAME_CELL_SELECTOR)
-    expect(found).not.toBeNull()
-    expect(found.hasAttribute('data-preset-name-cell')).toBe(true)
-    // …and it is inside the TRIGGER, never a dropdown row — the selector's whole point. Closed
-    // right now (openMenu() was never called), so the only matches at all are the seven stacked
-    // trigger cells; this also confirms the selector cannot be satisfied by anything the trigger
-    // itself is not.
-    expect(found.closest('[data-select-trigger]')).not.toBeNull()
+    const closed = [...document.querySelectorAll(PRESET_NAME_CELL_SELECTOR)]
+    expect(closed).toEqual([
+      ...triggerWrappers().map(nameCell),
+      ...gaugeRows().map(optionWrapper).map(nameCell),
+    ])
+    expect(closed).toHaveLength(4) // 2 presets × (the trigger + a row of the closed list)
+    // Open, the list's real rows are found as well.
+    openMenu()
+    const found = [...document.querySelectorAll(PRESET_NAME_CELL_SELECTOR)]
+    for (const cell of options().map(optionWrapper).map(nameCell)) expect(found).toContain(cell)
+    expect(found).toHaveLength(6)
+  })
+
+  // ★ THE TOP BAR'S WIDTH RULE, THE HALF THAT IS ARITHMETIC. The list is exactly this control's
+  // width, so the room a row leaves a name decides how long a name may be — and a row is built to
+  // leave it EXACTLY the room the control itself does, by being the control mirrored: the ✓ takes
+  // on the left what the ▲▼ take on the right, and the right inset is the control's left one. jsdom
+  // cannot lay either out, so the two sums are computed here from the classes and styles that
+  // produce them. If the control's padding or the row's ever changes alone, this is what notices.
+  it('a list row leaves a name exactly the room the control does, at every root font size', () => {
+    mount()
+    openMenu()
+    // Each length as { rem, px }, so equality holds whatever a rem is worth on the device.
+    const SPACING = { 'px-2.5': 0.625, 'pr-6': 1.5, 'p-1': 0.25 }
+    const lengthOf = (text) => ({
+      rem: Number(/([\d.]+)rem/.exec(text)?.[1] ?? 0),
+      px: Number(/([\d.]+)px/.exec(text)?.[1] ?? 0),
+    })
+    const sum = (...parts) =>
+      parts.reduce((a, b) => ({ rem: a.rem + b.rem, px: a.px + b.px }), { rem: 0, px: 0 })
+    const rem = (n) => ({ rem: n, px: 0 })
+    const classesOf = (el) => el.className.split(/\s+/)
+
+    // THE CONTROL: a 1px border (`panel`), `px-2.5` on the left, and `pr-6` on the right for the ▲▼.
+    const control = classesOf(trigger())
+    for (const c of ['panel', 'px-2.5', 'pr-6']) expect(control).toContain(c)
+    const BORDER = { rem: 0, px: 1 }
+    const controlLeft = sum(BORDER, rem(SPACING['px-2.5']))
+    const controlRight = sum(BORDER, rem(SPACING['pr-6']))
+
+    // A ROW: the list's own inset (`p-1`) on both sides; on the left the ✓ lane and nothing else
+    // (no left padding, no gap); on the right the row's own padding.
+    const row = options()[0]
+    const list = row.parentElement
+    expect(classesOf(list)).toContain('p-1')
+    const rowClasses = classesOf(row)
+    expect(rowClasses.filter((c) => /^(p[lxse]?|gap(-x)?|m[lxse]?)-/.test(c))).toEqual([])
+    const rowPr = rowClasses.filter((c) => c.startsWith('pr-'))
+    expect(rowPr).toHaveLength(1)
+    const checkLane = row.firstElementChild
+    const rowLeft = sum(rem(SPACING['p-1']), lengthOf(checkLane.style.width))
+    const rowRight = sum(rem(SPACING['p-1']), lengthOf(rowPr[0]))
+
+    // Mirrored: the row's left is the control's right, and the row's right is the control's left.
+    expect(rowLeft).toEqual(controlRight)
+    expect(rowRight).toEqual(controlLeft)
+    // …so what is left for the name is the same in both, whatever the width they share.
+    expect(sum(rowLeft, rowRight)).toEqual(sum(controlLeft, controlRight))
+    // The row's name cell has nothing of its own between the row and the name.
+    const cell = nameCell(optionWrapper(row))
+    expect(classesOf(cell).filter((c) => /^(p|m|gap|w|max-w|min-w)[a-z]?-/.test(c))).toEqual([])
   })
 
   it('puts `truncate` on the NAME rather than on the cell', () => {

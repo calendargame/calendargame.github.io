@@ -31,6 +31,7 @@
 // UI font differ there; only the owner's device can confirm the real thing.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { screen, cleanup, within } from '@testing-library/react'
+import { PRESET_NAME_CELL_SELECTOR } from '../src/components/PresetSwitcher.jsx'
 import {
   mountApp,
   resetAppState,
@@ -234,26 +235,50 @@ describe('the width cuts that paid for the fourth control', () => {
     expect(screen.getByRole('listbox', { name: 'Mode' }).style.width).toBe('max-content')
   })
 
-  it("the preset dropdown is at least as wide as its trigger and as wide as its names need (dropdownWidth='at-least-trigger')", () => {
+  // THE TOP BAR'S WIDTH RULE (the owner's): the Mode button is as wide as its longest mode name, the
+  // preset control fills the rest, and its list is EXACTLY the control's width. jsdom's rects are 0,
+  // so the width reads 0px here; the point is that it is the trigger's measured width and nothing
+  // else — no content sizing, no floor, no ceiling, no left pin to grow rightward from
+  // (tests/customselect pins the arithmetic against a real rect).
+  const expectTriggerWidthList = (list) => {
+    expect(list.style.width).toBe('0px')
+    expect(list.style.minWidth).toBe('')
+    expect(list.style.maxWidth).toBe('')
+    expect(list.style.left).toBe('')
+    expect(list.style.right).not.toBe('')
+  }
+  it("the preset dropdown is exactly as wide as its trigger (dropdownWidth='match-trigger')", () => {
     mountApp()
     tap(presetTrigger())
-    // The trigger's measured width is the list's FLOOR, not its width: a name is allowed to be as
-    // long as the trigger can show, and a list row has less room for it than the trigger has, so a
-    // list the trigger's exact width cut long names short. jsdom's rects are 0, so the floor reads
-    // 0px here; the point is which three properties carry it. A real browser was used to check that
-    // every name the rename box accepts is shown whole (and tests/customselect pins the arithmetic).
-    const list = screen.getByRole('listbox', { name: 'Preset' })
-    expect(list.style.width).toBe('max-content')
-    expect(list.getAttribute('style')).toMatch(/min-width: min\(0px, /)
-    expect(list.getAttribute('style')).toMatch(/max-width: calc\(/)
+    expectTriggerWidthList(screen.getByRole('listbox', { name: 'Preset' }))
   })
 
   it('"Open in" in the ⚙ menu is the same kind of list', () => {
     mountApp()
     openSettings()
     tap(within(panelEl()).getByRole('button', { name: /^Open in/ }))
-    const list = screen.getByRole('listbox', { name: 'Open in' })
-    expect(list.style.width).toBe('max-content')
-    expect(list.getAttribute('style')).toMatch(/min-width: min\(0px, /)
+    expectTriggerWidthList(screen.getByRole('listbox', { name: 'Open in' }))
+  })
+
+  // ★ THE CONTROL, ITS LIST, "Open in", AND ITS LIST AGREE WITH MANAGE PRESETS BY CONSTRUCTION.
+  // A preset's name may be as long as the narrowest place it is shown, and lib/presetNameWidth
+  // learns the places from ONE hook: the cell PresetOptionLabel draws every name in. So the claim
+  // to hold is that all four places wear it — while their lists are CLOSED, which is the state they
+  // are in when a name is being typed (a closed list is measured through its hidden row gauge).
+  it('every place a preset name is drawn wears the one hook the name limit measures', () => {
+    mountApp()
+    openSettings()
+    const cellsIn = (el) => [...el.querySelectorAll(PRESET_NAME_CELL_SELECTOR)]
+    const gaugeOf = (trigger) => trigger.parentElement.querySelector('[data-select-row-gauge]')
+    const openIn = within(panelEl()).getByRole('button', { name: /^Open in/ })
+    const places = [presetTrigger(), gaugeOf(presetTrigger()), openIn, gaugeOf(openIn)]
+    for (const place of places) {
+      expect(place).not.toBeNull()
+      expect(cellsIn(place)).toHaveLength(1) // one preset on a fresh app, drawn once in each place
+    }
+    // …and those four are ALL of them: nothing else on the page draws a preset's name in a cell,
+    // so nothing is measured that is not one of the places, and no list is open.
+    expect(cellsIn(document.body)).toHaveLength(places.length)
+    expect(screen.queryAllByRole('listbox')).toHaveLength(0)
   })
 })

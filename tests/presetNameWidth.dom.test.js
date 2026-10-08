@@ -1,53 +1,62 @@
 // @vitest-environment jsdom
 //
 // presetNameWidth.dom — the DOM/canvas-touching half of lib/presetNameWidth's live typing cap
-// (round 20): reading the switcher's live cell (readSwitcherBudget), measuring text against a
-// canvas (measureTextWidthPx, fitTextToWidth), and the one function components/PresetManager
-// actually calls (capCandidateToSwitcherWidth). tests/presetNameWidth.test.js owns the PURE
-// decision (fitsWithinWidth) with fabricated numbers and no jsdom at all.
+// (round 20): reading the live room in every place a preset name is drawn (readNameRooms),
+// measuring text against a canvas (measureTextWidthPx, fitTextToRooms), and the one function
+// components/PresetManager actually calls (capCandidateToNameRoom). tests/presetNameWidth.test.js
+// owns the PURE decision (fitsWithinWidth) with fabricated numbers and no jsdom at all.
 //
 // ⚠⚠ jsdom HAS NO LAYOUT ENGINE AND NO CANVAS. Neither fact is assumed here — both are PROVED, in
 // the first two cases below, because the rest of this file's coverage depends on knowing exactly
-// how each degrades: getBoundingClientRect always reports 0 (so readSwitcherBudget must fall back
-// on a real switcher element the same as on a missing one, unless a test fakes the rect), and
+// how each degrades: getBoundingClientRect always reports 0 (so readNameRooms must find nothing
+// on a real cell the same as on a missing one, unless a test fakes the rect), and
 // HTMLCanvasElement.getContext('2d') returns null rather than throwing (tests/setup/dom.js
 // silences the "not implemented" warning that call would otherwise log on every keystroke).
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
-  readSwitcherBudget,
+  readNameRooms,
   measureTextWidthPx,
-  fitTextToWidth,
-  capCandidateToSwitcherWidth,
+  fitTextToRooms,
+  capCandidateToNameRoom,
 } from '../src/lib/presetNameWidth.js'
 import { PRESET_NAME_CELL_SELECTOR } from '../src/components/PresetSwitcher.jsx'
 
-// A fake 2D context whose measureText is a simple, controllable function of the text — proportional
-// (WIDTH_PER_CHAR px per character) rather than jsdom's real (nonexistent) glyph metrics, which is
-// all a test of the WIRING needs: something deterministic to assert trimming against.
-const WIDTH_PER_CHAR = 5
+// A fake 2D context whose measureText is a simple, controllable function of the text AND THE FONT
+// — a third of the font's pixel size per character, so 15px text is 5px a character and 12px text
+// is 4px — rather than jsdom's real (nonexistent) glyph metrics. The font has to count: the places
+// a name is drawn do not share one (a list row's text is larger than the button's), and "which
+// place is narrowest" is a question about a width in a font, never about a width alone.
+const perChar = (font) => parseFloat(font) / 3
 const installFakeCanvas = () => {
   const original = window.HTMLCanvasElement.prototype.getContext
-  window.HTMLCanvasElement.prototype.getContext = () => ({
-    set font(_v) {
-      /* the real canvas reads this on every draw; the fake has nothing to key off */
-    },
-    measureText: (text) => ({ width: text.length * WIDTH_PER_CHAR }),
-  })
+  window.HTMLCanvasElement.prototype.getContext = () => {
+    let font = ''
+    return {
+      set font(value) {
+        font = value
+      },
+      measureText: (text) => ({ width: text.length * perChar(font) }),
+    }
+  }
   return () => {
     window.HTMLCanvasElement.prototype.getContext = original
   }
 }
 
-// A minimal stand-in for the switcher's trigger + name cell — the exact structure
-// PRESET_NAME_CELL_SELECTOR (`[data-select-trigger] [data-preset-name-cell]`) is written to match,
-// built by hand rather than mounting the real PresetSwitcher: this file is about the DOM QUERY and
-// the MEASUREMENT, not about CustomSelect's own rendering, and jsdom cannot give either element a
-// real width regardless of which one produced the markup — only a mocked rect can.
-const mountFakeSwitcherCell = (widthPx) => {
-  const trigger = document.createElement('button')
-  trigger.setAttribute('data-select-trigger', '')
+// The two fonts the cases below set names in: the top-bar button's smaller tier and a list row's
+// larger one. Only their SIZES matter to the fake canvas.
+const BUTTON_FONT = '12px sans-serif' // 4px a character
+const ROW_FONT = '15px sans-serif' // 5px a character
+
+// A minimal stand-in for ONE place a preset name is drawn — an element wearing the hook
+// PRESET_NAME_CELL_SELECTOR names, with a faked width and a font — built by hand rather than
+// mounting the real controls: this file is about the DOM QUERY and the MEASUREMENT, and jsdom can
+// give no element a real width or a computed font whichever component produced the markup.
+// (tests/topBar.dom proves the real app's four places all wear the hook.)
+const mountNameCell = (widthPx, font = ROW_FONT) => {
   const cell = document.createElement('span')
   cell.setAttribute('data-preset-name-cell', 'true')
+  cell.dataset.font = font
   cell.getBoundingClientRect = () => ({
     width: widthPx,
     height: 0,
@@ -59,13 +68,17 @@ const mountFakeSwitcherCell = (widthPx) => {
     y: 0,
     toJSON() {},
   })
-  trigger.appendChild(cell)
-  document.body.appendChild(trigger)
-  return () => trigger.remove()
+  document.body.appendChild(cell)
+  return cell
 }
+// The computed font, which jsdom does not resolve: each stand-in cell says its own.
+const fontSpy = vi
+  .spyOn(globalThis, 'getComputedStyle')
+  .mockImplementation((el) => ({ font: el.dataset.font ?? '' }))
 
 afterEach(() => {
   document.body.innerHTML = ''
+  fontSpy.mockClear()
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -82,149 +95,190 @@ describe('what jsdom actually does — the two facts the rest of this file relie
     expect(canvas.getContext('2d')).toBeNull()
   })
 
-  it('PRESET_NAME_CELL_SELECTOR is scoped to the trigger, never the dropdown', () => {
-    // Pinned here rather than only exercised indirectly through readSwitcherBudget below: this
-    // exact string is the one piece of the cross-component contract components/PresetSwitcher and
-    // this file have to agree on independently of any DOM behaviour.
-    expect(PRESET_NAME_CELL_SELECTOR).toBe('[data-select-trigger] [data-preset-name-cell]')
+  it('PRESET_NAME_CELL_SELECTOR is the ONE hook, scoped to nothing', () => {
+    // Pinned here rather than only exercised indirectly through readNameRooms below: this exact
+    // string is the whole cross-component contract. It names the cell and no ancestor, so every
+    // place that draws a preset name is measured — the button, a list row, "Open in" — and none can
+    // be left out by where it is mounted. (It was scoped to the top-bar button once, which is how a
+    // name that fit the button came to be cut short in the list.)
+    expect(PRESET_NAME_CELL_SELECTOR).toBe('[data-preset-name-cell]')
   })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('readSwitcherBudget — the cross-component DOM read', () => {
-  it('finds the switcher cell and reports its live width when the rect is real', () => {
-    const unmount = mountFakeSwitcherCell(142.5)
-    const budget = readSwitcherBudget()
-    expect(budget).not.toBeNull()
-    expect(budget.widthPx).toBe(142.5)
-    expect(typeof budget.font).toBe('string')
-    unmount()
+describe('readNameRooms — the cross-component DOM read', () => {
+  it('finds a name cell and reports its live width and font when the rect is real', () => {
+    mountNameCell(142.5, ROW_FONT)
+    expect(readNameRooms()).toEqual([{ widthPx: 142.5, font: ROW_FONT }])
   })
 
-  it('returns null when no element matches the selector at all (the "impossible in practice" case)', () => {
-    // Nothing mounted — the documented fallback path components/PresetManager's caller uses.
-    expect(readSwitcherBudget()).toBeNull()
+  it('is empty when no element matches the selector at all', () => {
+    // Nothing mounted — the documented fallback path capCandidateToNameRoom takes.
+    expect(readNameRooms()).toEqual([])
   })
 
-  it('returns null for a matched element reporting a non-positive width (plain unmocked jsdom)', () => {
-    // A real switcher cell, but with jsdom's own always-zero rect (no mock) — the case this suite
-    // hits by default whenever the real PresetSwitcher is mounted alongside PresetManager, and
-    // exactly why the fallback exists rather than only covering "cannot find the element at all".
-    const trigger = document.createElement('button')
-    trigger.setAttribute('data-select-trigger', '')
+  it('skips a matched element reporting a non-positive width (plain unmocked jsdom)', () => {
+    // A real cell, but with jsdom's own always-zero rect (no mock) — the case this suite hits by
+    // default whenever the real controls are mounted alongside PresetManager, and exactly why the
+    // fallback exists rather than only covering "cannot find the element at all".
     const cell = document.createElement('span')
     cell.setAttribute('data-preset-name-cell', 'true')
-    trigger.appendChild(cell)
-    document.body.appendChild(trigger)
-    expect(readSwitcherBudget()).toBeNull()
+    document.body.appendChild(cell)
+    expect(readNameRooms()).toEqual([])
   })
 
-  it('never matches a data-preset-name-cell that is NOT inside a [data-select-trigger] (the dropdown case)', () => {
-    // The dropdown's rows carry the same data-preset-name-cell but sit under data-select-group,
-    // never data-select-trigger — see components/PresetSwitcher's PRESET_NAME_CELL_SELECTOR export
-    // for why that is exactly the scoping that keeps this read off the (differently-sized) menu.
-    const panel = document.createElement('div')
-    panel.setAttribute('data-select-group', '')
-    const cell = document.createElement('span')
-    cell.setAttribute('data-preset-name-cell', 'true')
-    cell.getBoundingClientRect = () => ({
-      width: 999,
-      height: 0,
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      x: 0,
-      y: 0,
-      toJSON() {},
-    })
-    panel.appendChild(cell)
-    document.body.appendChild(panel)
-    expect(readSwitcherBudget()).toBeNull()
+  it('counts a cell wherever it is mounted — a list row is a place a name is drawn', () => {
+    // The defect this file's rewrite is for: the read used to be scoped to the top-bar button
+    // (`[data-select-trigger] …`) and deliberately could not see a row of the list, the one place a
+    // name has the least room.
+    const row = document.createElement('div')
+    row.setAttribute('data-select-row-gauge', '')
+    document.body.appendChild(row)
+    row.appendChild(mountNameCell(68, ROW_FONT))
+    expect(readNameRooms()).toEqual([{ widthPx: 68, font: ROW_FONT }])
+  })
+
+  it('keeps ONE room per font — the narrowest cell set in it', () => {
+    // Every preset has a cell in each place, all the same width there; and two places can share a
+    // font at different widths (the top bar's list and "Open in"'s). The narrowest is the only one
+    // that can refuse a name the others would take.
+    mountNameCell(200, ROW_FONT)
+    mountNameCell(68, ROW_FONT)
+    mountNameCell(120, ROW_FONT)
+    expect(readNameRooms()).toEqual([{ widthPx: 68, font: ROW_FONT }])
+  })
+
+  it('keeps a room for EACH font, because a width means nothing without one', () => {
+    mountNameCell(70, BUTTON_FONT)
+    mountNameCell(70, ROW_FONT)
+    expect(readNameRooms()).toEqual([
+      { widthPx: 70, font: BUTTON_FONT },
+      { widthPx: 70, font: ROW_FONT },
+    ])
   })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('measureTextWidthPx — degrades to 0 without a real canvas, measures for real with one', () => {
   it('is 0 under plain jsdom (no fake canvas installed)', () => {
-    expect(measureTextWidthPx('Weekend', '13px sans-serif')).toBe(0)
+    expect(measureTextWidthPx('Weekend', ROW_FONT)).toBe(0)
   })
 
-  it("reports the fake canvas's own width once one is installed", () => {
+  it("reports the fake canvas's own width, in the font it is handed, once one is installed", () => {
     const restore = installFakeCanvas()
-    expect(measureTextWidthPx('Weekend', '13px sans-serif')).toBe('Weekend'.length * WIDTH_PER_CHAR)
-    expect(measureTextWidthPx('', '13px sans-serif')).toBe(0)
+    expect(measureTextWidthPx('Weekend', ROW_FONT)).toBe('Weekend'.length * 5)
+    expect(measureTextWidthPx('Weekend', BUTTON_FONT)).toBe('Weekend'.length * 4)
+    expect(measureTextWidthPx('', ROW_FONT)).toBe(0)
     restore()
   })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('fitTextToWidth — the maxLength-shaped truncation for a paste-sized change', () => {
+describe('fitTextToRooms — the maxLength-shaped truncation for a paste-sized change', () => {
   it('returns the candidate UNCHANGED when it already fits', () => {
     const restore = installFakeCanvas()
-    expect(fitTextToWidth('Hi', '13px sans-serif', 1000)).toBe('Hi')
+    expect(fitTextToRooms('Hi', [{ font: ROW_FONT, widthPx: 1000 }])).toBe('Hi')
     restore()
   })
 
   it('trims to the longest prefix that fits, character by character', () => {
     const restore = installFakeCanvas()
-    // Budget for exactly 5 characters at WIDTH_PER_CHAR=5 is 25px.
-    expect(fitTextToWidth('Weekend Mornings', '13px sans-serif', 25)).toBe('Weeke')
+    // Room for exactly 5 characters at 5px each is 25px.
+    expect(fitTextToRooms('Weekend Mornings', [{ font: ROW_FONT, widthPx: 25 }])).toBe('Weeke')
+    restore()
+  })
+
+  it('trims to what fits EVERY room — the narrowest governs, each in its own font', () => {
+    const restore = installFakeCanvas()
+    // The same 40px holds 10 characters of the button's text and only 8 of the row's.
+    const rooms = [
+      { font: BUTTON_FONT, widthPx: 40 },
+      { font: ROW_FONT, widthPx: 40 },
+    ]
+    expect(fitTextToRooms('Weekend Mornings', rooms)).toBe('Weekend ')
+    // …and the order they are listed in decides nothing.
+    expect(fitTextToRooms('Weekend Mornings', [...rooms].reverse())).toBe('Weekend ')
     restore()
   })
 
   it('trims all the way to empty when even one character does not fit', () => {
     const restore = installFakeCanvas()
-    expect(fitTextToWidth('W', '13px sans-serif', 1)).toBe('')
+    expect(fitTextToRooms('W', [{ font: ROW_FONT, widthPx: 1 }])).toBe('')
     restore()
   })
 
   it('without a real canvas (0-width measurement), nothing is ever trimmed', () => {
     // The documented degradation: a 0-width measurement always "fits" (fitsWithinWidth's own
-    // inclusive-boundary case), so fitTextToWidth never has a reason to cut anything under plain
-    // jsdom — consistent with capCandidateToSwitcherWidth never reporting `capped` there either.
-    expect(fitTextToWidth('Weekend Mornings', '13px sans-serif', 1)).toBe('Weekend Mornings')
+    // inclusive-boundary case), so fitTextToRooms never has a reason to cut anything under plain
+    // jsdom — consistent with capCandidateToNameRoom never reporting `capped` there either.
+    expect(fitTextToRooms('Weekend Mornings', [{ font: ROW_FONT, widthPx: 1 }])).toBe(
+      'Weekend Mornings',
+    )
   })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('capCandidateToSwitcherWidth — the one call components/PresetManager makes', () => {
-  it('accepts a candidate that fits the LIVE switcher budget, unchanged', () => {
+describe('capCandidateToNameRoom — the one call components/PresetManager makes', () => {
+  it('accepts a candidate that fits the LIVE room, unchanged', () => {
     const restore = installFakeCanvas()
-    const unmount = mountFakeSwitcherCell(50) // 10 characters at WIDTH_PER_CHAR=5
-    const result = capCandidateToSwitcherWidth('Weekend')
-    expect(result).toEqual({ text: 'Weekend', capped: false })
-    unmount()
+    mountNameCell(50) // 10 characters at 5px
+    expect(capCandidateToNameRoom('Weekend', '')).toEqual({ text: 'Weekend', capped: false })
     restore()
   })
 
-  it('trims to fit the LIVE switcher budget, and reports capped:true', () => {
+  it('trims to fit the LIVE room, and reports capped:true', () => {
     const restore = installFakeCanvas()
-    const unmount = mountFakeSwitcherCell(25) // 5 characters
-    const result = capCandidateToSwitcherWidth('Weekend Mornings')
-    expect(result).toEqual({ text: 'Weeke', capped: true })
-    unmount()
+    mountNameCell(25) // 5 characters
+    expect(capCandidateToNameRoom('Weekend Mornings', '')).toEqual({ text: 'Weeke', capped: true })
+    restore()
+  })
+
+  // ★ THE DEFECT, AS THE OWNER MET IT: a name the top-bar button showed whole was cut short with
+  // "…" in the list under it. The limit was the button's room alone; a list row is its own place,
+  // with its own room and larger text, and it is the one that governs.
+  it('refuses a name that fits the BUTTON but not a row of its LIST', () => {
+    const restore = installFakeCanvas()
+    // The button: 91px of room at 4px a character — 22 characters. A list row: 68px at 5px — 13.
+    const button = document.createElement('button')
+    button.setAttribute('data-select-trigger', '')
+    document.body.appendChild(button)
+    button.appendChild(mountNameCell(91, BUTTON_FONT))
+    mountNameCell(68, ROW_FONT)
+    expect(capCandidateToNameRoom('Weekend Mornings', '')).toEqual({
+      text: 'Weekend Morni',
+      capped: true,
+    })
+    expect(capCandidateToNameRoom('Weekend Morni', '')).toEqual({
+      text: 'Weekend Morni',
+      capped: false,
+    })
+    restore()
+  })
+
+  it('…and the button governs when it is the tighter place — neither is assumed to be', () => {
+    const restore = installFakeCanvas()
+    mountNameCell(40, BUTTON_FONT) // 10 characters
+    mountNameCell(200, ROW_FONT) // 40
+    expect(capCandidateToNameRoom('Weekend Mornings', '').text).toBe('Weekend Mo')
     restore()
   })
 
   it('un-refuses on a backspace: a shorter candidate that now fits comes back capped:false', () => {
     const restore = installFakeCanvas()
-    const unmount = mountFakeSwitcherCell(25)
-    expect(capCandidateToSwitcherWidth('Weekend Mornings').capped).toBe(true)
-    expect(capCandidateToSwitcherWidth('Week')).toEqual({ text: 'Week', capped: false })
-    unmount()
+    mountNameCell(25)
+    expect(capCandidateToNameRoom('Weekend Mornings', 'Weeke').capped).toBe(true)
+    expect(capCandidateToNameRoom('Week', 'Weeke')).toEqual({ text: 'Week', capped: false })
     restore()
   })
 
-  it('falls back to the safe minimum budget when the switcher cell cannot be read at all', () => {
+  it('falls back to the safe minimum budget when no cell can be read at all', () => {
     // Nothing mounted, matching PresetManager standalone in a test with no top bar — the fallback
-    // path components/PresetSwitcher documents as "impossible in practice" but this suite still
-    // exercises, per the brief: prove it is real, not dead code.
+    // path is real, not dead code.
     const restore = installFakeCanvas()
-    // A name comfortably under the fallback budget (≈82px ÷ 5px/char ≈ 16 characters) is accepted.
-    expect(capCandidateToSwitcherWidth('Weekend').capped).toBe(false)
+    // A name comfortably under the fallback budget (≈61px, at ≈4.5px a character) is accepted.
+    expect(capCandidateToNameRoom('Weekend', '').capped).toBe(false)
     // A name well past it is trimmed, proving the fallback budget is finite and actually applied.
-    const long = capCandidateToSwitcherWidth('W'.repeat(40))
+    const long = capCandidateToNameRoom('W'.repeat(40), '')
     expect(long.capped).toBe(true)
     expect(long.text.length).toBeLessThan(40)
     expect(long.text.length).toBeGreaterThan(0)
@@ -232,10 +286,55 @@ describe('capCandidateToSwitcherWidth — the one call components/PresetManager 
   })
 
   it('never trims anything without a real canvas — the whole mechanism degrades to a no-op', () => {
-    const unmount = mountFakeSwitcherCell(10) // a tiny live budget…
+    mountNameCell(10) // a tiny live room…
     // …and yet, with no fake canvas installed, every measurement is 0 and therefore "fits".
-    const result = capCandidateToSwitcherWidth('Weekend Mornings')
-    expect(result).toEqual({ text: 'Weekend Mornings', capped: false })
-    unmount()
+    expect(capCandidateToNameRoom('Weekend Mornings', '')).toEqual({
+      text: 'Weekend Mornings',
+      capped: false,
+    })
+  })
+
+  // ── A NAME THAT IS ALREADY LONGER THAN THE ROOM ───────────────────────────────────────────
+  // It can exist: made on a wider screen, or under an older build's looser limit. It is stored as
+  // it is and never cut for being touched — `previous` is what the field held before the edit.
+  describe('a name already longer than the room is never cut for being edited', () => {
+    const OLD = 'Weekend Mornings' // 16 characters, in room for 10
+
+    it('deleting from it is accepted as typed, not trimmed to what fits', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(50)
+      expect(capCandidateToNameRoom('Weekend Morning', OLD)).toEqual({
+        text: 'Weekend Morning',
+        capped: false,
+      })
+      restore()
+    })
+
+    it('changing a letter in it, at the same width, is accepted', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(50)
+      expect(capCandidateToNameRoom('Weekend Evenings', OLD)).toEqual({
+        text: 'Weekend Evenings',
+        capped: false,
+      })
+      restore()
+    })
+
+    it('making it WIDER is refused — back to the width it already had, not down to the room', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(50)
+      expect(capCandidateToNameRoom(`${OLD}!`, OLD)).toEqual({ text: OLD, capped: true })
+      restore()
+    })
+
+    it('once it has been shortened to fit, the ordinary limit is the limit again', () => {
+      const restore = installFakeCanvas()
+      mountNameCell(50)
+      expect(capCandidateToNameRoom('Weekend Mornings', 'Weekend')).toEqual({
+        text: 'Weekend Mo',
+        capped: true,
+      })
+      restore()
+    })
   })
 })

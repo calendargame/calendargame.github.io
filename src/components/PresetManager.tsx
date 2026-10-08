@@ -23,7 +23,7 @@ import {
   movePreset,
   renamePreset,
 } from '../store/presetControl.js'
-import { capCandidateToSwitcherWidth } from '../lib/presetNameWidth.js'
+import { capCandidateToNameRoom } from '../lib/presetNameWidth.js'
 import {
   targetIndexForCenter,
   stepsToReorder,
@@ -99,14 +99,21 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // plus a `slice` in onChange for the paste-shaped write maxLength does not cover). That worked only
 // because the switcher's display cell was ALSO a fixed count of characters; once the cell became
 // flexible (components/PresetSwitcher), a character cap stopped answering the question that
-// actually matters — "will this fit the switcher, RIGHT NOW, on THIS device" — so onChange now
-// calls lib/presetNameWidth's capCandidateToSwitcherWidth on every keystroke, which measures the
-// candidate against the switcher's LIVE rendered cell width (a real canvas measurement against a
-// real DOM element in another part of the tree entirely — see that file for the mechanism and why
-// it is not a React prop or a store) and trims to the longest prefix that fits, exactly the shape
-// `maxLength` gives a paste. `nameWidthCapped` is what that trim sets, and it drives the small
-// WIDTH-language note below the field ("That's as long as this name can display.") rather than a
-// character count, because a character count is no longer the true reason.
+// actually matters — "will this fit where it is shown, RIGHT NOW, on THIS device" — so onChange
+// calls lib/presetNameWidth's capCandidateToNameRoom on every keystroke, which measures the
+// candidate against the LIVE room in every place a preset name is drawn — the top bar's control, a
+// row of its list, and "Open in" and its list, the narrowest governing (a real canvas measurement
+// against real DOM elements in another part of the tree entirely — see that file for the mechanism
+// and why it is not a React prop or a store) — and trims to the longest prefix that fits, exactly
+// the shape `maxLength` gives a paste. `nameWidthCapped` is what that trim sets, and it drives the
+// small WIDTH-language note below the field ("That's as long as this name can display.") rather
+// than a character count, because a character count is no longer the true reason.
+// ★ A NAME THAT IS ALREADY LONGER THAN THE ROOM IS LEFT ALONE. It can exist — made on a wider
+// screen, or under an older build's looser limit — and it stays stored exactly as it is, shown
+// shortened with "…" wherever it does not fit and whole in this field. Editing it never cuts it
+// for being touched: the cap is handed what the field held before the keystroke, and refuses only
+// an edit that makes the name WIDER than it already was (lib/presetNameWidth's `previous`). The
+// commit below does not measure at all, so focusing such a name and leaving it changes nothing.
 // ⚠ `maxLength={MAX_PRESET_NAME}` STAYS ON THE ELEMENT, as a SEPARATE, coarser backstop — the
 // store's own hard ceiling (store/presets argues why it is now a generous, device-independent
 // number rather than a pixel-tuned one), reached only if the width cap somehow fails to fire (a
@@ -998,11 +1005,15 @@ export default function PresetManager({
                       if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
                     }}
                     onChange={(e) => {
-                      // lib/presetNameWidth — measures the candidate against the SWITCHER's live cell
-                      // width (a different, separately-mounted control), not this field's own room, and
-                      // trims to the longest prefix that fits when it does not. See that file and the ★★
+                      // lib/presetNameWidth — measures the candidate against the live room wherever a
+                      // preset name is drawn (other, separately-mounted controls), not this field's own
+                      // room, and trims to the longest prefix that fits when it does not. The second
+                      // argument is what the field holds now, before this edit. See that file and the ★★
                       // note above for the mechanism and why the cap moved here from a character count.
-                      const { text, capped } = capCandidateToSwitcherWidth(e.target.value)
+                      const { text, capped } = capCandidateToNameRoom(
+                        e.target.value,
+                        editingText(p.id, p.name),
+                      )
                       setEditing({ id: p.id, text })
                       setNameWidthCapped(capped)
                     }}

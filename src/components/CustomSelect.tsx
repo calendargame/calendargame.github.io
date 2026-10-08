@@ -122,56 +122,101 @@ export interface CustomSelectOption {
 }
 // Measured coordinates for the portaled panel, in VIEWPORT space. The panel is position:fixed, so
 // its containing block IS the viewport and a getBoundingClientRect reading needs no conversion:
-// 6px below the trigger, and pinned to ONE of its side edges — which one is dropdownWidth's to say
-// (panelBox, below).
+// right edge pinned to the trigger's, top 6px below it.
 interface PanelPos {
-  // The trigger wrapper's left edge, and its right edge measured the way CSS `right` is (from the
-  // viewport's right edge).
-  left: number
   right: number
   top: number
-  // The trigger wrapper's own rendered width at the moment the panel opened.
+  // The trigger wrapper's own rendered width at the moment the panel opened. Only consumed when
+  // dropdownWidth === 'match-trigger' (the two preset lists), where the panel is exactly as wide as
+  // its trigger; 'content' (the default, the mode selector) ignores it.
   width: number
 }
-// The room the app keeps between anything and the screen's side edges (the top bar's and the ⚙
-// menu's own gutter). A list that grows past its trigger stops this far short of the edge.
-const SCREEN_GUTTER = '1rem'
-// WHERE THE PANEL SITS AND HOW WIDE IT IS — the two ways a call site can ask for.
-//   • 'content' — the mode selector. As wide as its widest option (max-content, 90vw at most),
-//     its RIGHT edge on the trigger's. Its trigger is pinned to that same width
-//     (triggerMatchesDropdown), so the two are one column.
-//   • 'at-least-trigger' — the two preset lists. NEVER NARROWER THAN THE TRIGGER, AND AS WIDE AS
-//     ITS LONGEST NAME NEEDS. A list the exact width of its trigger cannot show what the trigger
-//     shows: a row spends width the trigger does not (the ✓ column, wider padding, a larger text
-//     tier), so its name cell is the narrower of the two — and a preset's name is allowed to be
-//     exactly as long as the TRIGGER can display (lib/presetNameWidth), so every name near that
-//     length was cut short with "…" in the very list you pick it from. So the list takes the width
-//     its names ask for, with the trigger's width as its floor (short names: the same box as
-//     before, to the pixel — which holds only because a label holds no width of its own open in
-//     the list; components/openListContext is how the preset name cell knows to let go of its). It is pinned by its LEFT edge and grows to the right, because that is
-//     where the room is: the preset switcher sits at the left of the bar, a few dozen pixels from
-//     the screen's edge. It stops one gutter short of the right edge of the screen; a name longer
-//     than that — one made on a wider screen — is the only one still shortened, by the name's own
-//     ellipsis (components/PresetSwitcher's PresetOptionLabel).
-const panelBox = (dropdownWidth: 'content' | 'at-least-trigger', pos: PanelPos) =>
-  dropdownWidth === 'content'
-    ? { right: pos.right, width: 'max-content', maxWidth: '90vw' }
-    : {
-        left: pos.left,
-        width: 'max-content',
-        // min() because a min-width beats a max-width: the floor must never exceed the ceiling.
-        minWidth: `min(${pos.width}px, 100vw - ${pos.left}px - ${SCREEN_GUTTER})`,
-        maxWidth: `calc(100vw - ${pos.left}px - ${SCREEN_GUTTER})`,
-      }
-
-// The box metrics of ONE dropdown option row, shared by the real portaled rows and the hidden
-// width-mirror that triggerMatchesDropdown renders. The two MUST stay byte-identical here: the
-// mirror's only job is to report the panel's real rendered width back to the trigger, and it can
-// only do that honestly if its rows are padded, gapped and text-sized exactly like the live ones.
-// (Everything width-relevant lives in this string; the real row adds only the active/press visual
-// state, which changes no dimension.)
-const OPTION_ROW_BOX =
-  'w-full text-left rounded-xl pl-4 pr-4 py-3 text-[15px] flex items-center gap-2.5'
+// ★ ONE OPTION ROW, IN THE TWO SHAPES A LIST CAN ASK FOR (dropdownWidth). Everything about a row
+// that takes WIDTH is here and nowhere else — the box's classes and the ✓ column — because three
+// things draw a row and must agree to the pixel: the live portaled list, the hidden width-mirror
+// (triggerMatchesDropdown) that reports the list's width back to the trigger, and the hidden row
+// gauge ('match-trigger') that says what a row has room for while the list is closed.
+//   • 'content' — the mode selector. The list is as wide as its widest option (max-content, 90vw
+//     at most), and its trigger is pinned to that same width, so the row can afford to be roomy:
+//     1rem of padding each side, a 14px ✓ column, and a gap before the label.
+//   • 'match-trigger' — the two preset lists (the top bar's and the ⚙ menu's "Open in"). THE LIST
+//     IS EXACTLY ITS TRIGGER'S WIDTH, so a row's room for a name is whatever its own spacing leaves
+//     of that width — and a preset's name may be as long as the narrowest place it is shown
+//     (lib/presetNameWidth), so every pixel a row spends here is a pixel off every name. The roomy
+//     row above spent ~28px more than the trigger did, which is why a name that fit the button was
+//     cut short with "…" in the list under it. So this row is THE TRIGGER, MIRRORED: the trigger
+//     gives up a lane on its right to the ▲▼ (`pr-6`, 1.5rem) and a small inset on its left
+//     (`px-2.5`, 0.625rem), each plus its 1px border; the row gives up the same lane on its LEFT, to
+//     the ✓, and the same inset on its RIGHT. The list's own `p-1` (0.25rem a side) is part of both
+//     sums, which is where the two calc()s below come from:
+//         ✓ lane   0.25rem + (1.25rem + 1px)  =  1.5rem + 1px     (the trigger's ▲▼ lane + border)
+//         right    0.25rem + (0.375rem + 1px) =  0.625rem + 1px   (the trigger's inset + border)
+//     so a name has the SAME room in a row as in the button above it, at every root font size (the
+//     sums are in the trigger's own units). The ✓ sits centred in its lane, as the ▲▼ does in its.
+//     ⚠ The numbers are the top-bar switcher's trigger (components/PresetSwitcher's className);
+//     tests/presetSwitcher.dom holds the two together. "Open in" wears 2px more inset on its
+//     trigger, so its rows are 2px roomier than its button — and it is the wider control anyway.
+//     ⚠ THE TEXT TIER IS NOT BALANCED, on purpose: a row's 15px is larger than the trigger's
+//     text-sm at every root size up to 17.14px, so the same room holds slightly fewer characters in
+//     the list. Both lists in the bar keep one text size; lib/presetNameWidth measures a name
+//     against each place in that place's own font, and the narrower one governs.
+const OPTION_ROW = {
+  content: {
+    box: 'w-full text-left rounded-xl pl-4 pr-4 py-3 text-[15px] flex items-center gap-2.5',
+    checkWidth: '14px',
+    checkAlign: 'left',
+  },
+  'match-trigger': {
+    box: 'w-full text-left rounded-xl pr-[calc(0.375rem+1px)] py-3 text-[15px] flex items-center',
+    checkWidth: 'calc(1.25rem + 1px)',
+    checkAlign: 'center',
+  },
+} as const
+// What a row holds besides its box: the ✓ column and the label's cell. One component, so the live
+// list, the width-mirror, and the row gauge cannot drift apart.
+function OptionRowCells({
+  dropdownWidth,
+  checked,
+  children,
+}: {
+  dropdownWidth: keyof typeof OPTION_ROW
+  checked: boolean
+  children: ReactNode
+}) {
+  return (
+    <>
+      <span
+        style={{
+          display: 'inline-block',
+          // The reserved check column never changes width with the selection, so row indents never
+          // shift, and the ✓ glyph scales WITH the row's text tier (1em, so ~15px today) — a
+          // hardcoded 14px check would read wrong the moment the tier moves.
+          width: OPTION_ROW[dropdownWidth].checkWidth,
+          textAlign: OPTION_ROW[dropdownWidth].checkAlign,
+          color: '#1a1a1a',
+          fontSize: '1em',
+        }}
+      >
+        {checked ? '✓' : ''}
+      </span>
+      {/* min-w-0 flex-1 — added for the preset switcher's flexible name cell, and harmless for
+          every other caller (the mode selector's plain-text labels draw identically inside a wider
+          invisible box). This span is a FLEX ITEM of the row (blockified by being a direct child of
+          its `flex items-center`), so without flex-1 it stays content-sized — which is exactly
+          right for a caller whose label is plain text, and exactly wrong for one whose label is a
+          cell that needs to fill the row so its OWN children can fill IT in turn. `min-w-0` is the
+          same "let a truncating child shrink" fix as the trigger's own wrapper: without it a flex
+          item's content-based minimum can refuse to shrink at all.
+          ⚠ EVERY ROW GETS THE SAME TREATMENT: every option button is the same width (`w-full` of
+          one shared panel), so flex-1 stretches every row's label cell to that same shared width
+          regardless of that row's own text length — which is the width a long preset name
+          truncates against. */}
+      <span className="min-w-0 flex-1">
+        <InOpenListContext value={true}>{children}</InOpenListContext>
+      </span>
+    </>
+  )
+}
 // What joins the option VALUES into the one string an effect can depend on (the options array
 // itself is a new object every render). A value is a mode id or a preset number — never free text
 // — so a separator only has to be a character no value contains, and it is written as a visible
@@ -197,11 +242,14 @@ export default function CustomSelect({
   ariaLabel?: string
   wrapperRef?: RefObject<HTMLDivElement | null>
   showChevron?: boolean
-  // How the PORTALED PANEL is sized and which edge of the trigger it hangs from — panelBox, above,
-  // says both. 'content' (default) is the mode selector and must stay as it is (its dropdown's
-  // rendered width is not allowed to change); 'at-least-trigger' is the two preset lists. The
-  // trigger is measured on open and re-measured on resize / visualViewport / --bar-h.
-  dropdownWidth?: 'content' | 'at-least-trigger'
+  // How the PORTALED PANEL is sized, and the shape of its rows (OPTION_ROW, above). 'content'
+  // (default) — width:max-content, the panel is as wide as its widest option; this is the mode
+  // selector, and it must stay this way (its dropdown's rendered width is not allowed to change).
+  // 'match-trigger' — the panel is EXACTLY the trigger wrapper's live rendered width (measured on
+  // open, re-measured on resize / visualViewport / --bar-h, same as the panel position); this is
+  // the two preset lists, whose trigger fills the space its row leaves it, so the list is that
+  // same column and can never reach over a neighbour (the Mode button, in the bar).
+  dropdownWidth?: keyof typeof OPTION_ROW
   // Widen the trigger BUTTON to exactly its own dropdown's outer width, WITHOUT changing the
   // dropdown. The mode selector wants this: its dropdown rows use a bigger text tier and more
   // padding than the trigger, so "both size to content" would never make them equal. A hidden
@@ -292,8 +340,8 @@ export default function CustomSelect({
     // above catches any width change that causes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerMatchesDropdown, options.map((o) => o.value).join(OPTION_VALUE_SEPARATOR)])
-  // measurePanel reads the trigger's current viewport rect and writes panelPos: both side edges
-  // and its width, and the top, 6px below it. Called on open, on resize / visualViewport change, and
+  // measurePanel reads the trigger's current viewport rect and writes panelPos: right edge
+  // aligned to the trigger, 6px below it, and the trigger's width. Called on open, on resize / visualViewport change, and
   // when --bar-h moves the bar the trigger sits in — and on NOTHING else, in particular never on
   // a scroll (see the effect below).
   // Plain function (no useCallback): it reads ref.current, which a manual dep array can't
@@ -328,7 +376,7 @@ export default function CustomSelect({
     // 400 scrolled, −1494px at 1500) and needed a reposition per scroll event, while the fixed one
     // holds its exact 6px gap at every offset with ZERO reposition calls — and app mode is
     // pixel-identical either way, since scrollY was always 0 there.
-    setPanelPos({ left: rect.left, right, top: rect.bottom + 6, width: rect.width })
+    setPanelPos({ right, top: rect.bottom + 6, width: rect.width })
   }
   // Toggle handler. On the way OPEN it measures where the panel goes — the one thing that can only
   // be decided at that instant. Measurement only happens on open (close is cheap).
@@ -613,7 +661,7 @@ export default function CustomSelect({
         </span>
       </button>
       {/* The hidden width-mirror (triggerMatchesDropdown only). A faithful, out-of-flow copy
-          of the portaled panel — same p-1, same OPTION_ROW_BOX rows, same width:max-content /
+          of the portaled panel — same p-1, same OPTION_ROW rows, same width:max-content /
           maxWidth:90vw — so its rendered outer width equals the real dropdown's. It carries no
           role and is aria-hidden + visibility:hidden + pointer-events:none, so it is invisible to
           the user, to assistive tech, and to the suite's role queries (closed === zero options
@@ -637,20 +685,52 @@ export default function CustomSelect({
           {options.map((opt) => (
             <div
               key={`w-${opt.value}`}
-              className={OPTION_ROW_BOX}
+              className={OPTION_ROW.content.box}
               style={{ color: '#1a1a1a', whiteSpace: 'nowrap' }}
             >
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: '14px',
-                  color: '#1a1a1a',
-                  fontSize: '1em',
-                }}
-              >
-                ✓
-              </span>
-              <span className="min-w-0 flex-1">{opt.label}</span>
+              <OptionRowCells dropdownWidth="content" checked>
+                {opt.label}
+              </OptionRowCells>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* THE HIDDEN ROW GAUGE ('match-trigger' only) — the list, laid out at the trigger's width
+          while it is closed, so that what a row has room for can be MEASURED without opening it.
+          lib/presetNameWidth reads the preset name cells in here to learn how long a name may be:
+          the list is where a name has the least room, and a limit taken from the button alone let
+          through names the list then cut short. It is this wrapper's own width (which is the
+          trigger's, and so the panel's), the list's own `p-1`, and the very rows the list draws
+          (OPTION_ROW + OptionRowCells), so it cannot disagree with the open list. Out of flow,
+          zero-height and clipped, so however many options there are it adds nothing to any
+          scroller's extent (the ⚙ menu's, for "Open in"); no role, aria-hidden, visibility:hidden,
+          pointer-events:none — invisible to the user, to assistive tech, and to role queries. */}
+      {dropdownWidth === 'match-trigger' && (
+        <div
+          aria-hidden="true"
+          data-select-row-gauge
+          className="p-1"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: '100%',
+            height: 0,
+            overflow: 'hidden',
+            visibility: 'hidden',
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          {options.map((opt) => (
+            <div
+              key={`g-${opt.value}`}
+              className={OPTION_ROW[dropdownWidth].box}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <OptionRowCells dropdownWidth={dropdownWidth} checked={false}>
+                {opt.label}
+              </OptionRowCells>
             </div>
           ))}
         </div>
@@ -682,13 +762,19 @@ export default function CustomSelect({
             // is above #root) — harmless here, since the panel is sized to sit on screen.
             style={{
               position: 'fixed',
-              ...panelBox(dropdownWidth, panelPos),
+              right: panelPos.right,
               top: panelPos.top,
               zIndex: 60,
               background: 'rgba(245,245,247,0.50)',
               WebkitBackdropFilter: 'blur(28px) saturate(120%)',
               backdropFilter: 'blur(28px) saturate(120%)',
               boxShadow: '0 6px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.05)',
+              // 'content' (the mode selector, default) keeps its max-content sizing, clamped to
+              // 90vw; 'match-trigger' (the preset lists) is the trigger wrapper's live width from
+              // measurePanel, to the pixel — the same column as the button it hangs from.
+              ...(dropdownWidth === 'match-trigger'
+                ? { width: `${panelPos.width}px` }
+                : { width: 'max-content', maxWidth: '90vw' }),
               // Round 23: never taller than the room between the panel's top and the bottom of
               // the viewable area, less the same 1rem cushion (and bottom safe area) the ⚙ panel
               // keeps — a longer list scrolls inside (listRef, above). CSS rather than a measured
@@ -722,38 +808,12 @@ export default function CustomSelect({
                     onChange(opt.value)
                     closeAndFocus()
                   }}
-                  className={`${OPTION_ROW_BOX} ${i === activeIdx ? 'bg-black/10' : 'cs-option-press'}`}
+                  className={`${OPTION_ROW[dropdownWidth].box} ${i === activeIdx ? 'bg-black/10' : 'cs-option-press'}`}
                   style={{ color: '#1a1a1a', whiteSpace: 'nowrap' }}
                 >
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      // The reserved check column stays a fixed 14px so row indents never shift,
-                      // but the ✓ glyph scales WITH the row's text tier (1em, so ~15px today) —
-                      // a hardcoded 14px check would read wrong the moment the tier moves.
-                      width: '14px',
-                      color: '#1a1a1a',
-                      fontSize: '1em',
-                    }}
-                  >
-                    {opt.value === value ? '✓' : ''}
-                  </span>
-                  {/* min-w-0 flex-1 — added for the preset switcher's flexible name cell, and
-                    harmless for every other caller (the mode selector's plain-text labels draw
-                    identically inside a wider invisible box). This span is a FLEX ITEM of the row
-                    above (blockified by being a direct child of `flex items-center gap-2.5`), so
-                    without flex-1 it stays content-sized — which is exactly right for a caller
-                    whose label is plain text, and exactly wrong for one whose label is a cell that
-                    needs to fill the row so its OWN children can fill IT in turn. `min-w-0` is the
-                    same "let a truncating child shrink" fix as the trigger's own wrapper: without
-                    it a flex item's content-based minimum can refuse to shrink at all.
-                    ⚠ EVERY ROW GETS THE SAME TREATMENT: every option button is the same width
-                    (`w-full` of one shared panel), so flex-1 stretches every row's label cell to
-                    that same shared width regardless of that row's own text length — which is the
-                    width a long preset name truncates against. */}
-                  <span className="min-w-0 flex-1">
-                    <InOpenListContext value={true}>{opt.label}</InOpenListContext>
-                  </span>
+                  <OptionRowCells dropdownWidth={dropdownWidth} checked={opt.value === value}>
+                    {opt.label}
+                  </OptionRowCells>
                 </button>
               ))}
             </div>

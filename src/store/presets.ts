@@ -151,8 +151,8 @@ export type PresetRegistryValues = {
 // truncate under ordinary conditions. Round 20 made that cell FLEXIBLE — it now grows with the top bar
 // (components/PresetSwitcher's PRESET_NAME_COL is a MINIMUM width today, not a fixed one) — and
 // put a LIVE, PIXEL-MEASURED cap on the one place a name is actually typed (the rename field,
-// components/PresetManager, measured against the switcher's own current rendered width — see
-// lib/presetNameWidth for the mechanism). That live cap is what answers "how many characters fit
+// components/PresetManager, measured against the room in every place a name is currently shown,
+// a row of the switcher's list included — see lib/presetNameWidth for the mechanism). That live cap is what answers "how many characters fit
 // right now", and it is a moving target by construction: the same name that fits a wide phone can
 // overflow a narrow one, and this constant cannot chase a number that changes per device.
 //
