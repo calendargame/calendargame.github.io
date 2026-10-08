@@ -104,10 +104,17 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // candidate against the LIVE room in every place a preset name is drawn — the top bar's control, a
 // row of its list, and "Open in" and its list, the narrowest governing (a real canvas measurement
 // against real DOM elements in another part of the tree entirely — see that file for the mechanism
-// and why it is not a React prop or a store) — and trims to the longest prefix that fits, exactly
-// the shape `maxLength` gives a paste. `nameWidthCapped` is what that trim sets, and it drives the
-// small WIDTH-language note below the field ("That's as long as this name can display.") rather
-// than a character count, because a character count is no longer the true reason.
+// and why it is not a React prop or a store) — and refuses what does not fit: a typed letter
+// outright, a paste down to as much of its start as fits, the shape `maxLength` gives one.
+// `nameWidthCapped` is what a refusal sets, and it drives the small WIDTH-language note below the
+// field ("That's as long as this name can display.") rather than a character count, because a
+// character count is no longer the true reason.
+// ★ ONCE A LETTER HAS BEEN REFUSED THE NAME IS FULL, AND NOTHING MORE GOES IN — not even a narrower
+// letter that would have fit, which is how typing "Weekend Mornings" once left "Weekend i" in the
+// box. The rule is the cap's (lib/presetNameWidth's `full`); what this component does is hand
+// `nameWidthCapped` back to it on the next edit. So the note and the refusal are ONE fact: nothing
+// can be added exactly while the note is showing, and both end together — on an edit that takes
+// something away and fits, on a commit, on a discard, on the field losing the keyboard.
 // ★ A NAME THAT IS ALREADY LONGER THAN THE ROOM IS LEFT ALONE. It can exist — made on a wider
 // screen, or under an older build's looser limit — and it stays stored exactly as it is, shown
 // shortened with "…" wherever it does not fit and whole in this field. Editing it never cuts it
@@ -388,15 +395,36 @@ export default function PresetManager({
   // that is not — and the moment they can disagree, "which is the real name" has two answers. This
   // shape makes it unrepresentable: a row shows `editing.text` if it is THE row and `p.name`
   // otherwise, so a preset that is not being typed into can only ever show what is saved.
-  const [editing, setEditing] = useState<{ id: number; text: string } | null>(null)
+  // ★ `composingFrom` IS SET ONLY WHILE AN INPUT METHOD IS COMPOSING (Japanese, Chinese, Korean,
+  // a phone's dictation or swipe keyboard on some platforms), and it is the text the field held
+  // when the composition began. A composition is one edit that arrives in pieces, and the pieces
+  // are the keyboard's, not the player's: refusing or trimming one mid-way writes back into a box
+  // the input method is still drawing in, which cancels or garbles what is being composed. So the
+  // pieces are shown as they come and the WHOLE composition is put to the width cap once, when it
+  // ends, against the text it started from. It lives in this object so that it cannot outlive the
+  // edit: whatever clears `editing` clears it.
+  const [editing, setEditing] = useState<{
+    id: number
+    text: string
+    composingFrom?: string
+  } | null>(null)
   const editingText = (id: number, name: string) => (editing?.id === id ? editing.text : name)
 
-  // ★ WHETHER THE MOST RECENT KEYSTROKE HAD TO BE TRIMMED, for the width-language note beside the
-  // field (below). One flag, not one per row, for the identical reason `editing` itself is one
-  // value: only one field can hold the keyboard, so only one field can ever be the one this is
-  // about. Reset wherever `editing` itself resets — a fresh row, a commit, a discard — so the note
-  // can never survive past the field it was about.
+  // ★ WHETHER THE MOST RECENT EDIT HAD TO BE REFUSED — the name is full. It shows the
+  // width-language note beside the field (below), and it is handed back to the width cap on the
+  // next edit, which refuses every further insertion while it is set (the ★ note above this
+  // component). One flag, not one per row, for the identical reason `editing` itself is one value:
+  // only one field can hold the keyboard, so only one field can ever be the one this is about.
+  // Reset wherever `editing` itself resets — a commit (which is also every blur), a discard — so
+  // neither the note nor the refusal can survive past the field it was about.
   const [nameWidthCapped, setNameWidthCapped] = useState(false)
+  // Put one finished edit to the width cap and show what it answers. `previous` is what the field
+  // held before the edit.
+  const applyNameEdit = (id: number, candidate: string, previous: string) => {
+    const { text, capped } = capCandidateToNameRoom(candidate, previous, nameWidthCapped)
+    setEditing({ id, text })
+    setNameWidthCapped(capped)
+  }
 
   // The delete confirmation's subject, resolved from the id the caller holds. An ID and not the
   // preset object: the registry can be rewritten under this card (another row renamed, one moved),
@@ -477,7 +505,13 @@ export default function PresetManager({
   // pre-screen the text: one place decides what a name may be, and it is the store's.
   const commitRename = () => {
     if (!editing) return
-    renamePreset(editing.id, editing.text)
+    // A composition still open when the field is left has not been put to the width cap yet (see
+    // `composingFrom`), so it is now — nothing unjudged is ever saved.
+    const text =
+      editing.composingFrom === undefined
+        ? editing.text
+        : capCandidateToNameRoom(editing.text, editing.composingFrom, nameWidthCapped).text
+    renamePreset(editing.id, text)
     setEditing(null)
     setNameWidthCapped(false)
   }
@@ -1003,20 +1037,33 @@ export default function PresetManager({
                       if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
                     }}
                     onChange={(e) => {
+                      const current = editingText(p.id, p.name)
+                      // Mid-composition: show the piece, judge nothing (see `composingFrom`).
+                      if (editing?.id === p.id && editing.composingFrom !== undefined) {
+                        setEditing({ ...editing, text: e.target.value })
+                        return
+                      }
                       // lib/presetNameWidth — measures the candidate against the live room wherever a
                       // preset name is drawn (other, separately-mounted controls), not this field's own
-                      // room, and trims to the longest prefix that fits when it does not. The second
-                      // argument is what the field holds now, before this edit. See that file and the ★★
-                      // note above for the mechanism and why the cap moved here from a character count.
-                      const { text, capped } = capCandidateToNameRoom(
-                        e.target.value,
-                        editingText(p.id, p.name),
-                      )
-                      setEditing({ id: p.id, text })
-                      setNameWidthCapped(capped)
+                      // room, and refuses what does not fit. See that file and the ★★ note above for
+                      // the mechanism and why the cap moved here from a character count.
+                      applyNameEdit(p.id, e.target.value, current)
+                    }}
+                    onCompositionStart={() => {
+                      const current = editingText(p.id, p.name)
+                      setEditing({ id: p.id, text: current, composingFrom: current })
+                    }}
+                    onCompositionEnd={(e) => {
+                      if (editing?.id !== p.id || editing.composingFrom === undefined) return
+                      applyNameEdit(p.id, e.currentTarget.value, editing.composingFrom)
                     }}
                     onBlur={commitRename}
                     onKeyDown={(e) => {
+                      // A key pressed while an input method is composing belongs to the input method:
+                      // Enter there picks the composed text and Escape abandons it, and neither is a
+                      // verdict on the rename. (229 is the same statement from Safari, which ends the
+                      // composition before it reports the key.)
+                      if (e.nativeEvent.isComposing || e.keyCode === 229) return
                       if (e.key === 'Enter') {
                         e.preventDefault()
                         commitRename()
@@ -1096,7 +1143,7 @@ export default function PresetManager({
                   {/* THE WIDTH-CAP NOTE — WIDTH LANGUAGE, NEVER A CHARACTER COUNT, because a character
                 count is no longer the true reason a keystroke stopped landing (lib/presetNameWidth,
                 and the ★★ note above this component). Shown only for the row currently being typed
-                into, only while its most recent keystroke actually had to be trimmed — it disappears
+                into, only while its most recent edit actually had to be refused — it disappears
                 the moment a backspace brings the candidate back under budget, on the same `capped`
                 flag that trim reports. It takes the grid's second row, starting under the name box
                 (column 2) and running to the row's end. Same visual tier as the "cannot be deleted"

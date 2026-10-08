@@ -112,10 +112,11 @@ import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 //   ★ THE LIST IS MEASURED WHILE IT IS CLOSED: CustomSelect keeps a hidden copy of a
 //   'match-trigger' list laid out at the trigger's width (its row gauge), drawn by the same row
 //   code as the open list, and the name cells in it are found by the same hook.
-//   ★ AND A ROW GIVES A NAME THE SAME ROOM AS THE BUTTON DOES. A list row is this trigger mirrored
-//   (the ✓ takes on the left exactly what the ▲▼ take on the right — CustomSelect's OPTION_ROW has
-//   the arithmetic, against the `px-2.5 pr-6` + 1px border of the className below), so making the
-//   list the button's width costs a name no room; only the row's larger text does.
+//   ★ AND A ROW IS WHERE A NAME HAS THE LEAST ROOM. The list's rows are the ordinary dropdown rows,
+//   the same as the mode selector's — the owner's ruling: no special treatment for this list — and
+//   at the button's width a row spends more of it than the button does (the ✓ column, wider
+//   padding) on larger text. So the row is what decides how long a name may be, and a name that
+//   fits it fits the button with room to spare.
 //
 // ── WHAT A PRESET LIST SAYS OF AN AMNESIC PRESET ──────────────────────────────────────────────
 //

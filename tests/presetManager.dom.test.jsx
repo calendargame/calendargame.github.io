@@ -329,7 +329,11 @@ describe('renaming', () => {
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'weekend')
     // …with what the field held BEFORE the keystroke beside it: the saved name, on the first one.
-    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith('weekend', 'Preset 1')
+    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
+      'weekend',
+      'Preset 1',
+      false,
+    )
     // The field shows the FUNCTION's answer, not the raw keystroke — proving onChange trusts it
     // rather than mirroring the event value straight through.
     expect(nameBoxes()[0].value).toBe('WEEKEND')
@@ -347,9 +351,13 @@ describe('renaming', () => {
     }))
     focus(nameBoxes()[0])
     type(nameBoxes()[0], 'Weekend')
-    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith('Weekend', 'Preset 1')
+    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith(
+      'Weekend',
+      'Preset 1',
+      false,
+    )
     type(nameBoxes()[0], 'Weeks')
-    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith('Weeks', 'Week')
+    expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith('Weeks', 'Week', true)
   })
 
   it('focusing a name and leaving it never measures it, and saves it exactly as it was', () => {
@@ -365,6 +373,139 @@ describe('renaming', () => {
     enter(nameBoxes()[0])
     expect(presetNameWidth.capCandidateToNameRoom).not.toHaveBeenCalled()
     expect(registry().presets[0].name).toBe(stored)
+  })
+
+  // ★ ONCE A LETTER HAS BEEN REFUSED THE NAME IS FULL. The rule is the cap's own
+  // (tests/presetNameWidth.dom); what this component owes it is its last answer handed back as the
+  // third argument, and that answer dropped whenever the edit it belonged to is over — or a name
+  // would stay "full" into the next rename and refuse its first letter.
+  describe('the cap is told whether its last answer was a refusal, and never a stale one', () => {
+    const refuseOver = (n) =>
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((candidate) => ({
+        text: candidate.slice(0, n),
+        capped: candidate.length > n,
+      }))
+    const lastFull = () => presetNameWidth.capCandidateToNameRoom.mock.lastCall[2]
+
+    it('true on the edit after a refusal, false again after one that was not refused', () => {
+      openManager()
+      refuseOver(4)
+      focus(nameBoxes()[0])
+      type(nameBoxes()[0], 'Week')
+      expect(lastFull()).toBe(false)
+      type(nameBoxes()[0], 'Weeke') // refused
+      expect(lastFull()).toBe(false)
+      type(nameBoxes()[0], 'Weeki')
+      expect(lastFull()).toBe(true)
+      type(nameBoxes()[0], 'Wee') // a deletion, which the cap accepts
+      expect(lastFull()).toBe(true)
+      type(nameBoxes()[0], 'Weed')
+      expect(lastFull()).toBe(false)
+    })
+
+    it.each([
+      ['saved with Enter', (box) => enter(box)],
+      ['thrown away with Escape', (box) => escape(box)],
+      ['left by a blur', (box) => act(() => box.blur())],
+    ])('false on the first edit after a full name was %s', (_how, leave) => {
+      openManager()
+      refuseOver(4)
+      focus(nameBoxes()[0])
+      type(nameBoxes()[0], 'Weekend')
+      expect(capNote()).toBeTruthy()
+      leave(nameBoxes()[0])
+      focus(nameBoxes()[0])
+      type(nameBoxes()[0], 'Wed')
+      expect(lastFull()).toBe(false)
+    })
+  })
+
+  // ★ AN INPUT METHOD'S COMPOSITION IS ONE EDIT THAT ARRIVES IN PIECES. Refusing or trimming a
+  // piece writes back into a box the keyboard is still composing in, so the pieces are shown as
+  // they come and the whole composition is put to the cap once, when it ends, against the text it
+  // started from.
+  describe('a composition is judged once, when it ends', () => {
+    const composeStart = (box) => act(() => void fireEvent.compositionStart(box))
+    const composeEnd = (box) => act(() => void fireEvent.compositionEnd(box))
+
+    it('shows every piece as it comes, and asks the cap nothing until the end', () => {
+      openManager()
+      presetNameWidth.capCandidateToNameRoom.mockImplementation(() => ({
+        text: 'REFUSED',
+        capped: true,
+      }))
+      focus(nameBoxes()[0])
+      composeStart(nameBoxes()[0])
+      type(nameBoxes()[0], 'Preset 1k')
+      type(nameBoxes()[0], 'Preset 1か')
+      expect(nameBoxes()[0].value).toBe('Preset 1か')
+      expect(presetNameWidth.capCandidateToNameRoom).not.toHaveBeenCalled()
+      expect(capNote()).toBeNull()
+    })
+
+    it('at the end, the whole composition goes to the cap against the text it started from', () => {
+      openManager()
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
+        text: previous, // the cap refuses the lot
+        capped: true,
+      }))
+      focus(nameBoxes()[0])
+      composeStart(nameBoxes()[0])
+      type(nameBoxes()[0], 'Preset 1か')
+      type(nameBoxes()[0], 'Preset 1かな')
+      composeEnd(nameBoxes()[0])
+      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledTimes(1)
+      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
+        'Preset 1かな',
+        'Preset 1',
+        false,
+      )
+      expect(nameBoxes()[0].value).toBe('Preset 1')
+      expect(capNote()).toBeTruthy()
+      // …and ordinary typing is judged keystroke by keystroke again afterwards.
+      type(nameBoxes()[0], 'Preset 1!')
+      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenLastCalledWith(
+        'Preset 1!',
+        'Preset 1',
+        true,
+      )
+    })
+
+    it.each([
+      ['isComposing', { isComposing: true }],
+      ['key code 229', { keyCode: 229 }],
+    ])(
+      'Enter and Escape pressed to the input method (%s) neither save nor discard',
+      (_how, init) => {
+        openManager()
+        focus(nameBoxes()[0])
+        composeStart(nameBoxes()[0])
+        type(nameBoxes()[0], 'Preset 1かな')
+        act(() => void fireEvent.keyDown(nameBoxes()[0], { key: 'Enter', ...init }))
+        expect(registry().presets[0].name).toBe('Preset 1') // not saved
+        act(() => void fireEvent.keyDown(nameBoxes()[0], { key: 'Escape', ...init }))
+        expect(nameBoxes()[0].value).toBe('Preset 1かな') // not discarded
+        expect(document.activeElement).toBe(nameBoxes()[0])
+      },
+    )
+
+    it('a composition still open when the field is left is judged before it is saved', () => {
+      openManager()
+      presetNameWidth.capCandidateToNameRoom.mockImplementation((_candidate, previous) => ({
+        text: previous,
+        capped: true,
+      }))
+      focus(nameBoxes()[0])
+      composeStart(nameBoxes()[0])
+      type(nameBoxes()[0], 'Preset 1かな')
+      act(() => nameBoxes()[0].blur())
+      expect(presetNameWidth.capCandidateToNameRoom).toHaveBeenCalledWith(
+        'Preset 1かな',
+        'Preset 1',
+        false,
+      )
+      expect(registry().presets[0].name).toBe('Preset 1')
+    })
   })
 
   it('shows a WIDTH-language note exactly while the field is capped, never a character count', () => {

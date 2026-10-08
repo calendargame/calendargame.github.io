@@ -19,9 +19,8 @@ import { flushSync } from 'react-dom'
 // container (main.tsx appScrollRef / #appScroll) fills the viewport, so its scrollbar already
 // paints at the screen edge past the content wrapper's own px-4 — it takes the core without the
 // lane (its fades still come from scrollFadeClass). And since round 23 the option list inside
-// a dropdown's panel (components/CustomSelect): every option row carries its own side padding
-// (0.625rem at the least, with the list's inset), so the text already sits clear of an overlay
-// scrollbar, and a lane on top would also take the panel away from the hidden copies of it that
+// a dropdown's panel (components/CustomSelect): every option row carries its own 1rem of side
+// padding, so the text already sits clear of an overlay scrollbar, and a lane on top would also take the panel away from the hidden copies of it that
 // must match it to the pixel (its width-mirror and its row gauge). Since round 13 that container is
 // the WHOLE app: How to Play used to scroll the document instead and was exempt from this file
 // entirely, and it is now governed code like everything else. tests/scrollRegionGuard.test.js

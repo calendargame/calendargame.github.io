@@ -16,9 +16,10 @@ import { PRESET_NAME_COL, PRESET_NAME_CELL_SELECTOR } from '../components/Preset
 // refusing a keystroke, just width-based instead of count-based.
 //   ⚠ IT USED TO MEASURE THE TOP-BAR BUTTON ALONE, and that was the defect: a list row had less
 //   room than the button (and larger text), so a name the button showed whole was cut short with
-//   "…" in the list under it. A row now gives a name the same room as the button
-//   (components/CustomSelect's OPTION_ROW), and it is measured as its own place regardless — the
-//   row's text is the larger of the two at most screen sizes, so the row is usually what governs.
+//   "…" in the list under it. The list is exactly the button's width and its rows are the
+//   ordinary dropdown rows (the ✓ column, their own padding, larger text), so a row is the
+//   narrowest place a name is shown and is what governs — measured, not assumed: every place is
+//   asked, each in its own font.
 //
 // ★ WHY THIS FILE, AND WHY THE SPLIT INSIDE IT. Two things live here that would otherwise have to
 // live inside components/PresetManager, and both are worth pulling out for the same reason
@@ -162,17 +163,44 @@ export function fitTextToRooms(text: string, rooms: readonly NameRoom[]): string
   return fitted
 }
 
+// ── WHAT KIND OF EDIT THIS IS ─────────────────────────────────────────────────────────────────
+//
+// An INSERTION is an edit that only adds: the text as it was, whole and in order, with one run of
+// new characters put in somewhere — a typed letter, a paste at the cursor. Everything else (a
+// deletion, a selection typed or pasted over) takes something away. The cap treats the two
+// differently, twice over (capCandidateToNameRoom), so the question is asked in one place. `null`
+// when the edit is not an insertion.
+interface Insertion {
+  head: string
+  inserted: string
+  tail: string
+}
+const asInsertion = (previous: string, candidate: string): Insertion | null => {
+  if (candidate.length <= previous.length) return null
+  let head = 0
+  while (head < previous.length && previous[head] === candidate[head]) head++
+  const tail = previous.length - head
+  if (tail > 0 && previous.slice(head) !== candidate.slice(-tail)) return null
+  return {
+    head: candidate.slice(0, head),
+    inserted: candidate.slice(head, candidate.length - tail),
+    tail: candidate.slice(candidate.length - tail),
+  }
+}
+
 export interface CandidateResult {
-  /** What the field should show — `candidate` unchanged if it fit, its longest fitting prefix if not. */
+  /** What the field should show — `candidate` unchanged if it fit, and otherwise as much of the
+   *  edit as fits (none of it, for a single keystroke). */
   text: string
-  /** Whether anything had to be cut. Drives the width-language rejection note in PresetManager. */
+  /** Whether anything had to be refused. The field hands it back as `full` on its next edit, and
+   *  it drives the width-language note in PresetManager. */
   capped: boolean
 }
 
 /**
- * The one call components/PresetManager's rename field makes on every keystroke: reads the live
- * room in every place a name is drawn (falling back to the safe minimum above when none can be
- * measured), measures the candidate against each, and returns what the field should actually show.
+ * The one call components/PresetManager's rename field makes on every edit: reads the live room in
+ * every place a name is drawn (falling back to the safe minimum above when none can be measured),
+ * measures the candidate against each, and returns what the field should actually show.
  *
  * ★ `previous` IS WHAT THE FIELD HELD BEFORE THIS EDIT, AND IT IS WHY A NAME THAT IS ALREADY TOO
  * LONG IS NEVER CUT FOR BEING TOUCHED. A stored name can be wider than today's room — it was made
@@ -183,8 +211,31 @@ export interface CandidateResult {
  * never touched. So in each place the limit is the room OR the width the name already had there,
  * whichever is larger: an edit may shorten an over-long name, or keep its width, and is refused
  * only for making it wider than both.
+ *
+ * ★ `full` IS THIS FUNCTION'S OWN LAST `capped`, HANDED BACK, AND IT IS WHY A REFUSED LETTER IS
+ * NOT FOLLOWED BY A NARROWER ONE THAT SLIPS IN. Width decides what fits, and letters are not one
+ * width: with room for "Weekend " and no room for the "M" after it, the "i" four letters later
+ * does fit, and typing "Weekend Mornings" used to leave "Weekend i" in the box. So once an
+ * insertion has been refused the name is FULL, and every further insertion is refused whatever its
+ * width, until an edit takes something away — a deletion, or a selection typed or pasted over,
+ * which is measured as usual and, if it fits, is no longer full. The caller keeps the flag beside
+ * the pending text and drops both together (a commit, a discard, the field losing the keyboard),
+ * so there is nothing here to get stuck: this function remembers nothing between calls.
+ *
+ * ★ AN INSERTION THAT DOES NOT FIT LOSES ITS OWN END, NEVER THE NAME'S. A single typed letter is
+ * refused outright, wherever the cursor is; a paste keeps as many of its leading characters as fit,
+ * where it was pasted, and the text after the cursor is left alone — what a native `maxLength`
+ * does. (Trimming the whole candidate from its end, as this used to, dropped the last letter of
+ * the name to make room for one typed in the middle.) An edit that is not an insertion has no
+ * "what was added" to trim, and is cut to its longest prefix that fits.
  */
-export function capCandidateToNameRoom(candidate: string, previous: string): CandidateResult {
+export function capCandidateToNameRoom(
+  candidate: string,
+  previous: string,
+  full: boolean,
+): CandidateResult {
+  const insertion = asInsertion(previous, candidate)
+  if (full && insertion) return { text: previous, capped: true }
   const measured = readNameRooms()
   const rooms = (
     measured.length > 0 ? measured : [{ font: FALLBACK_FONT, widthPx: FALLBACK_BUDGET_PX }]
@@ -193,5 +244,11 @@ export function capCandidateToNameRoom(candidate: string, previous: string): Can
     widthPx: Math.max(room.widthPx, measureTextWidthPx(previous, room.font)),
   }))
   if (fitsEveryRoom(candidate, rooms)) return { text: candidate, capped: false }
-  return { text: fitTextToRooms(candidate, rooms), capped: true }
+  if (!insertion) return { text: fitTextToRooms(candidate, rooms), capped: true }
+  const { head, tail } = insertion
+  let { inserted } = insertion
+  while (inserted.length > 0 && !fitsEveryRoom(head + inserted + tail, rooms)) {
+    inserted = inserted.slice(0, -1)
+  }
+  return { text: head + inserted + tail, capped: true }
 }

@@ -305,56 +305,6 @@ describe('the control must not size itself to its longest option', () => {
     expect(found).toHaveLength(6)
   })
 
-  // ★ THE TOP BAR'S WIDTH RULE, THE HALF THAT IS ARITHMETIC. The list is exactly this control's
-  // width, so the room a row leaves a name decides how long a name may be — and a row is built to
-  // leave it EXACTLY the room the control itself does, by being the control mirrored: the ✓ takes
-  // on the left what the ▲▼ take on the right, and the right inset is the control's left one. jsdom
-  // cannot lay either out, so the two sums are computed here from the classes and styles that
-  // produce them. If the control's padding or the row's ever changes alone, this is what notices.
-  it('a list row leaves a name exactly the room the control does, at every root font size', () => {
-    mount()
-    openMenu()
-    // Each length as { rem, px }, so equality holds whatever a rem is worth on the device.
-    const SPACING = { 'px-2.5': 0.625, 'pr-6': 1.5, 'p-1': 0.25 }
-    const lengthOf = (text) => ({
-      rem: Number(/([\d.]+)rem/.exec(text)?.[1] ?? 0),
-      px: Number(/([\d.]+)px/.exec(text)?.[1] ?? 0),
-    })
-    const sum = (...parts) =>
-      parts.reduce((a, b) => ({ rem: a.rem + b.rem, px: a.px + b.px }), { rem: 0, px: 0 })
-    const rem = (n) => ({ rem: n, px: 0 })
-    const classesOf = (el) => el.className.split(/\s+/)
-
-    // THE CONTROL: a 1px border (`panel`), `px-2.5` on the left, and `pr-6` on the right for the ▲▼.
-    const control = classesOf(trigger())
-    for (const c of ['panel', 'px-2.5', 'pr-6']) expect(control).toContain(c)
-    const BORDER = { rem: 0, px: 1 }
-    const controlLeft = sum(BORDER, rem(SPACING['px-2.5']))
-    const controlRight = sum(BORDER, rem(SPACING['pr-6']))
-
-    // A ROW: the list's own inset (`p-1`) on both sides; on the left the ✓ lane and nothing else
-    // (no left padding, no gap); on the right the row's own padding.
-    const row = options()[0]
-    const list = row.parentElement
-    expect(classesOf(list)).toContain('p-1')
-    const rowClasses = classesOf(row)
-    expect(rowClasses.filter((c) => /^(p[lxse]?|gap(-x)?|m[lxse]?)-/.test(c))).toEqual([])
-    const rowPr = rowClasses.filter((c) => c.startsWith('pr-'))
-    expect(rowPr).toHaveLength(1)
-    const checkLane = row.firstElementChild
-    const rowLeft = sum(rem(SPACING['p-1']), lengthOf(checkLane.style.width))
-    const rowRight = sum(rem(SPACING['p-1']), lengthOf(rowPr[0]))
-
-    // Mirrored: the row's left is the control's right, and the row's right is the control's left.
-    expect(rowLeft).toEqual(controlRight)
-    expect(rowRight).toEqual(controlLeft)
-    // …so what is left for the name is the same in both, whatever the width they share.
-    expect(sum(rowLeft, rowRight)).toEqual(sum(controlLeft, controlRight))
-    // The row's name cell has nothing of its own between the row and the name.
-    const cell = nameCell(optionWrapper(row))
-    expect(classesOf(cell).filter((c) => /^(p|m|gap|w|max-w|min-w)[a-z]?-/.test(c))).toEqual([])
-  })
-
   it('puts `truncate` on the NAME rather than on the cell', () => {
     // A flex container's own text-overflow never fires — the ellipsis rule applies to a block box's
     // inline content, and this cell's children are flex items. On the cell it would clip with no

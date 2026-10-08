@@ -509,35 +509,29 @@ describe('CustomSelect — width props', () => {
     expect(panel().style.left).toBe('')
   })
 
-  // A list the width of its trigger has only the room its own rows leave a label, so the rows of
-  // a 'match-trigger' list are the trigger MIRRORED — the ✓ takes a lane on the left the size of
-  // the trigger's ▲▼ lane on the right, and the right inset is the trigger's left one — where a
-  // 'content' list, which sizes itself, keeps its roomier row. (The arithmetic against the real
-  // top-bar trigger is tests/presetSwitcher.dom's.)
-  it("a 'match-trigger' row is the compact, mirrored one; a 'content' row is unchanged", () => {
-    const { unmount } = mountBare({ dropdownWidth: 'match-trigger' })
-    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
-    const compact = screen.getAllByRole('option')[0]
-    const compactClasses = compact.className.split(/\s+/)
-    expect(compactClasses).toContain('pr-[calc(0.375rem+1px)]')
-    expect(compactClasses).toContain('text-[15px]')
-    for (const roomy of ['pl-4', 'pr-4', 'gap-2.5']) expect(compactClasses).not.toContain(roomy)
-    // (jsdom re-orders a calc()'s terms, so the lane is read as its two terms, not as one string.)
-    const lane = compact.firstElementChild.style.width
-    expect(lane).toMatch(/^calc\(.*\)$/)
-    for (const term of ['1.25rem', '1px']) expect(lane).toContain(term)
-    expect(compact.firstElementChild.style.textAlign).toBe('center')
-    unmount()
-    document.getElementById('root').remove()
-
-    mountBare({})
-    fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
-    const roomy = screen.getAllByRole('option')[0]
-    for (const c of ['text-[15px]', 'pl-4', 'pr-4', 'gap-2.5', 'flex']) {
-      expect(roomy.className.split(/\s+/)).toContain(c)
+  // ONE ROW SHAPE, IN EVERY LIST (the owner's ruling: no special treatment for the preset list).
+  // A list the width of its trigger is still drawn with the ordinary row — the same box, the same
+  // 14px ✓ column — as a list that sizes itself.
+  it("a 'match-trigger' list draws the same row as a 'content' list", () => {
+    const rowOf = (props) => {
+      const { unmount } = mountBare(props)
+      fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+      const row = screen.getAllByRole('option')[0]
+      const shape = {
+        box: row.className,
+        check: row.children[0].getAttribute('style'),
+        label: row.children[1].className,
+      }
+      unmount()
+      document.getElementById('root').remove()
+      return shape
     }
-    expect(roomy.firstElementChild.style.width).toBe('14px')
-    expect(roomy.firstElementChild.style.textAlign).toBe('left')
+    const content = rowOf({})
+    expect(rowOf({ dropdownWidth: 'match-trigger' })).toEqual(content)
+    for (const c of ['text-[15px]', 'pl-4', 'pr-4', 'gap-2.5', 'flex']) {
+      expect(content.box.split(/\s+/)).toContain(c)
+    }
+    expect(content.check).toContain('width: 14px')
   })
 
   // What a row of a closed list has room for has to be measurable (lib/presetNameWidth limits a
