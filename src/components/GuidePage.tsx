@@ -1513,12 +1513,15 @@ export default function GuidePage({
           its clearPresetStorage, which is derived from store/presets' PRESET_STORE_KEYS; which
           presets skip the confirmation entirely = that file's isPresetFactory, whose comment
           also argues the one entry of clearPresetStorage it deliberately does not count; the screen
-          clear = main.tsx's registry subscription calling remountScreens; the live typing cap that
-          replaced the old fixed character count (round 20) = lib/presetNameWidth, measured
+          clear = main.tsx's registry subscription calling remountScreens; a name of any length =
+          store/presets' normalizePresetName (it trims, and names an empty one — nothing else);
+          whether a name is cut short, and the note that says so = lib/presetNameWidth, measured
           against every cell components/PresetSwitcher's PresetOptionLabel draws (the control, a row
-          of its list, and Open in's), the list being exactly its control's width =
-          components/CustomSelect's 'match-trigger'; store/presets' MAX_PRESET_NAME is
-          now a separate, more generous backstop for a name this app never watched get typed. */}
+          of its list, and Open in's); the short form of a ready-made name = store/presets'
+          shortStockName, drawn by PresetOptionLabel on lib/presetNameWidth's stockNamesAreCut; how
+          much of a very long name is drawn or quoted = lib/presetNameText; a name the device has
+          no room for = store/presetControl's renamePreset ('no-room'); the list being exactly its
+          control's width = components/CustomSelect's 'match-trigger'. */}
       <GuideSection
         id="presets"
         title="Presets"
@@ -1588,13 +1591,23 @@ export default function GuidePage({
             The mode selector is exactly as wide as its longest mode name needs, and this control
             fills the rest of the bar. Its list is exactly as wide as the control — one column under
             it, never reaching across the mode selector — and the same goes for the ⚙ menu&apos;s{' '}
-            <b>Open in</b> list. A row of the list is where a name has the least room — the row
-            keeps its ✓ column and its own spacing, like every list here — and a name can only be
-            made as long as fits there (see <b>Rename</b> below), so a name is shown in full
-            everywhere. The one exception is a name that is already longer than that — one made on a
-            wider screen than the one you are holding, or a ready-made name like &quot;Preset
-            1&quot; on a very narrow phone. It is kept exactly as it is, and shown cut short with an
-            … wherever it does not fit.
+            <b>Open in</b> list. A name can be any length (see <b>Rename</b> below), so it does not
+            always fit: where it does not, it is shown on one line, cut short with an …, and nothing
+            gets wider to make room for it. A row of the list is where a name has the least room —
+            the row keeps its ✓ column and its own spacing, like every list here — so a name can be
+            whole on the control and cut short in the list under it.
+          </li>
+          <li>
+            A ready-made name — &quot;Preset 1&quot;, &quot;Preset 2&quot;, and so on, or a name you
+            typed that reads exactly like one — is shown in a short form, &quot;P1&quot;,
+            &quot;P2&quot;, where it would otherwise be cut. It is all or none: if any one of those
+            names would be cut in any of these four places — the control, its list, <b>Open in</b>,
+            and its list — every one of them is shown short in all four, so the control and its list
+            always match and a list never reads &quot;Preset 1&quot; above &quot;P10&quot;. On a
+            very narrow phone that is how a new app starts. Give it more room — a wider window, the
+            phone turned — and the full names come back by themselves. Only what is shown changes:
+            the name is still &quot;Preset 1&quot; in its box in Manage Presets, in every sentence
+            that names it, and to a screen reader.
           </li>
         </UL>
         <Subhead>Making and managing them</Subhead>
@@ -1614,15 +1627,21 @@ export default function GuidePage({
           <li>
             <b>Rename</b> — the name in each row is a box; tap it and it is all selected, so you can
             just type. <Kbd>Enter</Kbd> or tapping away keeps the new name, <Kbd>Esc</Kbd> throws it
-            away. Typing stops taking new characters only when the next one would be cut off in a
-            row of the top-left list — the room after the row&apos;s ✓, at the width of the control.
-            That limit moves with the screen, not with a fixed character count, so how many letters
-            fit can differ by device. Once a letter has been turned away the name is full: nothing
-            more can be added, not even a narrower letter, until you delete something or type over a
-            selection. A paste that is too long keeps as much of its start as fits. A name that is
-            already longer than the limit is never shortened for you: it stays as it is, and you can
-            still edit it, as long as the edit does not make it wider. Leave a name blank and it
-            goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on.
+            away. A name can be as long as you like: nothing you type or paste is turned away or
+            changed, apart from the spaces at its two ends, which are dropped when it is kept. While
+            what you have typed would not fit somewhere it is shown, a note under the box says so —
+            &quot;Some places will show this name cut short.&quot; It appears at the exact character
+            that stops fitting in the tightest of those places (usually a row of the top-left list)
+            and goes as soon as the name fits again; it is also there when you tap into a name that
+            is already too long. How much fits depends on the screen, so the same name can be whole
+            on one device and cut short on another, and the note follows if you turn the phone while
+            the box is open. A ready-made name only gets the note where even its short form
+            (&quot;P1&quot;) would be cut. A very long name — a pasted page, say — is kept whole in
+            its box and shown by its beginning everywhere else. Two presets can have the same name.
+            Leave a name blank and it goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and
+            so on. If the device has no room left to save a name, it is not changed: the box goes
+            back to the name it had, and a note under it says &quot;This device has no room to save
+            that name, so it was not changed.&quot;
           </li>
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to
@@ -2302,7 +2321,8 @@ export default function GuidePage({
             forgets reads its name followed by what it is — &quot;amnesic&quot; for one on Full,
             &quot;amnesic, stats only&quot; for one on Stats Only — in the list and in the bar
             alike. Nothing is drawn there for it, so this is where that fact is said. The same words
-            follow the names in the ⚙ menu&apos;s <b>Open in</b> list.
+            follow the names in the ⚙ menu&apos;s <b>Open in</b> list. A ready-made name shown as
+            &quot;P1&quot; is still read &quot;Preset 1&quot; in all of them.
           </li>
           <li>
             Inside <b>Manage Presets</b>, each row&apos;s name box is called Preset name — the name
@@ -2317,7 +2337,9 @@ export default function GuidePage({
             than left to right, so the first thing the keyboard reaches in this popup is a name and
             never a delete. The reorder handle has no box of its own, so the outline described under
             Panels and popups below is the only thing that shows the keyboard is on it; ↑ and ↓ move
-            the preset from there.
+            the preset from there. The note that can appear under a name box — that the name will be
+            shown cut short, or that the device had no room to save it — is read out once when it
+            appears, after whatever is being read, and not again while it stays.
           </li>
           <li>
             In the seven-dot answer layout every dot carries its weekday name, so the dots offer the
@@ -3212,14 +3234,18 @@ export default function GuidePage({
           smaller than a tenth of a percent reads &quot;&lt;0.1%&quot;, never &quot;0.0%&quot;. Tap
           the line to see what is using the room — the solve times of each mode that saves them (
           {modeList('classic', 'deduction', 'flash')}; Deduction&apos;s three puzzle types
-          separately), the Lookup history, each preset&apos;s other data — each with its own share
-          of the room beside it, written the same way. The list is largest first; anything holding
-          1% or more is named, and so are the largest few however little they hold — though never
-          something with nothing in it, such as a mode you have not played — with whatever is left
-          gathered into one last line, &quot;Everything else&quot;. Under it is what you can clear
-          to get some room back: <b>Clear History</b> in Lookup, deleting a preset you no longer
-          use, and <b>Reset Stats</b> in a mode — that last one only while the preset&apos;s Amnesic
-          is <b>Off</b>. On Stats Only or Full, Reset Stats clears that session&apos;s numbers and
+          separately), the Lookup history, each preset&apos;s other data, and the names of your
+          presets together (a name can be any length, so a very long one takes real room) — each
+          with its own share of the room beside it, written the same way. The list is largest first;
+          anything holding 1% or more is named, and so are the largest few however little they hold
+          — though never something with nothing in it, such as a mode you have not played — with
+          whatever is left gathered into one last line, &quot;Everything else&quot;. Under it is
+          what you can clear to get some room back: <b>Clear History</b> in Lookup, deleting a
+          preset you no longer use, and <b>Reset Stats</b> in a mode — that last one only while the
+          preset&apos;s Amnesic is <b>Off</b>. Shortening your preset names is suggested there too,
+          first in the list, but only when it would be enough on its own: the warning below is on,
+          and the names are long enough that shortening them alone would end it. Otherwise names are
+          not mentioned. On Stats Only or Full, Reset Stats clears that session&apos;s numbers and
           leaves the saved solve times where they are, so it makes no room; the popup says so there
           instead of offering it, and says what does (set Amnesic to Off first, then Reset Stats).
         </p>

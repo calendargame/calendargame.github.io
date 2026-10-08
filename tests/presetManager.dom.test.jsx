@@ -103,8 +103,8 @@ const ROW_ACTION_NAMES = {
 const rowButton = (name, action) =>
   within(rowOf(name)).getByRole('button', { name: ROW_ACTION_NAMES[action](name) })
 // The reorder handle. Its accessible name carries the row's CURRENT POSITION (components/
-// PresetManager's own reasoning: with no aria-live anywhere in this app, a changed name on a still-
-// FOCUSED element is what a screen reader announces after a keyboard move), so — unlike Delete — it
+// PresetManager's own reasoning: a changed name on a still-FOCUSED element is what a screen reader
+// announces after a keyboard move, with nothing else to wire), so — unlike Delete — it
 // cannot be looked up by a fixed string: this matches the stable "Reorder NAME, position " prefix and
 // leaves the trailing "N of M" free to change out from under a test that just reordered the list.
 const reorderHandle = (name) =>
@@ -687,9 +687,9 @@ describe('reordering', () => {
     })
 
     // ★★ THE ONE PIECE OF THE ACCESSIBILITY STORY THAT SILENTLY FAILS IF WRONG (the brief's own
-    // words) — this app uses NO aria-live anywhere (SettingsPanel's Check-for-updates button
-    // argues why), so the new position is announced ONLY if the SAME element stays focused across
-    // the re-render that follows a move. Proved here, not assumed: focus a handle, move it, and
+    // words) — a move is announced by the handle's own changed name and by nothing else (the
+    // card's one live region is for the notes under a name box), so the new position is heard
+    // ONLY if the SAME element stays focused across the re-render that follows a move. Proved here, not assumed: focus a handle, move it, and
     // check document.activeElement is the handle for that SAME preset at its NEW position — not
     // merely "a handle", and not <body>.
     it('focus survives a keyboard reorder onto the SAME preset`s handle at its new position', () => {
