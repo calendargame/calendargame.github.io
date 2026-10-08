@@ -1,7 +1,7 @@
 import type { BlitzBest } from '../store/progress.js'
 import { isNewBest } from '../engine/roundId.js'
 import { NewBestStar } from './primitives.jsx'
-import { BEST_COLUMN_CLASS } from './BestReadout.jsx'
+import { BestColumn } from './BestReadout.jsx'
 
 // BlitzBestRow — the two-field Best Score / Best Streak row with ★ new-best flags and the
 // Same Round / Different Rounds tag, shared by the two BlitzBest-shaped records: per-round
@@ -17,14 +17,14 @@ function BlitzBestRow({ rec, roundId }: { rec?: BlitzBest; roundId: number | nul
   const showTag = rec && rec.scoreRoundId != null && rec.streakRoundId != null
   return (
     <div className="flex flex-wrap items-start gap-4">
-      <div className={BEST_COLUMN_CLASS}>
+      <BestColumn>
         Best Score: {rec?.score ?? '—'}
         {isNewBest(rec?.scoreRoundId, roundId) && <NewBestStar />}
-      </div>
-      <div className={BEST_COLUMN_CLASS}>
+      </BestColumn>
+      <BestColumn>
         Best Streak: {rec?.streak ?? '—'}
         {isNewBest(rec?.streakRoundId, roundId) && <NewBestStar />}
-      </div>
+      </BestColumn>
       {showTag && (
         <span className="shrink-0 ml-auto">
           {rec.scoreRoundId === rec.streakRoundId ? 'Same Round' : 'Different Rounds'}

@@ -31,12 +31,38 @@ import type { ReactNode } from 'react'
 //     leaves the row beneath its full gap.
 //   • rounded-2xl — the strip's radius, the one radius the frame has, for when the row wears it.
 //
-// BEST_COLUMN_CLASS — the least width of one readout's column (Best Mean beside Best Median, Best
-// Score beside Best Streak), which every mode's readouts wear so the second one starts at the same
-// place on every screen. 125px, MEASURED FROM THE PAGE COLUMN'S EDGE: the row's inset is taken out
-// of it, so the second readout — and the "Same Run" / "Different Runs" tag after it — is exactly
-// where it was before the row had an inset, and the tag wraps on no screen it did not wrap on.
-export const BEST_COLUMN_CLASS = 'min-w-[calc(125px_-_0.75rem)]'
+// ── BestColumn — ONE READOUT'S COLUMN (Best Mean beside Best Median, Best Score beside Best Streak),
+// which every mode's readouts are drawn in, so the row wraps where it always did.
+//
+// ★ THE ROW'S INSET MUST NOT COST THE TAG ITS PLACE ON THE LINE. The readouts sit in a wrapping row
+// with the "Same Run" / "Different Runs" tag pushed to its far end, and the tag drops to a line of
+// its own on a screen too narrow for all three. The inset above takes .75rem off each end of that
+// line. Taking it out of the columns' least width (125px less the inset, as this once did) only
+// gave it back while a readout was SHORTER than that — a time of a minute or more, or one with its
+// ★, is not, and the tag then wrapped on screens it had never wrapped on.
+// So the line is measured exactly as it was before there was an inset, whatever the readouts say:
+//   • a column is at least 125px, as it always was, and hands the next thing on the line .75rem of
+//     its own width (-mr-3) — two columns, the two ends' inset, given back in full;
+//   • and a SLACK follows each column: nothing wide, growing to that same .75rem (max-w-3) whenever
+//     the line has it to spare, which puts back exactly the space the column gave up. (Its -ml-4
+//     cancels the row gap in front of it, so it adds nothing to the line itself.)
+// With room, then, the readouts stand a full gap apart, .75rem in from the frame at both ends. On
+// a screen with none to spare they close up by that much rather than push the tag off the line —
+// the room they had before the inset, used the same way. And the tag wraps where it wrapped before,
+// no sooner and no later.
+// ⚠ THREE NUMBERS ARE ONE: the row's px-3, the column's -mr-3, and the slack's max-w-3 — and the
+// slack's -ml-4 is the readouts' gap-4. tests/sessionOnlyOutline.dom reads them off the page and
+// holds them together.
+const BEST_COLUMN_CLASS = 'min-w-[125px] -mr-3'
+const BEST_SLACK_CLASS = '-ml-4 grow shrink-0 basis-0 max-w-3'
+export function BestColumn({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <div className={BEST_COLUMN_CLASS}>{children}</div>
+      <span aria-hidden="true" className={BEST_SLACK_CLASS} />
+    </>
+  )
+}
 
 export default function BestReadout({
   children,

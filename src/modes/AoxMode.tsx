@@ -33,7 +33,7 @@ import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
-import { BEST_COLUMN_CLASS } from '../components/BestReadout.jsx'
+import { BestColumn } from '../components/BestReadout.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import RunBreakdown from '../components/RunBreakdown.jsx'
@@ -772,12 +772,12 @@ function AoxMode({
         // ⚠ EVERY TIME HERE IS WRAPPED IN `whitespace-nowrap`, and it is not decoration. A time of a
         // minute or more now formats as "1m 2.34s" (lib/modeFormat — the em dash no longer hides a
         // long one), and that space is a line-break opportunity the old "59.99s" never had.
-        // These four readouts sit in a flex-wrap row of BEST_COLUMN_CLASS columns, so on a
+        // These four readouts sit in a flex-wrap row of BestColumn columns, so on a
         // narrow phone a bare value would break across two lines mid-number and read as two numbers.
         // The label may still wrap — "Best" / "Mean:" is legible; "1m" / "2.34s" is not.
         bests={
           <div className="flex flex-wrap items-start gap-4">
-            <div className={BEST_COLUMN_CLASS}>
+            <BestColumn>
               <div>
                 Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
                 {isNewBest(bestData.avgRoundId, runId) && <NewBestStar />}
@@ -785,8 +785,8 @@ function AoxMode({
               <div className="text-[11px] opacity-70">
                 Median: <span className="whitespace-nowrap">{fmtTime(bestData.avgMed)}</span>
               </div>
-            </div>
-            <div className={BEST_COLUMN_CLASS}>
+            </BestColumn>
+            <BestColumn>
               <div>
                 Best Median: <span className="whitespace-nowrap">{fmtTime(bestData.med)}</span>
                 {isNewBest(bestData.medRoundId, runId) && <NewBestStar />}
@@ -794,7 +794,7 @@ function AoxMode({
               <div className="text-[11px] opacity-70">
                 Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
               </div>
-            </div>
+            </BestColumn>
             {bestData.avgRoundId != null && bestData.medRoundId != null && (
               <span className="shrink-0 ml-auto">
                 {bestData.avgRoundId === bestData.medRoundId ? 'Same Run' : 'Different Runs'}

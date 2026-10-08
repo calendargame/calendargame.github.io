@@ -284,6 +284,52 @@ describe('the outline costs no layout', () => {
     expect([...block('off', false, BESTS).lastChild.classList]).toEqual([...bestsEl.classList])
   })
 
+  // ★ THE INSET MUST NOT COST THE TAG ITS PLACE ON THE LINE. The readouts wrap in a row with the
+  // "Same Round" tag at its far end, and the row's inset takes its width off both ends of that line.
+  // Each column hands that much back, and a slack after it takes it again whenever the line has it
+  // to spare (components/BestReadout's BestColumn) — so the three numbers are one, and the slack
+  // adds nothing to the line. jsdom lays nothing out: what is pinned here is that the page is BUILT
+  // that way, in every mode's row; that the tag then wraps exactly where it did before the inset was
+  // measured in a browser, across widths and readouts.
+  it.each([
+    ['Blitz', 'B', 2],
+    ['MoX', 'A', 2],
+  ])(
+    '%s: each Best column gives the row`s inset back, and a slack after it takes it up',
+    (_mode, key, columns) => {
+      mountApp()
+      act(() => void fireEvent.keyDown(window, { key }))
+      const row = bestReadout()
+      const step = (el, prefix) => {
+        const cls = [...el.classList].find((c) => c.startsWith(prefix))
+        expect(cls, `${prefix} on ${el.className}`).toBeTruthy()
+        return cls.slice(prefix.length)
+      }
+      const inset = step(row, 'px-')
+      const line = row.querySelector(':scope > div.flex')
+      const gap = step(line, 'gap-')
+      const cells = [...line.children]
+      const cols = cells.filter((el) => el.classList.contains('min-w-[125px]'))
+      expect(cols).toHaveLength(columns)
+      for (const col of cols) {
+        expect(step(col, '-mr-')).toBe(inset)
+        const slack = col.nextElementSibling
+        expect(slack.getAttribute('aria-hidden')).toBe('true')
+        expect(slack.textContent).toBe('')
+        expect(step(slack, 'max-w-')).toBe(inset) // grows to what the column gave up, and no further
+        expect(step(slack, '-ml-')).toBe(gap) // …and cancels the gap in front of it
+        expect([...slack.classList]).toEqual(
+          expect.arrayContaining(['grow', 'shrink-0', 'basis-0']),
+        )
+      }
+      // Nothing else on the line but the tag, when there is one.
+      expect(
+        cells.filter((el) => !cols.includes(el) && !cols.includes(el.previousElementSibling))
+          .length,
+      ).toBeLessThanOrEqual(1)
+    },
+  )
+
   // ★ THE RULES THEMSELVES. The frame is a ::after box positioned out of the flow; the host gains
   // `position:relative` and nothing else, and on a .panel only the border's COLOUR changes. Nothing
   // here may declare a width, a padding, a margin, a border-width or an outline on the host.
