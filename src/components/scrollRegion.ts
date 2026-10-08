@@ -21,7 +21,8 @@ import { flushSync } from 'react-dom'
 // lane (its fades still come from scrollFadeClass). And since round 23 the option list inside
 // a dropdown's panel (components/CustomSelect): every option row carries its own 1rem of side
 // padding, so the text already sits clear of an overlay scrollbar, and a lane on top would also take the panel away from the hidden copies of it that
-// must match it to the pixel (its width-mirror and its row gauge). Since round 13 that container is
+// must match it to the pixel (its width-mirror and its row gauge). (It takes the core as
+// ROW_LANE_SCROLLER_CLASS, below, which is what puts a CLASSIC scrollbar over that same padding.) Since round 13 that container is
 // the WHOLE app: How to Play used to scroll the document instead and was exempt from this file
 // entirely, and it is now governed code like everything else. tests/scrollRegionGuard.test.js
 // fails the suite on any raw vertical-overflow literal outside this file, so every scroll region
@@ -330,6 +331,40 @@ export function useScrollEdgeState<T extends HTMLElement>(
 //     beyond clientWidth and its borders), scrollbar-gutter:stable keeps the space reserved while
 //     the bar itself is gone. Overlay scrollbars (iOS, macOS, Android) take no width, so there is
 //     nothing to reserve and the gutter is left alone.
+// How wide a region's CLASSIC scrollbar is, in px — the width it takes out of the region's own
+// content box (offsetWidth beyond clientWidth and the borders). 0 for an overlay scrollbar (iOS,
+// macOS, Android), which takes none, and for a region that is not scrolling.
+const classicScrollbarWidth = (region: HTMLElement): number => {
+  const cs = getComputedStyle(region)
+  const borders = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0)
+  return Math.max(0, region.offsetWidth - region.clientWidth - borders)
+}
+
+// ── A LIST OF ROWS WHOSE SCROLLBAR SITS OVER THE ROWS' OWN LANE ─────────────────────────────────
+// For a scroller that carries no lane of its own because its ROWS do — a dropdown's option list
+// (components/CustomSelect), each row with a full rem of padding on its right, which is where an
+// overlay scrollbar is drawn, clear of the text.
+// ★ A CLASSIC SCROLLBAR IS NOT DRAWN OVER ANYTHING: it takes its width out of the list's content
+// box, the moment the list is long enough to scroll. So every row was a scrollbar narrower in a
+// long list than in a short one — on a desktop a preset's name that fits its row (and that the
+// hidden row gauge, which has no scrollbar, says fits) was cut as soon as there were enough
+// presets to scroll. A row's width must not depend on how many rows there are.
+// So the classic scrollbar is put where the overlay one already is. The list publishes its
+// scrollbar's width (writeScrollbarWidth → --scrollbar-w, 0px when there is none), and each row is
+// that much WIDER than the box that lost it (ROW_UNDER_SCROLLBAR_WIDTH_CLASS): exactly as wide as
+// it is in a list that does not scroll, with the scrollbar over the last of its right-hand
+// padding. ROW_LANE_SCROLLER_CLASS clips that overhang sideways, so it can never be scrolled to
+// and never raises a horizontal scrollbar of its own.
+//   ⚠ THE ROW'S OWN RIGHT PADDING MUST OUTSPAN THE SCROLLBAR for its text to stay clear: a classic
+//   scrollbar is 15–17px, and a dropdown row keeps 1rem plus the list's own .25rem to its right.
+//   ⚠ MEASURED BY ITS CALLER when the list opens and when the window changes size — never from
+//   observeScrollExtent's callback, which must not change layout (a row's width is layout).
+export const ROW_LANE_SCROLLER_CLASS = `${SCROLLER_CORE_CLASS} overflow-x-hidden`
+export const ROW_UNDER_SCROLLBAR_WIDTH_CLASS = 'w-[calc(100%_+_var(--scrollbar-w,0px))]'
+export function writeScrollbarWidth(region: HTMLElement): void {
+  region.style.setProperty('--scrollbar-w', `${classicScrollbarWidth(region)}px`)
+}
+
 export function holdScrollRegion(from: Element | null): (() => void) | undefined {
   let el = from?.parentElement ?? null
   while (el && el !== document.body) {
@@ -339,9 +374,7 @@ export function holdScrollRegion(from: Element | null): (() => void) | undefined
   }
   if (!el || el === document.body) return undefined
   const region = el
-  const cs = getComputedStyle(region)
-  const borders = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0)
-  const classicBar = region.offsetWidth - region.clientWidth - borders > 0
+  const classicBar = classicScrollbarWidth(region) > 0
   const prevOverflowY = region.style.overflowY
   const prevGutter = region.style.scrollbarGutter
   region.style.overflowY = 'hidden'

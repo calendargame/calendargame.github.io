@@ -777,3 +777,71 @@ describe('CustomSelect — long lists, and a trigger inside a scroll region', ()
     }
   })
 })
+
+// ── A CLASSIC SCROLLBAR MUST NOT COST A ROW ITS WIDTH ────────────────────────────────────────────
+// A desktop scrollbar takes its width out of the list's content box the moment the list is long
+// enough to scroll — so every row was ~15px narrower in a long list than in a short one, and a name
+// that fits a row (and that the hidden row gauge says fits) was cut. A phone's scrollbar is drawn
+// OVER the rows' own right-hand padding and takes nothing. A classic one is put in that same lane:
+// the list measures its scrollbar and each row is that much wider than the box that lost it.
+// jsdom lays nothing out, so the scrollbar is stood up as the two numbers it is read from; that
+// the name cell is then the same width with one preset as with twenty-five was measured in
+// Chromium, with classic scrollbars, at phone and desktop width.
+describe('CustomSelect — a classic scrollbar sits over the rows` own lane', () => {
+  let bar = 0
+  const stubs = []
+  const standUpScrollbar = () => {
+    const list = (el) => el.hasAttribute?.('data-drag-scroll')
+    for (const [prop, of] of [
+      ['offsetWidth', (el) => (list(el) ? 220 : 0)],
+      ['clientWidth', (el) => (list(el) ? 220 - bar : 0)],
+    ])
+      stubs.push(
+        vi.spyOn(HTMLElement.prototype, prop, 'get').mockImplementation(function () {
+          return of(this)
+        }),
+      )
+  }
+  afterEach(() => {
+    stubs.splice(0).forEach((s) => s.mockRestore())
+    bar = 0
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const list = () => document.querySelector('[role=listbox] [data-drag-scroll]')
+  const barVar = () => list().style.getPropertyValue('--scrollbar-w')
+
+  it('the list tells its rows how wide its scrollbar is, as it opens', () => {
+    bar = 15
+    standUpScrollbar()
+    openWith('b')
+    expect(barVar()).toBe('15px')
+  })
+
+  it('an overlay scrollbar, or a list too short to scroll, is no width at all', () => {
+    standUpScrollbar()
+    openWith('b')
+    expect(barVar()).toBe('0px')
+  })
+
+  it('a row is wider than the list`s box by exactly that much', () => {
+    openWith('b')
+    for (const row of options())
+      expect(row.className.split(/\s+/)).toContain('w-[calc(100%_+_var(--scrollbar-w,0px))]')
+    expect(options()[0].className.split(/\s+/)).not.toContain('w-full')
+  })
+
+  it('the rows` extra width is clipped by the list, never scrolled to', () => {
+    openWith('b')
+    expect(list().className.split(/\s+/)).toContain('overflow-x-hidden')
+  })
+
+  it('a window that changes size under an open list is measured again', () => {
+    standUpScrollbar()
+    openWith('b')
+    expect(barVar()).toBe('0px')
+    bar = 17 // shorter now: the list scrolls, and its scrollbar has arrived
+    act(() => void window.dispatchEvent(new Event('resize')))
+    expect(barVar()).toBe('17px')
+  })
+})
