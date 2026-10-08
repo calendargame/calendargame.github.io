@@ -118,6 +118,7 @@ const freshLive = (q) => ({
   q, //            the question as displayed (kept for the push, and for its answer)
   jul: undefined, // its calendar — taken at the first judgement, never again (undefined = unjudged)
   answer: undefined, // the model's own answer in that calendar — worked out once (modelAnswer)
+  grid: null, //       the reducer's grid this question's answer was last held to, and matched (compareCalendar)
   ssFrozen: null, // the frozen effective Save-Stats (null = untouched; true = scored)
   // ── how it was ANSWERED (never touched by an Override) ──
   aCredited: false, // a clean first-try correct that counted
@@ -184,6 +185,7 @@ const advance = (m, next) => {
       q: l.q,
       jul: l.jul,
       answer: l.answer,
+      grid: l.grid,
       aCredited: l.aCredited,
       aTime: l.aTime,
       wrongTime: l.wrongTime,
@@ -371,21 +373,37 @@ const modelAnswer = (q) => (q.answer ??= refAnswer(q.q, q.jul))
 
 // One question's calendar, model against reducer: the calendar the reducer stamped on its card, and
 // every answer that card's grid marks (its green, or the mark an Override leaves on the answer),
-// against the model's own answer in the model's own calendar.
+// against the model's own answer in the model's own calendar. `card` is the reducer's card as the
+// harness hands it over: its record (`meta`, whose `jul` is the stamp) and its grid (`btns`).
+// ★ A GRID ALREADY HELD TO THIS QUESTION'S ANSWER IS NOT WALKED AGAIN — and that leaves nothing
+// unchecked. The walk reads two things, and neither can have changed since it passed: the model's
+// answer is worked out once and kept (modelAnswer), and the grid is the SAME OBJECT, which the
+// fuzz froze before this was first called on it (fuzzHarness freezes every state all the way down,
+// so a grid that differs in any mark is a different object, and is walked). The question remembers
+// the last grid that matched (`grid`); a grid that did not match is remembered by nobody, so it is
+// reported again on every comparison until it is gone. The stamp is compared every time — it is one
+// comparison. Before this, every mark of every card of the whole history was read again after
+// every action — up to a seventh of a reference-model profile's whole run time (measured), spent
+// re-proving what had not changed.
 const compareCalendar = (v, where, q, card) => {
-  if (q.jul !== card.jul) v.push(`REF calendar: model ${q.jul}, reducer ${card.jul} (${where})`)
-  if (q.jul === undefined) return
+  const stamped = card.meta.jul
+  if (q.jul !== stamped) v.push(`REF calendar: model ${q.jul}, reducer ${stamped} (${where})`)
+  if (q.jul === undefined || q.grid === card.btns) return
   const answer = modelAnswer(q)
+  let matched = true
   for (const k in card.btns)
-    if ((card.btns[k] === 'correct' || card.btns[k] === 'override-wrong') && Number(k) !== answer)
+    if ((card.btns[k] === 'correct' || card.btns[k] === 'override-wrong') && Number(k) !== answer) {
       v.push(`REF answer: model ${answer}, the reducer's grid marks ${k} (${where})`)
+      matched = false
+    }
+  if (matched && card.btns) q.grid = card.btns
 }
 
 // The model's derived stats vs the reducer's. Returns violation strings (empty = agree).
 // `plan` is the reducer's own answer to "what does the button point at, and does it read Undo"
 // (overridePlan), compared against the model's independent answer. `cards` is the reducer's cards
-// as the harness reads them off the state — `history` in play order, and the `live` one — each as
-// { jul, btns }: the calendar stamped on the card and the grid it shows.
+// as the harness reads them off the state — `history` in play order, and the `live` one — each with
+// a `meta` (whose `jul` is the calendar stamped on the card) and a `btns` (the grid it shows).
 export function compareRefModel(m, state, plan, cards) {
   const v = [...m.violations]
   m.violations = []

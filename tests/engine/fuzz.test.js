@@ -57,11 +57,18 @@ import { runFuzzProfile, SCALE } from './fuzzHarness.js'
 // ⚠ THE BUDGET IS A HANG DETECTOR, NOT A SPEED ASSERTION, and it has to leave real room. It was 30s
 // when a profile took about 5s. Each step now does two to three times the checking — the calendar
 // checks on every card, the reference model compared every step, every state frozen all the way
-// down — so the heaviest profiles take 14–16s alone on the development laptop, and one reached 36s
-// in a full-suite run on a busy machine: a red suite with nothing wrong. Where the added time went
-// was measured before this was touched (two avoidable costs were removed; what is left is the new
-// coverage itself). Per-dispatch cost in the app is a separate matter and is measured in
-// microseconds. If a profile ever needs more than this, look for a real slowdown first.
+// down — and one profile reached 36s in a full-suite run on a busy machine: a red suite with
+// nothing wrong. Where the time goes has been measured twice, and what was not a check was taken
+// out each time. The second pass (fuzzHarness says each where it is): the failure report's
+// "recent actions" were written out as text after every action of every sequence; the exact
+// oracle and the model's cards were rebuilt with array methods that fall off their fast path on
+// the frozen arrays every state is made of; the model walked every mark of every card again after
+// every action; and the checks that read only the state were re-run on a state the reducer had
+// handed back untouched. The whole file took about 145s alone on the development laptop before
+// that pass and about 105s after it, the heaviest profiles 12–14s. What is left is the coverage
+// itself — the largest single part of it the freezing (about a fifth of the run: the freeze, and
+// the slower reads of what is frozen). Per-dispatch cost in the app is a separate matter and is
+// measured in microseconds. If a profile ever needs more than this, look for a real slowdown first.
 const T = 120000 * SCALE
 
 describe('fuzz / bug survey — engine invariants hold across random play', () => {

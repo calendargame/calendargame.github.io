@@ -142,10 +142,11 @@ function optionCount(q) {
 // the one, wherever it sits — it cannot be overridden, so its place yields nothing.
 function harnessTarget(state) {
   if (state.backDepth > 0) return state.card.timedOut ? null : 'browsed'
-  const cleanCreditOnGrid =
-    computeHasCredit(state.persistBtns) && !state.revealed && !state.countedWrong
+  // (The grid is read last, and only when the answer still depends on it.)
+  const cleanCreditOnGrid = () =>
+    !state.revealed && !state.countedWrong && computeHasCredit(state.persistBtns)
   const scored = state.saveStatsThisQ === true && !state.card.timedOut
-  if (scored && (state.countedWrong || cleanCreditOnGrid || state.card.answered !== null))
+  if (scored && (state.countedWrong || state.card.answered !== null || cleanCreditOnGrid()))
     return 'live'
   const newest = state.stack[state.stack.length - 1]
   return newest && !newest.meta.timedOut ? 'retro' : null
@@ -658,51 +659,55 @@ function liveCredit(live) {
   if (!answered || !ls || ls.saveStatsFrozen !== true) return null
   return computeHasCredit(btns) && !ls.revealed && !ls.countedWrong ? 'credit' : 'miss'
 }
+// ⚠ BUILT WITH PLAIN LOOPS, ONE LIST, ONE STREAK WALK — the same list, in the same order, that a
+// chain of slice / reverse / filter / map and four spreads used to build after every action. Those
+// are not checks, and here they are not cheap either: every array of a state is frozen (engine/
+// freeze), and the array methods leave their fast path on a frozen array (`slice` on a frozen
+// hundred-card history measured about ninety times slower than on a plain one, Node 24). The
+// forward stack is read from its end, so its cards arrive oldest first, and the isLive entry met
+// LAST on that walk is the lowest-indexed one — the one `find` returned.
 export function checkStrongScoreOracle(state, priorHistory = []) {
   const v = []
   const s = state.stats
-  const stackBools = state.stack.map((e) => !!e.hasCredit)
   const browsing = state.backDepth > 0
   // The hydrated prior-session credit flags, prepended to the reconstruction (the in-session stack
   // can't reach them). The oracle prepends the REAL prior history — independently re-deriving the
   // reducer's bestFloor/streakCarry from it — so a wrong fold collapses good/best/streak and is caught
   // here. Empty for a blank/timed start → byte-identical to before.
-  let history
+  const history = priorHistory.slice()
+  for (let i = 0; i < state.stack.length; i++) history.push(!!state.stack[i].hasCredit)
   if (browsing) {
-    const fwdBools = state.forwardStack
-      .slice()
-      .reverse()
-      .filter((e) => !e.isLive)
-      .map((e) => !!e.hasCredit)
-    const lc = liveCredit(state.forwardStack.find((e) => e.isLive))
-    const liveBool = lc === 'credit' ? [true] : lc === 'miss' ? [false] : []
-    history = [...priorHistory, ...stackBools, !!state.browseHasCredit, ...fwdBools, ...liveBool]
-  } else {
+    history.push(!!state.browseHasCredit)
+    let parkedLive
+    for (let i = state.forwardStack.length - 1; i >= 0; i--) {
+      const e = state.forwardStack[i]
+      if (e.isLive) parkedLive = e
+      else history.push(!!e.hasCredit)
+    }
+    const lc = liveCredit(parkedLive)
+    if (lc !== null) history.push(lc === 'credit')
+  } else if (
     // A held live credit (a clean green on the grid at the edge) was counted in good only if Save
     // Stats was on for the question (saveStatsThisQ===true); a complete-while-off neither credits
     // nor pushes.
-    const heldLiveCredit =
-      computeHasCredit(state.persistBtns) &&
-      !state.revealed &&
-      !state.countedWrong &&
-      state.saveStatsThisQ === true
-    history = heldLiveCredit
-      ? [...priorHistory, ...stackBools, true]
-      : [...priorHistory, ...stackBools]
-  }
+    computeHasCredit(state.persistBtns) &&
+    !state.revealed &&
+    !state.countedWrong &&
+    state.saveStatsThisQ === true
+  )
+    history.push(true)
 
-  const credits = history.filter(Boolean).length
+  let credits = 0
+  for (let i = 0; i < history.length; i++) if (history[i]) credits++
   if (s.good !== credits) v.push(`STRONG good(${s.good}) != reconstructed credits(${credits})`)
 
-  const { bestStreak } = computeStreaks(history)
+  const { curStreak, bestStreak } = computeStreaks(history)
   if (s.best !== bestStreak) v.push(`STRONG best(${s.best}) != history best(${bestStreak})`)
 
   // Clean live edge only (not browsing, not a pending miss): the trailing run == streak. A held-
   // credit edge IS clean (it ends in a credit), and `history` already carries that credit.
-  if (!browsing && !state.countedWrong && !state.revealed) {
-    const { curStreak } = computeStreaks(history)
-    if (s.streak !== curStreak) v.push(`STRONG streak(${s.streak}) != trailing(${curStreak})`)
-  }
+  if (!browsing && !state.countedWrong && !state.revealed && s.streak !== curStreak)
+    v.push(`STRONG streak(${s.streak}) != trailing(${curStreak})`)
   return v
 }
 
@@ -752,23 +757,30 @@ const liveQuestion = (state) => (state.backDepth > 0 ? state.forwardStack[0] : s
 // THE REDUCER'S CARDS AS THE REFERENCE MODEL COMPARES THEM — read off the state here, by the
 // harness's own walk (never the reducer's forEachCard): the history in play order (the cards behind
 // the one on screen, the browsed card, the non-live cards parked ahead of it, oldest first) and the
-// live card, each as the calendar stamped on it and the grid it shows.
-const view = (meta, btns) => ({ jul: meta.jul, btns: btns ?? {} })
+// live card. Each is something with a `meta` (the card's record, whose `jul` is its calendar) and a
+// `btns` (the grid it shows), and compareRefModel reads those two and nothing else of it.
+// ⚠ A history entry IS such a thing, so it is handed over AS IT IS — the entry object itself, not a
+// copy made for the comparison. Only the card on screen, which the state keeps as two fields, is
+// put together here. That is one small object per comparison where there was one per card, and it
+// is what lets the comparison know a card it has already held to its question (referenceModel's
+// compareCalendar: the very same frozen grid object). Plain loops for the reason
+// checkStrongScoreOracle gives; the isLive entry met last, walking the forward stack from its end,
+// is the one `find` returned.
 function refCards(state) {
   const browsing = state.backDepth > 0
-  const parkedLive = state.forwardStack.find((e) => e.isLive)
-  return {
-    history: [
-      ...state.stack.map((e) => view(e.meta, e.btns)),
-      ...(browsing ? [view(state.card, state.persistBtns)] : []),
-      ...state.forwardStack
-        .slice()
-        .reverse()
-        .filter((e) => !e.isLive)
-        .map((e) => view(e.meta, e.btns)),
-    ],
-    live: browsing ? view(parkedLive.meta, parkedLive.btns) : view(state.card, state.persistBtns),
+  const onScreen = { meta: state.card, btns: state.persistBtns }
+  const history = []
+  for (let i = 0; i < state.stack.length; i++) history.push(state.stack[i])
+  let parkedLive
+  if (browsing) {
+    history.push(onScreen)
+    for (let i = state.forwardStack.length - 1; i >= 0; i--) {
+      const e = state.forwardStack[i]
+      if (e.isLive) parkedLive = e
+      else history.push(e)
+    }
   }
+  return { history, live: browsing ? parkedLive : onScreen }
 }
 
 // ── A STATE AS AN OLDER BUILD WOULD HAVE PARKED IT ──────────────────────────────────────────────
@@ -875,6 +887,51 @@ function legacyRestoreBreaks(state, crossed, back, useJulian) {
   return v
 }
 
+// ── THE LAST FEW ACTIONS, FOR A FAILURE'S REPORT ────────────────────────────────────────────────
+// What a failing sequence prints under "recent actions": one line per action, the newest twenty.
+// Kept as the NUMBERS each line is made of, in a ring written over in place, and turned into text
+// only by a sequence that fails (`lines`). It used to be the text itself, built after every action
+// of every sequence — ten numbers formatted into a string some seventeen million times a run, for a
+// report a green run never prints: measured at about a quarter of the whole survey's time, and
+// none of it a check. The lines read exactly as they did.
+const TRAIL_ACTIONS = 20
+const TRAIL_FIELDS = 10
+function startTrail() {
+  const kinds = new Array(TRAIL_ACTIONS)
+  const nums = new Array(TRAIL_ACTIONS * TRAIL_FIELDS).fill(0)
+  let noted = 0
+  return {
+    note(step, kind, saveStats, state) {
+      const slot = noted++ % TRAIL_ACTIONS
+      const at = slot * TRAIL_FIELDS
+      const S = state.stats
+      kinds[slot] = kind
+      nums[at] = step
+      nums[at + 1] = saveStats ? 1 : 0
+      nums[at + 2] = S.played
+      nums[at + 3] = S.good
+      nums[at + 4] = S.streak
+      nums[at + 5] = S.best
+      nums[at + 6] = state.backDepth
+      nums[at + 7] = state.stack.length
+      nums[at + 8] = state.countedWrong ? 1 : 0
+      nums[at + 9] = state.card.answered !== null ? 1 : 0
+    },
+    // Oldest first.
+    lines() {
+      const out = []
+      for (let k = Math.max(0, noted - TRAIL_ACTIONS); k < noted; k++) {
+        const slot = k % TRAIL_ACTIONS
+        const n = (f) => nums[slot * TRAIL_FIELDS + f]
+        out.push(
+          `${n(0)}:${kinds[slot]}${n(1) ? '+' : '-'} p${n(2)}g${n(3)}s${n(4)}b${n(5)} bd${n(6)} stk${n(7)} cw${n(8)} ov${n(9)}`,
+        )
+      }
+      return out
+    },
+  }
+}
+
 export function runSequence(seed, steps, cov, profile) {
   const rnd = mulberry32(seed)
   // The Julian Calendar setting — where it starts, and (below) switched at any step, as a player
@@ -920,11 +977,28 @@ export function runSequence(seed, steps, cov, profile) {
   // initial question is a Deduction puzzle (and, per ANSWER, whether the click was correct), plus the
   // hydrated baseline above (folded into its derived stats, never browsed/overridden).
   const model = profile.referenceModel ? createRefModel(state.date, priorHistory, priorTimes) : null
-  const recent = []
+  const trail = startTrail()
   // Consecutive OVERRIDE dispatches. Consecutive presses always land on ONE card — a press that
   // stays leaves the button on the same card, and the one that advances leaves it on the card just
   // pushed — so a run of three is the same card flipped three times.
   let pressRun = 0
+  // ★ A STATE THAT HAS PASSED IS NOT ASKED THE SAME QUESTIONS AGAIN. Three of the checks made after
+  // every action read nothing but the state, the Julian Calendar setting, and the prior history: the
+  // engine's invariants, "the button and the press agree", and the exact score oracle. An action the
+  // reducer answers by handing back the state it was given — Back with nothing behind, an answer
+  // on a locked card, a regeneration of a question already used: one dispatched action in four
+  // (3.9 million of the survey's 15.5 million, counted) — leaves all three inputs exactly as they
+  // were when those checks last passed, and the state is FROZEN, so it is not merely the same
+  // object: nothing in it can have changed. Running them again could only return what they
+  // returned. So they run when any of the three is not the one that last passed, and never
+  // otherwise (the three `passed…` below; the prior history is replaced, never written into, so
+  // its identity is its content too).
+  // The reference model is NOT one of them, and is compared after every action without exception:
+  // the model is told about the action whatever the reducer did with it, so "the reducer did
+  // nothing and the model did something" is precisely a disagreement that has to be seen.
+  let passedState = null
+  let passedUnderJulian = false
+  let passedPrior = null
 
   for (let i = 0; i < steps; i++) {
     if (chance(rnd, P_JULIAN_FLIP)) {
@@ -973,7 +1047,7 @@ export function runSequence(seed, steps, cov, profile) {
           action: 'RELOAD',
           prevStats: state.stats,
           nowStats: back?.engine.stats,
-          recent,
+          recent: trail.lines(),
         }
       state = deepFreeze(back.engine)
       cov.reloads++
@@ -1002,7 +1076,7 @@ export function runSequence(seed, steps, cov, profile) {
           action: 'LEGACY RESTORE',
           prevStats: state.stats,
           nowStats: legacy?.engine.stats,
-          recent,
+          recent: trail.lines(),
         }
       // THE LIVE-QUESTION RULE: a screen whose timing is shown regenerates the restored live question
       // (one REGEN_DATE, exactly as modes/modeHooks' restoredEngine dispatches it) — which swaps an
@@ -1037,7 +1111,7 @@ export function runSequence(seed, steps, cov, profile) {
             action: 'RESTORE REGEN',
             prevStats: before.stats,
             nowStats: state.stats,
-            recent,
+            recent: trail.lines(),
           }
       }
     }
@@ -1205,25 +1279,31 @@ export function runSequence(seed, steps, cov, profile) {
       cov.timedOutBehind++
     pressRun = action.type === 'OVERRIDE' ? pressRun + 1 : 0
     if (pressRun === 3) cov.retoggle++
-    const S = state.stats
-    recent.push(
-      `${i}:${kind}${saveStats ? '+' : '-'} p${S.played}g${S.good}s${S.streak}b${S.best} bd${state.backDepth} stk${state.stack.length} cw${state.countedWrong ? 1 : 0} ov${state.card.answered !== null ? 1 : 0}`,
-    )
-    if (recent.length > 20) recent.shift()
+    trail.note(i, kind, saveStats, state)
 
-    const violations = checkGameInvariants(state, useJulian)
-    // The button and the press agree: the harness's own reading of which card the button points at
-    // must be the reducer's, every step — so "Override is offered" ⇔ "there is a card to toggle"
-    // (overrideAvail ⇔ overrideTarget !== null under the same Save-Stats gate).
-    const ht = harnessTarget(state)
-    if (ht !== overrideTarget(state))
-      violations.push(`TARGET: harness ${ht}, reducer ${overrideTarget(state)}`)
+    const violations = []
+    const asked =
+      passedState === state && passedUnderJulian === useJulian && passedPrior === priorHistory
+    if (!asked) {
+      violations.push(...checkGameInvariants(state, useJulian))
+      // The button and the press agree: the harness's own reading of which card the button points
+      // at must be the reducer's, every step — so "Override is offered" ⇔ "there is a card to
+      // toggle" (overrideAvail ⇔ overrideTarget !== null under the same Save-Stats gate).
+      const ht = harnessTarget(state)
+      if (ht !== overrideTarget(state))
+        violations.push(`TARGET: harness ${ht}, reducer ${overrideTarget(state)}`)
+      if (profile.strongOracle) violations.push(...checkStrongScoreOracle(state, priorHistory))
+      if (!violations.length) {
+        passedState = state
+        passedUnderJulian = useJulian
+        passedPrior = priorHistory
+      }
+    }
     // What a screen is TOLD a regeneration will do is what the reducer then did: regenReplaces is
     // asked before the dispatch (Flash ends its flash on the answer), so it must never disagree with
     // whether REGEN_DATE replaced the waiting question.
     if (action.type === 'REGEN_DATE' && regenReplaces(prev) !== (state !== prev))
       violations.push(`REGEN: regenReplaces said ${regenReplaces(prev)}, the reducer disagreed`)
-    if (profile.strongOracle) violations.push(...checkStrongScoreOracle(state, priorHistory))
     if (model)
       violations.push(...compareRefModel(model, state, overridePlan(state), refCards(state)))
     if (violations.length) {
@@ -1236,7 +1316,7 @@ export function runSequence(seed, steps, cov, profile) {
         action,
         prevStats: prev.stats,
         nowStats: state.stats,
-        recent,
+        recent: trail.lines(),
       }
     }
   }
