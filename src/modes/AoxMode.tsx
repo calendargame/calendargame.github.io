@@ -775,6 +775,10 @@ function AoxMode({
         // These four readouts sit in a flex-wrap row of BestColumn columns, so on a
         // narrow phone a bare value would break across two lines mid-number and read as two numbers.
         // The label may still wrap — "Best" / "Mean:" is legible; "1m" / "2.34s" is not.
+        // ⚠ EACH SUB-LINE IS SIZED IN em, FROM THE LINE ABOVE IT (eleven twelfths of it — what 11px was
+        // beside text-xs at a 16px root). Written in px it did not follow the fluid root: on a 320px
+        // phone, where text-xs is 9px, the note drew LARGER than the Best it annotates
+        // (tests/textSizeGuard).
         bests={
           <div className="flex flex-wrap items-start gap-4">
             <BestColumn>
@@ -782,7 +786,7 @@ function AoxMode({
                 Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
                 {isNewBest(bestData.avgRoundId, runId) && <NewBestStar />}
               </div>
-              <div className="text-[11px] opacity-70">
+              <div className="text-[0.917em] opacity-70">
                 Median: <span className="whitespace-nowrap">{fmtTime(bestData.avgMed)}</span>
               </div>
             </BestColumn>
@@ -791,7 +795,7 @@ function AoxMode({
                 Best Median: <span className="whitespace-nowrap">{fmtTime(bestData.med)}</span>
                 {isNewBest(bestData.medRoundId, runId) && <NewBestStar />}
               </div>
-              <div className="text-[11px] opacity-70">
+              <div className="text-[0.917em] opacity-70">
                 Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
               </div>
             </BestColumn>

@@ -1011,7 +1011,7 @@ export function SettingsPanel({
               panel's second half starts here", and every other divider stays in the column. */}
           <div className="space-y-2 pt-4 -mx-4 px-4 border-t-2 border-(--bd-500-40)">
             <GroupLabel>Per-preset</GroupLabel>
-            <div className="text-[11px] text-(--tx-300-60)">
+            <div className="text-[0.6875rem] text-(--tx-300-60)">
               Saved for this preset. Save Defaults captures these; the two Reset buttons restore
               them.
             </div>
@@ -1557,7 +1557,7 @@ export function SettingsPanel({
         </div>
         <div
           data-drag-stay
-          className="pt-3 px-4 border-t border-(--bd-500-20) text-[11px] text-(--tx-300-60) space-y-0.5"
+          className="pt-3 px-4 border-t border-(--bd-500-20) text-[0.6875rem] text-(--tx-300-60) space-y-0.5"
         >
           <div>
             Contact:{' '}

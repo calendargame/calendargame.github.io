@@ -1220,7 +1220,7 @@ export default function PresetManager({
                 note below, for the same reason: a small fact about why a control just did what it
                 did. */}
                   {editing?.id === p.id && nameWidthCapped && (
-                    <div className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[11px] text-(--tx-300-60)">
+                    <div className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[0.6875rem] text-(--tx-300-60)">
                       That&apos;s as long as this name can display.
                     </div>
                   )}
@@ -1235,7 +1235,7 @@ export default function PresetManager({
           a rule a player would otherwise have to discover by pressing. It sits under the list
           rather than in it so that it reads as a fact about the set, not about that one row. */}
       {!canDelete && (
-        <div className="px-4 text-[11px] text-(--tx-300-60)">
+        <div className="px-4 text-[0.6875rem] text-(--tx-300-60)">
           There is always at least one preset, so this one cannot be deleted. Full Reset is how you
           empty it.
         </div>

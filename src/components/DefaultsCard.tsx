@@ -352,11 +352,11 @@ function DefaultsCard({
       <div ref={footRef} className="elev-shadow-up shrink-0 px-4 space-y-3">
         {manage &&
           (dirty ? (
-            <div className="text-[11px] text-(--tx-300-60)">
+            <div className="text-[0.6875rem] text-(--tx-300-60)">
               Saving here updates only these values.
             </div>
           ) : note ? (
-            <div className="text-[11px] text-(--tx-300-60)">{note}</div>
+            <div className="text-[0.6875rem] text-(--tx-300-60)">{note}</div>
           ) : null)}
         {(!manage || dirty) && (
           <div className="pt-1">

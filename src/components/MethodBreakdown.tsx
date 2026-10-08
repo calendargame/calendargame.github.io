@@ -111,14 +111,14 @@ function MethodExplanation({
       <div className="grid grid-cols-5 gap-2 text-center text-sm">
         {codes.map((c, i) => (
           <div key={i} className="flex flex-col gap-1">
-            <div className="text-[11px] text-(--tx-200-80)">
+            <div className="text-[0.6875rem] text-(--tx-200-80)">
               {c.italic ? <i>{c.label}</i> : c.label}
             </div>
             <div className="font-semibold tabular-nums text-(--tx-50)">{c.value}</div>
           </div>
         ))}
       </div>
-      <div className="mt-2 text-center text-[11px] text-(--tx-300-60)">{calendarText}</div>
+      <div className="mt-2 text-center text-[0.6875rem] text-(--tx-300-60)">{calendarText}</div>
     </div>
   )
 }
