@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { renderGuidePage } from './helpers/guideScroller.jsx'
 import { installResizeObserver, holdFrames } from './helpers/scrollGeometry.js'
-import { ACCORDION_MS_FLOOR } from '../src/lib/accordionMotion.js'
+import { ACCORDION_MS_FLOOR, accordionEase } from '../src/lib/accordionMotion.js'
 
 // The bar's underside — the docking line — and a header's height. Both arbitrary; the line is
 // fractional because a real bar's height is.
@@ -55,6 +55,15 @@ const leaving = (id, carried) => {
   // the section's foot has arrived and is carrying the header up under the bar
   place[id] = { top: LINE - carried, natural: LINE - 3000, floor: LINE - carried + HEAD_H }
 }
+// …and a section given NO header top of its own has its header placed the way the browser's stick
+// places it, from the section alone: at its natural spot, or at the line plus whatever `top` the
+// app has written on the header (the stylesheet's is 0) when that is lower — and never out of the
+// bottom of its own section. `room` is the height of the section under its header: 0 while closed.
+const section = (id, natural, room, panelH) => {
+  place[id] = { natural, floor: natural + HEAD_H + room, panelH }
+}
+const stickTop = (el, sec) =>
+  Math.min(Math.max(sec.natural, LINE + (parseFloat(el.style.top) || 0)), sec.floor - HEAD_H)
 
 let rectSpy = null
 beforeEach(() => {
@@ -73,7 +82,10 @@ beforeEach(() => {
     const of = (prefix) =>
       this.id?.startsWith(prefix) ? place[this.id.slice(prefix.length)] : null
     const head = of('guide-head-')
-    if (head) return rect(head.top, head.top + HEAD_H)
+    if (head) {
+      const top = head.top ?? stickTop(this, head)
+      return rect(top, top + HEAD_H)
+    }
     const sec = of('guide-sec-')
     if (sec) return rect(sec.natural, sec.floor)
     // A section's panel body, for the one group below that needs the toggle to plan a glide: the
@@ -385,12 +397,183 @@ describe('one shadow: the bar gives its own up while a header is docked against 
   })
 })
 
-// ── OPENING A SECTION WHOSE HEADER IS ABOVE THE LINE ─────────────────────────────────────────────
-// Tapped while half under the bar (or opened from the keyboard), the header is put on the line at
-// once by the stick — carried DOWN from its natural spot, which is exactly what "text is under it"
-// looks like to the tracker. It lit the header's shadow for the length of the glide that brings the
-// section down to meet it. An opening section must never look pinned: while that glide is in flight
-// the header casts nothing, and it is looked at again the moment the glide is over.
+// ── OPENING A SECTION WHOSE HEADER IS ABOVE THE LINE: THE HEADER'S OWN PLACE ─────────────────────
+// Tapped while half under the bar (or opened from the keyboard after the page was scrolled on), the
+// header used to be put on the line by the stick the moment its panel had opened far enough to
+// give it room — in one frame, ahead of the glide bringing the rest of the section down. It is
+// brought down on that glide's clock and curve now, starting from where it stood. The section here
+// is placed the way a browser places it (`section`, above), and follows the page the glide moves.
+describe('a header tapped above the line is brought down to it, never dropped on it', () => {
+  const ABOVE = 30
+  const PANEL_H = 400
+  const START = 900
+  // The section's top edge follows the page: every pixel the glide scrolls back brings it down one.
+  const follow = (room = PANEL_H) =>
+    section('stats', LINE - ABOVE + (START - guide.pos()), room, PANEL_H)
+  const tapAboveTheLine = () => {
+    const view = mount()
+    guide.setContent(6000)
+    guide.scrollTo(START)
+    follow(0) // closed: exactly as tall as its header, so there is no room to stick in
+    frames = holdFrames(vi)
+    guide.clearWrites()
+    tap(view.container, 'stats')
+    follow() // its panel is open: the stick has room to work in from here on
+    return view
+  }
+  const top = (container) => header(container, 'stats').getBoundingClientRect().top
+  const offset = (container) => header(container, 'stats').style.top
+  // One frame of the app, and the page it moved.
+  const frame = (ms) => {
+    act(() => frames.at(ms))
+    follow()
+  }
+
+  it('is where it was on the frame of the tap, and rides its section down on the glide`s curve', () => {
+    const { container } = tapAboveTheLine()
+    expect(header(container, 'stats').getAttribute('aria-expanded')).toBe('true')
+    expect(top(container)).toBe(LINE - ABOVE) // the tap moved nothing
+    frame(0) // the clock starts here
+    expect(top(container)).toBe(LINE - ABOVE)
+    let last = LINE - ABOVE
+    for (let i = 1; i < 20; i++) {
+      frame((FOLD_MS * i) / 20)
+      const now = top(container)
+      expect(now).toBeCloseTo(LINE - ABOVE * (1 - accordionEase(i / 20)), 9)
+      expect(now).toBeCloseTo(place.stats.natural, 9) // on its section's own top edge, every frame
+      expect(now).toBeGreaterThanOrEqual(last) // only ever down
+      expect(now - last).toBeLessThan(ABOVE / 4) // and no frame is a drop
+      last = now
+    }
+    frame(FOLD_MS)
+    expect(top(container)).toBe(LINE) // landed, with its section
+    expect(offset(container)).toBe('') // …and back on the stylesheet's own line
+    expect(frames.pending()).toBe(0)
+  })
+
+  it.each([
+    ['exactly on the line', 0],
+    ['within the band that counts as on it', 0.3],
+    ['below it', -50],
+  ])('a header %s is left to the stylesheet`s line', (_where, above) => {
+    const { container } = mount()
+    guide.setContent(6000)
+    guide.scrollTo(START)
+    section('stats', LINE - above, 0, PANEL_H)
+    frames = holdFrames(vi)
+    tap(container, 'stats')
+    expect(offset(container)).toBe('')
+  })
+
+  it('under Reduce Motion nothing is brought anywhere: the end state at once', () => {
+    document.documentElement.style.setProperty('--motion-scale', '0')
+    try {
+      const { container } = tapAboveTheLine()
+      expect(offset(container)).toBe('')
+      expect(top(container)).toBe(LINE)
+    } finally {
+      document.documentElement.style.removeProperty('--motion-scale')
+    }
+  })
+
+  it('a reader who takes the page over mid-glide stops the page, and the header still comes down', () => {
+    const { container } = tapAboveTheLine()
+    frame(0)
+    frame(FOLD_MS * 0.2)
+    const stoppedAt = guide.pos()
+    act(() => window.dispatchEvent(new Event('wheel')))
+    expect(frames.pending()).toBe(1) // the glide is theirs; the header`s own frame is still asked for
+    let last = top(container)
+    for (const t of [0.4, 0.6, 0.8]) {
+      frame(FOLD_MS * t)
+      expect(guide.pos()).toBe(stoppedAt)
+      expect(top(container)).toBeCloseTo(LINE - ABOVE * (1 - accordionEase(t)), 9)
+      expect(top(container)).toBeGreaterThan(last)
+      last = top(container)
+    }
+    frame(FOLD_MS)
+    expect([top(container), offset(container)]).toEqual([LINE, ''])
+    expect(frames.pending()).toBe(0)
+  })
+
+  it('closed again on the way, it is held where it stands until its panel has folded', () => {
+    const { container } = tapAboveTheLine()
+    frame(0)
+    frame(FOLD_MS * 0.25)
+    const stoodAt = top(container)
+    const held = offset(container)
+    expect(stoodAt).toBeLessThan(LINE - 1) // really still on its way
+    tap(container, 'stats')
+    expect(header(container, 'stats').getAttribute('aria-expanded')).toBe('false')
+    // The fold: the section still has room under its header until the end of it.
+    for (const t of [0, 0.5, 0.9]) {
+      frame(5000 + FOLD_MS * t)
+      expect([top(container), offset(container)]).toEqual([stoodAt, held])
+    }
+    act(() => frames.at(5000 + FOLD_MS))
+    follow(0) // folded: no room left to stick in
+    expect([top(container), offset(container)]).toEqual([stoodAt, ''])
+    expect(frames.pending()).toBe(0)
+  })
+
+  it('swapped out for another section on the way, it is held the same', () => {
+    const { container } = tapAboveTheLine()
+    frame(0)
+    frame(FOLD_MS * 0.25)
+    const stoodAt = top(container)
+    const held = offset(container)
+    expect(held).not.toBe('')
+    below('overview', 300)
+    tap(container, 'overview')
+    expect(offset(container)).toBe(held) // the header left behind
+    expect(header(container, 'overview').style.top).toBe('') // the one opened is below the line
+    frame(5000)
+    frame(5000 + FOLD_MS * 0.5)
+    expect([top(container), offset(container)]).toEqual([stoodAt, held])
+    act(() => frames.at(5000 + FOLD_MS))
+    expect(offset(container)).toBe('')
+  })
+
+  it('opened again while it is being held, it sets off from where it stands', () => {
+    const { container } = tapAboveTheLine()
+    frame(0)
+    frame(FOLD_MS * 0.25)
+    const stoodAt = top(container)
+    tap(container, 'stats') // closed…
+    frame(5000)
+    frame(5000 + FOLD_MS * 0.5)
+    tap(container, 'stats') // …and opened again, half-way through the fold
+    expect(top(container)).toBe(stoodAt)
+    frame(9000)
+    frame(9000 + FOLD_MS * 0.5)
+    expect(top(container)).toBeGreaterThan(stoodAt)
+    expect(top(container)).toBeLessThan(LINE)
+    frame(9000 + FOLD_MS)
+    expect(offset(container)).toBe('')
+    expect(frames.pending()).toBe(0)
+  })
+
+  it('leaving the screen on the way gives it straight back to the stylesheet`s line', () => {
+    const view = tapAboveTheLine()
+    frame(0)
+    frame(FOLD_MS * 0.25)
+    const head = header(view.container, 'stats')
+    expect(head.style.top).not.toBe('')
+    act(() => view.unmount())
+    expect(head.style.top).toBe('')
+    expect(frames.pending()).toBe(0)
+  })
+})
+
+// ── OPENING A SECTION WHOSE HEADER IS ABOVE THE LINE: THE SHADOWS ────────────────────────────────
+// A header is carried DOWN from its natural spot — which is exactly what "text is under it" looks
+// like to the tracker — whenever its section's top is above where the header is drawn. While a
+// section opened above the line is on its way down that happens for the length of the glide if a
+// section ABOVE it is folding at the same time (the fold runs a frame ahead of the page, so the
+// section's top is pulled up past its header), and from the moment a reader takes the page over.
+// An opening section must never look pinned: while the glide is in flight the header casts nothing,
+// and it is looked at again the moment the glide is over. The header is placed BY HAND here, on the
+// line with its section's top above it — the carried picture itself.
 describe('a section opened with its header above the line shows no shadow while it glides into place', () => {
   const openAboveTheLine = () => {
     const view = mount()

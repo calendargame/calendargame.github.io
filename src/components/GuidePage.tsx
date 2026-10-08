@@ -29,6 +29,7 @@ import {
   releaseShades,
   arrivingBarYield,
   NO_DOCK,
+  DOCK_LINE_BAND_PX,
   type DockShades,
   type HeaderDockGeometry,
 } from '../lib/guideDock.js'
@@ -192,6 +193,45 @@ function startShadeRelease(
     if (p < 1) raf = requestAnimationFrame(step)
   }
   write(from, false)
+  raf = requestAnimationFrame(step)
+  return () => cancelAnimationFrame(raf)
+}
+// startHeaderOffset — a header's own distance from THE LINE while it is being brought to it. The
+// stick (index.css's .guide-head, `top:0`) holds an open section's header ON the line whenever its
+// section's top is above it. So a header tapped while it stood ABOVE the line — partly behind the
+// bar, or scrolled away with the keyboard still on it — was put on the line the moment its panel
+// had opened far enough to give it room: in ONE frame, ahead of the glide that brings the rest of
+// the section down to meet it, when every other open arrives on that glide. For the length of the
+// motion the header's `top` is therefore written here, inline: `fromPx` at once (in the tap, so the
+// frame of the tap shows the header exactly where it was), then on to `toPx` on the clock and curve
+// the panels and the scroll writer run, and off the header altogether at the end — the stylesheet's
+// own line again. It asks for its frame in the same tap as the scroll writer, so the two are handed
+// one timestamp per frame and agree on every one: while only the glide is moving the page, the
+// header rides its section's top edge exactly, and lands as it lands. `fromPx` equal to `toPx` HOLDS
+// the header where it stands for that long (a section closed again while its header was still on
+// its way). Returns the cancel, which leaves `top` as it stands; `onEnd` is told only when it ran
+// to its end.
+function startHeaderOffset(
+  header: HTMLElement,
+  fromPx: number,
+  toPx: number,
+  durationMs: number,
+  onEnd: () => void,
+): () => void {
+  let raf = 0
+  let start: number | null = null
+  header.style.top = `${fromPx}px`
+  const step = (now: number) => {
+    if (start === null) start = now
+    const p = Math.min(1, (now - start) / durationMs)
+    if (p < 1) {
+      header.style.top = `${fromPx + (toPx - fromPx) * accordionEase(p)}px`
+      raf = requestAnimationFrame(step)
+      return
+    }
+    header.style.top = ''
+    onEnd()
+  }
   raf = requestAnimationFrame(step)
   return () => cancelAnimationFrame(raf)
 }
@@ -511,6 +551,32 @@ export default function GuidePage({
   // and the tracker's own evaluate, so the glide's end can have the header looked at again.
   const arrivingRef = useRef<{ id: string; from: number; progress: number } | null>(null)
   const trackerRef = useRef<(() => void) | null>(null)
+  // The headers whose own distance from the line is being written (startHeaderOffset), each with
+  // its cancel: the one being brought down to the line, and any that was closed again on the way
+  // and is held where it stood until its panel has folded. A header has one at a time.
+  const headerOffsetsRef = useRef(new Map<HTMLElement, () => void>())
+  // Take a header's offset off it where it stands. `rest`: and give it back to the stylesheet's
+  // line — right whenever nothing is about to write it again.
+  const endHeaderOffset = useCallback((header: HTMLElement, rest: boolean) => {
+    headerOffsetsRef.current.get(header)?.()
+    headerOffsetsRef.current.delete(header)
+    if (rest) header.style.top = ''
+  }, [])
+  const runHeaderOffset = useCallback(
+    (header: HTMLElement, fromPx: number, toPx: number, durationMs: number) => {
+      endHeaderOffset(header, false)
+      headerOffsetsRef.current.set(
+        header,
+        startHeaderOffset(header, fromPx, toPx, durationMs, () =>
+          headerOffsetsRef.current.delete(header),
+        ),
+      )
+    },
+    [endHeaderOffset],
+  )
+  const restHeaderOffsets = useCallback(() => {
+    for (const header of [...headerOffsetsRef.current.keys()]) endHeaderOffset(header, true)
+  }, [endHeaderOffset])
   // ⚠ A LAYOUT EFFECT, and that is the whole of the guard's correctness since round 13. React runs
   // layout effects child-first and passive effects in a LATER task, so a passive version of this
   // would be ordered AFTER App's mode-switch layout effect (main.tsx), which resets #appScroll to
@@ -526,24 +592,28 @@ export default function GuidePage({
     // Off-screen: drop anything in flight, and listen for nothing — a hidden guide can neither
     // start a glide nor be scrolled, so there is no visibility case left to handle.
     // …and a closing header's shadows are put at rest rather than left mid-fade (endRelease): rAF
-    // stops while hidden for the release exactly as it does for the glide.
+    // stops while hidden for the release exactly as it does for the glide. A header still on its
+    // way to the line is given back to the stylesheet's line for the same reason.
     if (!visible) {
       cancelScrollWriter()
       endRelease(true)
+      restHeaderOffsets()
       return
     }
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'hidden') return
       cancelScrollWriter()
       endRelease(true)
+      restHeaderOffsets()
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       cancelScrollWriter()
       endRelease(true)
+      restHeaderOffsets()
     }
-  }, [visible, cancelScrollWriter, endRelease])
+  }, [visible, cancelScrollWriter, endRelease, restHeaderOffsets])
   // The toggle coordinator — hooked into the single toggle callback, never pointer
   // events. Everything is measured at tap time, pre-animation: the closing panel's
   // RENDERED height (its grid track — a mid-flight re-toggle reads the interpolated
@@ -719,6 +789,33 @@ export default function GuidePage({
       // the target is computed from anyway.
       const scroller = scrollerRef.current
       if (!tapped || !scroller || scroller.scrollHeight <= 0) return
+      // ★ A HEADER TAPPED ABOVE THE LINE IS BROUGHT DOWN TO IT, NOT DROPPED ON IT
+      // (startHeaderOffset says what used to happen). Measured here, in the tap, before the commit
+      // that opens its panel: how far above the line the tapped header's top stands. Past the band
+      // in which a header counts as ON the line (lib/guideDock), its own offset starts at exactly
+      // that — where it is — and runs out to nothing over this tap's motion. Anything else leaves
+      // the header to the stylesheet's line: one already on or below it, an instant open (Reduce
+      // Motion: no motion, so the end state at once), and a line that cannot be read (jsdom's NaN).
+      // The section this tap closes — its own, or the one a tap elsewhere swaps out — may still be
+      // carrying an offset from an open a moment ago. Given back to the line mid-fold, the stick
+      // would drop its header there for as long as the folding panel left it room; so it is HELD
+      // where it stands for the length of the fold, and let go when there is no room left to stick
+      // in.
+      if (closingHeader && headerOffsetsRef.current.has(closingHeader)) {
+        const standsAt = parseFloat(closingHeader.style.top)
+        if (scaledMs > 0) runHeaderOffset(closingHeader, standsAt, standsAt, scaledMs)
+        else endHeaderOffset(closingHeader, true)
+      }
+      const tappedHeader = opens ? document.getElementById(headerDomId(id)) : null
+      if (tappedHeader) {
+        const aboveLine =
+          scroller.getBoundingClientRect().top +
+          readBarHeight(getComputedStyle(scroller)) -
+          tappedHeader.getBoundingClientRect().top
+        if (scaledMs > 0 && aboveLine > DOCK_LINE_BAND_PX)
+          runHeaderOffset(tappedHeader, -aboveLine, 0, scaledMs)
+        else endHeaderOffset(tappedHeader, true)
+      }
       const scrollY = scroller.scrollTop
       const tappedRect = tapped.getBoundingClientRect()
       const target = accordionScrollTarget({
@@ -791,7 +888,15 @@ export default function GuidePage({
         },
       )
     },
-    [open, cancelScrollWriter, endRelease, paintBarShare, scrollerRef],
+    [
+      open,
+      cancelScrollWriter,
+      endRelease,
+      endHeaderOffset,
+      runHeaderOffset,
+      paintBarShare,
+      scrollerRef,
+    ],
   )
   return (
     // This root is the whole screen, so it carries all three of the screen's outer properties:
@@ -996,9 +1101,11 @@ export default function GuidePage({
             The sections of this guide open one at a time — opening a section closes the one before
             it. When a section opens or closes, the page scrolls along with the motion whenever
             that's needed to keep your place: instead of sliding off-screen, the section you tapped
-            comes to rest right under the bar at the top, with its title fully readable. The last
-            section or two are the exception — the page has already run out of room to scroll by
-            then, so they settle wherever the bottom of the page allows.
+            comes to rest right under the bar at the top, with its title fully readable — a title
+            that was partly tucked under the bar when you tapped it slides down into place with the
+            rest of its section, it doesn't jump there ahead of it. The last section or two are the
+            exception — the page has already run out of room to scroll by then, so they settle
+            wherever the bottom of the page allows.
           </li>
           <li>
             While you read down a long section, its title stays docked right under the bar at the
@@ -1987,7 +2094,8 @@ export default function GuidePage({
           aria-expanded/aria-controls here and in MethodBreakdown; the mode list = CustomSelect's
           open-state key handler; the motion paragraph = a full grep of --motion-scale, which now
           has SIX consumers — index.css's .expander rule, this file's own inline transitionDuration
-          + scroll glide (and, on that same read, a closing header's shadow hand-back), the three
+          + scroll glide (and, on that same read, a closing header's shadow hand-back and a header
+          tapped above the line being brought down to it), the three
           `transition:background-color` surface fades, and .boot-d's bootPulse — so those are the only things the paragraph may claim, and index.css's own
           words for the rest are "Functional motion — the .bar countdown and the color flashes — is
           deliberately NOT scaled". ⚠ THE PARAGRAPH IS NOW A COMPLETE ACCOUNT, WHICH IT WAS NOT

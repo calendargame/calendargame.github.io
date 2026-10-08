@@ -60,16 +60,20 @@
 // Both are a tap on a header, and in both the numbers above are true and the picture is not:
 //
 //   ARRIVING — a section is opened while its header's natural spot is ABOVE the line (the header
-//     was partly under the bar when it was tapped, or the keyboard opened it). The stick puts it on
-//     the line at once, carried down from that spot, so `depth` is above 0 and the rule above would
-//     light its shadow — for the length of the glide that is bringing the section down to meet it,
-//     going out as the glide lands. That is a section being OPENED looking pinned, which is the one
-//     thing these headers must never do. While the glide is in flight the header casts nothing
-//     (dockShades' `arriving`). And the BAR's share, which the header's place puts at nothing the
-//     moment the stick has it on the line — out in ONE frame, on a page that was scrolled and
-//     showing it in full — is taken down over the glide instead (arrivingBarYield): from what the
-//     bar was keeping at the tap to what the header's place says, on the glide's own clock, so the
-//     bar's shadow is gone as the section lands under its header and not before.
+//     was partly under the bar when it was tapped, or the keyboard opened it). The header is
+//     brought down to the line over the glide (components/GuidePage's startHeaderOffset), and
+//     whenever its section's top is above where it is drawn it has been carried down from its
+//     natural spot: all the way, when a section above it is folding at the same time — the fold
+//     runs ahead of the page, and pulls the section's top up past its header — and from the moment
+//     a reader stops the page mid-glide. Then `depth` is above 0 and the rule above would light its
+//     shadow — for the length of the glide that is bringing the section down to meet it, going out
+//     as the glide lands. That is a section being OPENED looking pinned, which is the one thing
+//     these headers must never do. While the glide is in flight the header casts nothing
+//     (dockShades' `arriving`). And the BAR's share, which the header's place alone would take away
+//     over the last few pixels before the line, on a page that was scrolled and showing it in
+//     full, is taken down over the whole glide instead (arrivingBarYield): from what the bar was
+//     keeping at the tap to what the header's place says, on the glide's own clock, so the bar's
+//     shadow is gone as the section lands under its header and not before.
 //
 //   RELEASING — a section is closed, or swapped for another, from its docked header. The moment it
 //     is no longer the open section nothing is docked, and by position alone the bar is owed its

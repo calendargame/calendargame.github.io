@@ -662,10 +662,11 @@ describe('tapping a section carries the reading position with it', () => {
   })
 
   it('moves nothing when the tap leaves the reading position coherent', () => {
-    // The stay-put default, which is most taps. The reader is at the top, so the tapped header is
-    // already at (in fact above) the reading line: no compensation is owed, and animating one
-    // anyway would be visible motion for no correction.
-    const { container, g } = readingPage(0)
+    // The stay-put default, which is most taps. The reader is at the top and the tapped header is
+    // exactly on the reading line (every rectangle here reports a top of 0, so the line is stood
+    // up at 0 too): no compensation is owed, and animating one anyway would be visible motion for
+    // no correction.
+    const { container, g } = readingPage(0, 0)
     openingPanelHeight(400)
     const frames = manualFrames()
     tap(container, 'overview')
@@ -673,7 +674,7 @@ describe('tapping a section carries the reading position with it', () => {
       container.querySelector('#guide-sec-overview button').getAttribute('aria-expanded'),
     ).toBe('true') // the tap landed …
     expect(g.writes).toEqual([]) // … and moved nothing
-    expect(frames).toEqual([]) // no writer was even scheduled
+    expect(frames).toEqual([]) // no writer was even scheduled, for the page or for the header
   })
 
   it('rides the panels’ own clock and curve, landing exactly on the target', () => {

@@ -444,6 +444,10 @@ input,textarea{user-select:text;-webkit-user-select:text}
        scroller's padding, and #appScroll's padding-top is exactly --bar-h (the inline style in
        main.tsx that starts every screen below the fixed bar) — so a `top:var(--bar-h)` here would
        count the bar twice and pin a whole bar-height too low (measured, round 23).
+       ONE WRITER EVER PUTS ANOTHER `top` ON A HEADER, inline, and only for the length of one
+       open: GuidePage's startHeaderOffset, which brings a header tapped ABOVE this line down to it
+       on the glide's own clock (a negative `top`, running out to nothing) where the stick alone
+       would have dropped it there in one frame. At rest every header is on this rule.
      • ONE DOCKING POSITION. That same line is where a section you OPEN is brought to rest
        (GuidePage glides the header's top onto it) and where a header you Tab to lands
        (#appScroll's scroll-padding-top, above). So opening a section puts its header exactly
