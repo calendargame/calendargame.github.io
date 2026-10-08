@@ -1955,9 +1955,17 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ITS REACH — where the keyboard may be while the menu is the top thing covering the page
       // (overlayStack's "THE KEYBOARD'S REACH"): anywhere in the TOP BAR (the card, the gear that
       // closes it, and the two lists beside the gear, which the paragraph above keeps usable over
-      // the open menu), held on the card, with Tab walking the card's controls. The page under the
-      // bar is what is out of reach.
-      useLayer(settingsOpen, ()=>setSettingsOpen(false), 'settings', pressOutsideSettings, {parts:()=>[htpStickyBarRef.current],hold:()=>settingsPopoverRef.current,walk:()=>settingsPopoverRef.current});
+      // the open menu), held on the card, with Tab walking ALL of it: the bar's own three controls
+      // — the preset list's button, the mode list's, and the gear — and then the card's, in the
+      // order they are written. The walk used to be the card alone, which left the two lists usable
+      // over the menu by a pointer and by nothing else: no key could put the keyboard on either
+      // button, so with the menu open the mode list could not be opened from the keyboard at all
+      // (only a mode letter changed the page). Tab is still the menu's — it opens no list — and from
+      // the card, where the menu's own key (G) puts the keyboard, the first Tab still lands on the
+      // menu's first control; Shift+Tab from there steps back onto the gear, then the mode list's
+      // button, then the preset list's, where Enter, Space, ↑, and ↓ open the list
+      // (components/CustomSelect). The page under the bar is what is out of reach.
+      useLayer(settingsOpen, ()=>setSettingsOpen(false), 'settings', pressOutsideSettings, {parts:()=>[htpStickyBarRef.current],hold:()=>settingsPopoverRef.current,walk:()=>htpStickyBarRef.current});
       // Close-on-drag-activate: the pointer controller dispatches a bubbling "drag-dismiss"
       // CustomEvent from a drag-clicked member of a data-drag-dismiss menu (lib/pointerGestures) — the
       // settings popover card is the only such menu. Closing here is exactly a normal close, so the

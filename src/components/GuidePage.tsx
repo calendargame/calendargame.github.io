@@ -1944,6 +1944,15 @@ export default function GuidePage({
                 <Kbd>Tab</Kbd>
                 <span>Mode selector (toggle) — on the page; see the notes</span>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="whitespace-nowrap">
+                  <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd>
+                </span>
+                <span>
+                  With ⚙ open: back to the ⚙ button, then the mode selector, then the preset list —
+                  see the notes
+                </span>
+              </div>
             </div>
           </div>
           <div>
@@ -1994,13 +2003,18 @@ export default function GuidePage({
             <b>With the ⚙ menu or a popup open</b> it walks that menu&apos;s or popup&apos;s own
             controls one at a time, and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> walks them backwards; both
             wrap round at the ends, neither steps out to the page behind, and each step scrolls the
-            control it lands on into view. <b>With a list open</b>, <Kbd>Tab</Kbd> or{' '}
-            <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> closes the list and leaves the keyboard on its button.
-            On the page, <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> is the browser&apos;s own step backwards,
-            and it is how the keyboard reaches the page&apos;s controls that have no key of their
-            own — a section of this guide, a stats box, a time readout, the strip of an ended run or
-            round (<Kbd>Enter</Kbd> or <Kbd>Space</Kbd> then presses what it is on). Tab plus any
-            other modifier (Ctrl+Tab, Ctrl+Shift+Tab, etc.) passes through to the browser.
+            control it lands on into view. The ⚙ menu&apos;s walk takes in the three buttons of the
+            top bar it hangs from as well — the preset list, the mode selector, and ⚙ itself, in
+            that order, ahead of the menu&apos;s own controls — so from the menu&apos;s first
+            control <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> steps back onto ⚙, then the mode selector, then
+            the preset list, and <Kbd>Tab</Kbd> from its last control comes round to them. It opens
+            no list on the way. <b>With a list open</b>, <Kbd>Tab</Kbd> or <Kbd>Shift</Kbd>+
+            <Kbd>Tab</Kbd> closes the list and leaves the keyboard on its button. On the page,{' '}
+            <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> is the browser&apos;s own step backwards, and it is how
+            the keyboard reaches the page&apos;s controls that have no key of their own — a section
+            of this guide, a stats box, a time readout, the strip of an ended run or round (
+            <Kbd>Enter</Kbd> or <Kbd>Space</Kbd> then presses what it is on). Tab plus any other
+            modifier (Ctrl+Tab, Ctrl+Shift+Tab, etc.) passes through to the browser.
           </li>
           <li>
             Every list opens from the keyboard once the keyboard is on its button: <Kbd>Enter</Kbd>{' '}
@@ -2011,7 +2025,12 @@ export default function GuidePage({
             again (which closes the mode list and leaves the keyboard on its button), then{' '}
             <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> steps back to the preset button beside it.{' '}
             <b>Open in</b> — <Kbd>G</Kbd>, then <Kbd>Tab</Kbd>: it is the first control in the ⚙
-            menu. What the keys do once a list is open is under Accessibility.
+            menu. And <b>with the ⚙ menu open</b>, where <Kbd>Tab</Kbd> is the menu&apos;s and the
+            mode letters are otherwise the only way to another mode: <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd>{' '}
+            from the menu steps back to the ⚙ button, once more to the mode selector, and once more
+            to the preset list, and <Kbd>Enter</Kbd>, <Kbd>Space</Kbd>, <Kbd>↑</Kbd>, or{' '}
+            <Kbd>↓</Kbd> opens the one the keyboard is on, over the menu. What the keys do once a
+            list is open is under Accessibility.
           </li>
           <li>
             In every box you can type into — the Year Range boxes, the MoX run length, every time
@@ -2272,9 +2291,10 @@ export default function GuidePage({
             holds the keyboard like one while it is open. Opening it puts the keyboard on the menu
             (or leaves it where it was, if it was already in the top bar: on the ⚙ button after a
             click, or on one of the two lists); <Kbd>Tab</Kbd> and <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd>{' '}
-            walk its controls and wrap at the ends; and closing it gives the keyboard back to
-            whatever on the page had it. <Kbd>Esc</Kbd> closes it, unless you&apos;re typing in one
-            of its boxes, in which case the first <Kbd>Esc</Kbd> belongs to the box.
+            walk its controls, with the top bar&apos;s three buttons (the preset list, the mode
+            selector, and ⚙) ahead of them, and wrap at the ends; and closing it gives the keyboard
+            back to whatever on the page had it. <Kbd>Esc</Kbd> closes it, unless you&apos;re typing
+            in one of its boxes, in which case the first <Kbd>Esc</Kbd> belongs to the box.
           </li>
           <li>
             Each section header in this guide, and the Show Codes button, states whether it&apos;s

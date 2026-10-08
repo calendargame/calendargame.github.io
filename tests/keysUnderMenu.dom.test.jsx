@@ -12,6 +12,10 @@
 //   • focus cannot be on the page: the menu takes the keyboard as it opens, Tab and Shift+Tab walk
 //     its own controls, and closing it hands the keyboard back. A page button that kept focus used
 //     to take Enter and Space behind the open menu, and Shift+Tab walked out into the page.
+//     "Its own controls" are the whole top bar's: the two lists' buttons and the gear stay usable
+//     over the open menu, so the walk takes them in ahead of the card — which is the keyboard's
+//     only way onto the mode list's button, and so its only way to open that list, while the menu
+//     is open.
 //
 // ★ EVERY KEY IS PROVED TWICE — that it DOES act with the menu closed, and that it does NOT with the
 // menu open. The first half is not decoration: until the harness gave the app's key handler the one
@@ -235,10 +239,16 @@ describe('the keyboard stays in the ⚙ menu while it is open', () => {
     })
     return { taken: !delivered }
   }
-  const stops = () =>
-    [...panelEl().querySelectorAll('button,input,select,textarea,a[href],[tabindex]')].filter(
-      (el) => el.tabIndex >= 0 && !el.disabled && el.offsetParent !== null,
+  const stopsIn = (el) =>
+    [...el.querySelectorAll('button,input,select,textarea,a[href],[tabindex]')].filter(
+      (stop) => stop.tabIndex >= 0 && !stop.disabled && stop.offsetParent !== null,
     )
+  // The menu's own controls, and the three in the bar the menu hangs from, each found by its name.
+  const stops = () => stopsIn(panelEl())
+  const presetButton = () => screen.getByRole('button', { name: /^Preset,/ })
+  const modeButton = () => screen.getByRole('button', { name: /^Mode,/ })
+  const gearButton = () => screen.getByRole('button', { name: /^Settings/ })
+  const shiftTab = () => tabOn(document.activeElement, { shiftKey: true })
 
   it('a page button that had the keyboard loses it when the menu opens — Enter and Space cannot reach it', () => {
     mountApp()
@@ -266,18 +276,25 @@ describe('the keyboard stays in the ⚙ menu while it is open', () => {
     openSettings('key')
     const all = stops()
     expect(all.length).toBeGreaterThan(5)
-    // From the gear (where a mouse press leaves the keyboard): not one of the menu's controls, so
-    // the rule itself takes the step, to the first of them.
-    const gear = screen.getByRole('button', { name: /^Settings/ })
+    // From the card, where G leaves the keyboard: to the menu's first control.
+    expect(document.activeElement).toBe(panelEl())
+    expect(tabOn(document.activeElement).taken).toBe(true)
+    expect(document.activeElement).toBe(all[0])
+    // From the gear (where a mouse press leaves the keyboard): the next control is the same one.
+    const gear = gearButton()
     act(() => gear.focus())
     expect(document.activeElement).toBe(gear) // the gear is in the top bar: within reach
     expect(tabOn(gear).taken).toBe(true)
     expect(document.activeElement).toBe(all[0])
     expect(modeMenuOpen()).toBe(false)
-    // Off the last control, forward: wraps to the first.
+    // Off the last control, forward: round to the top of the bar, then through it and back into
+    // the menu — never out to the page, and never opening a list on the way.
     act(() => all[all.length - 1].focus())
-    expect(tabOn(document.activeElement).taken).toBe(true)
-    expect(document.activeElement).toBe(all[0])
+    for (const next of [presetButton(), modeButton(), gear, all[0]]) {
+      expect(tabOn(document.activeElement).taken).toBe(true)
+      expect(document.activeElement).toBe(next)
+      expect(modeMenuOpen()).toBe(false)
+    }
     // In the middle the step is the rule's own too: to the next control.
     act(() => all[2].focus())
     expect(tabOn(document.activeElement).taken).toBe(true)
@@ -285,17 +302,82 @@ describe('the keyboard stays in the ⚙ menu while it is open', () => {
     expect(modeMenuOpen()).toBe(false)
   })
 
-  it('Shift+Tab off the first control wraps to the last — it never walks out into the page', () => {
+  it('Shift+Tab off the first control steps back through the bar, then wraps — never out into the page', () => {
     mountApp()
     openSettings('key')
     const all = stops()
     act(() => all[0].focus())
-    expect(tabOn(document.activeElement, { shiftKey: true }).taken).toBe(true)
-    expect(document.activeElement).toBe(all[all.length - 1])
+    for (const next of [gearButton(), modeButton(), presetButton(), all[all.length - 1]]) {
+      expect(shiftTab().taken).toBe(true)
+      expect(document.activeElement).toBe(next)
+    }
     // …and from the card itself, where the keyboard is when the menu was opened with G.
     act(() => panelEl().focus())
-    expect(tabOn(document.activeElement, { shiftKey: true }).taken).toBe(true)
-    expect(document.activeElement).toBe(all[all.length - 1])
+    expect(shiftTab().taken).toBe(true)
+    expect(document.activeElement).toBe(gearButton())
+  })
+
+  // The walk is exactly what stays usable over the open menu, and nothing else in the bar: the
+  // three buttons, in the order they stand, ahead of the menu's own controls.
+  it('the walk is the bar`s three buttons and then the menu`s controls, and nothing on the page', () => {
+    mountApp()
+    openSettings('key')
+    const bar = panelEl().closest('.htp-sticky-bar')
+    expect(stopsIn(bar)).toEqual([presetButton(), modeButton(), gearButton(), ...stops()])
+  })
+
+  // ★ THE WAY IN. With the menu open no key could put the keyboard on the mode list's button, so
+  // the list could not be opened from the keyboard at all.
+  it.each([['Enter'], [' '], ['ArrowDown'], ['ArrowUp']])(
+    'G, Shift+Tab, Shift+Tab, then %j: the mode list opens over the menu, and a pick is taken',
+    (opener) => {
+      mountApp()
+      pressKey('G')
+      expect(document.activeElement).toBe(panelEl())
+      shiftTab()
+      shiftTab()
+      const mode = modeButton()
+      expect(document.activeElement).toBe(mode)
+      expect(modeMenuOpen()).toBe(false) // getting there opened nothing
+      act(() => void fireEvent.keyDown(mode, { key: opener }))
+      expect(modeMenuOpen()).toBe(true)
+      expect(isSettingsOpen()).toBe(true) // over the menu, not instead of it
+      // Classic is on show: one step down the list is Deduction, and Enter takes it.
+      act(() => void fireEvent.keyDown(mode, { key: 'ArrowDown' }))
+      act(() => void fireEvent.keyDown(mode, { key: 'Enter' }))
+      expect(modeMenuOpen()).toBe(false)
+      expect(currentMode()).toBe('Deduction')
+      expect(isSettingsOpen()).toBe(false) // choosing a mode closes the menu, as a tap on one does
+    },
+  )
+
+  it('…and one more Shift+Tab is the preset list`s button, which opens the same way', () => {
+    mountApp()
+    pressKey('G')
+    shiftTab()
+    shiftTab()
+    shiftTab()
+    const preset = presetButton()
+    expect(document.activeElement).toBe(preset)
+    act(() => void fireEvent.keyDown(preset, { key: 'ArrowDown' }))
+    expect(screen.queryByRole('listbox')).not.toBeNull()
+    expect(preset.getAttribute('aria-expanded')).toBe('true')
+    expect(isSettingsOpen()).toBe(true)
+    // Escape closes the list alone and leaves the keyboard on its button, still inside the walk.
+    pressKey('Escape')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(isSettingsOpen()).toBe(true)
+    expect(document.activeElement).toBe(preset)
+  })
+
+  it('Enter on the gear, reached the same way, closes the menu', () => {
+    mountApp()
+    pressKey('G')
+    shiftTab()
+    const gear = gearButton()
+    expect(document.activeElement).toBe(gear)
+    act(() => gear.click()) // what Enter or Space on a button is
+    expect(isSettingsOpen()).toBe(false)
   })
 
   it('with the menu closed, Tab is the mode selector`s again', () => {
@@ -406,8 +488,9 @@ describe('a mode letter, H or G closes an open top-bar list as it acts', () => {
 
 describe('closing the ⚙ menu hands the keyboard back to where it was', () => {
   // Tab opens the mode list (the keyboard goes onto its button), G opens the menu over it, Tab
-  // walks into the menu, Escape closes it — and the keyboard used to be left on nothing.
-  it('Tab, G, Tab, Escape: back on the Mode button', () => {
+  // walks on — over the gear and into the menu — Escape closes it — and the keyboard used to be
+  // left on nothing.
+  it('Tab, G, Tab, Tab, Escape: back on the Mode button', () => {
     mountApp()
     pressKey('Tab')
     const mode = screen.getByRole('button', { name: /^Mode,/ })
@@ -416,6 +499,8 @@ describe('closing the ⚙ menu hands the keyboard back to where it was', () => {
     expect(isSettingsOpen()).toBe(true)
     expect(document.activeElement).toBe(mode)
     act(() => void fireEvent.keyDown(mode, { key: 'Tab' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Settings/ }))
+    act(() => void fireEvent.keyDown(document.activeElement, { key: 'Tab' }))
     expect(panelEl().contains(document.activeElement)).toBe(true)
     act(() => void fireEvent.keyDown(document.activeElement, { key: 'Escape' }))
     expect(isSettingsOpen()).toBe(false)

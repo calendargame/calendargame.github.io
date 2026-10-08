@@ -71,7 +71,9 @@ export type Reach = {
   // menu's card, the list's button.
   hold: () => HTMLElement | null
   // The element whose controls Tab WALKS, wrapping at the ends — the popup's scrim, the menu's
-  // card. null where Tab is the layer's own key: an open list closes on it.
+  // whole top bar (the two lists' buttons and the gear, then the card's own controls: everything
+  // that stays usable over the open menu has to be somewhere the keyboard can get to). null where
+  // Tab is the layer's own key: an open list closes on it.
   walk: () => HTMLElement | null
 }
 type Entry = {
@@ -377,7 +379,7 @@ if (typeof window !== 'undefined') {
   // else. The order is the document's — the layer's controls as they are written, which is also the
   // order a screen reader reads them in (nothing in the app carries a positive tabindex).
   //   • From a control: to the next one in the direction of travel, wrapping at the ends.
-  //   • From anything else — the card, the gear, nothing at all: Tab goes to the first control
+  //   • From anything else — the menu's card, nothing at all: Tab goes to the first control
   //     after where the keyboard is (the first of all, from outside the walk), Shift+Tab to the
   //     last one before it. A control INSIDE the focused element counts as after it, never before.
   //   • A control that will not take focus (hidden some way the test above does not see) is passed
