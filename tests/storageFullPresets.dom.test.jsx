@@ -15,20 +15,34 @@
 // The rule now (store/storageHealth): a refused save is held under its own destination — read back
 // from there, retried to there, forgotten when that place is deleted.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { screen, cleanup, act } from '@testing-library/react'
-import { resetAppState, mountApp, tap } from './helpers/settingsPanel.jsx'
+import { screen, cleanup, act, within, fireEvent } from '@testing-library/react'
+import {
+  resetAppState,
+  mountApp,
+  tap,
+  openSettings,
+  openModal,
+  modalCard,
+} from './helpers/settingsPanel.jsx'
 import { readDate, correctDayName, statValue } from './helpers/modeScreen.jsx'
 import { useProgress } from '../src/store/progress.js'
 import { useSettings } from '../src/store/settings.js'
-import { presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
+import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
 import {
   createPreset,
+  renamePreset,
   switchPreset,
   deletePreset,
   setPresetAmnesic,
   isPresetFactory,
 } from '../src/store/presetControl.js'
-import { useStorageHealth } from '../src/store/storageHealth.js'
+import { useStorageHealth, isHolding } from '../src/store/storageHealth.js'
+import {
+  useStorageUsage,
+  watchStorageUsage,
+  forgetStorageUsage,
+  DOCUMENTED_LIMITS,
+} from '../src/store/storageUsage.js'
 
 const realSetItem = Storage.prototype.setItem
 const quota = () => new DOMException('The quota has been exceeded.', 'QuotaExceededError')
@@ -130,6 +144,114 @@ describe('a full device (one shared allowance)', () => {
     expect(useSettings.getState().minY).toBe(1900)
     switchPreset(1)
     expect(useSettings.getState().minY).toBe(16000)
+  })
+
+  // ★ A PRESET NAME HAS NO LENGTH LIMIT, so a rename is the one registry change that can be too big
+  // for the device — a pasted book. It is REFUSED WHOLE rather than held like the saves above: a
+  // name that cannot be saved never could be, and every later registry change (a new preset, a
+  // switch) rides in the same save and would go unsaved with it.
+  describe('a name the device has no room to save', () => {
+    const REGISTRY = 'cg-presets-v1'
+    const BOOK = 'All work and no play. '.repeat(20_000).trim()
+    const settle = () => {
+      const p2 = createPreset('Timed')
+      renamePreset(1, 'Mornings')
+      cap = used() + 1000 // room for a longer name, not for a book
+      return p2
+    }
+
+    it('is refused whole: the name it had is intact on the device and in memory', () => {
+      settle()
+      const before = localStorage.getItem(REGISTRY)
+      expect(renamePreset(1, BOOK)).toBe('no-room')
+      expect(localStorage.getItem(REGISTRY)).toBe(before) // not a byte of it changed
+      expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Mornings', 'Timed'])
+      // …and a name that does fit is still taken afterwards.
+      expect(renamePreset(1, 'Weekend Mornings')).toBe('renamed')
+      expect(JSON.parse(localStorage.getItem(REGISTRY)).state.presets[0].name).toBe(
+        'Weekend Mornings',
+      )
+    })
+
+    it('nothing is held for it, and the app is not told the device is full', () => {
+      settle()
+      const stop = watchStorageUsage()
+      try {
+        const limit = useStorageUsage.getState().limit
+        expect(renamePreset(1, BOOK)).toBe('no-room')
+        expect(isHolding(localStorage)).toBe(false)
+        expect(useStorageHealth.getState()).toMatchObject({ unsaved: false, noticeOpen: false })
+        // A refused SAVE teaches the app the device is full at what it holds — untrue here: the
+        // device is as empty as it was, and its measured limit stands.
+        expect(useStorageUsage.getState().limit).toBe(limit)
+        expect(limit).toBe(DOCUMENTED_LIMITS[0])
+        expect(localStorage.getItem('cg-storage-limit-v1')).toBe(null)
+        expect(useStorageUsage.getState().warning).toBe(false)
+      } finally {
+        stop()
+        forgetStorageUsage()
+      }
+    })
+
+    it('the registry goes on being saved: a new preset, a switch, and a move all land', () => {
+      settle()
+      expect(renamePreset(1, BOOK)).toBe('no-room')
+      const p3 = createPreset('Guest')
+      switchPreset(p3.id)
+      const saved = JSON.parse(localStorage.getItem(REGISTRY)).state
+      expect(saved.presets.map((p) => p.name)).toEqual(['Mornings', 'Timed', 'Guest'])
+      expect(saved.activeId).toBe(p3.id)
+      expect(useStorageHealth.getState().unsaved).toBe(false)
+    })
+
+    it('on a device that is simply FULL, one more letter is refused the same way — and a shorter name is taken, and lets the held saves land', () => {
+      const main = fillWithAnUnsavedAnswer() // the device is exactly full, an answer is waiting
+      const before = localStorage.getItem(REGISTRY)
+      expect(renamePreset(main.id, 'Main!')).toBe('no-room')
+      expect(localStorage.getItem(REGISTRY)).toBe(before)
+      expect(useStorageHealth.getState().unsaved).toBe(true) // the answer is still waiting
+      // Shortening a name makes room: 4 characters back is enough for nothing here…
+      expect(renamePreset(main.id, 'M')).toBe('renamed')
+      // …but it is saved, and what was waiting is tried again at once.
+      expect(JSON.parse(localStorage.getItem(REGISTRY)).state.presets[1].name).toBe('M')
+    })
+
+    it('in Manage Presets: the box goes back to the saved name, and the row says why — once, politely', () => {
+      settle()
+      mountApp()
+      openSettings()
+      openModal('presets')
+      const card = () => modalCard('presets')
+      const boxes = () => within(card()).getAllByRole('textbox', { name: 'Preset name' })
+      const NOTE = 'This device has no room to save that name, so it was not changed.'
+      const region = () => card().querySelector('[aria-live]')
+      const before = localStorage.getItem(REGISTRY)
+      act(() => boxes()[0].focus())
+      act(() => fireEvent.change(boxes()[0], { target: { value: BOOK } }))
+      expect(boxes()[0].value).toBe(BOOK) // typing it is never refused
+      act(() => fireEvent.keyDown(boxes()[0], { key: 'Enter' }))
+      // Saving it is: the box shows what IS saved, under it the reason, and nothing was written.
+      expect(boxes()[0].value).toBe('Mornings')
+      expect(localStorage.getItem(REGISTRY)).toBe(before)
+      const note = within(boxes()[0].parentElement).getByText(NOTE)
+      expect(note.getAttribute('aria-hidden')).toBe('true')
+      expect(region().textContent).toBe(NOTE)
+      expect(region().getAttribute('aria-live')).toBe('polite')
+      expect(within(boxes()[1].parentElement).queryByText(NOTE)).toBeNull()
+      // No storage-full notice: nothing is unsaved.
+      expect(screen.queryByText(/out of room for Calendar Game/)).toBeNull()
+      expect(useStorageHealth.getState().noticeOpen).toBe(false)
+      // It stays while the player reads it, and goes when a name box is next entered.
+      expect(within(card()).queryAllByText(NOTE, { ignore: '[aria-live]' })).toHaveLength(1)
+      act(() => boxes()[1].focus())
+      expect(within(card()).queryByText(NOTE, { ignore: '[aria-live]' })).toBeNull()
+      expect(region().textContent).toBe('')
+      // …and a name that fits is taken as usual, with no note.
+      act(() => fireEvent.change(boxes()[1], { target: { value: 'Sprints' } }))
+      act(() => fireEvent.keyDown(boxes()[1], { key: 'Enter' }))
+      expect(usePresets.getState().presets[1].name).toBe('Sprints')
+      expect(region().textContent).toBe('')
+    })
   })
 
   it('a preset holding only unsaved play is not factory-fresh', () => {

@@ -113,6 +113,13 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // region (below, after the list) — which holds the note's words exactly while the note is on
 // screen, so staying on through further typing announces nothing more. The visible copy is hidden
 // from a screen reader so the words are not met twice.
+// ★ A NAME TOO BIG FOR THE DEVICE TO SAVE IS NOT SAVED, AND THE ROW SAYS SO. With no limit on a
+// name, a pasted book can be more than the device has room for. store/presetControl's renamePreset
+// refuses that rename whole — nothing half-written, the stored name untouched — and the field goes
+// back to the name that IS saved, with a second note in the same spot ("This device has no room to
+// save that name, so it was not changed."), said through the same live region. It stays until a
+// name box is next entered. (Why it is refused rather than held like other saves the device turns
+// down: store/presets' applyRegistryIfRoom.)
 //
 // ★★ MOVING IS A DEDICATED DRAG HANDLE, AS OF ROUND 20 — REPLACING THE ↑/↓ PAIR THIS COMMENT
 // USED TO ARGUE AGAINST A DRAG FOR. The owner's call, made explicit rather than re-litigated here:
@@ -186,6 +193,9 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // What the note under a name's field says while that name does not fit everywhere it is shown. True
 // wherever it is cut — one place or all of them — so it says "some places", not which.
 const CUT_SHORT_NOTE = 'Some places will show this name cut short.'
+// What it says instead when the device had no room to save the name just typed. True of a device
+// that is full and of a name that is simply enormous alike.
+const NO_ROOM_NOTE = 'This device has no room to save that name, so it was not changed.'
 
 // THE ROW'S TWO ICONS — DeleteIcon (the ✕) and ReorderHandleIcon (the grip) — both inline SVG drawn
 // in currentColor, the house pattern (W5Logo, GuidePage's dot diagram): no icon font, no external
@@ -401,6 +411,20 @@ export default function PresetManager({
       ? editing.id
       : null
 
+  // ★ THE ROW WHOSE LAST RENAME THE DEVICE HAD NO ROOM TO SAVE (the ★ note above this component).
+  // Set by the commit that was refused, cleared when a name box is next entered. Unlike the note
+  // above it IS remembered — it is about something that happened, not about the text in the box,
+  // which has already gone back to the saved name.
+  const [noRoomRowId, setNoRoomRowId] = useState<number | null>(null)
+  // The one note a row can be showing, and for which row.
+  const noted =
+    cutRowId !== null
+      ? { id: cutRowId, text: CUT_SHORT_NOTE }
+      : noRoomRowId !== null
+        ? { id: noRoomRowId, text: NO_ROOM_NOTE }
+        : null
+  const notedRowId = noted?.id ?? null
+
   // The delete confirmation's subject, resolved from the id the caller holds. An ID and not the
   // preset object: the registry can be rewritten under this card (another row renamed, one moved),
   // and a captured object would go stale where an id is resolved fresh on every render.
@@ -466,20 +490,23 @@ export default function PresetManager({
     const top = rect.top - list.getBoundingClientRect().top - list.clientTop + list.scrollTop
     scrollBandIntoView(list, top, rect.height)
   }
-  // The row being typed into, whenever its note appears. A layout effect: the scroll lands in the
-  // frame that draws the note.
+  // The row a note has just appeared under. A layout effect: the scroll lands in the frame that
+  // draws the note.
   useLayoutEffect(() => {
-    if (cutRowId !== null) revealRow(cutRowId)
-  }, [cutRowId])
+    if (notedRowId !== null) revealRow(notedRowId)
+  }, [notedRowId])
   // ── Renaming ────────────────────────────────────────────────────────────────────────────────
 
   // Commit whatever is pending. store/presetControl's renamePreset normalizes (outer spaces
   // trimmed, and an empty or whitespace-only name falls back to "Preset N"), so this deliberately
   // does NOT pre-screen the text: one place decides what a name may be, and it is the store's.
+  // ⚠ A RENAME THE DEVICE HAS NO ROOM TO SAVE DID NOT HAPPEN: the pending text is dropped like any
+  // other finished edit, so the box shows the name that is saved, and the row says why.
   const commitRename = () => {
     if (!editing) return
-    renamePreset(editing.id, editing.text)
+    const outcome = renamePreset(editing.id, editing.text)
     setEditing(null)
+    setNoRoomRowId(outcome === 'no-room' ? editing.id : null)
   }
 
   // ⚠ THE ESCAPE DISCARD MUST BE FLUSHED BEFORE THE BLUR, and this is the ⚙ Year Range boxes' bug
@@ -998,6 +1025,8 @@ export default function PresetManager({
                       // throw away a half-typed name. iOS does it every time you switch away and back,
                       // which is the likeliest way anyone would ever meet it.
                       if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
+                      // A new edit begins: what the last one could not save has been said.
+                      setNoRoomRowId(null)
                     }}
                     onChange={(e) => setEditing({ id: p.id, text: e.target.value })}
                     onBlur={commitRename}
@@ -1083,18 +1112,19 @@ export default function PresetManager({
                   >
                     <DeleteIcon />
                   </button>
-                  {/* THE CUT-SHORT NOTE (the ★ note above this component) — only for the row being
-                typed into, only while its text would be shown cut short somewhere. It takes the
-                grid's second row, starting under the name box (column 2) and running to the row's
-                end. Same visual tier as the "cannot be deleted" note below: a small fact about what
-                the app is doing with this row. aria-hidden: a screen reader is told through the
-                card's live region, once, and would otherwise meet the words twice. */}
-                  {cutRowId === p.id && (
+                  {/* THE ROW'S NOTE (the ★ notes above this component) — "cut short", for the row
+                being typed into while its text would be shown cut short somewhere; or "not saved",
+                for the row whose rename the device had no room for. It takes the grid's second
+                row, starting under the name box (column 2) and running to the row's end. Same
+                visual tier as the "cannot be deleted" note below: a small fact about what the app
+                is doing with this row. aria-hidden: a screen reader is told through the card's
+                live region, once, and would otherwise meet the words twice. */}
+                  {noted?.id === p.id && (
                     <div
                       aria-hidden="true"
                       className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[0.6875rem] text-(--tx-300-60)"
                     >
-                      {CUT_SHORT_NOTE}
+                      {noted.text}
                     </div>
                   )}
                 </div>
@@ -1107,7 +1137,7 @@ export default function PresetManager({
           hears: the note's words the moment the note appears, and nothing while it stays. Polite:
           it waits for whatever is being read (the letter just typed) to finish. */}
       <div aria-live="polite" className="sr-only">
-        {cutRowId !== null && CUT_SHORT_NOTE}
+        {noted?.text}
       </div>
       {/* The reason behind the dimmed ✕, shown only while it is dimmed. A withheld control states
           THAT it is unavailable; nothing about it can state WHY, and "the last one won't delete" is

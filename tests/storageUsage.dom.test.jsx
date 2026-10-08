@@ -27,6 +27,7 @@ import {
   storageUsed,
   percentText,
   percentSpoken,
+  shorterNamesWouldEndWarning,
   DOCUMENTED_LIMITS,
   MAX_STORAGE_LIMIT,
   STORAGE_WARN_PERCENT,
@@ -236,6 +237,76 @@ describe('what is filling the device', () => {
     expect(reading.rows.find((r) => r.kind === 'other').chars).toBe(
       'cg-presets-v1'.length + '{"state":{},"version":1}'.length,
     )
+  })
+
+  it('preset names are an owner of their own, counted as they are written in the save', () => {
+    localStorage.clear()
+    // A quote and a backslash are two characters each in a save; an emoji is two; a half emoji an
+    // older build left behind is written out as six.
+    const names = ['Weekend', 'He said "hi"', 'back\\slash', '🎉🎉', 'Weeke\ud83d', 'Preset 6']
+    const registry = JSON.stringify({
+      state: {
+        presets: names.map((name, i) => ({ id: i + 1, name, amnesic: false })),
+        activeId: 1,
+        nextId: 7,
+        openInPreset: 'last',
+      },
+      version: 1,
+    })
+    localStorage.setItem('cg-presets-v1', registry)
+    localStorage.setItem('cg-settings-v1', '{"state":{"theme":"dusk"},"version":9}')
+    const written = names.map((name) => JSON.stringify(name).length - 2)
+    expect(written).toEqual([7, 14, 11, 4, 11, 8])
+    const reading = readStorageUsage(localStorage)
+    const row = reading.rows.find((r) => r.kind === 'names')
+    expect(row.chars).toBe(written.reduce((a, b) => a + b))
+    // Shortening can give back all of each name but one character — the first, as it is written.
+    expect(row.spare).toBe(row.chars - (1 + 1 + 1 + 2 + 1 + 1))
+    // Nothing is counted twice: the rest of the list is "everything else", and the rows still come
+    // to exactly what the device holds.
+    expect(reading.rows.find((r) => r.kind === 'other').chars).toBe(
+      'cg-presets-v1'.length + registry.length - row.chars,
+    )
+    expect(reading.rows.reduce((sum, r) => sum + r.chars, 0)).toBe(everything())
+    expect(reading.used).toBe(everything())
+  })
+
+  it('no preset list on the device, or one that cannot be read, is no row at all', () => {
+    localStorage.clear()
+    localStorage.setItem('cg-settings-v1', '{"state":{},"version":9}')
+    expect(readStorageUsage(localStorage).rows.some((r) => r.kind === 'names')).toBe(false)
+    for (const broken of [
+      'not json',
+      '{"state":{"presets":7}}',
+      '{"state":{"presets":[{"name":5}, null]}}',
+    ]) {
+      localStorage.setItem('cg-presets-v1', broken)
+      const reading = readStorageUsage(localStorage)
+      expect(reading.rows.some((r) => r.kind === 'names')).toBe(false)
+      expect(reading.rows.reduce((sum, r) => sum + r.chars, 0)).toBe(everything())
+    }
+  })
+
+  describe('shorterNamesWouldEndWarning — would shortening names, and nothing else, be enough', () => {
+    const LIMIT = 1000 // the line is at 800
+    const rows = (names, spare, rest) => [
+      { kind: 'preset', presetId: 1, chars: rest },
+      { kind: 'names', chars: names, spare },
+    ]
+    it('yes exactly when what is held, less what the names could give back, is UNDER the line', () => {
+      expect(shorterNamesWouldEndWarning(rows(300, 298, 600), LIMIT)).toBe(true) // 900 → 602
+      expect(shorterNamesWouldEndWarning(rows(300, 101, 600), LIMIT)).toBe(true) // 900 → 799
+      // Exactly on the line is still a warning: not enough.
+      expect(shorterNamesWouldEndWarning(rows(300, 100, 600), LIMIT)).toBe(false) // 900 → 800
+      expect(shorterNamesWouldEndWarning(rows(300, 298, 900), LIMIT)).toBe(false) // 1200 → 902
+    })
+    it('never without names to shorten, or on a device that could not be measured', () => {
+      expect(
+        shorterNamesWouldEndWarning([{ kind: 'preset', presetId: 1, chars: 100 }], LIMIT),
+      ).toBe(false)
+      expect(shorterNamesWouldEndWarning(rows(5, 0, 100), LIMIT)).toBe(false) // one-letter names
+      expect(shorterNamesWouldEndWarning(rows(300, 298, 600), null)).toBe(false)
+    })
   })
 
   it('reads the device and nothing else: a session copy is not counted', () => {
@@ -1324,6 +1395,114 @@ describe('on the mounted app', () => {
       .getAllByRole('listitem')
       .map((li) => li.textContent)
     expect(rows.some((t) => /^Preset 1: Classic solve times \(9,000\)\d+\.\d%$/.test(t))).toBe(true)
+  })
+
+  describe('preset names in the breakdown', () => {
+    const ADVICE = /Your preset names are taking up much of this room/
+    // What each row of the breakdown SHOWS (not the words kept for a screen reader beside "<0.1%").
+    const rowTexts = () =>
+      within(popup())
+        .getAllByRole('listitem')
+        .filter((li) => !li.closest('.list-disc'))
+        .map(shownText)
+    const advice = () =>
+      within(popup())
+        .getAllByRole('listitem')
+        .filter((li) => li.closest('.list-disc'))
+    const openBreakdown = () => {
+      mountApp()
+      openSettings()
+      tap(line())
+    }
+    // A name of `chars` characters on preset 1, a second preset beside it.
+    const nameOf = (chars) => {
+      createPreset('Weekend')
+      renamePreset(1, 'n'.repeat(chars))
+    }
+
+    it('are one row, "Preset names", with their share written like every other', () => {
+      nameOf(600_000)
+      openBreakdown()
+      const { rows } = readStorageUsage(localStorage)
+      const names = rows.find((r) => r.kind === 'names')
+      expect(names.chars).toBe(600_000 + 'Weekend'.length)
+      expect(rowTexts()[0]).toBe(`Preset names${percentText(names.chars, CHROMIUM)}`) // the largest
+      expect(percentText(names.chars, CHROMIUM)).toBe('11.4%')
+      // The rows still come to the headline or a little under it, never more ("<0.1%" is under a
+      // tenth, counted here as nothing).
+      const figure = (text) => (/<0\.1%$/.test(text) ? 0 : parseFloat(text.match(/([\d.]+)%$/)[1]))
+      const headline = figure(shownText(popup().querySelector('#storage-usage-title')))
+      expect(
+        rowTexts()
+          .map(figure)
+          .reduce((a, b) => a + b),
+      ).toBeLessThanOrEqual(headline + 1e-9)
+      expect(rowTexts().at(-1)).toMatch(/^Everything else/)
+    })
+
+    it('ordinary names are a small owner like any other: listed among the first few, "<0.1%"', () => {
+      createPreset('Weekend')
+      openBreakdown()
+      expect(rowTexts()).toContain('Preset names<0.1%')
+    })
+
+    it('on a device with one untouched preset there is no preset list saved, and no row', () => {
+      openBreakdown()
+      expect(rowTexts().join('|')).not.toMatch(/Preset names/)
+    })
+
+    it('says nothing about names while there is no warning, however long they are', () => {
+      nameOf(3_000_000) // more than half the device, and under the line
+      openBreakdown()
+      expect(usage().warning).toBe(false)
+      expect(popup().textContent).not.toMatch(ADVICE)
+    })
+
+    it('says nothing about names when the warning is on but shortening them could not end it', () => {
+      nameOf(500_000)
+      fill(4_300_000) // the device is past the line without the names
+      openBreakdown()
+      expect(usage().warning).toBe(true)
+      expect(popup().textContent).not.toMatch(ADVICE)
+    })
+
+    it('suggests shortening them — first — exactly when that alone would end the warning', () => {
+      nameOf(4_300_000)
+      openBreakdown()
+      expect(usage().warning).toBe(true)
+      expect(advice()[0].textContent).toMatch(ADVICE)
+      expect(advice()[0].textContent).toMatch(/Manage Presets/)
+      // …said once, beside the other ways to make room, not instead of them.
+      expect(advice().filter((li) => ADVICE.test(li.textContent))).toHaveLength(1)
+      expect(advice().length).toBeGreaterThan(1)
+      expect(advice().some((li) => /Clear History/.test(li.textContent))).toBe(true)
+    })
+
+    it('…to the character: one short of enough says nothing, enough says it', () => {
+      const line80 = (CHROMIUM * STORAGE_WARN_PERCENT) / 100
+      nameOf(600_000)
+      fill(4_000_000) // past the line
+      openBreakdown() // …so everything the app writes about a warning has landed
+      expect(usage().warning).toBe(true)
+      act(() => usage().closePopup())
+      const names = readStorageUsage(localStorage).rows.find((r) => r.kind === 'names')
+      // Size the filler so that, with every name cut to one character, the device would sit EXACTLY
+      // on the line — which is still a warning.
+      const filler = FILLER.length + localStorage.getItem(FILLER).length
+      const exact = filler + (line80 - (everything() - names.spare))
+      fill(exact)
+      expect(everything() - names.spare).toBe(line80)
+      act(() => usage().openPopup())
+      expect(usage().warning).toBe(true)
+      expect(popup().textContent).not.toMatch(ADVICE)
+      // One character less on the device, and shortening the names alone would end it.
+      act(() => usage().closePopup())
+      fill(exact - 1)
+      act(() => usage().openPopup())
+      expect(everything() - names.spare).toBe(line80 - 1)
+      expect(usage().warning).toBe(true)
+      expect(popup().textContent).toMatch(ADVICE)
+    })
   })
 
   it('a preset with a very long name is named by its start, in a row that may break anywhere', () => {

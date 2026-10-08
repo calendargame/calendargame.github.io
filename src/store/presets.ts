@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { guardedStorage, readItem, writeItem, removeItem } from './storageHealth.js'
+import { guardedStorage, readItem, writeItem, tryWriteItem, removeItem } from './storageHealth.js'
 import { browsingSessionOpen } from './browsingSession.js'
 import { sessionPresetId, recordSessionPreset } from './sessionPreset.js'
 
@@ -67,7 +67,10 @@ export const PRESET_STORE_KEYS = {
 
 // The registry's OWN key, and it is deliberately NOT in the record above: it is global, so it must
 // never be namespaced, never be deleted with a preset, and never be scoped by the adapter below.
-const PRESET_REGISTRY_KEY = 'cg-presets-v1'
+// (Exported for store/storageUsage, which tells the preset NAMES in it apart from the rest.)
+export const PRESET_REGISTRY_KEY = 'cg-presets-v1'
+// The registry's shape version, as its save is stamped (the store's own `version` option).
+const REGISTRY_VERSION = 1
 
 // The first preset's id, which is also the id whose keys are the un-namespaced ones.
 export const FIRST_PRESET_ID = 1
@@ -313,32 +316,36 @@ export type PresetRegistryState = PresetRegistryValues & {
 }
 
 const PERSISTED_KEYS = Object.keys(makePresetRegistryDefaults()) as (keyof PresetRegistryValues)[]
+// The part of the registry that is saved: its four values, without the store's own function.
+const savedPart = (state: PresetRegistryValues): PresetRegistryValues =>
+  Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as PresetRegistryValues
+// ★ EACH PRESET'S `amnesic` IS TAKEN FROM THE DEVICE AT THE MOMENT OF THE WRITE, not from this
+// page's memory. It is an older build's field (see Preset above), and such a build in another tab
+// may have changed it since this page loaded — a guest's session switched on there. Writing back
+// the value this page happened to read would switch that session off at the older tab's next
+// reload, so every write carries what is stored NOW; a preset the device does not list yet keeps
+// the value it was handed.
+const withStoredAmnesic = (next: PresetRegistryValues): PresetRegistryValues => {
+  const stored = new Map(readStoredRegistry()?.presets.map((p) => [p.id, p.amnesic]))
+  return {
+    ...next,
+    presets: next.presets.map((p) => {
+      const amnesic = stored.get(p.id) ?? p.amnesic
+      return amnesic === p.amnesic ? p : { ...p, amnesic }
+    }),
+  }
+}
 
 export const usePresets = create<PresetRegistryState>()(
   persist(
     (set) => ({
       ...makePresetRegistryDefaults(),
-      // ★ EACH PRESET'S `amnesic` IS TAKEN FROM THE DEVICE AT THE MOMENT OF THE WRITE, not from this
-      // page's memory. It is an older build's field (see Preset above), and such a build in another
-      // tab may have changed it since this page loaded — a guest's session switched on there. Writing
-      // back the value this page happened to read would switch that session off at the older tab's
-      // next reload, so the write carries what is stored NOW; a preset the device does not list yet
-      // keeps the value it was handed.
       applyRegistry: (next) => {
         // The session's own record of the preset it is on moves with every change of it, and
         // FIRST: it is what a reload reads, and it must not depend on the permanent write below
         // landing (store/sessionPreset).
         recordSessionPreset(next.activeId)
-        set(() => {
-          const stored = new Map(readStoredRegistry()?.presets.map((p) => [p.id, p.amnesic]))
-          return {
-            ...next,
-            presets: next.presets.map((p) => {
-              const amnesic = stored.get(p.id) ?? p.amnesic
-              return amnesic === p.amnesic ? p : { ...p, amnesic }
-            }),
-          }
-        })
+        set(() => withStoredAmnesic(next))
       },
     }),
     {
@@ -348,11 +355,8 @@ export const usePresets = create<PresetRegistryState>()(
       // zustand's default localStorage, behind store/storageHealth: a refused save must never throw
       // out of applyRegistry, and is held for this key until it fits.
       storage: createJSONStorage(guardedStorage(() => window.localStorage)),
-      version: 1,
-      partialize: (state) =>
-        Object.fromEntries(
-          PERSISTED_KEYS.map((k) => [k, state[k]]),
-        ) as Partial<PresetRegistryState>,
+      version: REGISTRY_VERSION,
+      partialize: (state) => savedPart(state),
       // No `migrate` yet — v1 is the first shape there has ever been, so there is no older payload
       // in existence to rewrite. `openInPreset` (round 21) is additive: normalizeRegistry turns
       // its absent key into 'last', which is the behaviour before the pin existed, so no migrate step is owed. The
@@ -383,6 +387,41 @@ export const usePresets = create<PresetRegistryState>()(
     },
   ),
 )
+
+/**
+ * Apply `next` — BUT ONLY IF THE DEVICE HAS ROOM TO SAVE IT. Returns false, with nothing changed
+ * anywhere, when it does not.
+ *
+ * ★ FOR A CHANGE THAT CAN BE AS LARGE AS THE PLAYER LIKES: A PRESET'S NAME. A name has no length
+ * limit, so a pasted book can be more than the device will ever hold. An ordinary registry write
+ * the device refuses is HELD (store/storageHealth) — the app runs on with it, tells the player the
+ * device is full, and saves it when room is made. That is right for a change that must not be lost
+ * and will fit once something is cleared. It is wrong for this one: a name too big to save can
+ * never be saved, so it would be held for ever — and every later registry change (a new preset, a
+ * switch, "Open in") rides in that same save and would go unsaved with it. A refused save also
+ * teaches the app that the device is FULL at what it holds, which is untrue of a nearly empty
+ * device that has just turned down one enormous value.
+ * So the save is TRIED first, on its own (tryWriteItem: nothing held, no notice, nothing learned).
+ * A browser stores a value whole or not at all, so a refusal leaves the registry on the device
+ * exactly as it was. Only when it has landed is the change applied — which saves the same text a
+ * second time, through the store's own door, and settles anything that was being held.
+ * ⚠ THE TEXT TRIED IS THE TEXT THE STORE THEN SAVES — the same values, in the same order, under the
+ * same stamp — so what was seen to fit is what is written. tests/presets.dom pins the two together.
+ */
+export function applyRegistryIfRoom(next: PresetRegistryValues): boolean {
+  try {
+    const saved = JSON.stringify({
+      state: savedPart(withStoredAmnesic(next)),
+      version: REGISTRY_VERSION,
+    })
+    if (!tryWriteItem(window.localStorage, PRESET_REGISTRY_KEY, saved)) return false
+  } catch {
+    /* a browser that gives the app no storage at all: the registry lives in memory there, and
+       there is no room to run out of */
+  }
+  usePresets.getState().applyRegistry(next)
+  return true
+}
 
 // ── Where a per-preset store actually reads and writes ────────────────────────────────────────
 //

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { PRESET_STORE_KEYS, presetIdOfSuffix } from './presets.js'
+import { PRESET_STORE_KEYS, PRESET_REGISTRY_KEY, presetIdOfSuffix } from './presets.js'
 import { parseTimesKey, CHUNK_TIMES } from './progressStorage.js'
 import {
   isHolding,
@@ -45,7 +45,9 @@ import { captureError } from '../observability/sentry.js'
 //     save actually names: the sealed count plus the tail.
 //   • LOOKUP HISTORY (one list, shared by every preset);
 //   • a preset's OTHER data: its Bests, ⚙ settings, per-mode setup and saved defaults;
-//   • everything else (the preset list, small markers).
+//   • PRESET NAMES, all of them together: a name may be any length, so a pasted book can be the
+//     largest thing on the device. Their text is counted where it sits in the preset list;
+//   • everything else (the rest of the preset list, small markers).
 //
 // ★ THE LIMIT IS MEASURED, NOT ASSUMED. A browser has no way to ask how much localStorage a site may
 // use, and the browsers do not agree (Chromium allows 5,242,880 characters; Safari is documented at
@@ -131,6 +133,9 @@ export type UsageRow =
   | { kind: 'times'; presetId: number; silo: string; chars: number; count: number }
   | { kind: 'lookup'; chars: number; count: number }
   | { kind: 'preset'; presetId: number; chars: number }
+  // Every preset's name, as saved. `spare` is how much of that shortening the names could give
+  // back: all of each name but one character (a name cannot be empty).
+  | { kind: 'names'; chars: number; spare: number }
   | { kind: 'other'; chars: number }
 
 export type UsageReading = { used: number; rows: UsageRow[] }
@@ -146,6 +151,27 @@ function parsePresetKey(key: string): { presetId: number; progress: boolean } | 
   return null
 }
 
+// How much of the saved preset list is its presets' NAMES, and how much of that could be given
+// back — both nothing for text that is not a preset list. A name is counted as it is written in
+// the save (its quotes left out), which is what the device's allowance counts.
+function namesIn(registryText: string): { chars: number; spare: number } {
+  const size = { chars: 0, spare: 0 }
+  try {
+    const saved: unknown = JSON.parse(registryText)
+    const presets = isRecord(saved) && isRecord(saved.state) ? saved.state.presets : null
+    for (const preset of Array.isArray(presets) ? presets : []) {
+      if (!isRecord(preset) || typeof preset.name !== 'string') continue
+      const written = JSON.stringify(preset.name).length - 2
+      size.chars += written
+      // …less its first character as written, which is what a one-character name would still take.
+      size.spare += written - (JSON.stringify(Array.from(preset.name)[0] ?? '').length - 2)
+    }
+  } catch {
+    /* unreadable: all of it counts as "everything else" */
+  }
+  return size
+}
+
 // How a saved progress spells the start of a mode's solve times.
 const TIMES_OPEN = '"times":['
 
@@ -159,6 +185,7 @@ export function readStorageUsage(area: Storage): UsageReading {
   const times = new Map<string, { presetId: number; silo: string; chars: number; count: number }>()
   const presets = new Map<number, number>()
   const lookup = { chars: 0, count: 0 }
+  let names = { chars: 0, spare: 0 }
   let other = 0
   let used = 0
   const timesRow = (presetId: number, silo: string) => {
@@ -187,6 +214,11 @@ export function readStorageUsage(area: Storage): UsageReading {
       } catch {
         /* unreadable: its size still counts */
       }
+      continue
+    }
+    if (key === PRESET_REGISTRY_KEY) {
+      names = namesIn(text)
+      other += chars - names.chars // the rest of the list is nobody's to clear
       continue
     }
     const owner = parsePresetKey(key)
@@ -227,9 +259,30 @@ export function readStorageUsage(area: Storage): UsageReading {
     ...[...presets].map(([presetId, chars]) => ({ kind: 'preset' as const, presetId, chars })),
   ]
   if (lookup.chars) rows.push({ kind: 'lookup', ...lookup })
+  if (names.chars) rows.push({ kind: 'names', ...names })
   if (other) rows.push({ kind: 'other', chars: other })
   rows.sort((a, b) => b.chars - a.chars)
   return { used, rows }
+}
+
+/**
+ * Would shortening preset names, AND NOTHING ELSE, bring a device holding `rows` back under the
+ * warning line? What the breakdown popup's one sentence about names is shown for — only then, so
+ * it is never advice that could not work. Raw counts, like the warning itself: everything the
+ * device holds, less what the names could give back, against the line.
+ */
+export function shorterNamesWouldEndWarning(
+  rows: readonly UsageRow[],
+  limit: number | null,
+): boolean {
+  if (limit === null) return false
+  let held = 0
+  let spare = 0
+  for (const row of rows) {
+    held += row.chars
+    if (row.kind === 'names') spare = row.spare
+  }
+  return spare > 0 && (held - spare) * 100 < STORAGE_WARN_PERCENT * limit
 }
 
 // The one figure that is not a number read as it stands — as it is written, and as it is said.

@@ -2,6 +2,7 @@ import {
   usePresets,
   presetKey,
   normalizePresetName,
+  applyRegistryIfRoom,
   defaultPresetName,
   readStoredRegistry,
   PRESET_STORE_KEYS,
@@ -523,17 +524,32 @@ export function sweepDeletedPresetTimes(): void {
   }
 }
 
-/** Rename a preset. An empty or whitespace-only name falls back to the default one. */
-export function renamePreset(id: number, name: string): boolean {
+/**
+ * What became of a rename: the preset now has that name; there is no such preset; or the device
+ * had no room to save the name, and nothing was changed.
+ */
+export type RenameOutcome = 'renamed' | 'unknown' | 'no-room'
+
+/**
+ * Rename a preset. An empty or whitespace-only name falls back to the default one.
+ *
+ * ★ A NAME THE DEVICE CANNOT SAVE IS REFUSED, NOT HELD ('no-room'). A name may be any length, so it
+ * is the one registry change that can be too big to save at all; store/presets' applyRegistryIfRoom
+ * says why holding it would be wrong. The preset keeps the name it had, on the device and in memory.
+ * ★ THE NAME IT ALREADY HAS IS NOT WRITTEN AGAIN. Entering a name's field and leaving it is a
+ * rename to the same name, and a name can be a book: nothing is saved for it.
+ */
+export function renamePreset(id: number, name: string): RenameOutcome {
   const reg = usePresets.getState()
-  if (!reg.presets.some((p) => p.id === id)) return false
-  usePresets.getState().applyRegistry({
+  const preset = reg.presets.find((p) => p.id === id)
+  if (!preset) return 'unknown'
+  const next = normalizePresetName(name, id)
+  if (next === preset.name) return 'renamed'
+  const saved = applyRegistryIfRoom({
     ...reg,
-    presets: reg.presets.map((p) =>
-      p.id === id ? { ...p, name: normalizePresetName(name, id) } : p,
-    ),
+    presets: reg.presets.map((p) => (p.id === id ? { ...p, name: next } : p)),
   })
-  return true
+  return saved ? 'renamed' : 'no-room'
 }
 
 /**

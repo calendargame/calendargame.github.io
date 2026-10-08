@@ -267,13 +267,73 @@ describe('the registry', () => {
   })
 
   it('renaming trims, refuses to leave a preset nameless, and cuts nothing', () => {
-    expect(renamePreset(1, '  Mornings  ')).toBe(true)
+    expect(renamePreset(1, '  Mornings  ')).toBe('renamed')
     expect(activePreset().name).toBe('Mornings')
     renamePreset(1, '   ')
     expect(activePreset().name).toBe('Preset 1')
     renamePreset(1, 'y'.repeat(80))
     expect(activePreset().name).toBe('y'.repeat(80))
-    expect(renamePreset(99, 'nobody')).toBe(false)
+    expect(renamePreset(99, 'nobody')).toBe('unknown')
+  })
+
+  it('a rename to the name a preset already has saves nothing', () => {
+    // Entering a name's field and leaving it is exactly this, and a name can be a book.
+    renamePreset(1, 'Mornings')
+    const saved = localStorage.getItem('cg-presets-v1')
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+    try {
+      expect(renamePreset(1, 'Mornings')).toBe('renamed')
+      expect(renamePreset(1, '  Mornings ')).toBe('renamed') // the same name once trimmed
+      expect(setItem).not.toHaveBeenCalled()
+    } finally {
+      setItem.mockRestore()
+    }
+    expect(localStorage.getItem('cg-presets-v1')).toBe(saved)
+  })
+
+  it('a rename is tried on the device first, and what was tried is exactly what is then saved', () => {
+    // An older build's tab has switched preset 2's Amnesic on since this page loaded: the save
+    // carries what the device says, in the trial and in the write alike.
+    const p2 = createPreset('Timed')
+    const stored = JSON.parse(localStorage.getItem('cg-presets-v1'))
+    stored.state.presets[1].amnesic = true
+    localStorage.setItem('cg-presets-v1', JSON.stringify(stored))
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+    try {
+      expect(renamePreset(p2.id, 'Sprints "quoted" 🎉')).toBe('renamed')
+      const writes = setItem.mock.calls.filter(([key]) => key === 'cg-presets-v1')
+      expect(writes).toHaveLength(2)
+      expect(writes[0][1]).toBe(writes[1][1])
+      expect(JSON.parse(writes[1][1]).state.presets[1]).toEqual({
+        id: p2.id,
+        name: 'Sprints "quoted" 🎉',
+        amnesic: true,
+      })
+    } finally {
+      setItem.mockRestore()
+    }
+    expect(localStorage.getItem('cg-presets-v1')).toBe(
+      JSON.stringify({
+        state: JSON.parse(localStorage.getItem('cg-presets-v1')).state,
+        version: 1,
+      }),
+    )
+  })
+
+  it('a browser that gives the app no storage at all still renames, in memory', () => {
+    const real = Object.getOwnPropertyDescriptor(window, 'localStorage')
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('denied', 'SecurityError')
+      },
+    })
+    try {
+      expect(renamePreset(1, 'Mornings')).toBe('renamed')
+      expect(activePreset().name).toBe('Mornings')
+    } finally {
+      Object.defineProperty(window, 'localStorage', real)
+    }
   })
 
   it('a name of any length is stored whole, and comes back whole from the device', () => {

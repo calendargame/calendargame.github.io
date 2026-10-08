@@ -1,6 +1,11 @@
 import Popup from './Popup.js'
 import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
-import { percentSpoken, percentText, useStorageUsage } from '../store/storageUsage.js'
+import {
+  percentSpoken,
+  percentText,
+  shorterNamesWouldEndWarning,
+  useStorageUsage,
+} from '../store/storageUsage.js'
 import type { UsageRow } from '../store/storageUsage.js'
 import { usePresets } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
@@ -41,6 +46,7 @@ const count = (n: number): string => n.toLocaleString('en-US')
 // (lib/presetNameText): a very long one is its start and an ellipsis, so a row stays a few lines.
 function rowLabel(row: UsageRow, presets: Preset[]): string {
   if (row.kind === 'lookup') return `Lookup history (${count(row.count)})`
+  if (row.kind === 'names') return 'Preset names'
   if (row.kind === 'other') return 'Everything else'
   const preset = presets.find((p) => p.id === row.presetId)
   const who = preset
@@ -155,6 +161,12 @@ export default function StorageUsagePopup() {
             )}
           </ul>
           <p className="font-semibold text-(--tx-100-90)">To make room</p>
+          {/* ★ SHORTENING PRESET NAMES IS SUGGESTED ONLY WHEN IT WOULD WORK ON ITS OWN — the warning
+              is on, and the names hold enough that shortening them alone would end it
+              (store/storageUsage's shorterNamesWouldEndWarning). A name is normally a few
+              characters, and "shorten your names" on a device filled by solve times would be
+              advice that cannot help; so it is first in the list when it is the answer, and not
+              in it at all otherwise. */}
           {/* ★ ONLY WHAT IS TRUE FOR THE PRESET YOU ARE ON, RIGHT NOW. Reset Stats clears the stats
               on screen, and under Amnesic: Stats Only or Full those are the session's copy — the
               saved solve times, which are what is taking the room, are not touched (store/amnesic's
@@ -163,6 +175,12 @@ export default function StorageUsagePopup() {
               other two work under every value: Clear History empties the saved Lookup list
               whatever the value, and deleting a preset removes everything it holds. */}
           <ul className="space-y-1 list-disc ps-4">
+            {warning && shorterNamesWouldEndWarning(rows, limit) && (
+              <li>
+                Your preset names are taking up much of this room. <b>Shortening them</b> would be
+                enough on its own to end this warning (⚙ → Global → Manage Presets).
+              </li>
+            )}
             {resetStatsFreesRoom(amnesic) && (
               <li>
                 <b>Reset Stats</b>, on a mode&apos;s own screen, clears that mode&apos;s solve times
