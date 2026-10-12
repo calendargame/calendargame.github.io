@@ -29,6 +29,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { isJulianDate, isJulianOnlyDate, wday, wdayJulian } from '../lib/calendar.js'
 import { computeStreaks } from './streak.js'
+import { withoutLast } from './arrayCopy.js'
 import { computeHasCredit, markBtns, mkBtnsWithCorrect, greenOnMiss } from './answerButtons.js'
 import type { ButtonState, Btns } from './answerButtons.js'
 import type { FormatId } from '../lib/format.js'
@@ -722,7 +723,7 @@ const poolSlot = (s: GameState, before: number): number => {
 // old contribution leaves its slot as its new one takes it. `played` never moves — a toggle neither
 // adds nor removes a card — which is why historyBase and timesBase are never touched by one either.
 const retime = (stats: Stats, at: number, before: CardFields, after: CardFields): Stats => {
-  const times = stats.times.slice()
+  const times = [...stats.times] // a spread, never `slice` (engine/arrayCopy says why)
   if (before.solveTime != null) times.splice(at, 1)
   if (after.solveTime != null) times.splice(at, 0, after.solveTime)
   return { ...stats, good: stats.good + (after.hasCredit ? 1 : -1), times }
@@ -1240,7 +1241,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return withStreaks({
           ...state,
           stats: retime(state.stats, poolSlot(state, state.stack.length - 1), before, after),
-          stack: [...state.stack.slice(0, -1), entry],
+          stack: [...withoutLast(state.stack), entry],
         })
       }
 
@@ -1342,7 +1343,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         calcOpen: false,
         forwardStack: [...state.forwardStack, fwdEntry],
-        stack: state.stack.slice(0, -1),
+        stack: withoutLast(state.stack),
         date: prev,
         persistBtns: wasAnswered ? (prev.btns ?? {}) : {},
         locked: true,
@@ -1384,7 +1385,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         calcOpen: false,
         stack: [...state.stack, pushed],
-        forwardStack: state.forwardStack.slice(0, -1),
+        forwardStack: withoutLast(state.forwardStack),
         backDepth: Math.max(0, state.backDepth - 1),
         date: stripEntryMeta(fwd),
         liveSolveTime: fwd.solveTime ?? null, //  the ledger hand-off, mirroring BACK

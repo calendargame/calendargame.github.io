@@ -79,10 +79,10 @@ export interface UseGameEngineOptions {
 // cards it has checked, first of all). `import.meta.env.DEV` is the literal `false` in a production
 // build, so there the reducer below is gameReducer itself, the first state is returned as it is
 // made, and engine/freeze is not in the bundle.
-// What it costs a development build, measured on a 1,000-card history: some 35–70 µs a dispatch (an
-// answer copies the history array, and each slot of the copy is asked whether it is frozen; and the
-// engine's own array copies run slower on frozen arrays) — the same order as the invariant walk that
-// already runs after every dispatch, and nothing a person can perceive.
+// What it costs a development build, measured on a 1,000-card history: some 15–50 µs a dispatch (a
+// press copies the history array, and each slot of the copy is asked whether it is frozen) — the
+// same order as the invariant walk that already runs after every dispatch, and nothing a person can
+// perceive. (The reducer's own copies cost a frozen array nothing extra: engine/arrayCopy.)
 const engineReducer: (state: GameState, action: GameAction) => GameState = import.meta.env.DEV
   ? (state, action) => deepFreeze(gameReducer(state, action))
   : gameReducer
