@@ -25,7 +25,7 @@ import {
 import { observeScrollExtent, readShadeRampPx, writeShade } from './scrollRegion.js'
 import {
   dockShades,
-  lineShare,
+  restGeometry,
   releaseShades,
   arrivingShades,
   NO_DOCK,
@@ -103,6 +103,48 @@ function headerDockGeometry(id: string, lineY: number): HeaderDockGeometry | nul
     naturalTop: w.top + wrapper.clientTop,
     floorY: w.bottom - wrapper.clientTop,
   }
+}
+
+// stillToCome — what has yet to happen to the OPEN section's place before the page is at rest, as
+// lib/guideDock's restGeometry takes it. Measured, on any frame:
+//   • comingUp — how far its top has yet to come up the page. Everything still FOLDING AWAY above
+//     it: the rendered height of every panel before it in the page. Only one section is open at a
+//     time, so those all belong to closed sections — at rest that is nothing (a closed panel has no
+//     height); while a tap's fold runs it is what has yet to go, and after a quick second tap, what
+//     TWO folds have yet to give up between them. Plus what is left of the glide (`glideLeft`: the
+//     page scrolling on by that much brings the section up by that much).
+//   • growing — how far its foot has yet to go down: what its own panel has yet to open (the body's
+//     natural height, less the track that already shows — the coordinator's own measure).
+function stillToCome(openId: string, glideLeft: number): { comingUp: number; growing: number } {
+  const section = document.getElementById(sectionDomId(openId))
+  const guide = section?.closest('[data-guide]')
+  const body = document.getElementById(panelDomId(openId))
+  if (!section || !guide || !body) return { comingUp: glideLeft, growing: 0 }
+  const shown = (el: Element | null | undefined) => el?.getBoundingClientRect().height ?? 0
+  let folding = 0
+  // In document order, so the sections met before this one are the ones above it.
+  for (const other of guide.querySelectorAll(`[id^="${sectionDomId('')}"]`)) {
+    if (other === section) break
+    folding += shown(other.querySelector(':scope > .expander'))
+  }
+  return {
+    comingUp: folding + glideLeft,
+    growing: Math.max(0, shown(body) - shown(body.closest('.expander'))),
+  }
+}
+
+// anyPanelFolding — is any section's panel in How to Play still opening or folding away? Read off
+// the transitions the browser is drawing them with, like foldClock: a transition the browser lists
+// is one still running, and every one of them ends. (No Web Animations — jsdom — means nothing can
+// be followed, and nothing is.)
+function anyPanelFolding(): boolean {
+  const guide = document.querySelector('[data-guide]')
+  return (
+    guide
+      ?.getAnimations?.({ subtree: true })
+      .some((a) => 'transitionProperty' in a && a.transitionProperty === 'grid-template-rows') ??
+    false
+  )
 }
 
 // headerPinDepth — how far a section's header has been carried DOWN its own wrapper by the sticky
@@ -232,15 +274,21 @@ function startScrollWriter(
 // has run out. It asks for its frame AFTER the header's offset and the scroll writer have asked for
 // theirs (the toggle starts it last), so on every frame it is called with the page and the header
 // already where that frame puts them. Returns the cancel; neither callback is called after it.
+// ⚠ IT ALSO OUTLASTS ITS OWN CLOCK WHILE ANYTHING IS STILL FOLDING (`stillFolding`). The clock is
+// this tap's fold; a tap made while an EARLIER tap's fold was still running — a taller section,
+// given longer — leaves that one moving the page after this clock is over. Handing the header back
+// to its place then would be handing it back mid-motion, which is the very thing an arrival is for:
+// so it holds at the end of its curve, answering for where the header will rest, until the page is.
 function startArrival(
   clock: FoldClock,
+  stillFolding: () => boolean,
   onStep: (eased: number) => void,
   onEnd: () => void,
 ): () => void {
   let raf = 0
   const step = (now: number) => {
     const p = clock.at(now)
-    if (p < 1) {
+    if (p < 1 || stillFolding()) {
       onStep(accordionEase(p))
       raf = requestAnimationFrame(step)
     } else onEnd()
@@ -628,12 +676,17 @@ export default function GuidePage({
     },
     [paintBarShare],
   )
-  // The section still ARRIVING (lib/guideDock) — with the share of its shadow the bar was keeping
-  // at the tap and what its own header still wore, how far along the motion's clock it is, and where
-  // on that clock the page became the reader's — and the clock's cancel. And the tracker's own
-  // evaluate, which every frame of that clock asks for: the two strengths are measured, never
-  // guessed.
-  const arrivingRef = useRef<{ id: string; arrival: Arrival; cancel: () => void } | null>(null)
+  // The section still ARRIVING (lib/guideDock) — with what was on screen at the tap, how far along
+  // the motion's clock it is, and where the glide carrying the page is taking it (`glideTo`: null
+  // once nothing is — no glide, or a reader has the page) — and the clock's cancel. And the
+  // tracker's own evaluate, which every frame of that clock asks for: the two strengths are
+  // measured, never guessed.
+  const arrivingRef = useRef<{
+    id: string
+    arrival: Arrival
+    glideTo: number | null
+    cancel: () => void
+  } | null>(null)
   const trackerRef = useRef<(() => void) | null>(null)
   // Stop the arrival's clock where it stands, and write nothing: what is on screen stays on screen
   // for whatever takes over (a tap's release starts from it; a tracker that goes on looking writes
@@ -765,10 +818,17 @@ export default function GuidePage({
       const lineY = scroller.getBoundingClientRect().top + readBarHeight(scrollerStyle)
       const geometry = headerDockGeometry(open, lineY)
       const rampPx = readShadeRampPx()
-      const at = geometry ? dockShades(geometry, rampPx) : NO_DOCK
-      const arriving = arrivingRef.current?.id === open ? arrivingRef.current.arrival : null
-      const shades =
-        arriving && geometry ? arrivingShades(arriving, at, lineShare(geometry, rampPx)) : at
+      const arriving = arrivingRef.current?.id === open ? arrivingRef.current : null
+      // An ARRIVING header answers for where it will come to REST, not for where it is
+      // (lib/guideDock argues it): the same rule, asked about the place it is headed for.
+      const settle = (g: HeaderDockGeometry): HeaderDockGeometry => {
+        if (!arriving) return g
+        const glideLeft = arriving.glideTo === null ? 0 : arriving.glideTo - scroller.scrollTop
+        const { comingUp, growing } = stillToCome(open, glideLeft)
+        return restGeometry(g, comingUp, growing)
+      }
+      const place = geometry ? dockShades(settle(geometry), rampPx) : NO_DOCK
+      const shades = arriving && geometry ? arrivingShades(arriving.arrival, place) : place
       openShadesRef.current = shades
       writeShade(header, shades.header)
       share.tracked = shades.barYield
@@ -776,10 +836,28 @@ export default function GuidePage({
     }
     trackerRef.current = evaluate
     evaluate()
-    scroller.addEventListener('scroll', evaluate, { passive: true })
+    // ★ WHERE AN ARRIVING HEADER WILL REST CAN CHANGE IN ONE FRAME FOR A REASON THAT IS NOT THE
+    // CLOCK'S: the reader scrolls the page themselves, or the screen is turned. The arrival then
+    // sets off again from exactly what is on screen — the last thing written, before this event is
+    // looked at — over what is left of its clock, so the new resting place is come to, not jumped
+    // to. (A scroll while the glide is carrying the page is the glide's own, and changes nothing
+    // about where the header will rest; the glide being TAKEN OVER does this itself, in the toggle.)
+    const setOffAgain = () => {
+      const arriving = arrivingRef.current
+      if (arriving?.id !== open) return
+      arriving.arrival.from = openShadesRef.current
+      arriving.arrival.since = arriving.arrival.progress
+    }
+    const onScroll = () => {
+      if (arrivingRef.current?.glideTo === null) setOffAgain()
+      evaluate()
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', setOffAgain)
     const stopExtent = observeScrollExtent(scroller, evaluate)
     return () => {
-      scroller.removeEventListener('scroll', evaluate)
+      scroller.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', setOffAgain)
       stopExtent()
       trackerRef.current = null
       openShadesRef.current = NO_DOCK
@@ -890,12 +968,11 @@ export default function GuidePage({
       setMotionMs(durationMs)
       setOpen(opens ? id : null)
       // AN OPENING SECTION IS ARRIVING for the length of this motion (lib/guideDock) — EVERY one,
-      // whether or not the page glides for it: the bar gives its own shadow up over the clock rather
-      // than in the frame of the tap, and the header's shadow answers to the arrival. Each frame of
-      // that clock moves it on and has the tracker measure and write; when the clock has run out the
-      // header is looked at once more, as it stands. `gliding`: the page is being carried to the
-      // line, so the header casts nothing until a reader takes the page over (the glide marks that
-      // on the clock, below); with no glide the page is the reader's from the tap.
+      // whether or not the page glides for it: the bar's share and the header's shadow go from what
+      // is on screen now to what they will be where the header comes to rest, over the clock rather
+      // than in the frame of the tap. Each frame of that clock moves it on and has the tracker
+      // measure and write; when the clock has run out the header is looked at once more, as it
+      // stands. `glideTo`: where the page is being carried to, or null when it is not.
       // ⚠ CALLED AT EVERY WAY OUT OF THIS TAP, AND ONLY THERE — after the glide and the header's own
       // offset have asked for their frames, so each of its frames finds the page and the header
       // already where that frame puts them (startArrival). It was once started only on the way out
@@ -904,18 +981,21 @@ export default function GuidePage({
       // top fade went out in the frame of the tap.
       // (With no time to take — Reduce Motion — its first frame is its last: the page has landed by
       // then, and the place answers before anything is painted.)
-      const arrive = (gliding: boolean): void => {
+      const arrive = (glideTo: number | null): void => {
         if (!opens) return
         const arrival: Arrival = {
-          from: sharedBefore,
-          headerFrom: headerBefore,
+          from: { header: headerBefore, barYield: sharedBefore },
+          since: 0,
           progress: 0,
-          takenOverAt: gliding ? null : 0,
         }
         const cancelArrival = startArrival(
           clock,
+          anyPanelFolding,
           (eased) => {
             arrival.progress = eased
+            // (The glide ends with the clock: from there nothing is carrying the page.)
+            if (eased >= 1 && arrivingRef.current?.arrival === arrival)
+              arrivingRef.current.glideTo = null
             trackerRef.current?.()
           },
           () => {
@@ -923,7 +1003,7 @@ export default function GuidePage({
             trackerRef.current?.()
           },
         )
-        arrivingRef.current = { id, arrival, cancel: cancelArrival }
+        arrivingRef.current = { id, arrival, glideTo, cancel: cancelArrival }
       }
       // Scroll coordination needs the scroller's geometry on top of the two panel measurements.
       // TWO preconditions, and they are not the same guard wearing two shapes:
@@ -940,7 +1020,7 @@ export default function GuidePage({
       // Stating the precondition in terms of the GEOMETRY survived the move untouched: a test that
       // wants the writer stands up the extent the glide travels through, which is the same geometry
       // the target is computed from anyway.
-      if (!tapped || !scroller || scroller.scrollHeight <= 0) return arrive(false)
+      if (!tapped || !scroller || scroller.scrollHeight <= 0) return arrive(null)
       // ★ A HEADER TAPPED ABOVE THE LINE IS BROUGHT DOWN TO IT, NOT DROPPED ON IT
       // (startHeaderOffset says what used to happen). Measured here, in the tap, before the commit
       // that opens its panel: how far above the line the tapped header's top stands. Past the band
@@ -1009,14 +1089,18 @@ export default function GuidePage({
           closingExpander !== null && closingExpander.getBoundingClientRect().top < tappedRect.top,
         openingH,
       })
-      if (target === null) return arrive(false)
-      // The glide. A reader who takes the page over stops it, and is marked on the arrival's clock —
-      // from there the header's shadow comes in as the bar's goes on out.
+      if (target === null) return arrive(null)
+      // The glide. A reader who takes the page over stops it: nothing is carrying the page any more,
+      // so where the header will come to rest has just changed — and the arrival sets off again from
+      // exactly what is on screen (the tracker's last word), over what is left of its clock.
       scrollWriterRef.current = startScrollWriter(scroller, scrollY, target, clock, () => {
         const arriving = arrivingRef.current
-        if (arriving?.id === id) arriving.arrival.takenOverAt = arriving.arrival.progress
+        if (arriving?.id !== id) return
+        arriving.glideTo = null
+        arriving.arrival.from = openShadesRef.current
+        arriving.arrival.since = arriving.arrival.progress
       })
-      arrive(true)
+      arrive(target)
     },
     [
       open,
