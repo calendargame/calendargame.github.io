@@ -460,6 +460,113 @@ describe('one shadow: the bar gives its own up while a header is docked against 
     expect(barKeeps()).toBe(1)
   })
 
+  // ★ MORE THAN ONE HEADER LETTING GO AT ONCE. There was one slot for a release, so a tap made
+  // while a fold was still running ended it: the header that was letting go lost what was left of
+  // its shadow, and the bar was handed the rest of its share, in the frame of that tap. Each
+  // release now runs to the end of its own panel's fold, whatever is tapped meanwhile.
+  describe('a tap made while an earlier close is still letting go leaves it to finish', () => {
+    // 'stats' docked with text under it, closed, and a quarter of the way through its fold.
+    const closingStats = () => {
+      const view = mount()
+      tapAndSettle(view.container, 'stats')
+      scrollSo(() => stuck('stats', 50))
+      frames = holdFrames(vi)
+      tap(view.container, 'stats')
+      closedAt('stats', LINE) // (the collapse leaves the header where it was docked)
+      act(() => frames.at(0))
+      act(() => frames.at(FOLD_MS / 4))
+      const before = [barKeeps(), shade(view.container, 'stats')]
+      expect(before[0]).toBeGreaterThan(0)
+      expect(before[0]).toBeLessThan(1)
+      expect(Number(before[1])).toBeGreaterThan(0)
+      return { ...view, before }
+    }
+    // Run the frames from `from` on, and hold the two to: the header left behind only ever fades,
+    // the bar only ever gets more back, and neither by more than a frame of the fold allows.
+    const letGo = (container, from, lastBar, lastShade) => {
+      for (let i = 1; i <= 40; i++) {
+        act(() => frames.at(from + (FOLD_MS * i) / 40))
+        const [bar, own] = [barKeeps(), Number(shade(container, 'stats'))]
+        expect(own).toBeLessThanOrEqual(lastShade)
+        expect(lastShade - own).toBeLessThan(0.2)
+        expect(bar).toBeGreaterThanOrEqual(lastBar)
+        expect(bar - lastBar).toBeLessThan(0.2)
+        ;[lastBar, lastShade] = [bar, own]
+      }
+    }
+
+    it('another section opened within the fold: nothing changes on the tap, and both go on as they were going', () => {
+      const { container, before } = closingStats()
+      below('overview', 300) // it opens where it stands, far from the line: the bar is owed all
+      tap(container, 'overview')
+      expect([barKeeps(), shade(container, 'stats')]).toEqual(before)
+      act(() => frames.at(FOLD_MS / 4)) // the new opening's first frame, no time gone by
+      expect([barKeeps(), shade(container, 'stats')]).toEqual(before)
+      letGo(container, FOLD_MS / 4, before[0], Number(before[1]))
+      expect([barKeeps(), shade(container, 'stats'), shade(container, 'overview')]).toEqual([
+        1,
+        '0.000',
+        '0.000',
+      ])
+      expect(frames.pending()).toBe(0)
+    })
+
+    it('a chain — one section to the next to the next: each header left behind finishes letting go', () => {
+      const view = mount()
+      const { container } = view
+      tapAndSettle(container, 'stats')
+      scrollSo(() => stuck('stats', 50))
+      frames = holdFrames(vi)
+      below('overview', 300)
+      tap(container, 'overview') // stats → overview: stats is letting go…
+      closedAt('stats', LINE)
+      act(() => frames.at(0))
+      act(() => frames.at(FOLD_MS / 4))
+      const before = [barKeeps(), shade(container, 'stats')]
+      expect(Number(before[1])).toBeGreaterThan(0)
+      expect(Number(before[1])).toBeLessThan(1)
+      below('presets', 500)
+      tap(container, 'presets') // …→ presets, a quarter of the way through
+      expect([barKeeps(), shade(container, 'stats')]).toEqual(before)
+      act(() => frames.at(FOLD_MS / 4)) // the new tap's first frame, no time gone by
+      expect([barKeeps(), shade(container, 'stats')]).toEqual(before)
+      letGo(container, FOLD_MS / 4, before[0], Number(before[1]))
+      expect([barKeeps(), shade(container, 'stats'), shade(container, 'overview')]).toEqual([
+        1,
+        '0.000',
+        '0.000',
+      ])
+      expect(frames.pending()).toBe(0)
+    })
+
+    it('leaving the screen with two of them in flight puts every one at rest at once', () => {
+      const view = mount()
+      const { container } = view
+      tapAndSettle(container, 'stats')
+      scrollSo(() => stuck('stats', 50))
+      frames = holdFrames(vi)
+      stuck('overview', 30)
+      tap(container, 'overview')
+      closedAt('stats', LINE - 200)
+      act(() => frames.at(0))
+      act(() => frames.at(FOLD_MS))
+      scrollSo(() => stuck('overview', 60))
+      expect(shade(container, 'overview')).toBe('1.000')
+      tap(container, 'overview') // close overview…
+      act(() => frames.at(2000))
+      act(() => frames.at(2000 + FOLD_MS / 4))
+      tap(container, 'stats') // …reopen stats part-way (overview goes on letting go)…
+      act(() => frames.at(2000 + FOLD_MS / 4))
+      act(() => frames.at(2000 + (FOLD_MS * 3) / 8))
+      tap(container, 'stats') // …and close it again: two releases in flight
+      act(() => frames.at(2000 + (FOLD_MS * 3) / 8))
+      expect(Number(shade(container, 'overview'))).toBeGreaterThan(0)
+      act(() => view.unmount())
+      expect(barKeeps()).toBe(1)
+      expect(frames.pending()).toBe(0)
+    })
+  })
+
   it('leaving the screen mid-fold puts both at rest at once', () => {
     const view = mount()
     const { container } = view

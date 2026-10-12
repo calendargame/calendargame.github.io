@@ -644,38 +644,40 @@ export default function GuidePage({
   }, [])
   // ── THE BAR'S SHARE OF ITS SHADOW HAS TWO SOURCES, AND ONE WRITER ──────────────────────────────
   // `tracked` is what the open header's place says (the dock tracker, below) — all of it while
-  // nothing is open. `released` is the share a header that has just been CLOSED is still handing
-  // back, while its panel folds (startShadeRelease) — all of it while nothing is. The bar is told
-  // the smaller, so a release can hold the bar's shadow down for the length of a fold and can never
-  // lift it above what the open header allows.
-  const barShareRef = useRef({ tracked: NO_DOCK.barYield, released: NO_DOCK.barYield })
-  const paintBarShare = useCallback(
-    () => onBarYield(Math.min(barShareRef.current.tracked, barShareRef.current.released)),
-    [onBarYield],
+  // nothing is open. The other is every RELEASE in flight: the share a header that has just been
+  // CLOSED is still handing back while its panel folds (startShadeRelease). The bar is told the
+  // smallest of them, so a release can hold the bar's shadow down for the length of a fold and can
+  // never lift it above what the open header allows.
+  // ★ MORE THAN ONE HEADER CAN BE LETTING GO AT ONCE, each over its own panel's fold: close a
+  // section and tap another before the fold is over, or go from one to the next to the next. So the
+  // releases are kept by the header each is fading — with the strength it last wrote on that header
+  // and the share it is holding the bar to — and a new tap leaves the ones already running to
+  // finish. (There was one slot: a tap ended whatever release was in it, which dropped that
+  // header's shadow and freed the bar's share in the frame of the tap.)
+  const barShareRef = useRef({ tracked: NO_DOCK.barYield })
+  const releasesRef = useRef(
+    new Map<HTMLElement, { strength: number; share: number; cancel: () => void }>(),
   )
+  // What the bar is told: the smaller of the open header's word and every release's.
+  const barShare = useCallback(() => {
+    let share = barShareRef.current.tracked
+    for (const release of releasesRef.current.values()) share = Math.min(share, release.share)
+    return share
+  }, [])
+  const paintBarShare = useCallback(() => onBarYield(barShare()), [onBarYield, barShare])
   // What the tracker last wrote for the open header — where a release starts from.
   const openShadesRef = useRef<DockShades>(NO_DOCK)
-  // The release in flight, the header it is fading, and the strength it last wrote on that header
-  // (null = none).
-  const releaseRef = useRef<{ header: HTMLElement; strength: number; cancel: () => void } | null>(
-    null,
-  )
-  // End the release in flight where it stands. `rest`: also put what it was fading at rest — the
-  // header shadowless, the bar's share whole — which is right whenever nothing else is about to
-  // write them (the guide leaving the screen; another release starting, for the header).
-  const endRelease = useCallback(
-    (rest: boolean) => {
-      const release = releaseRef.current
-      if (!release) return
+  // End every release in flight and put what each was fading at rest — its header shadowless, the
+  // bar's share no longer held: for when nothing else is about to write them (the guide leaving the
+  // screen, the app going to the background).
+  const restReleases = useCallback(() => {
+    for (const [header, release] of releasesRef.current) {
       release.cancel()
-      releaseRef.current = null
-      if (!rest) return
-      writeShade(release.header, NO_DOCK.header)
-      barShareRef.current.released = NO_DOCK.barYield
-      paintBarShare()
-    },
-    [paintBarShare],
-  )
+      writeShade(header, NO_DOCK.header)
+    }
+    releasesRef.current.clear()
+    paintBarShare()
+  }, [paintBarShare])
   // The section still ARRIVING (lib/guideDock) — with what was on screen at the tap, how far along
   // the motion's clock it is, and where the glide carrying the page is taking it (`glideTo`: null
   // once nothing is — no glide, or a reader has the page) — and the clock's cancel. And the
@@ -735,7 +737,7 @@ export default function GuidePage({
   useLayoutEffect(() => {
     // Off-screen: drop anything in flight, and listen for nothing — a hidden guide can neither
     // start a glide nor be scrolled, so there is no visibility case left to handle.
-    // …and a closing header's shadows are put at rest rather than left mid-fade (endRelease): rAF
+    // …and a closing header's shadows are put at rest rather than left mid-fade (restReleases): rAF
     // stops while hidden for the release exactly as it does for the glide. A header still on its
     // way to the line is given back to the stylesheet's line for the same reason.
     // An arrival is ended with them, for the same reason — and the open header, which is still on
@@ -744,7 +746,7 @@ export default function GuidePage({
     if (!visible) {
       cancelScrollWriter()
       endArrival()
-      endRelease(true)
+      restReleases()
       restHeaderOffsets()
       return
     }
@@ -752,7 +754,7 @@ export default function GuidePage({
       if (document.visibilityState !== 'hidden') return
       cancelScrollWriter()
       endArrival()
-      endRelease(true)
+      restReleases()
       restHeaderOffsets()
       trackerRef.current?.()
     }
@@ -761,10 +763,10 @@ export default function GuidePage({
       document.removeEventListener('visibilitychange', onVisibilityChange)
       cancelScrollWriter()
       endArrival()
-      endRelease(true)
+      restReleases()
       restHeaderOffsets()
     }
-  }, [visible, cancelScrollWriter, endArrival, endRelease, restHeaderOffsets])
+  }, [visible, cancelScrollWriter, endArrival, restReleases, restHeaderOffsets])
   // The toggle coordinator — hooked into the single toggle callback, never pointer
   // events. Everything is measured at tap time, pre-animation: the closing panel's
   // RENDERED height (its grid track — a mid-flight re-toggle reads the interpolated
@@ -808,9 +810,10 @@ export default function GuidePage({
     // Live: the same object answers with the current --bar-h on every read, so a bar that changes
     // height (a rotation, the fluid root font) moves the line with it.
     const scrollerStyle = getComputedStyle(scroller)
-    // One object for the component's life (never reassigned): held here so the cleanup writes the
-    // same one.
+    // One object each for the component's life (never reassigned): held here so the cleanup reads
+    // and writes the same ones.
     const share = barShareRef.current
+    const releases = releasesRef.current
     const evaluate = () => {
       // The bar is fixed to the top of the viewport and the scroller's box starts there too, so the
       // bar's underside is the scroller's top plus the bar's height. Unmeasurable (NaN, where no
@@ -861,7 +864,7 @@ export default function GuidePage({
       stopExtent()
       trackerRef.current = null
       openShadesRef.current = NO_DOCK
-      if (releaseRef.current?.header !== header) writeShade(header, NO_DOCK.header)
+      if (!releases.has(header)) writeShade(header, NO_DOCK.header)
       share.tracked = NO_DOCK.barYield
       paintBarShare()
     }
@@ -933,37 +936,35 @@ export default function GuidePage({
       // HERE, before the state flips: the tracker's cleanup runs in the commit that follows, and by
       // then the release already owns the header's shadow and holds the bar's share where it was,
       // so the frame of the tap paints exactly what was on screen. A release still in flight from
-      // an earlier tap ends first: its header is put at rest, unless it is the very header being
-      // opened again. That one's arrival (below) takes over both things the release was holding,
-      // exactly where they stand: what is left of the header's shadow, and the bar's share — which
-      // the release therefore stops holding down. (Left held, the bar's shadow and the page's top
-      // fade stayed capped at wherever the fold had got to, for as long as that section was open.)
-      const reopening = opens && releaseRef.current?.header.id === headerDomId(id)
-      const sharedBefore = Math.min(barShareRef.current.tracked, barShareRef.current.released)
-      const headerBefore = reopening ? (releaseRef.current?.strength ?? 0) : NO_DOCK.header
-      endRelease(!reopening)
-      if (reopening) barShareRef.current.released = NO_DOCK.barYield
+      // an earlier tap is left to finish, on its own panel's fold — with one exception: the release
+      // of the very header being opened again. That one's arrival (below) takes over both things
+      // the release was holding, exactly where they stand: what is left of the header's shadow, and
+      // the bar's share — which the release therefore stops holding down. (Left held, the bar's
+      // shadow and the page's top fade stayed capped at wherever the fold had got to, for as long
+      // as that section was open.)
+      const releases = releasesRef.current
+      const sharedBefore = barShare()
+      const tappedHeader = opens ? document.getElementById(headerDomId(id)) : null
+      const interrupted = tappedHeader ? releases.get(tappedHeader) : undefined
+      const headerBefore = interrupted?.strength ?? NO_DOCK.header
+      if (tappedHeader && interrupted) {
+        interrupted.cancel()
+        releases.delete(tappedHeader)
+      }
       const closingHeader = open ? document.getElementById(headerDomId(open)) : null
       if (closingHeader) {
-        barShareRef.current.released = sharedBefore
-        const cancel = startShadeRelease(
-          { header: openShadesRef.current.header, barYield: sharedBefore },
-          clock,
-          (shades, done) => {
-            writeShade(closingHeader, shades.header)
-            barShareRef.current.released = shades.barYield
-            paintBarShare()
-            if (done) releaseRef.current = null
-            else if (releaseRef.current) releaseRef.current.strength = shades.header
-          },
-        )
-        // (With no time to take, the release has already landed and cleared itself.)
-        if (scaledMs > 0)
-          releaseRef.current = {
-            header: closingHeader,
-            strength: openShadesRef.current.header,
-            cancel,
-          }
+        const from = { header: openShadesRef.current.header, barYield: sharedBefore }
+        // In the map BEFORE it starts: its first word is written as it starts, and (with no time to
+        // take) so is its last.
+        const release = { strength: from.header, share: from.barYield, cancel: () => {} }
+        releases.set(closingHeader, release)
+        release.cancel = startShadeRelease(from, clock, (shades, done) => {
+          writeShade(closingHeader, shades.header)
+          release.strength = shades.header
+          release.share = shades.barYield
+          if (done) releases.delete(closingHeader)
+          paintBarShare()
+        })
       }
       setMotionMs(durationMs)
       setOpen(opens ? id : null)
@@ -1038,7 +1039,6 @@ export default function GuidePage({
         if (scaledMs > 0) runHeaderOffset(closingHeader, standsAt, standsAt, clock)
         else endHeaderOffset(closingHeader, true)
       }
-      const tappedHeader = opens ? document.getElementById(headerDomId(id)) : null
       if (tappedHeader) {
         const aboveLine =
           scroller.getBoundingClientRect().top +
@@ -1106,7 +1106,7 @@ export default function GuidePage({
       open,
       cancelScrollWriter,
       endArrival,
-      endRelease,
+      barShare,
       endHeaderOffset,
       runHeaderOffset,
       paintBarShare,
