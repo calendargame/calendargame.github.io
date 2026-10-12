@@ -12,7 +12,8 @@
 // the room that's left — and this guard keeps the shortcut from coming back.
 // SCOPE — the VERTICAL axis only, and only fixed px:
 //   • banned:  h-[64px]  min-h-[40px]  max-h-[440px]
-//   • legal:   min-w-[125px], pt-[3px], text-[11px]  (widths, offsets, type — not heights)
+//   • legal HERE: min-w-[125px], pt-[3px], text-[11px]  (widths, offsets, type — not heights;
+//     a pixel width or text size is tests/textSizeGuard's to refuse, and it does)
 //   • legal:   max-h-[55vh], max-h-[calc(100dvh_-_var(--bar-h))], min-h-10, h-full
 //     (viewport/relative units and the rem-based scale all follow the screen; that's the point)
 // A hairline BORDER or a 1px nudge is not a height and is not the target here; if a genuine

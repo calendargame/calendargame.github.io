@@ -25,13 +25,16 @@ const isHidden = (el) => {
   return false
 }
 const classes = (el) => [...el.classList]
+// A readout's column: the one thing in the row with a least width of its own (BestColumn).
+const isBestColumn = (el) => classes(el).some((c) => /^min-w-\[/.test(c))
+const bestColumns = (el) => [...el.children].filter(isBestColumn)
 // The visible mode's Best line: found from its "Best …:" label up to the row's wrapping line.
 const bestLine = () => {
   const label = [...document.querySelectorAll('div')].find(
     (el) => !isHidden(el) && /^\s*Best (Score|Mean):/.test(el.firstChild?.nodeValue ?? ''),
   )
   let col = label
-  while (!col.classList.contains('min-w-[125px]')) col = col.parentElement
+  while (!isBestColumn(col)) col = col.parentElement
   return col.parentElement.parentElement
 }
 // A record under EVERY configuration's key, so the test does not restate how a mode composes one.
@@ -141,7 +144,7 @@ describe('the Best row’s tag — both wordings or neither, and never a line of
       expect(classes(readouts)).toEqual(
         expect.arrayContaining(['flex', 'flex-wrap', 'items-start', 'gap-4', 'grow', 'min-w-0']),
       )
-      expect(readouts.querySelectorAll('.min-w-\\[125px\\]')).toHaveLength(2)
+      expect(bestColumns(readouts)).toHaveLength(2)
     })
 
     it('the words are still on the page for a screen reader, and nothing in the row takes the keyboard', () => {
@@ -159,7 +162,7 @@ describe('the Best row’s tag — both wordings or neither, and never a line of
       act(() => void fireEvent.keyDown(window, { key }))
       const { readouts, place } = parts(bestLine())
       expect(place).toBeNull()
-      expect(readouts.querySelectorAll('.min-w-\\[125px\\]')).toHaveLength(2)
+      expect(bestColumns(readouts)).toHaveLength(2)
     })
   })
 
@@ -177,6 +180,30 @@ describe('the Best row’s tag — both wordings or neither, and never a line of
       expect([place.dataset.longest, words.textContent]).toEqual([longest, wording])
       cleanup()
     }
+  })
+
+  // ★ THE COLUMNS' LEAST WIDTH FOLLOWS THE FLUID ROOT. It was 125px flat. The text in the columns is
+  // rem-sized, so on a short screen (a landscape phone, a 320×568 one: the root is 12px there, not
+  // the 16.458px of a 390×844 phone) the columns held 9px text in the room 12px text needs, and
+  // the tag — which was given what was left — had none at any width, with half the line empty.
+  // Written against the root it is exactly 125px where it was tuned, and in proportion elsewhere.
+  it('a Best column`s least width is written against the root: 125px at the 16.458px root, never a flat pixel width', () => {
+    const { container } = render(
+      <BestLine>
+        <BestColumn>Best Score: 1</BestColumn>
+      </BestLine>,
+    )
+    const [column] = bestColumns(container.firstElementChild.firstElementChild)
+    const floor = classes(column).find((c) => c.startsWith('min-w-'))
+    const rem = /^min-w-\[calc\((\d+(?:\.\d+)?)rem\/(\d+(?:\.\d+)?)\)\]$/.exec(floor)
+    expect(rem, floor).not.toBeNull()
+    // 390×844: the root is 1.95vh there (index.css's html rule), and 1.95% of 844 is 16.458.
+    expect(Number(rem[2])).toBeCloseTo(844 * 0.0195, 9)
+    expect((Number(rem[1]) / Number(rem[2])) * 16.458).toBeCloseTo(125, 9)
+    // …and at the 12px root of a short screen it is 91px, where it was still 125.
+    expect((Number(rem[1]) / Number(rem[2])) * 12).toBeCloseTo(91.14, 2)
+    const css = readFileSync('src/index.css', 'utf8')
+    expect(css).toContain('html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}')
   })
 
   it('How to Play says the tag is left out where there is no room for it, in both modes', () => {

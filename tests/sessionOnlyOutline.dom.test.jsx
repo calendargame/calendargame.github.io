@@ -313,7 +313,7 @@ describe('the outline costs no layout', () => {
       const gap = step(line, 'gap-')
       expect(step(line.parentElement, 'gap-x-')).toBe(gap)
       const cells = [...line.children]
-      const cols = cells.filter((el) => el.classList.contains('min-w-[125px]'))
+      const cols = cells.filter((el) => [...el.classList].some((c) => /^min-w-\[/.test(c)))
       expect(cols).toHaveLength(columns)
       for (const col of cols) {
         expect(step(col, '-mr-')).toBe(inset)

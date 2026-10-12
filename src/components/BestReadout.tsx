@@ -41,8 +41,9 @@ import type { ReactNode } from 'react'
 // gave it back while a readout was SHORTER than that — a time of a minute or more, or one with its
 // ★, is not, and the tag then lost its place on screens that had always had room for it.
 // So the line is measured exactly as it was before there was an inset, whatever the readouts say:
-//   • a column is at least 125px, as it always was, and hands the next thing on the line .75rem of
-//     its own width (-mr-3) — two columns, the two ends' inset, given back in full;
+//   • a column has the least width it always had (BEST_COLUMN_FLOOR, below), and hands the next
+//     thing on the line .75rem of its own width (-mr-3) — two columns, the two ends' inset, given
+//     back in full;
 //   • and a SLACK follows each column: nothing wide, growing to that same .75rem (max-w-3) whenever
 //     the line has it to spare, which puts back exactly the space the column gave up. (Its -ml-4
 //     cancels the row gap in front of it, so it adds nothing to the line itself.)
@@ -53,7 +54,15 @@ import type { ReactNode } from 'react'
 // ⚠ THREE NUMBERS ARE ONE: the row's px-3, the column's -mr-3, and the slack's max-w-3 — and the
 // slack's -ml-4 is the readouts' gap-4. tests/sessionOnlyOutline.dom reads them off the page and
 // holds them together.
-const BEST_COLUMN_CLASS = 'min-w-[125px] -mr-3'
+// ★ THE LEAST WIDTH IS WRITTEN AGAINST THE ROOT FONT, NOT IN PIXELS: 125px at the 16.458px root of
+// a 390×844 phone, which is where that number was tuned (the root is 1.95vh there — index.css's
+// html rule), and the same share of the line everywhere else. Everything a column HOLDS is
+// rem-sized, so it shrinks with the root; a flat 125px did not. At the 12px root of a short screen
+// (every phone on its side, a 320×568 one upright) the columns held 9px text in the room 12px text
+// needs, and the tag, which gets what is left of the line, had no place at ANY width — with half
+// the line standing empty. tests/textSizeGuard fails the suite on a box width written in pixels.
+const BEST_COLUMN_FLOOR = 'min-w-[calc(125rem/16.458)]'
+const BEST_COLUMN_CLASS = `${BEST_COLUMN_FLOOR} -mr-3`
 const BEST_SLACK_CLASS = '-ml-4 grow shrink-0 basis-0 max-w-3'
 export function BestColumn({ children }: { children: ReactNode }) {
   return (

@@ -72,6 +72,18 @@ const STILL_IN_PIXELS = [
   },
 ]
 
+// ── AND NO BOX WIDTH WRITTEN IN PIXELS ───────────────────────────────────────────────────────────
+// The same defect one step along: a box sized in pixels round text sized in rem. The Best row's
+// columns had a least width of 125 pixels, tuned at the 16.458px root of a 390×844 phone; at the
+// 12px root of a short screen (every landscape phone) they held 9px text in the room 12px text
+// needs, and the "Same Round" tag beside them — given what was left of the line — had no place at
+// any width. A width, a least width, a most width, or a basis written `…-[Npx]` cannot follow the
+// root. There is no allow-list: the tree has none (the Best columns' was the only one), so every
+// new one is either a mistake or a decision to be argued here.
+// (Not watched, on purpose: Tailwind's own steps and `w-px`, which are not arbitrary pixel values;
+// heights, which tests/heightGuard owns; and offsets and paddings, which do not box text in.)
+const PX_WIDTH = /(?<![a-z0-9-])(?:min-w|max-w|w|basis)-\[\d+(?:\.\d+)?px\]/g
+
 const found = new Map()
 for (const file of scanned) {
   const sizes = {}
@@ -111,6 +123,19 @@ describe('text size guard — a pixel text size cannot follow the fluid root', (
       }
     }
     expect(stale).toEqual([])
+  })
+
+  it('finds no box width written in pixels — a width round rem-sized text is written against the root', () => {
+    const widths = scanned.flatMap((file) =>
+      [...readFileSync(file, 'utf8').matchAll(PX_WIDTH)].map((m) => `${rel(file)} — ${m[0]}`),
+    )
+    expect(widths).toEqual([])
+    // (…and the pattern does see one, so an empty list is a clean tree and not a blind guard.)
+    const sees = (text) => [...text.matchAll(PX_WIDTH)].map((m) => m[0])
+    expect(sees('a min-w-[125px] b w-[40.5px] c max-w-[9px] d basis-[3px]')).toHaveLength(4)
+    expect(sees('w-px min-w-0 w-[7.5rem] min-w-[calc(125rem/16.458)] h-[3px] text-[11px]')).toEqual(
+      [],
+    )
   })
 
   // ★ THE CASE THAT FOUND IT. The sub-line is sized from the line above it, in the same block, so
