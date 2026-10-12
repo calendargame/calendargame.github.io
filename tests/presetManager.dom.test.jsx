@@ -613,6 +613,21 @@ describe('renaming', () => {
     expect(registry().presets[0].name).toBe('Preset 1')
   })
 
+  it('a name of characters that draw nothing is an empty name too, in the box and in its note', () => {
+    openManager()
+    layOutNameCells(TEN)
+    focus(nameBoxes()[0])
+    type(nameBoxes()[0], 'Weekend Morning')
+    expect(cutNote()).toBeTruthy()
+    // Thirty zero-width spaces and Hangul fillers: more characters than fit, and nothing to draw.
+    // It is about to be "Preset 1", which fits, so there is no note.
+    type(nameBoxes()[0], '​ㅤ'.repeat(15))
+    expect(cutNote()).toBeNull()
+    enter(nameBoxes()[0])
+    expect(registry().presets[0].name).toBe('Preset 1')
+    expect(nameBoxes()[0].value).toBe('Preset 1')
+  })
+
   it('renaming one row leaves every other row alone', () => {
     act(() => {
       createPreset('Timed')

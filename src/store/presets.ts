@@ -185,16 +185,49 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
   openInPreset: 'last',
 })
 
-// A name, made safe to store: its outer spaces trimmed, and never empty — one that is empty, all
-// spaces, or not text at all becomes the default name for its preset.
+// ── A name with nothing in it to see ──────────────────────────────────────────────────────────
+// A name is EMPTY when no character in it would be drawn: a preset named with a zero-width space
+// showed as a blank pill and a blank row. The pattern below finds one VISIBLE character, which is
+// any character that is none of these:
+//   • White_Space — every kind of space, tab, and line break;
+//   • Default_Ignorable_Code_Point — Unicode's own list of the characters a display leaves out when
+//     it does nothing else with them: the zero-width space, joiner, and non-joiner, the word joiner,
+//     the byte-order mark, the soft hyphen, the direction marks and overrides, the variation
+//     selectors, the tag characters, and the Hangul fillers (U+115F, U+1160, U+3164, U+FFA0);
+//   • Cc — the control characters;
+//   • U+2800, the Braille pattern with no dots raised. It is a symbol to Unicode and in none of the
+//     three sets above, and it is drawn as an empty cell: the one blank character named by hand.
+// The first three are read from the Unicode tables the browser carries, so they are never a list
+// kept here, and they grow with the browser.
+// ⚠ NOT "Cf", the format characters as a whole: that category also holds the Arabic number sign and
+// its like (U+0600–U+0605, U+06DD, U+070F, U+08E2), which ARE drawn. The format characters that draw
+// nothing are in Default_Ignorable_Code_Point already.
+// ⚠ ONLY THE WHOLE NAME IS JUDGED. An invisible character inside a name that has something to see
+// is left exactly where it is — it is what joins a family emoji, spells a flag, and shapes some
+// scripts — so nothing is ever taken out of a name.
+// ⚠ WHAT THIS CANNOT KNOW: whether the device has a font for a character. One it has none for is
+// drawn as an empty box, or as nothing, on that device only; nothing here can see that, and such a
+// name is kept.
+const VISIBLE_CHARACTER = /[^\p{White_Space}\p{Default_Ignorable_Code_Point}\p{Cc}⠀]/u
+
+// A name, made safe to store: its outer spaces trimmed, and never empty — one that is empty, has
+// nothing visible in it (above), or is not text at all becomes the default name for its preset.
+// ★ THIS IS THE ONE PLACE THAT DECIDES A NAME IS EMPTY. A rename, a new preset, the note under the
+// rename field, and a registry read from the device all ask it, so they cannot disagree. A name
+// with nothing visible in it that an older build saved is therefore SHOWN as the default name, and
+// the device is not rewritten for it: reading writes nothing, and the name goes to the device as
+// the default one with the next change to the preset list — exactly what has always happened to a
+// stored name of spaces.
 // ★ THERE IS NO LENGTH LIMIT, AND NOTHING HERE CUTS A NAME. A name is whatever the player typed or
 // pasted, a whole book included; the places that show it shorten what they DRAW (lib/presetNameText,
 // and the ellipsis in components/PresetSwitcher), never what is stored. So no part of a name is
 // ever sliced off by the unit a string is counted in — which is the only way half an emoji was
 // ever made. Two presets may share a name; nothing depends on names being different (a preset is
 // its id).
-export const normalizePresetName = (name: string, id: number): string =>
-  (typeof name === 'string' ? name.trim() : '') || defaultPresetName(id)
+export const normalizePresetName = (name: string, id: number): string => {
+  const trimmed = typeof name === 'string' ? name.trim() : ''
+  return VISIBLE_CHARACTER.test(trimmed) ? trimmed : defaultPresetName(id)
+}
 
 // ★ THE REGISTRY IS READ FROM UNTRUSTED STORAGE, exactly as store/lookupHistory's own list is, and
 // it gets the same treatment for the same reason: the screen is UNCONDITIONAL, not version-gated,

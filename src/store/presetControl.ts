@@ -531,7 +531,7 @@ export function sweepDeletedPresetTimes(): void {
 export type RenameOutcome = 'renamed' | 'unknown' | 'no-room'
 
 /**
- * Rename a preset. An empty or whitespace-only name falls back to the default one.
+ * Rename a preset. An empty name — one with nothing visible in it — falls back to the default one.
  *
  * ★ A NAME THE DEVICE CANNOT SAVE IS REFUSED, NOT HELD ('no-room'). A name may be any length, so it
  * is the one registry change that can be too big to save at all; store/presets' applyRegistryIfRoom

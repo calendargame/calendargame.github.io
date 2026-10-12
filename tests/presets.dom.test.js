@@ -15,6 +15,7 @@ import {
   usePresets,
   presetKey,
   normalizeRegistry,
+  normalizePresetName,
   readStoredRegistry,
   defaultPresetName,
   shortStockName,
@@ -274,6 +275,97 @@ describe('the registry', () => {
     renamePreset(1, 'y'.repeat(80))
     expect(activePreset().name).toBe('y'.repeat(80))
     expect(renamePreset(99, 'nobody')).toBe('unknown')
+  })
+
+  // A name is empty when nothing in it would be DRAWN — not only when it has no characters. Each
+  // name below is written as escapes so that what is in it can be read here, where it cannot be seen.
+  const DRAWS_NOTHING = {
+    'a zero-width space': '​',
+    'a zero-width non-joiner and a zero-width joiner': '‌‍',
+    'a word joiner': '⁠',
+    // Between two zero-width spaces, so that trimming (which takes this one off an end) is not what
+    // empties the name.
+    'a byte-order mark': '​﻿​',
+    'a soft hyphen': '­',
+    'direction marks and overrides': '‎‏‪‮⁦⁩؜',
+    'a variation selector on its own': '️',
+    'a variation selector from the second set': '\u{E0100}',
+    'control characters': '\u0001\u007F\u009F',
+    'the Hangul filler': 'ㅤ',
+    'the Hangul leading and vowel fillers': 'ᅟᅠ',
+    'the half-width Hangul filler': 'ﾠ',
+    'the blank Braille pattern': '⠀',
+    'the combining grapheme joiner': '͏',
+    'tag characters': '\u{E0020}\u{E007F}',
+    'a no-break space': ' ',
+    'invisible characters and spaces together': ' ​ ㅤ\t⠀ ﻿ ',
+  }
+  // …and each of these has something in it that is drawn, and is kept character for character.
+  const KEPT_EXACTLY = {
+    'a family joined by zero-width joiners': '\u{1F468}‍\u{1F469}‍\u{1F467}',
+    'a flag (two regional indicators)': '\u{1F1EF}\u{1F1F5}',
+    'a flag spelled with tag characters':
+      '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}',
+    'a letter with a combining accent': 'é',
+    'a combining accent on its own': '́',
+    'a zero-width joiner between two letters': 'a‍b',
+    'a letter after a left-to-right mark': '‎a',
+    'a letter between zero-width spaces': '​x​',
+    'a heart with its variation selector': '❤️',
+    'Hangul written with a filler': 'ᅟᅡ',
+    'a Braille pattern with one dot': '⠁',
+    // Format characters by category, and drawn all the same: they sit before the number they mark.
+    'the Arabic number sign': '؀',
+    'the Arabic end of ayah': '۝',
+    'a single punctuation mark': '.',
+  }
+
+  it('a name with nothing visible in it is an empty name, and gets the default', () => {
+    for (const [what, name] of Object.entries(DRAWS_NOTHING)) {
+      expect(normalizePresetName(name, 3), what).toBe('Preset 3')
+      // The same answer wherever a name is judged: a rename, a new preset, and a stored registry.
+      renamePreset(1, 'Mornings')
+      expect(renamePreset(1, name), what).toBe('renamed')
+      expect(activePreset().name, what).toBe('Preset 1')
+      expect(
+        normalizeRegistry({ presets: [{ id: 2, name }], activeId: 2 }).presets[0].name,
+        what,
+      ).toBe('Preset 2')
+    }
+    const made = createPreset('​⠀')
+    expect(made.name).toBe(defaultPresetName(made.id))
+  })
+
+  it('a name with anything visible in it is kept exactly, its invisible characters included', () => {
+    for (const [what, name] of Object.entries(KEPT_EXACTLY)) {
+      expect(normalizePresetName(name, 3), what).toBe(name)
+      expect(renamePreset(1, name), what).toBe('renamed')
+      expect(activePreset().name, what).toBe(name)
+      expect(
+        normalizeRegistry({ presets: [{ id: 2, name }], activeId: 2 }).presets[0].name,
+        what,
+      ).toBe(name)
+    }
+    // Outer spaces are trimmed as they always were, and nothing else about the name is touched.
+    expect(normalizePresetName('  a‍b​  ', 3)).toBe('a‍b​')
+  })
+
+  it('a stored name with nothing visible in it is shown as the default, and the device is not rewritten for it', async () => {
+    // An older build accepted such a name. Reading it writes nothing: the saved text is the same
+    // text after the load, and the name is the default one only in what the app runs on.
+    const saved = JSON.stringify({
+      state: {
+        presets: [{ id: 1, name: '​ㅤ', amnesic: false }],
+        activeId: 1,
+        nextId: 2,
+        openInPreset: 'last',
+      },
+      version: 1,
+    })
+    localStorage.setItem('cg-presets-v1', saved)
+    await usePresets.persist.rehydrate()
+    expect(activePreset().name).toBe('Preset 1')
+    expect(localStorage.getItem('cg-presets-v1')).toBe(saved)
   })
 
   it('a rename to the name a preset already has saves nothing', () => {
