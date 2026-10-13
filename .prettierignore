@@ -1,6 +1,9 @@
 # Build output
 dist
 
+# The browser lane's output (traces, a run's report)
+test-results
+
 # Dependencies
 node_modules
 

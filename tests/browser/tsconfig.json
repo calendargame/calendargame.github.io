@@ -1,0 +1,11 @@
+{
+  // The browser lane's own type-check (`npm run typecheck` runs it after the app's). Separate from
+  // the root tsconfig because these files run in Node under Playwright, not in the page: they get
+  // Node's types and Playwright's, and the app's `src` only as the types of what is saved (a seed
+  // that no longer matches a store's shape fails here, before any browser starts).
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": [".", "../../playwright.config.ts", "../../src/vite-env.d.ts"]
+}

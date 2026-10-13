@@ -30,6 +30,9 @@ dist-ssr
 PROJECT.md
 .gstack/
 
+# The browser lane's output (`npm run test:browser`): traces and the report of a failed run.
+/test-results/
+
 # Local scratch — batch plans, specs, throwaway scripts, source material, agent notes.
 # BOTH repos are PUBLIC, so anything here that isn't the app must be unstageable by accident:
 # a single `git add -A` is all it takes to publish it permanently.

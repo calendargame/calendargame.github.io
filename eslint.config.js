@@ -8,7 +8,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'test-results']),
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
     extends: [
@@ -97,6 +97,13 @@ export default defineConfig([
     files: ['tests/**/*.{js,jsx,ts,tsx}'],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     rules: { 'react-refresh/only-export-components': 'off' },
+  },
+  // The browser lane (tests/browser, run by Playwright) holds no React at all, and Playwright's
+  // fixtures hand each one a callback NAMED `use` — which the hooks rule reads as React's `use`
+  // hook called outside a component. Off for these files only; nothing in them can call a hook.
+  {
+    files: ['tests/browser/**/*.{js,ts}', 'playwright.config.ts'],
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
   },
   // MUST be last: turns off any ESLint rules that would conflict with Prettier's
   // formatting, so the two tools never fight (ESLint = correctness, Prettier = style).
