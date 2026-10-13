@@ -210,7 +210,7 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
       const section = managePresetsButton().parentElement
       const quoted = section.querySelector('b')
       expect(quoted.textContent).toBe(QUOTED)
-      expect(quoted.className).toContain('wrap-anywhere')
+      expect(quoted.className).toBe('wrap-anywhere')
       expect(section.textContent).toContain(`You are on ${QUOTED}. The three buttons`)
     })
 
@@ -247,6 +247,51 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
         expect(name.length).toBeLessThan(NAME_DRAWN_UNITS + 60)
         expect(name).toContain(BOOK.slice(0, 200))
       }
+    })
+
+    // ★ A QUOTED NAME PAINTS INSIDE ITS OWN LINES. A name can be a letter under hundreds of
+    // accents, which stack upwards out of the line and over whatever is above it. Every sentence
+    // that quotes a name draws it with components/QuotedName, which sets each such character in a
+    // box of its own that clips it (index.css's .stacked-character) and leaves everything else as
+    // the plain text it was. jsdom draws nothing, so the boxes and the rule are the contract here;
+    // what it looks like — and that an ordinary name is untouched — was checked in a browser.
+    it('every sentence that quotes a name boxes its stacked characters, and nothing else', () => {
+      const pile = '\u0301\u0302\u0303'.repeat(100)
+      const stacked = `Z${pile}algo w${pile}ith é and 👨‍👩‍👧`
+      act(() => {
+        renamePreset(1, stacked)
+        createPreset('Timed')
+      })
+      // Its text, its boxes, and — between the boxes — the name's ordinary text, accent and emoji
+      // and all, as plain text.
+      const expectBoxed = (quoted) => {
+        expect(quoted.className).toBe('wrap-anywhere')
+        expect(quoted.textContent).toBe(stacked)
+        const boxes = [...quoted.querySelectorAll('.stacked-character')]
+        expect(boxes.map((box) => box.textContent)).toEqual([`Z${pile}`, `w${pile}`])
+        expect([...quoted.childNodes].filter((n) => n.nodeType === 3).map((n) => n.data)).toEqual([
+          'algo ',
+          'ith é and 👨‍👩‍👧',
+        ])
+      }
+      mountApp()
+      openSettings()
+      expectBoxed(managePresetsButton().parentElement.querySelector('b')) // "You are on …"
+      act(() => {
+        switchPreset(2)
+        useSettings.getState().setSaveStats(false) // preset 2 holds something: deleting it asks
+      })
+      openModal('presets')
+      tap(within(rowOf('Timed')).getByRole('button', { name: 'Delete Timed' }))
+      const [going, opens] = confirmCard().querySelectorAll('b')
+      expect(going.textContent).toBe('Timed')
+      expect(going.children).toHaveLength(0) // an ordinary name: plain text, exactly as before
+      expectBoxed(opens) // "…deleting it opens …"
+      const css = readFileSync(resolve(__dirname, '../src/index.css'), 'utf8')
+      const rule = /\.stacked-character\s*\{([^}]*)\}/.exec(css)
+      expect(rule).not.toBeNull()
+      expect(rule[1]).toMatch(/display:\s*inline-block/) // one line tall, and never wrapped
+      expect(rule[1]).toMatch(/overflow:\s*clip/) // …and what leaves it is not painted
     })
 
     it('nothing on the page outside its box carries the book', () => {

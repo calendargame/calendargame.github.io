@@ -12,6 +12,7 @@ import {
 } from './scrollRegion.js'
 import { MODAL_CARD_CLASS } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
+import QuotedName from './QuotedName.jsx'
 import { usePresets, normalizePresetName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { useSessionAmnesic } from '../store/sessionAmnesic.js'
@@ -24,7 +25,7 @@ import {
   renamePreset,
 } from '../store/presetControl.js'
 import { isCutSomewhere, useNameRooms } from '../lib/presetNameWidth.js'
-import { nameAsDrawn, nameAsQuoted } from '../lib/presetNameText.js'
+import { nameAsDrawn } from '../lib/presetNameText.js'
 import {
   targetIndexForCenter,
   stepsToReorder,
@@ -952,15 +953,14 @@ export default function PresetManager({
           Delete this preset?
         </div>
         <div className="text-xs text-(--tx-200-80)">
-          <b className="wrap-anywhere">{nameAsQuoted(pendingDelete.name)}</b> and everything in it
-          go for good: its stats, its all-time bests, its per-mode setup, every ⚙ setting it holds,
-          and its saved defaults. No other preset is touched, and this cannot be undone.
+          <QuotedName name={pendingDelete.name} strong /> and everything in it go for good: its
+          stats, its all-time bests, its per-mode setup, every ⚙ setting it holds, and its saved
+          defaults. No other preset is touched, and this cannot be undone.
         </div>
         {pendingDelete.id === activeId && (
           <div className="text-xs text-(--tx-200-80)">
-            You are on this preset, so deleting it opens{' '}
-            <b className="wrap-anywhere">{nameAsQuoted(successor.name)}</b> and clears the screen —
-            a MoX run or Blitz round in progress included.
+            You are on this preset, so deleting it opens <QuotedName name={successor.name} strong />{' '}
+            and clears the screen — a MoX run or Blitz round in progress included.
           </div>
         )}
         {/* ONE BUTTON, AND IT IS THE DESTRUCTIVE ONE — the way back to the list is every

@@ -1758,15 +1758,16 @@ export default function GuidePage({
             on one device and cut short on another, and the note follows if you turn the phone while
             the box is open. A ready-made name only gets the note where even its short form
             (&quot;P1&quot;) would be cut. A very long name — a pasted page, say — is kept whole in
-            its box and shown by its beginning everywhere else. Two presets can have the same name.
-            Leave a name blank and it goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and
-            so on. If the device has no room left to save a name, it is not changed: the box goes
-            back to the name it had, and a note under it says &quot;This device has no room to save
-            that name, so it was not changed.&quot; That is so however you left the box — Enter,
-            Tab, a tap on another row, the app going to the background. The note stays under its row
-            until you next type in a name box. If what you tapped was the dimmed area outside the
-            popup, that tap shows you the note instead of closing the popup; tap there again to
-            close it.
+            its box and shown by its beginning everywhere else: where a sentence names a preset it
+            quotes the first 80 characters, and a letter piled high with accents is trimmed there to
+            the line it is on. Two presets can have the same name. Leave a name blank and it goes
+            back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on. If the device has no room
+            left to save a name, it is not changed: the box goes back to the name it had, and a note
+            under it says &quot;This device has no room to save that name, so it was not
+            changed.&quot; That is so however you left the box — Enter, Tab, a tap on another row,
+            the app going to the background. The note stays under its row until you next type in a
+            name box. If what you tapped was the dimmed area outside the popup, that tap shows you
+            the note instead of closing the popup; tap there again to close it.
           </li>
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to

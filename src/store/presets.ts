@@ -189,7 +189,10 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
 // A name is EMPTY when no character in it would be drawn: a preset named with a zero-width space
 // showed as a blank pill and a blank row. The pattern below finds one VISIBLE character, which is
 // any character that is none of these:
-//   • White_Space — every kind of space, tab, and line break;
+//   • White_Space — every kind of space, tab, and line break — EXCEPT the Ogham space mark
+//     (U+1680). Unicode counts it as a space, and it is drawn: it is the stroke an Ogham text is
+//     written along. It is the one "space" with something to see, so it is a visible character
+//     here, and it is not trimmed from the ends of a name either (outerSpacesTrimmed, below);
 //   • Default_Ignorable_Code_Point — Unicode's own list of the characters a display leaves out when
 //     it does nothing else with them: the zero-width space, joiner, and non-joiner, the word joiner,
 //     the byte-order mark, the soft hyphen, the direction marks and overrides, the variation
@@ -208,7 +211,27 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
 // ⚠ WHAT THIS CANNOT KNOW: whether the device has a font for a character. One it has none for is
 // drawn as an empty box, or as nothing, on that device only; nothing here can see that, and such a
 // name is kept.
-const VISIBLE_CHARACTER = /[^\p{White_Space}\p{Default_Ignorable_Code_Point}\p{Cc}⠀]/u
+// ⚠ KNOWINGLY STILL ACCEPTED, THOUGH THEY MAY DRAW AS NOTHING: the object replacement character
+// (U+FFFC) and the interlinear annotation marks (U+FFF9–U+FFFB), which are symbols and format
+// characters Unicode does NOT list as ignorable; private-use characters, which draw whatever a
+// font says, or nothing; and code points nothing is assigned to yet. No table the browser carries
+// says "this draws nothing" of any of them, and a list of them kept here would be a guess that
+// goes stale — U+2800 is the one such character named, and it stays the only one.
+const VISIBLE_CHARACTER = /[^\p{White_Space}\p{Default_Ignorable_Code_Point}\p{Cc}⠀]|\u1680/u
+// The spaces trimmed from the two ends of a name: what `String.prototype.trim` takes (every
+// White_Space character, and the byte-order mark) less the Ogham space mark, which is drawn.
+const OUTER_SPACE = /[\p{White_Space}\uFEFF]/u
+const isOuterSpace = (unit: string): boolean => unit !== '\u1680' && OUTER_SPACE.test(unit)
+// ★ ONE PASS FROM EACH END, AND NOTHING IN BETWEEN IS LOOKED AT — a name can be a book, and a
+// pattern anchored to the end of one would go back over every run of spaces inside it. (Every
+// character concerned is a single unit, so stepping by unit never lands inside an emoji.)
+const outerSpacesTrimmed = (name: string): string => {
+  let start = 0
+  let end = name.length
+  while (start < end && isOuterSpace(name[start])) start++
+  while (end > start && isOuterSpace(name[end - 1])) end--
+  return name.slice(start, end)
+}
 
 // A name, made safe to store: its outer spaces trimmed, and never empty — one that is empty, has
 // nothing visible in it (above), or is not text at all becomes the default name for its preset.
@@ -225,7 +248,7 @@ const VISIBLE_CHARACTER = /[^\p{White_Space}\p{Default_Ignorable_Code_Point}\p{C
 // ever made. Two presets may share a name; nothing depends on names being different (a preset is
 // its id).
 export const normalizePresetName = (name: string, id: number): string => {
-  const trimmed = typeof name === 'string' ? name.trim() : ''
+  const trimmed = typeof name === 'string' ? outerSpacesTrimmed(name) : ''
   return VISIBLE_CHARACTER.test(trimmed) ? trimmed : defaultPresetName(id)
 }
 
@@ -442,15 +465,24 @@ export const usePresets = create<PresetRegistryState>()(
  * same stamp — so what was seen to fit is what is written. tests/presets.dom pins the two together.
  */
 export function applyRegistryIfRoom(next: PresetRegistryValues): boolean {
+  // ⚠ ONLY "THE BROWSER GIVES THE APP NO STORAGE" IS PASSED OVER, and only where it shows itself:
+  // such a browser throws on the very mention of `localStorage`. The registry lives in memory
+  // there (the store took the same path as it loaded), so there is no room to run out of and the
+  // change is simply applied. Nothing else is caught: the device refusing for ROOM is
+  // tryWriteItem's `false`, and any other failure while saving is a fault that must surface —
+  // exactly as it does out of applyRegistry for every other change to the preset list.
+  let device: Storage | null = null
   try {
+    device = window.localStorage
+  } catch {
+    /* no storage at all */
+  }
+  if (device) {
     const saved = JSON.stringify({
       state: savedPart(withStoredAmnesic(next)),
       version: REGISTRY_VERSION,
     })
-    if (!tryWriteItem(window.localStorage, PRESET_REGISTRY_KEY, saved)) return false
-  } catch {
-    /* a browser that gives the app no storage at all: the registry lives in memory there, and
-       there is no room to run out of */
+    if (!tryWriteItem(device, PRESET_REGISTRY_KEY, saved)) return false
   }
   usePresets.getState().applyRegistry(next)
   return true

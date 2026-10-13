@@ -8,6 +8,7 @@ import {
   isDrawnWhole,
   nameAsDrawn,
   nameAsQuoted,
+  quotedNameParts,
 } from '../src/lib/presetNameText.js'
 
 const FAMILY = '👨‍👩‍👧' // three people and two joiners: 8 units, ONE character
@@ -108,11 +109,89 @@ describe('nameAsQuoted — a name as a sentence quotes it', () => {
     expect(performance.now() - started).toBeLessThan(50)
   })
 
-  it('a name of few but enormous characters still ends in an ellipsis when it was cut', () => {
-    // Fewer than eighty characters fit in what is read of it — but it is not the whole name.
-    const name = ('a' + '́'.repeat(100)).repeat(20) // 20 characters, 2,020 units
+  it('eighty characters means eighty, however many units each one is', () => {
+    // It used to read only as much of the name as a name slot draws (512 units) and count what was
+    // in that: 81 families (8 units each) were quoted as 63 of them, 81 couples as 33.
+    const COUPLE = '👩🏽‍❤️‍💋‍👨🏽' // a kiss, two skin tones: 15 units, ONE character
+    for (const character of [FAMILY, FLAG, THUMB, COUPLE, ACCENTED]) {
+      expect(nameAsQuoted(character.repeat(NAME_QUOTED_CHARACTERS))).toBe(
+        character.repeat(NAME_QUOTED_CHARACTERS),
+      )
+      expect(nameAsQuoted(character.repeat(NAME_QUOTED_CHARACTERS + 1))).toBe(
+        character.repeat(NAME_QUOTED_CHARACTERS) + '…',
+      )
+      expect(nameAsQuoted(character.repeat(5000))).toBe(
+        character.repeat(NAME_QUOTED_CHARACTERS) + '…',
+      )
+    }
+  })
+
+  it('a name of characters far larger than any real one is still bounded, and still ends in an ellipsis', () => {
+    // A letter under three hundred accents is ONE character. Eighty of those would be a page of
+    // text to lay out, so what is read of a name to quote it has an end too — and when that end
+    // comes first, the quote is the whole characters before it.
+    const stacked = 'a' + '́'.repeat(300) // 301 units
+    const name = stacked.repeat(80) // 80 characters, 24,080 units
     const quoted = nameAsQuoted(name)
     expect(quoted.endsWith('…')).toBe(true)
     expect(name.startsWith(quoted.slice(0, -1))).toBe(true)
+    expect(quoted.slice(0, -1).length % 301).toBe(0) // whole characters only
+    expect(quoted.length).toBeLessThan(3000)
+    expect(quoted.length).toBeGreaterThan(301) // …and more than one of them
+    // Few enough of them to be read whole are quoted whole.
+    expect(nameAsQuoted(stacked.repeat(5))).toBe(stacked.repeat(5))
+  })
+})
+
+describe('quotedNameParts — a quoted name, as the pieces it is drawn in', () => {
+  const pile = (marks) => '\u0301\u0302\u0303\u0304'.repeat(Math.ceil(marks / 4)).slice(0, marks)
+  const texts = (name) => quotedNameParts(name).map((part) => part.text)
+  const stacked = (name) =>
+    quotedNameParts(name)
+      .filter((part) => part.stacked)
+      .map((p) => p.text)
+
+  it('an ordinary name is ONE piece of ordinary text — accents, emoji, and every script included', () => {
+    for (const name of [
+      'Weekend Mornings',
+      'Ångström Ếch café',
+      'e\u0301 with a combining accent',
+      '🎉👨‍👩‍👧🇨🇦 👍🏽',
+      'ที่นี่ กรุงเทพฯ',
+      'नमस्ते',
+      'العَرَبِيَّة',
+      'עִבְרִית',
+      'བསྒྲུབས', // a tall Tibetan stack
+      '',
+    ]) {
+      expect(quotedNameParts(name)).toEqual(name ? [{ text: name, stacked: false }] : [])
+    }
+  })
+
+  it('a letter under more accents than any writing puts on one is a piece of its own, marked stacked', () => {
+    const name = `Z${pile(300)}algo w${pile(40)}ith`
+    expect(quotedNameParts(name)).toEqual([
+      { text: `Z${pile(300)}`, stacked: true },
+      { text: 'algo ', stacked: false },
+      { text: `w${pile(40)}`, stacked: true },
+      { text: 'ith', stacked: false },
+    ])
+  })
+
+  it('the line is drawn above the handful a real letter can carry: eight marks are a letter, nine a pile', () => {
+    expect(stacked(`a${pile(8)}b`)).toEqual([])
+    expect(stacked(`a${pile(9)}b`)).toEqual([`a${pile(9)}`])
+    // Two piles side by side are two boxes, never one that could wrap between them.
+    expect(stacked(`a${pile(9)}b${pile(9)}`)).toEqual([`a${pile(9)}`, `b${pile(9)}`])
+    // Length alone does not make a pile: a family is eight units and no marks.
+    expect(stacked(FAMILY.repeat(3) + '👩🏽‍❤️‍💋‍👨🏽')).toEqual([])
+  })
+
+  it('put back together, the pieces are exactly what the sentence quotes', () => {
+    const book = `Z${pile(50)}` + 'All work and no play. '.repeat(5_000)
+    for (const name of ['Weekend', `Z${pile(300)}algo`, book, FLAG.repeat(200)]) {
+      expect(texts(name).join('')).toBe(nameAsQuoted(name))
+    }
+    expect(texts(book).at(-1).endsWith('…')).toBe(true)
   })
 })

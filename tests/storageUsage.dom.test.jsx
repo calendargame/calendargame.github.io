@@ -1548,6 +1548,28 @@ describe('on the mounted app', () => {
     expect(popup().textContent.length).toBeLessThan(3000)
   })
 
+  it('a preset named with a letter under a pile of accents has that letter boxed in its row, like every quoted name', () => {
+    const pile = '\u0301\u0302\u0303'.repeat(100)
+    renamePreset(1, `Z${pile}algo`)
+    createPreset('Weekend')
+    useProgress.getState().setModeStats('classic', long(9000))
+    mountApp()
+    openSettings()
+    tap(line())
+    const rows = within(popup())
+      .getAllByRole('listitem')
+      .filter((li) => !li.closest('.list-disc'))
+    const named = rows.find((li) => li.textContent.includes('Classic solve times'))
+    expect(named.textContent).toMatch(/algo: Classic solve times \(9,000\)/)
+    expect([...named.querySelectorAll('.stacked-character')].map((b) => b.textContent)).toEqual([
+      `Z${pile}`,
+    ])
+    // Rows that quote no name, or an ordinary one, hold no box at all.
+    expect(popup().querySelectorAll('.stacked-character')).toHaveLength(
+      rows.filter((li) => li.textContent.includes('algo')).length,
+    )
+  })
+
   it('the storage-full notice opens on top of it, and closes first', () => {
     mountApp()
     openSettings()

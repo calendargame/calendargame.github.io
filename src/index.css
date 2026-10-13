@@ -659,6 +659,13 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .held-piece{background-image:linear-gradient(var(--stgl-bg),var(--stgl-bg)),linear-gradient(var(--card-bg),var(--card-bg))}
 .held-shadow{z-index:-1;pointer-events:none;box-shadow:var(--shadow-lifted)}
 .held-ink{background:var(--card-bg);box-shadow:0 0 0 2px var(--card-bg)}
+/* A CHARACTER STACKED WITH ACCENTS, IN A PRESET NAME QUOTED IN A SENTENCE (components/QuotedName
+   says which characters, and why each gets a box of its own). The box is one line of the
+   sentence — an inline-block holding a single line is exactly as tall as the line-height it
+   inherits — and it clips what leaves it, so the pile cannot reach the line above or below.
+   `clip`, not `hidden`: nothing here scrolls, and a box that only clips keeps the baseline of
+   the text in it, so the letter under the pile sits on the line with its neighbours. */
+.stacked-character{display:inline-block;overflow:clip}
 /* .svalue-input — the tap-to-type edit box inside SliderValueEditor's readout cell (round 8).
    The box is OUT OF FLOW (absolutely positioned over the cell), so it can never size that cell:
    the always-mounted invisible strut is the only in-flow child and sizes it alone, in BOTH states.

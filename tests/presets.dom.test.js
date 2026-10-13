@@ -318,6 +318,9 @@ describe('the registry', () => {
     'the Arabic number sign': '؀',
     'the Arabic end of ayah': '۝',
     'a single punctuation mark': '.',
+    // A "space" to Unicode, and drawn as a stroke: the line an Ogham text is written along.
+    'the Ogham space mark': '\u1680',
+    'Ogham space marks round a letter': '\u1680\u1681\u1680',
   }
 
   it('a name with nothing visible in it is an empty name, and gets the default', () => {
@@ -346,6 +349,14 @@ describe('the registry', () => {
         what,
       ).toBe(name)
     }
+    // The Ogham space mark is kept at the ENDS of a name too, where a space would be trimmed: it
+    // is something to see. The real spaces outside it still go.
+    expect(normalizePresetName(' \u1680 a \u1680 ', 3)).toBe('\u1680 a \u1680')
+    expect(normalizePresetName('\t\u00a0\u1680\ufeff\n', 3)).toBe('\u1680')
+    // Every other space Unicode has is still trimmed from the ends, as it always was.
+    expect(normalizePresetName('\u00a0\u2003\u3000\ufeff\u2028 a\u2029\u202f\u205f\u2000', 3)).toBe(
+      'a',
+    )
     // Outer spaces are trimmed as they always were, and nothing else about the name is touched.
     expect(normalizePresetName('  a‍b​  ', 3)).toBe('a‍b​')
   })
@@ -410,6 +421,28 @@ describe('the registry', () => {
         version: 1,
       }),
     )
+  })
+
+  it('trimming a book is one pass: a million spaces in the middle of a name cost nothing extra', () => {
+    const name = `a${' '.repeat(1_000_000)}b`
+    const started = performance.now()
+    expect(normalizePresetName(`  ${name}  `, 3)).toBe(name)
+    expect(performance.now() - started).toBeLessThan(250)
+  })
+
+  it('only "no storage at all" is passed over when a rename is tried: any other failure is not hidden', () => {
+    // The device refusing for room is 'no-room'; a browser with no storage renames in memory (the
+    // next case). Anything else that goes wrong while saving is a fault, and surfaces as one —
+    // exactly as it does for every other change to the preset list.
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('the disk is on fire', 'UnknownError')
+    })
+    try {
+      expect(() => renamePreset(1, 'Mornings')).toThrow('the disk is on fire')
+      expect(activePreset().name).toBe('Preset 1')
+    } finally {
+      setItem.mockRestore()
+    }
   })
 
   it('a browser that gives the app no storage at all still renames, in memory', () => {
