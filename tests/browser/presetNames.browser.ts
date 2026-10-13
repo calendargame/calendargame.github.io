@@ -66,7 +66,7 @@ const cells = (page: Page, names: string[]): Promise<Cell[]> =>
 test('stock names are drawn short everywhere, exactly when one of them would not fit somewhere', async ({
   page,
 }) => {
-  test.setTimeout(90_000)
+  test.setTimeout(180_000)
   // Twelve presets, so the longest stock name is "Preset 12".
   const names = Array.from({ length: 12 }, (_, i) => defaultPresetName(i + 1))
   const short = names.map((name) => shortStockName(name)!)

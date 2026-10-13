@@ -6,7 +6,8 @@
 //      from './support/app'`. The name must end in .browser.ts or nothing runs it.
 //   2. Open the app with `openApp(page, { viewport, theme, seed })`, get to the screen with
 //      `switchMode` / `openSettings`, then measure with `rectOf` and assert with `expect` or the
-//      `expectNo…` helpers below. A second window on the same saved data is `openSecondWindow`.
+//      `expectNo…` helpers below. A second window on the same saved data is `openSecondWindow`;
+//      a second DEVICE, with a save of its own, is the `newDevice` fixture.
 //   3. `npm run build`, then `npm run test:browser`. It must pass in every project, three runs in a
 //      row, before it is committed.
 //
@@ -126,11 +127,12 @@ export const pageErrorsOf = (context: BrowserContext): readonly string[] => page
 // so EVERY ENTRY HAS A TEST IN knownDefects.browser.ts THAT FAILS THE DAY THE ERROR STOPS
 // HAPPENING. Fix the defect, watch that test fail, delete both. Never add an entry without one.
 export const KNOWN_PAGE_ERRORS: readonly string[] = [
-  // The top bar's height observer (src/main.tsx's syncBarHeight) changes, in answer to the bar's
-  // height changing, a property the page's layout reads — so the browser has a new size to report
-  // before it has finished reporting the last, and raises this. Any change of the window's size
-  // that moves the root font sets it off (so, every width sweep here). Nothing is drawn wrong; on
-  // the live site it is an error in the log.
+  // The top bar's height observer (src/main.tsx's syncBarHeight) answers a change in the bar's
+  // height by writing --bar-h, which the page is laid out from — from inside the observer's own
+  // callback, so the browser has new sizes to report before it has finished reporting the last,
+  // and raises this. A change of the window's size that moves the root font sets it off (a
+  // different height, or a tablet or desktop width), which a sweep here cannot avoid. Nothing is
+  // drawn wrong; on the live site it is an error in the log.
   'ResizeObserver loop completed with undelivered notifications.',
 ]
 

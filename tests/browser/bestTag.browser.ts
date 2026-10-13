@@ -144,7 +144,7 @@ for (const c of CASES) {
     page,
     newDevice,
   }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(240_000)
     // The two wordings side by side — two devices, one save each — swept together.
     const [same, different] = await Promise.all([
       sweep(page, c, true),

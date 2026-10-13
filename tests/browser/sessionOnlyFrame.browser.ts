@@ -108,7 +108,7 @@ for (const saveStats of [true, false]) {
     page,
     newDevice,
   }) => {
-    test.setTimeout(60_000)
+    test.setTimeout(120_000)
     // Three devices, one per Amnesic value, walked through the modes together.
     const pages = { off: page, stats: await newDevice(), full: await newDevice() }
     for (const amnesic of AMNESIC)

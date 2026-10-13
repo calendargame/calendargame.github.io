@@ -35,10 +35,15 @@ export default defineConfig({
   reporter: CI
     ? [['github'], ['list'], ['json', { outputFile: 'test-results/report.json' }]]
     : 'list',
-  // Generous, like Vitest's 20s here and for the same reason: a loaded runner. The sweeps (a
-  // hundred and forty window widths in one test) set their own larger budget.
-  timeout: 30_000,
-  expect: { timeout: 5_000 },
+  // ⚠ GENEROUS ON PURPOSE, AND NOT A CLAIM ABOUT SPEED. Nothing in this lane asserts how FAST the
+  // app does anything, so a wait that takes longer on a loaded machine is not a failure — and the
+  // one unexplained first-attempt failure this lane has had came in a run that took half as long
+  // again as usual, on a laptop busy with something else. Playwright's stock five seconds for a
+  // wait (the splash gone, a list open) is a stopwatch nobody asked for; fifteen costs nothing when
+  // the thing arrives, and only delays the report of something that never will. The sweeps (a
+  // hundred and forty window widths in one test) set their own larger budget on top.
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   use: {
     // The trailing slash matters: a test opens './', which is this address whatever base the build
     // was made for ('/' for the live site, '/<repo>/' for the test site).

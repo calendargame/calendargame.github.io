@@ -142,6 +142,77 @@ jobs:
       # unnoticed. Intentional growth = bump the budget constant deliberately (shows in the diff).
       - name: Check bundle size budget
         run: npm run size
+      # ── THE BROWSER LANE (2026-10-12) ─────────────────────────────────────────────────────────
+      # Real-browser layout tests — Chromium and WebKit, tests/browser/*.browser.ts, run by
+      # Playwright (playwright.config.ts) — against THE dist THAT WAS JUST BUILT: the same files the
+      # upload step below hands to GitHub Pages, served under the same base. Vitest's DOM tests run
+      # in jsdom, which lays nothing out; every rule about widths, wrapping, scrollbars and what
+      # fits where is held here and nowhere else.
+      #
+      # ★ IT GATES THE DEPLOY, like every step above it. A layout rule that only advises is not a
+      # rule: the first time it went red on a day somebody wanted to ship, it would be read as noise
+      # and from then on it would be noise. Weighed against that, honestly, is the one thing a
+      # browser test can do that a unit test cannot — fail for no reason on a loaded runner — and
+      # three things keep that from deciding a deploy:
+      #   • the tests assert geometry AT REST and never a frame or a duration (the rule, and why, is
+      #     at the top of tests/browser/support/app.ts), so nothing in them depends on speed;
+      #   • ONE retry (playwright.config.ts), so a single stall cannot stop a deploy — and never a
+      #     silent one: a test that needed its retry is listed as FLAKY in the run, raises a warning
+      #     on it (the step after the tests), and its recorded trace is uploaded. A flaky test is a
+      #     defect to fix that week, not a result to accept;
+      #   • the step is bounded (`timeout-minutes`), so a hung browser fails in minutes, by name.
+      #
+      # ⚠ WHERE IT SITS IS LOAD-BEARING, IN BOTH DIRECTIONS.
+      #   • AFTER the build, the CNAME step and the size check: it tests the finished artifact, not
+      #     a second build of its own (two builds of one commit are not the same bytes — the deploy
+      #     stamp is the build clock), and it is the slowest check in the gate, so everything
+      #     cheaper has already had its chance to fail first.
+      #   • BEFORE the upload and BEFORE the version tag: a red lane publishes nothing and SPENDS NO
+      #     VERSION NUMBER. The tag step must stay last in this job — see its own note.
+      #
+      # THE COST: ESTIMATED at four to six minutes a deploy with the browsers cached — about one for
+      # the system packages WebKit needs, and three to five for the tests on this runner's two
+      # workers (they take 1.9 minutes on two workers of the laptop) — and about one more the first
+      # time after a Playwright upgrade, while the browsers download again. ⚠ An estimate until the
+      # first run here: read the real figure off that run's step timings and put it in this note.
+      #
+      # The browsers are cached under the exact Playwright version (each version pins its own
+      # browser builds, so the version IS the cache's identity; read from the installed package, not
+      # from package.json, so it is the version that will actually run). What a browser needs from
+      # the SYSTEM — the shared libraries WebKit links against — is not in that cache and cannot
+      # be: it is installed by apt on every run.
+      - name: Read the installed Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Restore the test browsers from the cache
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Download the test browsers (only after a Playwright upgrade)
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install chromium webkit
+      - name: Install the system packages the test browsers need
+        run: npx playwright install-deps chromium webkit
+      - name: Run the browser tests
+        timeout-minutes: 15
+        run: npm run test:browser
+      # Runs whether the tests passed or failed (never when the run was cancelled): a test that
+      # passed only on its retry is named in a warning on the run, so it cannot go by unseen.
+      - name: Name any browser test that needed its retry
+        if: ${{ !cancelled() }}
+        run: node tests/browser/support/reportFlaky.js
+      # The run's report, and the recorded trace of every test that failed an attempt — what
+      # `npx playwright show-trace` replays. Kept two weeks.
+      - name: Keep the browser tests' report and traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Upload the built site
         uses: actions/upload-pages-artifact@v3
         with:
