@@ -31,6 +31,11 @@ export function installNameRooms(widthPx) {
     const rect = getBoundingClientRect.call(this)
     return this.matches('[data-preset-name-cell]') ? { ...rect, width } : rect
   }
+  // …and a box at all: jsdom lays nothing out, and a cell with no box is not a place.
+  const getClientRects = element.getClientRects
+  element.getClientRects = function () {
+    return this.matches('[data-preset-name-cell]') ? [{ width }] : getClientRects.call(this)
+  }
   const read = () => act(() => refreshNameRooms())
   read()
   return {
@@ -41,6 +46,7 @@ export function installNameRooms(widthPx) {
     restore() {
       canvas.getContext = getContext
       element.getBoundingClientRect = getBoundingClientRect
+      element.getClientRects = getClientRects
       read() // back to "nothing can be measured", for the next case
     },
   }

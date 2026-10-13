@@ -36,9 +36,12 @@ import { shortStockName } from '../store/presets.js'
 //   while its font changes, and the font is part of a room), and when a font finishes loading (the
 //   same text is then a different width in the same room). A reading that matches the last one
 //   changes nothing.
-//   ⚠ NO ROOM, NO VERDICT. Where no cell can be measured (this suite's jsdom, which has no layout;
-//   never the app, whose top bar is always mounted) every name "fits": there is no place it is
-//   being cut.
+//   ⚠ NO PLACE, NO VERDICT — BUT A PLACE WITH NO ROOM IS A PLACE. Where no cell is laid out at all
+//   (this suite's jsdom, which has no layout; never the app, whose top bar is always mounted)
+//   every name "fits": there is nowhere it is being cut. A cell that IS laid out and has been
+//   squeezed to no width is the opposite case — the place where a name is cut hardest — and is a
+//   room of 0. (It used to be skipped as unmeasurable, so on the narrowest screens the verdict
+//   turned to "fits" exactly where the list rows had no room at all.)
 //
 // ★ WHY THE SPLIT INSIDE THIS FILE. The DECISION is pure and tested with fabricated numbers
 // (fitsWithinWidth, and the two functions built on it); the MEASUREMENT needs a live canvas and
@@ -59,8 +62,10 @@ export interface NameRoom {
 /**
  * Read every place a preset name is drawn right now: each name cell's live rendered width and
  * font, narrowed to ONE entry per font — the narrowest cell set in it, since a name that fits that
- * one fits every wider cell in the same font. Cells that report a non-positive width are skipped
- * (jsdom's zero-everywhere layout always does), so the result is empty when nothing can be measured.
+ * one fits every wider cell in the same font. A cell with NO LAYOUT is skipped — it has no box at
+ * all (a hidden subtree; and every element in jsdom), which is what `getClientRects()` being empty
+ * says — so the result is empty when nothing is laid out. A cell that has a box of no width is
+ * kept: that is a room of 0.
  */
 export function readNameRooms(): NameRoom[] {
   let cells: Iterable<Element>
@@ -71,8 +76,8 @@ export function readNameRooms(): NameRoom[] {
   }
   const narrowestByFont = new Map<string, number>()
   for (const cell of cells) {
+    if (cell.getClientRects().length === 0) continue
     const { width } = cell.getBoundingClientRect()
-    if (!(width > 0)) continue
     const font = getComputedStyle(cell).font
     narrowestByFont.set(font, Math.min(width, narrowestByFont.get(font) ?? Infinity))
   }

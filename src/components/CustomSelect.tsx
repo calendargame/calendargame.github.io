@@ -9,7 +9,6 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { isPageCovered, useLayer } from './overlayStack.js'
-import { InOpenListContext } from './openListContext.js'
 import {
   ROW_LANE_SCROLLER_CLASS,
   ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS,
@@ -129,16 +128,20 @@ interface PanelPos {
   right: number
   top: number
   // The trigger wrapper's own rendered width at the moment the panel opened. Only consumed when
-  // dropdownWidth === 'match-trigger' (the two preset lists), where the panel is exactly as wide as
-  // its trigger; 'content' (the default, the mode selector) ignores it.
+  // dropdownWidth === 'match-trigger' (the two preset lists), where the panel is as wide as its
+  // trigger; 'content' (the default, the mode selector) ignores it.
   width: number
+  // The trigger's left edge. Only consumed by a 'match-trigger' list that has to be WIDER than its
+  // trigger (`leastRowLabel`), which grows from this edge.
+  left: number
 }
 // The box metrics of ONE dropdown option row — the same row in every list this component draws
 // (the mode selector's, the top bar's preset list, the ⚙ menu's "Open in"). Everything about a row's
-// box that takes WIDTH lives in this string, because three things draw a row and must agree to the
+// box that takes WIDTH lives in this string, because four things draw a row and must agree to the
 // pixel: the live portaled list, the hidden width-mirror (triggerMatchesDropdown) that reports the
-// list's width back to the trigger, and the hidden row gauge ('match-trigger') that says what a
-// row has room for while the list is closed. (The real row adds only the active/press visual
+// list's width back to the trigger, the hidden row gauge ('match-trigger') that says what a row
+// has room for while the list is closed, and the hidden least-row (`leastRowLabel`) that says how
+// narrow such a list may be. (The real row adds only the active/press visual
 // state, which changes no dimension.)
 // ⚠ ITS WIDTH IS THE LIST'S BOX, AND ONLY THAT — so the highlight a row wears stops short of a
 // classic scrollbar with its corners whole. What a classic scrollbar takes from the row is given
@@ -181,9 +184,7 @@ function OptionRowCells({ checked, children }: { checked: boolean; children: Rea
           the scrollbar took that much out of the row, and this takes it back for the label alone,
           so a name has the same room whether or not the list scrolls. In the two hidden copies
           there is no scrollbar and the term is nothing. */}
-      <span className={`min-w-0 flex-1 ${ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS}`}>
-        <InOpenListContext value={true}>{children}</InOpenListContext>
-      </span>
+      <span className={`min-w-0 flex-1 ${ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS}`}>{children}</span>
     </>
   )
 }
@@ -193,6 +194,41 @@ function OptionRowCells({ checked, children }: { checked: boolean; children: Rea
 // escape rather than as the raw control character, which is invisible in an editor and makes git
 // and grep treat the whole file as binary.
 const OPTION_VALUE_SEPARATOR = '\u001f'
+// The rendered outer width of a hidden mirror — an out-of-flow copy of something this component
+// draws, laid out at its natural width so that width can be read — kept current. Returns the ref
+// to put on the mirror and the width, which is null until a layout engine has measured it (jsdom
+// reports 0 for every box, and never does).
+// The mirror's own box changes size when the fluid root font-size does (index.css's clamp, on any
+// viewport resize), when a font arrives, or when what it holds changes — all exactly what a
+// ResizeObserver on the mirror reports, so nothing else needs subscribing. `signature` is for a
+// mirror whose CONTENTS are the caller's: the observer is set up again when it changes.
+function useMirrorWidth(
+  mirrored: boolean,
+  signature: string,
+): [RefObject<HTMLDivElement | null>, number | null] {
+  const mirror = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    // No reset when `mirrored` is false: the width is only ever written while it is true, and each
+    // use is gated on its own prop anyway — a stale value can't paint. (Both props are fixed per
+    // call site in this app, so the branch is theoretical either way.)
+    if (!mirrored) return
+    const sync = () => {
+      const el = mirror.current
+      if (!el) return
+      const w = el.getBoundingClientRect().width
+      // > 0 guard: jsdom reports 0 for every rect. Only a real layout engine ever gets past here.
+      setWidth((prev) => (w > 0 && w !== prev ? w : prev))
+    }
+    sync()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(sync)
+    if (mirror.current) ro.observe(mirror.current)
+    return () => ro.disconnect()
+  }, [mirrored, signature])
+  return [mirror, width]
+}
+
 export default function CustomSelect({
   value,
   onChange,
@@ -204,6 +240,7 @@ export default function CustomSelect({
   pressDrag = false,
   dropdownWidth = 'content',
   triggerMatchesDropdown = false,
+  leastRowLabel,
 }: {
   value: string
   onChange: (value: string) => void
@@ -218,8 +255,23 @@ export default function CustomSelect({
   // 'match-trigger' — the panel is EXACTLY the trigger wrapper's live rendered width (measured on
   // open, re-measured on resize / visualViewport / --bar-h, same as the panel position); this is
   // the two preset lists, whose trigger fills the space its row leaves it, so the list is that
-  // same column and can never reach over a neighbour (the Mode button, in the bar).
+  // same column and does not reach over a neighbour (the Mode button, in the bar) — with the one
+  // exception `leastRowLabel` makes, below.
   dropdownWidth?: 'content' | 'match-trigger'
+  // ★ THE LEAST A 'match-trigger' LIST MAY BE: wide enough for ONE STANDARD ROW TO SHOW THIS LABEL
+  // WHOLE. A trigger that fills what its row leaves it can be left almost nothing (the preset
+  // control on a narrow, tall phone), and a list of exactly that width has rows with no room for
+  // a name at all — blank rows, each just a ✓. A list a little wider than its trigger is better
+  // than that, so with this set the list is its trigger's width OR this least width, whichever is
+  // more. Where it is more, the list starts at the trigger's left edge and grows rightwards.
+  //   • THE WIDTH IS MEASURED, NEVER WRITTEN DOWN: a hidden row holding this label (the least-row,
+  //     below — the same row box and cells as every other) is laid out at its natural width, and
+  //     that width, rounded up to a whole pixel, is the least. It moves with the row's padding,
+  //     its text size, and the font, with nothing to keep in step.
+  //   • THE ROW IS UNCHANGED. Nothing about a row's shape gives; only how narrow the LIST may be.
+  //   • THE ROW GAUGE IS HELD TO THE SAME LEAST, so what it reports is the row the list will draw.
+  // Unset (the default), a 'match-trigger' list is exactly its trigger's width at every size.
+  leastRowLabel?: ReactNode
   // Widen the trigger BUTTON to exactly its own dropdown's outer width, WITHOUT changing the
   // dropdown. The mode selector wants this: its dropdown rows use a bigger text tier and more
   // padding than the trigger, so "both size to content" would never make them equal. A hidden
@@ -282,34 +334,18 @@ export default function CustomSelect({
   // ends up exactly as wide as the real dropdown. null until measured (and in jsdom, which reports
   // 0 for everything — the trigger then just keeps its natural width, which is all a layout-free
   // environment can mean by "match").
-  const measureRef = useRef<HTMLDivElement>(null)
-  const [triggerMinWidth, setTriggerMinWidth] = useState<number | null>(null)
-  useLayoutEffect(() => {
-    // No reset in the `false` branch: triggerMinWidth is only ever written when this is true, and
-    // the style below is gated on `triggerMatchesDropdown` anyway — a stale value can't paint. (The
-    // prop is fixed per call site in this app, so the branch is theoretical either way.)
-    if (!triggerMatchesDropdown) return
-    const sync = () => {
-      const el = measureRef.current
-      if (!el) return
-      const w = el.getBoundingClientRect().width
-      // > 0 guard: jsdom reports 0 for every rect, and a 0 min-width would be a no-op anyway. Only
-      // a real layout engine ever gets past here.
-      setTriggerMinWidth((prev) => (w > 0 && w !== prev ? w : prev))
-    }
-    sync()
-    if (typeof ResizeObserver === 'undefined') return
-    // The mirror's own box changes size when the fluid root font-size does (index.css's clamp, on
-    // any viewport resize) or if the option set changes — both are exactly what a ResizeObserver on
-    // the mirror reports, so nothing else needs subscribing.
-    const ro = new ResizeObserver(sync)
-    if (measureRef.current) ro.observe(measureRef.current)
-    return () => ro.disconnect()
-    // A call site may hand over a fresh options array on every render; depend on a stable signature
-    // of it, not its identity, so this doesn't re-subscribe on every render. The mirror re-renders with the new labels regardless, and the ResizeObserver
-    // above catches any width change that causes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerMatchesDropdown, options.map((o) => o.value).join(OPTION_VALUE_SEPARATOR)])
+  // A call site may hand over a fresh options array on every render; the measurement depends on a
+  // stable signature of it, not its identity. The mirror re-renders with the new labels
+  // regardless, and its observer catches any width change that causes.
+  const [measureRef, triggerMinWidth] = useMirrorWidth(
+    triggerMatchesDropdown,
+    options.map((o) => o.value).join(OPTION_VALUE_SEPARATOR),
+  )
+  // `leastRowLabel` only: the hidden least-row, and its measured outer width — the least the list
+  // may be. Rounded UP to a whole pixel where it is used, so the row is never a fraction of a
+  // pixel short of the label it was measured for.
+  const [leastRowRef, leastRowWidth] = useMirrorWidth(leastRowLabel != null, '')
+  const leastListWidth = leastRowWidth === null ? 0 : Math.ceil(leastRowWidth)
   // measurePanel reads the trigger's current viewport rect and writes panelPos: right edge
   // aligned to the trigger, 6px below it, and the trigger's width. Called on open, on resize /
   // visualViewport change, when --bar-h moves the bar the trigger sits in, and when the trigger's
@@ -348,9 +384,13 @@ export default function CustomSelect({
     // holds its exact 6px gap at every offset with ZERO reposition calls — and app mode is
     // pixel-identical either way, since scrollY was always 0 there.
     // (The same answer is the same object: a measurement that changed nothing renders nothing.)
-    const next = { right, top: rect.bottom + 6, width: rect.width }
+    const next = { right, top: rect.bottom + 6, width: rect.width, left: rect.left }
     setPanelPos((prev) =>
-      prev && prev.right === next.right && prev.top === next.top && prev.width === next.width
+      prev &&
+      prev.right === next.right &&
+      prev.top === next.top &&
+      prev.width === next.width &&
+      prev.left === next.left
         ? prev
         : next,
     )
@@ -593,6 +633,20 @@ export default function CustomSelect({
   // the browser clamps scrollTop to what the region can actually scroll.
   const listRef = useRef<HTMLDivElement>(null)
   const panelShown = open && panelPos !== null
+  // ★ HOW WIDE A 'match-trigger' LIST IS, AND WHERE ITS RIGHT EDGE GOES — the one place. Its
+  // trigger's width, or the least a row may be (`leastRowLabel`), whichever is more. Where the
+  // least wins the list is `over` wider than its trigger: it keeps the trigger's LEFT edge and its
+  // right edge moves out by that much — but never nearer the screen's edge than the trigger
+  // itself already stands from either side, so a list can not be pushed off the screen; with no
+  // room to its right it grows leftwards instead.
+  const listWidth = panelPos === null ? 0 : Math.max(panelPos.width, leastListWidth)
+  const listRight =
+    panelPos === null
+      ? 0
+      : Math.max(
+          panelPos.right - (listWidth - panelPos.width),
+          Math.min(panelPos.right, panelPos.left),
+        )
   const { scrolledFromTop, atBottom } = useScrollEdgeState(listRef, panelShown)
   useLayoutEffect(() => {
     if (!panelShown) return
@@ -717,7 +771,8 @@ export default function CustomSelect({
           lib/presetNameWidth reads the preset name cells in here to learn whether a name is cut
           short: the list is where a name has the least room, and a reading taken from the button
           alone called names whole that the list then cut. It is this wrapper's own width (which is the
-          trigger's, and so the panel's), the list's own `p-1`, and the very rows the list draws
+          trigger's, and so the panel's) or the least a list may be, whichever is more — the open
+          list's own rule — with the list's own `p-1` and the very rows the list draws
           (OPTION_ROW_BOX + OptionRowCells), so it cannot disagree with the open list. Out of flow,
           pinned to this wrapper's top, and clipped to no height but its own padding (`height:0`
           on a border-box cannot go under the `p-1` — a few pixels, well inside the trigger's own
@@ -734,6 +789,7 @@ export default function CustomSelect({
             left: 0,
             top: 0,
             width: '100%',
+            minWidth: leastListWidth,
             height: 0,
             overflow: 'hidden',
             visibility: 'hidden',
@@ -746,6 +802,34 @@ export default function CustomSelect({
               <OptionRowCells checked={false}>{opt.label}</OptionRowCells>
             </div>
           ))}
+        </div>
+      )}
+      {/* THE HIDDEN LEAST-ROW (`leastRowLabel` only) — one standard row holding that label, in a box
+          as wide as the list's own padding and that row need (`max-content`), so its measured
+          width IS the least the list may be. The same row box and cells as the list, the gauge,
+          and the width-mirror, so a change to a row's shape moves this with it. Out of flow, no
+          height, hidden from the eye and from assistive tech, like the two copies above. */}
+      {leastRowLabel != null && (
+        <div
+          ref={leastRowRef}
+          aria-hidden="true"
+          data-select-least-row
+          className="p-1"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 'max-content',
+            height: 0,
+            overflow: 'hidden',
+            visibility: 'hidden',
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <div className={OPTION_ROW_BOX} style={{ whiteSpace: 'nowrap' }}>
+            <OptionRowCells checked={false}>{leastRowLabel}</OptionRowCells>
+          </div>
         </div>
       )}
       {showChevron && (
@@ -777,7 +861,7 @@ export default function CustomSelect({
             // is above #root) — harmless here, since the panel is sized to sit on screen.
             style={{
               position: 'fixed',
-              right: panelPos.right,
+              right: dropdownWidth === 'match-trigger' ? listRight : panelPos.right,
               top: panelPos.top,
               zIndex: 60,
               background: 'rgba(245,245,247,0.50)',
@@ -785,9 +869,10 @@ export default function CustomSelect({
               backdropFilter: 'blur(28px) saturate(120%)',
               // 'content' (the mode selector, default) keeps its max-content sizing, clamped to
               // 90vw; 'match-trigger' (the preset lists) is the trigger wrapper's live width from
-              // measurePanel, to the pixel — the same column as the button it hangs from.
+              // measurePanel, to the pixel — the same column as the button it hangs from — unless
+              // a row that narrow could not show `leastRowLabel` (listWidth, above).
               ...(dropdownWidth === 'match-trigger'
-                ? { width: `${panelPos.width}px` }
+                ? { width: `${listWidth}px` }
                 : { width: 'max-content', maxWidth: '90vw' }),
               // Round 23: never taller than the room between the panel's top and the bottom of
               // the viewable area, less the same 1rem cushion (and bottom safe area) the ⚙ panel

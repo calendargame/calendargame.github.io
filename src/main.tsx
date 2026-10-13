@@ -2337,24 +2337,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
             horizontal overflow (scrollWidth == clientWidth, measured, at both sizes below).
 
             THE PRESET SWITCHER STILL CANNOT FORCE AN OVERFLOW, and that is still structural: its
-            wrapper is `flex-1 min-w-0`, so it can be squeezed all the way to 0 — the 4.5em floor
-            (PRESET_NAME_COL) lives on the NAME CELL *inside* the trigger, under two `overflow:hidden`
-            ancestors, so it clips rather than pushes. A growing fixed sum costs the switcher
-            display room, never the row its fit.
-
-            THAT COST TO THE NAME CELL WAS PAID IN THE SAME ROUND, not carried forward as a flag. The
-            mode trigger's +34.72px came straight out of the switcher's flex-1 share (its trigger is
-            ~105px at 360×800 now, not ~140px), which left the OLD 6em name-cell floor (~82px at
-            text-sm) wider than the trigger's usable inner width once `px-2.5` + `pr-6` (the chevron
-            lane) come out — so a near-floor name clipped UNDER the ▲▼ on the tightest 360-wide
-            layout, and lib/presetNameWidth, which measures that cell's rect, read the inflated
-            floor as room the name did not have. The same round dropped PRESET_NAME_COL
-            to 4.5em (~61px at text-sm), which sits inside the tightest usable width with margin —
-            re-verified in the layout engine at 360×900, where the cell clears the chevron by 19px.
-            The floor's full derivation now lives beside the constant in components/PresetSwitcher;
-            nothing about it is left open. tests/topBar.dom guards the structural half (which
-            children carry `shrink-0` vs `flex-1 min-w-0`) as class reads, which is the most a jsdom
-            suite can do about geometry no jsdom suite can compute.
+            wrapper is `flex-1 min-w-0`, so it can be squeezed all the way to 0, and nothing inside
+            it has a width of its own to push back with — the name cell in the trigger is exactly
+            as wide as the trigger's inside. A growing fixed sum costs the switcher display room,
+            never the row its fit. (The cell carried a least width until a narrow, tall phone
+            showed it wider than the trigger it sat in; components/PresetSwitcher's ⚠ "no floor"
+            note has it. On such a phone the switcher's LIST is allowed a little more than the
+            switcher's width — the one least width in that file — and the bar is untouched by it:
+            the list is an overlay.) tests/topBar.dom guards the structural half (which children
+            carry `shrink-0` vs `flex-1 min-w-0`) as class reads, which is the most a jsdom suite
+            can do about geometry no jsdom suite can compute.
             ⚠ AND CHROMIUM IS NOT AN IPHONE. Glyph advances differ, the system UI stack differs, and
             ONLY THE OWNER'S DEVICE can confirm the real thing. What is claimed here is that the
             arithmetic is no longer guesswork, not that the phone has agreed. (All of the numbers

@@ -22,7 +22,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createRef } from 'react'
 import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react'
-import PresetSwitcher, { PRESET_NAME_COL } from '../src/components/PresetSwitcher.jsx'
+import PresetSwitcher, { ShortStockNameRoom } from '../src/components/PresetSwitcher.jsx'
 import { usePresets, makePresetRegistryDefaults } from '../src/store/presets.js'
 import {
   PRESET_NAME_CELL_SELECTOR,
@@ -256,18 +256,14 @@ describe('an amnesic preset in the list: nothing drawn, and a word spoken', () =
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('the control must not size itself to its longest option', () => {
-  it('floors the name cell in the TRIGGER, and never in a list row', () => {
-    // Round 20: the cell used to be exactly PRESET_NAME_COL wide (a `width` style); now it is
-    // AT LEAST that wide (a `minWidth` style), and the actual width — how much wider — is jsdom's
-    // to not know, since it has no layout engine (main.tsx's budget block and
-    // components/PresetSwitcher's own comments are where that arithmetic lives now). What this
-    // environment CAN still pin: `width` is gone (the mechanism that made the cell rigid), and
-    // `minWidth` is the exported constant on every one of the trigger's stacked cells.
-    // ★ AND NOT IN A LIST ROW — the open list's, or the hidden gauge's that stands in for it while
-    // it is closed. A row is exactly as wide as the trigger and its label cell already fills it, so
-    // a floor there holds nothing open; in a row with less room than the floor it would push the
-    // name past the row's edge, and the gauge would report room the row does not have — whether a
-    // name is cut is read from that cell.
+  it('no name cell has a width, or a least width, of its own — anywhere it is drawn', () => {
+    // A name cell is exactly as wide as what holds it: the control's inside in the trigger, a
+    // row's label cell in the list (and in the hidden gauge that stands in for a closed list). It
+    // carried a least width (4.5em) in the trigger once. On a narrow, tall phone the control is
+    // narrower than that, and the floor pushed the cell out past the control's own inside — the
+    // name ran under the ▲▼ and was clipped with no ellipsis, and the cell reported room it did
+    // not have. jsdom lays nothing out, so the absence of any width is the evidence here; the
+    // real layout was swept in a browser at every width from 280 to 460.
     act(() => {
       createPreset('W'.repeat(60)) // far wider than any cell
       createPreset('Hi')
@@ -280,9 +276,33 @@ describe('the control must not size itself to its longest option', () => {
     expect(inTrigger).toHaveLength(3) // 3 presets, each rendered once in the stack…
     expect(inList).toHaveLength(3) // …once in the menu…
     expect(inGauge).toHaveLength(3) // …and once in the menu's hidden gauge
-    for (const cell of [...inTrigger, ...inList, ...inGauge]) expect(cell.style.width).toBe('')
-    for (const cell of inTrigger) expect(cell.style.minWidth).toBe(PRESET_NAME_COL)
-    for (const cell of [...inList, ...inGauge]) expect(cell.style.minWidth).toBe('')
+    for (const cell of [...inTrigger, ...inList, ...inGauge]) {
+      expect(cell.style.width).toBe('')
+      expect(cell.style.minWidth).toBe('')
+      expect(cell.className).not.toMatch(/(^|\s)(min-)?w-/)
+    }
+  })
+
+  it('tells its list the least a row must show: the short form of every two-digit preset', () => {
+    // The one least width a preset list has (components/PresetSwitcher's ★ note): wide enough for
+    // a standard row to show "P10" … "P99" whole. The label is all ninety stacked in one cell, so
+    // the cell is as wide as the widest, whichever that is in the font of the day.
+    mount()
+    const least = document.querySelector('[data-select-least-row]')
+    expect(least).not.toBeNull()
+    const stacked = [...least.querySelectorAll('.grid > span')].map((el) => el.textContent)
+    expect(stacked).toHaveLength(90)
+    expect(stacked[0]).toBe('P10')
+    expect(stacked.at(-1)).toBe('P99')
+    expect(new Set(stacked).size).toBe(90)
+    for (const el of least.querySelectorAll('.grid > span'))
+      expect(el.className).toBe('col-start-1 row-start-1')
+    // It is not a place a name is drawn: nothing in it is measured as a room.
+    expect(least.querySelector(PRESET_NAME_CELL_SELECTOR)).toBeNull()
+    // …and the same component, on its own, is the same ninety.
+    cleanup()
+    const { container } = render(<ShortStockNameRoom />)
+    expect(container.textContent).toBe(stacked.join(''))
   })
 
   it('marks every cell with the DOM hook lib/presetNameWidth reads across the component boundary', () => {
@@ -317,6 +337,10 @@ describe('the control must not size itself to its longest option', () => {
     element.getBoundingClientRect = function () {
       return this.matches(PRESET_NAME_CELL_SELECTOR) ? { width: 77 } : original.call(this)
     }
+    const originalRects = element.getClientRects
+    element.getClientRects = function () {
+      return this.matches(PRESET_NAME_CELL_SELECTOR) ? [{ width: 77 }] : originalRects.call(this)
+    }
     let rooms = null
     function Reader() {
       rooms = useNameRooms()
@@ -333,6 +357,7 @@ describe('the control must not size itself to its longest option', () => {
       expect(rooms).toEqual([])
     } finally {
       element.getBoundingClientRect = original
+      element.getClientRects = originalRects
       act(() => refreshNameRooms())
     }
   })

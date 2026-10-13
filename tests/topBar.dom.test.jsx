@@ -282,4 +282,18 @@ describe('the width cuts that paid for the fourth control', () => {
     expect(cellsIn(document.body)).toHaveLength(places.length)
     expect(screen.queryAllByRole('listbox')).toHaveLength(0)
   })
+
+  // ★ AND BOTH PRESET LISTS HAVE THE SAME ONE LEAST WIDTH — a row that shows "P10" whole — and no
+  // other list has one: the mode selector's list sizes itself to its own names.
+  it('the top bar`s preset list and "Open in" both carry the least-row; the mode list does not', () => {
+    mountApp()
+    openSettings()
+    const leastOf = (trigger) => trigger.parentElement.querySelector('[data-select-least-row]')
+    const openIn = within(panelEl()).getByRole('button', { name: /^Open in/ })
+    for (const trigger of [presetTrigger(), openIn]) {
+      expect(leastOf(trigger)).not.toBeNull()
+      expect(leastOf(trigger).textContent.startsWith('P10P11')).toBe(true)
+    }
+    expect(document.querySelectorAll('[data-select-least-row]')).toHaveLength(2)
+  })
 })

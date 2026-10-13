@@ -94,6 +94,7 @@ const mountNameCell = (widthPx, font = ROW_FONT) => {
   const cell = document.createElement('span')
   cell.setAttribute('data-preset-name-cell', 'true')
   cell.dataset.font = font
+  cell.getClientRects = () => [{ width: widthPx }] // it is laid out: it has a box
   cell.getBoundingClientRect = () => ({
     width: widthPx,
     height: 0,
@@ -154,13 +155,35 @@ describe('readNameRooms — the cross-component DOM read', () => {
     expect(readNameRooms()).toEqual([])
   })
 
-  it('skips a matched element reporting a non-positive width (plain unmocked jsdom)', () => {
-    // A real cell, but with jsdom's own always-zero rect (no mock) — the case this suite hits by
-    // default whenever the real controls are mounted: a width of nothing is not a room.
+  it('skips a cell that is not laid out at all (plain unmocked jsdom)', () => {
+    // A real cell with no box — the case this suite hits by default whenever the real controls
+    // are mounted, and a hidden subtree in a browser: there is no place there to be cut in.
     const cell = document.createElement('span')
     cell.setAttribute('data-preset-name-cell', 'true')
     document.body.appendChild(cell)
+    expect(cell.getClientRects()).toHaveLength(0)
     expect(readNameRooms()).toEqual([])
+  })
+
+  it('a cell that IS laid out and has no width is a room of nothing — not an unmeasurable one', () => {
+    // The narrowest screens: the bar leaves the preset control so little that a row of its list
+    // has no room for a name at all. That is the place a name is cut HARDEST. It used to be
+    // skipped ("cannot measure"), which turned the verdict to "fits" exactly there.
+    mountNameCell(0, ROW_FONT)
+    mountNameCell(70, BUTTON_FONT)
+    expect(readNameRooms()).toEqual([
+      { widthPx: 0, font: ROW_FONT },
+      { widthPx: 70, font: BUTTON_FONT },
+    ])
+    const restore = installFakeCanvas()
+    try {
+      const rooms = readNameRooms()
+      expect(isCutSomewhere('P1', rooms)).toBe(true)
+      expect(isCutSomewhere('Preset 1', rooms)).toBe(true) // not even its short form fits
+      expect(stockNamesAreCut([{ name: 'Preset 1' }], rooms)).toBe(true)
+    } finally {
+      restore()
+    }
   })
 
   it('counts a cell wherever it is mounted — a list row is a place a name is drawn', () => {
@@ -379,16 +402,21 @@ describe('the rooms are kept current, and whatever is drawn from them follows', 
     })
   }
   const original = window.Element.prototype.getBoundingClientRect
+  const originalRects = window.Element.prototype.getClientRects
   beforeEach(() => {
     draws = 0
     widths.clear()
     window.Element.prototype.getBoundingClientRect = function () {
       return { width: widths.get(this.dataset?.cell) ?? 0 }
     }
+    window.Element.prototype.getClientRects = function () {
+      return widths.has(this.dataset?.cell) ? [this.getBoundingClientRect()] : []
+    }
   })
   afterEach(() => {
     cleanup()
     window.Element.prototype.getBoundingClientRect = original
+    window.Element.prototype.getClientRects = originalRects
     act(() => refreshNameRooms())
   })
   // Everything queued behind a render (the read a mounting cell asks for) has run.

@@ -619,6 +619,139 @@ describe('CustomSelect — width props', () => {
     })
   })
 
+  // ★ `leastRowLabel` — THE ONE LEAST WIDTH A 'match-trigger' LIST HAS. A trigger that fills what
+  // its row leaves it can be left almost nothing (the preset control on a narrow, tall phone), and
+  // a list of exactly that width has rows with no room for a label at all. So the list is its
+  // trigger's width OR the width one standard row needs to show this label whole, whichever is
+  // more — and that width is MEASURED from a hidden row, never written down.
+  describe("leastRowLabel: a 'match-trigger' list is never narrower than a row that shows it", () => {
+    const LEAST = 91.3 // what the hidden least-row measures; the list takes it rounded UP
+    const VIEW = 360
+    const rectAt = (left, width) => ({
+      top: 40,
+      bottom: 63,
+      left,
+      right: left + width,
+      x: left,
+      y: 40,
+      width,
+      height: 23,
+      toJSON: () => ({}),
+    })
+    // The trigger's wrapper at `left`, `width` wide; the least-row LEAST wide; nothing else laid out.
+    const layOut = (left, width) => {
+      rectSpy = vi
+        .spyOn(Element.prototype, 'getBoundingClientRect')
+        .mockImplementation(function () {
+          return this.hasAttribute('data-select-least-row') ? rectAt(0, LEAST) : rectAt(left, width)
+        })
+      vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(VIEW)
+    }
+    const open = () => fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+    const least = (container) => container.querySelector('[data-select-least-row]')
+    const gauge = (container) => container.querySelector('[data-select-row-gauge]')
+    const edges = () => {
+      const right = VIEW - parseFloat(panel().style.right)
+      return { left: right - parseFloat(panel().style.width), right }
+    }
+
+    it('lays out ONE standard row holding the label, hidden, at its natural width', () => {
+      const { container } = mountBare({ dropdownWidth: 'match-trigger', leastRowLabel: 'P88' })
+      const row = least(container)
+      expect(row.getAttribute('aria-hidden')).toBe('true')
+      expect(row.style.visibility).toBe('hidden')
+      expect(row.style.pointerEvents).toBe('none')
+      expect(row.style.position).toBe('absolute')
+      expect(row.style.width).toBe('max-content')
+      expect(row.style.height).toBe('0px')
+      expect(row.style.overflow).toBe('hidden')
+      // The list's own inset and the list's own row: the same box and cells as the gauge's rows.
+      expect(row.className.split(/\s+/)).toContain('p-1')
+      expect(row.children).toHaveLength(1)
+      const standard = gauge(container).children[0]
+      expect(row.children[0].className).toBe(standard.className)
+      expect(row.children[0].children).toHaveLength(2)
+      expect(row.children[0].children[0].style.width).toBe(standard.children[0].style.width)
+      expect(row.children[0].children[1].className).toBe(standard.children[1].className)
+      expect(row.children[0].children[1].textContent).toBe('P88')
+      // No role, nothing for a screen reader, and no option added to the list.
+      expect(screen.queryAllByRole('option')).toHaveLength(0)
+    })
+
+    it('a trigger wider than the least: the list is the trigger, to the pixel, exactly as without it', () => {
+      layOut(80, 220)
+      mountBare({ dropdownWidth: 'match-trigger', leastRowLabel: 'P88' })
+      open()
+      expect(panel().style.width).toBe('220px')
+      expect(panel().style.right).toBe(`${VIEW - 300}px`)
+      expect(panel().style.left).toBe('')
+      expect(panel().style.minWidth).toBe('')
+      expect(panel().style.maxWidth).toBe('')
+    })
+
+    it('a trigger narrower than the least: the list is the least, rounded up, from the trigger`s LEFT edge', () => {
+      layOut(46, 35.5)
+      mountBare({ dropdownWidth: 'match-trigger', leastRowLabel: 'P88' })
+      open()
+      expect(panel().style.width).toBe('92px')
+      expect(edges().left).toBeCloseTo(46, 6) // where the trigger starts
+      expect(edges().right).toBeCloseTo(46 + 92, 6) // …and past its right edge (81.5)
+    })
+
+    it('the hidden row gauge is held to the same least, so it describes the row the list will draw', () => {
+      layOut(46, 35.5)
+      const { container } = mountBare({ dropdownWidth: 'match-trigger', leastRowLabel: 'P88' })
+      expect(gauge(container).style.width).toBe('100%') // the trigger's width, where that is more…
+      expect(gauge(container).style.minWidth).toBe('92px') // …and never under the least
+    })
+
+    it('with no room to its right it grows leftwards: never nearer the screen`s edge than the trigger stands', () => {
+      layOut(VIEW - 5 - 35.5, 35.5) // a narrow trigger 5px from the right edge
+      mountBare({ dropdownWidth: 'match-trigger', leastRowLabel: 'P88' })
+      open()
+      expect(panel().style.width).toBe('92px')
+      expect(edges().right).toBeCloseTo(VIEW - 5, 6)
+      expect(edges().left).toBeGreaterThan(0)
+    })
+
+    it('…and partly: it goes right as far as the trigger`s own left margin allows, then left', () => {
+      layOut(VIEW - 30 - 35.5, 35.5) // 30px of room on the right, and the least needs 56.5 more
+      mountBare({ dropdownWidth: 'match-trigger', leastRowLabel: 'P88' })
+      open()
+      // min(left, right) of the trigger is 30 here, and the list would have to pass it: it stops there.
+      expect(edges().right).toBeCloseTo(VIEW - 30, 6)
+      expect(panel().style.width).toBe('92px')
+    })
+
+    it('follows the trigger: widened past the least, the list is the trigger again', () => {
+      const rect = { left: 46, width: 35.5 }
+      rectSpy = vi
+        .spyOn(Element.prototype, 'getBoundingClientRect')
+        .mockImplementation(function () {
+          return this.hasAttribute('data-select-least-row')
+            ? rectAt(0, LEAST)
+            : rectAt(rect.left, rect.width)
+        })
+      vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(VIEW)
+      mountBare({ dropdownWidth: 'match-trigger', leastRowLabel: 'P88' })
+      open()
+      expect(panel().style.width).toBe('92px')
+      rect.width = 140
+      act(() => void window.dispatchEvent(new Event('resize')))
+      expect(panel().style.width).toBe('140px')
+      expect(edges().left).toBeCloseTo(46, 6)
+    })
+
+    it('without it there is no least-row, and a narrow trigger still means a narrow list', () => {
+      layOut(46, 35.5)
+      const { container } = mountBare({ dropdownWidth: 'match-trigger' })
+      expect(least(container)).toBeNull()
+      expect(gauge(container).style.minWidth).toBe('0px')
+      open()
+      expect(panel().style.width).toBe('35.5px')
+    })
+  })
+
   it("a 'content' select has no row gauge — its list sizes itself", () => {
     const { container } = mountBare({ triggerMatchesDropdown: true })
     expect(container.querySelector('[data-select-row-gauge]')).toBeNull()

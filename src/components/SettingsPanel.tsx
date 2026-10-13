@@ -28,7 +28,7 @@ import DefaultsCard from './DefaultsCard.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
 import PresetManager from './PresetManager.jsx'
 import CustomSelect from './CustomSelect.jsx'
-import { PresetOptionLabel } from './PresetSwitcher.jsx'
+import { PresetOptionLabel, ShortStockNameRoom } from './PresetSwitcher.jsx'
 import { nameAsQuoted } from '../lib/presetNameText.js'
 import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
 import { useStorageUsage } from '../store/storageUsage.js'
@@ -957,6 +957,7 @@ export function SettingsPanel({
                 ariaLabel="Open in"
                 showChevron
                 dropdownWidth="match-trigger"
+                leastRowLabel={<ShortStockNameRoom />}
                 className="w-full min-w-0 border surface-tray rounded-xl px-3 py-1.5 pr-6 text-xs font-medium text-left text-(--tx-100-80)"
               />
             </div>

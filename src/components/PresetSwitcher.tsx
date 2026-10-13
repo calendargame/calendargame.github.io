@@ -1,7 +1,6 @@
-import { use, type RefObject } from 'react'
+import type { RefObject } from 'react'
 import CustomSelect from './CustomSelect.jsx'
-import { InOpenListContext } from './openListContext.js'
-import { usePresets, shortStockName } from '../store/presets.js'
+import { usePresets, shortStockName, defaultPresetName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { switchPreset } from '../store/presetControl.js'
 import { useSessionAmnesic } from '../store/sessionAmnesic.js'
@@ -59,41 +58,35 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 // player's thumb on every rename, and a long enough name would widen the top bar for as long as
 // that preset existed.
 //
-// ★★ ROUND 20 CHANGED WHO GIVES, AND PRESET_NAME_COL WITH IT. Rounds 18-19 fixed the width this cell
-// bore so it could never widen the bar; round 20 gave this control FIRST CLAIM on the bar's own
-// slack instead — main.tsx's row puts `flex-1 min-w-0` on THIS control alone, and every other
-// control keeps `shrink-0` (see the budget block above the bar's markup there for the arithmetic
-// and why the switcher is the one that gives). PRESET_NAME_COL followed the same turn: it went
-// from the ONE fixed width every option's name cell wore to a MINIMUM one, applied via `minWidth`
-// rather than `width` below. Everything that used to make the cell exactly PRESET_NAME_COL wide
-// now makes it AT LEAST that wide, and the rest is ordinary block-fill: this cell
-// (`display:flex`, no width of its own) sits inside a chain of boxes that each default to 100% of
-// their own parent once something upstream hands them a definite size to fill — the trigger's
-// `w-full` below is that upstream size, and CustomSelect's grid, its grid-item cells, and this
-// cell each just inherit it one layer at a time. NOTHING IN CustomSelect NEEDED TO CHANGE for
-// that half of the chain — its className is entirely this file's to set, which is the whole
-// reason `w-full` on the trigger below is enough on its own.
-//   ⚠ THE ONE PLACE CustomSelect DID need a matching change is the DROPDOWN rows, which are a
-//   structurally different flex row (not the trigger's stacked grid) and would NOT have picked up
-//   the same fill by construction — see that file's option-row rendering for the fix and why it
-//   was needed once this cell stopped being a fixed constant.
-//   THE FLOOR STAYS as the TRIGGER-GRID floor and a defensive one, AND ONLY THERE. The portaled
-//   panel is `dropdownWidth="match-trigger"` — exactly this trigger's live rendered width — so a
-//   menu row always has something to fill (the label cell is `flex-1` of a `w-full` row of that
-//   panel), and a floor in the menu holds nothing open; in a row narrower than the floor it would
-//   only push the name out past the row's edge, and make the row report more room than it has
-//   (PresetOptionLabel drops it there). It binds in the trigger's own stacked grid, and it is still the
-//   thing that stops a name cell collapsing toward bare content if the trigger is ever squeezed
-//   toward its own minimum — kept as a "never smaller than this" rather than an "always exactly
-//   this". `em`, not px or rem, for the reason it always was: the root font-size is FLUID
-//   (index.css's clamp), so a px floor would be a fixed number of pixels holding a variable number
-//   of characters, and `em` keeps the floor a fixed number of CHARACTERS at every root size
-//   instead.
+// ★★ THIS CONTROL TAKES WHAT THE BAR HAS LEFT, AND ITS NAME CELL TAKES WHAT THE CONTROL HAS. In
+// main.tsx's row this control alone is `flex-1 min-w-0` and every other control is `shrink-0` (the
+// budget block above the bar's markup there has the arithmetic, and why the switcher is the one
+// that gives). The trigger's `w-full` below hands that width down, and everything inside fills it
+// one layer at a time: CustomSelect's grid, its stacked cells, and the name cell (`display:flex`,
+// no width of its own). So a name cell is EXACTLY the room its control really has — in the
+// trigger and in a list row alike — and a name longer than that is cut with an ellipsis inside it.
+//   ⚠ THE CELL HAS NO FLOOR, AND MUST NOT BE GIVEN ONE. It carried a least width (4.5em) from the
+//   days it was a fixed column, kept "defensively". The cell fills its control at every size, so
+//   the floor never held anything open; all it could do was bind where the control was NARROWER
+//   than the floor — a narrow, tall phone — and there it pushed the cell out past the control's
+//   own inside: the name ran under the ▲▼ and was clipped with no ellipsis, and the cell reported
+//   room it did not have to lib/presetNameWidth.
 //
 // ★★ THE TOP BAR'S WIDTH RULE (the owner's): the Mode button is exactly as wide as its longest mode
 // name needs; THIS control fills what is left of the row; ITS LIST IS EXACTLY THIS CONTROL'S WIDTH —
-// it hangs under the button as one column and can never reach over the Mode button. The panel is an
+// it hangs under the button as one column, not reaching over the Mode button. The panel is an
 // overlay (`position:fixed`), so nothing it does can widen the bar either.
+//   ★ WITH ONE LEAST WIDTH, FOR THE NARROWEST SCREENS (a decision made for the owner, his to
+//   overrule). On a phone narrow and tall enough the bar leaves this control so little that a list
+//   of its width has rows with no room for a name at all — blank rows, each just a ✓ — and even
+//   "P1" is cut. Blank rows are worse than a list a little wider than its control. So the list is
+//   never narrower than one standard row needs to show the short form of a two-digit preset
+//   ("P10") whole: ShortStockNameRoom below is that label, and CustomSelect's `leastRowLabel`
+//   measures the row that holds it. Where that is wider than the control the list starts at the
+//   control's left edge and reaches a little way over the Mode button; everywhere else (360 wide
+//   and up, on an ordinary phone) the list is the control's width to the pixel, as before. The
+//   rows keep their one shape; "Open in" is the same list and takes the same least, which its wide
+//   control never reaches.
 //
 // ★★ A NAME MAY BE ANY LENGTH, AND WHAT DOES NOT FIT IS SHOWN WITH AN ELLIPSIS. Nothing limits what
 // a player may call a preset (store/presets' normalizePresetName), so every place a name is shown
@@ -153,15 +146,29 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 // read as "Weekend , amnesic"; and a join that trims each piece drops a leading space instead,
 // which is "Weekendamnesic". One text node has nothing to join, so it reads the same everywhere.
 
-// ★ THE FLOOR OF A PRESET NAME'S CELL IN THE TRIGGER: 4.5em. The trigger's own width is whatever
-// main.tsx's row does not spend on the logo, the mode selector, the gear, and their gaps (the
-// budget block above the bar's markup there has the arithmetic). It was 6em while the cell was a
-// fixed width; round 21 widened the mode selector, and a 6em floor (~82px at text-sm) then exceeded
-// the trigger's usable inner width at 360×800 (~69px), so a near-floor name ran UNDER the ▲▼ and
-// the cell reported more room than it had. 4.5em (~61px at text-sm) sits inside the tightest usable
-// width with margin. It is a MINIMUM, not a fixed width — on a roomier phone the cell block-fills
-// well past it.
-export const PRESET_NAME_COL = '4.5em'
+// ★ WHAT A PRESET LIST MUST ALWAYS HAVE ROOM FOR IN A ROW: the short form of any two-digit stock
+// name ("P10" … "P99") — handed to CustomSelect as `leastRowLabel` by both preset lists (the ★
+// "one least width" note above). Every one of the ninety is stacked in one cell, so the cell is as
+// wide as the WIDEST of them in whatever font the row is set in — digits are not all one width in
+// every font, and nothing here guesses which is widest. Never seen: CustomSelect lays it out in a
+// hidden row to measure it. Built from the same two functions that name a preset and shorten the
+// name, so it cannot disagree with what a row actually draws.
+const TWO_DIGIT_SHORT_NAMES = Array.from(
+  { length: 90 },
+  (_, i) => shortStockName(defaultPresetName(i + 10))!,
+)
+export function ShortStockNameRoom() {
+  return (
+    <span className="grid">
+      {TWO_DIGIT_SHORT_NAMES.map((name) => (
+        <span key={name} className="col-start-1 row-start-1">
+          {name}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 // ★ ONE PRESET'S ROW, AS EVERY PRESET LIST IN THE APP DRAWS IT — this switcher's, and since round 23
 // the ⚙ panel's "Open in" dropdown, which is the SAME control showing the SAME list (the
 // owner's "learn it once"). Exported rather than copied so the two can never drift: a name that
@@ -179,13 +186,6 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
     useNameRooms(),
   )
   const short = stockShort ? shortStockName(p.name) : null
-  // ★ THE FLOOR IS THE TRIGGER'S, NOT THE LIST'S. In the trigger it is what keeps the name cell
-  // from collapsing toward bare content. In a list row there is nothing for it to hold — the row's
-  // label cell already fills the row — and in a row with less room than the floor it would push the
-  // name out past the row's right edge, and make the cell report a width the row does not have to
-  // lib/presetNameWidth, which would then call a name whole that the list is cutting. In the list
-  // the cell is exactly the room the row gives it.
-  const inOpenList = use(InOpenListContext)
   // The stored name, as much of it as is ever drawn or said (lib/presetNameText).
   const full = nameAsDrawn(p.name)
   const drawn = short === null ? full : nameAsDrawn(short)
@@ -193,18 +193,13 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
   // preset has its words after its name, and a stock name drawn short is said in full.
   const spoken = amnesic ? `${full}, ${amnesic}` : short !== null ? full : null
   return (
-    // The name cell (floor PRESET_NAME_COL, grows past it). `flex` makes it a block-level flex
-    // container, so inside the trigger's grid cell AND inside a dropdown row it is the same box
-    // with the same rules — one structure serving both, which is what stops the two from drifting.
-    // Only `minWidth`, no `width`: the cell's width comes from filling whatever its ancestor chain
-    // hands it (see the trigger's `w-full` below), never from the name in it. `data-preset-name-cell`
-    // and the ref are how lib/presetNameWidth finds THIS exact element and hears when it changes size.
-    <span
-      className="flex items-center"
-      style={inOpenList ? undefined : { minWidth: PRESET_NAME_COL }}
-      data-preset-name-cell="true"
-      ref={watchNameCell}
-    >
+    // The name cell. `flex` makes it a block-level flex container, so inside the trigger's grid
+    // cell AND inside a dropdown row it is the same box with the same rules — one structure
+    // serving both, which is what stops the two from drifting. It has no width and no least width
+    // of its own (the ⚠ "no floor" note above): it is exactly as wide as what holds it, never as
+    // wide as the name in it. `data-preset-name-cell` and the ref are how lib/presetNameWidth
+    // finds THIS exact element and hears when it changes size.
+    <span className="flex items-center" data-preset-name-cell="true" ref={watchNameCell}>
       {/* `truncate` (overflow-hidden + ellipsis + nowrap) goes on the NAME, not on the cell: a
           flex container's own text-overflow never fires, because the ellipsis rule applies to a
           block box's inline content and this box's children are flex items. Put it here and a name
@@ -272,6 +267,7 @@ export default function PresetSwitcher({
       // block above): this trigger already fills the row's leftover space (w-full inside main.tsx's
       // flex-1 min-w-0), and the list is that same column. The mode selector keeps 'content'.
       dropdownWidth="match-trigger"
+      leastRowLabel={<ShortStockNameRoom />}
       // The mode selector's trigger classes, CHARACTER FOR CHARACTER, plus two the mode selector
       // does NOT wear — the two controls sit side by side in the same bar, so anything that
       // differed without a reason would read as one of them being wrong, and these two have one.
