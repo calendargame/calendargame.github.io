@@ -50,29 +50,89 @@ export { THEMES } from './seeds'
 // while storage is filled, before any of the app's code has run.
 const BLANK_PAGE = '__browser-lane-blank.html'
 
-export const test = base.extend({
+export const test = base.extend<{ newDevice: () => Promise<Page> }>({
   context: async ({ context, baseURL }, use) => {
-    const site = new URL(baseURL!).origin
-    // Nothing leaves the machine: the live site's build carries an analytics script, and a test run
-    // is not a visit. Answered empty rather than refused, so the page logs no failed request.
-    await context.route(
-      (url) => url.origin !== site,
-      (route) => route.fulfill({ status: 204, body: '' }),
-    )
-    await context.route(`**/${BLANK_PAGE}`, (route) =>
-      route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>blank</title>' }),
-    )
-    // Every test fails on an error the page raised or logged, in any window it opened — "it did
-    // not crash" is checked for free, everywhere, instead of remembered case by case.
-    const problems: string[] = []
-    context.on('weberror', (e) => problems.push(`uncaught: ${e.error().message}`))
-    context.on('console', (m) => {
-      if (m.type() === 'error') problems.push(`console.error: ${m.text()}`)
-    })
+    const check = await watch(context, baseURL!)
     await use(context)
-    expect(problems, 'the page raised or logged an error').toEqual([])
+    check()
+  },
+  /**
+   * A window on ANOTHER device: its own saved data, sharing nothing with `page`. For a test that
+   * needs two saves side by side (two pages of one context are one device — `openSecondWindow`).
+   * Watched and closed like the test's own.
+   */
+  newDevice: async ({ browser, baseURL }, use) => {
+    const devices: { context: BrowserContext; check: () => void }[] = []
+    await use(async () => {
+      // Playwright gives a context made this way the same fixed world as the test's own.
+      const context = await browser.newContext()
+      devices.push({ context, check: await watch(context, baseURL!) })
+      return context.newPage()
+    })
+    for (const { context, check } of devices) {
+      await context.close()
+      check()
+    }
   },
 })
+
+// Put a context under the lane's rules, and hand back the check to run when its test is over.
+async function watch(context: BrowserContext, baseURL: string): Promise<() => void> {
+  const site = new URL(baseURL).origin
+  // Nothing leaves the machine: the live site's build carries an analytics script, and a test run
+  // is not a visit. Answered empty rather than refused, so the page logs no failed request.
+  await context.route(
+    (url) => url.origin !== site,
+    (route) => route.fulfill({ status: 204, body: '' }),
+  )
+  await context.route(`**/${BLANK_PAGE}`, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>blank</title>' }),
+  )
+  // Every test fails on an error the page raised or logged, in any window it opened — "it did not
+  // crash" is checked for free, everywhere, instead of remembered case by case. Heard inside the
+  // page (its own `error` and `unhandledrejection` events) rather than through the browser's
+  // debugging channel, because the engines disagree about what that channel carries: WebKit passes
+  // a ResizeObserver loop error along it and Chromium does not, though both raise it.
+  const errors: string[] = []
+  pageErrors.set(context, errors)
+  await context.exposeBinding(REPORT, (_source, message: string) => void errors.push(message))
+  await context.addInitScript((REPORT) => {
+    const report = (message: string) =>
+      (window as unknown as Record<string, (m: string) => void>)[REPORT](message)
+    window.addEventListener('error', (e) => report(`uncaught: ${e.message}`))
+    window.addEventListener('unhandledrejection', (e) =>
+      report(`unhandled rejection: ${String(e.reason)}`),
+    )
+  }, REPORT)
+  context.on('console', (m) => {
+    if (m.type() === 'error') errors.push(`console.error: ${m.text()}`)
+  })
+  return () =>
+    expect(
+      errors.filter((e) => !KNOWN_PAGE_ERRORS.some((known) => e.includes(known))),
+      'the page raised or logged an error',
+    ).toEqual([])
+}
+
+const REPORT = '__browserLaneReport'
+const pageErrors = new WeakMap<BrowserContext, string[]>()
+/** Every error the pages of this context have raised or logged so far, known ones included. */
+export const pageErrorsOf = (context: BrowserContext): readonly string[] => pageErrors.get(context)!
+
+// ── ⚠ KNOWN DEFECTS THE LANE MEETS AND DOES NOT FAIL ON. THIS LIST IS MEANT TO BE EMPTY. ─────
+// An entry is an error the APP raises today, already known and waiting for its own fix, that a
+// test here cannot avoid setting off. Without the entry every test that touches it would be red
+// for a reason that is not its own; with it, the lane must not let the entry outlive the defect —
+// so EVERY ENTRY HAS A TEST IN knownDefects.browser.ts THAT FAILS THE DAY THE ERROR STOPS
+// HAPPENING. Fix the defect, watch that test fail, delete both. Never add an entry without one.
+export const KNOWN_PAGE_ERRORS: readonly string[] = [
+  // The top bar's height observer (src/main.tsx's syncBarHeight) changes, in answer to the bar's
+  // height changing, a property the page's layout reads — so the browser has a new size to report
+  // before it has finished reporting the last, and raises this. Any change of the window's size
+  // that moves the root font sets it off (so, every width sweep here). Nothing is drawn wrong; on
+  // the live site it is an error in the log.
+  'ResizeObserver loop completed with undelivered notifications.',
+]
 
 export interface OpenOptions {
   /** The window's size. Left out, it is the lane's 390×844 phone. */
@@ -233,9 +293,11 @@ export const textRectOf = (target: Locator): Promise<Rect> =>
     return { left, top, right, bottom, width, height }
   })
 
-// Two measurements of the same edge can differ in the last binary digit after a transform or a
-// fractional root font; a hundredth of a pixel is far below anything drawn.
-export const SAME_PX = 0.01
+// ONE TOLERANCE, AND IT IS THE BROWSERS' OWN GRAIN, NOT SLACK. Chromium and WebKit both lay boxes out
+// in sixty-fourths of a pixel while text is measured in finer fractions, so a box edge and the text
+// that fills it exactly can read 1/64px apart (0.0156). A twentieth of a pixel is three of those
+// steps: far below anything a screen draws, and above anything rounding alone produces.
+export const SAME_PX = 0.05
 
 /**
  * Nothing inside `target` is wider than it: its content does not overflow sideways, so nothing is
