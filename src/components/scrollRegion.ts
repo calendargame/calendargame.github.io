@@ -340,7 +340,7 @@ const classicScrollbarWidth = (region: HTMLElement): number => {
   return Math.max(0, region.offsetWidth - region.clientWidth - borders)
 }
 
-// ── A LIST OF ROWS WHOSE SCROLLBAR SITS OVER THE ROWS' OWN LANE ─────────────────────────────────
+// ── A LIST OF ROWS WHOSE SCROLLBAR HAS THE ROWS' OWN LANE ───────────────────────────────────────
 // For a scroller that carries no lane of its own because its ROWS do — a dropdown's option list
 // (components/CustomSelect), each row with a full rem of padding on its right, which is where an
 // overlay scrollbar is drawn, clear of the text.
@@ -348,19 +348,31 @@ const classicScrollbarWidth = (region: HTMLElement): number => {
 // box, the moment the list is long enough to scroll. So every row was a scrollbar narrower in a
 // long list than in a short one — on a desktop a preset's name that fits its row (and that the
 // hidden row gauge, which has no scrollbar, says fits) was cut as soon as there were enough
-// presets to scroll. A row's width must not depend on how many rows there are.
-// So the classic scrollbar is put where the overlay one already is. The list publishes its
-// scrollbar's width (writeScrollbarWidth → --scrollbar-w, 0px when there is none), and each row is
-// that much WIDER than the box that lost it (ROW_UNDER_SCROLLBAR_WIDTH_CLASS): exactly as wide as
-// it is in a list that does not scroll, with the scrollbar over the last of its right-hand
-// padding. ROW_LANE_SCROLLER_CLASS clips that overhang sideways, so it can never be scrolled to
-// and never raises a horizontal scrollbar of its own.
-//   ⚠ THE ROW'S OWN RIGHT PADDING MUST OUTSPAN THE SCROLLBAR for its text to stay clear: a classic
-//   scrollbar is 15–17px, and a dropdown row keeps 1rem plus the list's own .25rem to its right.
+// presets to scroll. The room a row gives its label must not depend on how many rows there are.
+// So the lane the overlay scrollbar is drawn in is GIVEN to the classic one. The list publishes
+// its scrollbar's width (writeScrollbarWidth → --scrollbar-w, 0px when there is none), and the
+// label's cell in each row reaches that far into the row's own right-hand padding
+// (ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS): the cell is exactly as wide as it is in a list that does
+// not scroll, and ends in the same place on the screen.
+//   ★ THE ROW'S OWN BOX IS NOT TOUCHED. It is the list's content box, scrollbar or no scrollbar —
+//   so its highlight (the selected, hovered, or keyboard row) stops short of a classic scrollbar,
+//   with both right-hand corners round and the list's inset between it and the bar, as it has
+//   beside an overlay one. (The whole ROW was once made a scrollbar wider instead. Its label had
+//   the right room, but its fill ran on under the bar: the two right-hand corners and the inset
+//   were gone, and the overhang was real scrollable width — clipped from sight by the list's
+//   overflow-x:hidden, but a script could still scroll the list sideways by it.)
+//   ⚠ THE ROW'S RIGHT PADDING SHOULD OUTSPAN THE SCROLLBAR, so that the cell stays inside the row:
+//   a classic scrollbar is 15–17px, and a dropdown row keeps 1rem to its right. Where the root font
+//   is small enough that it does not (1rem is 12px on a short window), the cell reaches the few
+//   pixels past the row's edge into the list's own .25rem of padding — still short of the bar, and
+//   still inside the list's box, so there is nothing to scroll to. ROW_LANE_SCROLLER_CLASS keeps
+//   overflow-x:hidden all the same: a list must never show a sideways scrollbar of its own.
+//   (overflow-x:clip, which would make sideways scrolling impossible outright, is not available
+//   here: beside an axis that scrolls, the platform computes `clip` to `hidden`.)
 //   ⚠ MEASURED BY ITS CALLER when the list opens and when the window changes size — never from
-//   observeScrollExtent's callback, which must not change layout (a row's width is layout).
+//   observeScrollExtent's callback, which must not change layout (a cell's width is layout).
 export const ROW_LANE_SCROLLER_CLASS = `${SCROLLER_CORE_CLASS} overflow-x-hidden`
-export const ROW_UNDER_SCROLLBAR_WIDTH_CLASS = 'w-[calc(100%_+_var(--scrollbar-w,0px))]'
+export const ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS = 'mr-[calc(-1_*_var(--scrollbar-w,0px))]'
 export function writeScrollbarWidth(region: HTMLElement): void {
   region.style.setProperty('--scrollbar-w', `${classicScrollbarWidth(region)}px`)
 }

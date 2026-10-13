@@ -816,8 +816,12 @@ describe('CustomSelect — long lists, and a trigger inside a scroll region', ()
 // A desktop scrollbar takes its width out of the list's content box the moment the list is long
 // enough to scroll — so every row was ~15px narrower in a long list than in a short one, and a name
 // that fits a row (and that the hidden row gauge says fits) was cut. A phone's scrollbar is drawn
-// OVER the rows' own right-hand padding and takes nothing. A classic one is put in that same lane:
-// the list measures its scrollbar and each row is that much wider than the box that lost it.
+// OVER the rows' own right-hand padding and takes nothing. A classic one is given that same lane:
+// the list measures its scrollbar, and the LABEL'S CELL in each row takes that much back out of
+// the row's right-hand padding — so a name has the same room whether or not the list scrolls,
+// while the row's own box (its highlight, with its round corners) stops short of the scrollbar.
+// (The whole row was once made a scrollbar wider instead: the highlight ran on under the bar and
+// lost both right-hand corners and its inset from the list's edge.)
 // jsdom lays nothing out, so the scrollbar is stood up as the two numbers it is read from; that
 // the name cell is then the same width with one preset as with twenty-five was measured in
 // Chromium, with classic scrollbars, at phone and desktop width.
@@ -858,14 +862,31 @@ describe('CustomSelect — a classic scrollbar sits over the rows` own lane', ()
     expect(barVar()).toBe('0px')
   })
 
-  it('a row is wider than the list`s box by exactly that much', () => {
+  it('a row is exactly the list`s own box: its highlight ends clear of the scrollbar, corners and inset whole', () => {
     openWith('b')
-    for (const row of options())
-      expect(row.className.split(/\s+/)).toContain('w-[calc(100%_+_var(--scrollbar-w,0px))]')
-    expect(options()[0].className.split(/\s+/)).not.toContain('w-full')
+    for (const row of options()) {
+      const classes = row.className.split(/\s+/)
+      expect(classes).toContain('w-full')
+      expect(classes).toContain('rounded-xl')
+      // Nothing makes the row's box any wider than the list gives it.
+      expect(classes.filter((c) => c.includes('--scrollbar-w'))).toEqual([])
+    }
+    expect(list().className.split(/\s+/)).toContain('p-1') // the inset the highlight keeps
   })
 
-  it('the rows` extra width is clipped by the list, never scrolled to', () => {
+  it('the label`s cell takes the scrollbar`s width back, so a name has the same room in a list that scrolls', () => {
+    openWith('b')
+    for (const row of options()) {
+      const [tick, cell, ...rest] = row.children
+      expect(rest).toEqual([])
+      expect(tick.className).not.toContain('--scrollbar-w')
+      expect(cell.className.split(/\s+/)).toEqual(
+        expect.arrayContaining(['min-w-0', 'flex-1', 'mr-[calc(-1_*_var(--scrollbar-w,0px))]']),
+      )
+    }
+  })
+
+  it('a sideways overhang is still never scrolled to', () => {
     openWith('b')
     expect(list().className.split(/\s+/)).toContain('overflow-x-hidden')
   })

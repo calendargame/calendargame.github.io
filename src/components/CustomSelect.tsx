@@ -12,7 +12,7 @@ import { isPageCovered, useLayer } from './overlayStack.js'
 import { InOpenListContext } from './openListContext.js'
 import {
   ROW_LANE_SCROLLER_CLASS,
-  ROW_UNDER_SCROLLBAR_WIDTH_CLASS,
+  ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS,
   writeScrollbarWidth,
   holdScrollRegion,
   scrollFadeClass,
@@ -140,11 +140,12 @@ interface PanelPos {
 // list's width back to the trigger, and the hidden row gauge ('match-trigger') that says what a
 // row has room for while the list is closed. (The real row adds only the active/press visual
 // state, which changes no dimension.)
-// ⚠ ITS WIDTH IS THE LIST'S BOX PLUS THE LIST'S CLASSIC SCROLLBAR, when it has one
-// (components/scrollRegion's ROW_UNDER_SCROLLBAR_WIDTH_CLASS argues it): a row is the same width in
-// a list long enough to scroll as in a short one, and as in the two hidden copies, which have no
-// scrollbar and where the term is nothing.
-const OPTION_ROW_BOX = `${ROW_UNDER_SCROLLBAR_WIDTH_CLASS} text-left rounded-xl pl-4 pr-4 py-3 text-[15px] flex items-center gap-2.5`
+// ⚠ ITS WIDTH IS THE LIST'S BOX, AND ONLY THAT — so the highlight a row wears stops short of a
+// classic scrollbar with its corners whole. What a classic scrollbar takes from the row is given
+// back to the LABEL'S CELL (OptionRowCells, below), which is what has to be the same width in a
+// list long enough to scroll as in a short one, and as in the two hidden copies.
+const OPTION_ROW_BOX =
+  'w-full text-left rounded-xl pl-4 pr-4 py-3 text-[15px] flex items-center gap-2.5'
 // What a row holds inside its box: the ✓ column and the label's cell. One component, so the live
 // list, the width-mirror, and the row gauge cannot drift apart.
 function OptionRowCells({ checked, children }: { checked: boolean; children: ReactNode }) {
@@ -174,8 +175,13 @@ function OptionRowCells({ checked, children }: { checked: boolean; children: Rea
           ⚠ EVERY ROW GETS THE SAME TREATMENT: every option button is the same width (the full
           width of one shared panel), so flex-1 stretches every row's label cell to that same shared width
           regardless of that row's own text length — which is the width a long preset name
-          truncates against. */}
-      <span className="min-w-0 flex-1">
+          truncates against.
+          ⚠ AND IT REACHES A CLASSIC SCROLLBAR'S WIDTH INTO THE ROW'S RIGHT-HAND PADDING, when the
+          list has one (components/scrollRegion's ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS argues it):
+          the scrollbar took that much out of the row, and this takes it back for the label alone,
+          so a name has the same room whether or not the list scrolls. In the two hidden copies
+          there is no scrollbar and the term is nothing. */}
+      <span className={`min-w-0 flex-1 ${ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS}`}>
         <InOpenListContext value={true}>{children}</InOpenListContext>
       </span>
     </>
@@ -591,8 +597,8 @@ export default function CustomSelect({
     if (!list || !(opt instanceof HTMLElement)) return
     scrollBandIntoView(list, opt.offsetTop, opt.offsetHeight)
   }, [panelShown, activeIdx])
-  // ★ A CLASSIC SCROLLBAR'S WIDTH, PUBLISHED TO THE ROWS (components/scrollRegion says why: a row
-  // must be as wide in a list that scrolls as in one that does not). Measured as the list opens —
+  // ★ A CLASSIC SCROLLBAR'S WIDTH, PUBLISHED TO THE ROWS (components/scrollRegion says why: a
+  // label must have the same room in a list that scrolls as in one that does not). Measured as the list opens —
   // a layout effect, so the first painted frame already has it — whenever the number of options
   // changes under an open list, and whenever the window changes size, which is what moves the cap
   // on the panel's height and so decides whether the list scrolls at all.
@@ -783,7 +789,7 @@ export default function CustomSelect({
                 options stay round. data-drag-scroll makes it lib/pointerGestures' auto-scroll target,
                 so a press-drag down a long top-bar list scrolls it at the edge the way the ⚙ panel
                 does. ROW_LANE_SCROLLER_CLASS (components/scrollRegion, which says why this list takes no
-                lane, and how a desktop scrollbar is kept off the rows' width) includes
+                lane, and how a desktop scrollbar is kept out of a label's room) includes
                 overscroll-contain, so a fling that hits the end does not scroll the page. */}
             <div
               ref={listRef}
