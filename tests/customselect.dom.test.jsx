@@ -14,7 +14,7 @@ import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { useRef } from 'react'
 import CustomSelect from '../src/components/CustomSelect.jsx'
 import { useLayer } from '../src/components/overlayStack.js'
-import { installResizeObserver } from './helpers/scrollGeometry.js'
+import { installResizeObserver, holdFrames } from './helpers/scrollGeometry.js'
 
 const OPTIONS = [
   { value: 'a', label: 'Alpha' },
@@ -519,6 +519,7 @@ describe('CustomSelect — width props', () => {
   // box itself now.
   it('an open list follows its trigger`s box, whenever that settles — not just the window`s resize event', () => {
     const ro = installResizeObserver() // BEFORE mount: the observer is built as the list opens
+    const frames = holdFrames(vi)
     try {
       let rect = TRIGGER_RECT
       rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => rect)
@@ -533,12 +534,25 @@ describe('CustomSelect — width props', () => {
       // …and then the trigger settles: narrower, and further left.
       rect = { ...TRIGGER_RECT, left: 60, x: 60, right: 196.25, width: 136.25 }
       act(() => ro.resize(wrapper))
+      // ⚠ NOT FROM INSIDE THE OBSERVER'S CALLBACK. Resizing the list there changes boxes other
+      // observers are watching, shallower in the page than the trigger — which the browser will not
+      // go back for in that frame, and logs as a "ResizeObserver loop". The callback asks for one
+      // frame, and the measurement is taken in it.
+      expect(panel().style.width).toBe('220px')
+      expect(frames.pending()).toBe(1)
+      act(() => ro.resize(wrapper)) // (told twice in a frame, it still asks for only one)
+      expect(frames.pending()).toBe(1)
+      act(() => frames.at(16))
       expect(panel().style.width).toBe('136.25px')
       expect(panel().style.right).toBe(`${document.documentElement.clientWidth - 196.25}px`)
-      // Closed, it stops watching.
+      // Closed, it stops watching — and a frame it had asked for is given up.
+      act(() => ro.resize(wrapper))
+      expect(frames.pending()).toBe(1)
       fireEvent.keyDown(screen.getByRole('button', { name: /^Test,/ }), { key: 'Escape' })
       expect(ro.isObserved(wrapper)).toBe(false)
+      expect(frames.pending()).toBe(0)
     } finally {
+      frames.restore()
       ro.restore()
     }
   })

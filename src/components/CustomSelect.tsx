@@ -504,6 +504,12 @@ export default function CustomSelect({
   // 136px trigger) — its rows then a different width from the hidden row gauge that says what a
   // name has room for. A ResizeObserver reports the box when layout has it; the list is portaled
   // and fixed, so nothing it does can change the trigger's size back, and there is no loop.
+  // ⚠ THE OBSERVER ONLY ASKS FOR THE MEASUREMENT; IT IS TAKEN ON THE NEXT FRAME. Resizing the list
+  // from inside the callback changes boxes that other observers are watching (the list's own
+  // scroll extent, the name cells in its rows) — and those sit SHALLOWER in the page than the
+  // trigger does, which the browser will not go back for in the same frame: it logs "ResizeObserver
+  // loop completed with undelivered notifications" and tells them a frame late anyway. One frame
+  // after the trigger settles, the list is its width; nothing is logged, and nothing is told late.
   //
   // The three things that DO move the trigger, none of them a page scroll: window resize
   // (rotation); the visualViewport, whose own resize/scroll report iOS moving the VISUAL viewport
@@ -532,11 +538,18 @@ export default function CustomSelect({
     })
     barObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
     const trigger = ref.current
+    let nextFrame = 0
     const boxObserver =
-      trigger && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(reposition) : null
+      trigger && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            cancelAnimationFrame(nextFrame)
+            nextFrame = requestAnimationFrame(reposition)
+          })
+        : null
     if (trigger) boxObserver?.observe(trigger)
     return () => {
       boxObserver?.disconnect()
+      cancelAnimationFrame(nextFrame)
       window.removeEventListener('resize', reposition)
       if (vv) {
         vv.removeEventListener('resize', reposition)
