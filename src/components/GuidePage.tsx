@@ -1748,26 +1748,29 @@ export default function GuidePage({
           <li>
             <b>Rename</b> — the name in each row is a box; tap it and it is all selected, so you can
             just type. <Kbd>Enter</Kbd> or tapping away keeps the new name, <Kbd>Esc</Kbd> throws it
-            away. A name can be as long as you like: nothing you type or paste is turned away or
-            changed, apart from the spaces at its two ends, which are dropped when it is kept. While
-            what you have typed would not fit somewhere it is shown, a note under the box says so —
-            &quot;Some places will show this name cut short.&quot; It appears at the exact character
-            that stops fitting in the tightest of those places (usually a row of the top-left list)
-            and goes as soon as the name fits again; it is also there when you tap into a name that
-            is already too long. How much fits depends on the screen, so the same name can be whole
-            on one device and cut short on another, and the note follows if you turn the phone while
-            the box is open. A ready-made name only gets the note where even its short form
-            (&quot;P1&quot;) would be cut. A very long name — a pasted page, say — is kept whole in
-            its box and shown by its beginning everywhere else: where a sentence names a preset it
-            quotes the first 80 characters, and a letter piled high with accents is trimmed there to
-            the line it is on. Two presets can have the same name. Leave a name blank and it goes
-            back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on. If the device has no room
-            left to save a name, it is not changed: the box goes back to the name it had, and a note
-            under it says &quot;This device has no room to save that name, so it was not
-            changed.&quot; That is so however you left the box — Enter, Tab, a tap on another row,
-            the app going to the background. The note stays under its row until you next type in a
-            name box. If what you tapped was the dimmed area outside the popup, that tap shows you
-            the note instead of closing the popup; tap there again to close it.
+            away. A name can be as long as you like: nothing you type or paste is turned away, and
+            the only thing changed is the spaces at its two ends, which are dropped when it is kept.
+            While what you have typed would not fit somewhere it is shown, a note under the box says
+            so — &quot;Some places will show this name cut short.&quot; It appears at the exact
+            character that stops fitting in the tightest of those places (usually a row of the
+            top-left list) and goes as soon as the name fits again; it is also there when you tap
+            into a name that is already too long. How much fits depends on the screen, so the same
+            name can be whole on one device and cut short on another, and the note follows if you
+            turn the phone while the box is open. A ready-made name only gets the note where even
+            its short form (&quot;P1&quot;) would be cut. A very long name — a pasted page, say — is
+            kept whole in its box and shown by its beginning everywhere else: where a sentence names
+            a preset it quotes the first 80 characters, and a letter piled high with accents is
+            trimmed there to the line it is on. Two presets can have the same name. A name with
+            nothing in it to see goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on:
+            that is one left blank, or one made up only of spaces and other characters that show
+            nothing on screen. (While you type, the note under the box treats such a name as the
+            &quot;Preset&quot; name it is about to become.) If the device has no room left to save a
+            name, it is not changed: the box goes back to the name it had, and a note under it says
+            &quot;This device has no room to save that name, so it was not changed.&quot; That is so
+            however you left the box — Enter, Tab, a tap on another row, the app going to the
+            background. The note stays under its row until you next type in a name box. If what you
+            tapped was the dimmed area outside the popup, that tap shows you the note instead of
+            closing the popup; tap there again to close it.
           </li>
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to
