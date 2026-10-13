@@ -2717,6 +2717,15 @@ import BlitzMode from './modes/BlitzMode.jsx'
       createRoot(rootEl).render(<ErrorBoundary><App/></ErrorBoundary>);
     }
 
+    // ⚠ TEMPORARY — the iPhone touch diagnostic (src/dev/touchDiagnostic.ts; its header says why it
+    // exists and what it offers). TEST SITE ONLY: the path check means the live site never requests
+    // the chunk, and neither does `vite dev` or a test run (both serve from "/"). All it adds until
+    // someone taps it is one small "Touch test" button. DELETE this block and that file together
+    // once the owner has reported what his iPhone does.
+    if (rootEl && import.meta.env.PROD && window.location.pathname.startsWith("/test_version/")) {
+      void import('./dev/touchDiagnostic.js').then(m=>m.installTouchDiagnostic());
+    }
+
 
     // Real-user error reporting. DEPLOYED builds only. This flag is the BUILD-time half —
     // import.meta.env.PROD is false in `vite dev`, so dev never reports — but it is true for a
