@@ -166,7 +166,13 @@ export default function StorageUsagePopup() {
               (store/storageUsage's shorterNamesWouldEndWarning). A name is normally a few
               characters, and "shorten your names" on a device filled by solve times would be
               advice that cannot help; so it is first in the list when it is the answer, and not
-              in it at all otherwise. */}
+              in it at all otherwise.
+              ⚠ IT SAYS THAT AND NOTHING MORE. The condition is about what shortening would DO, not
+              about how much the names hold: it is met by two default names on a device a few
+              characters over the line. So the line makes the one claim the condition proves —
+              "would be enough on its own" — and none about the names being large (it once opened
+              "Your preset names are taking up much of this room", which was false there). How
+              much they hold is the "Preset names" row above, in its own figure. */}
           {/* ★ ONLY WHAT IS TRUE FOR THE PRESET YOU ARE ON, RIGHT NOW. Reset Stats clears the stats
               on screen, and under Amnesic: Stats Only or Full those are the session's copy — the
               saved solve times, which are what is taking the room, are not touched (store/amnesic's
@@ -177,8 +183,8 @@ export default function StorageUsagePopup() {
           <ul className="space-y-1 list-disc ps-4">
             {warning && shorterNamesWouldEndWarning(rows, limit) && (
               <li>
-                Your preset names are taking up much of this room. <b>Shortening them</b> would be
-                enough on its own to end this warning (⚙ → Global → Manage Presets).
+                <b>Shortening your preset names</b> would be enough on its own to end this warning
+                (⚙ → Global → Manage Presets).
               </li>
             )}
             {resetStatsFreesRoom(amnesic) && (

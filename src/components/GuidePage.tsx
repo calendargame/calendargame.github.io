@@ -3369,10 +3369,10 @@ export default function GuidePage({
           preset you no longer use, and <b>Reset Stats</b> in a mode — that last one only while the
           preset&apos;s Amnesic is <b>Off</b>. Shortening your preset names is suggested there too,
           first in the list, but only when it would be enough on its own: the warning below is on,
-          and the names are long enough that shortening them alone would end it. Otherwise names are
-          not mentioned. On Stats Only or Full, Reset Stats clears that session&apos;s numbers and
-          leaves the saved solve times where they are, so it makes no room; the popup says so there
-          instead of offering it, and says what does (set Amnesic to Off first, then Reset Stats).
+          and shortening them alone would end it. Otherwise names are not mentioned. On Stats Only
+          or Full, Reset Stats clears that session&apos;s numbers and leaves the saved solve times
+          where they are, so it makes no room; the popup says so there instead of offering it, and
+          says what does (set Amnesic to Off first, then Reset Stats).
         </p>
         <p>
           How much room a device gives is something the app has to measure. It does that the first

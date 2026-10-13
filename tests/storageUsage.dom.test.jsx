@@ -44,6 +44,7 @@ import {
   SCRATCH_KEY,
 } from '../src/store/storageHealth.js'
 import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
+import { usePresets } from '../src/store/presets.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useSettings } from '../src/store/settings.js'
 import { useLookupHistory } from '../src/store/lookupHistory.js'
@@ -1398,7 +1399,7 @@ describe('on the mounted app', () => {
   })
 
   describe('preset names in the breakdown', () => {
-    const ADVICE = /Your preset names are taking up much of this room/
+    const ADVICE = /Shortening your preset names would be enough on its own to end this warning/
     // What each row of the breakdown SHOWS (not the words kept for a screen reader beside "<0.1%").
     const rowTexts = () =>
       within(popup())
@@ -1476,6 +1477,29 @@ describe('on the mounted app', () => {
       expect(advice().filter((li) => ADVICE.test(li.textContent))).toHaveLength(1)
       expect(advice().length).toBeGreaterThan(1)
       expect(advice().some((li) => /Clear History/.test(li.textContent))).toBe(true)
+    })
+
+    it('says only what is true in every state that shows it — two default names, ten characters over the line', () => {
+      // "Shortening them alone would end the warning" is true even here: the names are 16
+      // characters, 14 of which could go, and the device is 10 over the line. What is NOT true
+      // here is that the names are taking up much of the room — so the advice does not say so.
+      const line80 = (CHROMIUM * STORAGE_WARN_PERCENT) / 100
+      createPreset()
+      fill() // past the line
+      openBreakdown() // …so everything the app writes about a warning has landed
+      act(() => usage().closePopup())
+      const filler = FILLER.length + localStorage.getItem(FILLER).length
+      fill(filler + (line80 + 10 - everything()))
+      expect(everything()).toBe(line80 + 10)
+      act(() => usage().openPopup())
+      expect(everything()).toBe(line80 + 10) // nothing more was written by opening it
+      expect(usage().warning).toBe(true)
+      expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Preset 1', 'Preset 2'])
+      expect(advice()[0].textContent).toBe(
+        'Shortening your preset names would be enough on its own to end this warning (⚙ → Global → Manage Presets).',
+      )
+      expect(popup().textContent).not.toMatch(/taking up/)
+      expect(rowTexts()).toContain('Preset names<0.1%')
     })
 
     it('…to the character: one short of enough says nothing, enough says it', () => {
