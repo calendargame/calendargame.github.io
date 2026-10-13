@@ -14,6 +14,7 @@ import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { useRef } from 'react'
 import CustomSelect from '../src/components/CustomSelect.jsx'
 import { useLayer } from '../src/components/overlayStack.js'
+import { installResizeObserver } from './helpers/scrollGeometry.js'
 
 const OPTIONS = [
   { value: 'a', label: 'Alpha' },
@@ -507,6 +508,39 @@ describe('CustomSelect — width props', () => {
     // rightward. With the trigger's own width, that puts its left edge on the trigger's too.
     expect(panel().style.right).not.toBe('')
     expect(panel().style.left).toBe('')
+  })
+
+  // ★ AN OPEN LIST FOLLOWS ITS TRIGGER'S BOX. A rotation (or any change of the fluid root font)
+  // resizes the trigger in two steps: the window's `resize` event comes first, and the trigger
+  // only settles afterwards — the Mode pill beside a preset pill takes its new least width from a
+  // measurement of its own, and the preset pill fills what is left. The list was measured on the
+  // event, against a trigger that had not finished moving, and kept that width for as long as it
+  // stayed open (390×844 → 844×390: a 122px list under a 136px trigger). It watches the trigger's
+  // box itself now.
+  it('an open list follows its trigger`s box, whenever that settles — not just the window`s resize event', () => {
+    const ro = installResizeObserver() // BEFORE mount: the observer is built as the list opens
+    try {
+      let rect = TRIGGER_RECT
+      rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => rect)
+      const { container } = mountBare({ dropdownWidth: 'match-trigger' })
+      fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
+      expect(panel().style.width).toBe('220px')
+      const wrapper = container.firstElementChild
+      expect(ro.isObserved(wrapper)).toBe(true)
+      // The screen is turned. The event fires while the trigger is still its old size…
+      act(() => void window.dispatchEvent(new Event('resize')))
+      expect(panel().style.width).toBe('220px')
+      // …and then the trigger settles: narrower, and further left.
+      rect = { ...TRIGGER_RECT, left: 60, x: 60, right: 196.25, width: 136.25 }
+      act(() => ro.resize(wrapper))
+      expect(panel().style.width).toBe('136.25px')
+      expect(panel().style.right).toBe(`${document.documentElement.clientWidth - 196.25}px`)
+      // Closed, it stops watching.
+      fireEvent.keyDown(screen.getByRole('button', { name: /^Test,/ }), { key: 'Escape' })
+      expect(ro.isObserved(wrapper)).toBe(false)
+    } finally {
+      ro.restore()
+    }
   })
 
   // ONE ROW SHAPE, IN EVERY LIST (the owner's ruling: no special treatment for the preset list).

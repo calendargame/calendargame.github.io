@@ -305,9 +305,10 @@ export default function CustomSelect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerMatchesDropdown, options.map((o) => o.value).join(OPTION_VALUE_SEPARATOR)])
   // measurePanel reads the trigger's current viewport rect and writes panelPos: right edge
-  // aligned to the trigger, 6px below it, and the trigger's width. Called on open, on resize / visualViewport change, and
-  // when --bar-h moves the bar the trigger sits in — and on NOTHING else, in particular never on
-  // a scroll (see the effect below).
+  // aligned to the trigger, 6px below it, and the trigger's width. Called on open, on resize /
+  // visualViewport change, when --bar-h moves the bar the trigger sits in, and when the trigger's
+  // own box changes size — and on NOTHING else, in particular never on a scroll (see the effect
+  // below).
   // Plain function (no useCallback): it reads ref.current, which a manual dep array can't
   // track at ref.current granularity — useCallback here trips preserve-manual-memoization.
   // The React Compiler memoizes this automatically, so the effect below can list
@@ -340,7 +341,13 @@ export default function CustomSelect({
     // 400 scrolled, −1494px at 1500) and needed a reposition per scroll event, while the fixed one
     // holds its exact 6px gap at every offset with ZERO reposition calls — and app mode is
     // pixel-identical either way, since scrollY was always 0 there.
-    setPanelPos({ right, top: rect.bottom + 6, width: rect.width })
+    // (The same answer is the same object: a measurement that changed nothing renders nothing.)
+    const next = { right, top: rect.bottom + 6, width: rect.width }
+    setPanelPos((prev) =>
+      prev && prev.right === next.right && prev.top === next.top && prev.width === next.width
+        ? prev
+        : next,
+    )
   }
   // Toggle handler. On the way OPEN it measures where the panel goes — the one thing that can only
   // be decided at that instant. Measurement only happens on open (close is cheap).
@@ -482,6 +489,16 @@ export default function CustomSelect({
   // momentum is the jitter round 5 chased and round 11 deleted. The panel does not need it — it is
   // position:fixed under a trigger that lives in fixed chrome, so a moving page moves neither.
   //
+  // ★ AND THE TRIGGER'S OWN BOX IS WATCHED WHILE THE LIST IS OPEN, because none of those events is
+  // the moment the trigger has finished changing. A rotation — or anything that moves the fluid
+  // root font — resizes it in two steps: the window's `resize` comes first, and only afterwards
+  // does the Mode pill take its new least width (a measurement of its own, above) and the preset
+  // pill beside it fill what is left. Measured on the event, the list took the width of a trigger
+  // that had not settled and kept it until it was closed (390×844 → 844×390: a 122px list under a
+  // 136px trigger) — its rows then a different width from the hidden row gauge that says what a
+  // name has room for. A ResizeObserver reports the box when layout has it; the list is portaled
+  // and fixed, so nothing it does can change the trigger's size back, and there is no loop.
+  //
   // The three things that DO move the trigger, none of them a page scroll: window resize
   // (rotation); the visualViewport, whose own resize/scroll report iOS moving the VISUAL viewport
   // independently of the layout viewport a fixed element lives in (pinch-zoom pan, the URL bar
@@ -508,7 +525,12 @@ export default function CustomSelect({
       reposition()
     })
     barObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
+    const trigger = ref.current
+    const boxObserver =
+      trigger && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(reposition) : null
+    if (trigger) boxObserver?.observe(trigger)
     return () => {
+      boxObserver?.disconnect()
       window.removeEventListener('resize', reposition)
       if (vv) {
         vv.removeEventListener('resize', reposition)
