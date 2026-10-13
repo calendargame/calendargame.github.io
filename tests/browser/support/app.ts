@@ -261,7 +261,7 @@ export async function openPresetManager(page: Page): Promise<Locator> {
 export function statsBlock(page: Page) {
   const strip = page.locator('.panel:visible', { has: page.locator('[data-statval]') })
   const group = strip.locator('xpath=..')
-  const bests = group.locator('xpath=./div[2]')
+  const bests = group.locator(':scope > :nth-child(2)')
   return { strip, group, bests }
 }
 
