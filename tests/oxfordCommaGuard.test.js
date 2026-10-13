@@ -344,7 +344,7 @@ const NOT_A_LIST = [
     why: 'the comma opens “matching the text in …”; “the ⚙ menu and popups” is the pair that text is in',
   },
   {
-    file: 'src/changelog.ts',
+    file: 'CHANGELOG-ARCHIVE.md',
     phrase:
       'pressing Esc in the AoX run-length box now throws the typing away too, on the AoX screen and inside the Save Defaults box alike',
     why: 'the comma sets off where it happens; “on the AoX screen and inside the Save Defaults box” is a pair of places',

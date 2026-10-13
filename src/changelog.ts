@@ -100,6 +100,30 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-12',
+    items: [
+      'Preset names can now be any length, and nothing you type is turned away. Where a name is too long for its spot it ends in “…”, and Manage Presets tells you at the exact letter where that starts.',
+      'On a narrow screen, a preset still called “Preset 1” is shown as “P1” so that it fits, and it goes back to its full name wherever there is room. Only what is shown changes.',
+      'The preset list at the top of the screen is the same width as its button again, and every drop-down list draws its rows the same way. On a very narrow screen the list is a little wider than its button, so that no row is left blank.',
+      'Fades at the edge of a scrolling area are now half as deep. Every shadow in the app now comes from one small set, in each theme’s own colour, and the answer buttons no longer have one.',
+      'When Amnesic is on Full the stats strip and the Best line in MoX and Blitz now share a single dashed outline. There used to be two. The Best line is set in a little from the edge to make room.',
+      '“Storage used” now shows one decimal place. It reads “<0.1%” when something is stored but too little to show a digit, which a screen reader says as “under 0.1%”. Its breakdown has a new “Preset names” line.',
+      'In MoX and Blitz, the tag beside your bests no longer drops onto a line of its own. Where the screen is too narrow for it, it is left out.',
+      'In How to Play, the fade under the top bar now goes away while an open section’s title is pinned there, and it comes and goes smoothly as sections open, close, and swap. A title sitting above the top bar now glides into place.',
+      'With the ⚙ menu open, Shift+Tab now reaches the ⚙ button, the mode list, and the preset list, so both lists can be opened from the keyboard.',
+      'Lists of three or more things now carry a comma before the final “and” or “or”, throughout the app, How to Play, and this changelog.',
+      'A preset name with nothing in it that can be seen now counts as blank, and goes back to the preset’s default name.',
+      'If a device has no room to save a new preset name, the name is left as it was and a note under it says so.',
+      'A few small notes in ⚙ Settings now scale with the rest of the text on small screens and on large ones. So do the small lines under your MoX bests.',
+      'Fixed: the keyboard ring on the stats strip now follows its round corners.',
+      'Fixed: in How to Play on a slow device, the page could drift out of step with a long section closing above the one you opened.',
+      'Fixed: on a computer, a drop-down list long enough to scroll no longer loses room for its names to the scrollbar.',
+      'Fixed: a drop-down list left open while the screen turned could keep its old width.',
+      'Fixed: after the screen turned, the shadow at the edge of a scrolling area could fade in over the wrong distance.',
+      'Fixed: an emoji at the end of a long preset name could be cut in half.',
+    ],
+  },
+  {
     date: '2026-10-06',
     items: [
       'Amnesic, in ⚙ Settings → Stats, now has three choices: Off, Stats Only, and Full. Full is what Amnesic always was. On Stats Only your Blitz and MoX bests are your real saved ones and a new best is kept for good, while everything in the stats strip is for the session only and Lookup history saves as normal.',
@@ -245,28 +269,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       'This list now shows a version number in its top right corner, next to "What\'s new" — useful if you are ever asked which copy of the app you have.',
       'The dot beside Changelog now appears only when this list has actually gained something, so it never sends you to news you have already read. The dot on the gear still marks every update.',
       'How to Play now explains that a brand-new version can take up to about ten minutes to reach everywhere, so Check for updates can still answer "Up to date" just after one is released — asking again a little later finds it.',
-    ],
-  },
-  // ⚠ THIS ENTRY WAS REWRITTEN BY THE SECOND DEPLOY OF 2026-08-09, under the charter's same-day
-  // rule: one entry per Pacific day, restating that day's NET effect versus yesterday's build. The
-  // first deploy shipped "Reset Settings and Full Reset now wait until you leave the year box"; the
-  // second reversed exactly that on the owner's call, so the line describing it is GONE rather than
-  // followed by its own contradiction. Everything else it shipped is still true and is untouched,
-  // in its original order, with the day's new lines placed around it.
-  {
-    date: '2026-08-09',
-    items: [
-      'Stats you have hidden by tapping them now leave an empty box instead of a crossed-out one. A dash now means one thing only — nothing recorded yet — and when Save Stats is off the whole strip dims together, so you can still see at a glance which stats you hid yourself. Nothing is crossed out anywhere any more.',
-      'How to Play has a new Accessibility section: what the app does for screen readers, keyboards, and reduced-motion settings — and, said plainly, where it still falls short.',
-      'With Reduce Motion turned on, a few animations that used to play anyway now hold still as well: the dots on the Updating screen, and the colour fades on buttons.',
-      'Typing in a Year Range box now counts as a change straight away, for everything the Settings menu does about it: the violet bar under the ⚙ button, Save Defaults, Reset Settings, and Full Reset all react to the typing instead of waiting for you to leave the box. Dates still come from the stored range until the year counts.',
-      'The three buttons at the foot of the Settings menu now tell a screen reader when they are unavailable, instead of only looking grey — and on a computer the pointer shows the not-allowed cursor over them.',
-      'Fixed: in Lookup, tapping a row in the History list now shows you which row you tapped. The row is tinted and gets a coloured edge down its left side. Tapping always did put that date back in the box above, but nothing on screen changed to say which one you had picked. On a computer, resting the pointer on a row now lights it up too, on every colour theme.',
-      'Fixed: pressing Esc in a Year Range box now throws away what you typed and puts the stored year back. It used to do the opposite and keep the year you were trying to discard.',
-      'Fixed: pressing Esc in a Year Range box no longer closes the whole Settings menu with it. It just leaves the box, and pressing Esc again closes the menu.',
-      'Fixed: pressing Esc in the AoX run-length box now throws the typing away too, on the AoX screen and inside the Save Defaults box alike.',
-      'Fixed: pressing Esc in the Lookup date box now throws away what you typed and puts back what was there before. That was the last box in the app without it, so Esc means the same thing everywhere now: throw this away and leave the box. Enter still means keep it and leave.',
-      'Fixed: the three buttons at the foot of the Settings menu now do nothing at all while they are dimmed. Save Defaults could previously be opened with a keyboard when there was nothing to save.',
     ],
   },
 ]

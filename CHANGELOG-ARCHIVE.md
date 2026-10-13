@@ -14,6 +14,20 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 
 ## Retired entries
 
+### 2026-08-09
+
+- Stats you have hidden by tapping them now leave an empty box instead of a crossed-out one. A dash now means one thing only — nothing recorded yet — and when Save Stats is off the whole strip dims together, so you can still see at a glance which stats you hid yourself. Nothing is crossed out anywhere any more.
+- How to Play has a new Accessibility section: what the app does for screen readers, keyboards, and reduced-motion settings — and, said plainly, where it still falls short.
+- With Reduce Motion turned on, a few animations that used to play anyway now hold still as well: the dots on the Updating screen, and the colour fades on buttons.
+- Typing in a Year Range box now counts as a change straight away, for everything the Settings menu does about it: the violet bar under the ⚙ button, Save Defaults, Reset Settings, and Full Reset all react to the typing instead of waiting for you to leave the box. Dates still come from the stored range until the year counts.
+- The three buttons at the foot of the Settings menu now tell a screen reader when they are unavailable, instead of only looking grey — and on a computer the pointer shows the not-allowed cursor over them.
+- Fixed: in Lookup, tapping a row in the History list now shows you which row you tapped. The row is tinted and gets a coloured edge down its left side. Tapping always did put that date back in the box above, but nothing on screen changed to say which one you had picked. On a computer, resting the pointer on a row now lights it up too, on every colour theme.
+- Fixed: pressing Esc in a Year Range box now throws away what you typed and puts the stored year back. It used to do the opposite and keep the year you were trying to discard.
+- Fixed: pressing Esc in a Year Range box no longer closes the whole Settings menu with it. It just leaves the box, and pressing Esc again closes the menu.
+- Fixed: pressing Esc in the AoX run-length box now throws the typing away too, on the AoX screen and inside the Save Defaults box alike.
+- Fixed: pressing Esc in the Lookup date box now throws away what you typed and puts back what was there before. That was the last box in the app without it, so Esc means the same thing everywhere now: throw this away and leave the box. Enter still means keep it and leave.
+- Fixed: the three buttons at the foot of the Settings menu now do nothing at all while they are dimmed. Save Defaults could previously be opened with a keyboard when there was nothing to save.
+
 ### 2026-08-08
 
 - How to Play now scrolls inside its own panel, the same way every other page in the app already did. Two things change with it: tapping the status bar no longer jumps the guide to the top, and dragging on the top bar itself no longer scrolls it.
