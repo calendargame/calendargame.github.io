@@ -37,6 +37,7 @@ import {
   isPresetFactory,
 } from '../src/store/presetControl.js'
 import { useStorageHealth, isHolding } from '../src/store/storageHealth.js'
+import { installNameRooms, PX_PER_CHARACTER } from './helpers/nameRooms.js'
 import {
   useStorageUsage,
   watchStorageUsage,
@@ -216,41 +217,210 @@ describe('a full device (one shared allowance)', () => {
       expect(JSON.parse(localStorage.getItem(REGISTRY)).state.presets[1].name).toBe('M')
     })
 
-    it('in Manage Presets: the box goes back to the saved name, and the row says why — once, politely', () => {
-      settle()
-      mountApp()
-      openSettings()
-      openModal('presets')
-      const card = () => modalCard('presets')
-      const boxes = () => within(card()).getAllByRole('textbox', { name: 'Preset name' })
+    // ★ "…AND SAYS SO" HAS TO BE TRUE ON EVERY WAY OF LEAVING THE BOX. The rename is attempted when
+    // the box loses the keyboard, whatever took it — and the first build of the note was cleared
+    // again by the very tap that had caused it (another row's box), or went down with the card (a
+    // tap on the dim). So: the note stays under its row until the player next TYPES in a name box,
+    // and a tap outside the card that has just had a name refused does not also close the card.
+    describe('in Manage Presets, the row says why — whichever way the box was left', () => {
       const NOTE = 'This device has no room to save that name, so it was not changed.'
-      const region = () => card().querySelector('[aria-live]')
-      const before = localStorage.getItem(REGISTRY)
-      act(() => boxes()[0].focus())
-      act(() => fireEvent.change(boxes()[0], { target: { value: BOOK } }))
-      expect(boxes()[0].value).toBe(BOOK) // typing it is never refused
-      act(() => fireEvent.keyDown(boxes()[0], { key: 'Enter' }))
-      // Saving it is: the box shows what IS saved, under it the reason, and nothing was written.
-      expect(boxes()[0].value).toBe('Mornings')
-      expect(localStorage.getItem(REGISTRY)).toBe(before)
-      const note = within(boxes()[0].parentElement).getByText(NOTE)
-      expect(note.getAttribute('aria-hidden')).toBe('true')
-      expect(region().textContent).toBe(NOTE)
-      expect(region().getAttribute('aria-live')).toBe('polite')
-      expect(within(boxes()[1].parentElement).queryByText(NOTE)).toBeNull()
-      // No storage-full notice: nothing is unsaved.
-      expect(screen.queryByText(/out of room for Calendar Game/)).toBeNull()
-      expect(useStorageHealth.getState().noticeOpen).toBe(false)
-      // It stays while the player reads it, and goes when a name box is next entered.
-      expect(within(card()).queryAllByText(NOTE, { ignore: '[aria-live]' })).toHaveLength(1)
-      act(() => boxes()[1].focus())
-      expect(within(card()).queryByText(NOTE, { ignore: '[aria-live]' })).toBeNull()
-      expect(region().textContent).toBe('')
-      // …and a name that fits is taken as usual, with no note.
-      act(() => fireEvent.change(boxes()[1], { target: { value: 'Sprints' } }))
-      act(() => fireEvent.keyDown(boxes()[1], { key: 'Enter' }))
-      expect(usePresets.getState().presets[1].name).toBe('Sprints')
-      expect(region().textContent).toBe('')
+      const card = () => modalCard('presets')
+      const queryCard = () => screen.queryByRole('dialog', { name: 'Presets' })
+      const boxes = () => within(card()).getAllByRole('textbox', { name: 'Preset name' })
+      const rowOf = (i) => boxes()[i].parentElement
+      const notes = () => within(card()).queryAllByText(NOTE, { ignore: '[aria-live] *' })
+      const said = () => card().querySelector('[aria-live]').textContent
+      const scrim = () => card().closest('[data-settings-modal]')
+      let before
+      // Manage Presets open on "Mornings" and "Timed", the keyboard in row `i`, a book typed there.
+      const typeABook = (i = 1) => {
+        settle()
+        mountApp()
+        openSettings()
+        openModal('presets')
+        before = localStorage.getItem(REGISTRY)
+        act(() => boxes()[i].focus())
+        act(() => fireEvent.change(boxes()[i], { target: { value: BOOK } }))
+        expect(boxes()[i].value).toBe(BOOK) // typing it is never refused
+      }
+      // The refusal, as every route must leave it: nothing written, the box back to the saved
+      // name, ONE note under that row and no other, and the words in the live region.
+      const expectRefused = (i = 1) => {
+        expect(localStorage.getItem(REGISTRY)).toBe(before)
+        expect(boxes().map((b) => b.value)).toEqual(['Mornings', 'Timed'])
+        expect(notes()).toHaveLength(1)
+        expect(within(rowOf(i)).getByText(NOTE).getAttribute('aria-hidden')).toBe('true')
+        expect(said()).toBe(NOTE)
+        expect(useStorageHealth.getState()).toMatchObject({ unsaved: false, noticeOpen: false })
+      }
+      // A real tap: the press, the keyboard leaving the box for whatever was pressed, the click.
+      const tapOn = (el) =>
+        act(() => {
+          fireEvent.pointerDown(el)
+          if (el.tabIndex >= 0) el.focus()
+          else document.activeElement?.blur()
+          fireEvent.click(el)
+        })
+
+      it('Enter', () => {
+        typeABook()
+        act(() => fireEvent.keyDown(boxes()[1], { key: 'Enter' }))
+        expectRefused()
+        expect(card().querySelector('[aria-live]').getAttribute('aria-live')).toBe('polite')
+        expect(screen.queryByText(/out of room for Calendar Game/)).toBeNull()
+      })
+
+      it('Enter attempts the save ONCE — not once for the key and again for the blur it causes', () => {
+        typeABook()
+        const attempts = () =>
+          Storage.prototype.setItem.mock.calls.filter(([key]) => key === REGISTRY).length
+        const already = attempts()
+        act(() => fireEvent.keyDown(boxes()[1], { key: 'Enter' }))
+        expect(attempts() - already).toBe(1)
+        expect(document.activeElement).not.toBe(boxes()[1]) // …and Enter still leaves the box
+        expectRefused()
+      })
+
+      it('Tab, to the row`s own grip', () => {
+        typeABook()
+        act(() =>
+          within(rowOf(1))
+            .getByRole('button', { name: /^Reorder / })
+            .focus(),
+        )
+        expectRefused()
+      })
+
+      it('tapping ANOTHER row`s name box — the note is not wiped by the box that took the keyboard', () => {
+        typeABook()
+        tapOn(boxes()[0])
+        expect(document.activeElement).toBe(boxes()[0])
+        expectRefused()
+        // It is still there after the frame that drew it, and while the other box is merely held.
+        act(() => fireEvent.focusIn(boxes()[0]))
+        expectRefused()
+      })
+
+      it('tapping a grip, a ✕, or New Preset', () => {
+        typeABook()
+        tapOn(within(rowOf(0)).getByRole('button', { name: /^Reorder / }))
+        expectRefused()
+        cleanup()
+        document.getElementById('root')?.remove()
+        resetAppState()
+        cap = Infinity
+
+        typeABook()
+        tapOn(within(card()).getByRole('button', { name: 'New Preset' }))
+        expect(boxes().map((b) => b.value)).toEqual(['Mornings', 'Timed', 'Preset 3'])
+        expect(within(rowOf(1)).getByText(NOTE)).toBeTruthy()
+        expect(notes()).toHaveLength(1)
+        expect(said()).toBe(NOTE)
+        // The ✕ of the row itself: the preset goes (it holds nothing, so there is no question), and
+        // its note goes with it — it does not move to another row, and nothing is left being said.
+        tapOn(within(rowOf(1)).getByRole('button', { name: 'Delete Timed' }))
+        expect(boxes().map((b) => b.value)).toEqual(['Mornings', 'Preset 3'])
+        expect(notes()).toHaveLength(0)
+        expect(said()).toBe('')
+      })
+
+      it('a tap on the dim: the card STAYS, with the note — and the next tap closes it', () => {
+        typeABook()
+        tapOn(scrim())
+        expect(queryCard()).not.toBeNull()
+        expectRefused()
+        tapOn(scrim())
+        expect(queryCard()).toBeNull()
+        expect(localStorage.getItem(REGISTRY)).toBe(before)
+      })
+
+      it('…also on a browser that leaves the keyboard in the box when the dim is tapped', () => {
+        typeABook()
+        act(() => {
+          fireEvent.pointerDown(scrim())
+          fireEvent.click(scrim()) // no blur came with the press
+        })
+        expect(queryCard()).not.toBeNull()
+        expectRefused()
+      })
+
+      it('a tap on the dim with a name that DOES save closes the card at once, name kept', () => {
+        typeABook()
+        act(() => fireEvent.change(boxes()[1], { target: { value: 'Sprints' } }))
+        tapOn(scrim())
+        expect(queryCard()).toBeNull()
+        expect(usePresets.getState().presets[1].name).toBe('Sprints')
+      })
+
+      it('a refusal does not make a LATER, unrelated tap on the dim miss', () => {
+        typeABook()
+        act(() => fireEvent.keyDown(boxes()[1], { key: 'Enter' }))
+        expectRefused()
+        tapOn(scrim())
+        expect(queryCard()).toBeNull()
+      })
+
+      it('the app going to the background, and coming back to the same box', () => {
+        typeABook()
+        act(() => fireEvent.blur(boxes()[1])) // the window lost the keyboard
+        expectRefused()
+        act(() => fireEvent.focusIn(boxes()[1])) // …and has it again, on the box it left
+        expectRefused()
+      })
+
+      it('Escape is a discard, not an attempt: nothing is refused, so nothing is said', () => {
+        typeABook()
+        act(() => fireEvent.keyDown(boxes()[1], { key: 'Escape' }))
+        expect(boxes().map((b) => b.value)).toEqual(['Mornings', 'Timed'])
+        expect(notes()).toHaveLength(0)
+        expect(said()).toBe('')
+        expect(
+          Storage.prototype.setItem.mock.calls.filter(([key]) => key === REGISTRY),
+        ).toHaveLength(
+          3, // the three saves `settle` made, and none since
+        )
+      })
+
+      it('it is said once: the words stay one element while it shows, whatever else is drawn', () => {
+        typeABook()
+        act(() => fireEvent.keyDown(boxes()[1], { key: 'Enter' }))
+        const words = [...card().querySelector('[aria-live]').children].find(
+          (el) => el.textContent === NOTE,
+        )
+        expect(words).toBeTruthy()
+        tapOn(boxes()[0])
+        tapOn(within(card()).getByRole('button', { name: 'New Preset' }))
+        expect(words.isConnected).toBe(true)
+        expect(said()).toBe(NOTE)
+      })
+
+      it('it goes when the player next TYPES in a name box, and a name that fits is then taken', () => {
+        typeABook()
+        tapOn(boxes()[0])
+        expectRefused()
+        act(() => fireEvent.change(boxes()[0], { target: { value: 'Morning' } }))
+        expect(notes()).toHaveLength(0)
+        expect(said()).toBe('')
+        act(() => fireEvent.keyDown(boxes()[0], { key: 'Enter' }))
+        expect(usePresets.getState().presets[0].name).toBe('Morning')
+        expect(notes()).toHaveLength(0)
+      })
+
+      it('beside the "cut short" note: each is its own line under its own row, and said by itself', () => {
+        typeABook()
+        const cells = installNameRooms(5 * PX_PER_CHARACTER) // "Mornings" is eight: too long
+        try {
+          tapOn(boxes()[0])
+          const CUT = 'Some places will show this name cut short.'
+          expect(within(rowOf(1)).getByText(NOTE)).toBeTruthy()
+          expect(within(rowOf(0)).getByText(CUT)).toBeTruthy()
+          expect(
+            [...card().querySelector('[aria-live]').children].map((el) => el.textContent),
+          ).toEqual([NOTE, CUT])
+        } finally {
+          cells.restore()
+        }
+      })
     })
   })
 

@@ -337,7 +337,7 @@ describe('renaming', () => {
   // The note, as it is on screen (the visible copy — a screen reader is given the same words through
   // the card's live region, below).
   const NOTE = 'Some places will show this name cut short.'
-  const cutNote = () => within(card()).queryByText(NOTE, { ignore: '[aria-live]' })
+  const cutNote = () => within(card()).queryByText(NOTE, { ignore: '[aria-live] *' })
   const announced = () => card().querySelector('[aria-live]').textContent
   // Room for exactly ten characters in the narrowest place a name is shown.
   const TEN = 10 * PX_PER_CHARACTER
@@ -837,7 +837,7 @@ describe('reordering', () => {
         fireEvent.change(box, { target: { value: 'Weekend' } })
       })
       const note = within(rowOf('Weekend')).getByText('Some places will show this name cut short.')
-      expect(note.className).toMatch(/col-start-2/)
+      expect(note.parentElement.className).toMatch(/col-start-2/) // the notes' own cell
     })
   })
 
@@ -926,7 +926,7 @@ describe('reordering', () => {
       })
       expect(
         within(card()).getByText('Some places will show this name cut short.', {
-          ignore: '[aria-live]',
+          ignore: '[aria-live] *',
         }),
       ).toBeTruthy()
       expect(list().scrollTop).toBe(18)

@@ -116,10 +116,23 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // ★ A NAME TOO BIG FOR THE DEVICE TO SAVE IS NOT SAVED, AND THE ROW SAYS SO. With no limit on a
 // name, a pasted book can be more than the device has room for. store/presetControl's renamePreset
 // refuses that rename whole — nothing half-written, the stored name untouched — and the field goes
-// back to the name that IS saved, with a second note in the same spot ("This device has no room to
-// save that name, so it was not changed."), said through the same live region. It stays until a
-// name box is next entered. (Why it is refused rather than held like other saves the device turns
-// down: store/presets' applyRegistryIfRoom.)
+// back to the name that IS saved, with a second note under it ("This device has no room to save
+// that name, so it was not changed."), said through the same live region. (Why it is refused
+// rather than held like other saves the device turns down: store/presets' applyRegistryIfRoom.)
+// ★ …ON EVERY WAY OF LEAVING THE BOX, AND IN ONE PLACE: UNDER THE ROW. A rename is attempted when
+// the box loses the keyboard, whatever took it (ONE attempt per edit — Enter only leaves the box),
+// so the note has to survive whatever that was:
+//   • it is NOT cleared by a box being entered — the tap that takes the keyboard to another row's
+//     box is the very thing that caused it. It goes when the player next TYPES in a name box (they
+//     have moved on), when its row is deleted, and with the card;
+//   • A TAP ON THE DIM THAT HAS JUST HAD A NAME REFUSED DOES NOT ALSO CLOSE THE CARD. It would
+//     take the note down with it before it was drawn. The tap is spent on the news — the card
+//     stays, the note is under its row — and the next tap closes the card as usual. It is the
+//     card's own ladder again (the delete question, the first Escape in a name box): a dismiss
+//     that has something to answer for first answers for it. That is why there is no second
+//     surface for this message: the card never goes while it is unseen.
+//   • Escape in the box, and Back or a shortcut closing the card under it, are DISCARDS: nothing is
+//     attempted, so there is nothing to refuse and nothing to say.
 //
 // ★★ MOVING IS A DEDICATED DRAG HANDLE, AS OF ROUND 20 — REPLACING THE ↑/↓ PAIR THIS COMMENT
 // USED TO ARGUE AGAINST A DRAG FOR. The owner's call, made explicit rather than re-litigated here:
@@ -411,19 +424,18 @@ export default function PresetManager({
       ? editing.id
       : null
 
-  // ★ THE ROW WHOSE LAST RENAME THE DEVICE HAD NO ROOM TO SAVE (the ★ note above this component).
-  // Set by the commit that was refused, cleared when a name box is next entered. Unlike the note
-  // above it IS remembered — it is about something that happened, not about the text in the box,
-  // which has already gone back to the saved name.
-  const [noRoomRowId, setNoRoomRowId] = useState<number | null>(null)
-  // The one note a row can be showing, and for which row.
-  const noted =
-    cutRowId !== null
-      ? { id: cutRowId, text: CUT_SHORT_NOTE }
-      : noRoomRowId !== null
-        ? { id: noRoomRowId, text: NO_ROOM_NOTE }
-        : null
-  const notedRowId = noted?.id ?? null
+  // ★ THE ROW WHOSE LAST RENAME THE DEVICE HAD NO ROOM TO SAVE (the ★ notes above this component).
+  // Set by the attempt that was refused; cleared by the next keystroke in any name box. Unlike the
+  // note above it IS remembered — it is about something that happened, not about the text in the
+  // box, which has already gone back to the saved name. A row that has since been deleted has no
+  // note to show, so the id is only ever read through the list.
+  const [refusedRenameId, setRefusedRenameId] = useState<number | null>(null)
+  const noRoomRowId = presets.some((p) => p.id === refusedRenameId) ? refusedRenameId : null
+  // ★ A NAME WAS REFUSED BY THE TAP NOW IN PROGRESS — what stops that same tap, if it is on the
+  // dim, from closing the card over the note (the scrim listener below reads it and spends it).
+  // Dropped at every press, which comes before the keyboard leaves the box, so it can only ever
+  // be about the press that is still going on.
+  const refusedByThisTap = useRef(false)
 
   // The delete confirmation's subject, resolved from the id the caller holds. An ID and not the
   // preset object: the registry can be rewritten under this card (another row renamed, one moved),
@@ -445,6 +457,40 @@ export default function PresetManager({
   useEffect(() => {
     cardRef.current?.focus()
   }, [pendingDeleteId])
+  // ★ THE TAP ON THE DIM, HEARD BEFORE THE POPUP SHELL HEARS IT (the ★ "on every way of leaving the
+  // box" note above this component). The shell closes the card on a click on its dim
+  // (components/Popup); this listens on the same element in the capture phase, so it runs first:
+  //   1. a name box that still has the keyboard gives it up here. Most browsers have already
+  //      taken it away at the press; one that leaves it in the box when something that is not a
+  //      control is tapped has not, and the edit must be attempted before the card can go;
+  //   2. if that attempt — here or at the press — was refused, the click goes no further. The
+  //      shell never sees it, the card stays, and the note is under its row.
+  // Native listeners, because the click has to be stopped on its way DOWN to the dim, and React
+  // hears every event from the root. Only this card's own dismiss-by-tap is touched: Escape and
+  // Back do not come this way.
+  useEffect(() => {
+    const scrim = cardRef.current?.closest('[data-settings-modal]')
+    if (!scrim) return
+    const outsideCard = (e: Event) =>
+      !(e.target instanceof Node && cardRef.current?.contains(e.target))
+    const onPress = () => {
+      refusedByThisTap.current = false
+    }
+    const onClick = (e: Event) => {
+      if (!outsideCard(e)) return
+      const box = document.activeElement
+      if (box instanceof HTMLInputElement && cardRef.current?.contains(box)) box.blur()
+      if (!refusedByThisTap.current) return
+      refusedByThisTap.current = false
+      e.stopPropagation()
+    }
+    scrim.addEventListener('pointerdown', onPress, true)
+    scrim.addEventListener('click', onClick, true)
+    return () => {
+      scrim.removeEventListener('pointerdown', onPress, true)
+      scrim.removeEventListener('click', onClick, true)
+    }
+  }, [])
   // The list's scroll region, on the app's shared recipe (components/scrollRegion) — the same
   // treatment the Changelog popup's list wears, for the same reason: a bare max-height clips with
   // nothing to say that anything scrolls, which is worse than the overflow it hides. `active` is
@@ -490,23 +536,33 @@ export default function PresetManager({
     const top = rect.top - list.getBoundingClientRect().top - list.clientTop + list.scrollTop
     scrollBandIntoView(list, top, rect.height)
   }
-  // The row a note has just appeared under. A layout effect: the scroll lands in the frame that
+  // A row a note has just appeared under. A layout effect: the scroll lands in the frame that
   // draws the note.
   useLayoutEffect(() => {
-    if (notedRowId !== null) revealRow(notedRowId)
-  }, [notedRowId])
+    if (cutRowId !== null) revealRow(cutRowId)
+  }, [cutRowId])
+  useLayoutEffect(() => {
+    if (noRoomRowId !== null) revealRow(noRoomRowId)
+  }, [noRoomRowId])
   // ── Renaming ────────────────────────────────────────────────────────────────────────────────
 
-  // Commit whatever is pending. store/presetControl's renamePreset normalizes (outer spaces
-  // trimmed, and an empty or whitespace-only name falls back to "Preset N"), so this deliberately
-  // does NOT pre-screen the text: one place decides what a name may be, and it is the store's.
+  // Attempt the rename that is pending. store/presetControl's renamePreset normalizes (outer spaces
+  // trimmed, and a name that is empty or has nothing visible in it falls back to "Preset N"), so
+  // this deliberately does NOT pre-screen the text: one place decides what a name may be, and it
+  // is the store's.
+  // ★ ITS ONE CALLER IS THE BOX LOSING THE KEYBOARD (onBlur), so an edit is attempted exactly once,
+  // whatever ended it: a tap elsewhere, Tab, the window going away — and Enter, which does nothing
+  // but leave the box. (Enter used to attempt it itself and THEN leave, and the blur attempted it
+  // a second time with the text it still remembered: a refused book was tried twice.)
   // ⚠ A RENAME THE DEVICE HAS NO ROOM TO SAVE DID NOT HAPPEN: the pending text is dropped like any
   // other finished edit, so the box shows the name that is saved, and the row says why.
   const commitRename = () => {
     if (!editing) return
     const outcome = renamePreset(editing.id, editing.text)
     setEditing(null)
-    setNoRoomRowId(outcome === 'no-room' ? editing.id : null)
+    if (outcome !== 'no-room') return
+    setRefusedRenameId(editing.id)
+    refusedByThisTap.current = true
   }
 
   // ⚠ THE ESCAPE DISCARD MUST BE FLUSHED BEFORE THE BLUR, and this is the ⚙ Year Range boxes' bug
@@ -1025,10 +1081,14 @@ export default function PresetManager({
                       // throw away a half-typed name. iOS does it every time you switch away and back,
                       // which is the likeliest way anyone would ever meet it.
                       if (editing?.id !== p.id) setEditing({ id: p.id, text: p.name })
-                      // A new edit begins: what the last one could not save has been said.
-                      setNoRoomRowId(null)
                     }}
-                    onChange={(e) => setEditing({ id: p.id, text: e.target.value })}
+                    onChange={(e) => {
+                      setEditing({ id: p.id, text: e.target.value })
+                      // The player is typing a name again: what the last attempt could not save has
+                      // been said. (Not on FOCUS — the box that takes the keyboard is what caused
+                      // the attempt, and would wipe the note before it was drawn.)
+                      setRefusedRenameId(null)
+                    }}
                     onBlur={commitRename}
                     onKeyDown={(e) => {
                       // A key pressed while an input method is composing belongs to the input method:
@@ -1037,8 +1097,8 @@ export default function PresetManager({
                       // composition before it reports the key.)
                       if (e.nativeEvent.isComposing || e.keyCode === 229) return
                       if (e.key === 'Enter') {
+                        // Leaving the box is what keeps the name (commitRename's one caller).
                         e.preventDefault()
-                        commitRename()
                         e.currentTarget.blur()
                       } else if (e.key === 'Escape') {
                         discardRename(e.currentTarget)
@@ -1112,19 +1172,18 @@ export default function PresetManager({
                   >
                     <DeleteIcon />
                   </button>
-                  {/* THE ROW'S NOTE (the ★ notes above this component) — "cut short", for the row
-                being typed into while its text would be shown cut short somewhere; or "not saved",
-                for the row whose rename the device had no room for. It takes the grid's second
-                row, starting under the name box (column 2) and running to the row's end. Same
-                visual tier as the "cannot be deleted" note below: a small fact about what the app
-                is doing with this row. aria-hidden: a screen reader is told through the card's
-                live region, once, and would otherwise meet the words twice. */}
-                  {noted?.id === p.id && (
-                    <div
-                      aria-hidden="true"
-                      className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[0.6875rem] text-(--tx-300-60)"
-                    >
-                      {noted.text}
+                  {/* THE ROW'S NOTES (the ★ notes above this component) — "not saved", for the row
+                whose rename the device had no room for; and "cut short", for the row being typed
+                into while its text would be shown cut short somewhere. Each is its own line (a row
+                can have both: its box entered again, holding a saved name that is too long). They
+                take the grid's second row, starting under the name box (column 2) and running to
+                the row's end. Same visual tier as the "cannot be deleted" note below: a small fact
+                about what the app is doing with this row. aria-hidden: a screen reader is told
+                through the card's live region, once, and would otherwise meet the words twice. */}
+                  {(noRoomRowId === p.id || cutRowId === p.id) && (
+                    <div className="col-start-2 col-span-4 row-start-2 pl-1 pt-1 text-[0.6875rem] text-(--tx-300-60)">
+                      {noRoomRowId === p.id && <div aria-hidden="true">{NO_ROOM_NOTE}</div>}
+                      {cutRowId === p.id && <div aria-hidden="true">{CUT_SHORT_NOTE}</div>}
                     </div>
                   )}
                 </div>
@@ -1133,11 +1192,13 @@ export default function PresetManager({
           })}
         </div>
       </div>
-      {/* THE CARD'S LIVE REGION — always here, so that its text CHANGING is what a screen reader
-          hears: the note's words the moment the note appears, and nothing while it stays. Polite:
-          it waits for whatever is being read (the letter just typed) to finish. */}
+      {/* THE CARD'S LIVE REGION — always here, so that what is ADDED to it is what a screen reader
+          hears: a note's words the moment that note appears, and nothing while it stays. Each note
+          is its own element, so one arriving beside the other is said by itself. Polite: it waits
+          for whatever is being read (the letter just typed) to finish. */}
       <div aria-live="polite" className="sr-only">
-        {noted?.text}
+        {noRoomRowId !== null && <p>{NO_ROOM_NOTE}</p>}
+        {cutRowId !== null && <p>{CUT_SHORT_NOTE}</p>}
       </div>
       {/* The reason behind the dimmed ✕, shown only while it is dimmed. A withheld control states
           THAT it is unavailable; nothing about it can state WHY, and "the last one won't delete" is

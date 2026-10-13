@@ -1758,7 +1758,11 @@ export default function GuidePage({
             Leave a name blank and it goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and
             so on. If the device has no room left to save a name, it is not changed: the box goes
             back to the name it had, and a note under it says &quot;This device has no room to save
-            that name, so it was not changed.&quot;
+            that name, so it was not changed.&quot; That is so however you left the box — Enter,
+            Tab, a tap on another row, the app going to the background. The note stays under its row
+            until you next type in a name box. If what you tapped was the dimmed area outside the
+            popup, that tap shows you the note instead of closing the popup; tap there again to
+            close it.
           </li>
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to
