@@ -38,6 +38,7 @@ import { SCROLLER_CORE_CLASS, scrollFadeClass, scrollEdgeGaps, isAtBottom, isScr
 import { installPointerGestures } from './lib/pointerGestures.js'
 import { installSelectAllOnEntry } from './lib/textEntry.js'
 import { installKeyboardFocus, shortcutActed } from './lib/keyboardFocus.js'
+import { installWindowSync } from './store/windowSync.js'
 import { installTabLanding } from './lib/barLine.js'
 import { scrollBoxTo, scrollWindowHome } from './lib/appScroll.js'
 import { readBuildStamp, writeBuildStamp, buildChanged } from './lib/buildStamp.js'
@@ -1674,6 +1675,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ring in the ⚙ menu and the popups is drawn from (lib/keyboardFocus argues why the app keeps it
       // itself rather than trusting the browser's guess).
       useEffect(()=>installKeyboardFocus(),[]);
+      // Round 26 (Q2): the notices that another window changed the saved data — a `storage` event, or this
+      // window coming back to the front — handed to the windows-in-sync door (store/windowSync).
+      useEffect(()=>installWindowSync(),[]);
       // The Year Range boxes' text state, their refs, their two commits and their two focus-guarded
       // store→text sync effects — one unit, in components/useYearRangeMirrors. Called HERE rather
       // than up beside the store bindings so those two effects keep the exact ordinal position in

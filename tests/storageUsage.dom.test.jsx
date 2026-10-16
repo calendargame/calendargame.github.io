@@ -1011,7 +1011,9 @@ describe('the limit', () => {
     expect(useStorageHealth.getState().unsaved).toBe(false)
     expect(usage().limit).toBe(taught)
     expect(localStorage.getItem(LIMIT_KEY)).toBe(marker)
-    expect(usage().figure).toBe(percentText(everything(), LIMIT))
+    // (Against the limit it was TAUGHT, which is the one it knows: until the next measurement the
+    // figure is what the device holds over that.)
+    expect(usage().figure).toBe(percentText(everything(), taught))
     expect(parseFloat(usage().figure)).toBeLessThan(10)
     expect(usage().warning).toBe(false)
 

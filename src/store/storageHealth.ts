@@ -136,7 +136,7 @@ reportWritesTo((key) =>
 export const SCRATCH_KEY = 'cg-storage-probe'
 
 const settle = (): void => {
-  const unsaved = held.size > 0
+  const unsaved = held.size > 0 || doorHeld.size > 0
   const state = useStorageHealth.getState()
   if (unsaved === state.unsaved) return
   // false → true is a new episode, and a new episode is a new notice.
@@ -157,12 +157,56 @@ const release = (storage: Storage, key: string): void => {
 }
 
 // Try every held value again, each to the place it was refused from. One that still does not fit
-// stays held.
+// stays held. A place the windows-in-sync door holds is retried THROUGH the door (holdForDoor, below).
+// (Re-entered by a door retry that lands and so frees room for the others: the outer pass goes on.)
+let retrying = false
 const retryHeld = (): void => {
-  for (const [storage, area] of [...held])
-    for (const [key, value] of [...area]) {
-      if (tryWriteItem(storage, key, value)) release(storage, key)
-    }
+  if (retrying) return
+  retrying = true
+  try {
+    for (const [storage, area] of [...held])
+      for (const [key, value] of [...area]) {
+        if (tryWriteItem(storage, key, value)) release(storage, key)
+      }
+    for (const [storage, area] of [...doorHeld])
+      for (const [key, hold] of [...area]) if (hold.retry()) releaseDoorHold(storage, key)
+  } finally {
+    retrying = false
+  }
+}
+
+// ── A save the WINDOWS-IN-SYNC DOOR holds (store/syncedDoc; design-q1-q2.md v4, section 5) ──────────
+// Every saved doc goes through that door, which merges with the device before it writes. A save it
+// cannot land is therefore never held here as TEXT to be written again blindly — that text was merged
+// with the device as it was THEN, and a retry must merge with whatever another window saved since. So
+// the door keeps the save itself (its un-landed actions) and registers the place here with a RETRY of
+// its own: the door merges and writes. What it registers with it is the text the place would hold had
+// the save fitten, so a read of the place inside this page (readItem) still sees the player's newest
+// data, exactly as for a held value. The notice, `unsaved`, `isHolding`, and the first-refusal report
+// treat both kinds alike; removing the place forgets either; another tab's change forgets NEITHER of the
+// door's (the door merges with that change itself — what makes a held save safe to keep).
+type DoorHold = { text: string; retry: () => boolean }
+const doorHeld = new Map<Storage, Map<string, DoorHold>>()
+/** The door could not land (storage, key): hold `text` as what it would hold, with the door's retry. */
+export function holdForDoor(
+  storage: Storage,
+  key: string,
+  text: string,
+  retry: () => boolean,
+): void {
+  const first = !held.has(storage) && !doorHeld.has(storage)
+  let area = doorHeld.get(storage)
+  if (!area) doorHeld.set(storage, (area = new Map()))
+  area.set(key, { text, retry })
+  settle()
+  if (first) watcher?.refused(storage)
+}
+/** The door landed (storage, key) — or no longer needs to: nothing is held for it. */
+export function releaseDoorHold(storage: Storage, key: string): void {
+  const area = doorHeld.get(storage)
+  if (!area?.delete(key)) return
+  if (area.size === 0) doorHeld.delete(storage)
+  settle()
 }
 
 /**
@@ -257,16 +301,20 @@ export function writeItem(storage: Storage, key: string, value: string): boolean
 }
 
 /** Is any save for this storage area being held — i.e. is THIS area the one that is full? */
-export const isHolding = (storage: Storage): boolean => held.has(storage)
+export const isHolding = (storage: Storage): boolean => held.has(storage) || doorHeld.has(storage)
 
 /** What (storage, key) holds — the value held for it when its last save was refused. */
 export function readItem(storage: Storage, key: string): string | null {
-  return held.get(storage)?.get(key) ?? storage.getItem(key)
+  return (
+    doorHeld.get(storage)?.get(key)?.text ?? held.get(storage)?.get(key) ?? storage.getItem(key)
+  )
 }
 
 /** Remove (storage, key), and forget anything held for it. */
 export function removeItem(storage: Storage, key: string): void {
   release(storage, key)
+  const area = doorHeld.get(storage)
+  if (area?.delete(key) && area.size === 0) doorHeld.delete(storage)
   storage.removeItem(key)
   watcher?.changed(storage, key, null)
   settle()
@@ -290,6 +338,8 @@ export function placeChangedElsewhere(storage: Storage, key: string | null): voi
   else release(storage, key)
   settle()
 }
+// (A place the windows-in-sync door holds is NOT forgotten here: the door merges with the other tab's
+// change and keeps only its own un-landed actions on top of it — see holdForDoor.)
 // How many changes other pages have reported to each area.
 const elsewhere = new Map<Storage, number>()
 /**
@@ -343,6 +393,7 @@ export const guardedStorage = (getStorage: () => Storage) => (): StateStorage =>
  */
 export function forgetStorageHealth(): void {
   held.clear()
+  doorHeld.clear()
   elsewhere.clear()
   useStorageHealth.setState({ unsaved: false, noticeOpen: false })
 }

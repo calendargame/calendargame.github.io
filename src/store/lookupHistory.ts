@@ -1,6 +1,7 @@
-import { create } from 'zustand'
+import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { guardedStorage } from './storageHealth.js'
+import { door } from './syncedDoc.js'
 import { dimEither } from '../lib/calendar.js'
 
 // store/lookupHistory.ts — Lookup's saved history, SHARED across every preset (round 20).
@@ -15,9 +16,14 @@ import { dimEither } from '../lib/calendar.js'
 // (lib/buildStamp) or the changelog's seen-signature (src/changelog) — it describes something the
 // DEVICE remembers, not something any one preset owns — except unlike those two flags it is
 // reactive UI state a component renders, so it needs zustand rather than a plain synchronous read.
-// It therefore goes through zustand's OWN default localStorage adapter directly, exactly the way
-// store/presets' registry store persists itself — never presetScopedStorage or presetStatsStorage,
+// It therefore persists to ONE un-namespaced key — never presetScopedStorage or presetStatsStorage,
 // which would namespace or session-park it per preset, the one thing this list must never do.
+// ★ THROUGH THE WINDOWS-IN-SYNC DOOR (Round 26, Q2: store/syncedDoc's list door, store/syncList's
+// merge). Two windows of the app show the same history, and a lookup in one appears in the other at
+// once; a Clear made in a new window stays cleared even with an OLDER build's tab open (its next lookup
+// writes its whole stale list, and the cleared entries are tombstoned in the sync key); an older tab's
+// lookup is kept beside a new window's. A refused save is kept as actions and merged before it is
+// retried (store/storageHealth's door holds).
 //
 // ⚠ THERE IS NO MIGRATION FROM store/progress'S OLD `lookupHistory` FIELD, on the same "preset 1
 // IS the data, never a copy" principle store/presets states for itself: a rewrite that copied the
@@ -160,39 +166,52 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
 // ── The permanent list ────────────────────────────────────────────────────────────────────────
 
 export const LOOKUP_HISTORY_KEY = 'cg-lookup-v1'
+// v2.26.0, the oldest build that may share this origin, trimmed the list to its newest 100 on every
+// save: an older list of 100 or more lacks what it trimmed (store/syncList's resolveList).
+const OLDER_TRIM = 100
+const LOOKUP_DOOR = door.listStorage<LookupEntry, Pick<LookupHistoryState, 'history'>>({
+  kind: 'lookup',
+  key: LOOKUP_HISTORY_KEY,
+  version: 1,
+  field: 'history',
+  normalize: normalizeLookupEntries,
+  trimAt: OLDER_TRIM,
+})
 
 export type LookupHistoryState = {
   history: LookupEntry[]
   setHistory: (v: Updater<LookupEntry[]>) => void
 }
 
-export const useLookupHistory = create<LookupHistoryState>()(
-  persist(
-    (set) => ({
-      history: [],
-      setHistory: (v) => set((s) => ({ history: resolve(v, s.history) })),
-    }),
-    {
-      name: LOOKUP_HISTORY_KEY,
-      // zustand's default localStorage, behind store/storageHealth (a refused save is held, not thrown).
-      storage: createJSONStorage(guardedStorage(() => window.localStorage)),
-      version: 1, // a brand-new key: there is no older shape of THIS key to migrate from — see the
-      // file header for why the old store/progress field is not copied forward.
-      partialize: (state) => ({ history: state.history }),
-      // Plain merge, not store/presets' mergeOverDefaults: that helper exists to stop a PRESET
-      // SWITCH from leaking the outgoing preset's in-memory values into the incoming one, and this
-      // store is never rehydrated on a switch (it is not in presetControl's PER_PRESET_STORES) — it
-      // hydrates exactly once, at module load, the same as store/presets' own registry does. The
-      // unconditional screen is the load-bearing half, for the same reason store/progress ran it
-      // unconditionally: a current-version payload comes out of the same untrusted localStorage a
-      // stale or tampered one does.
-      merge: (persisted, current) => ({
-        ...current,
-        history: normalizeLookupEntries((persisted as Partial<LookupHistoryState> | null)?.history),
+export const useLookupHistory: UseBoundStore<StoreApi<LookupHistoryState>> =
+  create<LookupHistoryState>()(
+    persist(
+      (set) => ({
+        history: [],
+        setHistory: (v) => set((s) => ({ history: resolve(v, s.history) })),
       }),
-    },
-  ),
-)
+      {
+        name: LOOKUP_HISTORY_KEY,
+        storage: LOOKUP_DOOR,
+        version: 1, // a brand-new key: there is no older shape of THIS key to migrate from — see the
+        // file header for why the old store/progress field is not copied forward.
+        partialize: (state) => ({ history: state.history }),
+        // Plain merge, not store/presets' mergeOverDefaults: that helper exists to stop a PRESET
+        // SWITCH from leaking the outgoing preset's in-memory values into the incoming one, and this
+        // store is never rehydrated on a switch (it is not in presetControl's PER_PRESET_STORES) — it
+        // hydrates exactly once, at module load, the same as store/presets' own registry does. The
+        // unconditional screen is the load-bearing half, for the same reason store/progress ran it
+        // unconditionally: a current-version payload comes out of the same untrusted localStorage a
+        // stale or tampered one does.
+        merge: (persisted, current) => ({
+          ...current,
+          history: normalizeLookupEntries(
+            (persisted as Partial<LookupHistoryState> | null)?.history,
+          ),
+        }),
+      },
+    ),
+  )
 
 // ── The session-only overflow (Amnesic suppression) ──────────────────────────────────────────
 //
@@ -230,3 +249,4 @@ export const useLookupSession = create<LookupSessionState>()(
     },
   ),
 )
+LOOKUP_DOOR.attach(useLookupHistory)
