@@ -139,6 +139,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { opensKeyboard } from './textEntry.js'
 import { onAppScroll, scrollBoxTo } from './appScroll.js'
+import { answerButtonOf, voidPress } from './unaskedSwap.js'
 
 const HILITE = 'drag-target' // the live "this will be selected" class toggled during a drag (index.css)
 const GROUP_SELECTOR = '[data-answer-grid],[data-select-group]'
@@ -619,6 +620,19 @@ export function installPointerGestures(): () => void {
           if (dismiss) member.dispatchEvent(new CustomEvent('drag-dismiss', { bubbles: true }))
         }
       }
+      return
+    }
+    // ★ A PRESS ON AN ANSWER WHOSE GRID WENT WHILE IT WAS HELD — the question replaced under it
+    // (lib/unaskedSwap: another window's change), or the grid reset: the grid it began in is gone,
+    // so it presses nothing — never the new question's button — and it is answered by the cue
+    // (lib/unaskedSwap's voidPress), on the button under the finger in the grid now on screen.
+    // (resolveRelease below would press nothing either; this is where the press is SAID not to have
+    // counted.)
+    if (group && !group.isConnected) {
+      endGesture()
+      armSuppress(start)
+      const answer = answerButtonOf(relTarget)
+      if (answer) voidPress(answer)
       return
     }
     // A scroll presses nothing (the header's ★ "a touch that scrolled anything"): whatever lies under

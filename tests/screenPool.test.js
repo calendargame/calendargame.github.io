@@ -7,7 +7,7 @@
 // the door is then called with the copy that was live BEFORE the move (refused, nothing anywhere
 // changes) and with the one live after it (written, as the raw setter would).
 // (T-F1d of design-q6.md; tests/screenPool.gap.dom is the race the door closes, in the real app.)
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   createPreset,
   switchPreset,
@@ -24,8 +24,14 @@ import {
   parkRound,
   unparkRound,
   saveModeStats,
+  useScreenEpoch,
 } from '../src/store/screenPool.js'
+import { readSessionHistory, writeSessionHistory } from '../src/store/sessionHistory.js'
+import { useSwapEpoch } from '../src/lib/unaskedSwap.js'
+import { captureError } from '../src/observability/sentry.js'
 import { resetAppState } from './helpers/settingsPanel.jsx'
+
+vi.mock('../src/observability/sentry.js', () => ({ captureError: vi.fn() }))
 
 const REC = { score: 7, streak: 7, scoreStreak: 7, streakScore: 7, scoreRound: 1, streakRound: 1 }
 const STATS = { played: 3, good: 2, streak: 1, best: 2, times: [1.5, 2.25] }
@@ -62,7 +68,7 @@ describe('store/screenPool — a screen writes only to the copy it was drawn for
       expect(roundBests(oldData), 'no floor is read from a copy that is not live').toBe(null)
       for (const map of ['blitzBest', 'suddenBest', 'suddenAmBest', 'aoxBest'])
         fileRoundBest(oldData, map, (prev) => ({ ...prev, k: REC }))
-      saveModeStats(oldData, 'classic', STATS)
+      saveModeStats(oldData, 'classic', useProgress.getState().stats.classic, STATS)
       parkRound(oldData, newBests, 'blitz', { c: 3 })
       unparkRound(oldData, newBests, 'aox')
       expect(store(), 'nothing in the store moved').toBe(before)
@@ -71,7 +77,7 @@ describe('store/screenPool — a screen writes only to the copy it was drawn for
       expect(roundBests(newData), 'the live copy is read').not.toBe(null)
       fileRoundBest(newData, 'blitzBest', (prev) => ({ ...prev, k: REC }))
       expect(useProgress.getState().blitzBest.k).toEqual(REC)
-      saveModeStats(newData, 'classic', STATS)
+      saveModeStats(newData, 'classic', useProgress.getState().stats.classic, STATS)
       expect(useProgress.getState().stats.classic).toEqual(STATS)
       parkRound(newData, newBests, 'blitz', { c: 3 })
       expect(readSessionRound(newBests, 'blitz')).toEqual({ c: 3 })
@@ -85,5 +91,44 @@ describe('store/screenPool — a screen writes only to the copy it was drawn for
     fileRoundBest(id, 'aoxBest', () => ({ x: { avg: 1, med: 1, avgRound: 2, medRound: 2 } }))
     const { blitzBest, suddenBest, suddenAmBest, aoxBest } = useProgress.getState()
     expect(roundBests(id)).toEqual({ blitzBest, suddenBest, suddenAmBest, aoxBest })
+  })
+})
+
+// ★ THE SECOND CONDITION (design-q1-q2.md v4, 6.1; Q6's R5): a casual mirror writes only over the
+// stats object it last read or wrote. Stats that moved under it — another window's answers merged in
+// the gap between a commit and its effects — are never written over: the write is refused, that
+// engine is rebuilt on them (its data epoch moves, its park goes first, the grids remount and guard
+// the answers), and the refusal is reported once.
+describe('store/screenPool — a stale mirror is refused, and its engine rebuilt', () => {
+  beforeEach(() => resetAppState())
+
+  it('a write over its own base lands, and the next one carries the new base', () => {
+    const id = activeDataId()
+    const base = useProgress.getState().stats.classic
+    expect(saveModeStats(id, 'classic', base, STATS)).toBe(true)
+    expect(useProgress.getState().stats.classic).toBe(STATS)
+    const next = { ...STATS, played: 4 }
+    expect(saveModeStats(id, 'classic', STATS, next)).toBe(true)
+    expect(useProgress.getState().stats.classic).toBe(next)
+  })
+
+  it('a write over stats that moved is refused: nothing written, the engine rebuilt, reported once', () => {
+    const id = activeDataId()
+    const base = useProgress.getState().stats.flash
+    const elsewhere = { ...STATS, played: 9, good: 9 }
+    useProgress.getState().setModeStats('flash', elsewhere) // (another window's, merged in the gap)
+    writeSessionHistory(id, 'flash', '{"parked":1}', true)
+    const epochs = useScreenEpoch.getState()
+    const swaps = useSwapEpoch.getState().epoch
+    vi.mocked(captureError).mockClear()
+    expect(saveModeStats(id, 'flash', base, STATS)).toBe(false)
+    expect(useProgress.getState().stats.flash).toBe(elsewhere)
+    expect(useScreenEpoch.getState()).toEqual({ ...epochs, flash: epochs.flash + 1 }) // that engine's alone
+    expect(useSwapEpoch.getState().epoch).toBe(swaps + 1)
+    expect(readSessionHistory(id, 'flash')).toBe(null)
+    expect(saveModeStats(id, 'flash', base, STATS)).toBe(false)
+    expect(vi.mocked(captureError).mock.calls.map(([, ctx]) => ctx.tripwire)).toEqual([
+      'staleMirror',
+    ])
   })
 })

@@ -210,7 +210,7 @@ export interface Stats {
 export interface GameState {
   date: Question //                 current question {y,m,d,_fmt} (or a Deduction puzzle)
   questionId: number //             bumps on every advance / RESET — the hook resets the solve-timer on this, NOT on raw date changes (Back/Forward change date but must not reset the timer; no Override ever moves it backwards)
-  gridEpoch: number //              bumps ONLY on RESET / RESET_ROUND — the UI keys the answer grids on it, so every reset REMOUNTS them and the cleared colors SNAP to idle (a remounted element never CSS-transitions from its predecessor's state; .surface-button's hover transition would otherwise fade the green away). NOT bumped on advance / REGEN_DATE: a remount there would restart in-flight flash keyframes
+  gridEpoch: number //              bumps ONLY on RESET / RESET_ROUND / HYDRATE — the UI keys the answer grids on it, so every reset REMOUNTS them and the cleared colors SNAP to idle (a remounted element never CSS-transitions from its predecessor's state; .surface-button's hover transition would otherwise fade the green away). NOT bumped on advance / REGEN_DATE: a remount there would restart in-flight flash keyframes
   persistBtns: Btns //              answer-grid state {idx: 'correct'|'wrong-latest'|'wrong-prev'|'override-wrong'}
   stats: Stats //                   {played,good,streak,best,times}
   stack: StackEntry[] //            back-history (oldest→newest)
@@ -313,6 +313,7 @@ export type GameAction =
       saveStats: boolean
     }
   | { type: 'RESET'; timingOff: boolean; nextDate: Question }
+  | { type: 'HYDRATE'; nextDate: Question; stats?: Stats }
   | { type: 'REGEN_DATE'; nextDate: Question }
   | { type: 'LOCK_REVEAL'; useJulian: boolean }
   | { type: 'TIMEOUT_MISS'; useJulian: boolean; saveStats: boolean }
@@ -1061,6 +1062,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...initEngine(regen ? nextDate : state.date),
         questionId: questionIdAfterReset(state),
         // initEngine re-zeroes gridEpoch — carry the bump instead, so the reset remounts the grids.
+        gridEpoch: state.gridEpoch + 1,
+      }
+    }
+
+    // ── HYDRATE ──────────────────────────────────────────────────────────────────
+    // REBUILD THE ENGINE ON THE SAVED STATS AS THEY NOW ARE (design-q1-q2.md v4, 6.1): another
+    // window's answers to this silo were merged into the saved progress (store/syncedDoc), and this
+    // engine's own copy of them is out of date. What a mount does, in place: the stats it is handed,
+    // a fresh question, no history — the questionId moves on (a fresh clock) and the grids remount, as
+    // after a reset. Only the one silo's engine: Deduction's other two sub-types keep their puzzles.
+    case 'HYDRATE': {
+      return {
+        ...initEngine(action.nextDate, action.stats),
+        questionId: questionIdAfterReset(state),
         gridEpoch: state.gridEpoch + 1,
       }
     }

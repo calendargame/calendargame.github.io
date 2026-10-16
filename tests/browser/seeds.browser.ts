@@ -39,7 +39,9 @@ async function answerRight(page: Page) {
 test('every save the lane seeds carries the version the app writes today', async ({ page }) => {
   await openApp(page)
   // Make each store save: a ⚙ switch (settings), a mode's own toggle (the per-mode setup), a new
-  // preset (the list of presets). Progress is saved on open.
+  // preset (the list of presets), an answer (progress — an open writes nothing: design-q1-q2.md v4
+  // G7, and the stats a screen mounts on are the ones saved — made first, while Save Stats is on).
+  await answerRight(page)
   const panel = await openSettings(page)
   await panel.getByRole('button', { name: 'Save Stats' }).click()
   await page.keyboard.press('Escape')

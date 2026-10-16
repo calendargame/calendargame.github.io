@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useLayoutEffect, useRef } from 'react'
 import { useRemoteEpoch } from '../store/syncedDoc.js'
+import { unasked } from '../lib/unaskedSwap.js'
 
 // useSettingsCloseEffect — "run fn once when the ⚙ Settings popover CLOSES, iff these values
 // changed while it was open".
@@ -30,6 +31,9 @@ import { useRemoteEpoch } from '../store/syncedDoc.js'
 // the change shows in the panel and is applied at its close like any other. A change made HERE with
 // the panel closed (Blitz's sliders, MoX's run length on its own page) is not a third case: it is
 // taken into the snapshot as it happens, so it never fires fn later on another window's behalf.
+// What fn replaces in the third case is replaced WITHOUT this window's input, perhaps under a finger
+// already on an answer: it runs inside lib/unaskedSwap's `unasked`, so a question it swaps remounts
+// the grids and guards the answers. (At a close, the player is the one who asked.)
 //
 // Both effects below are LAYOUT effects (round 8, and they must stay together): the close-fired
 // reset/regen has to commit in the SAME paint as the popover close — as passive effects they ran a
@@ -62,7 +66,9 @@ export function useSettingsCloseEffect(
     // changed; a change made here while closed is only taken into the snapshot
     const before = snapRef.current
     snapRef.current = deps
-    if ((wasOpen || fromElsewhere) && deps.some((d, i) => d !== before[i])) fnRef.current(before)
+    if (!deps.some((d, i) => d !== before[i])) return
+    if (wasOpen) fnRef.current(before)
+    else if (fromElsewhere) unasked(() => fnRef.current(before))
   }, [settingsOpen, remote, ...deps]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

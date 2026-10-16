@@ -11,7 +11,8 @@ import { fittedParkedText, restoreParkedText } from '../engine/parkedHistory.js'
 import type { ParkedScreen, RestoredHistory } from '../engine/parkedHistory.js'
 import { fmtAccuracyPct, truncTime, fmtTime } from '../lib/modeFormat.js'
 import { activeDataId, activeBestsId, useActiveAmnesicMode } from '../store/amnesic.js'
-import { useProgress } from '../store/progress.js'
+import { useProgress, type StatsKey } from '../store/progress.js'
+import { saveModeStats } from '../store/screenPool.js'
 import {
   SLOT_BUDGET,
   readSessionHistory,
@@ -20,6 +21,8 @@ import {
 } from '../store/sessionHistory.js'
 import type { HistorySilo } from '../store/sessionHistory.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
+import { useRemoteEpoch } from '../store/syncedDoc.js'
+import { unasked } from '../lib/unaskedSwap.js'
 
 // Timing constants. The codes panel's own timings (its slide duration and the CODES_CLOSE_MS
 // freeze window derived from it) live in src/lib/accordionMotion.js and are consumed entirely
@@ -159,18 +162,28 @@ export function useStatsHideToggles({
   // a question really went — a reset always replaces it; a regeneration says whether it did.
   // A LAYOUT effect on the value going from hidden to shown, so the reset or the fresh question is in
   // the same paint as the switch (a tap here, or another window's change arriving).
+  // Turned on in ANOTHER window (the mode setup's remoteEpoch moved with it), what this replaces is
+  // replaced without this window's input: an unasked swap (lib/unaskedSwap).
   const timingWasOff = useRef(timingOff)
+  const prefsFromElsewhere = useRemoteEpoch((s) => s.modePrefs)
+  const prefsSeen = useRef(prefsFromElsewhere)
   useLayoutEffect(() => {
     const wasOff = timingWasOff.current
     timingWasOff.current = timingOff
+    const fromElsewhere = prefsFromElsewhere !== prefsSeen.current
+    prefsSeen.current = prefsFromElsewhere
     if (!wasOff || timingOff) return
-    for (const e of timed) {
-      let replaced = true
-      if (timingMismatch(e.state.stats)) e.fullReset()
-      else replaced = e.regenDate()
-      if (replaced) onQuestionReplaced?.()
+    const settle = () => {
+      for (const e of timed) {
+        let replaced = true
+        if (timingMismatch(e.state.stats)) e.fullReset()
+        else replaced = e.regenDate()
+        if (replaced) onQuestionReplaced?.()
+      }
     }
-  }, [timingOff]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (fromElsewhere) unasked(settle)
+    else settle()
+  }, [timingOff, prefsFromElsewhere]) // eslint-disable-line react-hooks/exhaustive-deps
   const toggleTimingOff = () => {
     if (!saveStats) return
     if (!timingOff) {
@@ -345,6 +358,20 @@ export function useSaveStatsOnRegen(
   })
 }
 
+/**
+ * ★ A CASUAL ENGINE'S STATS, MIRRORED INTO THE SAVED PROGRESS — through store/screenPool, which writes
+ * them only into the copy this screen was drawn for, and only over the stats object this mirror last
+ * READ (the store's slice as this screen mounted) or last WROTE: if the slice moved under it since (an
+ * other window's answers merged in the gap), the write is refused and the engine is rebuilt on them.
+ */
+export function useStatsMirror(dataId: string, key: StatsKey, stats: Stats): void {
+  const [mounted] = useState(() => useProgress.getState().stats[key])
+  const base = useRef(mounted)
+  useEffect(() => {
+    if (saveModeStats(dataId, key, base.current, stats)) base.current = stats
+  }, [stats, dataId, key])
+}
+
 // ★ THE COPY THIS SCREEN WAS MOUNTED ON, read ONCE at mount and never again — and there are two,
 // because a screen parks two different things (store/amnesic spells both):
 //   • useMountedDataId — the STATS copy ("1:saved" / "1:stats" / "1:session"). A casual mode's parked
@@ -514,8 +541,9 @@ export function useParkedHistory(
       parkers.delete(parker)
     }
   }, [dataId, silo])
-  // ★ A RESET RETIRES THE PARK IN THE SAME BREATH. Reset Stats, "Enable and Reset Stats" and Flash's
-  // Reset all clear the engine's history, and `gridEpoch` moves on exactly those (gameReducer). A
+  // ★ A RESET RETIRES THE PARK IN THE SAME BREATH. Reset Stats, "Enable and Reset Stats", Flash's
+  // Reset, and a rebuild on another window's stats (HYDRATE) all clear the engine's history, and
+  // `gridEpoch` moves on exactly those (gameReducer). A
   // park standing from an earlier hide describes the history that was just cleared; nothing may
   // bring it back, so it goes now rather than waiting to be overwritten by the next park.
   useChangeEffect([state.gridEpoch], () => discardSessionHistory(dataId, silo))

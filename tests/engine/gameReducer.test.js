@@ -456,7 +456,30 @@ describe('gameReducer — RESET_ROUND', () => {
 // gridEpoch — the grid-remount key. The UI keys every answer grid on it, so a bump REMOUNTS
 // the grid and the cleared colors snap to idle (no green fade). It must bump on the TWO resets
 // ONLY: a bump on advance / REGEN_DATE would remount mid-flash and restart the keyframes.
-describe('gameReducer — gridEpoch (bumps on the two resets only)', () => {
+// HYDRATE: the engine rebuilt on the saved stats as they now are (another window's answers to its
+// silo came in, store/screenPool's rebaseEngine) — what a mount does, in place.
+describe('gameReducer — HYDRATE', () => {
+  const SAVED = { played: 9, good: 7, streak: 2, best: 4, times: [1.2, 3.4] }
+  it('takes the stats it is handed, a fresh question and no history — a fresh clock, the grids remounted', () => {
+    let s = answer(initEngine(DATE), C)
+    s = answer({ ...s, date: DATE }, W)
+    s = { ...back(s), gridEpoch: 2 }
+    const before = s
+    s = gameReducer(s, { type: 'HYDRATE', nextDate: NEXT, stats: SAVED })
+    expect(s.stats).toBe(SAVED)
+    expect(s.date).toBe(NEXT)
+    expect([s.stack, s.forwardStack, s.backDepth, s.countedWrong]).toEqual([[], [], 0, false])
+    expect(s.questionId).toBe(before.questionId + 1)
+    expect(s.gridEpoch).toBe(3)
+    expect(checkGameInvariants(s, false)).toEqual([])
+  })
+  it('with no stats handed over, a blank slate', () => {
+    const s = gameReducer(answer(initEngine(DATE), C), { type: 'HYDRATE', nextDate: NEXT })
+    expect(s.stats).toEqual(initEngine(NEXT).stats)
+  })
+})
+
+describe('gameReducer — gridEpoch (bumps on the two resets, and a HYDRATE)', () => {
   it('starts at 0', () => {
     expect(initEngine(DATE).gridEpoch).toBe(0)
   })

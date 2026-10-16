@@ -6,6 +6,7 @@ import type { DedScreenProps } from './modeTypes.js'
 import {
   useButtonFlash,
   useStatsHideToggles,
+  useStatsMirror,
   useChangeEffect,
   engineFresh,
   useResetStatsConfirm,
@@ -41,10 +42,11 @@ import OverrideButton from '../components/OverrideButton.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
-import { saveModeStats } from '../store/screenPool.js'
+import { useScreenEpoch } from '../store/screenPool.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
 import { parkedFlag } from '../engine/parkedHistory.js'
+import { useSwapEpoch } from '../lib/unaskedSwap.js'
 
 // What "Enable and Reset Stats?" says it will reset: the sub-types whose stats moved while the
 // timer readouts were hidden — which is exactly the set the confirm resets (modeHooks'
@@ -179,8 +181,12 @@ function DeductionMode({
     useJulian,
     newDate,
   })
+  // Each sub-type's data epoch (store/screenPool): another window's answers to ONE sub-type rebuild
+  // that engine alone, in place; the other two keep their puzzles and clocks.
+  const epochs = useScreenEpoch()
   const dayEng = useGameEngine({
     label: 'dedDay',
+    epoch: epochs.dedDay,
     play: visible && dedType === 'day' ? 'question' : 'idle',
     genDate: genDay,
     minY,
@@ -197,6 +203,7 @@ function DeductionMode({
   })
   const monthEng = useGameEngine({
     label: 'dedMonth',
+    epoch: epochs.dedMonth,
     play: visible && dedType === 'month' ? 'question' : 'idle',
     genDate: genMonth,
     minY,
@@ -213,6 +220,7 @@ function DeductionMode({
   })
   const yearEng = useGameEngine({
     label: 'dedYear',
+    epoch: epochs.dedYear,
     play: visible && dedType === 'year' ? 'question' : 'idle',
     genDate: genYear,
     minY,
@@ -235,20 +243,14 @@ function DeductionMode({
   useParkedHistory(dataId, 'dedYear', yearEng.state, showing('year'), parkedScreen, panelOpen)
   const eng = dedType === 'month' ? monthEng : dedType === 'year' ? yearEng : dayEng
   const { state, correct, overrideAvail, overridden } = eng
+  const swapEpoch = useSwapEpoch((s) => s.epoch)
   // Android Back closes the Show-Codes panel of the ACTIVE mode. Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
-  // Mirrored through store/screenPool, which writes it only into the copy this screen was drawn for.
-  useEffect(() => {
-    saveModeStats(dataId, 'dedDay', dayEng.state.stats)
-  }, [dayEng.state.stats, dataId])
-  useEffect(() => {
-    saveModeStats(dataId, 'dedMonth', monthEng.state.stats)
-  }, [monthEng.state.stats, dataId])
-  useEffect(() => {
-    saveModeStats(dataId, 'dedYear', yearEng.state.stats)
-  }, [yearEng.state.stats, dataId])
+  useStatsMirror(dataId, 'dedDay', dayEng.state.stats)
+  useStatsMirror(dataId, 'dedMonth', monthEng.state.stats)
+  useStatsMirror(dataId, 'dedYear', yearEng.state.stats)
   // One flash for the active grid (only one sub-mode visible at a time). setFlash is cleared
   // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
   const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
@@ -584,8 +586,9 @@ function DeductionMode({
             )}
           </div>
           {/* key=gridEpoch — Deduction's puzzle grids remount on reset, same snap-clean as the
-                  weekday modes' keyed WeekdayAnswer (see its doc comment). */}
-          <div key={state.gridEpoch} className="mt-4">
+                  weekday modes' keyed WeekdayAnswer (see its doc comment) — and on an unasked swap
+                  (lib/unaskedSwap), as that grid does. */}
+          <div key={`${state.gridEpoch}.${swapEpoch}`} className="mt-4">
             {/* Both-crosses 2-option Year: overlay the real grid on an invisible inert
                     full-window sizer so the answer panel holds that layout's height — the New/‹›/
                     Reveal/Override row must not move a pixel as puzzles alternate 2↔5. The real

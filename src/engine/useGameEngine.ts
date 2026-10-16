@@ -19,7 +19,7 @@
 // useReducer infers `dispatch: Dispatch<GameAction>` from the typed reducer, so
 // every dispatch below is checked against the action union (Stage C, TypeScript).
 // ─────────────────────────────────────────────────────────────────────────
-import { useReducer, useRef, useEffect, useMemo } from 'react'
+import { useReducer, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import {
   gameReducer,
   initEngine,
@@ -34,6 +34,7 @@ import { deepFreeze } from './freeze.js'
 import { checkGameInvariants } from './invariants.js'
 import { solveTimeFromMs } from './stats.js'
 import { usePlayerBusy } from '../lib/playerBusy.js'
+import { inUnasked, noteUnaskedSwap } from '../lib/unaskedSwap.js'
 import { captureError } from '../observability/sentry.js'
 
 // genDate produces the next question for the active year range (the parent bakes in the
@@ -70,6 +71,11 @@ export interface UseGameEngineOptions {
   // written) goes through engine/parkedEngine's restoreParkedEngine in the MODE, at its parked
   // read, because only the mode can drop its own half of the snapshot along with an unreadable engine.
   getInitialState?: () => GameState | null
+  // THE ENGINE'S DATA EPOCH (store/screenPool's useScreenEpoch): when it moves, the engine is
+  // rebuilt in place on getInitialStats — the saved stats as they now are (gameReducer's HYDRATE) —
+  // because another window's answers to its silo came in. Omitted: the engine is rebuilt only by a
+  // remount (a screen with one engine is keyed on its epoch instead).
+  epoch?: number
 }
 
 // ★ IN DEVELOPMENT AND UNDER TEST, EVERY STATE THE HOOK HANDS OUT IS FROZEN, all the way down
@@ -98,11 +104,25 @@ export function useGameEngine({
   label,
   getInitialStats,
   getInitialState,
+  epoch,
 }: UseGameEngineOptions) {
   const [state, dispatch] = useReducer(engineReducer, undefined, () => {
     const first = getInitialState?.() ?? initEngine(genDate(minY, maxY), getInitialStats?.())
     return import.meta.env.DEV ? deepFreeze(first) : first
   })
+  // The rebuild an epoch move asks for, in the commit it moves in (a layout effect: no frame shows
+  // the old stats beside the new).
+  const epochSeen = useRef(epoch)
+  useLayoutEffect(() => {
+    if (epoch === epochSeen.current) return
+    epochSeen.current = epoch
+    dispatch({
+      type: 'HYDRATE',
+      nextDate: genDate(minY, maxY),
+      stats: getInitialStats?.(),
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [epoch])
 
   // The solve-timer starts when a NEW question is shown (advance / New / Reset bump
   // questionId). Back/Forward change `date` to a browsed entry but leave questionId
@@ -205,6 +225,12 @@ export function useGameEngine({
   // Actions are recreated each render (they close over the latest settings, which is what we
   // want); they read the timer from a ref, so there's no stale-closure hazard.
   const newDate = () => genDate(minY, maxY)
+  // ★ A QUESTION REPLACED BY A REACTION THIS WINDOW DID NOT ASK FOR (another window's change: inside
+  // lib/unaskedSwap's `unasked`) is an UNASKED SWAP — said here, by the actions that replace one, so
+  // the grids remount and the answers are guarded (lib/unaskedSwap).
+  const swapped = () => {
+    if (inUnasked()) noteUnaskedSwap()
+  }
   // `opts.complete` (AoX): credit this correct answer but don't advance — the run's last solve
   // stays on screen, locked + reversible. Other modes call answer(idx) → complete undefined.
   const answer = (idx: number, opts?: { complete?: boolean }) =>
@@ -221,7 +247,10 @@ export function useGameEngine({
   const reveal = () => dispatch({ type: 'REVEAL', useJulian, elapsed: elapsed(), saveStats })
   const showCodes = (open: boolean) =>
     dispatch({ type: 'SHOW_CODES', open, useJulian, elapsed: elapsed(), saveStats })
-  const doNew = () => dispatch({ type: 'NEW', useJulian, saveStats, nextDate: newDate() })
+  const doNew = () => {
+    dispatch({ type: 'NEW', useJulian, saveStats, nextDate: newDate() })
+    swapped()
+  }
   // The one button's press — Override and Undo alike, because the card decides which it is.
   // `opts.hold` (the run modes): a press that CREDITS the live card stays on it, locked, instead of
   // moving play on — MoX's completing solve, and a Blitz round / MoX run that stays ended. The other
@@ -236,7 +265,10 @@ export function useGameEngine({
     })
   const back = () => dispatch({ type: 'BACK' })
   const forward = () => dispatch({ type: 'FORWARD', useJulian })
-  const resetStats = () => dispatch({ type: 'RESET', timingOff, nextDate: newDate() })
+  const resetStats = () => {
+    dispatch({ type: 'RESET', timingOff, nextDate: newDate() })
+    swapped()
+  }
   // Regenerate the waiting question in place (timing/Save-Stats enable, or a date-setting change) —
   // and say whether it WENT: the engine keeps a question that has been used (gameReducer's
   // regenReplaces, the rule REGEN_DATE itself applies), and a screen holding something that belongs
@@ -244,12 +276,19 @@ export function useGameEngine({
   const regenDate = (): boolean => {
     const replaces = regenReplaces(state)
     dispatch({ type: 'REGEN_DATE', nextDate: newDate() })
+    if (replaces) swapped()
     return replaces
   }
   // Full reset of stats + history + the live question (timing-enable when a desync exists).
-  const fullReset = () => dispatch({ type: 'RESET', timingOff: false, nextDate: newDate() })
+  const fullReset = () => {
+    dispatch({ type: 'RESET', timingOff: false, nextDate: newDate() })
+    swapped()
+  }
   // Clear history + current-question state but KEEP stats (timed-mode "Reset" mid-round).
-  const resetRound = () => dispatch({ type: 'RESET_ROUND' })
+  const resetRound = () => {
+    dispatch({ type: 'RESET_ROUND' })
+    swapped()
+  }
   // Show the answer + lock with NO stat change (Blitz per-round timeout).
   const lockReveal = () => dispatch({ type: 'LOCK_REVEAL', useJulian })
   // Count a played miss + show the answer (Blitz per-question timeout).

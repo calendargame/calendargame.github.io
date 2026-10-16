@@ -22,3 +22,66 @@ test('a theme chosen in one window is worn by the other at once, both ways', asy
   await page.keyboard.press('Escape')
   await expect(second.locator('html')).toHaveAttribute('data-theme', 'dusk')
 })
+
+// ★ THE CUE FOR A PRESS THAT DID NOT COUNT (design-q1-q2.md v4, 6.4; lib/unaskedSwap): another window's
+// change replaces the question here — an older tab saving a new date format, which draws the waiting
+// question again — and a key pressed in the moment after it answers nothing, and rings the button it
+// pressed: a neutral inset ring, painted, then gone; under Reduce Motion too (no fade, the same ring).
+for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`a press just after another window replaced the question rings its button and answers nothing (motion: ${reducedMotion})`, async ({
+    page,
+    context,
+  }) => {
+    await page.emulateMedia({ reducedMotion })
+    await openApp(page, {
+      seed: { settings: { randomFormat: false, dateFormat: 'numeric-ymd', minY: 1583 } },
+    })
+    const second = await openSecondWindow(context)
+    // In the first window: the moment its answer grid is replaced, the key for Wednesday — a player
+    // pressing as the question changed — and what the button then shows, once painted and later.
+    await page.evaluate(() => {
+      // (the grid on screen: every mode's screen stays mounted, the others hidden)
+      const grid = () =>
+        [...document.querySelectorAll<HTMLElement>('[data-answer-grid="true"]')].find(
+          (g) => g.offsetParent !== null,
+        )
+      const first = grid()
+      const seen = new MutationObserver(() => {
+        const now = grid()
+        if (!now || now === first) return
+        seen.disconnect()
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '3', bubbles: true }))
+        const button = now.children[3] as HTMLElement
+        const ring = () => {
+          const style = getComputedStyle(button)
+          return `${style.outlineStyle} ${style.outlineWidth}`
+        }
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const on = ring()
+            setTimeout(() => {
+              ;(window as unknown as { voidRing: object }).voidRing = { on, off: ring() }
+            }, 700)
+          }),
+        )
+      })
+      seen.observe(document.body, { childList: true, subtree: true })
+    })
+    await second.evaluate(() => {
+      const key = 'cg-settings-v1'
+      const saved = JSON.parse(localStorage.getItem(key) ?? '{"state":{}}')
+      localStorage.setItem(
+        key,
+        JSON.stringify({ state: { ...saved.state, dateFormat: 'numeric-dmy' }, version: 4 }),
+      )
+    })
+    const ring = await page.waitForFunction(
+      () => (window as unknown as { voidRing?: { on: string; off: string } }).voidRing,
+    )
+    const { on, off } = (await ring.jsonValue()) as { on: string; off: string }
+    expect(on).toBe('solid 3px') // painted
+    expect(off).toMatch(/^none /) // and gone
+    // Nothing was answered: the score still reads 0/0.
+    await expect(page.locator('.panel:visible [data-statval]').first()).toHaveText('0/0')
+  })
+}

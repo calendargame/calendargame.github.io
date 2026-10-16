@@ -1,7 +1,11 @@
+import { create } from 'zustand'
 import { activeDataId } from './amnesic.js'
 import { useProgress, type ProgressValues, type StatsKey } from './progress.js'
 import { writeSessionRound, discardSessionRound } from './sessionRound.js'
+import { discardSessionHistory } from './sessionHistory.js'
 import type { Stats } from '../engine/gameReducer.js'
+import { noteUnaskedSwap } from '../lib/unaskedSwap.js'
+import { captureError } from '../observability/sentry.js'
 
 // store/screenPool.ts — THE ONE DOOR THROUGH WHICH A MODE SCREEN WRITES SAVED PROGRESS OR A PARKED
 // ROUND, and it lets a screen write only to the copy of the data it was DRAWN for.
@@ -30,10 +34,20 @@ import type { Stats } from '../engine/gameReducer.js'
 // reconciles and take-backs, and their parks. The raw setters and store/sessionRound's write and
 // discard are referenced only by store/progress, this file, and the reset and crash paths that act
 // for the app rather than for a screen (tests/screenPoolGuard).
-// ⚠ BUILT TO BE EXTENDED, NOT REPLACED (design-q1-q2.md, Q2): windows that stay in sync add a second
-// condition to the same door — a casual mirror's write carries the stats object it last read, and is
-// refused when the store's slice has moved under it (another window's answer adopted in the gap) —
-// and route the casual park through it. The pool check here stays the first condition of every write.
+// ★ THE SECOND CONDITION, FOR WINDOWS THAT STAY IN SYNC (design-q1-q2.md v4, 6.1 and Q6's R5): a
+// casual mirror's write carries the stats object it last READ from the store (at its mount) or last
+// WROTE — its `base` — and is refused when the store's slice has moved under it since: another
+// window's answers merged in the gap between a commit and its effects (store/syncedDoc patches the
+// slice and moves this engine's data epoch in the same turn, so the screen is about to be rebuilt on
+// them). A stale mirror never writes its copy over them. The engine is rebased on the store's stats
+// (rebaseEngine), and the refusal is reported once (tripwire `staleMirror`): with the epoch moved in
+// the same turn as the slice, it should never be seen. The pool check stays the first condition of
+// every write.
+// ★ THE REBUILD UNIT IS THE ENGINE, THE DATA UNIT THE SILO (6.1, B V5): `useScreenEpoch` holds one
+// number per casual engine. Classic's and Flash's screens are keyed on theirs (src/main.tsx), so a
+// move remounts the screen on the saved stats; Deduction's three engines live in one screen, and a
+// move rebuilds only that sub-type's engine in place (engine/useGameEngine's `epoch`, gameReducer's
+// HYDRATE) — the other two keep their puzzles and clocks.
 
 /** Is `dataId` the pool the app is reading right now? */
 const live = (dataId: string): boolean => dataId === activeDataId()
@@ -91,7 +105,51 @@ export function unparkRound(dataId: string, bestsId: string, mode: 'blitz' | 'ao
   if (live(dataId)) discardSessionRound(bestsId, mode)
 }
 
-/** Mirror a casual engine's stats into the pool `dataId` — a no-op unless it is live. */
-export function saveModeStats(dataId: string, key: StatsKey, stats: Stats): void {
-  if (live(dataId)) useProgress.getState().setModeStats(key, stats)
+/** Each casual engine's data epoch (★ above). */
+export const useScreenEpoch = create<Record<StatsKey, number>>()(() => ({
+  classic: 0,
+  flash: 0,
+  dedDay: 0,
+  dedMonth: 0,
+  dedYear: 0,
+}))
+
+/**
+ * Rebuild the engine of silo `key` on the pool's saved stats as they now are — another window's
+ * answers came in (store/syncedDoc), or a stale mirror was refused. Only that engine's park goes
+ * first (a park describes the history about to be dropped), and it is a question replaced without
+ * this window's input (lib/unaskedSwap).
+ */
+export function rebaseEngine(dataId: string, key: StatsKey): void {
+  discardSessionHistory(dataId, key)
+  useScreenEpoch.setState((s) => ({ ...s, [key]: s[key] + 1 }))
+  noteUnaskedSwap()
+}
+
+const staleReported = new Set<StatsKey>()
+/**
+ * Mirror a casual engine's stats (`next`) into the pool `dataId`, over `base` — the stats object the
+ * mirror last read or wrote (★ above). True when the store holds `next` afterwards; false, with
+ * nothing written, when `dataId` is not live or the slice has moved under the mirror.
+ */
+export function saveModeStats(dataId: string, key: StatsKey, base: Stats, next: Stats): boolean {
+  if (!live(dataId)) return false
+  const now = useProgress.getState().stats[key]
+  if (now === next) return true
+  if (now !== base) {
+    if (!staleReported.has(key)) {
+      staleReported.add(key)
+      captureError(
+        new Error('Saved stats: a screen mirror was refused over stats that had moved'),
+        {
+          tripwire: 'staleMirror',
+          key,
+        },
+      )
+    }
+    rebaseEngine(dataId, key)
+    return false
+  }
+  useProgress.getState().setModeStats(key, next)
+  return true
 }

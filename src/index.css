@@ -797,6 +797,16 @@ button{touch-action:manipulation}
 .flash-bad{animation:flashBad .55s ease-out forwards}
 [data-theme="light"] .flash-good,[data-theme="parchment"] .flash-good{animation-name:flashGoodLight}
 [data-theme="light"] .flash-bad,[data-theme="parchment"] .flash-bad{animation-name:flashBadLight}
+/* THE CUE FOR A PRESS THAT DID NOT COUNT (lib/unaskedSwap: the question was replaced under it by
+   another window's change). A neutral INSET ring in the theme's own ring colour — the border tone it
+   rings a dragged row with — never red or green, so it can never read as a verdict; nothing moves,
+   nothing grows. On for lib/unaskedSwap's VOID_MS, then a fade of .15s that --motion-scale makes none:
+   under Reduce Motion the ring is simply on, then off. An OUTLINE drawn inside the edge (a ring, not
+   a shadow: none of the shadow roles), so it follows the button's corners and the dots' circles
+   alike, and takes no room. */
+.press-void{outline:3px solid var(--drag-ring);outline-offset:-3px}
+.press-void-fade{outline:3px solid transparent;outline-offset:-3px;animation:pressVoidFade calc(.15s * var(--motion-scale)) ease-out}
+@keyframes pressVoidFade{from{outline-color:var(--drag-ring)}to{outline-color:transparent}}
 .btn-wrong-persist{background:rgba(185,28,28,.95)}
 .btn-wrong-dim{background:rgba(185,28,28,.32)}
 .btn-correct-persist{background:rgba(21,128,61,.95)}
