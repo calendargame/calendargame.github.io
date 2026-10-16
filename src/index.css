@@ -428,11 +428,14 @@ input,textarea{user-select:text;-webkit-user-select:text}
 /* THE SCROLLPORT STARTS AT THE BAR'S UNDERSIDE. The fixed bar owns viewport y 0…--bar-h on EVERY
    screen, so anything the browser scrolls to the scrollport's top edge would land UNDER it.
    scroll-padding-top tells the browser where the usable top really is, which is what makes a Tab
-   into any control — a How-to-Play section header above all — bring it to rest just under the
-   bar instead of behind it. It is on #appScroll unconditionally because that is what is true: a
+   into any control PARTLY under the bar — a How-to-Play section header above all — bring it to
+   rest just under the bar instead of behind it (the browsers align its nearest edge). ⚠ Not one
+   WHOLLY behind the bar, or scrolled away above it: both engines count that as not visible at all
+   and centre it instead, and for a How to Play header components/GuidePage puts it on the line
+   itself. It is on #appScroll unconditionally because that is what is true: a
    usable top below the bar is a property of this scroller, not of any one screen.
    IT IS ALSO THE GUIDE'S ONE DOCKING LINE, by being the same number three ways: this padding (where
-   a focused header lands), the scroller's own padding-top (which is what a sticky header's `top:0`
+   a focused header lands — with GuidePage's help for one wholly above it), the scroller's own padding-top (which is what a sticky header's `top:0`
    is measured from — .guide-head, below), and the line components/GuidePage glides a section you
    open to. A header you Tab to, a header you open, and a header that docks as you scroll all come
    to rest on the same pixel.
@@ -456,7 +459,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
        would have dropped it there in one frame. At rest every header is on this rule.
      • ONE DOCKING POSITION. That same line is where a section you OPEN is brought to rest
        (GuidePage glides the header's top onto it) and where a header you Tab to lands
-       (#appScroll's scroll-padding-top, above). So opening a section puts its header exactly
+       (#appScroll's scroll-padding-top, above, and GuidePage for one wholly above the line). So opening a section puts its header exactly
        where scrolling would have docked it: flush against the bar, the section's own top border
        tucked behind the bar, and nothing moves when you then start to scroll.
      • the fill is the panel's own (--panel-bg) composited over the page (--bg1), which is exactly
