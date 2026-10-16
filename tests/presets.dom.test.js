@@ -169,9 +169,19 @@ describe('preset 1 is the data that was already there', () => {
     expect(fresh.modePrefs.getState().blitzSec).toBe(45)
     expect(fresh.progress.getState().stats.classic).toEqual(PLAYED)
     expect(fresh.userDefaults.getState().saved.prefs.aoxN).toBe('25')
-    // …and storage is byte-for-byte what it was. Materialising a registry wrote nothing, because a
-    // default registry says nothing a missing one does not already say.
-    expect({ ...localStorage }).toEqual(before)
+    // …and storage is byte-for-byte what it was, but for ONE new key: materialising a registry wrote
+    // nothing, because a default registry says nothing a missing one does not already say. The one
+    // write is store/julianRange's pin — the Julian-on Year Range a preset that has none is given
+    // the first time this build opens it, derived from its Julian-off range (1583-10000 here),
+    // written once so nothing an older build does later can move it. A new key; nothing that was
+    // there is rewritten.
+    expect({ ...localStorage }).toEqual({
+      ...before,
+      'cg-julianrange-v1': JSON.stringify({
+        state: { julianMinY: 1583, julianMaxY: 10000 },
+        version: 1,
+      }),
+    })
   })
 })
 
@@ -672,9 +682,9 @@ describe('creating a preset', () => {
     expect(p2).toEqual({ id: 2, name: 'Preset 2', amnesic: false })
     expect(usePresets.getState().presets).toHaveLength(2)
     expect(usePresets.getState().activeId).toBe(1) // creating is not opening
-    // Preset 1's four keys are exactly as they were; the only new entry is the registry itself.
+    // Preset 1's keys are exactly as they were; the only new entry is the registry itself.
     for (const base of Object.values(PRESET_STORE_KEYS))
-      expect(localStorage.getItem(base)).toBe(saved[base])
+      expect(localStorage.getItem(base)).toBe(saved[base] ?? null)
     expect(useProgress.getState().stats.classic).toEqual(PLAYED)
   })
 
@@ -769,7 +779,7 @@ describe('reordering presets', () => {
     // Every key byte-for-byte what it was, the registry excepted — which is the only thing a
     // reorder is entitled to rewrite.
     for (const base of Object.values(PRESET_STORE_KEYS))
-      expect(localStorage.getItem(base)).toBe(saved[base])
+      expect(localStorage.getItem(base)).toBe(saved[base] ?? null)
     expect(usePresets.getState().activeId).toBe(1)
     expect(useProgress.getState().stats.classic).toEqual(PLAYED)
     expect(activePreset().id).toBe(1)
@@ -914,10 +924,16 @@ describe('deleting a preset', () => {
     switchPreset(p2.id)
     playOnThisPreset({ minY: 1900 })
     switchPreset(1)
+    // (Coming back to preset 1 pins its Julian-on Year Range, which it had never been given —
+    // store/julianRange — so that key is preset 1's as it stands after the switch.)
+    const preset1Now = {
+      ...preset1,
+      'cg-julianrange-v1': localStorage.getItem('cg-julianrange-v1'),
+    }
     expect(deletePreset(p2.id)).toBe(true)
     for (const base of Object.values(PRESET_STORE_KEYS)) {
       expect(localStorage.getItem(presetKey(base, 2))).toBeNull() // gone
-      expect(localStorage.getItem(base)).toBe(preset1[base]) // untouched
+      expect(localStorage.getItem(base)).toBe(preset1Now[base]) // untouched
     }
     expect(usePresets.getState().presets).toEqual([{ id: 1, name: 'Preset 1', amnesic: false }])
   })

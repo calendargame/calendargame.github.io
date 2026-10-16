@@ -42,7 +42,7 @@ import { nameHasInk } from '../lib/presetNameInk.js'
 // WHAT LIVES IN THIS FILE, and why they live together:
 //   • the REGISTRY store — the list of presets and which one is active. It is GLOBAL: it is the
 //     thing that says which preset you are on, so it cannot itself live inside a preset.
-//   • the KEY MATH (`presetKey`) and the SCOPED STORAGE ADAPTER the four per-preset stores persist
+//   • the KEY MATH (`presetKey`) and the SCOPED STORAGE ADAPTER the five per-preset stores persist
 //     through. The adapter reads the registry, so keeping both here means the dependency is one
 //     way and inside one file rather than a cycle across two.
 //   • `mergeOverDefaults`, the hydration rule that makes a switch safe (argued at its definition).
@@ -52,11 +52,14 @@ import { nameHasInk } from '../lib/presetNameInk.js'
 
 // ── The keys a preset is made of ──────────────────────────────────────────────────────────────
 //
-// ★ THE FOUR BASE KEYS LIVE HERE, not in the four store files, and that is deliberate: DELETING a
+// ★ THE FIVE BASE KEYS LIVE HERE, not in the five store files, and that is deliberate: DELETING a
 // preset has to remove exactly its keys and nothing else, which is only checkable if something can
 // enumerate them. Enumerating them by scanning localStorage for a pattern would be the fragile
 // version (it would sweep up anything that happened to match); deriving them from this record is
-// exact, and a fifth per-preset store added later becomes deletable by the act of being listed.
+// exact, and a per-preset store added later becomes deletable by the act of being listed — as the
+// fifth, store/julianRange's (Round 26), did.
+// ⚠ AN OLDER BUILD KNOWS ONLY THE FIRST FOUR: its preset delete leaves a fifth key behind, which a
+// cold open sweeps (store/presetControl's sweepDeletedPresetLeftovers).
 // ⚠ The `-v1` in these strings is the ORIGINAL key version and is frozen history — the live shape
 // version is each store's own `version` option. Do not "tidy" them.
 export const PRESET_STORE_KEYS = {
@@ -64,6 +67,7 @@ export const PRESET_STORE_KEYS = {
   modePrefs: 'cg-modeprefs-v1',
   progress: 'cg-progress-v1',
   userDefaults: 'cg-userdefaults-v1',
+  julianRange: 'cg-julianrange-v1',
 } as const
 
 // The registry's OWN key, and it is deliberately NOT in the record above: it is global, so it must

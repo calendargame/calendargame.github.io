@@ -40,6 +40,7 @@ import { expect } from 'vitest'
 import { screen, within, render, fireEvent, act } from '@testing-library/react'
 import { App } from '../../src/main.jsx'
 import { useSettings } from '../../src/store/settings.js'
+import { useJulianRange, JULIAN_RANGE_DEFAULTS } from '../../src/store/julianRange.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults } from '../../src/store/userDefaults.js'
 import { useProgress } from '../../src/store/progress.js'
@@ -107,6 +108,9 @@ export function resetAppState() {
   for (const preset of usePresets.getState().presets) discardSessionStats(preset.id)
   forgetSessionAmnesic()
   usePresets.setState(makePresetRegistryDefaults())
+  // The Julian-on Year Range back to a factory preset's, and then off the disk with everything else:
+  // an absent pair is the factory one (store/julianRange derives it), as on a device never played on.
+  useJulianRange.getState().applyJulianRange({ ...JULIAN_RANGE_DEFAULTS })
   localStorage.clear()
   useSettings.getState().resetToFactory()
   useModePrefs.getState().resetModePrefs()

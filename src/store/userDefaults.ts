@@ -7,6 +7,8 @@ import type { SettingsValues, LegacyDotFields } from './settings.js'
 import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { readAmnesicMode, storedAmnesic } from './amnesicMode.js'
 import type { AmnesicMode, StoredAmnesic } from './amnesicMode.js'
+import { deriveJulianRange, readJulianRange } from './julianRange.js'
+import type { JulianRangeValues } from './julianRange.js'
 
 // userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, "Save Defaults").
 //
@@ -62,12 +64,20 @@ export type PrefDefaults = {
 // ⚠ A SNAPSHOT IS HANDED IN WITH THE VALUE AND SAVED IN ITS TWO-FIELD SPELLING (store/amnesicMode's
 // StoredAmnesic — the boolean an older build on this origin acts on, and the three-way value beside
 // it). Nothing reads either field directly: effectiveAmnesicDefault is the way in.
+// ★ THE SNAPSHOT'S `settings` CARRIES THE JULIAN-ON YEAR RANGE TOO (Round 26, Q7): the 16 settings
+// plus `julianMinY` / `julianMaxY` (store/julianRange). There, and not in a store-shaped field of its
+// own, because that is the one place every older build's write keeps it: the defaults manager
+// passes `saved.settings` through and the store shallow-copies it, so the two extra keys ride along.
+// The one older-build write that drops them is a fresh Save Defaults there, which saves its 16 —
+// and then the pair is derived at READ from that snapshot's own range (effectiveJulianRangeDefaults),
+// which is right: the older build saved "the range". Never written back on a read.
+export type SavedSettings = SettingsValues & Partial<JulianRangeValues>
 export type DefaultsSnapshot = {
-  settings: SettingsValues
+  settings: SavedSettings
   prefs: PrefDefaults
   amnesic: AmnesicMode
 }
-export type SavedDefaults = { settings: SettingsValues; prefs: PrefDefaults } & StoredAmnesic
+export type SavedDefaults = { settings: SavedSettings; prefs: PrefDefaults } & StoredAmnesic
 export type UserDefaultsState = {
   saved: SavedDefaults | null
   saveDefaults: (snapshot: DefaultsSnapshot) => void
@@ -90,8 +100,18 @@ const FACTORY_PREF_DEFAULTS: PrefDefaults = {
 // `undefined` for it — permanently failing every at-defaults comparison (gear stuck on "modified")
 // and writing `undefined` into the live store on Reset/Full Reset. Fields the saver never saw
 // simply mean factory.
-export const effectiveSettingsDefaults = (saved: SavedDefaults | null): SettingsValues =>
-  saved ? { ...SETTINGS_DEFAULTS, ...saved.settings } : SETTINGS_DEFAULTS
+// (The settings store's 16 only: the snapshot's Julian-on pair is effectiveJulianRangeDefaults'.)
+const SETTINGS_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
+export const effectiveSettingsDefaults = (saved: SavedDefaults | null): SettingsValues => {
+  if (!saved) return SETTINGS_DEFAULTS
+  const merged: SettingsValues = { ...SETTINGS_DEFAULTS, ...saved.settings }
+  return Object.fromEntries(SETTINGS_KEYS.map((k) => [k, merged[k]])) as SettingsValues
+}
+// The effective Julian-on Year Range — the snapshot's pair when it has a usable one, otherwise the
+// pair derived from the snapshot's own Julian-off range (store/julianRange's rule); factory derives
+// 1-11582.
+export const effectiveJulianRangeDefaults = (saved: SavedDefaults | null): JulianRangeValues =>
+  readJulianRange(saved?.settings) ?? deriveJulianRange(effectiveSettingsDefaults(saved))
 export const effectivePrefDefaults = (saved: SavedDefaults | null): PrefDefaults =>
   saved ? { ...FACTORY_PREF_DEFAULTS, ...saved.prefs } : FACTORY_PREF_DEFAULTS
 // The effective Amnesic default — same "nothing saved = factory" rule as the two helpers above, and

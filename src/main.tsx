@@ -43,7 +43,7 @@ import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpd
 import { usePresets } from './store/presets.js'
 import { activeDataId, activeBestsId, activeAmnesicMode, useActiveAmnesicMode, keepsLookups, discardParkedStats } from './store/amnesic.js'
 import { useSessionAmnesic, commitSessionAmnesic } from './store/sessionAmnesic.js'
-import { setPresetAmnesic, commitSessionPreset, sweepDeletedPresetTimes } from './store/presetControl.js'
+import { setPresetAmnesic, commitSessionPreset, sweepDeletedPresetLeftovers } from './store/presetControl.js'
 import { openBrowsingSession } from './store/browsingSession.js'
 import { useSettings, readStoredDefaultMode } from './store/settings.js'
 import { readSessionMode, writeSessionMode } from './store/sessionMode.js'
@@ -1909,13 +1909,14 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ★ …AND SO IS THE PRESET THIS LOAD LANDED IN (commitSessionPreset: the "Open in" pin is applied
       // at hydrate, in memory only, and the reload that may follow reads the session's record of the
       // preset it is on). Session storage again — a fresh open writes nothing permanent at all.
-      // ★ ON A COLD OPEN ONLY, the solve-time chunks of presets that no longer exist are cleared
-      // (sweepDeletedPresetTimes — what an older build's preset delete leaves behind).
+      // ★ ON A COLD OPEN ONLY, the solve-time chunks and Julian-on Year Ranges of presets that no
+      // longer exist are cleared (sweepDeletedPresetLeftovers — what an older build's preset delete
+      // leaves behind).
       useEffect(()=>{
         const cold=openBrowsingSession();
         commitSessionAmnesic();
         commitSessionPreset();
-        if(cold)sweepDeletedPresetTimes();
+        if(cold)sweepDeletedPresetLeftovers();
       },[]);
       // ★ COLD-OPEN PAGE (round 21). `mode` starts "classic" only for the first paint; this
       // one-shot boot effect immediately moves it to the ACTIVE preset's session page — set if a

@@ -1,0 +1,279 @@
+{
+  "build": "v2.29.4",
+  "row1": {
+    "after": {
+      "cg-julianrange-v1": {
+        "state": {
+          "julianMinY": 1,
+          "julianMaxY": 10000
+        },
+        "version": 1
+      },
+      "cg-progress-v1": {
+        "state": {
+          "aoxBest": {
+            "10|false|written-mdy|random|random|random|1-10000|true": {
+              "avg": 1.5,
+              "avgMed": 1.5,
+              "avgRoundId": 7,
+              "med": 1.5,
+              "medAvg": 1.5,
+              "medRoundId": 7
+            }
+          }
+        },
+        "version": 5
+      },
+      "cg-settings-v1": {
+        "state": {
+          "randomFormat": false,
+          "dateFormat": "written-mdy",
+          "inputStyle": "buttons",
+          "dotRotation": "standard",
+          "defaultMode": "classic",
+          "useJulian": true,
+          "minY": 1,
+          "maxY": 10000,
+          "leapChance": "random",
+          "janFebChance": "random",
+          "julianChance": "random",
+          "saveStats": true,
+          "useSystem": true,
+          "darkTheme": "dusk",
+          "lightTheme": "light",
+          "manualTheme": "dusk"
+        },
+        "version": 4
+      }
+    },
+    "extra": null
+  },
+  "row2": {
+    "after": {
+      "cg-julianrange-v1": {
+        "state": {
+          "julianMinY": 1,
+          "julianMaxY": 11582
+        },
+        "version": 1
+      },
+      "cg-settings-v1": {
+        "state": {
+          "randomFormat": false,
+          "dateFormat": "written-mdy",
+          "inputStyle": "buttons",
+          "dotRotation": "standard",
+          "defaultMode": "classic",
+          "useJulian": true,
+          "minY": 1500,
+          "maxY": 1700,
+          "leapChance": "random",
+          "janFebChance": "random",
+          "julianChance": "random",
+          "saveStats": true,
+          "useSystem": true,
+          "darkTheme": "dusk",
+          "lightTheme": "light",
+          "manualTheme": "dusk"
+        },
+        "version": 4
+      }
+    },
+    "extra": null
+  },
+  "row4": {
+    "after": {
+      "cg-julianrange-v1": {
+        "state": {
+          "julianMinY": 5,
+          "julianMaxY": 11000
+        },
+        "version": 1
+      },
+      "cg-settings-v1": {
+        "state": {
+          "randomFormat": false,
+          "dateFormat": "written-mdy",
+          "inputStyle": "buttons",
+          "dotRotation": "standard",
+          "defaultMode": "classic",
+          "useJulian": true,
+          "minY": 1900,
+          "maxY": 2100,
+          "leapChance": "random",
+          "janFebChance": "random",
+          "julianChance": "random",
+          "saveStats": true,
+          "useSystem": true,
+          "darkTheme": "dusk",
+          "lightTheme": "light",
+          "manualTheme": "dusk"
+        },
+        "version": 4
+      }
+    },
+    "extra": null
+  },
+  "row5": {
+    "after": {
+      "cg-julianrange-v1~p2": {
+        "state": {
+          "julianMinY": 1900,
+          "julianMaxY": 2100
+        },
+        "version": 1
+      },
+      "cg-presets-v1": {
+        "state": {
+          "presets": [
+            {
+              "id": 1,
+              "name": "Preset 1",
+              "amnesic": false
+            }
+          ],
+          "activeId": 1,
+          "nextId": 3,
+          "openInPreset": "last"
+        },
+        "version": 1
+      }
+    },
+    "extra": {
+      "deleted": true
+    }
+  },
+  "row6": {
+    "after": {
+      "cg-julianrange-v1~p2": {
+        "state": {
+          "julianMinY": 1,
+          "julianMaxY": 10000
+        },
+        "version": 1
+      },
+      "cg-presets-v1": {
+        "state": {
+          "presets": [
+            {
+              "id": 1,
+              "name": "Preset 1",
+              "amnesic": false
+            },
+            {
+              "id": 2,
+              "name": "Preset 2",
+              "amnesic": false
+            }
+          ],
+          "activeId": 1,
+          "nextId": 3,
+          "openInPreset": "last"
+        },
+        "version": 1
+      }
+    },
+    "extra": {
+      "factory": true
+    }
+  },
+  "row8": {
+    "after": {
+      "cg-userdefaults-v1": {
+        "state": {
+          "saved": {
+            "settings": {
+              "randomFormat": false,
+              "dateFormat": "written-mdy",
+              "inputStyle": "buttons",
+              "dotRotation": "standard",
+              "defaultMode": "classic",
+              "useJulian": true,
+              "minY": 1500,
+              "maxY": 1600,
+              "leapChance": "random",
+              "janFebChance": "random",
+              "julianChance": "random",
+              "saveStats": true,
+              "useSystem": true,
+              "darkTheme": "dusk",
+              "lightTheme": "light",
+              "manualTheme": "dusk",
+              "julianMinY": 2,
+              "julianMaxY": 11000
+            },
+            "prefs": {
+              "flashMs": 900,
+              "blitzSec": 60,
+              "blitzQSec": 10,
+              "aoxN": "10"
+            },
+            "amnesic": false,
+            "amnesicMode": "off"
+          }
+        },
+        "version": 3
+      }
+    },
+    "extra": null
+  },
+  "row9": {
+    "after": {
+      "cg-settings-v1": {
+        "state": {
+          "randomFormat": false,
+          "dateFormat": "written-mdy",
+          "inputStyle": "buttons",
+          "dotRotation": "standard",
+          "defaultMode": "classic",
+          "useJulian": true,
+          "minY": 1500,
+          "maxY": 1600,
+          "leapChance": "random",
+          "janFebChance": "random",
+          "julianChance": "random",
+          "saveStats": true,
+          "useSystem": true,
+          "darkTheme": "dusk",
+          "lightTheme": "light",
+          "manualTheme": "dusk"
+        },
+        "version": 4
+      },
+      "cg-userdefaults-v1": {
+        "state": {
+          "saved": {
+            "settings": {
+              "randomFormat": false,
+              "dateFormat": "written-mdy",
+              "inputStyle": "buttons",
+              "dotRotation": "standard",
+              "defaultMode": "classic",
+              "useJulian": true,
+              "minY": 1500,
+              "maxY": 1600,
+              "leapChance": "random",
+              "janFebChance": "random",
+              "julianChance": "random",
+              "saveStats": true,
+              "useSystem": true,
+              "darkTheme": "dusk",
+              "lightTheme": "light",
+              "manualTheme": "dusk"
+            },
+            "prefs": {
+              "flashMs": 800,
+              "blitzSec": 60,
+              "blitzQSec": 10,
+              "aoxN": "10"
+            },
+            "amnesic": false,
+            "amnesicMode": "off"
+          }
+        },
+        "version": 3
+      }
+    },
+    "extra": null
+  }
+}

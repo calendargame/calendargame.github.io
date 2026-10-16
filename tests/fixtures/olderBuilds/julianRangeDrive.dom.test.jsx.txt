@@ -1,0 +1,160 @@
+// @vitest-environment jsdom
+// Drives an OLDER build's real store code (this file is copied into that build's tests/ folder, as
+// julianRangeDrive.dom.test.jsx) over storage as Round 26 leaves it — the Julian-on Year Range in a
+// per-preset key of its own (`cg-julianrange-v1[~pN]`) and riding in a saved-defaults snapshot as two
+// extra settings keys — and writes down what the older build left (run with OLDER_BUILD=<tag>
+// JULIAN_OUT=<file>). The record is tests/fixtures/olderBuilds/julianRange-<build>.json;
+// tests/julianRange.olderBuilds.test.js holds this build to it.
+//
+// The older builds know the settings blob as its 16 fields and a preset as four keys. Each case is
+// one row of design-q7-q10's interleaving table (A2.3), done the way the older build's own panel
+// does it: a store write through the same action its handler calls.
+import { it, afterAll } from 'vitest'
+import { writeFileSync } from 'node:fs'
+import { usePresets } from '../src/store/presets.js'
+import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { useModePrefs } from '../src/store/modePrefs.js'
+import { useProgress } from '../src/store/progress.js'
+import { useUserDefaults, effectiveSettingsDefaults } from '../src/store/userDefaults.js'
+import { deletePreset, isPresetFactory } from '../src/store/presetControl.js'
+
+const BUILD = process.env.OLDER_BUILD
+const out = {}
+const JR = 'cg-julianrange-v1'
+const SETTINGS = 'cg-settings-v1'
+const PROGRESS = 'cg-progress-v1'
+const DEFAULTS = 'cg-userdefaults-v1'
+const REGISTRY = 'cg-presets-v1'
+const NEW_SETTINGS = { ...SETTINGS_DEFAULTS, dotRotation: 'standard', defaultMode: 'classic' }
+// Settings as this build saves them: the 16 values, version 4 (fields an older build lacks are
+// simply ones it does not know).
+const settingsBlob = (values) => JSON.stringify({ state: { ...NEW_SETTINGS, ...values }, version: 4 })
+const pairBlob = (julianMinY, julianMaxY) =>
+  JSON.stringify({ state: { julianMinY, julianMaxY }, version: 1 })
+const registryBlob = (ids) =>
+  JSON.stringify({
+    state: {
+      presets: ids.map((id) => ({ id, name: `Preset ${id}`, amnesic: false })),
+      activeId: 1,
+      nextId: Math.max(...ids) + 1,
+      openInPreset: 'last',
+    },
+    version: 1,
+  })
+const AOX_1_10000 = '10|false|written-mdy|random|random|random|1-10000|true'
+const REC = { avg: 1.5, avgMed: 1.5, avgRoundId: 7, med: 1.5, medAvg: 1.5, medRoundId: 7 }
+
+// A page load of the older build: every store reads storage again (the settings store first, as
+// every build orders it). A store whose saved version differs migrates and re-saves at once.
+async function pageLoad() {
+  for (const s of [usePresets, useSettings, useModePrefs, useProgress, useUserDefaults])
+    await s.persist.rehydrate()
+}
+const dump = () =>
+  Object.fromEntries(
+    Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
+      .sort()
+      .map((k) => [k, JSON.parse(localStorage.getItem(k))]),
+  )
+async function run(name, seed, act) {
+  localStorage.clear()
+  sessionStorage.clear()
+  for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v)
+  await pageLoad()
+  const extra = (await act()) ?? null
+  out[name] = { after: dump(), extra }
+}
+
+it('row 1: the Julian-on pair set to 1-10000, then a theme change and Reset Settings here', async () => {
+  await run(
+    'row1',
+    {
+      [SETTINGS]: settingsBlob({ useJulian: true }),
+      [JR]: pairBlob(1, 10000),
+      [PROGRESS]: JSON.stringify({ state: { aoxBest: { [AOX_1_10000]: REC } }, version: 5 }),
+    },
+    () => {
+      useSettings.getState().setUseSystem(false)
+      useSettings.getState().setManualTheme('nebula')
+      useSettings.getState().applySettings(effectiveSettingsDefaults(useUserDefaults.getState().saved))
+    },
+  )
+})
+it('row 2: with Julian on, the range edited here to 1500-1700', async () => {
+  await run('row2', { [SETTINGS]: settingsBlob({ useJulian: true }), [JR]: pairBlob(1, 11582) }, () => {
+    useSettings.getState().setMinY(1500)
+    useSettings.getState().setMaxY(1700)
+  })
+})
+it('row 4: merely opened', async () => {
+  await run(
+    'row4',
+    { [SETTINGS]: settingsBlob({ useJulian: true, minY: 1900, maxY: 2100 }), [JR]: pairBlob(5, 11000) },
+    () => undefined,
+  )
+})
+it('row 5: a preset deleted here', async () => {
+  await run(
+    'row5',
+    {
+      [REGISTRY]: registryBlob([1, 2]),
+      [`${SETTINGS}~p2`]: settingsBlob({ minY: 1900, maxY: 2100 }),
+      [`${JR}~p2`]: pairBlob(1900, 2100),
+    },
+    () => ({ deleted: deletePreset(2) }),
+  )
+})
+it('row 6: is a preset whose only change is its Julian-on pair untouched, to this build?', async () => {
+  await run(
+    'row6',
+    { [REGISTRY]: registryBlob([1, 2]), [`${JR}~p2`]: pairBlob(1, 10000) },
+    () => ({ factory: isPresetFactory(2, true) }),
+  )
+})
+const PREFS = { flashMs: 800, blitzSec: 60, blitzQSec: 10, aoxN: '10' }
+const savedBlob = (settings) =>
+  JSON.stringify({
+    state: { saved: { settings, prefs: PREFS, amnesic: false, amnesicMode: 'off' } },
+    version: 3,
+  })
+// What the older build's panel hands saveDefaults for the Amnesic value it passes through.
+const amnesicOf = (saved) => (BUILD === 'v2.26.0' ? (saved?.amnesic ?? false) : 'off')
+it('row 8: saved defaults edited here, in the defaults manager', async () => {
+  await run(
+    'row8',
+    { [DEFAULTS]: savedBlob({ ...NEW_SETTINGS, minY: 1500, maxY: 1600, julianMinY: 2, julianMaxY: 11000 }) },
+    () => {
+      const saved = useUserDefaults.getState().saved
+      // components/SettingsPanel's commitManageDefaults, in every one of these builds:
+      useUserDefaults.getState().saveDefaults({
+        settings: saved ? saved.settings : SETTINGS_DEFAULTS,
+        prefs: { ...PREFS, flashMs: 900 },
+        amnesic: amnesicOf(saved),
+      })
+    },
+  )
+})
+it('row 9: Save Defaults pressed here', async () => {
+  await run(
+    'row9',
+    {
+      [SETTINGS]: settingsBlob({ minY: 1500, maxY: 1600 }),
+      [DEFAULTS]: savedBlob({ ...NEW_SETTINGS, julianMinY: 2, julianMaxY: 11000 }),
+    },
+    () => {
+      // components/SettingsPanel's openSaveDefaults + commitSaveDefaults: the live 16, as this build
+      // knows them.
+      const s = useSettings.getState()
+      const settings = Object.fromEntries(Object.keys(SETTINGS_DEFAULTS).map((k) => [k, s[k]]))
+      useUserDefaults.getState().saveDefaults({
+        settings,
+        prefs: PREFS,
+        amnesic: amnesicOf(useUserDefaults.getState().saved),
+      })
+    },
+  )
+})
+
+afterAll(() => {
+  writeFileSync(process.env.JULIAN_OUT, JSON.stringify({ build: BUILD, ...out }, null, 2) + '\n')
+})

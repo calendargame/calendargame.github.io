@@ -8,12 +8,19 @@ import {
   readStoredRegistry,
   PRESET_STORE_KEYS,
   FIRST_PRESET_ID,
+  presetIdOfSuffix,
 } from './presets.js'
 import type { Preset } from './presets.js'
 import { discardSessionStats, readSessionStats, dataIdOf, bestsIdOf } from './amnesic.js'
 import { amnesicModeOf, setSessionAmnesic, forgetSessionAmnesicOf } from './sessionAmnesic.js'
 import type { AmnesicMode } from './amnesicMode.js'
-import { readItem, removeItem, storageSpaceFreed, tryWriteItem } from './storageHealth.js'
+import {
+  isHolding,
+  readItem,
+  removeItem,
+  storageSpaceFreed,
+  tryWriteItem,
+} from './storageHealth.js'
 import { removeProgressCopy, hasTimesKeys, sweepAbandonedTimes } from './progressStorage.js'
 import { recordSessionPreset } from './sessionPreset.js'
 import { discardSessionMode } from './sessionMode.js'
@@ -27,6 +34,7 @@ import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults } from './progress.js'
 import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
+import { useJulianRange, JULIAN_RANGE_DEFAULTS } from './julianRange.js'
 import { sameJson } from './json.js'
 
 // store/presetControl.ts — the things you can DO to the set of presets, and the only place allowed
@@ -114,6 +122,9 @@ export const DUPLICATE_RULES = {
   progress: leftBehind('stats, Bests, and times: a copy is a fresh thing to track'),
   // The saved personal defaults, the saved Amnesic default among them.
   userDefaults: COPIED,
+  // The Year Range used while the Julian Calendar setting is on (store/julianRange) — a ⚙ setting,
+  // in a key of its own only so that no older build can drop it.
+  julianRange: COPIED,
   // ── the browsing session's per-preset parts ──
   // The Amnesic value the preset is on THIS session (store/sessionAmnesic): Off, Stats Only, or
   // Full. The copy is on the same one — with nothing in it yet, as any change of the value starts.
@@ -190,14 +201,19 @@ const presetStore = <T extends object>(
 // Named on its own because its saved copy can sit in TWO storage areas (an Amnesic preset's session
 // stats are a second payload of this same store — isPresetFactory reads both).
 const PROGRESS_STORE = presetStore('progress', useProgress, makeProgressDefaults)
+// ★ …AND THE JULIAN-ON YEAR RANGE COMES STRAIGHT AFTER THE SETTINGS, for the same kind of reason: a
+// preset that has no pair yet derives one from the Julian-off pair the settings store has just
+// loaded (store/julianRange). Its factory value is the pair a factory preset derives, 1-11582 — which
+// is also what the no-storage branch below sets, since there every preset's settings are factory.
 const PER_PRESET_STORES = [
   presetStore('settings', useSettings, () => ({ ...SETTINGS_DEFAULTS })),
+  presetStore('julianRange', useJulianRange, () => ({ ...JULIAN_RANGE_DEFAULTS })),
   presetStore('modePrefs', useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
   PROGRESS_STORE,
   presetStore('userDefaults', useUserDefaults, makeUserDefaultsDefaults),
 ]
 
-// Reload all four from the active preset's keys, in one synchronous turn.
+// Reload all five from the active preset's keys, in one synchronous turn.
 //
 // ⚠⚠ THE NO-STORAGE BRANCH IS NOT DEFENSIVE NOISE, AND IT MUST NOT GO BACK TO BEING A SKIP.
 // Zustand attaches `api.persist` only when a storage EXISTS; in a browser that refuses localStorage
@@ -214,15 +230,18 @@ const PER_PRESET_STORES = [
 // rehydrate — it is exactly what one does here. store/presets' mergeOverDefaults turns "no saved
 // copy" into the factory values, and a memory-only browser has no saved copy for ANY preset, this
 // one included. (`setState` with a partial merges, so each store keeps its own actions.)
-// ⚠ Rehydration writes NOTHING. Zustand's hydrate() lands the loaded state through the RAW `set`,
-// not the persist-wrapped one, so reloading a preset that has never been saved does not create its
-// keys, and reloading one that has does not rewrite them. The defaults branch writes nothing
+// ⚠ Rehydration writes NOTHING — with ONE deliberate exception. Zustand's hydrate() lands the loaded
+// state through the RAW `set`, not the persist-wrapped one, so reloading a preset that has never been
+// saved does not create its keys, and reloading one that has does not rewrite them. The exception is
+// store/julianRange: a preset with no Julian-on pair yet has one derived and PINNED — its key written
+// once, a new key and nothing existing rewritten — so that nothing an older build later does to the
+// Julian-off pair can move it (that store's header argues it). The defaults branch writes nothing
 // either — there is no storage for it to write to.
 const reloadPresetStores = () => {
   for (const { reload } of PER_PRESET_STORES) reload()
 }
 
-// Remove one preset's saved copy — its four keys and nothing else. Derived from the key record
+// Remove one preset's saved copy — its five keys and nothing else. Derived from the key record
 // rather than by scanning localStorage for a pattern, so it cannot sweep up a neighbour, and so a
 // fifth per-preset store becomes deletable by the act of being listed there. (The progress key goes
 // through store/progressStorage's removeProgressCopy instead of the loop: its sealed chunks of solve
@@ -663,22 +682,36 @@ export function setOpenInPreset(value: number | 'last'): boolean {
 export const commitSessionPreset = (): void => recordSessionPreset(usePresets.getState().activeId)
 
 /**
- * Clear away the sealed solve-time chunks of presets that no longer exist — called once per fresh
- * open, by src/main.tsx's cold-open effect.
+ * Clear away what presets that no longer exist left behind — called once per fresh open, by
+ * src/main.tsx's cold-open effect.
  *
- * WHY IT IS NEEDED. Deleting a preset in THIS build removes its chunks with it. An older build on
- * this origin (live and staging share one copy of the data) removes only the four keys it knows, so
- * a preset deleted there leaves its chunks behind with nothing pointing at them.
+ * WHY IT IS NEEDED. Deleting a preset in THIS build removes everything of it. An older build on this
+ * origin (live and staging share one copy of the data) removes only the four keys it knows, so a
+ * preset deleted there leaves behind its sealed chunks of solve times and its Julian-on Year Range
+ * (store/julianRange), with nothing pointing at them. (Ids are never reused, so neither could ever
+ * be read as another preset's; this is tidying, not a defence.)
  * ⚠ ONLY A PRESET NEITHER REGISTRY KNOWS — the one in memory and the one on the device, which
- * another tab may have added to since this page loaded — and only when it has no progress key
- * (store/progressStorage's sweepAbandonedTimes checks that half, held saves included).
+ * another tab may have added to since this page loaded. The chunks go only when the preset has no
+ * progress key either (store/progressStorage's sweepAbandonedTimes checks that half, held saves
+ * included). The Year Range goes only while this page is holding no refused save: a registry save
+ * held back on a full device is a list the device does not show, which may name the preset.
  */
-export function sweepDeletedPresetTimes(): void {
+export function sweepDeletedPresetLeftovers(): void {
   const known = new Set(
     [...usePresets.getState().presets, ...(readStoredRegistry()?.presets ?? [])].map((p) => p.id),
   )
   try {
-    sweepAbandonedTimes(window.localStorage, (id) => known.has(id))
+    const area = window.localStorage
+    sweepAbandonedTimes(area, (id) => known.has(id))
+    if (isHolding(area)) return
+    const base = PRESET_STORE_KEYS.julianRange
+    const orphans: string[] = []
+    for (let i = 0; i < area.length; i++) {
+      const key = area.key(i)
+      const id = key?.startsWith(base) ? presetIdOfSuffix(key.slice(base.length)) : null
+      if (key && id !== null && !known.has(id)) orphans.push(key)
+    }
+    for (const key of orphans) removeItem(area, key)
   } catch {
     /* storage refused — there is nothing to sweep */
   }
