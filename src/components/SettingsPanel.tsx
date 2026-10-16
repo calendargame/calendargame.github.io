@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { flushSync } from 'react-dom'
-import { rangeHasLeapYear } from '../lib/calendar.js'
+import { julianChanceApplies, leapChanceApplies } from '../lib/dateConfig.js'
 import { fmt, numericFormatOf } from '../lib/format.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
 import { sharedFitScale } from '../lib/statFit.js'
@@ -1498,10 +1498,15 @@ export function SettingsPanel({
                 is written straight into `disabled` because one boolean is now all a lock takes —
                 the IIFEs the two locked rows (Leap Year Chance, Julian Chance) used to need existed
                 only to hand the same derived boolean to a dim class as well.
-                Leap Year Chance: locked when the active range/calendar has no leap years; the
-                selected value is preserved + restored when a leap year becomes reachable again. */}
+                Leap Year Chance: locked when it cannot apply — the active range/calendar has no leap
+                year, or is a single leap year (lib/dateConfig's leapChanceApplies, the same question
+                the generator's settings in effect ask); the selected value is preserved + restored
+                when it can apply again. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Leap Year Chance</div>
-            <PillGroup label="Leap Year Chance" disabled={!rangeHasLeapYear(minY, maxY, useJulian)}>
+            <PillGroup
+              label="Leap Year Chance"
+              disabled={!leapChanceApplies(minY, maxY, useJulian)}
+            >
               <PillTray value={leapChance} onChange={setLeapChance} options={LEAP_CHANCE_OPTIONS} />
             </PillGroup>
             {/* Jan/Feb Chance: the listed % is the exact probability a leap-year date lands on
@@ -1527,10 +1532,7 @@ export function SettingsPanel({
                 spans both calendars. When locked the selected value stays visually selected, so
                 it's restored when the range becomes mixed again. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Julian Chance</div>
-            <PillGroup
-              label="Julian Chance"
-              disabled={!(useJulian && minY <= 1582 && maxY >= 1582)}
-            >
+            <PillGroup label="Julian Chance" disabled={!julianChanceApplies(minY, maxY, useJulian)}>
               <PillTray value={julianChance} onChange={setJulianChance} options={CHANCE_OPTIONS} />
             </PillGroup>
           </div>

@@ -43,6 +43,7 @@ import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
 import { buildRunBreakdown } from '../engine/runBreakdown.js'
 import { reconcileAoxStanding, aoxBestWithoutRun, emptyAoxBest } from '../engine/aoxBest.js'
 import { fileBest } from '../engine/bestMap.js'
+import { shownAoxBest } from '../engine/bestPool.js'
 import { newRoundId, isNewBest } from '../engine/roundId.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -118,10 +119,7 @@ function AoxMode({
   fmtDate,
   useJulian = false,
   genDate = randomDate,
-  leapChance = 'random',
-  janFebChance = 'random',
-  julianChance = 'random',
-  randomFormat = false,
+  dateDraw,
   dateFormat = 'written-mdy',
   inputStyle = 'buttons',
   dotRotation = 'standard',
@@ -146,13 +144,14 @@ function AoxMode({
   // for why a run is parked and restored ONLY against the Best records it was scored on.
   const bestsId = useMountedBestsId()
   const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
-  // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes,
-  // format (random→'random' bucket), leapChance, janFebChance, julianChance, year range,
-  // useJulian — the SAME dimensions as Blitz/Sudden (and as How-to-Play documents). The original
-  // app omitted julianChance here only (an inconsistency: it changes the Julian-date mix, a real
-  // difficulty dimension when the range spans pre-1582); since fixed — store/progress.ts migrates
-  // saved v1 keys so no recorded Best is orphaned.
-  const bestKey = `${n}|${allowMistakes}|${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
+  // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes, then
+  // the date settings IN EFFECT (`dateDraw`: the format bucket, the three chances, the year range) and
+  // useJulian — the SAME dimensions as Blitz/Sudden (and as How-to-Play documents). A setting that is
+  // not in effect is 'random' there (lib/dateConfig), so changing it never moves the key; the Bests
+  // filed under stored values before Round 26 are read through engine/bestPool's door below. (The
+  // original app omitted julianChance here only; since fixed — store/progress.ts migrates saved v1
+  // keys so no recorded Best is orphaned.)
+  const bestKey = `${n}|${allowMistakes}|${dateDraw}|${useJulian}`
   // The configuration a run begun (or restored) RIGHT NOW is played under — see RunConfig.
   const liveRun: RunConfig = { n, bestKey, oneByOne }
   // The ended run this (bests copy, mode) parked before its last unmount, read EXACTLY ONCE at
@@ -295,7 +294,10 @@ function AoxMode({
   // practice run became a recorded Best; turn it off, press twice, and a recorded run lost its. A run
   // is practice or it is not, from its first ending on — the same rule, and the same ref, as Blitz.
   const recordedRef = useRef<boolean | null>(parkedRun?.recorded ?? null)
-  const bestData = bests[bestKey] || emptyAoxBest()
+  // ★ THE BEST SHOWN: the pool's, through the one door (engine/bestPool) — this set-up's own record
+  // and every record filed for the same dates under stored values before Round 26. Never
+  // `bests[bestKey]`: that record can be lower than what the pool holds.
+  const bestData = shownAoxBest(bests, bestKey) ?? emptyAoxBest()
 
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
 
@@ -693,14 +695,10 @@ function AoxMode({
   // deps because Reset Settings can now restore the run length mid-run (round 6): the N field is
   // idle-locked (readOnly while running), so its only in-popover writer is Reset Settings, and a
   // reset that changes N (a Best-key dimension) must reconcile the run exactly as a panel change does.
-  useSettingsCloseEffect(
-    settingsOpen ?? false,
-    [randomFormat, dateFormat, useJulian, minY, maxY, leapChance, janFebChance, julianChance, aoxN],
-    () => {
-      if (runPhase !== 'idle') reset()
-      else eng.regenDate()
-    },
-  )
+  useSettingsCloseEffect(settingsOpen ?? false, [dateDraw, useJulian, aoxN], () => {
+    if (runPhase !== 'idle') reset()
+    else eng.regenDate()
+  })
 
   const primaryBtn =
     runPhase === 'idle' ? (

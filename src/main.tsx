@@ -18,6 +18,7 @@ import { initObservability, captureError } from './observability/sentry'
 import { createRoot } from 'react-dom/client'
 import { fmt } from './lib/format.js'
 import { randomDate } from './lib/dateGen.js'
+import { dateSettingsInEffect, dateDrawKey } from './lib/dateConfig.js'
 import { makeDedPuzzle } from './lib/dedPuzzle.js'
 import { UpdateDot } from './components/UpdateDot.jsx'
 import CustomSelect from './components/CustomSelect.jsx'
@@ -1703,8 +1704,18 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //   dateFormat: 'written-mdy'|'written-dmy'|'numeric-mdy'|'numeric-dmy'|'numeric-ymd'.
       //   randomFormat overrides the selected format for game-mode dates only (Lookup + DEPLOY_TS ignore it).
       //   leap/janFeb/julianChance: Option-A date-generation biases (apply to all game modes; Lookup unaffected).
-      //   julianChance's picker is locked when useJulian is off OR the year range is all-Gregorian
-      //   (minY>=1583) or all-Julian (maxY<=1581); year 1582 is mixed so any range including it is unlocked.
+      // ★ AND NOTHING BELOW READS THE THREE CHANCES OR RANDOM FORMAT AS STORED: `dateIn` is the date
+      // settings IN EFFECT (lib/dateConfig's dateSettingsInEffect — the one definition: a chance that
+      // cannot apply is 'random', and Random Format makes the format bucket 'random'). The generator is
+      // handed it, and every screen is handed it — as the range it plays and as `dateDraw`, the one
+      // string each screen's resets, parked `config`, and Best keys are built from — so a setting that
+      // is not in effect does nothing anywhere, by construction. (Before Round 26 the generator was
+      // handed the stored values, and a Julian Chance the range could not use made it drop the leap
+      // filters on a share of dates: lib/dateConfig's header.) Deduction never reads Julian Chance, so
+      // its string leaves it out — it is not in effect there.
+      const dateIn=dateSettingsInEffect({randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance});
+      const dateDraw=dateDrawKey(dateIn);
+      const dedDateDraw=dateDrawKey({...dateIn,julianChance:'random'});
       // FORMAT_IDS and rollFormat are defined at module scope (see top of file)
       // so the dateByMode useState initializer can also use them.
       // fmtDate: every date stamps _fmt (always present), so display always uses
@@ -1715,16 +1726,15 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // Stamps _fmt and _jul at generation. _fmt is always present — random roll
       // when randomFormat is on, current dateFormat when off. The display layer always
       // trusts _fmt.
-      // On a Cat A unanswered untouched live date, format setting changes
-      // can trigger a fresh genDate call via regenDecisionFor (Random off→on always; Random
-      // on→off and dropdown changes regen only on _fmt mismatch with the now-active format).
-      // Wrong guesses defer format regen — the new format only applies on the next genDate.
+      // A format change regenerates a waiting question like any other date setting a date is drawn
+      // under (each screen compares `dateDraw` as the panel closes); with Random Format on, a Date
+      // Format change is no change to `dateDraw` and regenerates nothing.
       // _jul is the Julian Calendar setting the date was drawn under — a record of the draw, not
       // the calendar it is answered in (see the snapshot-fields note at the top of this file): an
       // untouched date follows the setting as it stands, so toggling Julian over it updates the
       // answer, and the first judgement stamps the calendar onto the card.
       const genDate=(lo: number,hi: number)=>{
-        const dt=randomDate(lo,hi,useJulian,leapChance,janFebChance,julianChance);
+        const dt=randomDate(lo,hi,useJulian,dateIn.leapChance,dateIn.janFebChance,dateIn.julianChance);
         dt._fmt=randomFormat?rollFormat():dateFormat;
         dt._jul=useJulian;
         return dt;
@@ -2649,19 +2659,19 @@ import BlitzMode from './modes/BlitzMode.jsx'
               together (clearing any caught error AND resetting the component's state). The
               always-mounted modes pass `active` so a hidden mode's crash paints nothing. */}
           <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="MoX" active={mode==="aox"} onCrash={forgetMoxRun}>
-            <AoxMode minY={minY} maxY={maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
+            <AoxMode minY={dateIn.minY} maxY={dateIn.maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} dateDraw={dateDraw} inputStyle={inputStyle} dotRotation={dotRotation} dateFormat={dateFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"classic-"+classicResetKey} mode="Classic" active={mode==="classic"} onCrash={forgetClassicHistory}>
-            <ClassicMode visible={mode==="classic"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
+            <ClassicMode visible={mode==="classic"} genDate={genDate} minY={dateIn.minY} maxY={dateIn.maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} dateDraw={dateDraw} inputStyle={inputStyle} dotRotation={dotRotation} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"flash-"+flashResetKey} mode="Flash" active={mode==="flash"} onCrash={forgetFlashHistory}>
-            <FlashMode visible={mode==="flash"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
+            <FlashMode visible={mode==="flash"} genDate={genDate} minY={dateIn.minY} maxY={dateIn.maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} dateDraw={dateDraw} inputStyle={inputStyle} dotRotation={dotRotation} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"blitz-"+blitzResetKey} mode="Blitz" active={mode==="blitz"} onCrash={forgetBlitzRound}>
-            <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} inputStyle={inputStyle} dotRotation={dotRotation} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
+            <BlitzMode visible={mode==="blitz"} genDate={genDate} minY={dateIn.minY} maxY={dateIn.maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} dateDraw={dateDraw} inputStyle={inputStyle} dotRotation={dotRotation} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setBlitzIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"deduction-"+deductionResetKey} mode="Deduction" active={mode==="deduction"} onCrash={forgetDeductionHistory}>
-            <DeductionMode visible={mode==="deduction"} minY={minY} maxY={maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} leapChance={leapChance} janFebChance={janFebChance} julianChance={julianChance} settingsOpen={settingsOpen} onFreshChange={setDeductionIsFresh}/>
+            <DeductionMode visible={mode==="deduction"} minY={dateIn.minY} maxY={dateIn.maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} dateDraw={dedDateDraw} randomFormat={randomFormat} leapChance={dateIn.leapChance} janFebChance={dateIn.janFebChance} settingsOpen={settingsOpen} onFreshChange={setDeductionIsFresh}/>
           </ModeErrorBoundary>
           {/* Lookup is the one FIT-TO-SCREEN mode: its wrapper takes the screenful the flex column
               above guarantees, and LookupCard divides it up (top card natural, history list gets

@@ -2,7 +2,7 @@
 // Extracted verbatim from main.tsx (the main.tsx split); it was already a module-level sibling of App
 // taking everything through props, so nothing about its behaviour changes by living here.
 import { useEffect, useState } from 'react'
-import type { ModeProps } from './modeTypes.js'
+import type { DedScreenProps } from './modeTypes.js'
 import {
   useButtonFlash,
   useStatsHideToggles,
@@ -93,13 +93,13 @@ function DeductionMode({
   useJulian,
   saveStats,
   dateFormat,
+  dateDraw,
   randomFormat,
   leapChance,
   janFebChance,
-  julianChance,
   settingsOpen,
   onFreshChange,
-}: ModeProps) {
+}: DedScreenProps) {
   const dedType = useModePrefs((s) => s.dedType),
     setDedType = useModePrefs((s) => s.setDedType) // persisted (mode-prefs store)
   // Each silo's HISTORY is kept for the browsing session (store/sessionHistory): parked per silo
@@ -161,19 +161,12 @@ function DeductionMode({
 
   // Lifetime stats persist per sub-mode (Stage D1): each silo hydrates from its own saved slice
   // on mount and mirrors changes back to the store.
-  // The date settings a puzzle is drawn under on this screen — ONE list, read by the parks (as the
-  // settings each waiting puzzle belongs to) and by the settings-close regen below. (The filters are
-  // parked beside it as the screen's own fields, and a filter change regenerates at once.)
-  const dateSettings = [
-    randomFormat,
-    dateFormat,
-    leapChance,
-    janFebChance,
-    julianChance,
-    minY,
-    maxY,
-    useJulian,
-  ]
+  // The date settings a puzzle is drawn under on this screen — the ones IN EFFECT here (`dateDraw`,
+  // modes/modeTypes; App leaves Julian Chance out of Deduction's, which never reads it) and the
+  // calendar a puzzle is built in — ONE list, read by the parks (as the settings each waiting puzzle
+  // belongs to) and by the settings-close regen below. (The filters are parked beside it as the
+  // screen's own fields, and a filter change regenerates at once.)
+  const dateSettings = [dateDraw, useJulian]
   const dateConfig = dateSettings.join('|')
   // …and the question each silo was waiting on comes back, or is regenerated, by modeHooks'
   // live-question rule.

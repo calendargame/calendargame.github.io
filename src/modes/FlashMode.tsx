@@ -53,12 +53,9 @@ function FlashMode({
   useJulian,
   saveStats,
   dateFormat,
-  randomFormat,
+  dateDraw,
   inputStyle = 'buttons',
   dotRotation = 'standard',
-  leapChance,
-  janFebChance,
-  julianChance,
   fmtDate,
   settingsOpen,
   clockPaused,
@@ -75,18 +72,12 @@ function FlashMode({
   // A flash that was RUNNING is not restored, exactly as leaving the mode stops one (onHide below):
   // the screen comes back idle over the same engine, and Begin moves on as it would have then.
   const dataId = useMountedDataId()
-  // The date settings a question is drawn under on this screen — ONE list, read by the park (as the
-  // settings the waiting question belongs to) and by the settings-close regen below.
-  const dateSettings = [
-    randomFormat,
-    dateFormat,
-    leapChance,
-    janFebChance,
-    julianChance,
-    minY,
-    maxY,
-  ]
-  const dateConfig = dateSettings.join('|')
+  // The date settings a question is drawn under on this screen — the ones IN EFFECT, as one string
+  // (`dateDraw`, modes/modeTypes) — read by the park (as the settings the waiting question belongs to)
+  // and by the settings-close regen below. A setting that is not in effect is not in it, so changing
+  // one regenerates nothing.
+  const dateSettings = [dateDraw]
+  const dateConfig = dateDraw
   const [parked] = useState(() => readParkedHistory(dataId, 'flash', useJulian))
   const [active, setActive] = useState(false)
   const [flashPhase, setFlashPhase] = useState('dash') // dash (idle) | show (revealing) | hide ("…")

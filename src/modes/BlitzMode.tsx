@@ -34,6 +34,7 @@ import {
   suddenBestWithoutRound,
 } from '../engine/blitzBest.js'
 import { fileBest } from '../engine/bestMap.js'
+import { shownBlitzBest, shownSuddenBest } from '../engine/bestPool.js'
 import { newRoundId, isNewBest } from '../engine/roundId.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
@@ -166,12 +167,9 @@ function BlitzMode({
   useJulian,
   saveStats,
   dateFormat,
-  randomFormat,
+  dateDraw,
   inputStyle = 'buttons',
   dotRotation = 'standard',
-  leapChance,
-  janFebChance,
-  julianChance,
   fmtDate,
   settingsOpen,
   clockPaused,
@@ -193,8 +191,11 @@ function BlitzMode({
   // The per-config Best silo keys. blitzBk leads with an m/n Allow-Mistakes marker (both
   // per-round variants share the one blitzBest map); suddenBk has NO AM segment — for
   // per-question, AM-ness is the MAP split (suddenBest = sudden death, suddenAmBest = Allow
-  // Mistakes on), because the two record shapes differ (score-only vs score+streak).
-  const dateConfig = `${randomFormat ? 'random' : dateFormat}|${leapChance}|${janFebChance}|${julianChance}|${minY}-${maxY}|${useJulian}`
+  // Mistakes on), because the two record shapes differ (score-only vs score+streak). The tail is the
+  // date settings IN EFFECT (`dateDraw` — modes/modeTypes) and useJulian, so a setting that is not in
+  // effect never moves a key; the Bests filed under stored values before Round 26 are read through
+  // engine/bestPool's door (the display, below).
+  const dateConfig = `${dateDraw}|${useJulian}`
   const blitzBk = `${allowMistakes ? 'm' : 'n'}${blitzSec}|${dateConfig}`
   const suddenBk = `${qSec}|${dateConfig}`
   // ★ THE CONFIGURATION A ROUND IS PLAYED UNDER — the timing sub-mode, Allow Mistakes, and the Best
@@ -790,24 +791,9 @@ function BlitzMode({
   // timer lengths are in the deps because Reset Settings can now restore them mid-round (round 6):
   // the sliders are idle-locked, so the only in-popover writer of blitzSec/qSec is Reset Settings, and a
   // reset that lands a fresh timer must reconcile the running/ended round exactly as a panel change does.
-  useSettingsCloseEffect(
-    settingsOpen ?? false,
-    [
-      randomFormat,
-      dateFormat,
-      useJulian,
-      minY,
-      maxY,
-      leapChance,
-      janFebChance,
-      julianChance,
-      blitzSec,
-      qSec,
-    ],
-    () => {
-      if (active || timerDone) resetRound()
-    },
-  )
+  useSettingsCloseEffect(settingsOpen ?? false, [dateDraw, useJulian, blitzSec, qSec], () => {
+    if (active || timerDone) resetRound()
+  })
 
   // Reconcile Best while a round is over — when it ends AND on every post-round Override that moves
   // its stats. Each run REBUILDS the round's record from the pre-round one (engine/blitzBest): a
@@ -1083,9 +1069,12 @@ function BlitzMode({
         format: fmtBlitzT,
         fill: Math.round(((blitzSec - 10) / 290) * 100) + '%',
       }
-  const bScore = blitzBest[blitzBk],
-    sScore = suddenBest[suddenBk],
-    saScore = suddenAmBest[suddenBk]
+  // ★ THE BESTS SHOWN: each the pool's, through the one door (engine/bestPool) — this set-up's own
+  // record and every record filed for the same dates under stored values before Round 26. Never
+  // `blitzBest[blitzBk]` and the like: that record can be lower than what the pool holds.
+  const bScore = shownBlitzBest(blitzBest, blitzBk),
+    sScore = shownSuddenBest(suddenBest, suddenBk),
+    saScore = shownBlitzBest(suddenAmBest, suddenBk)
   return (
     <div style={{ display: visible ? 'block' : 'none' }}>
       {/* dimmed = Save Stats off = nothing is being recorded (whole strip, every value '—'); the

@@ -27,7 +27,7 @@ import {
   closeSettings,
 } from './helpers/settingsPanel.jsx'
 import { useSettings } from '../src/store/settings.js'
-import { wday, wdayJulian } from '../src/lib/calendar.js'
+import { dim, wday, wdayJulian } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
 
 // ── The visible screen (every mode is mounted; one is shown) ─────────────────────────────────────
@@ -44,10 +44,15 @@ const dayState = (name) => {
 }
 
 // ── Drawing the date ─────────────────────────────────────────────────────────────────────────────
-// The year range is the single year 1500, every draw is a leap-year draw in January or February
-// (both chances at 100%), so with the generator's dice pinned high the next date is February 29 —
-// which only exists while the Julian Calendar setting is on — and with them pinned low it is an
-// ordinary January day. The dice are real again as soon as the date is drawn.
+// The year range is 1496-1500 and every draw in a leap year falls in January or February (Jan/Feb
+// Chance 100%), so with the generator's dice pinned high the next date is February 29, 1500 — which
+// only exists while the Julian Calendar setting is on — and with them pinned low it is an ordinary
+// April day of 1497. The dice are real again as soon as the date is drawn.
+// ⚠ THE RANGE HOLDS A LEAP YEAR IN BOTH CALENDARS (1496) ON PURPOSE: Jan/Feb Chance then applies with
+// the setting on and off alike (lib/dateConfig's janFebChanceApplies), so switching the setting alone
+// changes no date setting IN EFFECT, which is the case this file is about. (On the single year 1500,
+// switching the setting off also takes Jan/Feb Chance out of effect — 1500 is no leap year in the
+// Gregorian calendar — and that, like any change to a setting in effect, regenerates a waiting date.)
 const LEAP_DAY = '1500-2-29'
 const JL = DAY[wdayJulian(1500, 2, 29)] // its weekday, in the one calendar that has it
 const NEVER = DAY[wday(1500, 2, 29)] //    what the old reading called right: the weekday of March 1
@@ -56,9 +61,9 @@ function pin1500() {
   setting((s) => {
     s.setRandomFormat(false)
     s.setDateFormat('numeric-ymd')
-    s.setMinY(1500)
+    s.setMinY(1496)
     s.setMaxY(1500)
-    s.setLeapChance('100')
+    s.setLeapChance('random')
     s.setJanFebChance('100')
     s.setUseJulian(true)
   })
@@ -124,9 +129,10 @@ describe('Classic — the Julian Calendar setting switched in the ⚙ panel', ()
     newLeapDay()
     expect(switchJulian(false)).toBe(LEAP_DAY) // deferred to the close, like every date setting
     const [y, m, d] = shownDate().split('-').map(Number)
-    expect(y).toBe(1500)
-    expect(`${m}-${d}`).not.toBe('2-29')
-    expect(d).toBeLessThanOrEqual(m === 2 ? 28 : 31)
+    expect(shownDate()).not.toBe(LEAP_DAY)
+    expect(y).toBeGreaterThanOrEqual(1496)
+    expect(y).toBeLessThanOrEqual(1500)
+    expect(d).toBeLessThanOrEqual(dim(y, m))
     // …and nothing was scored or pushed into history by the swap.
     expect(ctrl('Reveal').className).not.toContain('pointer-events-none')
   })
@@ -134,7 +140,7 @@ describe('Classic — the Julian Calendar setting switched in the ⚙ panel', ()
   it('OFF over an ordinary date keeps it — an untouched date just follows the setting', () => {
     newOrdinaryDay()
     const waiting = shownDate()
-    expect(waiting).toMatch(/^1500-1-\d+$/)
+    expect(waiting).toMatch(/^1497-4-\d+$/)
     switchJulian(false)
     expect(shownDate()).toBe(waiting)
     // …and its answer is now the Gregorian one.
@@ -193,8 +199,9 @@ describe('Classic — a waiting question that comes back after a reload', () => 
     newLeapDay()
     app = reloadApp(app, () => useSettings.getState().setUseJulian(false))
     const [y, m, d] = shownDate().split('-').map(Number)
-    expect(y).toBe(1500)
-    expect(`${m}-${d}`).not.toBe('2-29')
+    expect(shownDate()).not.toBe(LEAP_DAY)
+    expect(y).toBeGreaterThanOrEqual(1496)
+    expect(d).toBeLessThanOrEqual(dim(y, m))
   })
   it('the setting untouched: the same leap day returns', () => {
     newLeapDay()
@@ -229,13 +236,13 @@ describe('Flash — the date being flashed', () => {
     // next Begin flashes a date the calendar has.
     expect(shownDate()).toBe('—')
     tap(ctrl('Begin'))
-    expect(shownDate()).toMatch(/^1500-\d+-\d+$/)
+    expect(shownDate()).toMatch(/^1(49[6-9]|500)-\d+-\d+$/)
     expect(shownDate()).not.toBe(LEAP_DAY)
   })
   it('OFF over an ordinary date: the flash carries on with the same question', () => {
     begin(0.25)
     const flashed = shownDate()
-    expect(flashed).toMatch(/^1500-1-\d+$/)
+    expect(flashed).toMatch(/^1497-4-\d+$/)
     switchJulian(false)
     expect(shownDate()).toBe(flashed)
   })

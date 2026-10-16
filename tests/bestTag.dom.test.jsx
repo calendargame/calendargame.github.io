@@ -18,6 +18,9 @@ import { render, cleanup, act, fireEvent } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { BestLine, BestColumn } from '../src/components/BestReadout.jsx'
 import { useProgress } from '../src/store/progress.js'
+import { SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
+import { bestKeyTail, dateSettingsInEffect } from '../src/lib/dateConfig.js'
 import { resetAppState, mountApp } from './helpers/settingsPanel.jsx'
 
 const isHidden = (el) => {
@@ -37,9 +40,14 @@ const bestLine = () => {
   while (!isBestColumn(col)) col = col.parentElement
   return col.parentElement.parentElement
 }
-// A record under EVERY configuration's key, so the test does not restate how a mode composes one.
-const everyKey = (rec) =>
-  new Proxy({}, { get: (_t, k) => (typeof k === 'string' ? rec : undefined) })
+// The record under the key the factory set-up files it in. The key's date half comes from the
+// app's own builders (lib/dateConfig), so the test does not restate how one is composed; the head
+// is the factory run length / timer and Allow Mistakes. (It used to be a map answering every key,
+// which the Best shown can no longer be read from: engine/bestPool walks the map's keys.)
+const TAIL = bestKeyTail(dateSettingsInEffect(SETTINGS_DEFAULTS))
+const P = MODE_PREFS_DEFAULTS
+const MOX_KEY = `${P.aoxN}|${P.aoxAllowMistakes}|${TAIL}`
+const BLITZ_KEY = `${P.blitzAllowMistakes ? 'm' : 'n'}${P.blitzSec}|${TAIL}`
 const MODES = [
   {
     mode: 'MoX',
@@ -47,14 +55,16 @@ const MODES = [
     pair: ['Same Run', 'Different Runs'],
     seed: (same) =>
       useProgress.setState({
-        aoxBest: everyKey({
-          avg: 1.5,
-          avgMed: 1.4,
-          avgRoundId: 1,
-          med: 1.4,
-          medAvg: 1.5,
-          medRoundId: same ? 1 : 2,
-        }),
+        aoxBest: {
+          [MOX_KEY]: {
+            avg: 1.5,
+            avgMed: 1.4,
+            avgRoundId: 1,
+            med: 1.4,
+            medAvg: 1.5,
+            medRoundId: same ? 1 : 2,
+          },
+        },
       }),
   },
   {
@@ -63,7 +73,9 @@ const MODES = [
     pair: ['Same Round', 'Different Rounds'],
     seed: (same) =>
       useProgress.setState({
-        blitzBest: everyKey({ score: 5, streak: 3, scoreRoundId: 1, streakRoundId: same ? 1 : 2 }),
+        blitzBest: {
+          [BLITZ_KEY]: { score: 5, streak: 3, scoreRoundId: 1, streakRoundId: same ? 1 : 2 },
+        },
       }),
   },
 ]

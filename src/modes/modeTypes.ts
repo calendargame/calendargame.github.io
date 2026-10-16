@@ -14,6 +14,15 @@ export type FmtDate = (y: number, m: number, d: number, fmt?: FormatId) => strin
 // 7-grid is fixed, so the carried flash is always valid — the designed feedback.
 export type FlashState = { type: 'good' | 'bad'; idx: number; n?: number }
 export type GameEngine = ReturnType<typeof useGameEngine>
+// ★ THE DATE SETTINGS A SCREEN IS HANDED ARE THE ONES IN EFFECT (lib/dateConfig's dateSettingsInEffect,
+// computed once in App): minY / maxY are the range played, and `dateDraw` is every date setting a date
+// is drawn under — the format bucket, the three chances ('random' wherever one cannot apply), and the
+// range — as the one string every comparison, parked `config`, and Best key is built from. So a
+// setting that is not in effect never reaches a screen at all, and changing it cannot reset,
+// regenerate, or re-file anything. Date Format as stored still comes, for what it is in effect for on
+// every page: the order of the codes in Deduction, and the format of a date that carries none of its
+// own. (Deduction draws its own puzzles, so it alone is also handed the in-effect leap chances and
+// Random Format — DedScreenProps.)
 export interface ModeProps {
   visible: boolean
   minY: number
@@ -21,15 +30,17 @@ export interface ModeProps {
   useJulian: boolean
   saveStats: boolean
   dateFormat: FormatId
-  randomFormat: boolean
+  dateDraw: string
   inputStyle?: InputStyle // day-of-week answer layout (buttons | dots); weekday modes only — Deduction ignores it
   dotRotation?: DotRotation // how far that dot layout is turned (standard | ccw45 | ccw90); read only when inputStyle is 'dots'
-  leapChance: string
-  janFebChance: string
-  julianChance: string
   settingsOpen?: boolean //  the ⚙ popover open state — modes defer their settings side-effects to its CLOSE
   clockPaused?: boolean //  true while the rotate-back overlay covers the app — the countdown modes (Flash, Blitz) freeze their live clocks for its duration
   onFreshChange?: (fresh: boolean) => void
+}
+export interface DedScreenProps extends ModeProps {
+  randomFormat: boolean
+  leapChance: string // in effect: 'random' wherever it cannot apply
+  janFebChance: string // in effect, likewise
 }
 export interface DedOpts {
   useJulian: boolean

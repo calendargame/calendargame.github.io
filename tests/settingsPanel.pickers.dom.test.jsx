@@ -238,17 +238,24 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   // not a multiple of 400, so Gregorian does not.
   it('the Leap Year Chance picker re-evaluates when the Julian switch alone flips', () => {
     standUp()
-    commitRange(1500, 1500)
+    commitRange(1500, 1501)
     expect(switchState(JULIAN_SWITCH)).toBe('On')
-    expectLock('Leap Year Chance', false) // Julian: 1500 is a leap year
+    expectLock('Leap Year Chance', false) // Julian: 1500 is a leap year (and 1501 is not)
     toggleSwitch(JULIAN_SWITCH)
     expect(switchState(JULIAN_SWITCH)).toBe('Off')
-    expectLock('Leap Year Chance', true) // Gregorian: it is not
+    expectLock('Leap Year Chance', true) // Gregorian: it is not, so the range has no leap year
     toggleSwitch(JULIAN_SWITCH)
     expectLock('Leap Year Chance', false)
     // …and the range never moved, which is the whole claim.
     expect(yearValue('min')).toBe('1500')
-    expect(yearValue('max')).toBe('1500')
+    expect(yearValue('max')).toBe('1501')
+  })
+  it('the Leap Year Chance picker is locked on a single leap year — every date is in a leap year whatever it says', () => {
+    standUp()
+    commitRange(2000, 2000)
+    expectLock('Leap Year Chance', true)
+    commitRange(2000, 2001)
+    expectLock('Leap Year Chance', false)
   })
 
   // G2.6 — REMOVED in the dedup pass. THE NEGATIVE CONTROL — Jan/Feb Chance has no lock branch at
