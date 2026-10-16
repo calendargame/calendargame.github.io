@@ -3070,7 +3070,8 @@ export default function GuidePage({
       >
         <Lead>
           Treats early dates as Julian; on by default. Includes the Julian Chance frequency control.
-          It also chooses which Year Range pair is in use.
+          It also chooses which Year Range pair is in use, and how far Lookup goes (to 11582 with it
+          on, 10000 with it off).
         </Lead>
         <p>
           When on, dates on or before October 4, 1582 are treated as Julian, which has different
@@ -3831,7 +3832,10 @@ export default function GuidePage({
             half-typed text in the old format would no longer read.
           </li>
           <li>
-            Supports years 1–10000. The note under the box says which order to type the date in.
+            Supports years 1–10000, and with the Julian Calendar setting on 1–11582. The note under
+            the box says which order to type the date in, and how far it goes. A date past 10000
+            already in your history stays there, and can still be tapped, after the setting is
+            switched off.
           </li>
           <li>
             The answer has three fixed lines under that note — the date, then its weekday — and

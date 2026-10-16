@@ -1,6 +1,14 @@
 import * as React from 'react'
 import { fmt, MONTH, DAY, numericFormatOf } from '../lib/format.js'
-import { dim, dimEither, wday, wdayJulian, isJulianDate, isGapDate } from '../lib/calendar.js'
+import {
+  dim,
+  dimEither,
+  wday,
+  wdayJulian,
+  isJulianDate,
+  isGapDate,
+  yearMaxFor,
+} from '../lib/calendar.js'
 import { MethodBreakdownSection, type CodeDate } from './MethodBreakdown.jsx'
 import {
   SCROLL_REGION_CLASS,
@@ -287,6 +295,8 @@ export default function LookupCard({
   const ssid =
     typeof onSelectedHistoryIdChange === 'function' ? onSelectedHistoryIdChange : () => {}
   const cov = !!calcOpen
+  // The highest year the box accepts (the Julian Calendar setting's cap).
+  const yearMax = yearMaxFor(useJulian)
   // Codes-open is purely global state — it stays as-is when the user clicks through
   // history entries, only changing on (1) a manual toggle, (2) a brand-new lookup
   // via runLookup, or (3) MethodBreakdownSection's auto-close when the displayed
@@ -403,7 +413,10 @@ export default function LookupCard({
       mm = +match[2]
       yy = +match[3]
     }
-    if (yy < 1 || yy > 10000) return refuse('Year must be between 1 and 10000')
+    // The highest year is the Julian Calendar setting's (lib/calendar's caps): 11582 with it on,
+    // 10000 with it off. Typing is what is refused — a date past 10000 already in the history (one
+    // looked up with the setting on) stays there, and a tap on it still shows it.
+    if (yy < 1 || yy > yearMax) return refuse(`Year must be between 1 and ${yearMax}`)
     if (mm < 1 || mm > 12) return refuse('Month must be 1–12')
     // The day check, on the EITHER-calendar rule: a date is real if it exists in a calendar this
     // date can be read in, so pre-reform February keeps Julian's 29th. It runs BEFORE the history
@@ -653,7 +666,7 @@ export default function LookupCard({
         <p className="text-xs text-(--tx-100-90)">
           Format: <b>{inputMeta.label}</b>
           <br />
-          AD dates only, 1–10000
+          AD dates only, 1–{yearMax}
         </p>
         {/* The answer slot is ALWAYS rendered, at a constant THREE-line height, so nothing under it
             ever jumps — not Show Codes, and not the history list (which would otherwise shift under

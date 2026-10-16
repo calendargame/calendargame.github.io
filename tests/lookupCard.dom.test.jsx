@@ -164,6 +164,27 @@ describe('Lookup answer slot — always rendered, constant height (round 8 / rou
     expect(lines(container)).toHaveLength(2) // the date, then the message (two lines of wrap)
   })
 
+  it('with the Julian Calendar setting on, years run to 11582: a date past 10000 is a modern-calendar date, and the note says so', () => {
+    const { container } = render(<Host dateFormat="numeric-mdy" useJulian />)
+    const note = container.querySelector('.lookup-method-section').parentElement.children[1]
+    expect(note.textContent).toBe('Format: m/d/yAD dates only, 1–11582')
+    lookup(container, '10/10/11582') // October 10 — an ordinary day, unlike in 1582
+    expect(lines(container)).toEqual(['10/10/11582', 'Sunday']) // JavaScript's own Date agrees
+    lookup(container, '7/4/11583')
+    expect(slot(container).textContent).toBe('Year must be between 1 and 11582')
+  })
+
+  it('a date past 10000 looked up with the setting on stays in the history and still opens with it off — only typing it is refused', () => {
+    const stored = { id: 'e1', y: 10888, m: 9, d: 28 }
+    const { container } = render(
+      <Host dateFormat="written-mdy" initialHistory={[stored]} useJulian={false} />,
+    )
+    fireEvent.click(container.querySelector('ul button'))
+    expect(lines(container)).toEqual(['September 28, 10888', 'Tuesday'])
+    lookup(container, '9/28/10888')
+    expect(slot(container).textContent).toBe('Year must be between 1 and 10000')
+  })
+
   it('every error family lands in the SAME slot node — the card never changes height', () => {
     const { container } = render(<Host dateFormat="numeric-mdy" />)
     const node = slot(container)
@@ -172,6 +193,8 @@ describe('Lookup answer slot — always rendered, constant height (round 8 / rou
     expect(node.textContent).toBe('Enter date as m/d/y, e.g. 3/14/1592')
     lookup(container, '7/4/99999')
     expect(node.textContent).toBe('Year must be between 1 and 10000')
+    lookup(container, '7/4/10001')
+    expect(node.textContent).toBe('Year must be between 1 and 10000') // Julian off: the cap is 10000
     lookup(container, '13/4/1776')
     expect(node.textContent).toBe('Month must be 1–12')
     lookup(container, '2/30/1776')
