@@ -374,6 +374,64 @@ describe('New Preset', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
+// DUPLICATE (Round 26, Q5) — what a copy holds is store/presetControl's (tests/presetDuplicate.dom);
+// this is the button: a dropdown of the presets, a copy landing under its original, no switch, and
+// the note when the device has no room for one.
+describe('Duplicate', () => {
+  const duplicateButton = () => within(card()).getByRole('button', { name: 'Duplicate' })
+  const pick = (name) => {
+    tap(duplicateButton())
+    const list = screen.getByRole('listbox', { name: 'Preset to duplicate' })
+    tap(within(list).getByRole('option', { name }))
+  }
+  const COPY_NOTE = 'This device has no room to save a copy of that preset, so none was made.'
+
+  it('is a dropdown of every preset, none of them checked, beside New Preset', () => {
+    act(() => {
+      createPreset('Speed')
+    })
+    openManager()
+    expect(duplicateButton().textContent).toBe('Duplicate')
+    tap(duplicateButton())
+    const options = within(
+      screen.getByRole('listbox', { name: 'Preset to duplicate' }),
+    ).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual(['Preset 1', 'Speed'])
+    expect(options.map((o) => o.getAttribute('aria-selected'))).toEqual(['false', 'false'])
+  })
+
+  it('a copy lands directly after its original, named " (2)", and the preset you are on stays', () => {
+    act(() => {
+      createPreset('Speed')
+      createPreset('Last')
+    })
+    openManager()
+    pick('Speed')
+    expect(listedNames()).toEqual(['Preset 1', 'Speed', 'Speed (2)', 'Last'])
+    expect(registry().activeId).toBe(1)
+    pick('Speed (2)')
+    expect(listedNames()).toEqual(['Preset 1', 'Speed', 'Speed (2)', 'Speed (3)', 'Last'])
+    expect(screen.queryByRole('listbox')).toBeNull() // the list closes on the choice
+  })
+
+  it('a copy the device has no room for is not made, and the card says so — until the next New Preset', () => {
+    openManager()
+    const setItem = Storage.prototype.setItem
+    const refuse = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
+      if (key === 'cg-presets-v1') throw new DOMException('no room', 'QuotaExceededError')
+      return setItem.call(this, key, value)
+    })
+    pick('Preset 1')
+    refuse.mockRestore()
+    expect(listedNames()).toEqual(['Preset 1'])
+    expect(within(card()).getByText(COPY_NOTE, { ignore: '[aria-live] *' })).toBeTruthy()
+    expect(card().querySelector('[aria-live]').textContent).toBe(COPY_NOTE)
+    tap(within(card()).getByRole('button', { name: 'New Preset' }))
+    expect(within(card()).queryByText(COPY_NOTE)).toBeNull()
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('renaming', () => {
   const type = (box, text) => act(() => fireEvent.change(box, { target: { value: text } }))
   const enter = (box) => act(() => fireEvent.keyDown(box, { key: 'Enter' }))
@@ -844,7 +902,7 @@ describe('reordering', () => {
         ...card().closest('[data-settings-modal]').querySelectorAll('button,input,[tabindex="0"]'),
       ]
       expect(stops[0]).toBe(nameBoxes()[0])
-      // The whole cycle, row by row: name, grip, ✕ — and New Preset at the foot.
+      // The whole cycle, row by row: name, grip, ✕ — and New Preset and Duplicate at the foot.
       expect(stops.map((el) => el.getAttribute('aria-label') ?? el.textContent)).toEqual([
         'Preset name',
         'Reorder Preset 1, position 1 of 2',
@@ -853,6 +911,7 @@ describe('reordering', () => {
         'Reorder Scratch, position 2 of 2',
         'Delete Scratch',
         'New Preset',
+        'Duplicate',
       ])
       // …so Enter on the first stop keeps a name; it cannot delete anything.
       act(() => stops[0].focus())

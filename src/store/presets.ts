@@ -170,6 +170,26 @@ export const shortStockName = (name: string): string | null => {
   return number && `${STOCK_NAME_WORD[0]}${number}`
 }
 
+// ── A copy's name ─────────────────────────────────────────────────────────────────────────────
+// What Duplicate Preset (store/presetControl's duplicatePreset) names a copy: the original's name
+// and " (2)" — and a name that already ends in " (<number>)" counts on from that number instead,
+// so a copy of "Speed (2)" is "Speed (3)", not "Speed (2) (2)". Either way it takes the first number
+// from there that no preset in `taken` is already called, so a copy of "Speed" beside "Speed (2)"
+// is "Speed (3)". (Names may repeat — nothing depends on their differing — but a copy that read the
+// same as a preset already in the list would be no help to anyone.)
+// ★ ONLY THE END OF A NAME IS READ, so a pasted book costs no more than a word; and the number is
+// counted as a BigInt, so a name ending in a number too big for an ordinary one still counts on
+// by exactly one.
+export function copyName(name: string, taken: ReadonlySet<string>): string {
+  const open = name.lastIndexOf(' (')
+  const digits = name.endsWith(')') && open >= 0 ? name.slice(open + 2, -1) : ''
+  const counted = /^[1-9][0-9]*$/.test(digits)
+  const base = counted ? name.slice(0, open) : name
+  let n = counted ? BigInt(digits) + 1n : 2n
+  while (taken.has(`${base} (${n})`)) n++
+  return `${base} (${n})`
+}
+
 // Fresh defaults via a FACTORY (the same reasoning as makeProgressDefaults): the nested array must
 // be a new one each call, so nothing can alias the registry's list into a reset.
 //

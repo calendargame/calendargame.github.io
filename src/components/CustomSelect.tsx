@@ -241,6 +241,7 @@ export default function CustomSelect({
   dropdownWidth = 'content',
   triggerMatchesDropdown = false,
   leastRowLabel,
+  menuLabel,
 }: {
   value: string
   onChange: (value: string) => void
@@ -272,6 +273,13 @@ export default function CustomSelect({
   //   • THE ROW GAUGE IS HELD TO THE SAME LEAST, so what it reports is the row the list will draw.
   // Unset (the default), a 'match-trigger' list is exactly its trigger's width at every size.
   leastRowLabel?: ReactNode
+  // ★ A MENU, NOT A SETTING: the trigger always shows THIS, and choosing an option is an act, not a
+  // value — Manage Presets' Duplicate button, whose list is the presets and whose choice is "copy
+  // that one". No option is ever checked (pass a `value` that names none, ''), the trigger names
+  // itself by this text (there is no chosen value to say beside `ariaLabel`, which still names the
+  // list), and everything else — the list, its rows, its keyboard, its dismissal — is this
+  // component's as for any other call site.
+  menuLabel?: ReactNode
   // Widen the trigger BUTTON to exactly its own dropdown's outer width, WITHOUT changing the
   // dropdown. The mode selector wants this: its dropdown rows use a bigger text tier and more
   // padding than the trigger, so "both size to content" would never make them equal. A hidden
@@ -715,28 +723,34 @@ export default function CustomSelect({
         // Label + value (see the two ids above). With no `ariaLabel` there is nothing to compose,
         // so the trigger falls back to naming itself from its own content — the selected option —
         // which is the correct answer for a caller that never named the control.
-        aria-labelledby={ariaLabel ? `${labelId} ${valueId}` : undefined}
+        aria-labelledby={ariaLabel && menuLabel == null ? `${labelId} ${valueId}` : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={open && activeIdx >= 0 ? optionId(activeIdx) : undefined}
       >
-        {ariaLabel && (
-          <span id={labelId} className="sr-only">
-            {ariaLabel},
-          </span>
-        )}
-        <span id={valueId} className="grid items-center">
-          {options.map((o) => (
-            <span
-              key={o.value}
-              className={`col-start-1 row-start-1 truncate text-left ${o.value === value ? '' : 'invisible'}`}
-              aria-hidden={o.value !== value}
-            >
-              {o.label}
+        {menuLabel != null ? (
+          <span className="block truncate text-left">{menuLabel}</span>
+        ) : (
+          <>
+            {ariaLabel && (
+              <span id={labelId} className="sr-only">
+                {ariaLabel},
+              </span>
+            )}
+            <span id={valueId} className="grid items-center">
+              {options.map((o) => (
+                <span
+                  key={o.value}
+                  className={`col-start-1 row-start-1 truncate text-left ${o.value === value ? '' : 'invisible'}`}
+                  aria-hidden={o.value !== value}
+                >
+                  {o.label}
+                </span>
+              ))}
             </span>
-          ))}
-        </span>
+          </>
+        )}
       </button>
       {/* The hidden width-mirror (triggerMatchesDropdown only). A faithful, out-of-flow copy
           of the portaled panel — same p-1, same OPTION_ROW_BOX rows, same width:max-content /

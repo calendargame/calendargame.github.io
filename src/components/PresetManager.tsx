@@ -17,6 +17,8 @@ import {
 import { MODAL_CARD_CLASS } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
 import QuotedName from './QuotedName.jsx'
+import CustomSelect from './CustomSelect.jsx'
+import { PresetOptionLabel } from './PresetSwitcher.jsx'
 import { usePresets, normalizePresetName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { useSessionAmnesic } from '../store/sessionAmnesic.js'
@@ -24,6 +26,7 @@ import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 import {
   createPreset,
   deletePreset,
+  duplicatePreset,
   isPresetFactory,
   movePreset,
   renamePreset,
@@ -99,6 +102,24 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 // than an omission here: creating and opening are separate acts, so making a preset cannot yank a
 // player out of the round they are in. The new row appears at the foot of the list; the switcher in
 // the top bar is how you go to it.
+//
+// ★ DUPLICATE (Round 26, Q5) SITS BESIDE IT, AND IS A DROPDOWN OF THE PRESETS: one tap opens the
+// list, one tap on a preset makes a copy of it — every setting, the saved defaults, the per-mode
+// setup, and the Amnesic value, none of the stats, Bests, or times (store/presetControl's
+// DUPLICATE_RULES is the one list of what goes across). The copy is named after its original with
+// " (2)" (" (#)" counts on — store/presets' copyName), lands DIRECTLY AFTER its original, and the
+// list scrolls to it; like New Preset it does not switch you into it.
+//   • THE LIST IS components/CustomSelect's, as a MENU (its `menuLabel`): the button always says
+//     "Duplicate" and no row is checked, because choosing is an act, not a setting. Its rows are
+//     the same rows as every other preset list (PresetSwitcher's PresetOptionLabel), so a name
+//     reads the same here as in the top bar — a stock name drawn short there is short here — and
+//     an amnesic preset is announced the same way. The list is as wide as its longest name needs
+//     (CustomSelect's 'content'), so it is never the place a name has the least room.
+//   • A COPY THE DEVICE HAS NO ROOM FOR IS NOT MADE, and the card says so under the two buttons
+//     ("This device has no room to save a copy of that preset, so none was made."), through the
+//     same live region as the rename notes. Nothing is half-made (duplicatePreset). The note goes
+//     at the next New Preset or Duplicate, at a delete — which may be what made the room — or with
+//     the card.
 //
 // ★★ A NAME MAY BE ANY LENGTH, AND THE FIELD NEVER REFUSES OR ALTERS WHAT IS TYPED. The rename
 // field is a plain text box: whatever is typed, pasted, composed by an input method, or dictated
@@ -222,6 +243,9 @@ const CUT_SHORT_NOTE = 'Some places will show this name cut short.'
 // What it says instead when the device had no room to save the name just typed. True of a device
 // that is full and of a name that is simply enormous alike.
 const NO_ROOM_NOTE = 'This device has no room to save that name, so it was not changed.'
+// What it says under the New Preset / Duplicate row when the device had no room for a copy.
+const NO_ROOM_FOR_COPY_NOTE =
+  'This device has no room to save a copy of that preset, so none was made.'
 
 // THE ROW'S TWO ICONS — DeleteIcon (the ✕) and ReorderHandleIcon (the grip) — both inline SVG drawn
 // in currentColor, the house pattern (W5Logo, GuidePage's dot diagram): no icon font, no external
@@ -634,11 +658,27 @@ export default function PresetManager({
   // dimension as 0, so the suite can prove the preset was created and can prove nothing about
   // whether it came into view.
   const addPreset = () => {
+    setCopyRefused(false)
     flushSync(() => {
       createPreset()
     })
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
+  }
+
+  // ── Duplicating ─────────────────────────────────────────────────────────────────────────────
+
+  // Whether the last copy asked for was refused for room (NO_ROOM_FOR_COPY_NOTE). Remembered, like
+  // a refused rename: it is news about something that happened.
+  const [copyRefused, setCopyRefused] = useState(false)
+  // ★ THE COPY LANDS UNDER ITS ORIGINAL AND THE LIST GOES TO IT — the least scroll that shows it
+  // clear of the edge fades (revealRow), so a copy of a row near the foot of a long list does not
+  // arrive out of sight. flushSync for the reason addPreset has it: the row must be in the list
+  // before it is measured.
+  const copyPreset = (sourceId: number) => {
+    const made = flushSync(() => duplicatePreset(sourceId))
+    setCopyRefused(made === 'no-room')
+    if (typeof made === 'object') revealRow(made.id)
   }
 
   // ── Deleting ────────────────────────────────────────────────────────────────────────────────
@@ -658,6 +698,7 @@ export default function PresetManager({
   const removePreset = (id: number) => {
     deletePreset(id)
     setPendingDeleteId(null)
+    setCopyRefused(false)
   }
   const confirmDelete = () => {
     if (pendingDelete) removePreset(pendingDelete.id)
@@ -1239,6 +1280,7 @@ export default function PresetManager({
       <div aria-live="polite" className="sr-only">
         {noRoomRowId !== null && <p>{NO_ROOM_NOTE}</p>}
         {cutRowId !== null && <p>{CUT_SHORT_NOTE}</p>}
+        {copyRefused && <p>{NO_ROOM_FOR_COPY_NOTE}</p>}
       </div>
       {/* The reason behind the dimmed ✕, shown only while it is dimmed. A withheld control states
           THAT it is unavailable; nothing about it can state WHY, and "the last one won't delete" is
@@ -1250,20 +1292,43 @@ export default function PresetManager({
           empty it.
         </div>
       )}
-      <div className="px-4 pt-1">
+      <div className="px-4 pt-1 flex gap-2">
         {/* NEW PRESET is the constructive act, so it wears btn-solid — the same violet fill Save
             Defaults and every Begin button wear, and the same reason rose is left to the two
-            destructive controls. It fills the row: round 21 removed the standalone Close
-            beside it — the scrim tap, Escape and Android Back already dismiss the whole card, and
-            the owner wanted the real estate back. */}
+            destructive controls. Round 21 removed a standalone Close beside it (the scrim tap,
+            Escape and Android Back already dismiss the whole card); since Round 26 it shares the
+            row, half and half, with DUPLICATE — the ★ note at the top of this file. */}
         <button
           type="button"
           onClick={addPreset}
-          className="w-full px-3 py-2 rounded-xl btn-solid border border-transparent text-sm font-medium"
+          className="flex-1 min-w-0 px-3 py-2 rounded-xl btn-solid border border-transparent text-sm font-medium"
         >
           New Preset
         </button>
+        {/* DUPLICATE — a dropdown of the presets (CustomSelect as a MENU). The no-fill toggle
+            surface with the select's ▲▼, so it reads as a list to open beside the button that
+            acts at once. Its wrapper is the row's flex item (CustomSelect's own div takes no
+            class) and its trigger fills it. */}
+        <div className="flex-1 min-w-0">
+          <CustomSelect
+            value=""
+            menuLabel="Duplicate"
+            onChange={(v) => copyPreset(Number(v))}
+            options={presets.map((p) => ({
+              value: String(p.id),
+              label: <PresetOptionLabel preset={p} />,
+            }))}
+            ariaLabel="Preset to duplicate"
+            showChevron
+            className="w-full px-3 py-2 pr-6 rounded-xl border surface-toggle text-sm font-medium text-(--tx-100-80)"
+          />
+        </div>
       </div>
+      {copyRefused && (
+        <div aria-hidden="true" className="px-4 text-[0.6875rem] text-(--tx-300-60)">
+          {NO_ROOM_FOR_COPY_NOTE}
+        </div>
+      )}
     </div>
   )
 }

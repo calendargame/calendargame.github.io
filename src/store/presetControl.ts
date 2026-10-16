@@ -3,6 +3,7 @@ import {
   presetKey,
   normalizePresetName,
   applyRegistryIfRoom,
+  copyName,
   defaultPresetName,
   readStoredRegistry,
   PRESET_STORE_KEYS,
@@ -12,7 +13,7 @@ import type { Preset } from './presets.js'
 import { discardSessionStats, readSessionStats, dataIdOf, bestsIdOf } from './amnesic.js'
 import { amnesicModeOf, setSessionAmnesic, forgetSessionAmnesicOf } from './sessionAmnesic.js'
 import type { AmnesicMode } from './amnesicMode.js'
-import { readItem, removeItem, storageSpaceFreed } from './storageHealth.js'
+import { readItem, removeItem, storageSpaceFreed, tryWriteItem } from './storageHealth.js'
 import { removeProgressCopy, hasTimesKeys, sweepAbandonedTimes } from './progressStorage.js'
 import { recordSessionPreset } from './sessionPreset.js'
 import { discardSessionMode } from './sessionMode.js'
@@ -72,34 +73,95 @@ type PresetStore<T> = {
     rehydrate: () => void | Promise<void>
     // The store's own saved-shape version and its own `migrate` — read back from the store rather
     // than imported, so judging an old payload (isPresetFactory) runs the ONE migration there is.
-    getOptions: () => { version?: number; migrate?: (state: unknown, version: number) => unknown }
+    getOptions: () => {
+      version?: number
+      migrate?: (state: unknown, version: number) => unknown
+      partialize?: (state: T) => unknown
+    }
   }
   getState: () => T
   setState: (partial: Partial<T>) => void
 }
 
+// ── EVERY PART OF A PRESET, AND WHAT DUPLICATE PRESET DOES WITH IT ─────────────────────────
+//
+// ★ THE ONE PLACE THAT SAYS WHAT A COPY OF A PRESET HOLDS (duplicatePreset, below). A preset is
+// more than its four stores: the browsing session keeps per-preset state of its own. Every part is
+// named here with ONE answer — copied, or left behind and why — and the `satisfies` below makes the
+// list complete BY CONSTRUCTION for the stores: a per-preset store added to store/presets'
+// PRESET_STORE_KEYS does not compile until it has an answer here. tests/presetDuplicate.dom holds
+// the rest: it fills a preset's every part, finds every storage key that belongs to it, and fails
+// on any key no part here owns — so a new kind of per-preset key (a store's own sync record, say)
+// cannot slip past a duplicate unanswered either.
+// THE OWNER'S RULE (Round 26, Q5): a copy carries all the settings, the saved defaults, the
+// per-mode choices, and the Amnesic value — NOT the stats, the Bests, or the times. A copy is a
+// fresh thing to track, and copying times would double what the device holds. (Lookup history is
+// in no preset, so it is in no copy either: it is shared already.)
+type DuplicateRule = { copied: true } | { copied: false; because: string }
+const COPIED: DuplicateRule = { copied: true }
+const leftBehind = (because: string): DuplicateRule => ({ copied: false, because })
+// The browsing session's per-preset parts (sessionStorage), beside the stores' four.
+type SessionPart = 'amnesic' | 'sessionStats' | 'sessionPage' | 'sessionRounds' | 'sessionHistories'
+export const DUPLICATE_RULES = {
+  // ── the per-preset stores (store/presets' PRESET_STORE_KEYS) ──
+  // Every ⚙ setting of the Per-preset half, Default Mode and the theme among them.
+  settings: COPIED,
+  // The per-mode setup on each mode's own screen: Deduction's sub-type, the Blitz mode a preset
+  // opens in (Per Round / Per Question) and its timers, the MoX run length, Flash's speed, the
+  // stat toggles.
+  modePrefs: COPIED,
+  // Stats, all-time Bests, and solve times (and the sealed chunks of times that go with them).
+  progress: leftBehind('stats, Bests, and times: a copy is a fresh thing to track'),
+  // The saved personal defaults, the saved Amnesic default among them.
+  userDefaults: COPIED,
+  // ── the browsing session's per-preset parts ──
+  // The Amnesic value the preset is on THIS session (store/sessionAmnesic): Off, Stats Only, or
+  // Full. The copy is on the same one — with nothing in it yet, as any change of the value starts.
+  amnesic: COPIED,
+  // An amnesic preset's session stats (store/amnesic's session copy of the progress store).
+  sessionStats: leftBehind('stats: the session copy of what `progress` is'),
+  // The page the preset was last showing this session (store/sessionMode): a place the player was,
+  // not a choice — the copy opens on its Default Mode, which is copied.
+  sessionPage: leftBehind('where the original was this session, not a setting'),
+  // An ended Blitz round or MoX run waiting on screen (store/sessionRound).
+  sessionRounds: leftBehind('a result, which belongs to the run that set it'),
+  // Parked casual play — a history, an answered question (store/sessionHistory).
+  sessionHistories: leftBehind('play, not a setting'),
+} satisfies Record<keyof typeof PRESET_STORE_KEYS | SessionPart, DuplicateRule>
+
 // ★ ONE ENTRY PER PER-PRESET STORE, HOLDING EVERY FACT THIS FILE NEEDS ABOUT IT — where its saved
 // copy lives, how to point it at a different preset, what it holds when it has no saved copy, what
-// it is holding right now, and how to read a saved copy an older build wrote. TWO WALKERS read this list (reloadPresetStores just below and
-// isPresetFactory further down), and they read the SAME list on purpose: a fifth per-preset store
-// added later is reloaded AND judged by the act of being listed here, where two parallel lists would
-// let it become reloadable but un-checkable — a preset holding real data that the delete flow would
-// then destroy without asking.
+// it is holding right now (and would save), how to read a saved copy an older build wrote, and
+// whether a duplicate carries it. THREE WALKERS read this list (reloadPresetStores just below,
+// isPresetFactory, and duplicatePreset further down), and they read the SAME list on purpose: a
+// fifth per-preset store added later is reloaded, judged, AND copied or not by the act of being
+// listed here, where parallel lists would let it become reloadable but un-checkable — a preset
+// holding real data that the delete flow would then destroy without asking.
 // ⚠ `makeDefaults` and `readLive` are ERASED to plain records. isPresetFactory compares JSON values
 // and has no use for any store's own type; keeping the generic only as far as this factory function
 // is what lets four differently-typed stores sit in one array without a cast at each of them.
 const presetStore = <T extends object>(
-  key: string,
+  name: keyof typeof PRESET_STORE_KEYS,
   store: PresetStore<T>,
   makeDefaults: () => Partial<T>,
 ) => ({
-  key,
+  key: PRESET_STORE_KEYS[name],
+  // What Duplicate Preset does with this store (DUPLICATE_RULES, above).
+  duplicate: DUPLICATE_RULES[name],
   reload: () => {
     if (store.persist) store.persist.rehydrate()
     else store.setState(makeDefaults())
   },
   makeDefaults: () => makeDefaults() as Record<string, unknown>,
   readLive: () => store.getState() as Record<string, unknown>,
+  // ★ WHAT THIS STORE WOULD SAVE RIGHT NOW, as the text it saves it in — its own `partialize`, under
+  // its own version stamp: the copy duplicatePreset writes for the preset you are ON, which is
+  // what is on its screens rather than what was last saved. null where the store has no storage.
+  savedText: (): string | null => {
+    const options = store.persist?.getOptions()
+    if (!options?.partialize) return null
+    return JSON.stringify({ state: options.partialize(store.getState()), version: options.version })
+  },
   // ★ A SAVED COPY, IN TODAY'S SHAPE — what this preset would actually open holding. zustand runs a
   // store's `migrate` on a saved copy whose version differs, and only for the preset being OPENED;
   // every other preset's keys stay in whatever shape the build that last saved them wrote. So a
@@ -127,12 +189,12 @@ const presetStore = <T extends object>(
 // and lost it the first time someone reordered the record.
 // Named on its own because its saved copy can sit in TWO storage areas (an Amnesic preset's session
 // stats are a second payload of this same store — isPresetFactory reads both).
-const PROGRESS_STORE = presetStore(PRESET_STORE_KEYS.progress, useProgress, makeProgressDefaults)
+const PROGRESS_STORE = presetStore('progress', useProgress, makeProgressDefaults)
 const PER_PRESET_STORES = [
-  presetStore(PRESET_STORE_KEYS.settings, useSettings, () => ({ ...SETTINGS_DEFAULTS })),
-  presetStore(PRESET_STORE_KEYS.modePrefs, useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
+  presetStore('settings', useSettings, () => ({ ...SETTINGS_DEFAULTS })),
+  presetStore('modePrefs', useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
   PROGRESS_STORE,
-  presetStore(PRESET_STORE_KEYS.userDefaults, useUserDefaults, makeUserDefaultsDefaults),
+  presetStore('userDefaults', useUserDefaults, makeUserDefaultsDefaults),
 ]
 
 // Reload all four from the active preset's keys, in one synchronous turn.
@@ -438,9 +500,8 @@ export function createPreset(name?: string): Preset {
   // ⚠ THE SKIP LOOP STAYS, for the case the stored registry cannot answer either: keys left on disk
   // by a delete that was interrupted between the registry write and the removal. It is also the
   // second net under the sliver above.
-  const stored = readStoredRegistry()
-  let id = Math.max(reg.nextId, stored?.nextId ?? 0, FIRST_PRESET_ID + 1)
-  while (presetStorageInUse(id)) id++
+  // (Both live in allocatePresetId, below, which duplicatePreset shares.)
+  const id = allocatePresetId()
   // A new preset is PERMANENT until somebody says otherwise — its Amnesic value starts on Off
   // (setSessionAmnesic, below). Inheriting the current preset's value was rejected on sight: creating
   // a preset is not a decision about where its stats are kept, and the one direction of that mistake
@@ -463,6 +524,105 @@ export function createPreset(name?: string): Preset {
     openInPreset: reg.openInPreset,
   })
   return preset
+}
+
+// The next preset id: above every id this tab and the device's stored registry have handed out,
+// and past any id whose namespace still holds keys (createPreset argues each half).
+function allocatePresetId(): number {
+  const stored = readStoredRegistry()
+  let id = Math.max(usePresets.getState().nextId, stored?.nextId ?? 0, FIRST_PRESET_ID + 1)
+  while (presetStorageInUse(id)) id++
+  return id
+}
+
+/**
+ * Add a copy of a preset (Duplicate Preset, Round 26 Q5) — DIRECTLY AFTER its original in the list,
+ * named the original's name and " (2)" (store/presets' copyName: " (#)" counts on, to the next
+ * number no preset has). Returns the new preset; 'unknown' when there is no such preset; or
+ * 'no-room' when the device cannot save the copy, and then NOTHING has changed anywhere.
+ *
+ * ★ WHAT IS COPIED IS DUPLICATE_RULES' ANSWER, and nothing here decides it: each store marked
+ * copied, and the session's Amnesic value. The copy's own stats, Bests, and times start empty.
+ * ★ THE PRESET YOU ARE ON IS COPIED AS IT IS ON SCREEN — each store's live values, as it would save
+ * them now (`savedText`) — and any other preset as it is saved, through store/storageHealth's door,
+ * so a save the device refused and is holding counts as saved. A saved copy goes across in the
+ * shape it was saved in, version stamp and all, so the copy opens holding exactly what its original
+ * would: the store's own migration runs on both alike. A store with nothing saved is not written at
+ * all, and the copy has its factory values there, as the original does.
+ * ★ DOES NOT SWITCH TO IT, like createPreset: making a preset is not a decision to go there.
+ * ★ NOTHING HALF-MADE. The copy's stores are written first, each TRIED (tryWriteItem: nothing held,
+ * no notice) — they belong to an id no list names yet, so nothing can read them — and the list last,
+ * through applyRegistryIfRoom. If any write is refused, every store written for the copy is removed
+ * again and the list is untouched: no copy, and the device as it was.
+ * ⚠ A BROWSER THAT GIVES THE APP NO STORAGE has nothing to copy from or to: the copy is listed, in
+ * memory, and opens on the factory values — which is also what that browser's every other preset
+ * opens on (reloadPresetStores' no-storage branch).
+ */
+export function duplicatePreset(sourceId: number): Preset | 'unknown' | 'no-room' {
+  const reg = usePresets.getState()
+  const index = reg.presets.findIndex((p) => p.id === sourceId)
+  if (index < 0) return 'unknown'
+  const id = allocatePresetId()
+  let device: Storage | null = null
+  try {
+    device = window.localStorage
+  } catch {
+    /* no storage at all */
+  }
+  const written: string[] = []
+  const undo = () => {
+    for (const key of written) removeItem(device!, key)
+  }
+  if (device)
+    for (const entry of PER_PRESET_STORES) {
+      if (!entry.duplicate.copied) continue
+      const text =
+        sourceId === reg.activeId ? entry.savedText() : savedCopyText(entry.key, sourceId)
+      if (text === null) continue
+      const key = presetKey(entry.key, id)
+      if (!tryWriteItem(device, key, text)) {
+        undo()
+        return 'no-room'
+      }
+      written.push(key)
+    }
+  const taken = new Set(reg.presets.map((p) => p.name))
+  const preset: Preset = {
+    id,
+    name: normalizePresetName(copyName(reg.presets[index].name, taken), id),
+    // The older builds' field (store/presets' Preset), as such a build spells its own new preset.
+    amnesic: false,
+  }
+  const presets = [...reg.presets]
+  presets.splice(index + 1, 0, preset)
+  const listed = applyRegistryIfRoom({
+    presets,
+    activeId: reg.activeId,
+    nextId: id + 1,
+    openInPreset: reg.openInPreset,
+  })
+  if (!listed) {
+    undo()
+    return 'no-room'
+  }
+  if (DUPLICATE_RULES.amnesic.copied) setSessionAmnesic(id, amnesicModeOf(sourceId))
+  return preset
+}
+
+// A preset's SAVED copy of one store, re-written as the plain `{ state, version }` that store saves
+// — its values, never its bytes, so nothing else that happens to ride in a saved text goes across —
+// or null when it has nothing saved there or what is there cannot be read.
+function savedCopyText(baseKey: string, presetId: number): string | null {
+  const raw = readPresetPayload(baseKey, presetId)
+  if (raw === null) return null
+  try {
+    const saved: unknown = JSON.parse(raw)
+    if (!saved || typeof saved !== 'object' || !('state' in saved)) return null
+    const { state, version } = saved as { state: unknown; version?: unknown }
+    return JSON.stringify({ state, version })
+  } catch {
+    return null
+  }
 }
 
 /**

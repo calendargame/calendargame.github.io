@@ -1639,7 +1639,8 @@ export default function GuidePage({
           PresetSwitcher (its ariaLabel, its options list, the sr-only "<name>, amnesic" phrases); the
           manager = components/PresetManager (every button's accessible name, the delete
           confirmation's two views, the withheld ✕ on a last preset); what a switch actually swaps =
-          store/presetControl's PER_PRESET_STORES, all four of them; what a delete actually removes =
+          store/presetControl's PER_PRESET_STORES, all four of them; what a copy holds = that file's
+          DUPLICATE_RULES, and its name = store/presets' copyName; what a delete actually removes =
           its clearPresetStorage, which is derived from store/presets' PRESET_STORE_KEYS; which
           presets skip the confirmation entirely = that file's isPresetFactory, whose comment
           also argues the one entry of clearPresetStorage it deliberately does not count; the screen
@@ -1764,6 +1765,20 @@ export default function GuidePage({
             switch you into it, so making one never disturbs the round you are in. Use the control
             at the top left when you want to go there. There is no limit on how many presets you can
             have; a long list scrolls, here and in both preset lists.
+          </li>
+          <li>
+            <b>Duplicate</b> — beside <b>New Preset</b>. Tap it for a list of your presets, and tap
+            the one to copy. The copy has every setting the original has, its saved defaults, its
+            per-mode setup (the Deduction sub-type, the Blitz mode it opens in, its timers and run
+            length, <b>Default Mode</b>, and the rest), and its <b>Amnesic</b> setting — but none of
+            its stats, all-time bests, or times: it starts fresh, to be tracked on its own. It is
+            named after the original with &quot;(2)&quot; on the end — a copy of a name that already
+            ends in a number in brackets counts on, so a copy of &quot;Speed (2)&quot; is
+            &quot;Speed (3)&quot; — taking the first number no preset has yet. It goes directly
+            under its original, the list scrolls to show it, and like <b>New Preset</b> it does not
+            switch you into it. If the device has no room to save the copy, none is made, and a note
+            under the two buttons says &quot;This device has no room to save a copy of that preset,
+            so none was made.&quot;
           </li>
           <li>
             <b>Rename</b> — the name in each row is a box; tap it and it is all selected, so you can
@@ -2497,7 +2512,10 @@ export default function GuidePage({
             Panels and popups below is the only thing that shows the keyboard is on it; ↑ and ↓ move
             the preset from there. The note that can appear under a name box — that the name will be
             shown cut short, or that the device had no room to save it — is read out once when it
-            appears, after whatever is being read, and not again while it stays.
+            appears, after whatever is being read, and not again while it stays; so is the note
+            under the two buttons that a copy could not be saved. <b>Duplicate</b> says
+            &quot;Duplicate&quot; and opens a list called Preset to duplicate, whose rows read each
+            preset&apos;s name the way the top bar&apos;s list does.
           </li>
           <li>
             In the seven-dot answer layout every dot carries its weekday name, so the dots offer the
