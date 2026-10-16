@@ -1,5 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  RefObject,
+} from 'react'
 import { flushSync } from 'react-dom'
 import {
   BOTTOM_EDGE_BAND_PX,
@@ -132,8 +136,16 @@ import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
 //     card's own ladder again (the delete question, the first Escape in a name box): a dismiss
 //     that has something to answer for first answers for it. That is why there is no second
 //     surface for this message: the card never goes while it is unseen.
-//   • Escape in the box, and Back or a shortcut closing the card under it, are DISCARDS: nothing is
-//     attempted, so there is nothing to refuse and nothing to say.
+//   • BACK IS A WAY OF LEAVING THE BOX TOO (Q17, Round 26). Android's Back, a browser's Back, a
+//     back-swipe: "leave", and leaving keeps what was typed — it used to close the card under the
+//     box with nothing attempted, and the name was silently gone. So Back leaves the box exactly as
+//     a tap elsewhere does (the caller's dismiss asks leaveNameBoxRef, below) and then closes the
+//     card; and if that rename was refused, the Back is spent on the news instead — the card stays,
+//     the note is under its row, and the next Back closes it. (components/overlayStack's ★ above
+//     useRegistration is how a popup stays after a Back.)
+//   • ESCAPE IN THE BOX IS THE ONE DISCARD: the desktop convention for an edit, and what How to
+//     Play has always said ("Esc throws it away"). Nothing is attempted, so there is nothing to
+//     refuse and nothing to say; a second Escape closes the card.
 //
 // ★★ MOVING IS A DEDICATED DRAG HANDLE, AS OF ROUND 20 — REPLACING THE ↑/↓ PAIR THIS COMMENT
 // USED TO ARGUE AGAINST A DRAG FOR. The owner's call, made explicit rather than re-litigated here:
@@ -376,7 +388,7 @@ const HELD_PIECE_CLASS = 'held-piece'
 const HELD_SHADOW_CLASS = 'held-shadow'
 const HELD_INK_CLASS = 'held-ink'
 
-// THREE PROPS. The first two are the same one fact: which preset the delete confirmation is asking
+// FOUR PROPS. The first two are the same one fact: which preset the delete confirmation is asking
 // about, or null while the list is showing. Nothing in this card dismisses itself — it has no Close
 // and its confirmation has no Cancel — so the caller (components/SettingsPanel) owns the open flag
 // and what a dismiss means, exactly as it does for the other popups. The dismiss routes LADDER
@@ -385,14 +397,20 @@ const HELD_INK_CLASS = 'held-ink'
 // button answers it.
 // The third, `screensFresh`, is src/main.tsx's aggregate of the five mode screens' freshness reports,
 // passed straight through to isPresetFactory at the ✕ (pressDelete below says why it is needed).
+// The fourth, `leaveNameBoxRef`, is the caller's handle on the one thing its dismiss has to do
+// first: leave a name box that still has the keyboard, attempting the rename as every way of
+// leaving does, and say whether the device refused it (the ★ "Back is a way of leaving the box
+// too" note above). This card fills it in; the caller only calls it.
 export default function PresetManager({
   pendingDeleteId,
   setPendingDeleteId,
   screensFresh,
+  leaveNameBoxRef,
 }: {
   pendingDeleteId: number | null
   setPendingDeleteId: (id: number | null) => void
   screensFresh: boolean
+  leaveNameBoxRef: RefObject<(() => boolean) | null>
 }) {
   // Two narrow subscriptions, the same pair components/PresetSwitcher takes and for the same
   // reason: `presets` is replaced wholesale by applyRegistry (so reference equality is a correct
@@ -432,11 +450,12 @@ export default function PresetManager({
   // note to show, so the id is only ever read through the list.
   const [refusedRenameId, setRefusedRenameId] = useState<number | null>(null)
   const noRoomRowId = presets.some((p) => p.id === refusedRenameId) ? refusedRenameId : null
-  // ★ A NAME WAS REFUSED BY THE TAP NOW IN PROGRESS — what stops that same tap, if it is on the
-  // dim, from closing the card over the note (the scrim listener below reads it and spends it).
-  // Dropped at every press, which comes before the keyboard leaves the box, so it can only ever
-  // be about the press that is still going on.
-  const refusedByThisTap = useRef(false)
+  // ★ A NAME WAS REFUSED JUST NOW — by the tap now in progress, or by the Back being answered —
+  // what stops that same tap, if it is on the dim, from closing the card over the note (the scrim
+  // listener below reads it and spends it), and what tells the caller's dismiss the same thing for
+  // a Back (leaveNameBoxRef, below). Dropped at every press, which comes before the keyboard leaves
+  // the box, so it can only ever be about the press that is still going on.
+  const refusedJustNow = useRef(false)
 
   // The delete confirmation's subject, resolved from the id the caller holds. An ID and not the
   // preset object: the registry can be rewritten under this card (another row renamed, one moved),
@@ -475,14 +494,14 @@ export default function PresetManager({
     const outsideCard = (e: Event) =>
       !(e.target instanceof Node && cardRef.current?.contains(e.target))
     const onPress = () => {
-      refusedByThisTap.current = false
+      refusedJustNow.current = false
     }
     const onClick = (e: Event) => {
       if (!outsideCard(e)) return
       const box = document.activeElement
       if (box instanceof HTMLInputElement && cardRef.current?.contains(box)) box.blur()
-      if (!refusedByThisTap.current) return
-      refusedByThisTap.current = false
+      if (!refusedJustNow.current) return
+      refusedJustNow.current = false
       e.stopPropagation()
     }
     scrim.addEventListener('pointerdown', onPress, true)
@@ -492,6 +511,27 @@ export default function PresetManager({
       scrim.removeEventListener('click', onClick, true)
     }
   }, [])
+  // ★ THE WAY OUT OF A NAME BOX, FOR THE CALLER'S DISMISS (the ★ "Back is a way of leaving the box
+  // too" note above). A box that still has the keyboard gives it up — which attempts the rename,
+  // through the box's own onBlur, exactly as a tap elsewhere would — and the answer is whether the
+  // device refused it. No box with the keyboard: nothing to leave, nothing refused. (A dismiss by a
+  // tap on the dim never needs this: the listener above has already left the box, and stopped the
+  // tap itself if the rename was refused. Escape never needs it either: Escape in a box is the
+  // box's own key, and with no box in use there is nothing pending.)
+  useEffect(() => {
+    leaveNameBoxRef.current = () => {
+      const box = document.activeElement
+      if (!(box instanceof HTMLInputElement) || !cardRef.current?.contains(box)) return false
+      refusedJustNow.current = false
+      box.blur()
+      const refused = refusedJustNow.current
+      refusedJustNow.current = false
+      return refused
+    }
+    return () => {
+      leaveNameBoxRef.current = null
+    }
+  }, [leaveNameBoxRef])
   // The list's scroll region, on the app's shared recipe (components/scrollRegion) — the same
   // treatment the Changelog popup's list wears, for the same reason: a bare max-height clips with
   // nothing to say that anything scrolls, which is worse than the overflow it hides. `active` is
@@ -563,7 +603,7 @@ export default function PresetManager({
     setEditing(null)
     if (outcome !== 'no-room') return
     setRefusedRenameId(editing.id)
-    refusedByThisTap.current = true
+    refusedJustNow.current = true
   }
 
   // ⚠ THE ESCAPE DISCARD MUST BE FLUSHED BEFORE THE BLUR, and this is the ⚙ Year Range boxes' bug

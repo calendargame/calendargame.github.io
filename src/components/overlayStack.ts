@@ -564,9 +564,19 @@ function popOverlay(entry: Entry) {
 // stack has to be right before the frame that shows the change is painted: registered a frame late,
 // a second popup would open undimmed over a still-dimmed first one, and closing it would leave one
 // frame with no dim at all. Updates made from a layout effect are rendered before the browser paints.
+// ★ A POPUP'S CLOSE MAY DECLINE, BY RETURNING false — "something had to be answered first, and the
+// player has to see the answer" (the one case: components/SettingsPanel's preset manager, when
+// leaving a name box on the way out tried a rename the device had no room to save, and the note
+// under its row has to be read). Escape and a tap on the dim simply leave such a popup where it
+// is. A real BACK press is different: the browser has already stepped off the popup's history
+// entry, and this stack had already taken the popup off before asking it to close — so a popup
+// that stays registers itself again, with a history entry of its own, and the next Back closes
+// it. (Declining is a popup's business only: layers and page states close when asked.)
+type Close = () => boolean | void
+
 function useRegistration(
   isOpen: boolean,
-  close: () => void,
+  close: Close,
   id: string,
   escape: boolean,
   modal: boolean,
@@ -588,9 +598,14 @@ function useRegistration(
   const covers = reach !== null
   useLayoutEffect(() => {
     if (!isOpen) return
-    const entry = pushOverlay({
+    // The entry this registration holds now — replaced if a declined close re-registers it.
+    let entry: Entry | null = null
+    const opened: Omit<Entry, 'depth' | 'returnTo'> = {
       id,
-      close: () => closeRef.current(),
+      close: () => {
+        if (closeRef.current() !== false || !entry || stack.includes(entry)) return
+        entry = pushOverlay(opened) ?? entry
+      },
       escape,
       modal,
       reach: covers
@@ -602,9 +617,12 @@ function useRegistration(
         : null,
       appWide,
       press: pressed ? (e) => pressRef.current?.(e) : null,
-    })
+    }
+    entry = pushOverlay(opened)
     if (!entry) return
-    return () => popOverlay(entry)
+    return () => {
+      if (entry) popOverlay(entry)
+    }
   }, [isOpen, id, escape, modal, covers, pressed, appWide])
 }
 
@@ -632,9 +650,10 @@ export function useLayer(
 
 // A POPUP, open for as long as its component is mounted (components/Popup, the only caller).
 // Returns whether it is the TOP popup — the one that paints the dim and holds the keyboard.
+// `close` may decline by returning false (the ★ above useRegistration).
 // `appWide`: it belongs to no screen and no panel (isAppWidePopupOpen argues what that changes).
 // `reach`: its scrim, and the dialog in it — every popup covers the page.
-export function usePopupLayer(close: () => void, id: string, appWide: boolean, reach: Reach) {
+export function usePopupLayer(close: Close, id: string, appWide: boolean, reach: Reach) {
   useRegistration(true, close, id, true, true, reach, null, appWide)
   return useSyncExternalStore(subscribe, () => isTopPopup(id))
 }

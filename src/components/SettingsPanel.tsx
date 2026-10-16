@@ -539,8 +539,16 @@ export function SettingsPanel({
   // ⚠ NOT memoized, deliberately: it reads `pendingDeleteId` on every call, and the stack holds
   // every close through a post-commit ref (components/overlayStack), so a fresh identity per render
   // re-registers nothing.
+  // ★ AND A NAME BOX IS LEFT FIRST (Q17): a dismiss that closes the card is a way of leaving the
+  // name box that has the keyboard, so the rename is attempted as every way of leaving attempts it
+  // (components/PresetManager fills leavePresetNameBox in). Only Back ever reaches this with a box
+  // in use — a tap on the dim has left the box already, and Escape in a box is the box's own key.
+  // If the device refused that name, the card stays with the note under its row, and this says so
+  // with `false` (components/Popup's onDismiss may decline); the next dismiss closes it.
+  const leavePresetNameBox = useRef<(() => boolean) | null>(null)
   const dismissPresets = () => {
     if (pendingDeleteId !== null) clearPendingDelete()
+    else if (leavePresetNameBox.current?.()) return false
     else closePresets()
   }
   // Opening the changelog retires the link's dot — the breadcrumb's last stop. First tap only in
@@ -816,6 +824,7 @@ export function SettingsPanel({
         pendingDeleteId={pendingDeleteId}
         setPendingDeleteId={setPendingDeleteId}
         screensFresh={screensFresh}
+        leaveNameBoxRef={leavePresetNameBox}
       />
     </Popup>
   )

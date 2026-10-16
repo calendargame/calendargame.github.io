@@ -60,8 +60,10 @@ export default function Popup({
 }: {
   // Unique per popup INSTANCE across the whole app: it keys the stack entry.
   id: string
-  // What Escape, Android Back and a tap on the scrim all call.
-  onDismiss: () => void
+  // What Escape, Android Back and a tap on the scrim all call. It may DECLINE, by returning false:
+  // the popup then stays open (and after a real Back press takes a new place in the history, so
+  // the next Back closes it — components/overlayStack's ★ above useRegistration).
+  onDismiss: () => boolean | void
   // This popup belongs to the app, not to a screen or to the ⚙ panel: nothing that changes the
   // screen takes it away (components/overlayStack's isAppWidePopupOpen says what follows from that).
   appWide?: boolean

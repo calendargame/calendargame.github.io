@@ -23,6 +23,8 @@ import {
   openSettings,
   openModal,
   modalCard,
+  pressBack,
+  isSettingsOpen,
 } from './helpers/settingsPanel.jsx'
 import { readDate, correctDayName, statValue } from './helpers/modeScreen.jsx'
 import { useProgress } from '../src/store/progress.js'
@@ -366,6 +368,29 @@ describe('a full device (one shared allowance)', () => {
         expectRefused()
         act(() => fireEvent.focusIn(boxes()[1])) // …and has it again, on the box it left
         expectRefused()
+      })
+
+      // Back is a way of LEAVING the box (Q17): the rename is attempted as every other way of leaving
+      // attempts it. Refused, the Back is spent on the news — and the card, which a real Back has
+      // already taken off the stack, puts itself back so the next Back has something to close.
+      it('Android Back: the card STAYS, with the note — and the next Back closes it, the ⚙ panel still open', async () => {
+        typeABook()
+        await pressBack()
+        expect(queryCard()).not.toBeNull()
+        expectRefused()
+        await pressBack()
+        expect(queryCard()).toBeNull()
+        expect(isSettingsOpen()).toBe(true)
+        expect(localStorage.getItem(REGISTRY)).toBe(before)
+      })
+
+      it('Android Back with a name that DOES save closes the card at once, name kept', async () => {
+        typeABook()
+        act(() => fireEvent.change(boxes()[1], { target: { value: 'Sprints' } }))
+        await pressBack()
+        expect(queryCard()).toBeNull()
+        expect(isSettingsOpen()).toBe(true)
+        expect(usePresets.getState().presets[1].name).toBe('Sprints')
       })
 
       it('Escape is a discard, not an attempt: nothing is refused, so nothing is said', () => {
