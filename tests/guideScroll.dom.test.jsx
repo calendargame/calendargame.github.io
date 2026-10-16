@@ -1306,15 +1306,18 @@ describe('index.css — the feather token and the reading line it is NOT derived
     // A section you open used to be seated on a line of its own (--seat-top), one panel gap below
     // the line its header docks at while you scroll — two resting places for one header. There is
     // one now: --bar-h, which the scrollport's padding (the stick), its scroll-padding-top (a Tab
-    // into a header) and GuidePage's glide all read. A second token coming back is that bug.
+    // into a header), lib/barLine (a Tab into a header wholly above the line) and GuidePage's glide
+    // all read — the last two through barLine's one reader. A second token coming back is that bug.
     expect(css).not.toContain('seat-top')
     expect(css).toContain('#appScroll{scroll-padding-top:var(--bar-h)}')
-    const guideSource = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'components', 'GuidePage.tsx'),
-      'utf8',
-    )
+    const src = (...path) =>
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', ...path), 'utf8')
+    const guideSource = src('components', 'GuidePage.tsx')
     expect(guideSource).not.toContain('seat-top')
-    expect(guideSource).toContain("getPropertyValue('--bar-h')")
+    expect(guideSource).toContain(
+      "import { addStandingRule, readBarHeight } from '../lib/barLine.js'",
+    )
+    expect(src('lib', 'barLine.ts')).toContain("getPropertyValue('--bar-h')")
   })
 
   it('keeps ONE home for the panel gap — the token the guide lays its sections out with', () => {

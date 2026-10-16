@@ -428,17 +428,18 @@ input,textarea{user-select:text;-webkit-user-select:text}
 /* THE SCROLLPORT STARTS AT THE BAR'S UNDERSIDE. The fixed bar owns viewport y 0…--bar-h on EVERY
    screen, so anything the browser scrolls to the scrollport's top edge would land UNDER it.
    scroll-padding-top tells the browser where the usable top really is, which is what makes a Tab
-   into any control PARTLY under the bar — a How-to-Play section header above all — bring it to
-   rest just under the bar instead of behind it (the browsers align its nearest edge). ⚠ Not one
-   WHOLLY behind the bar, or scrolled away above it: both engines count that as not visible at all
-   and centre it instead, and for a How to Play header components/GuidePage puts it on the line
-   itself. It is on #appScroll unconditionally because that is what is true: a
-   usable top below the bar is a property of this scroller, not of any one screen.
+   into any control PARTLY under the bar bring it to rest just under the bar instead of behind it
+   (the browsers align its nearest edge). ⚠ Not one WHOLLY behind the bar, or scrolled away above
+   it: both engines count that as not visible at all and centre it instead, so lib/barLine
+   (installed on this scroller by main.tsx) puts any control the keyboard steps onto from above the
+   line on the line itself, on every screen. It is on #appScroll unconditionally because that is
+   what is true: a usable top below the bar is a property of this scroller, not of any one screen.
    IT IS ALSO THE GUIDE'S ONE DOCKING LINE, by being the same number three ways: this padding (where
-   a focused header lands — with GuidePage's help for one wholly above it), the scroller's own padding-top (which is what a sticky header's `top:0`
-   is measured from — .guide-head, below), and the line components/GuidePage glides a section you
-   open to. A header you Tab to, a header you open, and a header that docks as you scroll all come
-   to rest on the same pixel.
+   a focused header lands — lib/barLine, with GuidePage's rule for where a sticky header stood), the
+   scroller's own padding-top (which is what a sticky header's `top:0` is measured from —
+   .guide-head, below), and the line components/GuidePage glides a section you open to. A header
+   you Tab to from above the line, a header you open, and a header that docks as you scroll all
+   come to rest on the same pixel.
    The line used to sit one panel gap LOWER for a tapped section than the spot its header docked
    at, so a section came to rest in one place and then rode up to another as soon as you scrolled.
    The gap was there to hide the bottom edge of the section above, and flush hides it too — it is
@@ -457,11 +458,14 @@ input,textarea{user-select:text;-webkit-user-select:text}
        open: GuidePage's startHeaderOffset, which brings a header tapped ABOVE this line down to it
        on the glide's own clock (a negative `top`, running out to nothing) where the stick alone
        would have dropped it there in one frame. At rest every header is on this rule.
-     • ONE DOCKING POSITION. That same line is where a section you OPEN is brought to rest
-       (GuidePage glides the header's top onto it) and where a header you Tab to lands
-       (#appScroll's scroll-padding-top, above, and GuidePage for one wholly above the line). So opening a section puts its header exactly
-       where scrolling would have docked it: flush against the bar, the section's own top border
-       tucked behind the bar, and nothing moves when you then start to scroll.
+     • ONE LINE TO REST ON, three ways there. That same line is where a section you OPEN is
+       brought to rest (GuidePage glides the header's top onto it) and where a header you Tab to
+       from above lands (#appScroll's scroll-padding-top for one partly under the bar, lib/barLine
+       for one wholly above it). So opening a section puts its header exactly where scrolling would
+       have docked it: flush against the bar, the section's own top border tucked behind the bar,
+       and nothing moves when you then start to scroll. It is not the only place a header can rest:
+       a header you Tab to from BELOW the line stays where the browser brings it, and a closed
+       header scrolls away with the page like any other content.
      • the fill is the panel's own (--panel-bg) composited over the page (--bg1), which is exactly
        what the wrapper shows behind a transparent header at rest — no visible change there — but
        OPAQUE, so text scrolling under a docked header cannot show through it.

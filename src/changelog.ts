@@ -128,7 +128,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Fixed: in Manage Presets, pressing your device's Back while typing a preset name no longer throws the name away. It keeps it, as tapping away does, and closes the popup. Escape still throws a name away.",
       'Fixed: on an iPhone, a flick that started on a button in the ⚙ menu could press that button as your finger lifted, such as opening the Open in list. A flick now only scrolls, wherever it starts.',
       'Fixed: in How to Play, tapping section titles quickly one after another could leave the last one resting a little below the top bar, or with the start of its section hidden under it. It now comes to rest exactly where it would if you had waited between taps.',
-      'Fixed: in How to Play, stepping back with Shift+Tab onto a section title hidden under the top bar jumped the page away from it, near the start of the guide all the way to the top. The title now comes to rest right under the bar.',
+      'Fixed: stepping back with Shift+Tab onto something hidden under the top bar jumped the page away from it, leaving it partway down the screen, and in How to Play near the start of the guide all the way to the top. It now comes to rest right under the bar, on every screen.',
       "Fixed: in How to Play, a section title docked under the top bar had no top edge, because its section's border had scrolled away behind the bar. The border now runs along the title's top, flush against the bar.",
     ],
   },

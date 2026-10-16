@@ -184,8 +184,8 @@ for (const [above, what] of [
     await expect(head(page, 5)).toBeFocused()
     await atRest(page)
     const rest = await read(page, 5)
-    expect(rest.offLine, 'on the line (a whole pixel, so up to one above it)').toBeGreaterThan(-1)
-    expect(rest.offLine, 'on the line, not below it').toBeLessThanOrEqual(SAME_PX)
+    expect(rest.offLine, 'on the line, not above it').toBeGreaterThanOrEqual(-SAME_PX)
+    expect(rest.offLine, 'on the line: the first whole pixel of scroll below it').toBeLessThan(1)
   })
 }
 

@@ -38,6 +38,7 @@ import { SCROLLER_CORE_CLASS, scrollFadeClass, scrollEdgeGaps, isAtBottom, isScr
 import { installPointerGestures } from './lib/pointerGestures.js'
 import { installSelectAllOnEntry } from './lib/textEntry.js'
 import { installKeyboardFocus, shortcutActed } from './lib/keyboardFocus.js'
+import { installTabLanding } from './lib/barLine.js'
 import { readBuildStamp, writeBuildStamp, buildChanged } from './lib/buildStamp.js'
 import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
@@ -749,8 +750,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // hairline he reported in How to Play (a faint line of the PREVIOUS panel's bottom border
       // touching the bar with no gap, gone after scrolling a hair further). SIX readers share
       // this one token and every one of them sharpens at once:
-      //   1. scroll-padding-top on #appScroll (index.css) — where a control you Tab to comes to
-      //      rest, a How-to-Play section header above all.
+      //   1. scroll-padding-top on #appScroll (index.css), and lib/barLine — where a control you
+      //      Tab to from above the line comes to rest, a How-to-Play section header above all.
       //   2. GuidePage's docking line — where a section you open is glided to, and the line its
       //      dock tracker measures the open header against.
       //   3. .doc-fade-top's top offset — where the guide's top feather starts.
@@ -831,6 +832,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // has, because it reads it in handlers and in its own effects, after it is attached.
       const [appScroller,setAppScroller]=useState<HTMLDivElement | null>(null);
       const attachAppScroll=useCallback((el: HTMLDivElement | null)=>{appScrollRef.current=el;setAppScroller(el);},[]);
+      // Where a Tab lands on every screen: a control the keyboard steps onto from above the line
+      // under the bar comes to rest on that line, not centred by the browser (lib/barLine says why).
+      useEffect(()=>appScroller?installTabLanding(appScroller):undefined,[appScroller]);
       // The guide's two fixed soft edges (index.css .doc-fade-*), refs so the edge effect below can
       // write their --shade. Mounted for the whole of guide mode now that their strength is
       // continuous — a strip at --shade 0 paints nothing, so there is no on/off left to render.
