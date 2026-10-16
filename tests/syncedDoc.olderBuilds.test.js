@@ -71,6 +71,25 @@ describe.each(BUILDS)('%s, as the real build behaved', (build) => {
     expect(v.state.blitzBest[OTHER]).toMatchObject({ w: 1, zz: 1 })
   })
 
+  // (part2-issues #5, #6) a round that beat the record, then taken back below it on its results screen
+  it('a take-back below the record: v2.26.0 keeps the field with its own round at the old value, under the old tag; later builds put the old holder back, as a literal', () => {
+    const [beat] = sets(seen.takeBackBeats, PROGRESS)
+    const round = beat.state.blitzBest[KEY].scoreRoundId
+    const back = sets(seen.takeBack, PROGRESS).at(-1).state.blitzBest[KEY]
+    const below = sets(seen.takeBackBelow, PROGRESS).at(-1)?.state.blitzBest[KEY] ?? back
+    for (const rec of [back, below]) {
+      expect([rec.score, rec.streak]).toEqual([5, 4])
+      if (build === 'v2.26.0') {
+        expect([rec.scoreRoundId, rec.streakRoundId, rec.w]).toEqual([round, round, 1])
+        // …and its round ids are a counter from 1 per mount, not the clock (part2-issues #5)
+        expect(round).toBe(1)
+      } else {
+        expect([rec.scoreRoundId, rec.streakRoundId, rec.w]).toEqual([111, 111, undefined])
+        expect(round).toBeGreaterThan(2 ** 40)
+      }
+    }
+  })
+
   it('F-B (v2.28.0+): writeKept keeps the device envelope, and writes every record the page changed as a fresh literal', () => {
     if (!seen.threeWay) return
     const [beats] = sets(seen.keptBeats, PROGRESS)

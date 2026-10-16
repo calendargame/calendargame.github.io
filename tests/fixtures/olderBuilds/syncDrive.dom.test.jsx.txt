@@ -16,7 +16,8 @@
 //   F-D  every older build rewrites the progress doc as it boots;
 //   F-E  a Full Reset under Stats Only writes the doc with the Best maps emptied and the envelope
 //        kept, then removes it, in one task;
-//   and whether any build keeps a doc's top-level `sync` envelope on an ordinary whole-copy save.
+//   and whether any build keeps a doc's top-level `sync` envelope on an ordinary whole-copy save; and what a
+//   take-back of a round that beat the record writes (part2-issues #1).
 import { describe, it, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { writeFileSync } from 'node:fs'
@@ -201,6 +202,40 @@ describe(`sync drive — ${BUILD}`, () => {
     for (let i = 0; i < 7; i++) right()
     press('Reveal')
     out.roundBeats = take()
+  })
+
+  // ★ A TAKE-BACK of a round that beat the record (part2-issues #1): the round's own cards Overridden on
+  // its results screen until it no longer beats it - what the record object the build then writes is, its
+  // tag and its values (a build that spreads the record it holds writes the record's OLD values under the
+  // tag it carried).
+  it('F-B: a round that beat the record, taken back below it on its results screen', async () => {
+    seed()
+    load()
+    take()
+    key('B')
+    press('Begin')
+    for (let i = 0; i < 7; i++) right()
+    press('Reveal')
+    out.takeBackBeats = take()
+    const overrideKey = () => [...document.querySelectorAll('[data-key="O"]')].find((b) => !isHidden(b))
+    // the 7th card, then the 4th: R R R W R R W - five right, a streak of three: below the record (5, 4)
+    press('<')
+    tap(overrideKey())
+    await new Promise((r) => setTimeout(r, 450)) // past the double-tap guard
+    press('<')
+    press('<')
+    press('<')
+    tap(overrideKey())
+    out.takeBack = take()
+    // …and on below anything it ever held: two more cards (the 3rd and the 1st) - three right
+    await new Promise((r) => setTimeout(r, 450))
+    press('<')
+    tap(overrideKey())
+    await new Promise((r) => setTimeout(r, 450))
+    press('<')
+    press('<')
+    tap(overrideKey())
+    out.takeBackBelow = take()
   })
 
   it('F-B, F-E: writeKept under Stats Only (v2.28.0+), then Full Reset', () => {

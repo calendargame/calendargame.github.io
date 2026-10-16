@@ -900,9 +900,355 @@
           "blitzBest": {
             "m60|numeric-ymd|random|random|random|1583-10000|true": {
               "score": 7,
-              "scoreRoundId": 1835186380519257,
+              "scoreRoundId": 1835202476370338,
               "streak": 7,
-              "streakRoundId": 1835186380519257
+              "streakRoundId": 1835202476370338
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "takeBackBeats": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 7,
+              "scoreRoundId": 1835202477417248,
+              "streak": 7,
+              "streakRoundId": 1835202477417248
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "takeBack": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 6,
+              "scoreRoundId": 1835202477417248,
+              "streak": 6,
+              "streakRoundId": 1835202477417248
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "takeBackBelow": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111
             },
             "m30|numeric-ymd|random|random|random|1583-10000|true": {
               "score": 9,
