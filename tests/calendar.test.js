@@ -13,6 +13,7 @@ import {
   dimEither,
   isJulianOnlyDate,
   rangeHasLeapYear,
+  rangeHasCommonYear,
 } from '../src/lib/calendar.js'
 
 // calendar.test.js — the foundational date math. Every assertion is checked
@@ -297,5 +298,21 @@ describe('rangeHasLeapYear — is any leap year reachable in [lo, hi]?', () => {
   it('single-year ranges', () => {
     expect(rangeHasLeapYear(2024, 2024, false)).toBe(true)
     expect(rangeHasLeapYear(2023, 2023, false)).toBe(false)
+  })
+})
+
+describe('rangeHasCommonYear — is any year in [lo, hi] NOT a leap year?', () => {
+  it('every range of two years or more has one (two years in a row are never both leap years)', () => {
+    for (let y = 1; y < 10000; y += 97) expect(rangeHasCommonYear(y, y + 1, true)).toBe(true)
+  })
+  it('a single year: by its own calendar', () => {
+    expect(rangeHasCommonYear(2024, 2024, false)).toBe(false)
+    expect(rangeHasCommonYear(2023, 2023, false)).toBe(true)
+    expect(rangeHasCommonYear(1100, 1100, true)).toBe(false) // Julian: 1100 is leap
+    expect(rangeHasCommonYear(1100, 1100, false)).toBe(true) // Gregorian: it is not
+    expect(rangeHasCommonYear(1700, 1700, true)).toBe(true) // after the reform: Gregorian
+  })
+  it('an empty range has none', () => {
+    expect(rangeHasCommonYear(5, 4, false)).toBe(false)
   })
 })

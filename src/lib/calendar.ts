@@ -107,3 +107,15 @@ export function rangeHasLeapYear(lo: number, hi: number, useJulian: boolean): bo
   }
   return false
 }
+// Returns true if [lo,hi] contains at least one COMMON year (not a leap year), by the same per-year rule
+// as rangeHasLeapYear. Two years in a row are never both leap years, so only a single-year range can
+// lack one — a leap year on its own (2000, or 1100 by the Julian rule). On such a range a Leap Year
+// Chance below 100% asks for dates the range does not have, exactly as one above Random does on a
+// range with no leap year (lib/dateConfig's leapChanceApplies).
+export function rangeHasCommonYear(lo: number, hi: number, useJulian: boolean): boolean {
+  lo = Math.max(1, lo)
+  hi = Math.min(10000, hi)
+  if (lo > hi) return false
+  if (lo < hi) return true
+  return !(useJulian && lo < 1582 ? isLeapJulian(lo) : isLeap(lo))
+}
