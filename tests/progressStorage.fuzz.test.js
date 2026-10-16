@@ -1,16 +1,17 @@
 // progressStorage.fuzz — ONE DEVICE, FOUR BUILDS, RANDOM INTERLEAVINGS, AGAINST A MODEL.
 //
 // Live and staging are one browser origin, so the saved progress is read and written by whatever is
-// open: two pages of this build line (each either this release, which never starts sealing, or the
-// next, which does), a v2.27.3 page and a v2.26.0 page (tests/helpers/progressWorld's models, held
-// to the real builds by tests/progressStorage.olderBuilds). Each step one of them does one thing —
+// open: two pages of the sealing line (each either this build, which seals, or a READER build —
+// v2.28.0 / v2.29.x, which never starts sealing — run as its own recorded code), a v2.27.3 page and
+// a v2.26.0 page (tests/helpers/progressWorld's models; every older model is held to the real builds
+// by tests/progressStorage.olderBuilds). A page's `seal` says which of the first two it is. Each step one of them does one thing —
 // loads, answers (timed, untimed, wrong, a long run), Overrides near the end or deep in the history,
 // resets a mode, Full Resets, deletes or switches preset, turns Amnesic on or off, reloads, dies
 // after the k-th write of a save — while the device is sometimes full.
 //
 // ★ THE ORACLE, after every step, for both presets:
 //   1. What the main key means, read by the layout's definition alone (progressWorld's `meaning`),
-//      is exactly what a fresh page of EITHER release loads.
+//      is exactly what a fresh page of EITHER codec (this build's, the reader builds') loads.
 //   2. That is exactly the state of the page whose save last landed there — its own state for a
 //      page of this line, what its text meant when it landed for an older page.
 //   3. No chunk key was ever written twice with different text.
@@ -32,6 +33,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { isDeepStrictEqual } from 'node:util'
 import { createProgressCodec, removeProgressCopy } from '../src/store/progressStorage.js'
+import { createProgressCodec as createReaderCodec } from './fixtures/olderBuilds/progressStorage-v2.29.0.ts'
 import { placeChangedElsewhere, forgetStorageHealth } from '../src/store/storageHealth.js'
 import { checkStatsInvariants } from '../src/engine/invariants.js'
 import {
@@ -178,7 +180,10 @@ function world(seed, { seals, older, deletes, stale = false }) {
 
   // ── The pages ──
   const ours = (name, seal) => {
-    const p = newPage(createProgressCodec, local, { seal, preset: pick(PRESETS), name })
+    const p = newPage(seal ? createProgressCodec : createReaderCodec, local, {
+      preset: pick(PRESETS),
+      name,
+    })
     p.seal = seal
     p.session = null
     // A stale read: while `lagging` names a key, this page reads the text another page's last
@@ -333,8 +338,8 @@ function world(seed, { seals, older, deletes, stale = false }) {
         expected.set(key, means.state)
       }
       expect(means.state).toEqual(expected.get(key))
-      for (const seal of [false, true]) {
-        const loaded = createProgressCodec(seal).load({
+      for (const make of [createReaderCodec, createProgressCodec]) {
+        const loaded = make().load({
           area: local.view('check'),
           presetId: preset,
         })
@@ -395,9 +400,9 @@ const STEPS = 110
 const seeds = (from, n) => Array.from({ length: n }, (_, i) => from + i)
 
 describe.each([
-  ['two pages of this release', [false, false]],
-  ['this release beside the next one (sealing on)', [false, true]],
-  ['two pages of the next release', [true, true]],
+  ['two pages of the reader builds', [false, false]],
+  ['a reader build beside this build', [false, true]],
+  ['two pages of this build', [true, true]],
 ])('%s, v2.27.3 and v2.26.0, everything allowed', (_label, seals) => {
   it.each(seeds(seals[0] * 1000 + seals[1] * 100 + 1, 6))('seed %i', (seed) => {
     const w = world(seed, { seals, older: ['v2.27.3', 'v2.26.0'], deletes: true })
@@ -417,8 +422,8 @@ describe('with ONE older page and no reset or delete, nothing is ever lost — n
 })
 
 describe.each([
-  ['two pages of the next release', [true, true], []],
-  ['this release beside the next one, and v2.27.3', [false, true], ['v2.27.3']],
+  ['two pages of this build', [true, true], []],
+  ['a reader build beside this build, and v2.27.3', [false, true], ['v2.27.3']],
 ])('%s, reading each other’s saves one write late', (_label, seals, older) => {
   it.each(seeds(8001 + seals[0] * 100, 6))('seed %i', (seed) => {
     world(seed, { seals, older, deletes: true, stale: true }).run(STEPS)

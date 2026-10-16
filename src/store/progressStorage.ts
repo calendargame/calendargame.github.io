@@ -60,23 +60,14 @@ import { isRecord } from './json.js'
 // Chunks that are merely unreachable — a deep Override re-sealed its part under new names, two tabs
 // diverged — are KEPT until that silo is reset: an older page may still hold a save that names them.
 
-// ── ★ A STAGED ROLLOUT, AND THE ONE TEMPORARY THING IN THIS FILE ──────────────────────────────
-// This release is the READER. It loads a sealed save, and saves it back sealed — sealing forward as
-// the tail grows, applying every rule above — but it NEVER STARTS sealing a silo that is not sealed
-// already, so nothing it ships can create the layout. A save with no `sealed` in it is read and
-// written exactly as before.
-// WHAT TURNS IT ON: the NEXT release sets sealing on for every silo past SEAL_ABOVE times. By then
-// every copy of the app on a device (the live site, the staging site, a tab left open) is at least
-// this release, and so reads the layout in full.
-// ⚠ THIS CONSTANT AND ITS BRANCH (`sealNewSilos ||` in the save below, and the parameter that
-// carries it) ARE DELETED IN THAT RELEASE — sealing is then simply what a silo past the threshold
-// does. Until then the tests run the save both ways.
-// ⚠ THAT RELEASE HAS A SECOND REMOVAL, for the same reason (no build older than this one is left
-// to share a device with): engine/parkedEngine's `withCalendars`, which gives a calendar to the
-// judged cards a build up to v2.27.3 parked without one. A parked card lives only as long as its
-// browsing session, so once every copy of the app stamps its own cards there is nothing left for
-// it to complete. The two go together; each names the other.
-export const SEAL_NEW_SILOS = false
+// ── ★ THE OLDER BUILDS THAT SHARE THE DEVICE (a two-step roll-out, finished in Round 26) ────────
+// v2.28.0 shipped the READER of this layout and nothing that could create it; Round 26 turned sealing
+// on, for every silo past SEAL_ABOVE times, once every copy of the app on a device could read it.
+//   • v2.28.0 and v2.29.x read a sealed save in full and keep sealing it forward as its tail grows,
+//     by every rule above — they never START sealing a plain silo, which changes nothing here
+//     (tests/fixtures/olderBuilds/progressStorage-v2.29.0.ts is their code, held to what they stored).
+//   • v2.27.3 and older read the sealed times as times the old 1,000 cap trimmed, which they already
+//     handle: their Mean and Median cover the tail only, until that tab updates. Known and accepted.
 
 /** Times per chunk. Fixed for ever: a chunk's position is its index × this. */
 export const CHUNK_TIMES = 250
@@ -240,8 +231,6 @@ type SiloBook = {
   ref: readonly number[]
   // ids[j] names the chunk holding ref[j·250 …]; empty for a silo that is not sealed.
   ids: string[]
-  // Was it sealed when last loaded or saved? (The staged rollout's question — see SEAL_NEW_SILOS.)
-  sealed: boolean
   // Every chunk key this page has read or written for it — what a reset seen here deletes.
   keys: Set<string>
 }
@@ -279,9 +268,8 @@ const openBook = (copy: ProgressCopy): Book => ({
 /**
  * The reader and writer of the saved progress for one page. `load` and `save` are what zustand's
  * persist calls (through store/amnesic's router, which decides which copy); both are synchronous.
- * `sealNewSilos` is the staged rollout's switch — see SEAL_NEW_SILOS; only tests pass it.
  */
-export function createProgressCodec<S>(sealNewSilos: boolean = SEAL_NEW_SILOS) {
+export function createProgressCodec<S>() {
   let book: Book | null = null
 
   /**
@@ -324,7 +312,7 @@ export function createProgressCodec<S>(sealNewSilos: boolean = SEAL_NEW_SILOS) {
       }
       const tail = silo.times as number[]
       if (!('sealed' in silo)) {
-        b.silos.set(name, { ref: tail, ids: [], sealed: false, keys: new Set() })
+        b.silos.set(name, { ref: tail, ids: [], keys: new Set() })
         leftBehind(name)
         continue
       }
@@ -339,7 +327,7 @@ export function createProgressCodec<S>(sealNewSilos: boolean = SEAL_NEW_SILOS) {
           tripwire: 'progressSealed',
         })
         stats[name] = timesLost === undefined ? rest : { ...rest, timesLost }
-        b.silos.set(name, { ref: tail, ids: [], sealed: false, keys: new Set() })
+        b.silos.set(name, { ref: tail, ids: [], keys: new Set() })
         continue
       }
       const keys = ids.map((id, j) => `${b.family}${name}:${j}.${id}`)
@@ -363,12 +351,7 @@ export function createProgressCodec<S>(sealNewSilos: boolean = SEAL_NEW_SILOS) {
       // (engine/parkedHistory compares it with `!==`).
       const lost = (timesLost as number) - recovered
       stats[name] = lost > 0 ? { ...rest, times, timesLost: lost } : { ...rest, times }
-      b.silos.set(name, {
-        ref: times,
-        ids: ids.slice(0, intact),
-        sealed: true,
-        keys: new Set(keys),
-      })
+      b.silos.set(name, { ref: times, ids: ids.slice(0, intact), keys: new Set(keys) })
     }
     // Chunk keys of a silo the save does not have at all are left behind too.
     for (const silo of [...bySilo.keys()]) leftBehind(silo)
@@ -447,7 +430,7 @@ export function createProgressCodec<S>(sealNewSilos: boolean = SEAL_NEW_SILOS) {
         for (const key of keys) b.doomed.set(key, name)
         keys.clear()
       }
-      const target = sealNewSilos || was?.sealed ? sealedChunks(times.length) : 0
+      const target = sealedChunks(times.length)
       // How many remembered ids still name their chunk: all of them when the times are the very
       // array last saved; otherwise every chunk before the first time that differs.
       let kept = 0
@@ -463,7 +446,7 @@ export function createProgressCodec<S>(sealNewSilos: boolean = SEAL_NEW_SILOS) {
         if (id === null) break // no room: the rest stays in the tail, and the next save tries again
         ids.push(id)
       }
-      b.silos.set(name, { ref: times, ids, sealed: target > 0, keys })
+      b.silos.set(name, { ref: times, ids, keys })
       if (ids.length === 0) continue
       anySealed = true
       const n = ids.length * CHUNK_TIMES

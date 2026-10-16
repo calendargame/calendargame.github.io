@@ -287,14 +287,20 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
   // the correct-answer count kept growing, so after a reload `good !== times.length` was true for
   // every player past 1,000 timed answers (a false "Enable and Reset Stats?") and a reloaded Mean
   // averaged a different set of solves than the one on screen a moment earlier.
+  // Past 1,000 times the save is SEALED (store/progressStorage): the newest times stay in the main
+  // key and the older ones in chunk keys it names — every one of them still on the device, in order.
   it('every solve time is kept on the WRITE path — nothing is trimmed', () => {
     const times = Array.from({ length: 1500 }, (_, i) => i / 10)
     useProgress
       .getState()
       .setModeStats('classic', { played: 1500, good: 1500, streak: 1, best: 1, times })
     expect(useProgress.getState().stats.classic.times).toEqual(times)
-    const saved = JSON.parse(localStorage.getItem('cg-progress-v1'))
-    expect(saved.state.stats.classic.times).toEqual(times)
+    const saved = JSON.parse(localStorage.getItem('cg-progress-v1')).state.stats.classic
+    const sealed = saved.sealed.ids.map((id, j) =>
+      JSON.parse(localStorage.getItem(`cg-times-v1:classic:${j}.${id}`)),
+    )
+    expect([...sealed.flat(), ...saved.times]).toEqual(times)
+    expect(saved.timesLost, 'the sealed count, and nothing lost').toBe(saved.sealed.n)
   })
 })
 

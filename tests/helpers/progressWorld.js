@@ -2,16 +2,18 @@
 // builds among them, for store/progressStorage's tests.
 //
 // Live and staging are one browser origin, so the saved progress is read and written by whatever
-// builds are open: this release, the next one (which turns sealing on), v2.27.3 and v2.26.0. This
-// file is the stand-in for that: a Disk (the device), a view of it per page (store/storageHealth
-// keys what it is holding by the Storage object, so each page gets its own), a small independent
-// reader of the layout (the oracle), and models of the two older builds.
+// builds are open: this build (which seals), the READER builds v2.28.0 and v2.29.x (which read and
+// keep the layout and never start it), v2.27.3, and v2.26.0. This file is the stand-in for that: a
+// Disk (the device), a view of it per page (store/storageHealth keys what it is holding by the
+// Storage object, so each page gets its own), a small independent reader of the layout (the
+// oracle), a page over any codec (`newPage` — this build's, or the reader builds' recorded one,
+// tests/fixtures/olderBuilds/progressStorage-v2.29.0.ts), and models of the two builds before them.
 //
 // ★ THE OLDER-BUILD MODELS ARE CHECKED AGAINST THE REAL BUILDS, not against a reading of them.
 // tests/fixtures/olderBuilds/*.json is what the real app at each tag stored, step by step, when
 // driven over a seeded sealed save (sealedDrive.dom.test.jsx.txt beside them is the driver; it was
-// run inside `git archive` copies of fcdcf56 and ff506f8). tests/progressStorage.olderBuilds.test.js
-// replays those steps through the models below and compares.
+// run inside `git archive` copies of fcdcf56, ff506f8, 389ebd1, and a54b9f1).
+// tests/progressStorage.olderBuilds.test.js replays those steps through the models and compares.
 
 export const MAIN = 'cg-progress-v1'
 export const CHUNK = 250
@@ -227,13 +229,13 @@ export const mulberry = (seed) => () => {
 export { timeOf }
 
 /**
- * A page of this build on one copy: zustand's persist in miniature (load replaces the state and
- * re-saves a save stamped with another version; every change saves the whole state), over the codec
- * under test. `seal` is the staged rollout's switch — false is this release, true the next.
+ * A page on one copy: zustand's persist in miniature (load replaces the state and re-saves a save
+ * stamped with another version; every change saves the whole state), over the codec it is given —
+ * this build's (store/progressStorage), or the reader builds' recorded one.
  */
-export function newPage(createProgressCodec, disk, { seal = false, preset = 1, name = 'N' } = {}) {
+export function newPage(createProgressCodec, disk, { preset = 1, name = 'N' } = {}) {
   const area = disk.view(name)
-  const codec = createProgressCodec(seal)
+  const codec = createProgressCodec()
   const page = {
     name,
     area,

@@ -1,11 +1,12 @@
 // progressStorage — the layout of the saved progress on the device (store/progressStorage).
 //
-// A silo past 1,000 solve times may be SEALED: its newest 250–499 times stay in the main key and the
-// older ones live in 250-time chunk keys the main key names. This release only READS that layout
-// (and writes it back for a silo that is already sealed); the next one turns sealing on. So every
-// group here that saves runs BOTH ways — `seal: false` is this release, `seal: true` the next — and
-// sealed saves are seeded by hand (tests/helpers/progressWorld's seedSealed, which shares no code
-// with the file under test).
+// A silo past 1,000 solve times is SEALED: its newest 250–499 times stay in the main key and the
+// older ones live in 250-time chunk keys the main key names. This build seals; the READER builds
+// that may still share the device (v2.28.0 and v2.29.x) read and keep the layout and never start it.
+// So every group here that saves runs BOTH ways — this build, and the reader builds' own recorded
+// code (tests/fixtures/olderBuilds/progressStorage-v2.29.0.ts, held to the real builds by
+// tests/progressStorage.olderBuilds) — and sealed saves are seeded by hand
+// (tests/helpers/progressWorld's seedSealed, which shares no code with the file under test).
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { createJSONStorage } from 'zustand/middleware'
 import {
@@ -34,7 +35,7 @@ import {
 vi.mock('../src/observability/sentry.js', () => ({ captureError: vi.fn() }))
 let createProgressCodec, removeProgressCopy, sweepAbandonedTimes, hasTimesKeys, parseTimesKey
 let placeChangedElsewhere
-let baselineTrimmedTimes, SEAL_NEW_SILOS
+let baselineTrimmedTimes, createReaderCodec
 let readItem, writeItem, removeItem, useStorageHealth, forgetStorageHealth, captureError
 beforeAll(async () => {
   vi.resetModules()
@@ -45,8 +46,10 @@ beforeAll(async () => {
     hasTimesKeys,
     parseTimesKey,
     baselineTrimmedTimes,
-    SEAL_NEW_SILOS,
   } = await import('../src/store/progressStorage.js'))
+  // The reader builds' codec, loaded behind the same reset so it shares this file's storageHealth.
+  ;({ createProgressCodec: createReaderCodec } =
+    await import('./fixtures/olderBuilds/progressStorage-v2.29.0.ts'))
   ;({
     readItem,
     writeItem,
@@ -59,8 +62,8 @@ beforeAll(async () => {
 })
 
 const BOTH = [
-  ['this release (never starts sealing)', false],
-  ['the next release (sealing on)', true],
+  ['this build (it seals)', false],
+  ['the reader builds, v2.28.0 and v2.29.0 (they never start sealing)', true],
 ]
 const disks = []
 const disk = () => {
@@ -68,15 +71,16 @@ const disk = () => {
   disks.push(d)
   return d
 }
-const page = (d, opts) => newPage(createProgressCodec, d, opts)
+const page = (d, { reader = false, ...opts } = {}) =>
+  newPage(reader ? createReaderCodec : createProgressCodec, d, opts)
 const stateWith = (stats) => ({ ...blankState(), stats: { ...blankState().stats, ...stats } })
 const mainOf = (d, preset = 1) => JSON.parse(d.items.get(mainKey(preset)))
 const siloOnDisk = (d, silo = 'classic', preset = 1) => mainOf(d, preset).state.stats[silo]
 // A fresh page of either release reads the same thing, and it is what the main text means.
 const expectLoads = (d, state, preset = 1) => {
   expect(meaning(d, d.items.get(mainKey(preset)), preset)?.state).toEqual(state)
-  for (const [, seal] of BOTH) {
-    const fresh = page(d, { seal, preset })
+  for (const [, reader] of BOTH) {
+    const fresh = page(d, { reader, preset })
     fresh.load()
     expect(fresh.state).toEqual(state)
   }
@@ -105,8 +109,8 @@ describe('a save made on a stale read of the main key', () => {
     const rand = mulberry(41)
     const state = stateWith({ classic: siloOf(2300, rand) })
     seedSealed(d, state)
-    const mine = page(d, { seal: true, name: 'mine' })
-    const other = page(d, { seal: true, name: 'other' })
+    const mine = page(d, { name: 'mine' })
+    const other = page(d, { name: 'other' })
     mine.load()
     other.load()
     const before = d.items.get(MAIN)
@@ -136,44 +140,46 @@ describe('a save made on a stale read of the main key', () => {
   })
 })
 
-describe('the staged rollout', () => {
-  it('ships OFF: this release never starts sealing', () => {
-    expect(SEAL_NEW_SILOS).toBe(false)
-  })
-
-  it('with nothing sealed, a save is written and read byte-for-byte as v2.27.3 does', () => {
-    // v2.27.3's adapter: zustand's createJSONStorage over store/storageHealth's three functions.
-    const before = (area) =>
-      createJSONStorage(() => ({
-        getItem: (k) => readItem(area, k),
-        setItem: (k, v) => writeItem(area, k, v),
-        removeItem: (k) => removeItem(area, k),
-      }))
-    const rand = mulberry(7)
-    const now = disk()
-    const then = disk()
-    const codec = createProgressCodec()
-    const old = before(then.view())
-    const copy = { area: now.view(), presetId: 1 }
-    let state = blankState()
-    for (let step = 0; step < 60; step++) {
-      const silo = ['classic', 'flash', 'dedYear'][step % 3]
-      // Long histories included: 0 … 6,000 times, legacy long floats, a legacy gap, bests.
-      const n = step % 7 === 0 ? 0 : Math.floor(rand() * (step % 5 === 0 ? 6000 : 1300))
-      const extra = step % 4 === 0 ? { timesLost: 1 + Math.floor(rand() * 900) } : {}
-      const silos = { ...state.stats, [silo]: siloOf(n, rand, extra) }
-      if (n) silos[silo].times[0] = 3.456699999999997
-      if (extra.timesLost) silos[silo].good += extra.timesLost
-      state = { ...state, stats: silos, blitzBest: { [`k${step}`]: { score: step, streak: 1 } } }
-      const value = { state, version: 5 }
-      codec.save(copy, value)
-      old.setItem(MAIN, value)
-      expect([...now.items]).toEqual([...then.items]) // the same keys holding the same text
-      expect(now.items.get(MAIN)).toBe(JSON.stringify(value))
-      expect(createProgressCodec().load(copy)).toEqual(old.getItem(MAIN))
-    }
-    expect(now.log.every(([, key]) => key === MAIN)).toBe(true)
-  })
+describe('sealing on, and the saves that are not sealed', () => {
+  it.each(BOTH)(
+    'with nothing sealed, a save is written and read byte-for-byte as v2.27.3 does — %s',
+    (_label, reader) => {
+      // v2.27.3's adapter: zustand's createJSONStorage over store/storageHealth's three functions.
+      const before = (area) =>
+        createJSONStorage(() => ({
+          getItem: (k) => readItem(area, k),
+          setItem: (k, v) => writeItem(area, k, v),
+          removeItem: (k) => removeItem(area, k),
+        }))
+      const rand = mulberry(7)
+      const now = disk()
+      const then = disk()
+      const make = reader ? createReaderCodec : createProgressCodec
+      const codec = make()
+      const old = before(then.view())
+      const copy = { area: now.view(), presetId: 1 }
+      let state = blankState()
+      for (let step = 0; step < 60; step++) {
+        const silo = ['classic', 'flash', 'dedYear'][step % 3]
+        // Legacy long floats, a legacy gap, bests — and for the reader long histories too (0 … 6,000
+        // times: it never starts sealing); this build seals past 1,000, so its plain saves stop there.
+        const most = reader ? (step % 5 === 0 ? 6000 : 1300) : 1001
+        const n = step % 7 === 0 ? 0 : Math.floor(rand() * most)
+        const extra = step % 4 === 0 ? { timesLost: 1 + Math.floor(rand() * 900) } : {}
+        const silos = { ...state.stats, [silo]: siloOf(n, rand, extra) }
+        if (n) silos[silo].times[0] = 3.456699999999997
+        if (extra.timesLost) silos[silo].good += extra.timesLost
+        state = { ...state, stats: silos, blitzBest: { [`k${step}`]: { score: step, streak: 1 } } }
+        const value = { state, version: 5 }
+        codec.save(copy, value)
+        old.setItem(MAIN, value)
+        expect([...now.items]).toEqual([...then.items]) // the same keys holding the same text
+        expect(now.items.get(MAIN)).toBe(JSON.stringify(value))
+        expect(make().load(copy)).toEqual(old.getItem(MAIN))
+      }
+      expect(now.log.every(([, key]) => key === MAIN)).toBe(true)
+    },
+  )
 
   it('a save the old cap trimmed (v4) reads as v2.27.3 read it, and is handed on with its version', () => {
     const d = disk()
@@ -193,9 +199,9 @@ describe('the staged rollout', () => {
     expect(createProgressCodec().load({ area: d.view(), presetId: 1 }).state.stats).toEqual(stats)
   })
 
-  it('this release leaves a long plain silo plain, however long it plays', () => {
+  it('the reader builds leave a long plain silo plain, however long it plays', () => {
     const d = disk()
-    const p = page(d)
+    const p = page(d, { reader: true })
     p.state = stateWith({ classic: siloOf(5000) })
     p.save()
     for (let i = 0; i < 300; i++) p.update('classic', play.timed(2 + i / 1000))
@@ -203,9 +209,9 @@ describe('the staged rollout', () => {
     expect(d.items.get(MAIN)).toBe(JSON.stringify({ state: p.state, version: 5 }))
   })
 
-  it('…and the next one seals it: chunks first, then the one main write that names them', () => {
+  it('…and this build seals it: chunks first, then the one main write that names them', () => {
     const d = disk()
-    const p = page(d, { seal: true })
+    const p = page(d)
     p.state = stateWith({ classic: siloOf(5000) })
     p.save()
     const sets = d.log.map(([, key]) => key)
@@ -221,7 +227,7 @@ describe('the staged rollout', () => {
 
   it('a silo of exactly 1,000 times is never sealed; the 1,001st seals it', () => {
     const d = disk()
-    const p = page(d, { seal: true })
+    const p = page(d)
     p.state = stateWith({ classic: siloOf(1000) })
     p.save()
     expect(d.chunkKeys()).toEqual([])
@@ -233,9 +239,9 @@ describe('the staged rollout', () => {
   })
 })
 
-describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
+describe.each(BOTH)('codec round trips — %s', (_label, reader) => {
   it('load(save(x)) is x: any lengths, legacy long floats, a legacy gap', () => {
-    const rand = mulberry(seal ? 11 : 12)
+    const rand = mulberry(reader ? 12 : 11)
     for (let round = 0; round < 25; round++) {
       const d = disk()
       // Already sealed on the device where the lengths allow, so both releases save it sealed.
@@ -266,7 +272,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
       const state = { ...blankState(), stats, aoxBest: { a: { avg: 1.5, med: null } } }
       seedSealed(d, state)
       expectLoads(d, state)
-      const p = page(d, { seal })
+      const p = page(d, { reader })
       p.load()
       p.save()
       expectLoads(d, state)
@@ -285,7 +291,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
     const d = disk()
     const state = stateWith({ classic: siloOf(2000) })
     seedSealed(d, state)
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     expect(p.state).toEqual(state)
     for (let i = 0; i < 600; i++) {
@@ -309,7 +315,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(n) }))
     const whole = JSON.stringify(siloOf(n).times).length
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     expect(p.state.stats.classic.times).toHaveLength(n)
     let most = 0
@@ -332,7 +338,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
   it('an Override in the tail writes the main key only; a deep one re-seals from its chunk on', () => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(3000) }))
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     const original = d.chunkKeys()
     let mark = d.log.length
@@ -365,14 +371,14 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
   it('a sealed silo that falls to 1,000 times is saved plain again', () => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(1001) }))
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     p.update('classic', play.takeBack(1000))
     expect('sealed' in siloOnDisk(d)).toBe(false)
     expect(siloOnDisk(d).times).toHaveLength(1000)
     expectLoads(d, p.state)
     p.update('classic', play.timed(2)) // back to 1,001
-    expect('sealed' in siloOnDisk(d)).toBe(seal) // only the next release seals it again
+    expect('sealed' in siloOnDisk(d)).toBe(!reader) // only this build seals it again
     expectLoads(d, p.state)
   })
 
@@ -380,7 +386,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(3000), flash: siloOf(2000) }))
     seedSealed(d, stateWith({ classic: siloOf(2000) }), { preset: 12 })
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     const flash = d.chunkKeys().filter((k) => k.includes(':flash:'))
     const mark = d.log.length
@@ -399,7 +405,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
   it('a reset whose main save is REFUSED deletes nothing until a save lands', () => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(3000) }))
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     const kept = d.chunkKeys()
     const before = p.state
@@ -424,7 +430,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
     older.reset('classic') // drops `sealed`; knows nothing of chunks
     older.update('classic', play.timed(2.5))
     expect(d.chunkKeys().filter((k) => k.includes(':classic:'))).toHaveLength(sealedChunks(3000))
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     expect(d.log.filter(([, , , who]) => who === 'N')).toEqual([]) // a load writes nothing
     p.update('classic', play.timed(3.5))
@@ -442,13 +448,13 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
     seedSealed(d, state)
     const chunks = d.chunkKeys()
     d.put(MAIN, JSON.stringify({ state, version: 5 })) // the stale page's complete copy
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     p.load()
     const mark = d.log.length
     p.update('classic', play.timed(3.5))
     expect(d.chunkKeys()).toEqual(chunks)
     expect(writesSince(d, mark).map(([, k]) => k)).toEqual([MAIN]) // re-sealing writes no chunk
-    expect('sealed' in siloOnDisk(d)).toBe(seal)
+    expect('sealed' in siloOnDisk(d)).toBe(!reader)
     expectLoads(d, p.state)
   })
 
@@ -456,7 +462,7 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(3000) }))
     d.remove(MAIN)
-    const p = page(d, { seal })
+    const p = page(d, { reader })
     expect(p.load()).toBeNull()
     p.update('flash', play.wrong)
     expect(d.chunkKeys()).toEqual([])
@@ -465,8 +471,8 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
   it('two pages taking turns: each save is that page’s whole state, exactly', () => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(2600) }))
-    const a = page(d, { seal, name: 'A' })
-    const b = page(d, { seal, name: 'B' })
+    const a = page(d, { reader, name: 'A' })
+    const b = page(d, { reader, name: 'B' })
     a.load()
     b.load()
     for (let i = 0; i < 40; i++) {
@@ -479,8 +485,8 @@ describe.each(BOTH)('codec round trips — %s', (_label, seal) => {
   it('while its own save is held, a page re-checks its chunks — another page’s reset cannot strand them', () => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(3000) }))
-    const a = page(d, { seal, name: 'A' })
-    const b = page(d, { seal, name: 'B' })
+    const a = page(d, { reader, name: 'A' })
+    const b = page(d, { reader, name: 'B' })
     a.load()
     b.load()
     d.limit = d.used // full: A's next save is refused and held
@@ -499,7 +505,7 @@ describe('a full device', () => {
   it('a chunk the device refuses is simply not sealed: nothing is unsaved, and the next save tries again', () => {
     const d = disk()
     seedSealed(d, stateWith({ classic: siloOf(2249) }))
-    const p = page(d, { seal: false })
+    const p = page(d, { reader: true })
     p.load()
     d.limit = d.used + 40 // room for one more time in the main key, not for a 1.7 KB chunk
     p.update('classic', play.timed(2.5)) // the 2,250th: a chunk is due
@@ -532,7 +538,7 @@ describe('a full device', () => {
 
   it('sealing a long plain silo on a device more than half full converges, losing nothing', () => {
     const d = disk()
-    const p = page(d, { seal: true })
+    const p = page(d)
     p.state = stateWith({ classic: siloOf(20_000) })
     d.put(MAIN, JSON.stringify({ state: p.state, version: 5 }))
     d.limit = Math.floor(d.used * 1.3) // 77% full: the chunks cannot all fit beside the old main
@@ -552,7 +558,7 @@ describe('a full device', () => {
 describe('crash injection: the page dies at every write of a save', () => {
   const scenarios = {
     'sealing a long plain silo': (d) => {
-      const p = page(d, { seal: true })
+      const p = page(d)
       p.state = stateWith({ classic: siloOf(3000, mulberry(1)) })
       d.put(MAIN, JSON.stringify({ state: p.state, version: 5 }))
       p.load()
@@ -599,7 +605,7 @@ describe('crash injection: the page dies at every write of a save', () => {
       expect([before, p.state]).toContainEqual(now)
       expectLoads(d, now)
       // The next open finishes the job, and leaves nothing a reset should have removed.
-      const again = page(d, { seal: name === 'sealing a long plain silo' })
+      const again = page(d, { reader: name !== 'sealing a long plain silo' })
       again.load()
       again.state = p.state
       again.save()
@@ -686,7 +692,7 @@ describe('corruption', () => {
       if (lost) stored.timesLost = lost(silo)
       main.state.stats.classic = stored
       d.put(MAIN, JSON.stringify(main))
-      const p = page(d, { seal: true })
+      const p = page(d)
       p.load()
       const { sealed: _gone, ...rest } = stored
       expect(p.state.stats.classic).toEqual(rest)
@@ -704,7 +710,7 @@ describe('corruption', () => {
 
   it('a name already taken by other text gets a numbered suffix — nothing is overwritten', () => {
     const d = disk()
-    const p = page(d, { seal: true })
+    const p = page(d)
     p.state = stateWith({ classic: siloOf(1300, mulberry(21)) })
     const text = JSON.stringify(p.state.stats.classic.times.slice(0, CHUNK))
     d.put(`${family(1)}classic:0.${chunkId(text)}`, '[1,2,3]')
@@ -718,7 +724,7 @@ describe('corruption', () => {
 describe('older builds on the same device', () => {
   it.each(BOTH)(
     'v2.26.0 plays a sealed silo past its 1,000 cap and trims — %s reads it exactly',
-    (_l, seal) => {
+    (_l, reader) => {
       const d = disk()
       const state = stateWith({ classic: siloOf(2499) }) // sealed: 8 chunks + a 499-time tail
       seedSealed(d, state)
@@ -727,7 +733,7 @@ describe('older builds on the same device', () => {
       for (let i = 0; i < 520; i++) old.update('classic', play.timed(1 + i / 1000))
       expect(siloOnDisk(d).times).toHaveLength(1000)
       expect(mainOf(d).version).toBe(4)
-      const p = page(d, { seal })
+      const p = page(d, { reader })
       p.load()
       const got = p.state.stats.classic
       expect(got.times).toHaveLength(2000 + 1000)
@@ -740,14 +746,14 @@ describe('older builds on the same device', () => {
 
   it.each(BOTH)(
     'v2.27.3 appends to the tail of a sealed save — %s reads every time',
-    (_l, seal) => {
+    (_l, reader) => {
       const d = disk()
       const state = stateWith({ classic: siloOf(3000) })
       seedSealed(d, state)
       const old = olderPage('v2.27.3', d)
       old.load()
       for (let i = 0; i < 700; i++) old.update('classic', play.timed(1 + i / 1000))
-      const p = page(d, { seal })
+      const p = page(d, { reader })
       p.load()
       expect(p.state.stats.classic.times).toHaveLength(3700)
       expect('timesLost' in p.state.stats.classic).toBe(false)
