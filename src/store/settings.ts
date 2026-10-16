@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
 import { readItem } from './storageHealth.js'
 import type { FormatId } from '../lib/format.js'
+import { YEAR_MAX_GREGORIAN } from '../lib/calendar.js'
 import { isDotRotation, type DotRotation } from '../lib/dotLayout.js'
 import { isPageId, type PageId } from '../lib/modes.js'
 
@@ -115,8 +116,10 @@ export const SETTINGS_DEFAULTS: SettingsValues = {
   // payload from before `defaultMode` existed merges to exactly this, so v2→v3 needs no migrate function.
   defaultMode: 'classic',
   useJulian: true,
+  // The range used while the Julian Calendar setting is OFF (Round 26, Q7) — to every older build on
+  // this origin, simply "the range". The Julian-on range is store/julianRange's, in a key of its own.
   minY: 1,
-  maxY: 10000,
+  maxY: YEAR_MAX_GREGORIAN,
   leapChance: 'random',
   janFebChance: 'random',
   julianChance: 'random',

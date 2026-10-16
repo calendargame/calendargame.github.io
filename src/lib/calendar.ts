@@ -90,13 +90,26 @@ export const dimEither = (y: number, m: number): number =>
 // does not ask it at all (gameReducer's waitingDateMissing).
 export const isJulianOnlyDate = (y: number, m: number, d: number): boolean =>
   isJulianDate(y, m, d) && d > dim(y, m) && d <= dim(y, m, true)
+// ★ THE YEAR CAPS (Round 26, Q7) — the ONE home of the highest year a range, a year box, and Lookup
+// accept. With the Julian Calendar setting off, 10000. With it on, 11582: years 10001-11582 are
+// modern-calendar (Gregorian) years whose last four digits behave exactly like years 1-1582's under
+// the modern calendar, because 10000 = 25 x 400 — so they drill the year-endings of 1-1582 the way a
+// modern-calendar reader sees them, not the Julian reading a Julian-on player sees for those years.
+// (isJulianDate / isGapDate test the exact year, so 11582 is never mistaken for 1582; method's
+// yearParts takes the last four digits, which is exact for the same reason.)
+export const YEAR_MAX_GREGORIAN = 10000
+export const YEAR_MAX_JULIAN = 11582
+export const yearMaxFor = (useJulian: boolean): number =>
+  useJulian ? YEAR_MAX_JULIAN : YEAR_MAX_GREGORIAN
 // Returns true if [lo,hi] contains at least one leap year, evaluated under the active calendar
 // (Julian rule for years <1582 when useJulian is on; Gregorian rule otherwise). Used to lock the
 // Leap Year Chance buttons when no leap year is reachable — without this, setting 50/75/100% would
 // be silently ignored per date with no visible signal that the setting can't take effect.
+// The range is bounded by the cap for the calendar setting it is asked under (yearMaxFor): with the
+// setting off a range never walks past 10000.
 export function rangeHasLeapYear(lo: number, hi: number, useJulian: boolean): boolean {
   lo = Math.max(1, lo)
-  hi = Math.min(10000, hi)
+  hi = Math.min(yearMaxFor(useJulian), hi)
   if (lo > hi) return false
   // Check every multiple of 4 in [lo,hi]. Non-multiples can't be leap years under either rule.
   const start = lo + ((4 - (lo % 4)) % 4)
@@ -114,7 +127,7 @@ export function rangeHasLeapYear(lo: number, hi: number, useJulian: boolean): bo
 // range with no leap year (lib/dateConfig's leapChanceApplies).
 export function rangeHasCommonYear(lo: number, hi: number, useJulian: boolean): boolean {
   lo = Math.max(1, lo)
-  hi = Math.min(10000, hi)
+  hi = Math.min(yearMaxFor(useJulian), hi)
   if (lo > hi) return false
   if (lo < hi) return true
   return !(useJulian && lo < 1582 ? isLeapJulian(lo) : isLeap(lo))

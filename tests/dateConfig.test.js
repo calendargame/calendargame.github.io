@@ -217,6 +217,10 @@ describe('inEffectBestKey — the table, row by row', () => {
       expect(at(s)).toEqual({ key: mapsTo(s), samePool: true })
     }
   })
+  it('a key with years past 10000 is one this build files with Julian on (up to 11582), and maps to itself', () => {
+    const s = { minY: 10001, maxY: 11582, leapChance: '75', janFebChance: '25' }
+    expect(at(s)).toEqual({ key: k(s), samePool: true })
+  })
   it('a key it cannot read is null, never guessed', () => {
     for (const bad of [
       '',
@@ -228,7 +232,8 @@ describe('inEffectBestKey — the table, row by row', () => {
       '10|false|written-mdy|random|random|random|1-10000|maybe',
       '10|false|written-mdy|random|random|random|10000-1|true',
       '10|false|written-mdy|random|random|random|0-100|true',
-      '10|false|written-mdy|random|random|random|1-10001|true',
+      '10|false|written-mdy|random|random|random|1-10001|false', // past Julian off's cap
+      '10|false|written-mdy|random|random|random|1-11583|true', // past Julian on's
       '10|false|written-mdy|random|random|random|1_10000|true',
       '10|false|written-mdy|random|random|random|01-100|true',
     ])

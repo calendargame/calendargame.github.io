@@ -33,7 +33,7 @@
 // or merged). The only records that stop showing are the ones the fault above played on DIFFERENT
 // dates; they stay on the device, and Full Reset is still the only thing that removes them.
 // ─────────────────────────────────────────────────────────────────────────
-import { rangeHasCommonYear, rangeHasLeapYear } from './calendar.js'
+import { rangeHasCommonYear, rangeHasLeapYear, yearMaxFor } from './calendar.js'
 import { FORMAT_IDS } from './modeFormat.js'
 import type { FormatId } from './format.js'
 
@@ -146,8 +146,8 @@ export function inEffectBestKey(rawKey: string): InEffectBestKey | null {
   if (ends.length !== 2 || !YEAR.test(ends[0]) || !YEAR.test(ends[1])) return null
   const minY = Number(ends[0])
   const maxY = Number(ends[1])
-  if (minY > maxY || maxY > 10000) return null
   const useJulian = julian === 'true'
+  if (minY > maxY || maxY > yearMaxFor(useJulian)) return null
   const inEffect = dateSettingsInEffect({
     randomFormat: format === 'random',
     dateFormat: format === 'random' ? FORMAT_IDS[0] : (format as FormatId),

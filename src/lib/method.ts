@@ -132,6 +132,8 @@ export function calcCdCode(cd: number): number {
   }
   return canonicalizeMod((METHOD_CD_ADVANCED_LEAP_MAP.get(b) ?? 0) + (cd - b))
 }
+// The last four digits: exact for every year the app draws, 10001-11582 included — 10000 = 25 x 400,
+// so year y + 10000 has year y's Gregorian codes (lib/calendar's YEAR_MAX_JULIAN).
 export function yearParts(y: number): { a: number; b: number; cd: number } {
   const f = ((y % 10000) + 10000) % 10000
   return { a: Math.floor(f / 1000), b: Math.floor((f % 1000) / 100), cd: f % 100 }
