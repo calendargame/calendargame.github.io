@@ -2013,11 +2013,12 @@ export default function GuidePage({
           <i>anywhere</i> on the stats strip to see that run or round solve by solve (with Save
           Stats on — a dimmed strip does not open it). A failed run shows every date up to and
           including the one that ended it, and its mean is the mean of the solves you did make. A
-          summary sits at the top — solves, accuracy, mean, median, fastest, slowest, and the spread
-          between the fastest and the slowest — over a scrolling list of every date you were asked,
-          in order. Each row reads, left to right: its number, the day of the week that date fell on
-          (as one letter — the key is below), the date, any note about it, and its time, with the
-          times lined up in a column on the right.
+          summary sits at the top in two columns — solves, fastest, slowest, and the spread between
+          the fastest and the slowest down the left; accuracy, mean, and median down the right —
+          over a scrolling list of every date you were asked, in order. Each row reads, left to
+          right: its number, the day of the week that date fell on (as one letter — the key is
+          below), the date, any note about it, and its time, with the times lined up in a column on
+          the right.
         </p>
         <UL>
           <li>

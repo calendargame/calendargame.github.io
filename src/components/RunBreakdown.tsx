@@ -100,6 +100,14 @@ export default function RunBreakdown({
         </div>
         {/* THE SUMMARY. Two columns of label/value pairs, so seven figures fit above the list
             without pushing it off the card.
+            ★ THE ORDER IS BY COLUMN (the owner's, Round 26): down the left, the run's counts and
+            its extremes — Solves, Fastest, Slowest, Spread; down the right, how well and how fast
+            on the whole — Accuracy, Mean, Median. The figures are written in that reading order
+            and the grid FLOWS BY COLUMN (grid-flow-col) over as many rows as the left column has,
+            so the page shows exactly the order a screen reader reads: the left column, then the
+            right. Spread is the one figure that can be absent (below), so the left column is four
+            tall with it and three without — and the rows follow it, which keeps Accuracy at the
+            top of the right column either way rather than wrapping it under Slowest.
             ★ WHICH FORMATTER EACH FIGURE TAKES IS THE WCA SPLIT (lib/modeFormat, regulation 9f1),
             APPLIED PER FIGURE RATHER THAN PER SECTION — which is what this block got wrong until
             round 22's fixer: it sent all of them through the ROUNDING formatter on the reasoning
@@ -115,14 +123,16 @@ export default function RunBreakdown({
             print a spread the run does not have. It reads null — and is omitted — unless there are
             at least two DISTINCT times to span, because a spread of 0.00s across identical solves
             is a fact about nothing. */}
-        <div className="px-4 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+        <div
+          className={`px-4 grid grid-flow-col grid-cols-2 ${summary.spread != null ? 'grid-rows-4' : 'grid-rows-3'} gap-x-4 gap-y-0.5 text-xs`}
+        >
           <Figure label="Solves" value={`${summary.solves}/${summary.cards}`} />
-          <Figure label="Accuracy" value={fmtAccuracyPct(summary.solves, summary.cards)} />
-          <Figure label="Mean" value={fmtTime(summary.mean)} />
-          <Figure label="Median" value={fmtTime(summary.median)} />
           <Figure label="Fastest" value={truncTime(summary.fastest)} />
           <Figure label="Slowest" value={truncTime(summary.slowest)} />
           {summary.spread != null && <Figure label="Spread" value={fmtTime(summary.spread)} />}
+          <Figure label="Accuracy" value={fmtAccuracyPct(summary.solves, summary.cards)} />
+          <Figure label="Mean" value={fmtTime(summary.mean)} />
+          <Figure label="Median" value={fmtTime(summary.median)} />
         </div>
         {/* THE LIST. The shared scroll-region recipe (components/scrollRegion): the card owns py-4
             only, this scroller owns the px-4, which puts the right padding INSIDE the scroller as

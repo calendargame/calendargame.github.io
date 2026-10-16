@@ -96,6 +96,14 @@ const figure = (dlg, label) =>
     .parentElement.querySelectorAll('span')[1]
     .textContent.trim()
 const rows = (dlg) => Array.from(dlg.querySelectorAll('li[data-solve-row]'))
+// The summary's grid, and its figures' labels in the order they are written — which is the order a
+// screen reader reads them, and (the grid flowing by column over the left column's rows) the order
+// down the left column and then down the right. jsdom lays nothing out, so the column split is
+// read from the grid's own classes: its row count is the left column's height.
+const summaryGrid = (dlg) =>
+  within(dlg).getByText('Solves', { selector: 'span' }).parentElement.parentElement
+const summaryOrder = (dlg) =>
+  Array.from(summaryGrid(dlg).children).map((f) => f.firstElementChild.textContent)
 
 function pin() {
   localStorage.clear()
@@ -157,6 +165,17 @@ describe('the run breakdown — MoX', () => {
     expect(figure(dlg, 'Fastest')).toBe('2.00s')
     expect(figure(dlg, 'Slowest')).toBe('6.00s')
     expect(figure(dlg, 'Spread')).toBe('4.00s')
+    // Down the left: Solves, Fastest, Slowest, Spread. Down the right: Accuracy, Mean, Median.
+    expect(summaryOrder(dlg)).toEqual([
+      'Solves',
+      'Fastest',
+      'Slowest',
+      'Spread',
+      'Accuracy',
+      'Mean',
+      'Median',
+    ])
+    expect(summaryGrid(dlg)).toHaveClass('grid-flow-col', 'grid-cols-2', 'grid-rows-4')
   })
 
   // ★★ THE SUMMARY AND THE ROWS MUST FORMAT THE SAME SOLVE THE SAME WAY (round 22's fixer). Fastest
@@ -367,6 +386,16 @@ describe('the run breakdown — MoX', () => {
     ])
     expect(figure(dlg, 'Solves')).toBe('1/2')
     expect(figure(dlg, 'Mean')).toBe(stripMean)
+    // One time has no spread: the left column is three tall, and Accuracy still heads the right.
+    expect(summaryOrder(dlg)).toEqual([
+      'Solves',
+      'Fastest',
+      'Slowest',
+      'Accuracy',
+      'Mean',
+      'Median',
+    ])
+    expect(summaryGrid(dlg)).toHaveClass('grid-flow-col', 'grid-cols-2', 'grid-rows-3')
   })
 
   it('each row reads number, weekday letter, date, word, time — and the letter speaks its full name', () => {
