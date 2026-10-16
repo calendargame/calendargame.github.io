@@ -65,8 +65,8 @@
 //     on itself after wandering — is a press however long it lasted and however far it went, as long
 //     as the browser did not take it for a scroll (a scroll is a pointercancel: onCancel). Mouse
 //     presses are untouched: a mouse always gets its click.
-//   • WHO PRESSES IT. A QUICK, STILL tap (ownsTap: under TAP_MS and TAP_SLOP_PX, its touch not
-//     withheld) stays the browser's, exactly as before — every engine clicks for it, and its click
+//   • WHO PRESSES IT. A QUICK, STILL tap (pressedHere is false: under TAP_MS and TAP_SLOP_PX, its
+//     touch not withheld) stays the browser's, exactly as before — every engine clicks for it, and its click
 //     carries the tap's whole native order: the focus move that commits a box being typed in comes
 //     BEFORE the activation, and a touch that only stopped a coasting list is not a click at all.
 //     Any OTHER release is pressed here, at once (pressOnRelease): no waiting to see whether a
@@ -84,17 +84,30 @@
 //     -webkit-touch-callout or cancelling selectstart/contextmenu — all tried on the device). What
 //     stopped it was cancelling the SECOND tap's touchstart, so that iOS never sees a double tap
 //     (onTouchStart): a touch that begins within DOUBLE_TAP_MS of a TAP ending (not of a scroll — a
-//     flick after a flick must still scroll) on a control this controller presses. A cancelled
-//     touchstart gets no click, so that touch is pressed here on release like any other.
+//     flick after a flick must still scroll), ANYWHERE but where the browser's own gestures are the
+//     point (withholdsSecondTap: text a player can select or type in, and links). On a control a
+//     cancelled touchstart gets no click, so that touch is pressed here on release like any other;
+//     anywhere else nothing was going to be pressed, and the lens is all it stops — over a label or
+//     a stat's number as much as over a button.
+//     ⚠ ITS ONE COST, accepted for that: a touch withheld this way cannot start a scroll, so a flick
+//     begun within DOUBLE_TAP_MS of a tap ending does not move the page. A flick after a FLICK is
+//     never withheld, and neither is one begun on the guide's text.
 //   • TEXT KEEPS EVERYTHING. A touch that begins on text a player can select or type in (TEXT_SELECTOR
 //     — the guide's titles and body, the Contact address, every box) is left wholly to the browser:
 //     its caret, its selection handles, and its lens are the point of it.
+//   • A SURFACE IS A CONTROL TOO. A popup's dim closes the popup when it is tapped, and it is not a
+//     <button> — so it carries SURFACE_SELECTOR's marker, and this controller treats it as a control
+//     wherever a press lands on its bare self (never on the card drawn over it, which is the dim's
+//     content and not its surface). A press on the dim is therefore exactly a press on a button: a
+//     quick tap is the browser's click, a long or moved one is pressed here, and one that slides
+//     onto the card is cancelled. Before Round 26's follow-up a long press on the dim closed nothing
+//     on an iPhone, for the same missing click as a button's.
 //   • NOT CONTROLS OF THIS FILE: links (two mailto addresses — a long press on a link is the
-//     platform's own preview, never a press), the preset reorder grip (it owns its own drag), the
-//     sliders, and a popup's dim. Those keep the browser's behaviour.
+//     platform's own preview, never a press), the preset reorder grip (it owns its own drag), and the
+//     sliders. Those keep the browser's behaviour.
 //
-// TESTABILITY: gestureTarget, resolveRelease, resolveTriggerRelease, nextHilite, menuFor, ownsTap,
-// bandDirection, and scrollDelta are pure (or layout-free DOM reads) and unit-tested, as are the pointer
+// TESTABILITY: gestureTarget, controlOf, resolveRelease, resolveTriggerRelease, nextHilite, menuFor,
+// pressedHere, withholdsSecondTap, bandDirection, and scrollDelta are pure (or layout-free DOM reads) and unit-tested, as are the pointer
 // latch, click suppression, and the touch rules above via synthetic events; the browser lane
 // (tests/browser/touchPress.browser.ts) drives them in Chromium and WebKit. What only the phone can show
 // — what iOS sends after a long press, whether a cancelled touchstart keeps its pointer events — was
@@ -109,6 +122,12 @@ const TARGET_SELECTOR = 'button,[data-drag-focus]' // what a release can land on
 const WITHHELD_SELECTOR = '[aria-disabled="true"]' // …and what a gesture must never land on, however it matched above
 // Text a player can select or type in: a touch that starts here stays the browser's (the header's ★).
 const TEXT_SELECTOR = 'input,textarea,select,[contenteditable],.select-text'
+// …and everywhere the browser's own gestures are the point, which a double tap's second touch must
+// reach untouched: that text, and links (pressed by the browser, never by this controller).
+const BROWSER_OWNED_SELECTOR = `${TEXT_SELECTOR},a[href]`
+// A SURFACE: an element that is a control where a press lands on its bare self, and not where it
+// lands on anything drawn over it (a popup's dim — components/Popup; the header's ★).
+const SURFACE_SELECTOR = '[data-press-surface]'
 // A control whose press must leave the keyboard where it is (Lookup and Clear, beside the date box
 // they act on — components/LookupCard). The browser's way to say so is cancelling the press's
 // mousedown, which is what moves focus; onMouseDown does that for every press the browser makes, and
@@ -157,6 +176,18 @@ export function gestureTarget(el: Element | null): HTMLElement | null {
   return el && !el.matches(WITHHELD_SELECTOR) ? (el as HTMLElement) : null
 }
 
+// The control a pointer on `el` belongs to, through gestureTarget: the nearest `selector` match
+// around it (a button; on a release, the focus opt-ins too) — or, where there is none, `el` itself
+// when it is a SURFACE (the header's ★). Only the surface's bare self: what is drawn over it has
+// no `selector` match to find and is not the surface, so a press there belongs to nothing.
+export function controlOf(el: Element | null | undefined, selector: string): HTMLElement | null {
+  if (!(el instanceof Element)) return null
+  return gestureTarget(el.closest(selector) ?? (el.matches(SURFACE_SELECTOR) ? el : null))
+}
+// Is `node` part of the press on `control`? Inside a button, yes; a surface's press is its bare self.
+const pressHolds = (control: Element, node: Node) =>
+  control.matches(SURFACE_SELECTOR) ? control === node : control.contains(node)
+
 // Pure decision: given where the press STARTED, the release target under the release point (or null),
 // and the selection group the press began inside (or null), decide whether to suppress the native click
 // on the start button and which button (if any) to activate instead.
@@ -186,12 +217,13 @@ export function pressedHere(heldMs: number, movedPx: number, withheld: boolean):
 }
 
 // Pure-ish (a closest() walk): does a touch landing on `target` have its touchstart cancelled when it
-// is a double tap's second half? Only on a control this controller presses (so the cancelled touch is
-// still pressed, on release) or on an answer grid's gaps (which press nothing and never scroll) — and
-// never on text a player can select or type in, which keeps its own lens.
+// is a double tap's second half? Everywhere the browser's own gestures are not the point: on a
+// control this controller presses (so the cancelled touch is still pressed, on release), and on
+// anything that presses nothing — a label, a stat's number, a grid's gaps, the page — where the
+// lens is all there is to stop. Never on text a player can select or type in, which keeps its own
+// lens, and never on a link, which the browser presses. (The header's ★, with the one cost.)
 export function withholdsSecondTap(target: Element | null): boolean {
-  if (!target || target.closest(TEXT_SELECTOR)) return false
-  return !!gestureTarget(target.closest('button')) || !!target.closest('[data-answer-grid]')
+  return target instanceof Element && !target.closest(BROWSER_OWNED_SELECTOR)
 }
 
 // Pure decision for the GROUP drag hilite: given the group member under the pointer (null = off-grid),
@@ -303,7 +335,7 @@ export function installPointerGestures(): () => void {
   let prevTs: number | null = null // previous rAF timestamp; null = first frame after a (re)start → dt 0
 
   const targetAt = (x: number, y: number): HTMLElement | null =>
-    gestureTarget(document.elementFromPoint(x, y)?.closest(TARGET_SELECTOR) ?? null)
+    controlOf(document.elementFromPoint(x, y), TARGET_SELECTOR)
   const memberAt = (g: Element | null, x: number, y: number): Element | null => {
     if (!g) return null
     const t = targetAt(x, y)
@@ -407,7 +439,7 @@ export function installPointerGestures(): () => void {
   // opened, a button it removed), and a tap's click lands on whatever is there when it comes.
   const pressOnRelease = (el: HTMLElement) => {
     const box = document.activeElement
-    if (opensKeyboard(box) && !el.contains(box) && !el.closest(KEEP_FOCUS_SELECTOR)) box.blur()
+    if (opensKeyboard(box) && !pressHolds(el, box) && !el.closest(KEEP_FOCUS_SELECTOR)) box.blur()
     el.click()
     cancelTouchEnd = true
     armSuppress(document.documentElement)
@@ -438,7 +470,7 @@ export function installPointerGestures(): () => void {
     // through targetAt, and resolveRelease would read that as a slide-off — arming a click suppression
     // on a button that was never going to act. Same predicate, same reason, one gesture earlier.
     const target = e.target as Element | null
-    const el = gestureTarget(target?.closest?.('button') ?? null)
+    const el = controlOf(target, 'button')
     if (!el) return
     pointerId = e.pointerId
     pointerKind = e.pointerType

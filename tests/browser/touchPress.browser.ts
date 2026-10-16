@@ -7,7 +7,9 @@
 //
 // THE CONTROL UNDER TEST is the mode screen's Show Codes button: a press toggles it, so its state is
 // the count of presses that reached the app — one press opens the codes, a second (a double press)
-// would close them again — and every click that arrives at it is counted as well.
+// would close them again — and every click that arrives at it is counted as well. A POPUP'S DIM is a
+// control too (the controller's "A SURFACE IS A CONTROL TOO"): a press on it closes the popup, held
+// or not, and the status-bar strip along its top edge is part of it.
 //
 // TWO KINDS OF TOUCH:
 //   • REAL ones (Chromium only): sent through the browser's own input pipeline (DevTools'
@@ -28,7 +30,16 @@
 // ⚠ THE HOLDS ARE INPUT, NOT WAITS. A long press IS a finger held for a while; the time below is
 // how long the finger is down, not a guess at how long the app takes. Nothing is asserted until the
 // press is over, and then the resting state is read.
-import { test, expect, openApp, openSettings, settled, switchMode, topBar } from './support/app'
+import {
+  test,
+  expect,
+  openApp,
+  openPresetManager,
+  openSettings,
+  settled,
+  switchMode,
+  topBar,
+} from './support/app'
 import type { CDPSession, Locator, Page } from '@playwright/test'
 
 test.use({ hasTouch: true })
@@ -57,6 +68,47 @@ async function centre(target: Locator) {
 }
 
 const hold = (page: Page, ms: number) => page.waitForTimeout(ms) // the finger is down (see the header)
+
+// A popup over the page — ⚙ → Manage Presets, over the ⚙ menu — and two points on its dim: one in
+// the open dim beside the card, and one in the status-bar strip along the very top edge. Each is
+// checked to be the dim's own surface before it is used, so a press there is a press on the dim.
+async function openPopup(page: Page) {
+  await openApp(page)
+  const dialog = await openPresetManager(page)
+  const dim = page.locator('#root > [data-settings-modal]')
+  await expect(dim).toHaveCount(1)
+  const box = (await dialog.boundingBox())!
+  const view = page.viewportSize()!
+  const beside = { x: view.width / 2, y: (box.y + box.height + view.height) / 2 }
+  const strip = { x: view.width / 2, y: 4 }
+  for (const at of [beside, strip])
+    expect(
+      await dim.evaluate((el, { x, y }) => document.elementFromPoint(x, y) === el, at),
+      'the point is the dim’s own surface',
+    ).toBe(true)
+  return { dialog, dim, beside, strip }
+}
+
+// A text on the page that is no control, no link, and not selectable: a label. Found from what it
+// is, not where it sits, and marked for the test.
+async function aLabel(page: Page) {
+  await page.evaluate(() => {
+    const label = [...document.querySelectorAll('#root span, #root div')].find((el) => {
+      const r = el.getBoundingClientRect()
+      return (
+        el.childElementCount === 0 &&
+        (el.textContent ?? '').trim().length > 2 &&
+        r.width > 20 &&
+        r.height > 8 &&
+        getComputedStyle(el).visibility === 'visible' &&
+        el.closest('button,a,input,textarea,select,.select-text,[data-answer-grid]') === null &&
+        document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === el
+      )
+    })!
+    label.setAttribute('data-touch-label', '')
+  })
+  return page.locator('[data-touch-label]')
+}
 
 async function openOnCodes(page: Page) {
   await openApp(page)
@@ -255,6 +307,72 @@ test.describe('real touches (Chromium)', () => {
     await settled(page)
     expect(Number(await slider.inputValue())).toBeGreaterThan(Number(before))
   })
+
+  test('a popup’s dim, HELD: the popup closes, once — and nothing under it is pressed', async ({
+    page,
+  }) => {
+    const { dim, beside } = await openPopup(page)
+    const finger = await touchscreen(page)
+    await finger.down(beside)
+    await hold(page, HOLD_MS)
+    await finger.up()
+    await expect(dim).toHaveCount(0)
+    await settled(page)
+    // The ⚙ menu the popup was opened over is still open: no second press reached the page.
+    await expect(page.locator('#settings-popover')).toBeVisible()
+  })
+
+  test('…and the status-bar strip along its top edge is the dim: held there, the popup closes', async ({
+    page,
+  }) => {
+    const { dim, strip } = await openPopup(page)
+    const finger = await touchscreen(page)
+    await finger.down(strip)
+    await hold(page, HOLD_MS)
+    await finger.up()
+    await expect(dim).toHaveCount(0)
+    await settled(page)
+    await expect(page.locator('#settings-popover')).toBeVisible()
+  })
+
+  test('…a quick tap on the dim closes it, as always', async ({ page }) => {
+    const { dim, beside } = await openPopup(page)
+    const finger = await touchscreen(page)
+    await finger.down(beside)
+    await finger.up()
+    await expect(dim).toHaveCount(0)
+  })
+
+  test('…and a press on the dim slid onto the card and lifted there closes nothing', async ({
+    page,
+  }) => {
+    const { dialog, dim, beside } = await openPopup(page)
+    const box = (await dialog.boundingBox())!
+    const finger = await touchscreen(page)
+    await finger.down(beside)
+    await hold(page, HOLD_MS)
+    await finger.move({ x: beside.x, y: box.y + box.height - 4 })
+    await finger.up()
+    await settled(page)
+    await expect(dim).toHaveCount(1)
+  })
+
+  test('a double tap and hold on a LABEL: the second touch is cancelled at its start, and nothing is pressed', async ({
+    page,
+  }) => {
+    const codes = await openOnCodes(page)
+    const label = await aLabel(page)
+    const finger = await touchscreen(page)
+    await finger.down(await centre(label))
+    await finger.up()
+    await hold(page, DOUBLE_TAP_GAP_MS)
+    await finger.down(await centre(label))
+    await hold(page, HOLD_MS)
+    await finger.up()
+    await settled(page)
+    expect(await touchStarts(page)).toEqual([false, true])
+    await expect(codes).toHaveAttribute('aria-expanded', 'false')
+  })
 })
 
 // ── CLICK-LESS sequences, in both engines ─────────────────────────────────────────────────────
@@ -266,8 +384,14 @@ interface Sequence {
   /** Whether a click follows the touch, as the browser sends one after a quick tap. */
   click?: boolean
 }
-async function clickless(page: Page, target: Locator, { holdMs, click = false }: Sequence) {
-  const at = await centre(target)
+async function clickless(page: Page, target: Locator, sequence: Sequence) {
+  return clicklessAt(page, await centre(target), sequence)
+}
+async function clicklessAt(
+  page: Page,
+  at: { x: number; y: number },
+  { holdMs, click = false }: Sequence,
+) {
   return page.evaluate(
     async ({ x, y, holdMs, click }) => {
       const el = document.elementFromPoint(x, y)!
@@ -350,4 +474,29 @@ test('the keyboard presses once, before and after touches, as it always did', as
   await expect(codes).toHaveAttribute('aria-expanded', 'true')
   await settled(page)
   expect(await clicksSeen(codes)).toBe(3)
+})
+
+test('click-less: a popup’s dim held and lifted brings no click, and the popup closes', async ({
+  page,
+}) => {
+  const { dim, beside } = await openPopup(page)
+  const { endCancelled } = await clicklessAt(page, beside, { holdMs: HOLD_MS })
+  await expect(dim).toHaveCount(0)
+  expect(endCancelled, 'the browser’s own tap is withheld').toBe(true)
+  await settled(page)
+  await expect(page.locator('#settings-popover')).toBeVisible()
+})
+
+test('click-less: a double tap’s second touch on a label is cancelled at its start, and presses nothing', async ({
+  page,
+}) => {
+  const codes = await openOnCodes(page)
+  await clickless(page, codes, { holdMs: 0, click: true })
+  await expect(codes).toHaveAttribute('aria-expanded', 'true')
+  const second = await clickless(page, await aLabel(page), { holdMs: HOLD_MS })
+  expect(second.startCancelled).toBe(true)
+  expect(second.endCancelled).toBe(false)
+  await settled(page)
+  await expect(codes).toHaveAttribute('aria-expanded', 'true')
+  expect(await clicksSeen(codes)).toBe(1)
 })

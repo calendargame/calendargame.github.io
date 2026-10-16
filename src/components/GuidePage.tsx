@@ -1247,11 +1247,14 @@ export default function GuidePage({
           <li>
             How long you hold a button before lifting makes no difference: a long press works just
             like a tap, and so does sliding off a button and back onto it before you lift. Only a
-            press that turns into a scroll does nothing.
+            press that turns into a scroll does nothing. The dimmed area around a popup works the
+            same way: hold it as long as you like, and the popup still closes when you lift.
           </li>
           <li>
-            On an iPhone, a quick double tap and hold on a button doesn&apos;t bring up the
-            magnifier. Text you can select, and the boxes you type in, still have it.
+            On an iPhone, a quick double tap and hold doesn&apos;t bring up the magnifier — not on a
+            button, and not on a label or a number either. Text you can select, and the boxes you
+            type in, still have it. The one thing to know: a scroll you start within a moment of a
+            tap (under half a second) doesn&apos;t move the page, so start it again.
           </li>
           <li>
             Answer options reach a little further than they look. Each one responds across its whole

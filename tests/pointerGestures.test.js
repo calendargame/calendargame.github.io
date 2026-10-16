@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // pointerGestures — the pure decisions + latch/suppression contracts behind press-drag-release
-// input. resolveRelease / resolveTriggerRelease / nextHilite / menuFor / bandDirection / scrollDelta are
+// input. controlOf / resolveRelease / resolveTriggerRelease / nextHilite / menuFor / bandDirection / scrollDelta are
 // pure (or layout-free DOM reads) and tested directly; the controller's pointer latch, click suppression
 // and group-drag hilite are tested by installing it and dispatching synthetic pointer events with a
 // stubbed elementFromPoint. The full wiring (real pointer drags, hit-testing, edge auto-scroll feel) is
@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   gestureTarget,
+  controlOf,
   resolveRelease,
   resolveTriggerRelease,
   nextHilite,
@@ -193,6 +194,36 @@ describe('pointerGestures.gestureTarget — an announced-unavailable control is 
   })
   it('null in, null out (no hit under the pointer)', () => {
     expect(gestureTarget(null)).toBe(null)
+  })
+})
+
+// controlOf — what a pointer on an element belongs to: the button around it, or a SURFACE (a popup's
+// dim, `data-press-surface`) where the pointer is on its bare self and nowhere else.
+describe('pointerGestures.controlOf — a button, or a surface pressed on its bare self', () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+  it('the button around the pointer, as before', () => {
+    const b = domEl('button', {}, document.body)
+    expect(controlOf(domEl('span', {}, b), 'button')).toBe(b)
+    expect(controlOf(b, 'button')).toBe(b)
+  })
+  it('a surface, where the pointer is on it — and only there', () => {
+    const dim = domEl('div', { 'data-press-surface': '' }, document.body)
+    const card = domEl('div', { role: 'dialog' }, dim)
+    const text = domEl('p', {}, card)
+    const close = domEl('button', {}, card)
+    expect(controlOf(dim, 'button')).toBe(dim)
+    expect(controlOf(card, 'button')).toBe(null) // drawn over the dim: not the dim's press
+    expect(controlOf(text, 'button')).toBe(null)
+    expect(controlOf(close, 'button')).toBe(close) // a button on the card is its own control
+  })
+  it('an announced-unavailable button is nothing, and so is no element at all', () => {
+    expect(controlOf(domEl('button', { 'aria-disabled': 'true' }, document.body), 'button')).toBe(
+      null,
+    )
+    expect(controlOf(null, 'button')).toBe(null)
+    expect(controlOf(document, 'button')).toBe(null)
   })
 })
 
@@ -618,27 +649,39 @@ describe('pointerGestures.withholdsSecondTap — where a double tap’s second t
   afterEach(() => {
     document.body.innerHTML = ''
   })
-  it('a control, and the gaps of an answer grid', () => {
+  it('a control, the gaps of an answer grid, and a popup’s dim', () => {
     const b = domEl('button', {}, document.body)
     const inner = domEl('span', {}, b)
     const grid = domEl('div', { 'data-answer-grid': '' }, document.body)
     expect(withholdsSecondTap(b)).toBe(true)
     expect(withholdsSecondTap(inner)).toBe(true)
     expect(withholdsSecondTap(grid)).toBe(true)
+    expect(withholdsSecondTap(domEl('div', { 'data-press-surface': '' }, document.body))).toBe(true)
+  })
+  it('…and everything that presses nothing — a label, a stat’s number, the page — where the lens is all there is to stop', () => {
+    const row = domEl('div', {}, document.body)
+    expect(withholdsSecondTap(domEl('span', {}, row))).toBe(true) // a label
+    expect(withholdsSecondTap(domEl('span', { class: 'tabular-nums' }, row))).toBe(true) // a number
+    expect(withholdsSecondTap(row)).toBe(true)
+    expect(withholdsSecondTap(document.body)).toBe(true)
+    // An announced-unavailable button: no click was going to act, so nothing is lost but the lens.
+    expect(withholdsSecondTap(domEl('button', { 'aria-disabled': 'true' }, document.body))).toBe(
+      true,
+    )
   })
   it('never text a player can select or type in — not even inside a control', () => {
     const b = domEl('button', {}, document.body)
     const title = domEl('span', { class: 'select-text' }, b)
     expect(withholdsSecondTap(title)).toBe(false)
     expect(withholdsSecondTap(domEl('input', {}, document.body))).toBe(false)
+    expect(withholdsSecondTap(domEl('input', { type: 'range' }, document.body))).toBe(false)
     expect(withholdsSecondTap(domEl('textarea', {}, document.body))).toBe(false)
+    expect(withholdsSecondTap(domEl('div', { contenteditable: 'true' }, document.body))).toBe(false)
   })
-  it('never what the controller does not press: a link, an announced-unavailable button, plain page', () => {
-    expect(withholdsSecondTap(domEl('a', { href: 'mailto:x@y.z' }, document.body))).toBe(false)
-    expect(withholdsSecondTap(domEl('button', { 'aria-disabled': 'true' }, document.body))).toBe(
-      false,
-    )
-    expect(withholdsSecondTap(domEl('div', {}, document.body))).toBe(false)
+  it('never a link — the browser presses it — and nothing at all for no element', () => {
+    const link = domEl('a', { href: 'mailto:x@y.z' }, document.body)
+    expect(withholdsSecondTap(link)).toBe(false)
+    expect(withholdsSecondTap(domEl('span', {}, link))).toBe(false)
     expect(withholdsSecondTap(null)).toBe(false)
   })
 })
@@ -899,6 +942,66 @@ describe('pointerGestures controller — touches that are not quick taps, and th
     const second = touch('touchstart', 2)
     a.dispatchEvent(second)
     expect(second.defaultPrevented).toBe(false)
+  })
+
+  it('THE MAGNIFIER over what presses nothing: a second touch on a label is cancelled too, and presses nothing', () => {
+    const a = domEl('button', {}, document.body)
+    const label = domEl('span', {}, document.body)
+    const pageClicks = counted(document.body)
+    press(a, { held: 50 })
+    a.click()
+    now += 100
+    const { start, end } = press(label, { held: 600 })
+    expect(start.defaultPrevented).toBe(true) // no double tap for iOS to answer with its lens
+    expect(end.defaultPrevented).toBe(false) // no press was made here, so there is none to withhold
+    expect(pageClicks).toHaveBeenCalledTimes(1) // the button's own click, and nothing from the label
+  })
+
+  it('A POPUP’S DIM: held and lifted on it, it is pressed at the lift, once — the click it closes on', () => {
+    const dim = domEl('div', { 'data-press-surface': '' }, document.body)
+    const clicks = counted(dim)
+    const { end } = press(dim, { held: 2000 })
+    expect(clicks).toHaveBeenCalledTimes(1)
+    expect(clicks.mock.calls[0][0].target).toBe(dim) // on the dim's bare self: a tap on the dim
+    expect(end.defaultPrevented).toBe(true)
+  })
+
+  it('…a quick tap on it is the browser’s click, as before', () => {
+    const dim = domEl('div', { 'data-press-surface': '' }, document.body)
+    const clicks = counted(dim)
+    const { end } = press(dim, { held: 40 })
+    expect(clicks).not.toHaveBeenCalled()
+    expect(end.defaultPrevented).toBe(false)
+  })
+
+  it('…a press that began on the card drawn over it is no press of the dim, however long', () => {
+    const dim = domEl('div', { 'data-press-surface': '' }, document.body)
+    const card = domEl('div', { role: 'dialog' }, dim)
+    const clicks = counted(dim)
+    const { end } = press(card, { held: 2000 })
+    expect(clicks).not.toHaveBeenCalled()
+    expect(end.defaultPrevented).toBe(false)
+  })
+
+  it('…and a press on the dim slid onto the card is cancelled: its click, if one comes, is swallowed', () => {
+    const dim = domEl('div', { 'data-press-surface': '' }, document.body)
+    const card = domEl('div', { role: 'dialog' }, dim)
+    const clicks = counted(dim)
+    press(dim, { held: 2000, via: [[card, 80]], at: card })
+    expect(clicks).not.toHaveBeenCalled()
+    dim.click() // a mouse's click lands on the element holding both ends: the dim
+    expect(clicks).not.toHaveBeenCalled()
+  })
+
+  it('…and a box being typed in on the card lets go before the dim is pressed, as a tap on the dim makes it', () => {
+    const dim = domEl('div', { 'data-press-surface': '' }, document.body)
+    const card = domEl('div', { role: 'dialog' }, dim)
+    const box = domEl('input', { type: 'text' }, card)
+    box.focus()
+    let focusAtPress = null
+    dim.addEventListener('click', () => (focusAtPress = document.activeElement))
+    press(dim, { held: 1000 })
+    expect(focusAtPress).not.toBe(box)
   })
 
   it('keyboard and screen-reader presses (a click with no pointer events) are untouched before and after', () => {

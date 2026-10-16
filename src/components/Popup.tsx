@@ -31,7 +31,7 @@ import { isTopPopup, usePopupLayer } from './overlayStack.js'
 //     how that was finally established on a device, and the three attempts that fed it the wrong
 //     thing — is the ★★ note above App's theme effect in src/main.tsx. Here it is only two rules:
 //     the TOP popup draws it (so there is exactly one, at any depth), and a tap on it is a tap on
-//     the dim.
+//     the dim (it takes no pointer events, so the tap lands on the dim itself).
 //   • WHERE THE KEYBOARD MAY BE while this is the top popup: inside this scrim, held on its dialog,
 //     with Tab walking the scrim's controls. That is all this shell SAYS (the `reach` it registers
 //     with); components/overlayStack's "THE KEYBOARD'S REACH" is the one rule that acts on it, the
@@ -93,13 +93,18 @@ export default function Popup({
   //     a right-click) cannot arm or disarm the next one.
   //   • A TOUCH reports where it came up as where it went down — the browser holds a finger's events
   //     on the element it landed on — so a tap on the dim that wanders a few pixels still ends "on
-  //     the dim", and a finger that travels further than a tap is not sent as a click at all.
+  //     the dim".
+  // ★ THE DIM IS A CONTROL OF THE PRESS CONTROLLER (lib/pointerGestures — `data-press-surface`, its
+  // "A SURFACE IS A CONTROL TOO"), exactly as a button is: a quick tap's click comes from the
+  // browser, and a press held or moved about and lifted back on the dim is clicked by the controller
+  // at the lift — an iPhone sends no click for one. Either way the click arrives here, after the
+  // press's own pointerdown noted it, and is read the same.
   const tapOnDimRef = useRef(false)
-  // Is this event ON THE DIM — the scrim itself, or the status-bar strip lying along its top edge
-  // (which is part of the dim: same colour, and nothing a player could tell apart from it)?
+  // Is this event ON THE DIM — the scrim's bare self? The status-bar strip lying along its top edge
+  // is part of the dim (same colour, and nothing a player could tell apart from it), and it takes no
+  // pointer events (index.css), so a press there lands on the scrim itself.
   const isDim = (e: { target: EventTarget; currentTarget: EventTarget }) =>
-    e.target === e.currentTarget ||
-    (e.target instanceof Element && e.target.hasAttribute('data-status-bar-dim'))
+    e.target === e.currentTarget
   // ★ FOCUS THAT GOES NOWHERE COMES BACK TO THE DIALOG. No `focusin` reports that — nothing was
   // focused — so the stack's own rule never hears of it, and the keyboard is left on <body> behind
   // the scrim, with nothing on screen to say where it is. Two things can send it there, and each
@@ -148,6 +153,7 @@ export default function Popup({
     <div
       ref={scrimRef}
       data-settings-modal
+      data-press-surface
       role="presentation"
       className={top ? `${MODAL_SCRIM_CLASS} ${MODAL_DIM_CLASS}` : MODAL_SCRIM_CLASS}
       onPointerDown={(e) => {

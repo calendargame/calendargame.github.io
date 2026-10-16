@@ -256,8 +256,11 @@ body{color:var(--body-color)}
      the same fluid rem) so it only ever covers empty, already-dimmed bar and is invisible on the
      page. What was proved on the device was a 14px strip and a bar-height one; 1rem is about
      16px on an iPhone (the root font runs 12–19px across all screens). ⚠ A much THINNER strip
-     is unproven — do not shave this down without a device to check it on. */
-.status-bar-dim{position:fixed;top:0;left:0;right:0;height:1rem;z-index:-1;background:var(--status-dim)}
+     is unproven — do not shave this down without a device to check it on.
+   • pointer-events:none: it is paint, not a control. A press on it lands on the scrim under it,
+     which is the dim a press closes the popup through (components/Popup) — so the dim has one
+     hit-testable surface, and the press controller (lib/pointerGestures) one control to press. */
+.status-bar-dim{position:fixed;top:0;left:0;right:0;height:1rem;z-index:-1;background:var(--status-dim);pointer-events:none}
 /* THE THREE CLAMPS ABOVE ARE NOW PERMANENT, AND THAT IS THE POINT (round 13). Rounds 7–12
    carried a release beside them — <html data-doc-scroll>, stamped by App for the whole of guide
    mode, which unclamped html/body/#root so the DOCUMENT scrolled How to Play. It bought exactly

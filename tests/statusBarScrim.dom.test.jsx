@@ -123,24 +123,27 @@ describe('the status-bar strip: a solid layer at the top edge while a popup is o
     expect(strips()).toHaveLength(0)
   })
 
-  it('a tap on the strip is a tap on the dim — it closes the popup; a press that ends on the card does not', async () => {
+  it('a tap on the strip is a tap on the dim — the strip takes no presses, the dim under it does; a press that ends on the card does not close', async () => {
+    // jsdom does not hit-test, so where a press on the strip LANDS is index.css's to say (the
+    // geometry test below: pointer-events:none) and the browser lane's to prove
+    // (tests/browser/touchPress: a press at the top edge closes the popup). Here: the dim it lands
+    // on closes the popup on a tap, and not on a press that ends over the card.
     mountApp()
     const onDismiss = vi.fn()
     await openScrim(onDismiss)
-    const [strip] = strips()
     const card = document.querySelector('[data-settings-modal] [role="dialog"]')
     const scrim = document.querySelector('#root > [data-settings-modal]')
 
-    // Down on the strip, up over the card: the click lands on the scrim (the nearest element holding
+    // Down on the dim, up over the card: the click lands on the scrim (the nearest element holding
     // both ends), and it is not a tap on the dim.
-    fireEvent.pointerDown(strip)
+    fireEvent.pointerDown(scrim)
     fireEvent.pointerUp(card)
     fireEvent.click(scrim)
     expect(onDismiss).not.toHaveBeenCalled()
 
-    fireEvent.pointerDown(strip)
-    fireEvent.pointerUp(strip)
-    fireEvent.click(strip)
+    fireEvent.pointerDown(scrim)
+    fireEvent.pointerUp(scrim)
+    fireEvent.click(scrim)
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
 })
@@ -266,6 +269,8 @@ describe('the geometry that makes the strip what the phone reads (index.css)', (
     expect(strip).toMatch(/background:var\(--status-dim\)/)
     // -1 inside the scrim's own stacking context: over the scrim's see-through fill, under the card.
     expect(strip).toMatch(/z-index:-1/)
+    // Paint, not a control: a press on it lands on the dim under it (components/Popup).
+    expect(strip).toMatch(/pointer-events:none/)
     // rem, not px: it must stay inside the top bar's own 1.25rem top padding on every screen.
     const height = /height:([\d.]+)rem/.exec(strip)
     expect(height).not.toBeNull()
