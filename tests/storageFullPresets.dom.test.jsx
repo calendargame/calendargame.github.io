@@ -29,6 +29,7 @@ import {
 import { readDate, correctDayName, statValue } from './helpers/modeScreen.jsx'
 import { useProgress } from '../src/store/progress.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
 import {
   createPreset,
@@ -510,6 +511,10 @@ describe('on the mounted app', () => {
       s.setDateFormat('numeric-ymd')
       s.setMinY(1583)
       s.setMaxY(10000)
+      // …and the Julian-on pair (store/julianRange): the Julian Calendar setting is on by default,
+      // so THAT is the range in use, and left at 1-11582 it draws Julian dates the modern-calendar
+      // answer below gets wrong.
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     })
   const answerRight = () => tap(screen.getByRole('button', { name: correctDayName(readDate()) }))
 

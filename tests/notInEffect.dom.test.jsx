@@ -119,7 +119,12 @@ const PICKERS = [
   {
     name: 'Rotate Dots',
     reason: 'Not in use while Input is Buttons.',
-    arrange: () => {},
+    // Nothing to arrange for the reason itself (Buttons is the factory Input). The range in use is
+    // pinned past the reform only so `answerRight` answers right: the Julian Calendar setting is on,
+    // so that is the Julian-on pair (store/julianRange), and at its factory 1-11582 it draws Julian
+    // dates the modern-calendar reader cannot answer.
+    arrange: () =>
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 }),
     stored: () => useSettings.getState().dotRotation,
   },
   {

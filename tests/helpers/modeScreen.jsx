@@ -12,7 +12,7 @@
 // either one at random would have been a coin flip about which future markup change breaks the
 // net. Each reconciliation below says which form won and why.
 import { screen } from '@testing-library/react'
-import { wday } from '../../src/lib/calendar.js'
+import { wday, isJulianDate, isGapDate } from '../../src/lib/calendar.js'
 import { DAY } from '../../src/lib/format.js'
 
 // ── The live question ─────────────────────────────────────────────────────────────────────────
@@ -86,8 +86,20 @@ export function readDate() {
   return { y: Number(parts[1]), m: Number(parts[2]), d: Number(parts[3]) }
 }
 
-// The answer to that question, by the name on the button a user would press.
-export const correctDayName = ({ y, m, d }) => DAY[wday(y, m, d)]
+// The answer to that question, by the name on the button a user would press — in the MODERN
+// calendar, so only for a date after the reform. A date up to October 1582 is answered in the Julian
+// calendar while that setting is on (the default), and this reader would name the wrong day without
+// a word: the run fails on a 'correct' answer and the case reports a score instead of the cause.
+// Every caller pins the range IN USE to 1583+ — and with the Julian Calendar setting on that is the
+// Julian-on pair (store/julianRange), not minY / maxY, which is exactly the half a fixture forgets.
+export function correctDayName({ y, m, d }) {
+  if (isJulianDate(y, m, d) || isGapDate(y, m, d))
+    throw new Error(
+      `correctDayName(): ${y}-${m}-${d} is before the calendar reform — this reader needs the ` +
+        'fixture to pin the year range in use to 1583 or later (the Julian-on pair too).',
+    )
+  return DAY[wday(y, m, d)]
+}
 
 // ── The stats strip ───────────────────────────────────────────────────────────────────────────
 
