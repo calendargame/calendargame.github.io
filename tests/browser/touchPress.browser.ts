@@ -357,6 +357,58 @@ test.describe('real touches (Chromium)', () => {
     await expect(dim).toHaveCount(1)
   })
 
+  // ★ SCROLLING IS NEVER GIVEN UP FOR THE LENS (the owner's ruling, Round 26): a flick that starts
+  // 100 ms after a tap, on the text of something that scrolls, moves it — the touch is not withheld.
+  // `mark` picks the plain text to tap and flick from (no control, no link), in the scroller's
+  // visible middle with room to scroll under it.
+  async function flickAfterTap(page: Page, scroller: Locator) {
+    await page.evaluate(() => {
+      const w = window as unknown as { touchStarts: boolean[] }
+      w.touchStarts = []
+      window.addEventListener('touchstart', (e) => w.touchStarts.push(e.defaultPrevented))
+    })
+    await scroller.evaluate((el) => {
+      const view = el.getBoundingClientRect()
+      const mid = (view.top + view.bottom) / 2
+      const text = [...el.querySelectorAll('span, p, div, li')]
+        .filter((t) => t.childElementCount === 0 && (t.textContent ?? '').trim().length > 3)
+        .filter((t) => !t.closest('button, a, input, [role="button"]'))
+        .map((t) => ({ t, r: t.getBoundingClientRect() }))
+        .filter(({ r }) => r.height > 0 && r.top > view.top + 20 && r.bottom < view.bottom - 20)
+        .sort((a, b) => Math.abs(a.r.top - mid) - Math.abs(b.r.top - mid))[0]
+      text.t.setAttribute('data-flick-from', '')
+    })
+    const from = await centre(scroller.locator('[data-flick-from]'))
+    const before = await scroller.evaluate((el) => el.scrollTop)
+    const finger = await touchscreen(page)
+    await finger.down(from) // a tap…
+    await finger.up()
+    await hold(page, 100) // …and 100 ms later, a flick from the same place
+    await finger.down(from)
+    for (let dy = 10; dy <= 200; dy += 10) await finger.move({ x: from.x, y: from.y - dy })
+    await finger.up()
+    await settled(page)
+    expect(await touchStarts(page), 'neither touch was withheld').toEqual([false, false])
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(before)
+  }
+
+  test('a flick 100 ms after a tap scrolls the ⚙ menu', async ({ page }) => {
+    await openApp(page)
+    const panel = await openSettings(page)
+    await flickAfterTap(page, panel.locator('[data-drag-scroll]').first())
+  })
+
+  test('a flick 100 ms after a tap scrolls How to Play', async ({ page }) => {
+    await openApp(page)
+    await switchMode(page, 'guide')
+    const guide = page.locator('#appScroll')
+    // An open section, so there is text to flick from, on a page that scrolls.
+    await guide.locator('button[aria-expanded="false"]:visible').first().click()
+    await settled(page)
+    expect(await guide.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+    await flickAfterTap(page, guide)
+  })
+
   test('a double tap and hold on a LABEL: the second touch is cancelled at its start, and nothing is pressed', async ({
     page,
   }) => {

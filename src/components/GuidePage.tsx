@@ -1251,10 +1251,12 @@ export default function GuidePage({
             same way: hold it as long as you like, and the popup still closes when you lift.
           </li>
           <li>
-            On an iPhone, a quick double tap and hold doesn&apos;t bring up the magnifier — not on a
-            button, and not on a label or a number either. Text you can select, and the boxes you
-            type in, still have it. The one thing to know: a scroll you start within a moment of a
-            tap (under half a second) doesn&apos;t move the page, so start it again.
+            On an iPhone, a quick double tap and hold doesn&apos;t bring up the magnifier on a
+            button, nor on the labels and numbers of a screen that doesn&apos;t scroll. Text you can
+            select, and the boxes you type in, still have it. In a part that scrolls (the ⚙ menu, a
+            list, or a page too long for the screen) a flick must always scroll, so there the
+            magnifier can still come up over plain text; only a flick that starts on a button
+            straight after a tap (within half a second) doesn&apos;t scroll — start it again.
           </li>
           <li>
             Answer options reach a little further than they look. Each one responds across its whole

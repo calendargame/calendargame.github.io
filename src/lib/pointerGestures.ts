@@ -84,14 +84,21 @@
 //     -webkit-touch-callout or cancelling selectstart/contextmenu — all tried on the device). What
 //     stopped it was cancelling the SECOND tap's touchstart, so that iOS never sees a double tap
 //     (onTouchStart): a touch that begins within DOUBLE_TAP_MS of a TAP ending (not of a scroll — a
-//     flick after a flick must still scroll), ANYWHERE but where the browser's own gestures are the
-//     point (withholdsSecondTap: text a player can select or type in, and links). On a control a
-//     cancelled touchstart gets no click, so that touch is pressed here on release like any other;
-//     anywhere else nothing was going to be pressed, and the lens is all it stops — over a label or
-//     a stat's number as much as over a button.
-//     ⚠ ITS ONE COST, accepted for that: a touch withheld this way cannot start a scroll, so a flick
-//     begun within DOUBLE_TAP_MS of a tap ending does not move the page. A flick after a FLICK is
-//     never withheld, and neither is one begun on the guide's text.
+//     flick after a flick must still scroll). WHERE (withholdsSecondTap):
+//       – on a control this controller presses: a cancelled touchstart gets no click, so that touch
+//         is pressed here on release like any other;
+//       – on anything else — a label, a stat's number, a grid's gaps — ONLY where the touch could not
+//         start a scroll (canStartScroll: no scrollable box, the page included, holds it, or a
+//         touch-action:none box stands between). A cancelled touchstart cannot start a scroll, and
+//         SCROLLING IS NEVER GIVEN UP FOR THE LENS (the owner's ruling, Round 26): a flick on the
+//         ⚙ menu's text, a list, or a page long enough to scroll, straight after a tap, must move it.
+//         Nothing else was found that stops the lens without cancelling the touch, so over plain
+//         text in a scrolling area the lens can still appear — the accepted residual;
+//       – never on text a player can select or type in, or on a link (the browser's own gestures
+//         are the point there).
+//     ⚠ What remains of the cost: a flick that starts ON A CONTROL within DOUBLE_TAP_MS of a tap does
+//     not scroll — the control's touch is cancelled so its lens cannot come, as Q3 first shipped.
+//     A flick after a FLICK is never withheld.
 //   • TEXT KEEPS EVERYTHING. A touch that begins on text a player can select or type in (TEXT_SELECTOR
 //     — the guide's titles and body, the Contact address, every box) is left wholly to the browser:
 //     its caret, its selection handles, and its lens are the point of it.
@@ -107,7 +114,7 @@
 //     sliders. Those keep the browser's behaviour.
 //
 // TESTABILITY: gestureTarget, controlOf, resolveRelease, resolveTriggerRelease, nextHilite, menuFor,
-// pressedHere, withholdsSecondTap, bandDirection, and scrollDelta are pure (or layout-free DOM reads) and unit-tested, as are the pointer
+// pressedHere, withholdsSecondTap, canStartScroll, bandDirection, and scrollDelta are pure (or layout-free DOM reads) and unit-tested, as are the pointer
 // latch, click suppression, and the touch rules above via synthetic events; the browser lane
 // (tests/browser/touchPress.browser.ts) drives them in Chromium and WebKit. What only the phone can show
 // — what iOS sends after a long press, whether a cancelled touchstart keeps its pointer events — was
@@ -216,14 +223,33 @@ export function pressedHere(heldMs: number, movedPx: number, withheld: boolean):
   return withheld || heldMs >= TAP_MS || movedPx >= TAP_SLOP_PX
 }
 
-// Pure-ish (a closest() walk): does a touch landing on `target` have its touchstart cancelled when it
-// is a double tap's second half? Everywhere the browser's own gestures are not the point: on a
-// control this controller presses (so the cancelled touch is still pressed, on release), and on
-// anything that presses nothing — a label, a stat's number, a grid's gaps, the page — where the
-// lens is all there is to stop. Never on text a player can select or type in, which keeps its own
-// lens, and never on a link, which the browser presses. (The header's ★, with the one cost.)
+// Does a touch landing on `target` have its touchstart cancelled when it is a double tap's second
+// half? (The header's ★, THE MAGNIFIER.) On a control this controller presses (so the cancelled
+// touch is still pressed, on release); on anything else that presses nothing — a label, a stat's
+// number, a grid's gaps — only where the touch could not start a scroll; never on text a player can
+// select or type in, which keeps its own lens, and never on a link, which the browser presses.
 export function withholdsSecondTap(target: Element | null): boolean {
-  return target instanceof Element && !target.closest(BROWSER_OWNED_SELECTOR)
+  if (!(target instanceof Element) || target.closest(BROWSER_OWNED_SELECTOR)) return false
+  return !!controlOf(target, 'button') || !canStartScroll(target)
+}
+
+// Could a touch that starts on `target` start a scroll? Yes when a box around it can scroll — its
+// overflow lets it, and it holds more than it shows — or the page itself can, unless a box with
+// touch-action:none stands between the touch and that scroller (the answer grids: a drag there
+// selects, it never scrolls). A layout read, so it is asked only of a double tap's second touch.
+const SCROLLS = /^(auto|scroll)$/
+export function canStartScroll(target: Element): boolean {
+  for (let el: Element | null = target; el; el = el.parentElement) {
+    const style = getComputedStyle(el)
+    if (style.touchAction === 'none') return false
+    // (Read by property name: this asks whether a box scrolls; it builds no scroller —
+    // components/scrollRegion is where those are made, and tests/scrollRegionGuard holds it.)
+    const scrolls = (axis: 'x' | 'y') => SCROLLS.test(style.getPropertyValue(`overflow-${axis}`))
+    if (scrolls('y') && el.scrollHeight > el.clientHeight) return true
+    if (scrolls('x') && el.scrollWidth > el.clientWidth) return true
+  }
+  const page = document.scrollingElement
+  return !!page && page.scrollHeight > page.clientHeight
 }
 
 // Pure decision for the GROUP drag hilite: given the group member under the pointer (null = off-grid),

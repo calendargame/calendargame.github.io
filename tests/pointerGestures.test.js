@@ -19,6 +19,7 @@ import {
   scrollDelta,
   pressedHere,
   withholdsSecondTap,
+  canStartScroll,
   EDGE,
   MAX_SPEED,
   TAP_MS,
@@ -683,6 +684,45 @@ describe('pointerGestures.withholdsSecondTap — where a double tap’s second t
     expect(withholdsSecondTap(link)).toBe(false)
     expect(withholdsSecondTap(domEl('span', {}, link))).toBe(false)
     expect(withholdsSecondTap(null)).toBe(false)
+  })
+
+  // ★ SCROLLING IS NEVER GIVEN UP FOR THE LENS (the owner's ruling, Round 26): where a touch could
+  // start a scroll, only a control's second touch is held back. jsdom lays nothing out, so a box
+  // that holds more than it shows is said so here, through its scroll and client heights.
+  const scroller = (overflow = 'auto', holds = 900, shows = 400) => {
+    const box = domEl('div', { style: `overflow-y:${overflow}` }, document.body)
+    Object.defineProperty(box, 'scrollHeight', { value: holds })
+    Object.defineProperty(box, 'clientHeight', { value: shows })
+    return box
+  }
+  it('in a box that can scroll: a label is left alone, so a flick from it scrolls — a control is still held', () => {
+    const box = scroller()
+    const label = domEl('span', {}, domEl('div', {}, box))
+    expect(canStartScroll(label)).toBe(true)
+    expect(withholdsSecondTap(label)).toBe(false)
+    expect(withholdsSecondTap(domEl('button', {}, box))).toBe(true)
+    expect(withholdsSecondTap(domEl('span', {}, domEl('button', {}, box)))).toBe(true)
+  })
+  it('a box that cannot scroll (it shows all it holds, or its overflow does not scroll) holds the label back', () => {
+    expect(withholdsSecondTap(domEl('span', {}, scroller('auto', 400, 400)))).toBe(true)
+    expect(withholdsSecondTap(domEl('span', {}, scroller('hidden')))).toBe(true)
+  })
+  it('a touch-action:none box between the touch and the scroller (an answer grid) cannot scroll: held', () => {
+    const grid = domEl('div', { 'data-answer-grid': '', style: 'touch-action:none' }, scroller())
+    expect(canStartScroll(grid)).toBe(false)
+    expect(withholdsSecondTap(grid)).toBe(true)
+  })
+  it('the page itself, when it can scroll, counts as a scroller', () => {
+    const label = domEl('span', {}, document.body)
+    const page = { scrollHeight: 2000, clientHeight: 800 }
+    Object.defineProperty(document, 'scrollingElement', { value: page, configurable: true })
+    try {
+      expect(withholdsSecondTap(label)).toBe(false)
+      page.scrollHeight = 800 // a page that shows all it holds
+      expect(withholdsSecondTap(label)).toBe(true)
+    } finally {
+      delete document.scrollingElement
+    }
   })
 })
 
