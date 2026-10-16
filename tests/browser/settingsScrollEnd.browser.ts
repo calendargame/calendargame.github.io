@@ -6,7 +6,17 @@
 // by 0.2px, and Chromium dropped the line outright. Swept a pixel at a time over the heights where
 // he saw it, in both engines. And the pixel is taken back from the margin under the scroll area, so
 // the distance from that control to the foot's line is what it was: the card's space-y-4.
-import { test, expect, openApp, openSettings, resizeTo, settled } from './support/app'
+import {
+  test,
+  expect,
+  openApp,
+  openSettings,
+  resizeTo,
+  settled,
+  appReady,
+  switchMode,
+  SAME_PX,
+} from './support/app'
 
 test('scrolled to the end, the last control is drawn whole, and sits a rem above the foot', async ({
   page,
@@ -55,4 +65,67 @@ test('scrolled to the end, the last control is drawn whole, and sits a rem above
       `${at}: the last control to the foot's line, against a rem`,
     ).toBeLessThan(1)
   }
+})
+
+// THE SAME, FOR LOOKUP'S HISTORY LIST (Round 26): scrolled to the end, the last row's bottom border is
+// at or above the list's bottom edge — it was under it by up to 0.9px at 360 wide before the list
+// got its pixel of padding — and the panel's bottom padding gave that pixel back, so the padding
+// under the last row is the rem it was.
+test('Lookup: scrolled to the end, the last history row is drawn whole, with a rem of padding under it as before', async ({
+  page,
+}) => {
+  test.setTimeout(180_000)
+  await openApp(page)
+  await page.evaluate(() =>
+    window.localStorage.setItem(
+      'cg-lookup-v1',
+      JSON.stringify({
+        state: {
+          history: Array.from({ length: 40 }, (_, i) => ({ id: `e${i}`, y: 1900 + i, m: 3, d: 4 })),
+        },
+        version: 1,
+      }),
+    ),
+  )
+  await page.reload()
+  await appReady(page)
+  await switchMode(page, 'lookup')
+  const list = page.locator('ul:has(li[data-row]):visible')
+  for (const width of [360, 390])
+    for (let height = 600; height <= 860; height += 3) {
+      await resizeTo(page, width, height)
+      // Twice: the list is windowed, so arriving at the end draws its last rows, which can change
+      // how tall it is; the second scroll lands on the end as it then stands.
+      for (let i = 0; i < 2; i++) {
+        await list.evaluate((el) => (el.scrollTop = el.scrollHeight))
+        await settled(page)
+      }
+      const at = `at ${width}×${height}`
+      const r = await list.evaluate((ul) => {
+        const rows = [...ul.querySelectorAll('li[data-row] button')]
+        const panel = ul.parentElement!
+        return {
+          atEnd: Math.abs(ul.scrollHeight - ul.clientHeight - ul.scrollTop) < 1,
+          scrolls: ul.scrollHeight > ul.clientHeight,
+          last: rows[rows.length - 1].getBoundingClientRect().bottom,
+          bottom: ul.getBoundingClientRect().bottom,
+          listPad: parseFloat(getComputedStyle(ul).paddingBottom),
+          panelPad: parseFloat(getComputedStyle(panel).paddingBottom),
+          rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+        }
+      })
+      expect(r.scrolls, `${at}: the list scrolls`).toBe(true)
+      expect(r.atEnd, `${at}: scrolled to the end`).toBe(true)
+      expect(r.last, `${at}: the last row's bottom edge against the list's`).toBeLessThanOrEqual(
+        r.bottom,
+      )
+      // …and the pixel is GIVEN BACK: the list's pixel of padding and the panel's bottom padding add
+      // up to the rem the panel always had under its last row. (Asserted on the two paddings, not on
+      // the last row's position: a history row's button sits a little above the bottom of its own row,
+      // which no padding decides, and the whole-pixel scroll leaves its own fraction on top.)
+      expect(
+        Math.abs(r.listPad + r.panelPad - r.rem),
+        `${at}: the padding under the last row`,
+      ).toBeLessThanOrEqual(SAME_PX)
+    }
 })

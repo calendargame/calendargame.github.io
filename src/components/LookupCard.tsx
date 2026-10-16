@@ -207,7 +207,7 @@ function LookupHistoryList({
   return (
     <ul
       ref={listRef}
-      className={`${SCROLL_REGION_CLASS} flex-auto min-h-0 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
+      className={`${SCROLL_REGION_CLASS} pb-px flex-auto min-h-0 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
     >
       {padTop > 0 && <li aria-hidden="true" role="presentation" style={{ height: padTop }} />}
       {entries.slice(start, end).map((e, i) => {
@@ -726,7 +726,14 @@ export default function LookupCard({
           grow, so with one entry the card still hugs its content instead of stretching to the
           bottom of the screen. Opening Show Codes in the card above is one of the things that
           takes that room. space-y-4 → gap-4 now that it's a flex column. */}
-      <div className="rounded-2xl panel py-4 gap-4 flex flex-col min-h-0">
+      {/* ⚠ pb-px ON THE LIST AND THE 1px TAKEN BACK HERE (Round 26) — the ⚙ menu's scroll-end fix
+          (components/SettingsPanel), measured here too: the list's height is fractional (what the
+          column has left) while the furthest scroll position is a whole pixel, so scrolled to the
+          end, up to a pixel of the last row's bottom border stayed under the list's edge (0.02 to
+          0.9px at 360 wide, Chromium and WebKit). A pixel of padding at the list's end keeps it
+          inside, and the panel's bottom padding is a rem less that same pixel, so the last row
+          sits where it did. tests/browser/settingsScrollEnd sweeps it. */}
+      <div className="rounded-2xl panel pt-4 pb-[calc(var(--spacing)*4_-_1px)] gap-4 flex flex-col min-h-0">
         {/* History panel on the shared scroll-region recipe (round 7,
             components/scrollRegion): the panel owns py-4 only, and every child carries its
             own px-4 — for the scrolling <ul> below that puts the 1rem right padding INSIDE

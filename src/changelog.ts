@@ -122,6 +122,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'The Show Codes box now has as much room above its codes as below them, like the stats boxes. That room grows with the text on a bigger screen.',
       'Fixed: a Julian Chance your year range could not use was quietly switching off Leap Year Chance and Jan/Feb Chance for some of your dates, and a Leap Year Chance that could not apply did the same to the other chance settings. A best set while that was happening is kept but no longer shown; every other best is unaffected.',
       "Fixed: in the ⚙ menu, scrolled all the way down, the Amnesic picker's bottom edge is no longer cut off.",
+      "Fixed: in Lookup, scrolled all the way down, the last history row's bottom edge is no longer cut off.",
       'Fixed: on a very narrow screen, the Mode button no longer covers the end of the Preset button, and the ⚙ no longer runs off the edge. The Preset button keeps room for its arrows and a number, and the Mode button gives way instead, its name cut short where it does not fit.',
       "Fixed: in Manage Presets, pressing your device's Back while typing a preset name no longer throws the name away. It keeps it, as tapping away does, and closes the popup. Escape still throws a name away.",
       'Fixed: on an iPhone, a flick that started on a button in the ⚙ menu could press that button as your finger lifted, such as opening the Open in list. A flick now only scrolls, wherever it starts.',

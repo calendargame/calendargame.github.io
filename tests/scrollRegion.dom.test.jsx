@@ -57,8 +57,14 @@ describe('Lookup history on the shared scroll-region recipe (round 7)', () => {
     const list = container.querySelector('ul')
     expect(list.className).toContain(SCROLL_REGION_CLASS) // the px-4 lane lives INSIDE the scroller
     const panel = list.parentElement
-    expect(panel.className).toContain('py-4')
-    expect(panel.className.split(/\s+/)).not.toContain('p-4') // vertical-only — the lane moved inward
+    // Vertical only — the lane moved inward. A rem top and bottom, the bottom one a pixel less
+    // since Round 26: the list carries that pixel as its own end padding, so a last row's bottom
+    // border is never left under the list's edge at the end of a scroll (LookupCard says why).
+    expect(panel.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(['pt-4', 'pb-[calc(var(--spacing)*4_-_1px)]']),
+    )
+    expect(list.className.split(/\s+/)).toContain('pb-px')
+    expect(panel.className.split(/\s+/)).not.toContain('p-4')
   })
 
   // Round 8 replaced the list's fixed 440-pixel cap with measured layout: the list takes the
