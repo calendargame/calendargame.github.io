@@ -13,6 +13,14 @@
 //     it is at full length again;
 //   • THE PAGE FITS: an ended round with Show Codes open fits a 390×844 and a 360×800 window — the
 //     owner's worry when the slot was proposed; before it, both scrolled (13px and 14px).
+// ⚠ THE DATE ON THE CARD IS RANDOM, AND WHETHER IT TAKES ONE LINE OR TWO IS UP TO ITS LENGTH AND
+// THE FONT. A long written date ("November 27, 9348") is one line on the laptop and on an iPhone,
+// and two on the Linux CI runner, whose bold font is wider: the card grew by one line (37px) and
+// the page by 25px on the runs that drew one, and the retry passed on a shorter date — a flake
+// since the lane's first CI runs (e3e1806's and 99a1b0e's runs flaked the same way). So the card is
+// held to what the SLOT decides (its top and sides), and its height to the date it shows: the same
+// number of the date's lines, whatever they are. And the page is held to fit with the date it has,
+// less any line beyond the first the date takes on this machine's font.
 // Reduce Motion is on for the lane, so the cross-fade has no time to take and every reading is a
 // resting one.
 import {
@@ -26,20 +34,30 @@ import {
   THEMES,
 } from './support/app'
 import { SAME_PX, type Rect } from './support/app'
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 function parts(page: Page) {
   const slider = page.locator('input[type="range"]:visible')
   const row = slider.locator('xpath=../..')
+  const card = row.locator('xpath=following-sibling::div[1]')
   return {
     row,
     slider,
     clock: row.locator('.range-clock'),
     valueBox: row.locator('button[aria-label^="Edit Blitz"]'),
     timer: row.locator('[role="timer"]'),
-    card: row.locator('xpath=following-sibling::div[1]'),
+    card,
+    // The date on the card, above the weekday buttons: the last child of the card's first block
+    // (the card's number, when it shows, is that block's first).
+    date: card.locator(':scope > :first-child > :last-child'),
   }
 }
+
+/** How many lines `target`'s text takes, by its height against its own line height. */
+const linesOf = (target: Locator) =>
+  target.evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)),
+  )
 
 type Face = Awaited<ReturnType<typeof faceOf>>
 async function faceOf(page: Page) {
@@ -54,6 +72,8 @@ async function faceOf(page: Page) {
     valueCell: await rectOf(p.valueBox),
     timerCell: await rectOf(p.timer),
     card: await rectOf(p.card),
+    dateLines: await linesOf(p.date),
+    dateLine: await p.date.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight)),
     sliderOpacity: await opacity(p.slider),
     clockOpacity: await opacity(p.clock),
     valueVisible: (await visibility(p.valueBox)) === 'visible',
@@ -102,7 +122,17 @@ function expectNothingMoved(idle: Face, now: Face, state: string, clocking: bool
   expectSameBox(now.track, idle.track, `${state}: the slider's track`)
   expectSameBox(now.timerCell, idle.valueCell, `${state}: the time left's cell vs the value box's`)
   expectSameBox(now.valueCell, idle.valueCell, `${state}: the value box's cell`)
-  expectSameBox(now.card, idle.card, `${state}: the date card under the slot`)
+  // The date card: where the slot puts it, exactly; how tall, by the date it shows — a date that
+  // takes another line on this font makes the card that line taller, and nothing else may.
+  for (const edge of ['left', 'right', 'top'] as const)
+    expect(
+      Math.abs(now.card[edge] - idle.card[edge]),
+      `${state}: the date card under the slot: ${edge}`,
+    ).toBeLessThanOrEqual(SAME_PX)
+  expect(
+    Math.abs(now.card.height - idle.card.height - (now.dateLines - idle.dateLines) * idle.dateLine),
+    `${state}: the date card's height, the date's lines apart`,
+  ).toBeLessThanOrEqual(SAME_PX)
   // The countdown is laid exactly over the slider's track.
   expectSameBox(now.clockBox, now.track, `${state}: the countdown over the track`)
   // The number: the same line as idle's value, and the same right edge.
@@ -190,5 +220,14 @@ for (const viewport of [
     const over = await page
       .locator('#appScroll')
       .evaluate((el) => el.scrollHeight - el.clientHeight)
-    expect(over, 'the Blitz page scrolls with Show Codes open').toBeLessThanOrEqual(0)
+    // A date this machine's font cannot set on one line costs the page its extra lines; the page
+    // must fit with what is left (see the ⚠ above — on the laptop and an iPhone it is one line).
+    const date = parts(page).date
+    const extra =
+      ((await linesOf(date)) - 1) *
+      (await date.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight)))
+    expect(
+      over - extra,
+      `the Blitz page scrolls with Show Codes open (the date, "${await date.textContent()}", takes ${await linesOf(date)} line(s))`,
+    ).toBeLessThanOrEqual(0)
   })

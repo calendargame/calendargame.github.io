@@ -5,15 +5,25 @@
 //     two items of a line share one line box (same top, same height, the line exactly as tall as
 //     them), the first item is hard left and the last hard right, and the gaps between the foot's
 //     lines are all equal — including a line a pair has had to break onto.
-//   • At every PHONE size: each pair is on ONE line, so the foot is exactly three lines.
+//   • At every PHONE size: each pair is on ONE line, so the foot is exactly three lines — at an
+//     iPhone's size in the iPhone's width of font too (below).
 // Round 25's foot broke Changelog onto a line of its own on the owner's 430-wide iPhone, 12.7px
 // below the line above where every other line sat 2.1px apart; both halves of that are pinned here.
 //
-// ★ RUN TWICE: AS IT IS, AND WITH THE FOOT'S TEXT A TENTH WIDER. The iPhone's system font sets
-// these words wider than the fonts on this lane's machines (Round 25 measured ~7.5% over this
-// laptop's), and a CI runner's fonts are different again, so "it fits here" is not "it fits on his
-// phone". The foot's font size is raised by a tenth for the second run — rem-relative, so it still
-// scales with the window — which stands for a font that much wider.
+// ★ RUN TWICE: AS IT IS, AND IN THE IPHONE'S WIDTH OF FONT. The iPhone's system font sets these
+// words wider than the Windows laptop's (Round 25 measured ~7.5%), so "it fits here" is not "it
+// fits on his phone". The second run raises the foot's font size — rem-relative, so it still
+// scales with the window — until the foot's words are as wide as a tenth over the laptop's
+// (IPHONE_EM: a margin on the 7.5%), and never lowers it.
+// ⚠ A FACTOR, NOT A FIXED TENTH, because the machines differ. The Linux CI runner's font is already
+// wider than the laptop's, and a tenth on top of IT stood for no phone at all: Round 26's first
+// test-site run broke the stamp's line at 360×800 that way. Measured against the laptop's widths,
+// the second run means the same font width on every machine — and where a machine's own font is
+// already wider, it is simply that font.
+// ⚠ AND THE IPHONE'S WIDTH ONLY AT AN IPHONE'S SIZE in the phone sweep. An Android phone sets these
+// words in its own font (Roboto, about as wide as the laptop's); the lane's own font stands in for
+// it. The full sweep makes both runs at every window: there a break is allowed, and only its look
+// is held.
 //
 // ⚠ WHERE A PAIR MAY BREAK. Only in a window narrower than any phone and as tall as one (an iPad's
 // 320px Slide Over): the root size that height gives cannot fit "Last Updated: …" beside "Check for
@@ -24,24 +34,49 @@ import type { Locator } from '@playwright/test'
 
 const WIDTHS = Array.from({ length: 15 }, (_, i) => 320 + i * 10)
 const HEIGHTS = [568, 640, 700, 760, 820, 880, 956]
-// Phones in use (CSS pixels): the narrowest iPhone, the common Androids, every current iPhone.
-const PHONES: [number, number][] = [
+// Phones in use (CSS pixels): the narrowest iPhone and every current one, and the common Androids.
+const IPHONES: [number, number][] = [
   [320, 568],
-  [360, 640],
-  [360, 740],
-  [360, 800],
   [375, 667],
   [375, 812],
   [390, 844],
   [393, 852],
   [402, 874],
-  [412, 915],
   [414, 896],
   [428, 926],
   [430, 932],
   [440, 956],
 ]
-const FACTORS = [1, 1.1]
+const ANDROIDS: [number, number][] = [
+  [360, 640],
+  [360, 740],
+  [360, 800],
+  [412, 915],
+]
+// The foot's stamp line, "Last Updated: 10/16/2026 00:18" and "Check for updates", in ems of the
+// foot's font: 14.29 and 8.84 as the Windows laptop's WebKit sets them (Round 26; its Chromium,
+// 14.07 and 8.72), a tenth wider for the iPhone. The stand-in for the iPhone's font is "these words
+// this wide", whatever font the machine has.
+const IPHONE_EM = (14.29 + 8.84) * 1.1
+const IPHONE_WORDS = 'Last Updated: 10/16/2026 00:18Check for updates'
+/** How much larger the foot's font must be set for its words to be as wide as an iPhone sets
+ *  them — never smaller than the machine's own (1). */
+const iphoneFactor = (foot: Locator) =>
+  foot.evaluate(
+    (el, { words, target }) => {
+      const probe = document.createElement('span')
+      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font-size:100px'
+      probe.textContent = words
+      el.appendChild(probe)
+      const em = probe.getBoundingClientRect().width / 100
+      probe.remove()
+      return Math.max(1, target / em)
+    },
+    { words: IPHONE_WORDS, target: IPHONE_EM },
+  )
+const runs = async (foot: Locator) => [1, await iphoneFactor(foot)]
+const named = (width: number, height: number, factor: number) =>
+  `at ${width}×${height}${factor === 1 ? '' : `, text ×${factor.toFixed(3)} (an iPhone's width)`}`
 // Two boxes laid out on one line can differ by the browsers' grain; a line is a line within this.
 const LINE_PX = 0.5
 
@@ -100,11 +135,11 @@ test('the foot’s lines: nothing runs out, each pair on one line box anchored a
   const foot = (await openSettings(page)).locator('.popover-sticky-footer')
   await expect(foot.getByRole('button', { name: 'Check for updates' })).toBeVisible()
   let broke = 0
-  for (const factor of FACTORS)
+  for (const factor of await runs(foot))
     for (const height of HEIGHTS)
       for (const width of WIDTHS) {
         await resizeTo(page, width, height)
-        const at = `at ${width}×${height}${factor === 1 ? '' : `, text ×${factor}`}`
+        const at = named(width, height, factor)
         const now = await measure(foot, factor)
         for (const [i, { box, items }] of now.lines.entries()) {
           for (const item of items) {
@@ -158,13 +193,15 @@ test('at every phone size each pair is on one line: the foot is three lines', as
   test.setTimeout(120_000)
   await openApp(page)
   const foot = (await openSettings(page)).locator('.popover-sticky-footer')
-  for (const factor of FACTORS)
-    for (const [width, height] of PHONES) {
-      await resizeTo(page, width, height)
-      const now = await measure(foot, factor)
-      expect(
-        visualLines(now).length,
-        `at ${width}×${height}${factor === 1 ? '' : `, text ×${factor}`}`,
-      ).toBe(3)
-    }
+  const iphone = await runs(foot)
+  for (const [phones, factors] of [
+    [IPHONES, iphone],
+    [ANDROIDS, [1]],
+  ] as const)
+    for (const factor of factors)
+      for (const [width, height] of phones) {
+        await resizeTo(page, width, height)
+        const now = await measure(foot, factor)
+        expect(visualLines(now).length, named(width, height, factor)).toBe(3)
+      }
 })
