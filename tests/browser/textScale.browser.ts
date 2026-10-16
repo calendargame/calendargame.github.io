@@ -10,8 +10,8 @@
 //     breaks onto a second line, and no How to Play section runs out sideways.
 // Round 25's pixel-to-rem change grew text on bigger phones and broke a row fitted to the old size
 // (the ⚙ foot); the sweeps here are what would have caught that.
-// (Lookup's history rows are NOT converted yet — tests/textSizeGuard's entry for LookupCard says
-// why; their sweep comes with them.)
+// (Lookup's history rows are converted too, and fitted to their room in the device's font: their
+// sweep, in three fonts at every phone width, is tests/browser/lookupRows.)
 import {
   test,
   expect,

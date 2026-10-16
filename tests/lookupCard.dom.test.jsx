@@ -386,18 +386,27 @@ describe('Lookup — a pre-reform date shows BOTH calendars (round 11)', () => {
     expect(lines(container)).toEqual(['10/15/1582', 'Friday'])
   })
 
-  // The history rows carry the same information compactly — measured at 375px, where the full
-  // weekday form overflows the row by 5.8px and a wrap would give the one scrolling list two row
-  // heights. A row with a single reading is untouched: no label, no separator, full weekday.
+  // The history rows carry the same information compactly (a wrap would give the one scrolling list
+  // two row heights): both readings abbreviated, and a calendar with no such date "none" beside its
+  // letter (the owner's wording, Round 26). A row with a single reading is untouched: no label, no
+  // separator, full weekday. Each row's NAME — what a screen reader says — is spelled out as the
+  // answer slot spells it. (That every row FITS, in any font, is the browser lane's: lookupRows.)
   it('history rows abbreviate both readings, and leave a single reading alone', () => {
     const { container } = render(<Host dateFormat="written-mdy" />)
     lookup(container, '7/4/1776')
     lookup(container, '9/24/1444')
     lookup(container, '2/29/1500')
     expect(rows(container)).toEqual([
-      ['February 29, 1500', 'J: Sat · G: Does Not Exist'],
+      ['February 29, 1500', 'J: Sat · G: none'],
       ['September 24, 1444', 'J: Thu · G: Tue'],
       ['July 4, 1776', 'Thursday'],
+    ])
+    expect(
+      [...container.querySelectorAll('ul li button')].map((b) => b.getAttribute('aria-label')),
+    ).toEqual([
+      'February 29, 1500: Julian: Saturday, Gregorian: Does Not Exist',
+      'September 24, 1444: Julian: Thursday, Gregorian: Tuesday',
+      'July 4, 1776: Thursday',
     ])
   })
 

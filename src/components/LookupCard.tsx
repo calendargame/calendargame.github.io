@@ -8,6 +8,8 @@ import {
   isJulianDate,
   isGapDate,
   yearMaxFor,
+  YEAR_MAX_GREGORIAN,
+  YEAR_MAX_JULIAN,
 } from '../lib/calendar.js'
 import { MethodBreakdownSection, type CodeDate } from './MethodBreakdown.jsx'
 import {
@@ -17,6 +19,15 @@ import {
   useWindowedRows,
 } from './scrollRegion.js'
 import { isPageCovered } from './overlayStack.js'
+import {
+  makeRuler,
+  setRows,
+  widestRow,
+  widestDigit,
+  largestFit,
+  watchTextRoom,
+  refitTextRoom,
+} from '../lib/textFit.js'
 import { shortcutActed } from '../lib/keyboardFocus.js'
 import type { FormatId } from '../lib/format.js'
 // The history entry's persisted shape lives with the store that versions and migrates it
@@ -78,6 +89,11 @@ const GAP_MSG = 'October 5–14, 1582 never existed — 10 days skipped in the G
 // exists in Julian but not in Gregorian (the label beside it — "Gregorian:" / "G:" — is what scopes
 // it there). Inventing a second phrase for the second case would split one idea into two.
 const NO_READING = 'Does Not Exist'
+// …and the HISTORY ROW's word for it beside a calendar's letter: "G: none" (the owner's wording,
+// Round 26 — "G: Does Not Exist" was the row that ran out of room first). The answer slot above, and
+// every row's name for a screen reader (rowName), still say it in full. A gap entry has no letter
+// to stand beside, so its row says NO_READING in full, as before.
+const ROW_NO_READING = 'none'
 
 // ── Derived-from-the-entry helpers ──────────────────────────────────────────────────────────
 // A history entry stores INPUTS only ({id, y, m, d, isGap?}); its label and its weekday reading(s)
@@ -95,7 +111,7 @@ interface Reading {
   label: string // 'Julian' | 'Gregorian', or '' when there is only one calendar and naming it is noise
   shortLabel: string // the row's form of the same: 'J' | 'G' | ''
   weekday: string // the weekday name, or NO_READING where this calendar has no such date
-  shortWeekday: string // the row's form: 'Wed' — see entryRowReadings for why rows abbreviate
+  shortWeekday: string // the row's form: 'Wed', or ROW_NO_READING — see entryRowReadings
 }
 const reading = (
   label: string,
@@ -106,9 +122,10 @@ const reading = (
   label,
   shortLabel,
   weekday: exists ? DAY[dayIndex] : NO_READING,
-  // Three letters is the whole abbreviation rule (Sunday → Sun). NO_READING is left intact: it is a
-  // statement about the date, not a weekday, and "Doe" would be nonsense.
-  shortWeekday: exists ? DAY[dayIndex].slice(0, 3) : NO_READING,
+  // Three letters is the whole abbreviation rule (Sunday → Sun). A missing date is not cut to three
+  // letters ("Doe" would be nonsense): it is a statement about the date, not a weekday, so the row
+  // has its own short word for it, ROW_NO_READING.
+  shortWeekday: exists ? DAY[dayIndex].slice(0, 3) : ROW_NO_READING,
 })
 
 // Every reading a date has, in the order they are shown.
@@ -133,22 +150,128 @@ const entryReadings = (e: LookupEntry): Reading[] => {
 
 // The history row's readings, on ONE line, middot-separated.
 //
-// MEASURED, not guessed (375px, the narrowest phone this has to survive; the numbers are the real
-// rendered widths): a row gives its two spans 272.4px between them, the widest ambiguous-era date
-// label is 117.1px ("September 24, 1444", written format), and a two-reading line with full weekday
-// names runs to 161.1px — 290.1px in total, which overflows by 5.8px. Wrapping is not the answer:
-// it would give this one scrolling list two different row heights, which reads far worse than a
-// shorter word. So rows abbreviate — 'J: Wed · G: Sun' — landing the worst case at 214.5px, and the
-// worst NO_READING row ("February 29, 1300" + 'J: Mon · G: Does Not Exist') at 255.7px. The
-// spelled-out form lives in the answer slot directly above, so the compact form has somewhere to be
-// learned from. A row with only ONE reading keeps the full weekday: nothing is competing for the
-// space, and abbreviating it would change every ordinary row for nothing.
+// Rows abbreviate where a date has two readings — 'J: Wed · G: Sun', 'J: Mon · G: none' — so a row
+// is one line on a narrow phone; the spelled-out form lives in the answer slot directly above, so
+// the compact form has somewhere to be learned from. A row with only ONE reading keeps the full
+// weekday: nothing is competing for the space. Wrapping is not the answer: it would give this one
+// scrolling list two different row heights. Whether a row FITS is not left to these words being
+// short enough in some font: the rows are sized to their room in the device's own font
+// (fitRows, below).
+const rowReading = (shortLabel: string, shortWeekday: string) => `${shortLabel}: ${shortWeekday}`
 const entryRowReadings = (e: LookupEntry): string =>
   e.isGap
     ? NO_READING
     : entryReadings(e)
-        .map((r) => (r.label ? `${r.shortLabel}: ${r.shortWeekday}` : r.weekday))
+        .map((r) => (r.label ? rowReading(r.shortLabel, r.shortWeekday) : r.weekday))
         .join(' · ')
+// The row's name for a screen reader: its date and its readings, spelled out as the answer slot
+// spells them ("Julian: Monday, Gregorian: Does Not Exist") — "J: Mon · G: none" read aloud is a
+// string of letters, and the row's words are only short because a screen is narrow.
+const rowName = (e: LookupEntry, fmtDate?: (y: number, m: number, d: number) => string) =>
+  `${entryLabel(e, fmtDate)}: ${
+    e.isGap
+      ? NO_READING
+      : entryReadings(e)
+          .map((r) => (r.label ? `${r.label}: ${r.weekday}` : r.weekday))
+          .join(', ')
+  }`
+
+// ★ THE ROWS ARE SIZED TO THEIR ROOM, IN THE DEVICE'S OWN FONT (Round 26). A row is one line by
+// construction, and its date is never cut: where the WIDEST ROW THE LIST CAN HOLD would not fit the
+// list at full size, every row's text is drawn smaller by the one scale at which it does
+// (--lookup-fit, set on the list; lib/textFit measures and watches). The widest row is found from
+// SHAPES, not from the entries saved: for the Date Format in use, each kind of row a date can
+// make — a date before the 1582 reform (a year of at most four digits, two readings), one after it
+// (a year of up to five, one full weekday), and the ten dates the reform skipped (NO_READING) —
+// with every month, and every digit written as the font's widest. So looking a date up never
+// changes the size, and no date anyone can look up is cut, whatever the font. (Measured before
+// this: "February 29, 1300 — J: Mon · G: Does Not Exist" was cut below ~375px wide at a full root,
+// and wider with the iPhone's font.)
+// ⚠ A FIT NEVER CHANGES A ROW'S HEIGHT: each text's line height is pinned at its full-size value
+// (the row's text-xs line height, 4/3 of the size), so a fitted row is exactly as tall as an
+// unfitted one. That is not tidiness. useWindowedRows draws the rows out of view as their count
+// times ONE measured row's pitch, and measures again only when the list's own box resizes — and a
+// fit can arrive without that (a Date Format change, a font that finishes loading). A row whose
+// height followed its text would leave the spacers at the old pitch, and the rows would jump as
+// the list scrolled. (It is also textFit's rule: a fit sizes text inside a box that does not move.)
+const ROW_CLASS =
+  'w-full text-left px-3 py-2 rounded-xl panel flex items-center justify-between gap-3 text-xs transition'
+// The selected row's edge is the widest a row's frame gets, so it is the frame measured.
+const ROW_SELECTED_CLASS = 'border-l-2 border-l-(--acc) bg-(--hist-sel)'
+// The root's scale, pinned to a standard phone (13px and 12px at its 16.458px root), times the fit;
+// each line height is the full size's, never the fit's (the ⚠ above).
+const ROW_LABEL_CLASS =
+  'block min-w-0 truncate text-[length:calc(13rem/16.458*var(--lookup-fit,1))] leading-[calc(13rem/16.458*4/3)] font-medium text-(--tx-100-90)'
+const ROW_READINGS_CLASS =
+  'shrink-0 whitespace-nowrap text-[length:calc(12rem/16.458*var(--lookup-fit,1))] leading-[calc(12rem/16.458*4/3)] font-semibold text-(--tx-200-80)'
+
+type RowKind = { labels: string[]; readings: string[] }
+const SHORT_DAYS = DAY.map((d) => d.slice(0, 3))
+const TOP_YEAR = Math.max(YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN)
+const rowKinds = (fmtDate?: (y: number, m: number, d: number) => string): RowKind[] => {
+  const label = (y: number, m: number, d: number) => entryLabel({ id: '', y, m, d }, fmtDate)
+  const months = MONTH.map((_, i) => i + 1)
+  return [
+    {
+      labels: months.map((m) => label(1000, m, 10)),
+      readings: SHORT_DAYS.flatMap((j) =>
+        [...SHORT_DAYS, ROW_NO_READING].map((g) => `${rowReading('J', j)} · ${rowReading('G', g)}`),
+      ),
+    },
+    { labels: months.map((m) => label(TOP_YEAR, m, 10)), readings: [...DAY] },
+    {
+      labels: Array.from({ length: 10 }, (_, i) => label(1582, 10, 5 + i)),
+      readings: [NO_READING],
+    },
+  ]
+}
+
+// Two rulers (lib/textFit): one for a single text in a row's type, one for whole rows.
+let textRuler: HTMLElement | null = null
+let rowRuler: HTMLElement | null = null
+const rowElement = (label: string, readings: string) => {
+  const row = document.createElement('div')
+  row.className = `${ROW_CLASS} ${ROW_SELECTED_CLASS}`
+  for (const [className, text] of [
+    [ROW_LABEL_CLASS, label],
+    [ROW_READINGS_CLASS, readings],
+  ]) {
+    const span = document.createElement('span')
+    span.className = className
+    span.textContent = text
+    row.append(span)
+  }
+  return row
+}
+const widestText = (texts: string[], className: string): string => {
+  textRuler!.className = className
+  setRows(textRuler!, texts)
+  const widths = [...textRuler!.children].map((r) => r.getBoundingClientRect().width)
+  return texts[widths.indexOf(Math.max(...widths))]
+}
+// Fit the list `ul` (its content width `room`) to the widest row its kinds can make. A row is its
+// two texts side by side, so its widest is the widest label beside the widest readings of its kind;
+// those rows are then measured whole, in a row's own frame, at each scale tried.
+function fitRows(ul: HTMLElement, room: number, kinds: RowKind[]): void {
+  textRuler ??= makeRuler(ROW_LABEL_CLASS)
+  rowRuler ??= makeRuler()
+  textRuler.className = ROW_LABEL_CLASS
+  const digit = widestDigit(textRuler)
+  const widest = kinds.map((k) => ({
+    label: widestText(
+      k.labels.map((l) => l.replace(/\d/g, digit)),
+      ROW_LABEL_CLASS,
+    ),
+    readings: widestText(k.readings, ROW_READINGS_CLASS),
+  }))
+  rowRuler.replaceChildren(...widest.map((w) => rowElement(w.label, w.readings)))
+  const scale = largestFit(room, (s) => {
+    rowRuler!.style.setProperty('--lookup-fit', String(s))
+    return widestRow(rowRuler!)
+  })
+  if (scale < 1) ul.style.setProperty('--lookup-fit', String(scale))
+  else ul.style.removeProperty('--lookup-fit')
+}
 
 // Which calendar Show Codes works in. The answer slot shows both readings now, so the Julian
 // Calendar setting no longer decides what a date IS — but the codes panel teaches ONE method and
@@ -197,6 +320,22 @@ function LookupHistoryList({
 }) {
   const listRef = React.useRef<HTMLUListElement>(null)
   const { scrolledFromTop, atBottom } = useScrollEdgeState(listRef, entries)
+  // The kinds of row this list can hold, in the Date Format in use — kept current for the fit, and
+  // a change of them (a Date Format change) fits the list again before the frame is drawn.
+  const kinds = rowKinds(fmtDate)
+  const kindsKey = kinds.map((k) => k.labels.join('|')).join('/')
+  const kindsRef = React.useRef(kinds)
+  React.useLayoutEffect(() => {
+    kindsRef.current = kinds
+  })
+  React.useLayoutEffect(
+    () =>
+      watchTextRoom(listRef.current, (room) => fitRows(listRef.current!, room, kindsRef.current)),
+    [],
+  )
+  React.useLayoutEffect(() => {
+    if (listRef.current) refitTextRoom(listRef.current)
+  }, [kindsKey])
   const selectedIndex = selectedId === null ? -1 : entries.findIndex((e) => e.id === selectedId)
   const { start, end, padTop, padBottom } = useWindowedRows(
     listRef,
@@ -224,23 +363,19 @@ function LookupHistoryList({
           >
             <button
               type="button"
+              aria-label={rowName(e, fmtDate)}
               onClick={() => onSelect(e)}
-              className={`w-full text-left px-3 py-2 rounded-xl panel flex items-center justify-between gap-3 text-xs transition ${selectedId === e.id ? 'border-l-2 border-l-(--acc) bg-(--hist-sel)' : 'hover:bg-(--hist-hov)'}`}
+              className={`${ROW_CLASS} ${selectedId === e.id ? ROW_SELECTED_CLASS : 'hover:bg-(--hist-hov)'}`}
             >
-              {/* Every row is exactly one line tall, by construction rather than by fitting:
-                  the readings never wrap and never shrink (a two-reading line is the whole
-                  point of the row), and the date label is the side that gives — truncate ends
-                  it with an ellipsis instead of pushing the readings out of the panel. The
-                  measurement in entryRowReadings says nothing reachable actually needs the
-                  truncation; it is here so that a row's height can never depend on its
-                  content — which a scrolling list wants anyway, and a WINDOWED one requires:
-                  the undrawn rows are stood in for by their count times one row's height. */}
-              <span className="block min-w-0 truncate text-[13px] font-medium text-(--tx-100-90)">
-                {entryLabel(e, fmtDate)}
-              </span>
-              <span className="shrink-0 whitespace-nowrap text-[12px] font-semibold text-(--tx-200-80)">
-                {entryRowReadings(e)}
-              </span>
+              {/* Every row is exactly one line tall: the readings never wrap, and the date label
+                  is the side that would give — truncate would end it with an ellipsis rather
+                  than push the readings out of the panel. fitRows (above) sizes the rows so that
+                  no row any date can make needs it, in any font; it stays so that a row's height
+                  can never depend on its content — which a scrolling list wants anyway, and a
+                  WINDOWED one requires: the undrawn rows are stood in for by their count times
+                  one row's height. */}
+              <span className={ROW_LABEL_CLASS}>{entryLabel(e, fmtDate)}</span>
+              <span className={ROW_READINGS_CLASS}>{entryRowReadings(e)}</span>
             </button>
           </li>
         )
@@ -747,7 +882,7 @@ export default function LookupCard({
             NAME only, not a style hook: it is what the tests select this row by.
             THE COUNT is INSIDE the History span, not a third flex child: the row is
             justify-between, so a third child would redistribute the whole header. As inline text
-            at the row's own 11px tier it shares the line box the header already had, and
+            at the row's own tier it shares the line box the header already had, and
             whitespace-nowrap is what keeps that true at every width — a wrap is the one way this
             could grow the header, and a heading that changes height shoves the whole list below it
             down, exactly the reflow worth designing out (the same by-construction rule
@@ -756,7 +891,7 @@ export default function LookupCard({
             Dimmer than the label it follows — --tx-300-60 is the footnote tier, a step down
             from the header's own --tx-200-70 in every theme — so it reads as a detail about the
             heading rather than part of it. */}
-        <div className="lookup-history-header shrink-0 px-4 flex items-center justify-between text-[11px] uppercase tracking-wide text-(--tx-200-70)">
+        <div className="lookup-history-header shrink-0 px-4 flex items-center justify-between text-[calc(11rem/16.458)] uppercase tracking-wide text-(--tx-200-70)">
           <span className="whitespace-nowrap">
             History
             {entries.length > 1 && (

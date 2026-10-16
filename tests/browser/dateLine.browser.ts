@@ -14,20 +14,8 @@
 // goes is a layout question for the owner, reported with the round rather than decided here.
 // The worst strings are put into the card's own date element: what is measured is how the app's own
 // rule sets that text, which no seed can draw on demand (the date shown is random).
-// And Lookup: a history row with a five-digit year is never cut (its date has one reading, so its
-// row is short), and five-digit years do not change the one row that IS cut on a narrow screen —
-// "February 29, 1300", whose two readings fill it (a separate, known defect: its wording is the
-// owner's to decide, so it is reported here, not asserted).
-import {
-  test,
-  expect,
-  openApp,
-  resizeTo,
-  rectOf,
-  settled,
-  appReady,
-  switchMode,
-} from './support/app'
+// (Lookup's history rows, five-digit years among them, are held by tests/browser/lookupRows.)
+import { test, expect, openApp, resizeTo, rectOf, settled } from './support/app'
 import { SAME_PX, expectPageNotWiderThanWindow } from './support/app'
 
 const WIDEST = {
@@ -95,49 +83,4 @@ test('the widest date of every format is one line in its card, at every phone si
     }
     await expectPageNotWiderThanWindow(page)
   }
-})
-
-test('Lookup: a row with a five-digit year is never cut; the 1300 row is reported', async ({
-  page,
-}) => {
-  test.setTimeout(120_000)
-  await openApp(page, {
-    seed: { settings: { randomFormat: false, dateFormat: 'written-mdy', useJulian: true } },
-  })
-  await page.evaluate(() =>
-    window.localStorage.setItem(
-      'cg-lookup-v1',
-      JSON.stringify({
-        state: {
-          history: [
-            { id: 'a', y: 10000, m: 9, d: 10 },
-            { id: 'b', y: 11582, m: 9, d: 28 },
-            { id: 'c', y: 1300, m: 2, d: 29 },
-          ],
-        },
-        version: 1,
-      }),
-    ),
-  )
-  await page.reload()
-  await appReady(page)
-  await switchMode(page, 'lookup')
-  const rows = page.locator('ul li[data-row] button:visible')
-  await expect(rows).toHaveCount(3)
-  const report: string[] = []
-  for (const [width, height] of SIZES) {
-    await resizeTo(page, width, height)
-    const cut = await rows.evaluateAll((els) =>
-      els.map((b) => {
-        const label = b.firstElementChild as HTMLElement
-        return { text: b.textContent, cut: label.scrollWidth > label.clientWidth }
-      }),
-    )
-    for (const r of cut.slice(0, 2)) expect(r.cut, `at ${width}×${height}: "${r.text}"`).toBe(false)
-    if (cut[2].cut) report.push(`${width}×${height}`)
-  }
-  test.info().annotations.push({
-    type: 'February 29, 1300 row',
-    description: report.length ? `cut at ${report.join(', ')}` : 'never cut',
-  })
 })

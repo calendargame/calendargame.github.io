@@ -2581,6 +2581,12 @@ export default function GuidePage({
             Year, Julian On.
           </li>
           <li>
+            Each row of Lookup&apos;s history reads its date and its readings in full words, as the
+            answer above the list spells them — &quot;February 29, 1500: Julian: Saturday,
+            Gregorian: Does Not Exist&quot; — rather than the short &quot;J: Sat · G: none&quot; the
+            row shows.
+          </li>
+          <li>
             The ⚙ button says what&apos;s behind it: that a setting has been changed, that an update
             is waiting, and that storage is almost full, whenever any of them is true. Inside the
             menu the <b>Storage used</b> line says the same of itself — it adds &quot;almost
@@ -3986,11 +3992,14 @@ export default function GuidePage({
           </li>
           <li>
             History rows say the same thing in short, so each stays on one line: "J: Sat · G: Wed"
-            for a date with two readings, and just the weekday on its own for every other date. Tap
-            a row to see it spelled out in full above; the row you tapped is tinted and marked with
-            a coloured edge down its left side, so you can always tell which one you are reading.
-            The list keeps that row in view: ↑ and ↓ walk it along with the selection, and a new
-            lookup brings the list back to the top, where the new entry is.
+            for a date with two readings ("G: none" where the date is not a Gregorian date at all),
+            and just the weekday on its own for every other date. No row is ever cut short: where
+            the longest row a date can make would not fit, on a narrow phone or in a wide font,
+            every row is drawn a little smaller, all at the same size, and each row stays the same
+            height. Tap a row to see it spelled out in full above; the row you tapped is tinted and
+            marked with a coloured edge down its left side, so you can always tell which one you are
+            reading. The list keeps that row in view: ↑ and ↓ walk it along with the selection, and
+            a new lookup brings the list back to the top, where the new entry is.
           </li>
           <li>
             A reload keeps the page as you had it — the date in the box, its answer, the selected

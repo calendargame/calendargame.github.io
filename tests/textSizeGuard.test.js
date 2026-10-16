@@ -56,11 +56,6 @@ const STILL_IN_PIXELS = [
     why: 'the ★ beside a new Best: never larger than its text at any root. (The <kbd> chip and the ⚙ menu`s two heading tiers left this list in Round 26, onto the root`s scale pinned to a standard phone — as did How to Play`s body, small print, and ▼.)',
   },
   {
-    file: 'src/components/LookupCard.tsx',
-    sizes: { 'text-[13px]': 1, 'text-[12px]': 1, 'text-[11px]': 1 },
-    why: 'a history row`s date and readings, and the History heading: consistent with each other. HELD BACK FROM ROUND 26`s CONVERSION ON PURPOSE: the row "February 29, 1300 — J: Mon · G: Does Not Exist" already has its date cut short below ~375px wide at a full root (and at 375-390 with the iPhone`s wider font), and on the root`s scale it is cut in two more tall, narrow windows. The row`s wording (or a two-line row) is the owner`s call; the conversion goes with that fix, not before it.',
-  },
-  {
     file: 'src/components/CardNumber.tsx',
     sizes: { 'text-[11px]': 1 },
     why: 'the card`s number, alone in its corner: there is no line beside it for it to outgrow',
