@@ -1,6 +1,7 @@
 // A PRESET NAME AND THE ROOM IT HAS — lib/presetNameWidth's two answers, checked against the page:
 //   • a stock name ("Preset 3") is drawn short ("P3"), everywhere at once, exactly when some stock
-//     name would not fit somewhere it is shown;
+//     name would not fit somewhere it is shown — and as its bare number ("3") exactly when some
+//     stock name's "P" form would not fit either;
 //   • the note under the rename box ("Some places will show this name cut short.") is there exactly
 //     when the text in the box would be cut somewhere — and a name saved with the note showing
 //     really is drawn cut, one saved without it really is not.
@@ -16,7 +17,7 @@
 // one more character is several pixels — the answer must be the app's.
 import { test, expect, openApp, openPresetManager, resizeTo, settled, topBar } from './support/app'
 import { presetsNamed } from './support/seeds'
-import { defaultPresetName, shortStockName } from '../../src/store/presets'
+import { defaultPresetName, shortStockName, stockNumber } from '../../src/store/presets'
 import type { Page } from '@playwright/test'
 
 const CLOSE_PX = 0.5
@@ -63,44 +64,63 @@ const cells = (page: Page, names: string[]): Promise<Cell[]> =>
 
 // ── Stock names ──────────────────────────────────────────────────────────────────────────────
 
-test('stock names are drawn short everywhere, exactly when one of them would not fit somewhere', async ({
+test('stock names are drawn short everywhere, exactly when one of them would not fit somewhere — and as bare numbers exactly when a short one would not', async ({
   page,
 }) => {
   test.setTimeout(180_000)
   // Twelve presets, so the longest stock name is "Preset 12".
   const names = Array.from({ length: 12 }, (_, i) => defaultPresetName(i + 1))
   const short = names.map((name) => shortStockName(name)!)
+  const numbers = names.map((name) => stockNumber(name)!)
   await openApp(page, { seed: { presets: presetsNamed(...names) } })
   await expect(topBar(page).preset).toContainText('Preset 1')
 
-  const seen = { short: 0, full: 0, tooClose: 0 }
-  for (let width = 280; width <= 480; width += 2) {
+  const seen = { full: 0, short: 0, number: 0, tooClose: 0 }
+  for (let width = 240; width <= 480; width += 2) {
     await resizeTo(page, width, 844)
-    const now = await cells(page, names)
+    const now = await cells(page, [...names, ...short])
     const at = `at ${width}px`
     expect(now.length, `${at}: name cells laid out`).toBeGreaterThan(0)
-    // One form everywhere: every cell shows a full stock name, or every cell shows a short one.
-    const drawnShort = now.map((cell) => short.includes(cell.text))
-    const drawnFull = now.map((cell) => names.includes(cell.text))
+    // One form everywhere: every cell shows a full stock name, or every cell a short one, or every
+    // cell a number. (A number that is itself cut is drawn with an ellipsis, so it is told by what
+    // its cell holds — which is one of the numbers whatever is shown of it.)
+    const drawn = (forms: string[]) => now.map((cell) => forms.includes(cell.text))
+    const form = drawn(names).every(Boolean)
+      ? 'full'
+      : drawn(short).every(Boolean)
+        ? 'short'
+        : drawn(numbers).every(Boolean)
+          ? 'number'
+          : null
     expect(
-      drawnShort.every(Boolean) || drawnFull.every(Boolean),
+      form,
       `${at}: one form everywhere (${[...new Set(now.map((c) => c.text))].join(', ')})`,
-    ).toBe(true)
-    // The worst case over every name and every cell: by how much the worst-placed name misses.
-    const worst = Math.max(...now.flatMap((cell) => cell.wouldOverrun))
-    if (Math.abs(worst) < CLOSE_PX) {
+    ).not.toBeNull()
+    // The worst case over every name and every cell: by how much the worst-placed name misses —
+    // written in full, and in its "P" form.
+    const worst = (from: number, to: number) =>
+      Math.max(...now.flatMap((cell) => cell.wouldOverrun.slice(from, to)))
+    const full = worst(0, names.length)
+    const p = worst(names.length, names.length * 2)
+    // ⚠ A "P" FORM THAT JUST FITS IS NOT TOO CLOSE TO CALL. A list is never narrower than a row
+    // showing "P10"-"P99" whole (components/PresetSwitcher's one least width, rounded UP to a whole
+    // pixel), so wherever that least width is what a row has, the widest "P" form fits it by a
+    // hair, by construction — and must be drawn. Only a "P" form over by a hair is too close.
+    if (Math.abs(full) < CLOSE_PX || (full > 0 && p > 0 && p < CLOSE_PX)) {
       seen.tooClose++
       continue
     }
+    const expected = full <= 0 ? 'full' : p <= 0 ? 'short' : 'number'
     expect(
-      drawnShort[0],
-      `${at}: short form (a full name would overrun by ${worst.toFixed(2)}px)`,
-    ).toBe(worst > 0)
-    seen[worst > 0 ? 'short' : 'full']++
+      form,
+      `${at}: a full name would overrun by ${full.toFixed(2)}px, a "P" form by ${p.toFixed(2)}px`,
+    ).toBe(expected)
+    seen[expected]++
   }
-  // The sweep crossed the width where the names change form, and was decided nearly everywhere.
-  expect(seen.short, 'widths where names were short').toBeGreaterThan(0)
+  // The sweep crossed both widths where the names change form, and was decided nearly everywhere.
   expect(seen.full, 'widths where names were full').toBeGreaterThan(0)
+  expect(seen.short, 'widths where names were short').toBeGreaterThan(0)
+  expect(seen.number, 'widths where names were numbers').toBeGreaterThan(0)
   expect(seen.tooClose, 'widths too close to call').toBeLessThanOrEqual(3)
 })
 

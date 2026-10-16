@@ -1649,7 +1649,8 @@ export default function GuidePage({
           whether a name is cut short, and the note that says so = lib/presetNameWidth, measured
           against every cell components/PresetSwitcher's PresetOptionLabel draws (the control, a row
           of its list, and Open in's); the short form of a ready-made name = store/presets'
-          shortStockName, drawn by PresetOptionLabel on lib/presetNameWidth's stockNamesAreCut; how
+          shortStockName and stockNumber, drawn by PresetOptionLabel on lib/presetNameWidth's
+          stockNameForm; how
           much of a very long name is drawn or quoted = lib/presetNameText; a name the device has
           no room for = store/presetControl's renamePreset ('no-room'); the list being exactly its
           control's width = components/CustomSelect's 'match-trigger'. */}
@@ -1735,14 +1736,17 @@ export default function GuidePage({
           <li>
             A ready-made name — &quot;Preset 1&quot;, &quot;Preset 2&quot;, and so on, or a name you
             typed that reads exactly like one — is shown in a short form, &quot;P1&quot;,
-            &quot;P2&quot;, where it would otherwise be cut. It is all or none: if any one of those
+            &quot;P2&quot;, where it would otherwise be cut, and where even that would be cut, as
+            just its number, &quot;1&quot;, &quot;2&quot;. It is all or none: if any one of those
             names would be cut in any of these four places — the control, its list, <b>Open in</b>,
-            and its list — every one of them is shown short in all four, so the control and its list
-            always match and a list never reads &quot;Preset 1&quot; above &quot;P10&quot;. On a
-            very narrow phone that is how a new app starts. Give it more room — a wider window, the
-            phone turned — and the full names come back by themselves. Only what is shown changes:
-            the name is still &quot;Preset 1&quot; in its box in Manage Presets, in every sentence
-            that names it, and to a screen reader.
+            and its list — every one of them is shown short in all four, and if any one&apos;s
+            &quot;P&quot; form would be cut as well, every one is shown as its number; so the
+            control and its list always match and a list never reads &quot;Preset 1&quot; above
+            &quot;P10&quot;. On a very narrow phone that is how a new app starts. Where even a
+            number does not fit, it is cut short with an … like any other name. Give it more room —
+            a wider window, the phone turned — and the longer names come back by themselves. Only
+            what is shown changes: the name is still &quot;Preset 1&quot; in its box in Manage
+            Presets, in every sentence that names it, and to a screen reader.
           </li>
         </UL>
         <Subhead>Making and managing them</Subhead>
@@ -1771,9 +1775,9 @@ export default function GuidePage({
             into a name that is already too long. How much fits depends on the screen, so the same
             name can be whole on one device and cut short on another, and the note follows if you
             turn the phone while the box is open. A ready-made name only gets the note where even
-            its short form (&quot;P1&quot;) would be cut. A very long name — a pasted page, say — is
-            kept whole in its box and shown by its beginning everywhere else: where a sentence names
-            a preset it quotes the first 80 characters, and a letter piled high with accents is
+            its number (&quot;1&quot;) would be cut. A very long name — a pasted page, say — is kept
+            whole in its box and shown by its beginning everywhere else: where a sentence names a
+            preset it quotes the first 80 characters, and a letter piled high with accents is
             trimmed there to the line it is on. Two presets can have the same name. A name with
             nothing in it to see goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on:
             that is one left blank, or one made up only of spaces and other characters that show

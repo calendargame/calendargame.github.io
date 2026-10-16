@@ -1,11 +1,11 @@
 import type { RefObject } from 'react'
 import CustomSelect from './CustomSelect.jsx'
-import { usePresets, shortStockName, defaultPresetName } from '../store/presets.js'
+import { usePresets, shortStockName, stockNumber, defaultPresetName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { switchPreset } from '../store/presetControl.js'
 import { useSessionAmnesic } from '../store/sessionAmnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
-import { stockNamesAreCut, useNameRooms, watchNameCell } from '../lib/presetNameWidth.js'
+import { stockNameForm, useNameRooms, watchNameCell } from '../lib/presetNameWidth.js'
 import { nameAsDrawn } from '../lib/presetNameText.js'
 
 // PresetSwitcher — the control that says which preset you are on and moves you to another one.
@@ -103,24 +103,31 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 //   this list — and at the button's width a row spends more of it than the button does (the ✓
 //   column, wider padding) on larger text.
 //
-// ★★ A STOCK NAME THAT WOULD BE CUT IS DRAWN SHORT: "Preset 1" → "P1" (the owner's rule). A stock
-// name is one that reads exactly "Preset <number>" (store/presets' shortStockName — the default
+// ★★ A STOCK NAME THAT WOULD BE CUT IS DRAWN SHORT: "Preset 1" → "P1" → "1" (the owner's rule, and
+// its second step his too: "you can just show the plain number. And if it still can't fit that,
+// then leave it at the ... there's no reason to optimize past that"). A stock name is one that
+// reads exactly "Preset <number>" (store/presets' shortStockName and stockNumber — the default
 // names, and any name typed to read the same). On a narrow phone the default name does not fit a
-// row of its own list, and "Pres…" says less than "P1".
+// row of its own list, and "Pres…" says less than "P1"; on the narrowest, "P1" does not fit the
+// control, and "1" still says which preset it is.
 //   • ONE ANSWER FOR THE WHOLE APP. If ANY stock name among the presets would be cut in ANY place a
-//     name is shown, EVERY stock name is drawn short in EVERY such place; otherwise all are drawn
-//     in full. So the button and its list always agree, a list never mixes "Preset 1" with "P10",
-//     and "Open in" matches the top bar.
-//   • IT FOLLOWS THE SCREEN, WITH NOTHING REMEMBERED. The answer is worked out from the full names
-//     and the rooms as they are now (lib/presetNameWidth's stockNamesAreCut), so a rotation or a
-//     wider window brings the full names straight back. What is drawn cannot feed back into it: a
-//     name cell's width comes from its control, never from the text in it.
+//     name is shown, EVERY stock name is drawn short in EVERY such place; and if any one's "P" form
+//     would be cut too, every one is drawn as its bare number. Otherwise all are drawn in full. So
+//     the button and its list always agree, a list never mixes "Preset 1" with "P10" or "P1" with
+//     "10", and "Open in" matches the top bar.
+//   • WHERE EVEN THE BARE NUMBER IS CUT, NOTHING MORE IS DONE: it is cut like any other name, with
+//     the ellipsis.
+//   • IT FOLLOWS THE SCREEN, WITH NOTHING REMEMBERED. The answer is worked out from the full names,
+//     their "P" forms, and the rooms as they are now (lib/presetNameWidth's stockNameForm) — never
+//     from what is drawn — so a rotation or a wider window brings the longer forms straight back.
+//     What is drawn cannot feed back into it: a name cell's width comes from its control, never
+//     from the text in it.
 //   • DRAWN ONLY. The stored name is never changed. The rename field shows it in full, every
 //     sentence that quotes it quotes it in full, and a screen reader hears it in full — the short
 //     form is hidden from one, with the real name beside it.
-//   • A name the player typed that reads "P1" beside a stock "Preset 1" drawn as "P1" gives two
-//     rows that read alike. Names were never required to differ (two presets may both be called
-//     "Weekend"), so this is that same case and gets no machinery of its own.
+//   • A name the player typed that reads "P1" (or "1") beside a stock "Preset 1" drawn that way
+//     gives two rows that read alike. Names were never required to differ (two presets may both be
+//     called "Weekend"), so this is that same case and gets no machinery of its own.
 //
 // ── WHAT A PRESET LIST SAYS OF AN AMNESIC PRESET ──────────────────────────────────────────────
 //
@@ -180,12 +187,13 @@ export function ShortStockNameRoom() {
 export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
   const amnesic = AMNESIC_SPOKEN[useSessionAmnesic((s) => s.modes[p.id] ?? 'off')]
   // The app-wide answer (the ★★ "drawn short" block above): every cell asks the same question in
-  // the same render, and stockNamesAreCut answers it once.
-  const stockShort = stockNamesAreCut(
+  // the same render, and stockNameForm answers it once.
+  const form = stockNameForm(
     usePresets((s) => s.presets),
     useNameRooms(),
   )
-  const short = stockShort ? shortStockName(p.name) : null
+  const short =
+    form === 'full' ? null : form === 'short' ? shortStockName(p.name) : stockNumber(p.name)
   // The stored name, as much of it as is ever drawn or said (lib/presetNameText).
   const full = nameAsDrawn(p.name)
   const drawn = short === null ? full : nameAsDrawn(short)

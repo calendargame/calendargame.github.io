@@ -45,7 +45,7 @@ import {
   readNameRooms,
   measureTextWidthPx,
   isCutSomewhere,
-  stockNamesAreCut,
+  stockNameForm,
   refreshNameRooms,
   watchNameCell,
   useNameRooms,
@@ -179,8 +179,8 @@ describe('readNameRooms — the cross-component DOM read', () => {
     try {
       const rooms = readNameRooms()
       expect(isCutSomewhere('P1', rooms)).toBe(true)
-      expect(isCutSomewhere('Preset 1', rooms)).toBe(true) // not even its short form fits
-      expect(stockNamesAreCut([{ name: 'Preset 1' }], rooms)).toBe(true)
+      expect(isCutSomewhere('Preset 1', rooms)).toBe(true) // not even its bare number fits
+      expect(stockNameForm([{ name: 'Preset 1' }], rooms)).toBe('number')
     } finally {
       restore()
     }
@@ -328,37 +328,56 @@ describe('isCutSomewhere — is this name shown cut short in at least one place'
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('stock names — "Preset 3" that would be cut is drawn "P3"', () => {
+describe('stock names — "Preset 3" that would be cut is drawn "P3", and "3" where that would be', () => {
   let restoreCanvas = () => {}
   afterEach(() => restoreCanvas())
   const named = (...names) => names.map((name) => ({ name }))
 
-  it('isCutSomewhere judges a stock name by its short form', () => {
+  it('isCutSomewhere judges a stock name by its shortest form, the bare number', () => {
     restoreCanvas = installFakeCanvas()
     mountNameCell(35) // 7 characters
     let rooms = readNameRooms()
-    expect(isCutSomewhere('Preset 1', rooms)).toBe(false) // 8, but drawn "P1"
-    expect(isCutSomewhere('Preset 123456', rooms)).toBe(false) // "P123456": 7
-    expect(isCutSomewhere('Preset 1234567', rooms)).toBe(true) // "P1234567": 8
+    expect(isCutSomewhere('Preset 1', rooms)).toBe(false) // 8, but drawn "P1" or "1"
+    expect(isCutSomewhere('Preset 1234567', rooms)).toBe(false) // "1234567": 7
+    expect(isCutSomewhere('Preset 12345678', rooms)).toBe(true) // "12345678": 8
     expect(isCutSomewhere('Preset 1!', rooms)).toBe(true) // not a stock name: 9
     document.body.innerHTML = ''
-    mountNameCell(5) // one character: not even "P1"
+    mountNameCell(5) // one character: not "P1", but "1"
     rooms = readNameRooms()
-    expect(isCutSomewhere('Preset 1', rooms)).toBe(true)
+    expect(isCutSomewhere('Preset 1', rooms)).toBe(false)
+    expect(isCutSomewhere('Preset 12', rooms)).toBe(true)
+    document.body.innerHTML = ''
+    mountNameCell(4) // not even one character
+    expect(isCutSomewhere('Preset 1', readNameRooms())).toBe(true)
   })
 
-  it('stockNamesAreCut: any stock name, in any room, written in full', () => {
+  it('stockNameForm: full while every stock name fits written in full, short while every "P" form does, the bare number otherwise', () => {
     restoreCanvas = installFakeCanvas()
     mountNameCell(48, BUTTON_FONT) // 12 characters at 4px
     mountNameCell(40, ROW_FONT) // 8 characters at 5px
-    const rooms = readNameRooms()
-    expect(stockNamesAreCut(named('Preset 1', 'Preset 2'), rooms)).toBe(false)
-    expect(stockNamesAreCut(named('Preset 1', 'Preset 10'), rooms)).toBe(true) // 9 in the row
+    let rooms = readNameRooms()
+    expect(stockNameForm(named('Preset 1', 'Preset 2'), rooms)).toBe('full')
+    expect(stockNameForm(named('Preset 1', 'Preset 10'), rooms)).toBe('short') // 9 in the row
     // A name that is not a stock name is not this rule's business, however long it is.
-    expect(stockNamesAreCut(named('Preset 1', 'Weekend Mornings'), rooms)).toBe(false)
-    expect(stockNamesAreCut(named('Weekend Mornings'), rooms)).toBe(false)
+    expect(stockNameForm(named('Preset 1', 'Weekend Mornings'), rooms)).toBe('full')
+    expect(stockNameForm(named('Weekend Mornings'), rooms)).toBe('full')
+    // ALL the "P" forms are asked about, and all step down together: "P1234567" is 8, "P12345678"
+    // 9 — so one long number takes every stock name to its number, the short ones included.
+    expect(stockNameForm(named('Preset 1', 'Preset 1234567'), rooms)).toBe('short')
+    expect(stockNameForm(named('Preset 1', 'Preset 12345678'), rooms)).toBe('number')
+    // The narrowest screens: the room in a row is two characters, so "P10" is cut and "10" is not.
+    document.body.innerHTML = ''
+    mountNameCell(10)
+    rooms = readNameRooms()
+    expect(stockNameForm(named('Preset 1', 'Preset 2'), rooms)).toBe('short')
+    expect(stockNameForm(named('Preset 1', 'Preset 10'), rooms)).toBe('number')
+    // Where even a number is cut, it is still the number that is drawn (and cut, with an "…"):
+    // there is no fourth form.
+    document.body.innerHTML = ''
+    mountNameCell(1)
+    expect(stockNameForm(named('Preset 1'), readNameRooms())).toBe('number')
     // No rooms, no verdict.
-    expect(stockNamesAreCut(named('Preset 10'), [])).toBe(false)
+    expect(stockNameForm(named('Preset 10'), [])).toBe('full')
   })
 
   it('answers the same question once: every cell on the page asks it in the same render', () => {
@@ -367,16 +386,16 @@ describe('stock names — "Preset 3" that would be cut is drawn "P3"', () => {
     mountNameCell(40)
     const rooms = readNameRooms()
     const presets = named('Preset 1', 'Preset 2', 'Preset 3')
-    expect(stockNamesAreCut(presets, rooms)).toBe(false)
+    expect(stockNameForm(presets, rooms)).toBe('full')
     const once = measured.length
     expect(once).toBeGreaterThan(0)
-    for (let cell = 0; cell < 50; cell++) expect(stockNamesAreCut(presets, rooms)).toBe(false)
+    for (let cell = 0; cell < 50; cell++) expect(stockNameForm(presets, rooms)).toBe('full')
     expect(measured.length).toBe(once)
     // A new list of presets, or new rooms, is a new question.
-    expect(stockNamesAreCut(named('Preset 1', 'Preset 10'), rooms)).toBe(true)
+    expect(stockNameForm(named('Preset 1', 'Preset 10'), rooms)).toBe('short')
     document.body.innerHTML = ''
     mountNameCell(45)
-    expect(stockNamesAreCut(named('Preset 1', 'Preset 10'), readNameRooms())).toBe(false)
+    expect(stockNameForm(named('Preset 1', 'Preset 10'), readNameRooms())).toBe('full')
   })
 })
 

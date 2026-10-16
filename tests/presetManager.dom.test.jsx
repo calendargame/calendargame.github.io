@@ -490,7 +490,7 @@ describe('renaming', () => {
     expect(cutNote()).toBeNull()
   })
 
-  it('a stock name is cut only where even its short form is: "Preset 1" is drawn as "P1"', () => {
+  it('a stock name is cut only where even its number is: "Preset 1" is drawn as "P1", then "1"', () => {
     openManager()
     layOutNameCells(7 * PX_PER_CHARACTER) // "Preset 1" is eight
     focus(nameBoxes()[0])
@@ -502,7 +502,9 @@ describe('renaming', () => {
     expect(cutNote()).toBeNull()
     type(nameBoxes()[0], '') // about to be "Preset 1" again
     expect(cutNote()).toBeNull()
-    nameRooms.resize(1 * PX_PER_CHARACTER) // not even "P1" fits
+    nameRooms.resize(1 * PX_PER_CHARACTER) // not even "P1" fits: shown as "1", whole
+    expect(cutNote()).toBeNull()
+    type(nameBoxes()[0], 'Preset 12') // "12" is two
     expect(cutNote()).toBeTruthy()
   })
 

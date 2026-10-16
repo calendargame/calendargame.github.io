@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { isDrawnWhole } from './presetNameText.js'
-import { shortStockName } from '../store/presets.js'
+import { shortStockName, stockNumber } from '../store/presets.js'
 
 // lib/presetNameWidth.ts — DOES A PRESET NAME FIT WHERE IT IS SHOWN, RIGHT NOW?
 //
@@ -10,8 +10,9 @@ import { shortStockName } from '../store/presets.js'
 //   • the note under the rename field (components/PresetManager) appears at the exact character
 //     where the text being typed stops fitting in the narrowest place a name is shown, and goes the
 //     moment it fits again (isCutSomewhere);
-//   • a stock name ("Preset 3") that would be cut is drawn in its short form ("P3") instead
-//     (stockNamesAreCut — components/PresetSwitcher draws it and states the rule).
+//   • a stock name ("Preset 3") that would be cut is drawn in a short form instead — "P3", or the
+//     bare number "3" where even that would be cut (stockNameForm — components/PresetSwitcher
+//     draws it and states the rule).
 // Both are PURE FUNCTIONS OF THE TEXT AND THE ROOMS: nothing is remembered between calls, so
 // neither can be left on, or off, by the order things happened in.
 //
@@ -205,32 +206,48 @@ const showsInFull = (text: string, rooms: readonly NameRoom[]): boolean => {
  * Is a preset named `name` shown cut short in at least one place? What the note under the rename
  * field is drawn from. `name` is a name as it is STORED (store/presets' normalizePresetName): the
  * field asks about what its text would be saved as, not about the text itself.
- * ★ A STOCK NAME IS JUDGED BY ITS SHORT FORM. "Preset 3" that does not fit is drawn as "P3"
- * (stockNamesAreCut, below), so it is cut only where even "P3" is.
+ * ★ A STOCK NAME IS JUDGED BY ITS SHORTEST FORM. "Preset 3" that does not fit is drawn as "P3", and
+ * where that does not fit either, as "3" (stockNameForm, below) — so it is cut only where even the
+ * bare number is.
  */
 export function isCutSomewhere(name: string, rooms: readonly NameRoom[]): boolean {
   if (showsInFull(name, rooms)) return false
-  const short = shortStockName(name)
-  return short === null || !showsInFull(short, rooms)
+  const number = stockNumber(name)
+  return number === null || !showsInFull(number, rooms)
 }
 
-// The last question stockNamesAreCut was asked, and its answer: every name cell on the page asks
-// the same one in the same render.
-let lastStock: { presets: unknown; rooms: unknown; cut: boolean } | null = null
 /**
- * Would ANY stock name among `presets` be cut in ANY room — written in FULL? One answer for the
- * whole app: when it is yes, every stock name is drawn in its short form everywhere a name is shown.
- * ★ IT MEASURES THE FULL NAMES, WHATEVER IS ON SCREEN, and a room's width does not depend on the
- * text in it (a name cell fills the space its control gives it). So drawing the short forms cannot
- * change the answer that chose them: no flicker, and the full names are back the moment they fit.
+ * How every stock name is drawn, everywhere a name is shown: in full ("Preset 3"), short ("P3"), or
+ * as its bare number ("3"). components/PresetSwitcher's ★★ "drawn short" block states the rule.
  */
-export function stockNamesAreCut(
+export type StockForm = 'full' | 'short' | 'number'
+
+// The last question stockNameForm was asked, and its answer: every name cell on the page asks the
+// same one in the same render.
+let lastStock: { presets: unknown; rooms: unknown; form: StockForm } | null = null
+/**
+ * The form ALL the stock names among `presets` are drawn in — one answer for the whole app:
+ *   • 'full'   when every stock name, written in full, is shown whole in every room;
+ *   • 'short'  when one is not, but every one's "P3" form is;
+ *   • 'number' when even one of those is not. Where a bare number does not fit either, it is cut
+ *              like any other name (the ellipsis) — the owner's "no reason to optimize past that".
+ * ★ IT MEASURES THE FULL NAMES AND THE "P3" FORMS, WHATEVER IS ON SCREEN, and a room's width does
+ * not depend on the text in it (a name cell fills the space its control gives it). So drawing a
+ * shorter form cannot change the answer that chose it: no flicker, and the longer forms are back
+ * the moment they fit.
+ */
+export function stockNameForm(
   presets: readonly { name: string }[],
   rooms: readonly NameRoom[],
-): boolean {
+): StockForm {
   if (lastStock?.presets !== presets || lastStock.rooms !== rooms) {
-    const cut = presets.some((p) => shortStockName(p.name) !== null && !showsInFull(p.name, rooms))
-    lastStock = { presets, rooms, cut }
+    const stock = presets.filter((p) => stockNumber(p.name) !== null)
+    const form: StockForm = stock.every((p) => showsInFull(p.name, rooms))
+      ? 'full'
+      : stock.every((p) => showsInFull(shortStockName(p.name)!, rooms))
+        ? 'short'
+        : 'number'
+    lastStock = { presets, rooms, form }
   }
-  return lastStock.cut
+  return lastStock.form
 }
