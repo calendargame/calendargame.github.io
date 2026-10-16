@@ -362,10 +362,6 @@ function BlitzMode({
   // ALREADY answered wrong is an 'answer' end, and crediting that card resumes the round with a fresh
   // question clock — exactly what a judged-correct answer would have granted before the expiry.)
 
-  const resetTimerBars = () => {
-    if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
-    if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(1)'
-  }
   const stopRound = () => {
     blitzStartRef.current = null
     blitzPausedAtRef.current = null
@@ -748,7 +744,12 @@ function BlitzMode({
     endedAtRef.current = null
     setShowTimerDate(false)
     stopRound()
-    resetTimerBars()
+    // ★ A RESET ROUND SHOWS A RESET COUNTDOWN (Q11): the full configured length, on the readout AND the
+    // bar, and as the remaining the next Begin starts from. The countdown is drawn by direct DOM writes
+    // (drawClock), so nothing React renders can put it back — this reset used to redraw the bar alone
+    // and leave the readout on whatever the round last drew, which read as a countdown frozen through
+    // the Reset. paintClock is the one draw for both, and the remaining with them.
+    paintClock(perQ ? qSec : blitzSec)
   } // App's arm (resets stats for blitz)
 
   // Leaving the mode mid-round ABANDONS the round (the original App discarded an active round

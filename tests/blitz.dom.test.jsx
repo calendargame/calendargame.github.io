@@ -1893,3 +1893,106 @@ describe('Blitz — the ★ marks exactly the bests the round on screen set', ()
     expect(bestScore()).not.toContain('★')
   })
 })
+
+// ★ Q11 (Round 26, the owner's report): begin a round, Reset, and the countdown stayed where the
+// round left it. A countdown stays still only while a round sits ENDED (by a wrong answer, a
+// Reveal, Show Codes, or its own clock) and has not been reset; a reset round always shows a full,
+// reset countdown — readout and bar — in both timing sub-modes.
+describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs()
+    useProgress.getState().resetProgress()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+    useModePrefs.getState().setBlitzSec(30)
+    useModePrefs.getState().setBlitzQSec(10)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const visibleBar = () => Array.from(document.querySelectorAll('.bar')).find((b) => !isHidden(b))
+  const clockText = () => visibleBar().previousElementSibling.textContent.trim()
+  const barScale = () => visibleBar().firstElementChild.style.transform
+
+  it('Per Round: begun, part-drained, Reset → the full length, on the readout and the bar', () => {
+    mountApp()
+    switchToBlitz()
+    begin()
+    tick(4500)
+    expect(clockText()).toBe('26s')
+    expect(barScale()).not.toBe('scaleX(1)')
+    clickText('Reset')
+    expect(clockText()).toBe('30s')
+    expect(barScale()).toBe('scaleX(1)')
+    tick(3000) // and it stays reset: nothing is running
+    expect(clockText()).toBe('30s')
+    begin() // …and the next round starts from the top
+    tick(1500)
+    expect(clockText()).toBe('29s')
+  })
+
+  it('Per Round: a round a wrong answer ended stays frozen until Reset, then resets', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off → a wrong ends the round
+    begin()
+    tick(4500)
+    click(wrongName(readDate()))
+    tick(5000)
+    expect(clockText()).toBe('26s') // frozen: ended, not reset
+    clickText('Reset')
+    expect(clockText()).toBe('30s')
+    expect(barScale()).toBe('scaleX(1)')
+  })
+
+  it('Per Round: a round that is draining while ended (a press ended it) resets too', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Allow Mistakes') // off
+    begin()
+    click(correctName(readDate()))
+    tick(2500)
+    clickText('Override') // flips that card to a miss → a 'toggle' end, still draining
+    tick(2000)
+    expect(clockText()).toBe('26s')
+    clickText('Reset')
+    expect(clockText()).toBe('30s')
+    tick(3000)
+    expect(clockText()).toBe('30s')
+  })
+
+  it('Per Question: begun, part-drained, Reset → the full question clock', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Per Round') // → Per Question
+    begin()
+    tick(3200)
+    expect(clockText()).toBe('7s')
+    clickText('Reset')
+    expect(clockText()).toBe('10s')
+    expect(barScale()).toBe('scaleX(1)')
+  })
+
+  it('Per Question: a round a wrong answer ended stays frozen until Reset, then resets', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Per Round') // → Per Question (Allow Mistakes on)
+    clickText('Allow Mistakes') // off → sudden death
+    begin()
+    tick(3200)
+    click(wrongName(readDate()))
+    tick(3000)
+    expect(clockText()).toBe('7s')
+    clickText('Reset')
+    expect(clockText()).toBe('10s')
+    expect(barScale()).toBe('scaleX(1)')
+  })
+})

@@ -4195,8 +4195,10 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
         Leaving Blitz mid-round abandons it — you return to a fresh, idle Blitz (no hidden countdown
         keeps running while you're away). If you leave after a round ends without pressing Reset,
         the round state (bests, history, final date) is preserved when you return. Press Reset to
-        clear your current round, unlock the settings, and start fresh. Changing a setting the round
-        depends on — while a round is going or has ended — resets it when you close the ⚙ menu.
+        clear your current round, put the countdown back to its full time, unlock the settings, and
+        start fresh. Until you do, an ended round&apos;s countdown stays where the round left it.
+        Changing a setting the round depends on — while a round is going or has ended — resets it
+        when you close the ⚙ menu.
       </p>
     </>
   ),
