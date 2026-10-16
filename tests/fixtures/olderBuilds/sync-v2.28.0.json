@@ -1,0 +1,1892 @@
+{
+  "build": "v2.28.0",
+  "boot": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "answers": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 11,
+              "good": 9,
+              "streak": 3,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 12,
+              "good": 10,
+              "streak": 4,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 13,
+              "good": 10,
+              "streak": 0,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "overrideLabel": "Override",
+  "overrideAtDepth": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 13,
+              "good": 9,
+              "streak": 0,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "overrideBack": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 13,
+              "good": 10,
+              "streak": 0,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "reset": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "roundBelow": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 5,
+              "scoreRoundId": 111,
+              "streak": 4,
+              "streakRoundId": 111,
+              "w": 1,
+              "zz": 1
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "roundBeats": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 7,
+              "scoreRoundId": 1835186366816324,
+              "streak": 7,
+              "streakRoundId": 1835186366816324
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "threeWay": true,
+  "statsOnlyOn": [],
+  "keptBeats": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 7,
+              "scoreRoundId": 1835186367949564,
+              "streak": 7,
+              "streakRoundId": 1835186367949564
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5,
+        "sync": {
+          "g": "gen1",
+          "at": {
+            "s:classic": {
+              "st": "1.n0",
+              "fp": "x"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "keptBelow": [
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 10,
+              "good": 8,
+              "streak": 2,
+              "best": 5,
+              "times": [3, 4, 5, 6, 7, 8, 9, 10],
+              "w": "TAG-c",
+              "zz": 1
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": [],
+              "w": "TAG-f"
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {
+            "m60|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 7,
+              "scoreRoundId": 1835186367949564,
+              "streak": 7,
+              "streakRoundId": 1835186367949564
+            },
+            "m30|numeric-ymd|random|random|random|1583-10000|true": {
+              "score": 9,
+              "scoreRoundId": 333,
+              "streak": 9,
+              "streakRoundId": 333,
+              "w": 1,
+              "zz": 1
+            }
+          },
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5,
+        "sync": {
+          "g": "gen1",
+          "at": {
+            "s:classic": {
+              "st": "1.n0",
+              "fp": "x"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "fullReset": [
+    {
+      "op": "set",
+      "key": "cg-settings-v1",
+      "value": {
+        "state": {
+          "randomFormat": false,
+          "dateFormat": "written-mdy",
+          "inputStyle": "buttons",
+          "dotRotation": "standard",
+          "defaultMode": "classic",
+          "useJulian": true,
+          "minY": 1,
+          "maxY": 10000,
+          "leapChance": "random",
+          "janFebChance": "random",
+          "julianChance": "random",
+          "saveStats": true,
+          "useSystem": true,
+          "darkTheme": "dusk",
+          "lightTheme": "light",
+          "manualTheme": "dusk"
+        },
+        "version": 4
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-modeprefs-v1",
+      "value": {
+        "state": {
+          "flashMs": 2000,
+          "flashTimingOff": false,
+          "flashScoringOff": false,
+          "blitzSec": 60,
+          "blitzQSec": 10,
+          "blitzPerQ": false,
+          "blitzAllowMistakes": true,
+          "blitzTimingOff": false,
+          "aoxN": "10",
+          "aoxAllowMistakes": false,
+          "aoxOneByOne": false,
+          "aoxTimingOff": false,
+          "dedType": "day",
+          "dedTimingOff": true,
+          "dedScoringOff": false,
+          "classicTimingOff": true,
+          "classicScoringOff": false
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {},
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-lookup-v1",
+      "value": {
+        "state": {
+          "history": []
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-modeprefs-v1",
+      "value": {
+        "state": {
+          "flashMs": 2000,
+          "flashTimingOff": false,
+          "flashScoringOff": false,
+          "blitzSec": 60,
+          "blitzQSec": 10,
+          "blitzPerQ": false,
+          "blitzAllowMistakes": true,
+          "blitzTimingOff": false,
+          "aoxN": "10",
+          "aoxAllowMistakes": false,
+          "aoxOneByOne": false,
+          "aoxTimingOff": false,
+          "dedType": "day",
+          "dedTimingOff": true,
+          "dedScoringOff": false,
+          "classicTimingOff": true,
+          "classicScoringOff": false
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-modeprefs-v1",
+      "value": {
+        "state": {
+          "flashMs": 2000,
+          "flashTimingOff": false,
+          "flashScoringOff": false,
+          "blitzSec": 60,
+          "blitzQSec": 10,
+          "blitzPerQ": false,
+          "blitzAllowMistakes": true,
+          "blitzTimingOff": false,
+          "aoxN": "10",
+          "aoxAllowMistakes": false,
+          "aoxOneByOne": false,
+          "aoxTimingOff": false,
+          "dedType": "day",
+          "dedTimingOff": true,
+          "dedScoringOff": false,
+          "classicTimingOff": true,
+          "classicScoringOff": false
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {},
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {},
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {},
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {},
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-progress-v1",
+      "value": {
+        "state": {
+          "stats": {
+            "classic": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "flash": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedDay": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedMonth": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            },
+            "dedYear": {
+              "played": 0,
+              "good": 0,
+              "streak": 0,
+              "best": 0,
+              "times": []
+            }
+          },
+          "blitzBest": {},
+          "suddenBest": {},
+          "suddenAmBest": {},
+          "aoxBest": {}
+        },
+        "version": 5
+      }
+    }
+  ],
+  "fullResetKept": [
+    {
+      "op": "set",
+      "key": "cg-settings-v1",
+      "value": {
+        "state": {
+          "randomFormat": false,
+          "dateFormat": "numeric-ymd",
+          "inputStyle": "buttons",
+          "dotRotation": "standard",
+          "defaultMode": "classic",
+          "useJulian": true,
+          "minY": 1583,
+          "maxY": 10000,
+          "leapChance": "random",
+          "janFebChance": "random",
+          "julianChance": "random",
+          "saveStats": true,
+          "useSystem": true,
+          "darkTheme": "dusk",
+          "lightTheme": "light",
+          "manualTheme": "dusk"
+        },
+        "version": 4
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-modeprefs-v1",
+      "value": {
+        "state": {
+          "flashMs": 800,
+          "flashTimingOff": false,
+          "flashScoringOff": false,
+          "blitzSec": 60,
+          "blitzQSec": 10,
+          "blitzPerQ": false,
+          "blitzAllowMistakes": true,
+          "blitzTimingOff": false,
+          "aoxN": "10",
+          "aoxAllowMistakes": false,
+          "aoxOneByOne": false,
+          "aoxTimingOff": false,
+          "dedType": "day",
+          "dedTimingOff": true,
+          "dedScoringOff": false,
+          "classicTimingOff": true,
+          "classicScoringOff": false
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-lookup-v1",
+      "value": {
+        "state": {
+          "history": []
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "remove",
+      "key": "cg-progress-v1"
+    },
+    {
+      "op": "set",
+      "key": "cg-modeprefs-v1",
+      "value": {
+        "state": {
+          "flashMs": 2000,
+          "flashTimingOff": false,
+          "flashScoringOff": false,
+          "blitzSec": 60,
+          "blitzQSec": 10,
+          "blitzPerQ": false,
+          "blitzAllowMistakes": true,
+          "blitzTimingOff": false,
+          "aoxN": "10",
+          "aoxAllowMistakes": false,
+          "aoxOneByOne": false,
+          "aoxTimingOff": false,
+          "dedType": "day",
+          "dedTimingOff": true,
+          "dedScoringOff": false,
+          "classicTimingOff": true,
+          "classicScoringOff": false
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-modeprefs-v1",
+      "value": {
+        "state": {
+          "flashMs": 800,
+          "flashTimingOff": false,
+          "flashScoringOff": false,
+          "blitzSec": 60,
+          "blitzQSec": 10,
+          "blitzPerQ": false,
+          "blitzAllowMistakes": true,
+          "blitzTimingOff": false,
+          "aoxN": "10",
+          "aoxAllowMistakes": false,
+          "aoxOneByOne": false,
+          "aoxTimingOff": false,
+          "dedType": "day",
+          "dedTimingOff": true,
+          "dedScoringOff": false,
+          "classicTimingOff": true,
+          "classicScoringOff": false
+        },
+        "version": 1
+      }
+    }
+  ],
+  "settingsBoot": [],
+  "settingsSet": [
+    {
+      "op": "set",
+      "key": "cg-settings-v1",
+      "value": {
+        "state": {
+          "randomFormat": false,
+          "dateFormat": "numeric-ymd",
+          "inputStyle": "buttons",
+          "dotRotation": "standard",
+          "defaultMode": "classic",
+          "useJulian": true,
+          "minY": 1583,
+          "maxY": 10000,
+          "leapChance": "random",
+          "janFebChance": "random",
+          "julianChance": "random",
+          "saveStats": false,
+          "useSystem": true,
+          "darkTheme": "dusk",
+          "lightTheme": "light",
+          "manualTheme": "dusk"
+        },
+        "version": 4
+      }
+    }
+  ],
+  "prefsSet": [
+    {
+      "op": "set",
+      "key": "cg-modeprefs-v1",
+      "value": {
+        "state": {
+          "flashMs": 1000,
+          "flashTimingOff": false,
+          "flashScoringOff": false,
+          "blitzSec": 60,
+          "blitzQSec": 10,
+          "blitzPerQ": false,
+          "blitzAllowMistakes": true,
+          "blitzTimingOff": false,
+          "aoxN": "10",
+          "aoxAllowMistakes": false,
+          "aoxOneByOne": false,
+          "aoxTimingOff": false,
+          "dedType": "day",
+          "dedTimingOff": true,
+          "dedScoringOff": false,
+          "classicTimingOff": true,
+          "classicScoringOff": false
+        },
+        "version": 1
+      }
+    }
+  ],
+  "registryBoot": [
+    {
+      "op": "set",
+      "key": "cg-presets-v1",
+      "value": {
+        "state": {
+          "presets": [
+            {
+              "id": 1,
+              "name": "Alpha",
+              "amnesic": false,
+              "zz": 1
+            }
+          ],
+          "activeId": 1,
+          "nextId": 2,
+          "openInPreset": "last",
+          "zz": 1
+        },
+        "version": 1,
+        "sync": {
+          "g": "gen1",
+          "at": {
+            "s:classic": {
+              "st": "1.n0",
+              "fp": "x"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "set",
+      "key": "cg-lookup-v1",
+      "value": {
+        "state": {
+          "history": [
+            {
+              "id": "a",
+              "y": 2000,
+              "m": 1,
+              "d": 1,
+              "zz": 1
+            }
+          ]
+        },
+        "version": 1,
+        "sync": {
+          "g": "gen1",
+          "at": {
+            "s:classic": {
+              "st": "1.n0",
+              "fp": "x"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "rename": [
+    {
+      "op": "set",
+      "key": "cg-presets-v1",
+      "value": {
+        "state": {
+          "presets": [
+            {
+              "id": 1,
+              "name": "Beta",
+              "amnesic": false
+            }
+          ],
+          "activeId": 1,
+          "nextId": 2,
+          "openInPreset": "last"
+        },
+        "version": 1
+      }
+    }
+  ],
+  "create": [
+    {
+      "op": "set",
+      "key": "cg-presets-v1",
+      "value": {
+        "state": {
+          "presets": [
+            {
+              "id": 1,
+              "name": "Beta",
+              "amnesic": false
+            },
+            {
+              "id": 2,
+              "name": "Preset 2",
+              "amnesic": false
+            }
+          ],
+          "activeId": 1,
+          "nextId": 3,
+          "openInPreset": "last"
+        },
+        "version": 1
+      }
+    }
+  ],
+  "lookup": [
+    {
+      "op": "set",
+      "key": "cg-lookup-v1",
+      "value": {
+        "state": {
+          "history": [
+            {
+              "id": "b",
+              "y": 2001,
+              "m": 2,
+              "d": 3
+            },
+            {
+              "id": "a",
+              "y": 2000,
+              "m": 1,
+              "d": 1
+            }
+          ]
+        },
+        "version": 1
+      }
+    }
+  ],
+  "defaultsBoot": [
+    {
+      "op": "set",
+      "key": "cg-userdefaults-v1",
+      "value": {
+        "state": {
+          "saved": {
+            "settings": {
+              "randomFormat": false,
+              "dateFormat": "numeric-ymd",
+              "inputStyle": "buttons",
+              "dotRotation": "standard",
+              "defaultMode": "classic",
+              "useJulian": true,
+              "minY": 1583,
+              "maxY": 10000,
+              "leapChance": "random",
+              "janFebChance": "random",
+              "julianChance": "random",
+              "saveStats": true,
+              "useSystem": true,
+              "darkTheme": "dusk",
+              "lightTheme": "light",
+              "manualTheme": "dusk"
+            },
+            "prefs": {
+              "flashMs": 800,
+              "blitzSec": 60,
+              "blitzQSec": 10,
+              "aoxN": "10"
+            },
+            "amnesic": "off",
+            "w": "TAG-d"
+          }
+        },
+        "version": 3,
+        "sync": {
+          "g": "gen1",
+          "at": {
+            "s:classic": {
+              "st": "1.n0",
+              "fp": "x"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "saveDefaults": [
+    {
+      "op": "set",
+      "key": "cg-userdefaults-v1",
+      "value": {
+        "state": {
+          "saved": {
+            "settings": {
+              "randomFormat": false,
+              "dateFormat": "numeric-ymd",
+              "inputStyle": "buttons",
+              "dotRotation": "standard",
+              "defaultMode": "classic",
+              "useJulian": true,
+              "minY": 1583,
+              "maxY": 10000,
+              "leapChance": "random",
+              "janFebChance": "random",
+              "julianChance": "random",
+              "saveStats": false,
+              "useSystem": true,
+              "darkTheme": "dusk",
+              "lightTheme": "light",
+              "manualTheme": "dusk"
+            },
+            "prefs": {
+              "flashMs": 800,
+              "blitzSec": 60,
+              "blitzQSec": 10,
+              "aoxN": "10"
+            },
+            "amnesic": false,
+            "amnesicMode": "off"
+          }
+        },
+        "version": 3
+      }
+    }
+  ]
+}

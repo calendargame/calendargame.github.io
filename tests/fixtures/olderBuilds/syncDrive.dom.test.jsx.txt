@@ -1,0 +1,323 @@
+// @vitest-environment jsdom
+// Drives an OLDER build's real app (this file is copied into that build's tests/ folder, as
+// syncDrive.dom.test.jsx) over saved data as Round 26's windows-in-sync build leaves it, and writes
+// down EVERY write the older build makes to the keys that matter (run with OLDER_BUILD=<tag>
+// SYNC_OUT=<file>). The record is tests/fixtures/olderBuilds/sync-<build>.json;
+// tests/syncedDoc.olderBuilds.test.js holds the design's facts about older builds to it
+// (design-q1-q2.md v4, sections 1 and 18.1, 18.5, 18.9):
+//   F-A  a silo's unknown fields (the sync tag `w`) ride through every answer and every Override at any
+//        depth, and a Reset drops them (a literal);
+//   F-B  a Best record the build does not change is saved as it was parsed (its `w` kept); one it
+//        changes is a fresh literal (`w` gone); writeKept (v2.28.0+, Stats Only) keeps the device's
+//        envelope and writes every record the page changed as a fresh literal;
+//   F-C  settings, mode prefs, the registry, and Lookup entries are rebuilt field by field (nothing
+//        rides inside them); which builds keep an unknown settings FIELD (Q21's `amnesic`) and which
+//        drop it;
+//   F-D  every older build rewrites the progress doc as it boots;
+//   F-E  a Full Reset under Stats Only writes the doc with the Best maps emptied and the envelope
+//        kept, then removes it, in one task;
+//   and whether any build keeps a doc's top-level `sync` envelope on an ordinary whole-copy save.
+import { describe, it, afterEach } from 'vitest'
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { writeFileSync } from 'node:fs'
+import { App } from '../src/main.jsx'
+import { usePresets } from '../src/store/presets.js'
+import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { useModePrefs } from '../src/store/modePrefs.js'
+import { useProgress } from '../src/store/progress.js'
+import { useUserDefaults, effectiveAmnesicDefault } from '../src/store/userDefaults.js'
+import { useLookupHistory, addLookupEntry } from '../src/store/lookupHistory.js'
+import * as control from '../src/store/presetControl.js'
+import { wday } from '../src/lib/calendar.js'
+import { DAY } from '../src/lib/format.js'
+
+const BUILD = process.env.OLDER_BUILD
+const READABLE = {
+  ...SETTINGS_DEFAULTS,
+  randomFormat: false,
+  dateFormat: 'numeric-ymd',
+  minY: 1583,
+  maxY: 10000,
+}
+const PROGRESS = 'cg-progress-v1'
+const SETTINGS = 'cg-settings-v1'
+const PREFS = 'cg-modeprefs-v1'
+const DEFAULTS = 'cg-userdefaults-v1'
+const REGISTRY = 'cg-presets-v1'
+const LOOKUP = 'cg-lookup-v1'
+const S = READABLE
+const KEY = `m60|numeric-ymd|${S.leapChance}|${S.janFebChance}|${S.julianChance}|1583-10000|${S.useJulian}`
+const OTHER = 'm30|numeric-ymd|random|random|random|1583-10000|true'
+const ENVELOPE = { g: 'gen1', at: { 's:classic': { st: '1.n0', fp: 'x' } } }
+
+function mountApp() {
+  const root = document.createElement('div')
+  root.id = 'root'
+  document.body.appendChild(root)
+  return render(<App />)
+}
+function unmountApp() {
+  cleanup()
+  document.getElementById('root')?.remove()
+}
+const isHidden = (el) => {
+  for (let n = el; n; n = n.parentElement) if (n.style && n.style.display === 'none') return true
+  return false
+}
+function readDate() {
+  const els = [...document.querySelectorAll('div')].filter(
+    (e) => e.children.length === 0 && /^-?\d+-\d+-\d+$/.test(e.textContent.trim()) && !isHidden(e),
+  )
+  if (els.length !== 1) throw new Error(`expected one visible date, found ${els.length}`)
+  const [y, m, d] = els[0].textContent.trim().split('-').map(Number)
+  return { y, m, d }
+}
+const visibleButton = (name) => screen.getAllByRole('button', { name }).find((b) => !isHidden(b))
+const has = (name) => screen.queryAllByRole('button', { name }).some((b) => !isHidden(b))
+const tap = (el) =>
+  act(() => {
+    fireEvent.pointerDown(el)
+    fireEvent.click(el, { detail: 1 })
+  })
+const right = () => tap(visibleButton(DAY[wday(readDate().y, readDate().m, readDate().d)]))
+const wrong = () => {
+  const { y, m, d } = readDate()
+  tap(visibleButton(DAY[(wday(y, m, d) + 1) % 7]))
+}
+const press = (name) => tap(visibleButton(name))
+const key = (k) => act(() => void fireEvent.keyDown(window, { key: k }))
+const nextIfLocked = () => {
+  const next = screen.queryAllByRole('button', { name: /^(Next|Continue)/ }).find((b) => !isHidden(b))
+  if (next) tap(next)
+}
+
+// A page load of the older build: every store reads storage again, then the app mounts.
+function load() {
+  act(() => {
+    for (const s of [usePresets, useSettings, useModePrefs, useProgress, useUserDefaults, useLookupHistory])
+      s.persist.rehydrate()
+  })
+  mountApp()
+}
+const version = (store) => store.persist.getOptions().version
+const put = (k, state, v, extra = {}) =>
+  localStorage.setItem(k, JSON.stringify({ state, version: v, ...extra }))
+const stored = (k, area = localStorage) => JSON.parse(area.getItem(k) ?? 'null')
+const blank = () => ({ played: 0, good: 0, streak: 0, best: 0, times: [] })
+
+// ★ EVERY WRITE, as the device receives it: the op, the key, and what the key then holds.
+const WATCHED = [PROGRESS, SETTINGS, PREFS, DEFAULTS, REGISTRY, LOOKUP]
+let writes = []
+const realSet = Storage.prototype.setItem
+const realRemove = Storage.prototype.removeItem
+Storage.prototype.setItem = function (k, v) {
+  realSet.call(this, k, v)
+  if (this === window.localStorage && WATCHED.includes(k)) writes.push({ op: 'set', key: k, value: JSON.parse(v) })
+}
+Storage.prototype.removeItem = function (k) {
+  realRemove.call(this, k)
+  if (this === window.localStorage && WATCHED.includes(k)) writes.push({ op: 'remove', key: k })
+}
+const take = () => {
+  const w = writes
+  writes = []
+  return w
+}
+
+function seed() {
+  localStorage.clear()
+  sessionStorage.clear()
+  put(SETTINGS, { ...READABLE, amnesic: 'stats', zz: 1 }, version(useSettings), { sync: ENVELOPE })
+  const stats = {
+    classic: { played: 10, good: 8, streak: 2, best: 5, times: [3, 4, 5, 6, 7, 8, 9, 10], w: 'TAG-c', zz: 1 },
+    flash: { ...blank(), w: 'TAG-f' },
+    dedDay: blank(),
+    dedMonth: blank(),
+    dedYear: blank(),
+  }
+  const rec = (score, streak, id) => ({ score, scoreRoundId: id, streak, streakRoundId: id, w: 1, zz: 1 })
+  put(
+    PROGRESS,
+    {
+      stats,
+      blitzBest: { [KEY]: rec(5, 4, 111), [OTHER]: rec(9, 9, 333) },
+      suddenBest: {},
+      suddenAmBest: {},
+      aoxBest: {},
+    },
+    version(useProgress),
+    { sync: ENVELOPE },
+  )
+  put(PREFS, { ...useModePrefs.getState(), zz: 1 }, version(useModePrefs), { sync: ENVELOPE })
+  writes = []
+}
+
+const out = { build: BUILD }
+afterEach(unmountApp)
+
+describe(`sync drive — ${BUILD}`, () => {
+  it('F-D, F-A: the boot rewrite; answers and an Override at depth carry the tag; Reset drops it', async () => {
+    seed()
+    load()
+    out.boot = take()
+    right()
+    nextIfLocked()
+    right()
+    nextIfLocked()
+    wrong()
+    nextIfLocked()
+    out.answers = take()
+    press('<')
+    press('<')
+    const overrideKey = () => [...document.querySelectorAll('[data-key="O"]')].find((b) => !isHidden(b))
+    out.overrideLabel = overrideKey().textContent.trim()
+    tap(overrideKey())
+    out.overrideAtDepth = take()
+    await new Promise((r) => setTimeout(r, 450)) // past the double-tap guard
+    tap(overrideKey())
+    out.overrideBack = take()
+    act(() => {
+      fireEvent.click(visibleButton('Reset Stats'))
+    })
+    const dlg = screen.getByRole('dialog', { name: 'Reset Stats?' })
+    act(() => {
+      fireEvent.click([...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Reset Stats'))
+    })
+    out.reset = take()
+  })
+
+  it('F-B: a record left alone keeps its object; one a round beats is a fresh literal', () => {
+    seed()
+    load()
+    take()
+    key('B')
+    press('Begin')
+    right()
+    press('Reveal')
+    out.roundBelow = take()
+    press('Reset')
+    take()
+    press('Begin')
+    for (let i = 0; i < 7; i++) right()
+    press('Reveal')
+    out.roundBeats = take()
+  })
+
+  it('F-B, F-E: writeKept under Stats Only (v2.28.0+), then Full Reset', () => {
+    seed()
+    load()
+    take()
+    // A three-way Amnesic value (v2.28.0+) is a string; up to v2.27.3 it was a boolean.
+    const threeWay = typeof effectiveAmnesicDefault(null) === 'string'
+    out.threeWay = threeWay
+    if (!threeWay) return
+    act(() => {
+      control.setPresetAmnesic(1, 'stats')
+    })
+    out.statsOnlyOn = take()
+    // The permanent copy as a NEW window would leave it meanwhile: the envelope back on it, and
+    // every record tagged (the older build's boot rewrite above dropped the envelope).
+    const renew = () => {
+      const doc = stored(PROGRESS)
+      for (const r of Object.values(doc.state.blitzBest)) r.w = 1
+      localStorage.setItem(PROGRESS, JSON.stringify({ ...doc, sync: ENVELOPE }))
+      take()
+    }
+    renew()
+    key('B')
+    press('Begin')
+    for (let i = 0; i < 7; i++) right()
+    press('Reveal')
+    out.keptBeats = take()
+    press('Reset')
+    take()
+    renew()
+    press('Begin')
+    right()
+    press('Reveal')
+    out.keptBelow = take()
+    act(() => {
+      fireEvent.click(screen.getAllByRole('button', { name: /^Settings( \(|$)/ })[0])
+    })
+    act(() => {
+      fireEvent.click([...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Full Reset'))
+    })
+    const dlg = screen.getByRole('dialog', { name: /Full Reset/ })
+    act(() => {
+      fireEvent.click([...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Full Reset'))
+    })
+    out.fullReset = take()
+  })
+
+  it('F-E: Full Reset in a preset whose saved default is Stats Only (v2.28.0+): the two writes', () => {
+    seed()
+    if (typeof effectiveAmnesicDefault(null) !== 'string') return
+    const saved = { settings: { ...READABLE }, prefs: { flashMs: 800, blitzSec: 60, blitzQSec: 10, aoxN: '10' }, amnesic: 'stats' }
+    put(DEFAULTS, { saved }, version(useUserDefaults))
+    load()
+    act(() => {
+      control.setPresetAmnesic(1, 'stats')
+    })
+    const doc = stored(PROGRESS)
+    localStorage.setItem(PROGRESS, JSON.stringify({ ...doc, sync: ENVELOPE }))
+    take()
+    act(() => {
+      fireEvent.click(screen.getAllByRole('button', { name: /^Settings( \(|$)/ })[0])
+    })
+    act(() => {
+      fireEvent.click([...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Full Reset'))
+    })
+    const dlg = screen.getByRole('dialog', { name: /Full Reset/ })
+    act(() => {
+      fireEvent.click([...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Full Reset'))
+    })
+    out.fullResetKept = take()
+  })
+
+  it('F-C: settings and mode prefs are rebuilt field by field (Q21 field kept or dropped)', () => {
+    seed()
+    load()
+    out.settingsBoot = take().filter((w) => w.key === SETTINGS || w.key === PREFS)
+    act(() => useSettings.getState().setSaveStats(false))
+    out.settingsSet = take()
+    act(() => useModePrefs.getState().setFlashMs(1000))
+    out.prefsSet = take()
+  })
+
+  it('F-C: the registry and the Lookup history are rebuilt field by field', () => {
+    seed()
+    put(
+      REGISTRY,
+      { presets: [{ id: 1, name: 'Alpha', amnesic: false, zz: 1 }], activeId: 1, nextId: 2, openInPreset: 'last', zz: 1 },
+      version(usePresets),
+      { sync: ENVELOPE },
+    )
+    put(LOOKUP, { history: [{ id: 'a', y: 2000, m: 1, d: 1, zz: 1 }] }, version(useLookupHistory), { sync: ENVELOPE })
+    load()
+    out.registryBoot = take().filter((w) => w.key === REGISTRY || w.key === LOOKUP)
+    act(() => {
+      control.renamePreset(1, 'Beta')
+    })
+    out.rename = take()
+    act(() => {
+      control.createPreset()
+    })
+    out.create = take()
+    act(() => useLookupHistory.getState().setHistory((p) => addLookupEntry(p, { id: 'b', y: 2001, m: 2, d: 3 })))
+    out.lookup = take()
+  })
+
+  it('F-C: saved defaults — the tag inside `saved` across a load and a Save Defaults', () => {
+    seed()
+    const saved = { settings: { ...READABLE }, prefs: { flashMs: 800, blitzSec: 60, blitzQSec: 10, aoxN: '10' }, amnesic: BUILD < 'v2.28.0' ? false : 'off', w: 'TAG-d' }
+    put(DEFAULTS, { saved }, version(useUserDefaults), { sync: ENVELOPE })
+    load()
+    out.defaultsBoot = take().filter((w) => w.key === DEFAULTS)
+    act(() => useUserDefaults.getState().saveDefaults({ ...saved, settings: { ...saved.settings, saveStats: false } }))
+    out.saveDefaults = take()
+  })
+
+  it('writes the record', () => {
+    writeFileSync(process.env.SYNC_OUT, JSON.stringify(out, null, 1) + '\n')
+  })
+})
