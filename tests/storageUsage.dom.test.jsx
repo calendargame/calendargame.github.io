@@ -1764,7 +1764,11 @@ describe('on the mounted app, with a timed question on screen', () => {
     expect(usage().figure).toBeNull()
     openSettings()
     expect(usage().limit).toBe(SAFARI)
-    expect(line().textContent).toBe(`Storage used: ${percentText(everything(), SAFARI)}`)
+    // Read as a screen reader hears it, so the test holds whatever the figure is: a device holding
+    // under a tenth of a percent (how much that is moves with what the app itself keeps, such as the
+    // newest changelog entry's length) shows "<0.1%" and SAYS "under 0.1%".
+    const written = percentText(everything(), SAFARI)
+    expect(line()).toHaveAccessibleName(`Storage used: ${percentSpoken(written) ?? written}`)
   })
 
   it('on a device that cannot be measured the line shows a dash, and says why', () => {

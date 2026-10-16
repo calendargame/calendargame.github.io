@@ -100,6 +100,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-15',
+    items: [
+      'A button now works however long you hold it before lifting your finger, and when you slide off it and back on before lifting. On an iPhone, a press held for a couple of seconds, or moved about, used to do nothing.',
+      'On an iPhone, a quick double tap and hold on a button no longer brings up the magnifier. Boxes you type in keep it.',
+    ],
+  },
+  {
     date: '2026-10-12',
     items: [
       'Preset names can now be any length, and nothing you type is turned away. Where a name is too long for its spot it ends in “…”, and Manage Presets tells you at the exact letter where that starts.',
@@ -259,18 +266,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Nothing you can see changed this time — just work underneath to keep things running smoothly.',
     ],
   },
-  // ★ THE CAP HAS NOW BITTEN FOUR TIMES. 2026-09-05 retired 2026-07-17; 2026-09-08 retired
-  // 2026-07-19; adding 2026-09-09 retired 2026-07-21 in the same change; adding 2026-09-10 above
-  // retired 2026-07-26. The array is AT ten — the next new day retires 2026-07-28 (see the
-  // ten-entry rule in the charter above).
-  {
-    date: '2026-08-10',
-    items: [
-      'This list now shows a version number in its top right corner, next to "What\'s new" — useful if you are ever asked which copy of the app you have.',
-      'The dot beside Changelog now appears only when this list has actually gained something, so it never sends you to news you have already read. The dot on the gear still marks every update.',
-      'How to Play now explains that a brand-new version can take up to about ten minutes to reach everywhere, so Check for updates can still answer "Up to date" just after one is released — asking again a little later finds it.',
-    ],
-  },
+  // ★ THE ARRAY IS AT TEN, so every new day retires the oldest into CHANGELOG-ARCHIVE.md (the
+  // ten-entry rule in the charter above). The most recent: adding 2026-10-15 retired 2026-08-10.
 ]
 
 // Who is told which key this file has just written or removed (the header says why).

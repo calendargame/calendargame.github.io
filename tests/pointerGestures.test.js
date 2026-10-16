@@ -16,8 +16,13 @@ import {
   menuFor,
   bandDirection,
   scrollDelta,
+  pressedHere,
+  withholdsSecondTap,
   EDGE,
   MAX_SPEED,
+  TAP_MS,
+  TAP_SLOP_PX,
+  DOUBLE_TAP_MS,
   installPointerGestures,
 } from '../src/lib/pointerGestures.js'
 
@@ -582,5 +587,326 @@ describe('pointerGestures controller — pointer latch + click suppression', () 
     a.click()
     expect(aClicks).not.toHaveBeenCalled() // the slide-off still resolved → had the foreign cancel
     // ended the gesture, onUp would have bailed and this click would have gone through
+  })
+})
+
+// ── Round 26: a touch that is not a quick tap is pressed by the controller (the owner's iPhone: a long
+// or moved press that lifts on its button brings pointerup + touchend and NO click), and the second tap
+// of a double tap is withheld at its touchstart (the text magnifier). The browser's click is simulated
+// with .click(); a touch event is a plain Event carrying `touches`, which is all the controller reads.
+describe('pointerGestures.pressedHere — a quick, still tap stays the browser’s; anything else is pressed here', () => {
+  it('a quick still tap → the browser’s click', () => {
+    expect(pressedHere(0, 0, false)).toBe(false)
+    expect(pressedHere(TAP_MS - 1, TAP_SLOP_PX - 0.1, false)).toBe(false)
+  })
+  it('held to TAP_MS, or wandered TAP_SLOP_PX → pressed here', () => {
+    expect(pressedHere(TAP_MS, 0, false)).toBe(true)
+    expect(pressedHere(4196, 0, false)).toBe(true) // the owner's logged hold
+    expect(pressedHere(0, TAP_SLOP_PX, false)).toBe(true)
+  })
+  it('a withheld touch (its touchstart cancelled) → pressed here however quick: no click is coming', () => {
+    expect(pressedHere(0, 0, true)).toBe(true)
+  })
+  it('the limits sit under the engines’ own (Chromium: 400 ms long press, 8 px slop) and the window over a double tap', () => {
+    expect(TAP_MS).toBeLessThan(400)
+    expect(TAP_SLOP_PX).toBeLessThan(8)
+    expect(DOUBLE_TAP_MS).toBeGreaterThanOrEqual(300)
+  })
+})
+
+describe('pointerGestures.withholdsSecondTap — where a double tap’s second touch is cancelled', () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+  it('a control, and the gaps of an answer grid', () => {
+    const b = domEl('button', {}, document.body)
+    const inner = domEl('span', {}, b)
+    const grid = domEl('div', { 'data-answer-grid': '' }, document.body)
+    expect(withholdsSecondTap(b)).toBe(true)
+    expect(withholdsSecondTap(inner)).toBe(true)
+    expect(withholdsSecondTap(grid)).toBe(true)
+  })
+  it('never text a player can select or type in — not even inside a control', () => {
+    const b = domEl('button', {}, document.body)
+    const title = domEl('span', { class: 'select-text' }, b)
+    expect(withholdsSecondTap(title)).toBe(false)
+    expect(withholdsSecondTap(domEl('input', {}, document.body))).toBe(false)
+    expect(withholdsSecondTap(domEl('textarea', {}, document.body))).toBe(false)
+  })
+  it('never what the controller does not press: a link, an announced-unavailable button, plain page', () => {
+    expect(withholdsSecondTap(domEl('a', { href: 'mailto:x@y.z' }, document.body))).toBe(false)
+    expect(withholdsSecondTap(domEl('button', { 'aria-disabled': 'true' }, document.body))).toBe(
+      false,
+    )
+    expect(withholdsSecondTap(domEl('div', {}, document.body))).toBe(false)
+    expect(withholdsSecondTap(null)).toBe(false)
+  })
+})
+
+describe('pointerGestures controller — touches that are not quick taps, and the magnifier', () => {
+  let uninstall
+  let hit
+  let origEFP
+  let now
+  const ptr = (type, o = {}) => {
+    const e = new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: o.x ?? 0,
+      clientY: o.y ?? 0,
+    })
+    Object.defineProperty(e, 'pointerId', { value: o.pointerId ?? 1 })
+    Object.defineProperty(e, 'isPrimary', { value: true })
+    Object.defineProperty(e, 'pointerType', { value: o.pointerType ?? 'touch' })
+    return e
+  }
+  const touch = (type, fingers = 0, cancelable = true) => {
+    const e = new Event(type, { bubbles: true, cancelable })
+    Object.defineProperty(e, 'touches', { value: { length: fingers } })
+    return e
+  }
+  // One whole touch, as the phone sends it: pointerdown, touchstart, [wander, wait], pointerup,
+  // touchend. Returns the touchstart and the touchend, so a test can ask whether either was cancelled.
+  const press = (el, { held = 0, at = el, via = [], endCancelable = true } = {}) => {
+    hit = el
+    el.dispatchEvent(ptr('pointerdown'))
+    const start = touch('touchstart', 1)
+    el.dispatchEvent(start)
+    for (const [over, px] of via) {
+      hit = over
+      document.dispatchEvent(ptr('pointermove', { x: px }))
+    }
+    now += held
+    hit = at
+    document.dispatchEvent(ptr('pointerup'))
+    const end = touch('touchend', 0, endCancelable)
+    el.dispatchEvent(end)
+    return { start, end }
+  }
+  const counted = (node) => {
+    const spy = vi.fn()
+    node.addEventListener('click', spy)
+    return spy
+  }
+  beforeEach(() => {
+    origEFP = document.elementFromPoint
+    document.elementFromPoint = () => hit
+    hit = null
+    now = 1000
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    uninstall = installPointerGestures()
+  })
+  afterEach(() => {
+    uninstall()
+    vi.restoreAllMocks()
+    if (origEFP) document.elementFromPoint = origEFP
+    else delete document.elementFromPoint
+    document.body.innerHTML = ''
+  })
+
+  it('a quick, still tap is left to the browser: its click is the one press, and its touchend is not touched', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    const { end } = press(a, { held: 40 })
+    expect(clicks).not.toHaveBeenCalled() // nothing pressed by the controller…
+    expect(end.defaultPrevented).toBe(false)
+    a.click() // …the browser's click, 5–9 ms later
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  it('a touch HELD on a button and lifted on it is pressed at the lift, once — the owner’s lost answer', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    const { end } = press(a, { held: 4196 })
+    expect(clicks).toHaveBeenCalledTimes(1) // at pointerup, without waiting for a click
+    expect(end.defaultPrevented).toBe(true) // the browser's own tap is withheld
+    a.click() // a later, separate press (keyboard, screen reader) is not swallowed
+    expect(clicks).toHaveBeenCalledTimes(2)
+  })
+
+  it('…and where its touchend cannot be cancelled, the click that may follow is swallowed WHEREVER it lands', () => {
+    const a = domEl('button', {}, document.body)
+    const appeared = domEl('button', {}, document.body) // say, a popup's button the press just opened
+    const aClicks = counted(a)
+    const newClicks = counted(appeared)
+    press(a, { held: TAP_MS, endCancelable: false })
+    expect(aClicks).toHaveBeenCalledTimes(1)
+    appeared.click() // the browser's late click, on what is under the finger NOW
+    expect(newClicks).not.toHaveBeenCalled()
+    appeared.click() // the arming is spent: a real press after it goes through
+    expect(newClicks).toHaveBeenCalledTimes(1)
+    expect(aClicks).toHaveBeenCalledTimes(1)
+  })
+
+  it('a touch that WANDERED and came back to its button is pressed, once', () => {
+    const a = domEl('button', {}, document.body)
+    const b = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    press(a, { via: [[b, 143]] })
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  it('answer grid: dragged around the grid and lifted back on the FIRST answer → that answer, once', () => {
+    const grid = domEl('div', { 'data-answer-grid': '' }, document.body)
+    const mon = domEl('button', {}, grid)
+    const tue = domEl('button', {}, grid)
+    const monClicks = counted(mon)
+    const tueClicks = counted(tue)
+    const { end } = press(mon, { held: 3600, via: [[tue, 48]] })
+    expect(monClicks).toHaveBeenCalledTimes(1)
+    expect(tueClicks).not.toHaveBeenCalled()
+    expect(end.defaultPrevented).toBe(true) // so the browser adds no click of its own
+  })
+
+  it('answer grid: lifted on ANOTHER answer → that answer, once, and the first never (unchanged)', () => {
+    const grid = domEl('div', { 'data-answer-grid': '' }, document.body)
+    const mon = domEl('button', {}, grid)
+    const tue = domEl('button', {}, grid)
+    const monClicks = counted(mon)
+    const tueClicks = counted(tue)
+    press(mon, { held: 2500, via: [[tue, 48]], at: tue })
+    mon.click() // the browser's click on the pressed answer, if one comes
+    expect(tueClicks).toHaveBeenCalledTimes(1)
+    expect(monClicks).not.toHaveBeenCalled()
+  })
+
+  it('a touch the browser took for a SCROLL presses nothing, however it ends', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    hit = a
+    a.dispatchEvent(ptr('pointerdown'))
+    a.dispatchEvent(touch('touchstart', 1))
+    now += 900
+    document.dispatchEvent(ptr('pointercancel'))
+    a.dispatchEvent(touch('touchend'))
+    expect(clicks).not.toHaveBeenCalled()
+  })
+
+  it('slid off and lifted elsewhere: still cancelled, however long the hold', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    press(a, { held: 2000, at: null })
+    a.click()
+    expect(clicks).not.toHaveBeenCalled()
+  })
+
+  it('a MOUSE held long is the browser’s, as before: its click is the press', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    hit = a
+    a.dispatchEvent(ptr('pointerdown', { pointerType: 'mouse' }))
+    now += 4000
+    document.dispatchEvent(ptr('pointerup', { pointerType: 'mouse' }))
+    expect(clicks).not.toHaveBeenCalled()
+    a.click()
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  it('a long press that began on SELECTABLE text inside a control is left to the browser (its selection, its lens)', () => {
+    const header = domEl('button', {}, document.body)
+    const title = domEl('span', { class: 'select-text' }, header)
+    const clicks = counted(header)
+    hit = title
+    title.dispatchEvent(ptr('pointerdown'))
+    now += 2000
+    document.dispatchEvent(ptr('pointerup'))
+    const end = touch('touchend')
+    title.dispatchEvent(end)
+    expect(clicks).not.toHaveBeenCalled()
+    expect(end.defaultPrevented).toBe(false)
+  })
+
+  it('a press made here lets the keyboard go first, so a box being typed in commits BEFORE the press acts', () => {
+    const box = domEl('input', { type: 'text' }, document.body)
+    const a = domEl('button', {}, document.body)
+    box.focus()
+    let focusAtPress = null
+    a.addEventListener('click', () => (focusAtPress = document.activeElement))
+    press(a, { held: 1000 })
+    expect(focusAtPress).not.toBe(box)
+    expect(document.activeElement).not.toBe(box)
+  })
+
+  it('…unless the control keeps focus (data-keep-focus — Lookup and Clear beside the date box)', () => {
+    const box = domEl('input', { type: 'text' }, document.body)
+    const lookup = domEl('button', { 'data-keep-focus': '' }, document.body)
+    box.focus()
+    press(lookup, { held: 1000 })
+    expect(document.activeElement).toBe(box)
+  })
+
+  it('data-keep-focus: the mousedown of a press the browser makes is cancelled, so focus stays where it is', () => {
+    const lookup = domEl('button', { 'data-keep-focus': '' }, document.body)
+    const other = domEl('button', {}, document.body)
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+    lookup.dispatchEvent(down)
+    expect(down.defaultPrevented).toBe(true)
+    const plain = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+    other.dispatchEvent(plain)
+    expect(plain.defaultPrevented).toBe(false)
+  })
+
+  it('THE MAGNIFIER: a double tap’s second touch on a control is cancelled at touchstart — and still pressed, once', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    press(a, { held: 50 })
+    a.click() // the first tap's own click from the browser
+    expect(clicks).toHaveBeenCalledTimes(1)
+    now += DOUBLE_TAP_MS - 50
+    const { start, end } = press(a, { held: 600 }) // …and the second, held: the lens gesture
+    expect(start.defaultPrevented).toBe(true)
+    expect(end.defaultPrevented).toBe(true)
+    expect(clicks).toHaveBeenCalledTimes(2)
+  })
+
+  it('…even when the second tap is quick: it gets no click from the browser, so the controller presses it', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    press(a, { held: 50 })
+    a.click()
+    now += 100
+    press(a, { held: 50 })
+    expect(clicks).toHaveBeenCalledTimes(2)
+  })
+
+  it('…not once the window has passed, not after a SCROLL (a flick after a flick still scrolls), not on text', () => {
+    const a = domEl('button', {}, document.body)
+    const box = domEl('input', { type: 'text' }, document.body)
+    press(a, { held: 50 })
+    now += DOUBLE_TAP_MS
+    expect(press(a, { held: 50 }).start.defaultPrevented).toBe(false) // too late to be a double tap
+
+    now += DOUBLE_TAP_MS // a scroll, then a touch right after it
+    hit = a
+    a.dispatchEvent(ptr('pointerdown'))
+    a.dispatchEvent(touch('touchstart', 1))
+    document.dispatchEvent(ptr('pointercancel'))
+    a.dispatchEvent(touch('touchend'))
+    now += 50
+    expect(press(a, { held: 50 }).start.defaultPrevented).toBe(false)
+
+    now += 50 // a tap has just ended: a box still keeps its own double tap
+    const onBox = touch('touchstart', 1)
+    box.dispatchEvent(onBox)
+    expect(onBox.defaultPrevented).toBe(false)
+  })
+
+  it('a second finger’s touchstart is never withheld', () => {
+    const a = domEl('button', {}, document.body)
+    press(a, { held: 50 })
+    now += 50
+    const second = touch('touchstart', 2)
+    a.dispatchEvent(second)
+    expect(second.defaultPrevented).toBe(false)
+  })
+
+  it('keyboard and screen-reader presses (a click with no pointer events) are untouched before and after', () => {
+    const a = domEl('button', {}, document.body)
+    const clicks = counted(a)
+    a.click()
+    press(a, { held: 1000 })
+    a.click()
+    expect(clicks).toHaveBeenCalledTimes(3)
   })
 })

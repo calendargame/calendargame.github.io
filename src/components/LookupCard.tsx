@@ -308,8 +308,9 @@ export default function LookupCard({
   // TWO THINGS SET THE BASELINE, and both of them are "the edit starts here":
   //   • the keyboard ENTERING the box — onFocus, below;
   //   • the CARD ITSELF writing the box — writeInput, below.
-  // The second is load-bearing rather than tidy. Lookup and Clear both preventDefault their
-  // mousedown, so a press on either leaves the keyboard exactly where it was: without it, pressing
+  // The second is load-bearing rather than tidy. Lookup and Clear both carry data-keep-focus (the
+  // press controller, lib/pointerGestures, cancels their mousedown and makes its own presses of them
+  // without moving focus), so a press on either leaves the keyboard exactly where it was: without it, pressing
   // Clear and then Escape would resurrect the very text Clear had just thrown away. The other two
   // card-writes (a Date Format change, picking a history row) reach it for the same reason.
   const lookupAtFocusRef = React.useRef('')
@@ -626,7 +627,7 @@ export default function LookupCard({
           <button
             type="button"
             onClick={runLookup}
-            onMouseDown={(e) => e.preventDefault()}
+            data-keep-focus
             className="px-4 py-2 rounded-xl btn-solid text-sm font-medium"
           >
             Lookup
@@ -639,7 +640,7 @@ export default function LookupCard({
           <button
             type="button"
             onClick={clearLookup}
-            onMouseDown={(e) => e.preventDefault()}
+            data-keep-focus
             className="px-4 py-2 rounded-xl bg-(--nbtn-bg) text-white text-sm font-medium"
           >
             Clear

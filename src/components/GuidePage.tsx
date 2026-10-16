@@ -1245,6 +1245,15 @@ export default function GuidePage({
             cancelled — so a misclick is easy to back out of.
           </li>
           <li>
+            How long you hold a button before lifting makes no difference: a long press works just
+            like a tap, and so does sliding off a button and back onto it before you lift. Only a
+            press that turns into a scroll does nothing.
+          </li>
+          <li>
+            On an iPhone, a quick double tap and hold on a button doesn&apos;t bring up the
+            magnifier. Text you can select, and the boxes you type in, still have it.
+          </li>
+          <li>
             Answer options reach a little further than they look. Each one responds across its whole
             rectangle, rounded corners included, and half way into the space beside it — so the gap
             between two options belongs to them, split down the middle, and a tap that lands between
@@ -1263,7 +1272,7 @@ export default function GuidePage({
           <li>
             On the weekday answer grid you can slide between options: press one, drag to the option
             you want (it highlights as you move, including over an already-answered option), and
-            release on it to choose it.
+            release on it to choose it — the one you started on included, if you come back to it.
           </li>
           <li>
             The mode selector at the top works this way too — press it and drag down to a mode, then

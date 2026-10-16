@@ -14,6 +14,12 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 
 ## Retired entries
 
+### 2026-08-10
+
+- This list now shows a version number in its top right corner, next to "What's new" — useful if you are ever asked which copy of the app you have.
+- The dot beside Changelog now appears only when this list has actually gained something, so it never sends you to news you have already read. The dot on the gear still marks every update.
+- How to Play now explains that a brand-new version can take up to about ten minutes to reach everywhere, so Check for updates can still answer "Up to date" just after one is released — asking again a little later finds it.
+
 ### 2026-08-09
 
 - Stats you have hidden by tapping them now leave an empty box instead of a crossed-out one. A dash now means one thing only — nothing recorded yet — and when Save Stats is off the whole strip dims together, so you can still see at a glance which stats you hid yourself. Nothing is crossed out anywhere any more.

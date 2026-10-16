@@ -683,8 +683,9 @@ describe('Lookup date box — Escape discards the edit and lets go (round 17)', 
   })
 
   it('Clear moves the baseline: Escape after it cannot resurrect what Clear threw away', () => {
-    // Clear preventDefaults its own mousedown, so pressing it leaves the keyboard in the box —
-    // which is exactly the route that would misbehave if the baseline were only ever set on focus.
+    // Clear carries data-keep-focus (lib/pointerGestures cancels its mousedown), so pressing it
+    // leaves the keyboard in the box — which is exactly the route that would misbehave if the
+    // baseline were only ever set on focus.
     // ⚠ THE BOX MUST ALREADY HOLD TEXT WHEN IT IS FOCUSED, or this case tests nothing: focusing an
     // EMPTY box makes the focus baseline "" too, and then both the right answer and the wrong one
     // land on an empty box. Type, let go, then come back — that is the only shape where the focus

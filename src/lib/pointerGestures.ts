@@ -52,16 +52,80 @@
 // fallback). Reaching that needs a keyboard activation of the very button a gesture just cancelled on, within
 // a second of it — and the swallowed click consumes the arming, so the next one passes.
 //
-// TESTABILITY: gestureTarget, resolveRelease, resolveTriggerRelease, nextHilite, menuFor, bandDirection, and scrollDelta are pure
-// (or layout-free DOM reads) and unit-tested, as are the pointer latch + click suppression via synthetic
-// events; the full wiring (real pointer drags + elementFromPoint + auto-scroll feel) is verified
-// on-device — jsdom has no layout engine, so elementFromPoint/getBoundingClientRect don't work there.
+//
+// ★ A TOUCH THAT IS NOT A QUICK TAP IS PRESSED BY THIS CONTROLLER, NOT BY THE BROWSER (Round 26, from
+// the owner's iPhone, read off an on-screen event log: lost input, and the text magnifier).
+//   • WHAT THE PHONE SENDS. A quick tap brings pointerup, touchend, the mouse events, and a click
+//     5–9 ms after the lift. A press HELD (2.5–4.2 s logged) or MOVED (48–143 px, then lifted back on
+//     the button it pressed) brings pointerup and touchend and then NOTHING: no click, and never a
+//     pointercancel. This controller used to leave a release on the pressed button to that click, so
+//     those presses answered nothing. A drag that lifted on ANOTHER answer always worked, because
+//     that one this controller clicks itself (resolveRelease's `activate`).
+//   • THE RULE. A touch (or pen) press on a control that is released on it — or, in an answer grid,
+//     on itself after wandering — is a press however long it lasted and however far it went, as long
+//     as the browser did not take it for a scroll (a scroll is a pointercancel: onCancel). Mouse
+//     presses are untouched: a mouse always gets its click.
+//   • WHO PRESSES IT. A QUICK, STILL tap (ownsTap: under TAP_MS and TAP_SLOP_PX, its touch not
+//     withheld) stays the browser's, exactly as before — every engine clicks for it, and its click
+//     carries the tap's whole native order: the focus move that commits a box being typed in comes
+//     BEFORE the activation, and a touch that only stopped a coasting list is not a click at all.
+//     Any OTHER release is pressed here, at once (pressOnRelease): no waiting to see whether a
+//     click comes. And so that the browser cannot press it a second time, its tap is WITHHELD —
+//     the touchend is cancelled (onTouchEnd), which is the platform's own off switch for the mouse
+//     events and the click. Where a touchend cannot be cancelled, or never comes (an engine with
+//     pointer events but no touch events), the click that may follow is swallowed instead, wherever
+//     it lands: the press already happened, and the page under the finger may have changed since.
+//   • WHY THE THRESHOLDS ARE NOT GUESSES THAT CAN LOSE AN ANSWER. They need only be at or BELOW every
+//     engine's own limit for a tap, never equal to it: a touch under them is one every browser
+//     clicks for, and a touch over them is pressed here with the browser's tap cancelled. Between
+//     the two limits both would have pressed, and the cancelled touchend means only one does.
+//   • THE MAGNIFIER. iOS shows its text-selection lens on a double-tap-and-hold, even over text that
+//     cannot be selected (`body{user-select:none}` does not stop it, and neither did
+//     -webkit-touch-callout or cancelling selectstart/contextmenu — all tried on the device). What
+//     stopped it was cancelling the SECOND tap's touchstart, so that iOS never sees a double tap
+//     (onTouchStart): a touch that begins within DOUBLE_TAP_MS of a TAP ending (not of a scroll — a
+//     flick after a flick must still scroll) on a control this controller presses. A cancelled
+//     touchstart gets no click, so that touch is pressed here on release like any other.
+//   • TEXT KEEPS EVERYTHING. A touch that begins on text a player can select or type in (TEXT_SELECTOR
+//     — the guide's titles and body, the Contact address, every box) is left wholly to the browser:
+//     its caret, its selection handles, and its lens are the point of it.
+//   • NOT CONTROLS OF THIS FILE: links (two mailto addresses — a long press on a link is the
+//     platform's own preview, never a press), the preset reorder grip (it owns its own drag), the
+//     sliders, and a popup's dim. Those keep the browser's behaviour.
+//
+// TESTABILITY: gestureTarget, resolveRelease, resolveTriggerRelease, nextHilite, menuFor, ownsTap,
+// bandDirection, and scrollDelta are pure (or layout-free DOM reads) and unit-tested, as are the pointer
+// latch, click suppression, and the touch rules above via synthetic events; the browser lane
+// (tests/browser/touchPress.browser.ts) drives them in Chromium and WebKit. What only the phone can show
+// — what iOS sends after a long press, whether a cancelled touchstart keeps its pointer events — was
+// read off the owner's iPhone, and the rest is verified on-device: jsdom has no layout engine, so
+// elementFromPoint/getBoundingClientRect don't work there.
 // ─────────────────────────────────────────────────────────────────────────
+import { opensKeyboard } from './textEntry.js'
 
 const HILITE = 'drag-target' // the live "this will be selected" class toggled during a drag (index.css)
 const GROUP_SELECTOR = '[data-answer-grid],[data-select-group]'
 const TARGET_SELECTOR = 'button,[data-drag-focus]' // what a release can land on: buttons everywhere, plus focus opt-ins (the Year Range inputs) inside a menu
 const WITHHELD_SELECTOR = '[aria-disabled="true"]' // …and what a gesture must never land on, however it matched above
+// Text a player can select or type in: a touch that starts here stays the browser's (the header's ★).
+const TEXT_SELECTOR = 'input,textarea,select,[contenteditable],.select-text'
+// A control whose press must leave the keyboard where it is (Lookup and Clear, beside the date box
+// they act on — components/LookupCard). The browser's way to say so is cancelling the press's
+// mousedown, which is what moves focus; onMouseDown does that for every press the browser makes, and
+// pressOnRelease honours the same marker for the presses this controller makes itself.
+const KEEP_FOCUS_SELECTOR = '[data-keep-focus]'
+// ★ THE TAP LIMITS (the header's ★ says why each need only be at or below the engines' own):
+//   • TAP_MS — a touch held this long is no longer a quick tap. Under Android's 400 ms long-press
+//     timeout (Chromium's, since Android 12) and iOS's ~500 ms, and over the 26–64 ms taps the owner's
+//     iPhone logged, with room for a slow finger.
+//   • TAP_SLOP_PX — a touch that wandered this far is no longer still. Under Chromium's 8 px touch
+//     slop, past which it cancels a tap; iOS allows more.
+//   • DOUBLE_TAP_MS — a touch starting this soon after a tap ended is a double tap's second half:
+//     the window the owner's iPhone was tested with, and over the ~300 ms both engines call a
+//     double tap.
+export const TAP_MS = 300
+export const TAP_SLOP_PX = 6
+export const DOUBLE_TAP_MS = 400
 
 // ★ ANNOUNCED-UNAVAILABLE CONTROLS ARE NOT GESTURE TARGETS (round 15). Every element this controller
 // treats as a target — the press it latches onto, the member it rings under the finger, the member a
@@ -111,6 +175,23 @@ export function resolveRelease(
     return { suppressStart: true, activate: member }
   }
   return { suppressStart: releaseBtn !== startEl, activate: null }
+}
+
+// Pure decision for a TOUCH (or pen) released on the control it pressed — the one release resolveRelease
+// leaves to "the browser's click": is this a quick, still tap the browser will click for (false), or a
+// press this controller makes itself, cancelling the browser's tap (true)? `withheld` = its touchstart
+// was cancelled by the magnifier rule, so no click is coming whatever its length. (The header's ★.)
+export function pressedHere(heldMs: number, movedPx: number, withheld: boolean): boolean {
+  return withheld || heldMs >= TAP_MS || movedPx >= TAP_SLOP_PX
+}
+
+// Pure-ish (a closest() walk): does a touch landing on `target` have its touchstart cancelled when it
+// is a double tap's second half? Only on a control this controller presses (so the cancelled touch is
+// still pressed, on release) or on an answer grid's gaps (which press nothing and never scroll) — and
+// never on text a player can select or type in, which keeps its own lens.
+export function withholdsSecondTap(target: Element | null): boolean {
+  if (!target || target.closest(TEXT_SELECTOR)) return false
+  return !!gestureTarget(target.closest('button')) || !!target.closest('[data-answer-grid]')
 }
 
 // Pure decision for the GROUP drag hilite: given the group member under the pointer (null = off-grid),
@@ -189,6 +270,22 @@ export function installPointerGestures(): () => void {
   let suppressEl: Element | null = null
   let hilited: Element | null = null
   let hasLeftStart = false // group path: true once the pointer has left the pressed option (nextHilite)
+  // The touch rules (the header's ★), per gesture: when and where it went down, the farthest it has
+  // wandered, whether it began on selectable text, and whether its touchstart was withheld.
+  let downAt = 0
+  let downX = 0
+  let downY = 0
+  let moved = 0
+  let onText = false
+  let withheld = false
+  // …and across touches: when the last TAP ended (a touch the browser did not take for a scroll), whether
+  // the touch now down has been taken for one, a touchstart withheld before its pointerdown arrived
+  // (no engine checked orders them that way, but the rule must not depend on it), and whether the
+  // touchend now coming belongs to a press made here and must be cancelled.
+  let lastTapEnd = -Infinity
+  let touchTaken = false
+  let withheldEarly = false
+  let cancelTouchEnd = false
   let clearTimer: ReturnType<typeof setTimeout> | null = null
   let lastX = 0 // latest pointer position, kept current for the edge auto-scroll loop
   let lastY = 0
@@ -275,6 +372,9 @@ export function installPointerGestures(): () => void {
     trigger = null
     menuCache = null
     hasLeftStart = false
+    moved = 0
+    onText = false
+    withheld = false
   }
   // Suppress the start button's native click. On touch that click fires the ORIGINAL button regardless
   // of drift AND is DELAYED/async after release (a long press makes the browser "commit" to the pressed
@@ -290,6 +390,27 @@ export function installPointerGestures(): () => void {
       suppressEl = null
       clearTimer = null
     }, 1000)
+  }
+  const disarm = () => {
+    suppressEl = null
+    if (clearTimer) {
+      clearTimeout(clearTimer)
+      clearTimer = null
+    }
+  }
+  // A touch released on its control that is NOT a quick tap (pressedHere): press it NOW, as the
+  // browser's own tap would have — first the focus move a tap makes (a box being typed in lets go,
+  // and commits, before the press acts; KEEP_FOCUS_SELECTOR is the press that says otherwise), then
+  // the click — and see that the browser adds no tap of its own. onTouchEnd cancels the touchend
+  // that is about to arrive; until it has, ANY click is held to be this touch's — armed on the whole
+  // document, because the press may already have changed what lies under the finger (a popup it
+  // opened, a button it removed), and a tap's click lands on whatever is there when it comes.
+  const pressOnRelease = (el: HTMLElement) => {
+    const box = document.activeElement
+    if (opensKeyboard(box) && !el.contains(box) && !el.closest(KEEP_FOCUS_SELECTOR)) box.blur()
+    el.click()
+    cancelTouchEnd = true
+    armSuppress(document.documentElement)
   }
 
   const onDown = (e: PointerEvent) => {
@@ -309,18 +430,15 @@ export function installPointerGestures(): () => void {
       if (e.pointerType !== pointerKind) return
       endGesture()
     }
-    if (clearTimer) {
-      clearTimeout(clearTimer)
-      clearTimer = null
-    }
-    suppressEl = null
+    disarm()
     // gestureTarget on the START too, not only on the release/hilite hit-tests: an announced-unavailable
     // button must latch no gesture at all, which is precisely what pointer-events-none used to give
     // these for free (the pointerdown landed on the row behind and closest('button') found nothing).
     // Without it a press on a dimmed ⚙ footer button would latch, then resolve its own release to null
     // through targetAt, and resolveRelease would read that as a slide-off — arming a click suppression
     // on a button that was never going to act. Same predicate, same reason, one gesture earlier.
-    const el = gestureTarget((e.target as Element | null)?.closest?.('button') ?? null)
+    const target = e.target as Element | null
+    const el = gestureTarget(target?.closest?.('button') ?? null)
     if (!el) return
     pointerId = e.pointerId
     pointerKind = e.pointerType
@@ -328,8 +446,12 @@ export function installPointerGestures(): () => void {
     group = el.closest(GROUP_SELECTOR)
     trigger = group ? null : el.closest('[data-select-trigger]')
     hasLeftStart = false
-    lastX = e.clientX
-    lastY = e.clientY
+    lastX = downX = e.clientX
+    lastY = downY = e.clientY
+    downAt = performance.now()
+    onText = !!target?.closest(TEXT_SELECTOR)
+    withheld = withheldEarly
+    withheldEarly = false
     // Deliberately NO hilite on press: in a group the ring appears only after the pointer LEAVES the
     // pressed option (nextHilite, applied in onMove) — a plain tap never flashes it.
   }
@@ -337,6 +459,7 @@ export function installPointerGestures(): () => void {
     if (!startEl || e.pointerId !== pointerId) return
     lastX = e.clientX
     lastY = e.clientY
+    moved = Math.max(moved, Math.hypot(e.clientX - downX, e.clientY - downY))
     if (trigger) {
       ensureMenuCache() // the menu mounts a render after pointerdown — pair with it the moment it exists
       if (!menuCache) return
@@ -378,9 +501,22 @@ export function installPointerGestures(): () => void {
       return
     }
     const { suppressStart, activate } = resolveRelease(start, relTarget, group)
+    // A touch released on what it pressed, which resolveRelease leaves to the browser's click: the
+    // header's ★ decides whether that click is coming, or whether the press is made here.
+    const pressHere =
+      !suppressStart &&
+      !activate &&
+      pointerKind !== 'mouse' &&
+      !onText &&
+      pressedHere(
+        performance.now() - downAt,
+        Math.max(moved, Math.hypot(e.clientX - downX, e.clientY - downY)),
+        withheld,
+      )
     endGesture()
     if (suppressStart) armSuppress(start)
     if (activate && activate !== start) (activate as HTMLElement).click()
+    else if (pressHere) pressOnRelease(start)
   }
   // A gesture the SYSTEM took away (pointercancel: the touch became a scroll/pinch, the app was
   // suspended mid-press, an OS gesture won). There is no release point, so nothing may activate — and
@@ -400,6 +536,9 @@ export function installPointerGestures(): () => void {
   // The arming is cleared by the click that consumes it, by the next pointerdown, or by armSuppress's
   // fallback timer — so a later genuine tap is never swallowed.
   const onCancel = (e: PointerEvent) => {
+    // Any touch the browser takes (a scroll starting anywhere, not only on a control) is no tap: a
+    // touch right after it is not a double tap's second half (onTouchStart).
+    if (e.isPrimary && e.pointerType !== 'mouse') touchTaken = true
     if (!startEl || e.pointerId !== pointerId) return
     const start = startEl
     const wasTrigger = trigger !== null // endGesture clears it — read before
@@ -411,21 +550,64 @@ export function installPointerGestures(): () => void {
       suppressEl &&
       (e.target === suppressEl || (suppressEl as Element).contains(e.target as Node))
     ) {
-      suppressEl = null
-      if (clearTimer) {
-        clearTimeout(clearTimer)
-        clearTimer = null
-      }
+      disarm()
       e.preventDefault()
       e.stopImmediatePropagation()
     }
   }
+  // THE MAGNIFIER (the header's ★): the second tap of a double tap, landing on a control, is cancelled
+  // at its touchstart, so iOS never sees the double tap its text-selection lens answers. Its pointer
+  // events still come, and its release is pressed here (`withheld` → pressedHere).
+  // ⚠ A NON-PASSIVE touchstart listener on the document, the one place one can see every touch: a
+  // listener added after a touch begins is too late for that touch's to be cancellable. It returns
+  // at its first comparison for every touch that is not inside a double tap's window, which is all of
+  // them that start a scroll after anything but a tap.
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length !== 1) return // a second finger is no tap's second half
+    touchTaken = false
+    if (performance.now() - lastTapEnd >= DOUBLE_TAP_MS) return
+    if (!e.cancelable || !withholdsSecondTap(e.target as Element | null)) return
+    e.preventDefault()
+    if (startEl && pointerKind !== 'mouse') withheld = true
+    else withheldEarly = true
+  }
+  // The end of a touch: cancel it when its press was made here (pressOnRelease) — the browser then
+  // makes no mouse events and no click for it, and the click the document was armed against will not
+  // come — and note when a TAP ended, for the next touch.
+  const onTouchEnd = (e: TouchEvent) => {
+    if (e.touches.length > 0) return
+    withheldEarly = false
+    if (cancelTouchEnd) {
+      cancelTouchEnd = false
+      if (e.cancelable) {
+        e.preventDefault()
+        if (suppressEl === document.documentElement) disarm()
+      }
+    }
+    if (!touchTaken) lastTapEnd = performance.now()
+  }
+  const onTouchCancel = () => {
+    touchTaken = true
+    cancelTouchEnd = false
+    withheldEarly = false
+  }
+  // KEEP_FOCUS_SELECTOR's half for the presses the BROWSER makes: cancelling the mousedown is how a
+  // press asks the browser to leave focus where it is.
+  const onMouseDown = (e: MouseEvent) => {
+    if ((e.target as Element | null)?.closest?.(KEEP_FOCUS_SELECTOR)) e.preventDefault()
+  }
 
+  const passive = { capture: true, passive: true }
+  const active = { capture: true, passive: false }
   document.addEventListener('pointerdown', onDown, true)
   document.addEventListener('pointermove', onMove, true)
   document.addEventListener('pointerup', onUp, true)
   document.addEventListener('pointercancel', onCancel, true)
   document.addEventListener('click', onClick, true)
+  document.addEventListener('touchstart', onTouchStart, active)
+  document.addEventListener('touchend', onTouchEnd, active)
+  document.addEventListener('touchcancel', onTouchCancel, passive)
+  document.addEventListener('mousedown', onMouseDown, true)
   return () => {
     if (clearTimer) clearTimeout(clearTimer)
     stopAutoScroll()
@@ -435,5 +617,9 @@ export function installPointerGestures(): () => void {
     document.removeEventListener('pointerup', onUp, true)
     document.removeEventListener('pointercancel', onCancel, true)
     document.removeEventListener('click', onClick, true)
+    document.removeEventListener('touchstart', onTouchStart, true)
+    document.removeEventListener('touchend', onTouchEnd, true)
+    document.removeEventListener('touchcancel', onTouchCancel, true)
+    document.removeEventListener('mousedown', onMouseDown, true)
   }
 }
