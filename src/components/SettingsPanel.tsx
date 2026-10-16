@@ -21,6 +21,7 @@ import {
   yearRangeInEffect,
 } from '../lib/dateConfig.js'
 import { fmt, numericFormatOf } from '../lib/format.js'
+import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from '../lib/calendar.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
 import { sharedFitScale } from '../lib/statFit.js'
 import { UPDATE_CHECK_LABEL } from '../lib/updateCheck.js'
@@ -57,8 +58,9 @@ import {
   PANEL_RESET_BTN_CLASS,
   NOT_OFFERED_BTN_CLASS,
   FOOTER_META_ROW_CLASS,
-  NUM_INPUT_CLASS,
-  NUM_INPUT_DORMANT_CLASS,
+  YEAR_INPUT_BASE,
+  YEAR_INPUT_CLASS,
+  YEAR_INPUT_DORMANT_CLASS,
 } from './controlClasses.js'
 import { BUILD_IS_DEPLOYED, DEPLOY_TS } from '../deployStamp.js'
 import { APP_VERSION } from '../appVersion.js'
@@ -195,6 +197,21 @@ const NOT_IN_EFFECT = {
 // answers, the menu's own dates).
 const DATE_FORMAT_IDLE_PAGES = new Set(['classic', 'flash', 'aox', 'blitz'])
 
+// ★ A YEAR BOX IS NEVER NARROWER THAN ITS LONGEST YEAR, IN THE DEVICE'S OWN FONT (Round 26, Q7).
+// The four boxes share the row (each pair, and each box in it, takes an equal part), but no box
+// may be given less than the room its longest year needs — and how wide "11582" is depends on the
+// font (DejaVu Sans, a Linux desktop's, sets it 18% wider than Windows' Segoe UI). So the box's
+// floor is not a number: it is a SIZER in the box's own grid cell, invisible and of no height,
+// set in the box's own type (its padding, border, size, and figures) and holding a run of each
+// digit at the longest year's length, one per line ("00000" to "99999"). The cell is as wide as
+// the widest of them — no year is wider, whatever the font, proportional figures included — and
+// the box fills the cell (controlClasses' YEAR_INPUT_BASE keeps the rest of the floor small). Where
+// the four floors do not fit on one row (a font or a text size far wider than any this app was
+// drawn in), the row WRAPS: the Julian On pair goes under the
+// Julian Off one, each pair whole. Nothing is ever cut or scrolled sideways.
+// tests/browser/notInEffect holds both, in three fonts.
+const YEAR_DIGITS = String(Math.max(YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN)).length
+const YEAR_SIZER_TEXT = [...'0123456789'].map((digit) => digit.repeat(YEAR_DIGITS)).join('\n')
 // ONE YEAR BOX — the Year Range row has four (two pairs), and each behaves exactly as the one pair
 // always did: digits only while typing, the commit on leaving (blur or Enter), Escape throwing the
 // typing away (the ★ notes at the row say why it is written this way).
@@ -213,36 +230,45 @@ function YearBox({
   reasonId?: string
 }) {
   return (
-    <input
-      ref={inputRef}
-      aria-describedby={reasonId}
-      type="text"
-      inputMode="numeric"
-      pattern="[0-9]*"
-      aria-label={name}
-      data-drag-focus
-      value={mirror.value}
-      onChange={(e) => {
-        if (e.target.value === '' || /^\d*$/.test(e.target.value)) mirror.setValue(e.target.value)
-      }}
-      onBlur={mirror.commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault()
-          mirror.commit()
-          e.currentTarget.blur()
-        }
-        if (e.key === 'Escape') {
-          const el = e.currentTarget
-          flushSync(() => mirror.setValue(String(committed)))
-          el.blur()
-        }
-        blockMinus(e)
-      }}
-      onBeforeInput={blockMinusBI}
-      // Not in effect: the same box, hollow (index.css's .tray-dormant in place of .surface-tray).
-      className={`${reasonId ? NUM_INPUT_DORMANT_CLASS : NUM_INPUT_CLASS} py-1.5 flex-1 min-w-0`}
-    />
+    <span className="grid flex-1">
+      <input
+        ref={inputRef}
+        aria-describedby={reasonId}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        aria-label={name}
+        data-drag-focus
+        value={mirror.value}
+        onChange={(e) => {
+          if (e.target.value === '' || /^\d*$/.test(e.target.value)) mirror.setValue(e.target.value)
+        }}
+        onBlur={mirror.commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            mirror.commit()
+            e.currentTarget.blur()
+          }
+          if (e.key === 'Escape') {
+            const el = e.currentTarget
+            flushSync(() => mirror.setValue(String(committed)))
+            el.blur()
+          }
+          blockMinus(e)
+        }}
+        onBeforeInput={blockMinusBI}
+        // Not in effect: the same box, hollow (index.css's .tray-dormant in place of .surface-tray).
+        // w-0 min-w-full: the box gives the cell no width of its own, and fills the one it is given.
+        className={`${reasonId ? YEAR_INPUT_DORMANT_CLASS : YEAR_INPUT_CLASS} py-1.5 col-start-1 row-start-1 w-0 min-w-full`}
+      />
+      <span
+        aria-hidden
+        className={`${YEAR_INPUT_BASE} border border-transparent col-start-1 row-start-1 h-0 overflow-clip invisible whitespace-pre`}
+      >
+        {YEAR_SIZER_TEXT}
+      </span>
+    </span>
   )
 }
 // ONE PAIR — its caption over its two boxes, the "→" between them. The pair not in use is drawn not
@@ -267,13 +293,15 @@ function YearPair({
   const id = useId()
   const reasonId = dormant ? id : undefined
   return (
-    <div className="flex-1 min-w-0 space-y-1.5">
+    // flex-auto: a pair starts at its boxes' floors and takes an equal part of what is left; the
+    // caption (w-0 min-w-full) adds nothing to that, so the two pairs are always alike.
+    <div className="flex-auto space-y-1.5">
       {dormant && (
         <span id={id} hidden>
           {dormant}
         </span>
       )}
-      <SectionLabel className="text-center">{caption}</SectionLabel>
+      <SectionLabel className="text-center w-0 min-w-full">{caption}</SectionLabel>
       <div className="flex items-center gap-1.5">
         <YearBox
           name={`Earliest Year, ${caption}`}
@@ -1561,8 +1589,11 @@ export function SettingsPanel({
             {/* ★ TWO PAIRS OF BOXES ON ONE ROW (Round 26, Q7): the range used while the Julian
                 Calendar setting is off (up to 10000), and the one used while it is on (up to 11582
                 — lib/calendar's caps). Two captioned families side by side, Date Format's pattern;
-                each family and each box takes an equal share of the row (flex-1 min-w-0 — a fixed
-                width cannot hold four). Only the pair for the setting as it stands is in effect
+                each family and each box takes an equal share of the row, never below the room its
+                longest year needs in the device's font (YearBox's sizer says how — a fixed width
+                cannot hold four on every font). Where the floors do not fit one row the row wraps,
+                each pair whole (flex-wrap; items-end keeps the boxes on one line if the captions
+                ever wrap). Only the pair for the setting as it stands is in effect
                 (lib/dateConfig's yearRangeInEffect); the other is still typed into and saved, and
                 changing it changes no date. */}
             {/* ★ EVERY YEAR BOX NAMES ITSELF (aria-label), for the same reason the four
@@ -1603,7 +1634,7 @@ export function SettingsPanel({
                 it and let go, Escape = discard it and let go), it drops the numeric keyboard on a
                 phone, and it leaves a second Escape free to close the panel — a dismissal ladder,
                 rather than an input that swallows Escape forever. */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-end gap-2">
               <YearPair
                 caption="Julian Off"
                 mirrors={yearRangeOff}

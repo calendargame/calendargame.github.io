@@ -107,8 +107,8 @@ export const FOOTER_META_ROW_CLASS =
 // Boxed numeric-input shared className (split into base + surface in round 7) — the app's
 // second shared input idiom beside SliderValueEditor: a bordered box with centered tabular
 // digits at the text-xs control tier. Used by the AoX run-length field (mode screen + the
-// Save Defaults popup, both appending " py-1 w-14 shrink-0") and the ⚙ Year Range pair
-// (" py-1.5 w-16"). These boxes NEVER declare a height — the engine derives one from the inner
+// Save Defaults popup, both appending " py-1 w-14 shrink-0") and — in its own padding (below) —
+// the ⚙ Year Range's four boxes. These boxes NEVER declare a height — the engine derives one from the inner
 // line box — and an <input> derives it through different machinery than a <button> does, landing
 // ~2px apart in WebKit even when every class, padding and border matches. So a box is only ever
 // flush with button neighbors because its ROW STRETCHES it (the AoX run-length row, items-stretch),
@@ -128,12 +128,20 @@ export const FOOTER_META_ROW_CLASS =
 // of ours. (Every text input in the app now states this: here, the Lookup date field, and
 // SliderValueEditor's edit box via .svalue-input. Range sliders are deliberately untouched —
 // their native track/thumb IS the control that index.css styles.)
-export const NUM_INPUT_BASE = 'appearance-none rounded-xl px-2 text-center tabular-nums text-xs'
+const NUM_INPUT_FRAME = 'appearance-none rounded-xl'
+const NUM_INPUT_TYPE = 'text-center tabular-nums text-xs'
+export const NUM_INPUT_BASE = `${NUM_INPUT_FRAME} px-2 ${NUM_INPUT_TYPE}`
 export const NUM_INPUT_CLASS = NUM_INPUT_BASE + ' border surface-tray'
+// THE YEAR RANGE'S BOXES (Round 26, Q7) — the same box with a quarter-rem padding each side: four
+// share one row, each never narrower than its longest year in the device's font
+// (components/SettingsPanel's YearBox), and the padding is the part of that floor which is not the
+// year. The year is centred, so a box wider than its floor looks exactly as padded as the others.
+export const YEAR_INPUT_BASE = `${NUM_INPUT_FRAME} px-1 ${NUM_INPUT_TYPE}`
+export const YEAR_INPUT_CLASS = YEAR_INPUT_BASE + ' border surface-tray'
 // …NOT IN EFFECT (Round 26 — a Year Range pair while the other Julian setting is chosen): the same
 // box, hollow — index.css's .tray-dormant in place of .surface-tray, the look a ⚙ picker's tray wears
 // in the same state (components/PillGroup says what the three looks mean).
-export const NUM_INPUT_DORMANT_CLASS = NUM_INPUT_BASE + ' border tray-dormant'
+export const YEAR_INPUT_DORMANT_CLASS = YEAR_INPUT_BASE + ' border tray-dormant'
 // Presentational primitives (NewBestStar, SectionLabel, Kbd) + their class consts → src/components/primitives.jsx, imported at top.
 // buttonStateClass — picks the className for an answer-grid button based on its
 // persistent state (correct/wrong-latest/wrong-prev/override-wrong) and any active

@@ -3057,7 +3057,9 @@ export default function GuidePage({
           Controls which years dates are drawn from. Two pairs of boxes on one row: the range used
           while the Julian Calendar setting is off (Julian Off — 1–10000 AD by default, and up to
           10000), and the one used while it is on (Julian On — 1–11582 AD by default, and up to
-          11582).
+          11582). Every box always has room for its longest year, whatever font your device uses; if
+          your device sets text so large that four such boxes cannot share one row, the Julian On
+          pair moves whole under the Julian Off one.
         </Lead>
         <UL>
           <li>

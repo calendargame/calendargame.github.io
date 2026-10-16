@@ -101,57 +101,134 @@ const ROW_SIZES: [number, number][] = [
     [390, h],
   ]),
 ]
+const FONTS = [null, 'serif', 'monospace'] as const
+const BOX_NAMES = [
+  'Earliest Year, Julian Off',
+  'Latest Year, Julian Off',
+  'Earliest Year, Julian On',
+  'Latest Year, Julian On',
+]
 
-test('the Year Range row: four boxes on one line, no year cut, nothing sideways, one height with Julian on or off', async ({
+// The year's own width, set as the box sets it — its family, size, weight, and figures (a canvas
+// cannot be told to use tabular figures, so the text is laid out) — against the room inside its
+// padding.
+const fitOf = (box: Locator) =>
+  box.evaluate((el: HTMLInputElement) => {
+    const cs = getComputedStyle(el)
+    const span = document.createElement('span')
+    span.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;white-space:pre'
+    for (const p of [
+      'fontFamily',
+      'fontSize',
+      'fontWeight',
+      'fontStyle',
+      'fontStretch',
+      'fontVariantNumeric',
+      'fontFeatureSettings',
+      'letterSpacing',
+    ] as const)
+      span.style[p] = cs[p]
+    span.textContent = el.value
+    document.body.append(span)
+    const need = span.getBoundingClientRect().width
+    span.remove()
+    // (From the box's own float width: clientWidth is whole pixels, and would under-count.)
+    const room =
+      el.getBoundingClientRect().width -
+      ['borderLeftWidth', 'borderRightWidth', 'paddingLeft', 'paddingRight']
+        .map((p) => parseFloat(cs[p as 'paddingLeft']))
+        .reduce((a, b) => a + b, 0)
+    return { text: el.value, need, room }
+  })
+
+for (const font of FONTS)
+  test(`the Year Range row: four boxes on one line, no year cut, nothing sideways, one height with Julian on or off — ${font ?? "the machine's own font"}`, async ({
+    page,
+  }) => {
+    test.setTimeout(180_000)
+    // The widest years each pair can hold: 10000 with Julian off, 11582 with it on.
+    await openApp(page, {
+      seed: {
+        settings: { minY: 10000, maxY: 10000 },
+        julianRange: { julianMinY: 11582, julianMaxY: 11582 },
+      },
+    })
+    if (font) await page.addStyleTag({ content: `html{font-family:${font} !important}` })
+    const panel = await openSettings(page)
+    const boxes = BOX_NAMES.map((name) => panel.getByRole('textbox', { name }))
+    if (font) expect(await boxes[0].evaluate((el) => getComputedStyle(el).fontFamily)).toBe(font)
+    const julian = panel.getByRole('button', { name: 'Julian Calendar (pre-Oct 15, 1582)' })
+    // box → its cell → its pair's boxes → the pair → the row
+    const row = boxes[0].locator('xpath=../../../..')
+    for (const [width, height] of ROW_SIZES) {
+      await resizeTo(page, width, height)
+      const at = `at ${width}×${height}`
+      const tops = await Promise.all(boxes.map(async (b) => (await rectOf(b)).top))
+      for (const t of tops)
+        expect(Math.abs(t - tops[0]), `${at}: the four boxes' tops`).toBeLessThanOrEqual(SAME_PX)
+      for (const [i, b] of boxes.entries()) {
+        const fit = await fitOf(b)
+        expect(fit.text).toBe(i < 2 ? '10000' : '11582')
+        expect(
+          fit.need,
+          `${at}: "${fit.text}" in box ${i + 1} (${fit.room.toFixed(1)}px of room)`,
+        ).toBeLessThanOrEqual(fit.room)
+      }
+      await expectPageNotWiderThanWindow(page)
+      const onHeight = (await rectOf(row)).height
+      await julian.click()
+      await settled(page)
+      expect(
+        Math.abs((await rectOf(row)).height - onHeight),
+        `${at}: the row's height, Julian off vs on`,
+      ).toBeLessThanOrEqual(SAME_PX)
+      await julian.click()
+      await settled(page)
+    }
+  })
+
+// WHAT GIVES WAY when four boxes cannot fit one row (a font or a text size far wider than any the
+// app was drawn in — here the boxes' text at two and a half times its size): the row wraps, the
+// Julian On pair under the Julian Off one, each pair whole on its line — and still no year is cut
+// and nothing scrolls sideways.
+test('the Year Range row: where four boxes cannot fit one row, each pair goes whole onto a line of its own', async ({
   page,
 }) => {
-  test.setTimeout(180_000)
-  // The widest years each pair can hold: 10000 with Julian off, 11582 with it on.
   await openApp(page, {
     seed: {
       settings: { minY: 10000, maxY: 10000 },
       julianRange: { julianMinY: 11582, julianMaxY: 11582 },
     },
   })
+  // The boxes and their sizers (each box's cell holds both), and nothing else.
+  await page.addStyleTag({
+    content: `#settings-popover span:has(> input[aria-label*=", Julian O"]) > *{font-size:2.5em !important}`,
+  })
   const panel = await openSettings(page)
-  const boxes = [
-    'Earliest Year, Julian Off',
-    'Latest Year, Julian Off',
-    'Earliest Year, Julian On',
-    'Latest Year, Julian On',
-  ].map((name) => panel.getByRole('textbox', { name }))
-  const julian = panel.getByRole('button', { name: 'Julian Calendar (pre-Oct 15, 1582)' })
-  const row = boxes[0].locator('xpath=../../..')
-  for (const [width, height] of ROW_SIZES) {
+  const boxes = BOX_NAMES.map((name) => panel.getByRole('textbox', { name }))
+  for (const [width, height] of [
+    [360, 800],
+    [390, 844],
+  ] as [number, number][]) {
     await resizeTo(page, width, height)
     const at = `at ${width}×${height}`
-    const tops = await Promise.all(boxes.map(async (b) => (await rectOf(b)).top))
-    for (const t of tops)
-      expect(Math.abs(t - tops[0]), `${at}: the four boxes' tops`).toBeLessThanOrEqual(SAME_PX)
-    for (const [i, b] of boxes.entries()) {
-      // The year's own width in the box's own font, against the room inside its padding.
-      const fit = await b.evaluate((el: HTMLInputElement) => {
-        const cs = getComputedStyle(el)
-        const ctx = document.createElement('canvas').getContext('2d')!
-        ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
-        const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
-        return { text: el.value, need: ctx.measureText(el.value).width, room }
-      })
-      expect(fit.text).toBe(i < 2 ? '10000' : '11582')
+    const r = await Promise.all(boxes.map((b) => rectOf(b)))
+    expect(
+      Math.abs(r[0].top - r[1].top),
+      `${at}: Julian Off's two boxes share a line`,
+    ).toBeLessThanOrEqual(SAME_PX)
+    expect(
+      Math.abs(r[2].top - r[3].top),
+      `${at}: Julian On's two boxes share a line`,
+    ).toBeLessThanOrEqual(SAME_PX)
+    expect(r[2].top, `${at}: Julian On's pair is under Julian Off's`).toBeGreaterThan(r[0].bottom)
+    for (const b of boxes) {
+      const fit = await fitOf(b)
       expect(
         fit.need,
-        `${at}: "${fit.text}" in box ${i + 1} (${fit.room.toFixed(1)}px of room)`,
+        `${at}: "${fit.text}" (${fit.room.toFixed(1)}px of room)`,
       ).toBeLessThanOrEqual(fit.room)
     }
     await expectPageNotWiderThanWindow(page)
-    const onHeight = (await rectOf(row)).height
-    await julian.click()
-    await settled(page)
-    expect(
-      Math.abs((await rectOf(row)).height - onHeight),
-      `${at}: the row's height, Julian off vs on`,
-    ).toBeLessThanOrEqual(SAME_PX)
-    await julian.click()
-    await settled(page)
   }
 })
