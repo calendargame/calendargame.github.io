@@ -5,7 +5,14 @@
 // below compares with those two expressions, written out here independently, with Object.is — so a
 // −0 against a 0, or a last-bit difference, is a failure.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { appended, retimed, summaryOf, auditTimesPool } from '../../src/engine/timesPool.js'
+import {
+  appended,
+  retimed,
+  summaryOf,
+  auditTimesPool,
+  timesHash,
+  prefixHash,
+} from '../../src/engine/timesPool.js'
 import { calcAvg, calcMed, solveTimeFromMs } from '../../src/engine/stats.js'
 
 const freshMean = (t) => (t.length ? t.reduce((a, b) => a + b, 0) / t.length : null)
@@ -157,5 +164,22 @@ describe('engine/timesPool — the same Mean and Median as working the pool out 
     expect(t).toEqual([5, 1, 4, 2, 3])
     expect(next).toEqual([5, 1, 4, 2, 3, 0])
     expect(retimed(next, 1, true, 9)).toEqual([5, 9, 4, 2, 3, 0])
+  })
+})
+
+describe('engine/timesPool — the rolling hash of a pool (the windows-in-sync tag, store/syncCounts)', () => {
+  it('an append carries the hash one step: it equals the hash of the same times worked out afresh', () => {
+    let pool = []
+    for (let i = 0; i < 300; i++) pool = appended(pool, solveTimeFromMs(1000 + ((i * 7919) % 9000)))
+    expect(timesHash(pool)).toBe(timesHash([...pool]))
+    expect(prefixHash(pool, 120)).toBe(timesHash(pool.slice(0, 120)))
+    expect(prefixHash(pool, 0)).toBe(timesHash([]))
+    expect(prefixHash(pool, 999)).toBe(timesHash(pool))
+  })
+  it('a retime folds it again; order and every double matter', () => {
+    const pool = [1.5, 2.25, 3]
+    expect(timesHash(retimed(pool, 1, true, 2.5))).toBe(timesHash([1.5, 2.5, 3]))
+    expect(timesHash([1.5, 3, 2.25])).not.toBe(timesHash(pool))
+    expect(timesHash([1.5, 2.2500000000000004, 3])).not.toBe(timesHash(pool))
   })
 })

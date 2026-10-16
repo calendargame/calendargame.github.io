@@ -25,6 +25,8 @@
 //     added them. A pool with a value the buffer cannot order exactly (anything that is not a
 //     finite, non-negative number other than −0) gets no buffer and is selected from scratch, as
 //     before — engine/invariants reports such a pool anyway.
+//   • HASH. The rolling hash of the times in order (timesHash) is the same kind of fold, carried one
+//     step by an append; the windows-in-sync door (store/syncCounts) names a silo's times by it.
 //   • In a development build and the tests, every 64th Summary made from an earlier one is checked
 //     against a from-scratch fold and selection, and a disagreement throws where it was made
 //     (auditTimesPool turns that up to every one, for a deep fuzz sweep).
@@ -53,6 +55,9 @@ interface SortedBuffer {
 interface Summary {
   /** The sum of every time, folded left to right from 0 — calcAvg's own expression. */
   readonly sum: number
+  /** The rolling hash of every time, in order (timesHash, below), as its two 32-bit lanes. */
+  readonly h1: number
+  readonly h2: number
   /** Every time is a finite, non-negative number (engine/invariants asks). */
   readonly valid: boolean
   /** Every time is one the sorted buffer can hold (isSortable, below). */
@@ -71,20 +76,61 @@ const isTime = (t: unknown): boolean => typeof t === 'number' && Number.isFinite
 // zeros). engine/stats' solveTimeFromMs never makes a −0, and JSON cannot carry one.
 const isSortable = (t: unknown): boolean => isTime(t) && !Object.is(t, -0)
 
-// The fold calcAvg computes, and the two flags, in one pass.
-function fold(times: readonly number[]): { sum: number; valid: boolean; sortable: boolean } {
+// ── THE ROLLING HASH OF A POOL (Round 26, Q2: the sync tag's `h`, store/syncCounts) ──
+// Two 32-bit lanes, each time mixed in by its exact double bits (read little-endian, so every engine
+// agrees), left to right from a fixed seed. A fold, so the hash of a longer pool is the hash of the
+// shorter one carried on — an append costs one step, and the hash of the first n times of any pool is
+// the same fold stopped at n (prefixHash). Not cryptographic: a clash only ever makes two different
+// pools of the SAME length and counts read as one, which the sync tag's counts already narrow.
+const HASH_SEED1 = 0xdeadbeef
+const HASH_SEED2 = 0x41c6ce57
+const BITS = new DataView(new ArrayBuffer(8))
+type Lanes = { h1: number; h2: number }
+function mixTime(h: Lanes, t: number): Lanes {
+  BITS.setFloat64(0, t, true)
+  const lo = BITS.getUint32(0, true)
+  const hi = BITS.getUint32(4, true)
+  let h1 = Math.imul(h.h1 ^ lo, 2654435761)
+  h1 = Math.imul(h1 ^ hi, 2246822507)
+  let h2 = Math.imul(h.h2 ^ hi, 1597334677)
+  h2 = Math.imul(h2 ^ lo, 3266489909)
+  return { h1: h1 ^ (h1 >>> 15), h2: h2 ^ (h2 >>> 13) }
+}
+const lanesText = ({ h1, h2 }: Lanes): string =>
+  (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
+
+// The fold calcAvg computes, the two flags, and the hash, in one pass.
+function fold(times: readonly number[]): {
+  sum: number
+  valid: boolean
+  sortable: boolean
+  h1: number
+  h2: number
+} {
   let sum = 0
   let valid = true
   let sortable = true
+  let h: Lanes = { h1: HASH_SEED1, h2: HASH_SEED2 }
   for (let i = 0; i < times.length; i++) {
     const t = times[i]
     sum = sum + t
+    h = mixTime(h, t)
     if (!isSortable(t)) {
       sortable = false
       if (!isTime(t)) valid = false
     }
   }
-  return { sum, valid, sortable }
+  return { sum, valid, sortable, h1: h.h1, h2: h.h2 }
+}
+
+/** The rolling hash of a pool's times, in order — from its Summary (an append costs one step). */
+export const timesHash = (times: readonly number[]): string => lanesText(summaryOf(times))
+/** The rolling hash of the first `n` times of a pool (a fresh fold, linear in `n`). */
+export function prefixHash(times: readonly number[], n: number): string {
+  if (n >= times.length) return timesHash(times)
+  let h: Lanes = { h1: HASH_SEED1, h2: HASH_SEED2 }
+  for (let i = 0; i < n; i++) h = mixTime(h, times[i])
+  return lanesText(h)
 }
 
 // ── The median by SELECTION, for a pool with no buffer — linear, and the same doubles a sort gives ──
@@ -189,6 +235,8 @@ function audited(times: readonly number[], s: Summary): Summary {
     const median = selectedMedian(times)
     if (
       !Object.is(f.sum, s.sum) ||
+      f.h1 !== s.h1 ||
+      f.h2 !== s.h2 ||
       f.valid !== s.valid ||
       f.sortable !== s.sortable ||
       !Object.is(median, s.median)
@@ -211,8 +259,7 @@ function takeBuffer(prev: readonly number[], from: Summary): SortedBuffer {
 export function summaryOf(times: readonly number[]): Summary {
   let s = SUMMARIES.get(times)
   if (!s) {
-    const { sum, valid, sortable } = fold(times)
-    s = { sum, valid, sortable, median: selectedMedian(times), buf: null }
+    s = { ...fold(times), median: selectedMedian(times), buf: null }
     SUMMARIES.set(times, s)
   }
   return s
@@ -223,13 +270,14 @@ export function appended(prev: readonly number[], t: number): number[] {
   const next = [...prev, t] // a spread, never `concat` (engine/arrayCopy says why)
   const from = summaryOf(prev)
   const sum = from.sum + t
+  const { h1, h2 } = mixTime(from, t)
   const valid = from.valid && isTime(t)
   const sortable = from.sortable && isSortable(t)
   let s: Summary
   if (sortable) {
     const buf = insert(takeBuffer(prev, from), t)
-    s = { sum, valid, sortable, median: middleOf(buf), buf }
-  } else s = { sum, valid, sortable, median: selectedMedian(next), buf: null }
+    s = { sum, h1, h2, valid, sortable, median: middleOf(buf), buf }
+  } else s = { sum, h1, h2, valid, sortable, median: selectedMedian(next), buf: null }
   SUMMARIES.set(next, audited(next, s))
   return next
 }
