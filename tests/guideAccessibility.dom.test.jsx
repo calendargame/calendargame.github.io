@@ -102,11 +102,10 @@ describe('the four gaps the Accessibility section admits to — each fails when 
     expect(repoFile('index.html')).toContain('user-scalable=no')
   })
 
-  it('GAP 3: the history buttons and Flash’s timer slider still have no names — Blitz’s has one', () => {
-    // Protects: "the < and > history buttons are only their symbols, and the timer slider on the
-    // Flash screen has no name of its own (the copies inside Save Defaults do, and so does
-    // Blitz's…)". Blitz's slider was named in Round 26 (Q12), when it became its own countdown and
-    // had to say which of the two it is.
+  it('GAP 3: the history buttons still have no names — the time sliders do', () => {
+    // Protects: "the < and > history buttons are only their symbols. (The time sliders are named:
+    // Flash's is read as its speed, and Blitz's as its round or question timer…)". Both sliders
+    // were named in Round 26 — Blitz's when it became its own countdown (Q12), Flash's to match.
     // Asked of the real DOM rather than the source, because "has no accessible name" is a property
     // of the rendered element and an aria-label could arrive from any of several directions.
     // EVERY one of them, not a specimen: App mounts all five mode screens at once (only one is
@@ -127,10 +126,10 @@ describe('the four gaps the Accessibility section admits to — each fails when 
       }
     }
     const sliders = [...container.querySelectorAll('input[type="range"]')]
-    expect(sliders.length, 'no mode-screen timer sliders rendered').toBeGreaterThan(1)
-    const blitz = sliders.filter((s) => s.getAttribute('aria-label')?.startsWith('Blitz '))
-    expect(blitz.map((s) => s.getAttribute('aria-label'))).toEqual(['Blitz round timer'])
-    for (const s of sliders) if (!blitz.includes(s)) expect(s.getAttribute('aria-label')).toBeNull()
+    expect(sliders.map((s) => s.getAttribute('aria-label')).sort()).toEqual([
+      'Blitz round timer',
+      'Flash speed',
+    ])
   })
 
   it('GAP 4: the game loop withholds by dimming alone — with Show Codes the one exception', () => {

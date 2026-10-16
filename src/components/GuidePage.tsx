@@ -2624,9 +2624,8 @@ export default function GuidePage({
           </li>
           <li>
             Not everything is named yet: the <b>&lt;</b> and <b>&gt;</b> history buttons are only
-            their symbols, and the timer slider on the Flash screen has no name of its own (the
-            copies inside Save Defaults do, and so does Blitz&apos;s, which is read as its round or
-            question timer and, during a round, as the time left).
+            their symbols. (The time sliders are named: Flash&apos;s is read as its speed, and
+            Blitz&apos;s as its round or question timer and, during a round, as the time left.)
           </li>
           <li>
             Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: the

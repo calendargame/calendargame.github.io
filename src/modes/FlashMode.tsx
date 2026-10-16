@@ -537,6 +537,7 @@ function FlashMode({
               }
             }}
             disabled={active}
+            aria-label="Flash speed"
             style={
               {
                 '--rng-fill': Math.round(((flashMs - 100) / 4900) * 100) + '%',
