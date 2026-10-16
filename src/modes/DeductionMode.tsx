@@ -23,6 +23,8 @@ import {
   BASE_BTN,
   buttonStateClass,
   RESET_STATS_BTN_CLASS,
+  DATE_CARD_CLASS,
+  DATE_LINE_CLASS,
 } from '../components/controlClasses.js'
 import { YEAR_OPTION_DEFAULT, yearGridLayout, makeDedPuzzle } from '../lib/dedPuzzle.js'
 import { answerGridHitPad, colSpanClass } from '../lib/answerGrid.js'
@@ -569,9 +571,9 @@ function DeductionMode({
           </div>
         </div>
         <div className="mt-4 rounded-2xl panel p-4">
-          <div className="text-center relative">
+          <div className={DATE_CARD_CLASS}>
             <CardNumber state={state} show={state.backDepth > 0} />
-            <div className="text-3xl font-bold">
+            <div className={DATE_LINE_CLASS}>
               {date ? fmtDatePartial(date.y, date.m, date.d, date._fmt, date.type) : '—'}
             </div>
             {date && (

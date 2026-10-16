@@ -16,7 +16,11 @@ import {
   useSaveStatsOnRegen,
   useDateSettingsOnRegen,
 } from './modeHooks.js'
-import { RESET_STATS_BTN_CLASS } from '../components/controlClasses.js'
+import {
+  RESET_STATS_BTN_CLASS,
+  DATE_CARD_CLASS,
+  DATE_LINE_CLASS,
+} from '../components/controlClasses.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
@@ -195,9 +199,9 @@ function ClassicMode({
       />
       <div className="mt-5">
         <div className="mt-4 rounded-2xl panel p-4">
-          <div className="text-center relative">
+          <div className={DATE_CARD_CLASS}>
             <CardNumber state={state} show={state.backDepth > 0} />
-            <div className="text-3xl font-bold">{fmtDate(date.y, date.m, date.d, date._fmt)}</div>
+            <div className={DATE_LINE_CLASS}>{fmtDate(date.y, date.m, date.d, date._fmt)}</div>
           </div>
           <WeekdayAnswer
             key={state.gridEpoch}

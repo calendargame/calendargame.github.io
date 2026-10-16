@@ -37,7 +37,7 @@ function isHidden(el) {
   return false
 }
 const shownDate = () =>
-  [...document.querySelectorAll('div.text-3xl')].find((e) => !isHidden(e)).textContent.trim()
+  [...document.querySelectorAll('div.date-line')].find((e) => !isHidden(e)).textContent.trim()
 const ctrl = (name) => screen.getByRole('button', { name })
 const dayState = (name) => {
   const c = ctrl(name).className

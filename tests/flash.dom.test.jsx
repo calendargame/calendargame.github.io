@@ -59,7 +59,7 @@ function readDate() {
 
 // The big date display's current text (date or "—" or "…"), visible copy only.
 function dateDisplayText() {
-  const el = Array.from(document.querySelectorAll('div.text-3xl')).find((e) => !isHidden(e))
+  const el = Array.from(document.querySelectorAll('div.date-line')).find((e) => !isHidden(e))
   return el ? el.textContent.trim() : null
 }
 

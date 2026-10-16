@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { useButtonFlash, useMountedBestsId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
-import { RESET_BTN_CLASS } from '../components/controlClasses.js'
+import { RESET_BTN_CLASS, DATE_CARD_CLASS, DATE_LINE_CLASS } from '../components/controlClasses.js'
 import {
   fmtTime,
   truncTime,
@@ -1205,9 +1205,9 @@ function BlitzMode({
         </span>
       </div>
       <div className="mt-4 rounded-2xl panel p-4">
-        <div className="text-center relative">
+        <div className={DATE_CARD_CLASS}>
           <CardNumber state={state} show={state.backDepth > 0} />
-          <div className="text-3xl font-bold">{dateText}</div>
+          <div className={DATE_LINE_CLASS}>{dateText}</div>
         </div>
         <WeekdayAnswer
           key={state.gridEpoch}

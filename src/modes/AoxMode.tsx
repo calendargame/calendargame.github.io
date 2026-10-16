@@ -28,7 +28,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { FLASH_MS, useButtonFlash, useMountedBestsId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
-import { NUM_INPUT_CLASS, RESET_BTN_CLASS } from '../components/controlClasses.js'
+import {
+  NUM_INPUT_CLASS,
+  RESET_BTN_CLASS,
+  DATE_CARD_CLASS,
+  DATE_LINE_CLASS,
+} from '../components/controlClasses.js'
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
@@ -921,9 +926,9 @@ function AoxMode({
         />
       )}
       <div className="mt-4 rounded-2xl panel p-4">
-        <div className="text-center relative">
+        <div className={DATE_CARD_CLASS}>
           <CardNumber state={state} show={inBack || (isLocked && liveCardScored)} />
-          <div className="text-3xl font-bold">
+          <div className={DATE_LINE_CLASS}>
             {dateVisible ? fmtDate(date.y, date.m, date.d, date._fmt) : '—'}
           </div>
         </div>

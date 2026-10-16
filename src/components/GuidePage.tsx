@@ -1448,6 +1448,12 @@ export default function GuidePage({
             red alongside the green.
           </li>
           <li>
+            The date on the card is always one line. On a phone too narrow for the longest dates (a
+            five-digit year such as September 10, 10000) at full size, every date on that screen is
+            drawn a little smaller — all at the same size, so nothing on the card moves from one
+            date to the next.
+          </li>
+          <li>
             While browsing back, a small <b>Q#</b> label at the top-right of the date card numbers
             the card you are looking at, and it counts whatever the <b>Score</b> box beside it
             counts. In {modeNames('classic', 'deduction', 'flash')} that score is your lifetime

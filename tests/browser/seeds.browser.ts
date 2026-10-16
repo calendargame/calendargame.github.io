@@ -28,7 +28,7 @@ const saved = (page: Page, key: string) =>
 // Answer the date on screen correctly, by the app's own calendar: the date as the default format
 // writes it ("April 7, 9322"), Julian before the 1582 changeover as the default settings have it.
 async function answerRight(page: Page) {
-  const shown = await page.locator('.text-3xl:visible').textContent()
+  const shown = await page.locator('.date-line:visible').textContent()
   const [, monthName, day, year] = /^(\w+) (\d+), (\d+)$/.exec(shown ?? '') ?? []
   expect(monthName, `a date in the default format, not "${shown}"`).toBeDefined()
   const [y, m, d] = [+year, MONTH.indexOf(monthName) + 1, +day]
