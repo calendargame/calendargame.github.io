@@ -864,12 +864,21 @@ export function SettingsPanel({
           theme pill now dismisses like the date-format pills). Each of those opens a popup or a
           list (every popup portals OUT of this card, so a drag-release on popup content can never
           drag-dismiss the panel), and the panel has to stay up behind it. The Year Range inputs
-          are data-drag-focus (release = focus for typing, panel stays open). The inner scroll wrapper is data-drag-scroll — the controller's auto-scroll
-          target + edge-band geometry.
+          are data-drag-focus (release = focus for typing, panel stays open). The inner scroll
+          wrapper is data-drag-scroll — the controller's auto-scroll target + edge-band geometry.
           Scroll recipe (round 7): the wrapper wears SCROLL_REGION_CLASS + scrollFadeClass
           (components/scrollRegion) — this popover IS the reference treatment (card py-4 only, the
           px-4 scrollbar lane inside the scroller, edge fades) every other scroll region now
           shares.
+          ⚠ pb-px AND THE 1px TAKEN BACK BELOW IT (Round 26, the owner's iPhone): the scroll area's
+          height is fractional — it is what the card has left — while the browser's furthest scroll
+          position is a whole pixel, so at the very end of the list up to a pixel of the last
+          control could stay under the scroll area's bottom edge. On his phone that was the
+          Amnesic pill's bottom border, cut by 0.2px (Chromium drops the line outright). One pixel
+          of padding at the end of the list keeps every border of the last control inside, and
+          the margin under the scroll area is the card's space-y-4 less that same pixel, so the
+          distance from the last control to the foot's line is unchanged. tests/browser/
+          settingsScrollEnd sweeps it.
           tabIndex −1 + its name: the card is what HOLDS the keyboard when the menu opens and the
           keyboard is not already in the top bar (components/overlayStack's "THE KEYBOARD'S REACH";
           src/main.tsx hands it over as the menu's `hold`) — so the first Tab lands on the first
@@ -887,7 +896,7 @@ export function SettingsPanel({
         <div
           ref={popoverInnerScrollRef}
           data-drag-scroll
-          className={`${SCROLL_REGION_CLASS} flex-1 min-h-0 space-y-4 ${scrollFadeClass(popoverScrolledFromTop, popoverAtBottom)}`}
+          className={`${SCROLL_REGION_CLASS} pb-px mb-[calc(var(--spacing)*4_-_1px)] flex-1 min-h-0 space-y-4 ${scrollFadeClass(popoverScrolledFromTop, popoverAtBottom)}`}
         >
           {/* SETTINGS regrouped into 3 categories: Display (how it's shown + how you answer +
               theme), Dates (which dates get generated), Stats. Each category is a SectionLabel
