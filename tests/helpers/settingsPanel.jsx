@@ -45,6 +45,7 @@ import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults } from '../../src/store/userDefaults.js'
 import { useProgress } from '../../src/store/progress.js'
 import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
+import { door } from '../../src/store/syncedDoc.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
 import { discardSessionStats } from '../../src/store/amnesic.js'
 import { forgetSessionAmnesic } from '../../src/store/sessionAmnesic.js'
@@ -107,8 +108,15 @@ export function resetAppState() {
   // thing they are testing instead of as a line nobody can account for.
   for (const preset of usePresets.getState().presets) discardSessionStats(preset.id)
   forgetSessionAmnesic()
+  // The device is emptied FIRST and the windows-in-sync door forgets what it knew (store/syncedDoc):
+  // a registry put back to one preset over a device still listing several would be merged with them
+  // (design 8.1). The registry's reset writes, so the device is emptied again after it, and the door
+  // forgets that write too: a device that has never been played on has no registry entry at all.
+  localStorage.clear()
+  door.forget()
   usePresets.setState(makePresetRegistryDefaults())
   localStorage.clear()
+  door.forget()
   useSettings.getState().resetToFactory()
   // The Julian-on Year Range back to a factory preset's — and SAVED, as on any device this build has
   // opened: the first open of a preset pins its pair (store/julianRange), so a device with no such key

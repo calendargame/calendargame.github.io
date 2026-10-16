@@ -37,6 +37,7 @@ import {
   isPresetFactory,
 } from '../src/store/presetControl.js'
 import { openBrowsingSession, forgetBrowsingSession } from '../src/store/browsingSession.js'
+import { door } from '../src/store/syncedDoc.js'
 import { sessionPresetId, forgetSessionPreset } from '../src/store/sessionPreset.js'
 import { writeSessionMode } from '../src/store/sessionMode.js'
 import { writeSessionRound } from '../src/store/sessionRound.js'
@@ -409,20 +410,19 @@ describe('the registry', () => {
     expect(localStorage.getItem('cg-presets-v1')).toBe(saved)
   })
 
-  it('a rename is tried on the device first, and what was tried is exactly what is then saved', () => {
-    // An older build's tab has switched preset 2's Amnesic on since this page loaded: the save
-    // carries what the device says, in the trial and in the write alike.
+  it('a rename is tried on the device once, merged with what the device says, and the store then writes nothing more', () => {
+    // An older build's tab has switched preset 2's Amnesic on since this page loaded (its whole-copy
+    // save drops the sync envelope): the rename is merged with that, so the older tab's flag is carried.
     const p2 = createPreset('Timed')
     const stored = JSON.parse(localStorage.getItem('cg-presets-v1'))
     stored.state.presets[1].amnesic = true
-    localStorage.setItem('cg-presets-v1', JSON.stringify(stored))
+    localStorage.setItem('cg-presets-v1', JSON.stringify({ state: stored.state, version: 1 }))
     const setItem = vi.spyOn(Storage.prototype, 'setItem')
     try {
       expect(renamePreset(p2.id, 'Sprints "quoted" 🎉')).toBe('renamed')
       const writes = setItem.mock.calls.filter(([key]) => key === 'cg-presets-v1')
-      expect(writes).toHaveLength(2)
-      expect(writes[0][1]).toBe(writes[1][1])
-      expect(JSON.parse(writes[1][1]).state.presets[1]).toEqual({
+      expect(writes).toHaveLength(1)
+      expect(JSON.parse(writes[0][1]).state.presets[1]).toEqual({
         id: p2.id,
         name: 'Sprints "quoted" 🎉',
         amnesic: true,
@@ -430,12 +430,10 @@ describe('the registry', () => {
     } finally {
       setItem.mockRestore()
     }
-    expect(localStorage.getItem('cg-presets-v1')).toBe(
-      JSON.stringify({
-        state: JSON.parse(localStorage.getItem('cg-presets-v1')).state,
-        version: 1,
-      }),
-    )
+    // the shape every build reads, with the windows-in-sync envelope beside it
+    const saved = JSON.parse(localStorage.getItem('cg-presets-v1'))
+    expect(Object.keys(saved).sort()).toEqual(['state', 'sync', 'version'])
+    expect(saved.version).toBe(1)
   })
 
   it('trimming a book is one pass: a million spaces in the middle of a name cost nothing extra', () => {
@@ -656,6 +654,39 @@ describe('the "open in" pin', () => {
     switchPreset(2)
     deletePreset(2)
     expect(sessionPresetId()).toBe(1)
+  })
+
+  // ★ ANOTHER WINDOW DELETES THE PRESET THIS ONE IS ON (design-q1-q2.md v4, 8.3): the windows-in-sync
+  // door hears of it, and this window moves to the neighbour, exactly as a delete made here moves it.
+  it('a preset deleted in ANOTHER window: this one, if it was on it, moves to the neighbour; nothing is removed here', () => {
+    vi.useFakeTimers()
+    try {
+      createPreset('B')
+      createPreset('C')
+      switchPreset(2)
+      useSettings.getState().setSaveStats(false) // preset 2 holds a setting of its own
+      const before = localStorage.getItem('cg-presets-v1')
+      const saved = JSON.parse(before)
+      // the other window's write (an older build's: the whole list, no envelope - it knew of preset 2)
+      const after = JSON.stringify({
+        state: {
+          ...saved.state,
+          presets: saved.state.presets.filter((p) => p.id !== 2),
+          activeId: 1,
+        },
+        version: 1,
+      })
+      localStorage.setItem('cg-presets-v1', after)
+      door.notice('cg-presets-v1', before, after)
+      vi.runAllTimers()
+      expect(usePresets.getState().presets.map((p) => p.id)).toEqual([1, 3])
+      expect(usePresets.getState().activeId).toBe(3) // the one after it
+      expect(sessionPresetId()).toBe(3)
+      // ★ only this window's own session is touched: preset 2's saved keys were the deleting window's to remove
+      expect(localStorage.getItem(presetKey('cg-settings-v1', 2))).not.toBe(null)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('deleting the pinned preset drops the pin back to "last"', async () => {

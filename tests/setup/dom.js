@@ -35,6 +35,7 @@ import { forgetBrowsingSession } from '../../src/store/browsingSession.js'
 import { forgetSessionAmnesic } from '../../src/store/sessionAmnesic.js'
 import { forgetSessionPreset } from '../../src/store/sessionPreset.js'
 import { forgetStorageHealth } from '../../src/store/storageHealth.js'
+import { door } from '../../src/store/syncedDoc.js'
 import { forgetStorageUsage } from '../../src/store/storageUsage.js'
 import { useUserDefaults } from '../../src/store/userDefaults.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
@@ -107,6 +108,14 @@ if (typeof window !== 'undefined') {
 // it can leak stats / bests between tests. Reset it before EVERY test (the DOM tests also
 // localStorage.clear() + resetToFactory() in their own beforeEach). Cheap + idempotent.
 beforeEach(() => {
+  // EVERY CASE STARTS ON AN EMPTY DEVICE (localStorage), and the windows-in-sync door's BOOKS
+  // (store/syncedDoc) - this page's knowledge of each saved doc, module state that a close would drop
+  // with the page - are forgotten with it. Both FIRST: every reset below is then a write onto a device
+  // that holds nothing, which is what it models. (The order matters since the door merges: a registry
+  // put back to one preset over a device still listing a previous case's five would be read as a
+  // window that never knew of them, and the five would be kept - the membership rule, design 8.1.)
+  if (typeof localStorage !== 'undefined') localStorage.clear()
+  door.forget()
   // ⚠⚠ THE REGISTRY GOES BACK FIRST, AND THE ORDER IS THE WHOLE POINT — it decides WHERE every reset
   // below lands. The four per-preset stores persist through a preset-SCOPED storage (store/presets'
   // presetScopedStorage), so while the registry still says "preset 2" a reset writes preset 2's

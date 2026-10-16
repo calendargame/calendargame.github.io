@@ -12,6 +12,7 @@ import {
 } from './storageHealth.js'
 import type { StorageWatcher } from './storageHealth.js'
 import { LOOKUP_HISTORY_KEY } from './lookupHistory.js'
+import { SYNC_KEY_PREFIX } from './syncedDoc.js'
 import { isRecord } from './json.js'
 import { isPlayerBusy, isRoundLive, onPlayerFree } from '../lib/playerBusy.js'
 import { captureError } from '../observability/sentry.js'
@@ -46,8 +47,13 @@ import { captureError } from '../observability/sentry.js'
 //   • LOOKUP HISTORY (one list, shared by every preset);
 //   • a preset's OTHER data: its Bests, ⚙ settings, per-mode setup and saved defaults;
 //   • PRESET NAMES, all of them together: a name may be any length, so a pasted book can be the
-//     largest thing on the device. Their text is counted where it sits in the preset list;
+//     largest thing on the device. Their text is counted where it sits in the preset list — and in
+//     the list's SYNC KEY, which keeps a copy of each name short enough to copy (store/syncCounts'
+//     KEY_VALUE_MAX) so windows can put a newer name back over an older build's stale one;
 //   • everything else (the rest of the preset list, small markers).
+// ★ A SYNC KEY (store/syncedDoc: what lets windows open side by side merge one doc) belongs to the
+// owner of its doc: a preset's to that preset, Lookup history's to Lookup history, the preset list's
+// to "everything else" less the names in it — so clearing a thing gives back what the breakdown said.
 //
 // ★ THE LIMIT IS MEASURED, NOT ASSUMED. A browser has no way to ask how much localStorage a site may
 // use, and the browsers do not agree (Chromium allows 5,242,880 characters; Safari is documented at
@@ -159,17 +165,32 @@ function namesIn(registryText: string): { chars: number; spare: number } {
   try {
     const saved: unknown = JSON.parse(registryText)
     const presets = isRecord(saved) && isRecord(saved.state) ? saved.state.presets : null
-    for (const preset of Array.isArray(presets) ? presets : []) {
-      if (!isRecord(preset) || typeof preset.name !== 'string') continue
-      const written = JSON.stringify(preset.name).length - 2
-      size.chars += written
-      // …less its first character as written, which is what a one-character name would still take.
-      size.spare += written - (JSON.stringify(Array.from(preset.name)[0] ?? '').length - 2)
-    }
+    for (const preset of Array.isArray(presets) ? presets : [])
+      if (isRecord(preset)) addName(size, preset.name)
   } catch {
     /* unreadable: all of it counts as "everything else" */
   }
   return size
+}
+// …and in the preset list's sync key: the copy of each name it holds (a slice `name:<id>`'s value).
+function namesInSyncKey(keyText: string): { chars: number; spare: number } {
+  const size = { chars: 0, spare: 0 }
+  try {
+    const saved: unknown = JSON.parse(keyText)
+    const at = isRecord(saved) && isRecord(saved.at) ? saved.at : {}
+    for (const [slice, entry] of Object.entries(at))
+      if (slice.startsWith('name:') && isRecord(entry)) addName(size, entry.v)
+  } catch {
+    /* unreadable: all of it counts as "everything else" */
+  }
+  return size
+}
+function addName(size: { chars: number; spare: number }, name: unknown): void {
+  if (typeof name !== 'string') return
+  const written = JSON.stringify(name).length - 2
+  size.chars += written
+  // …less its first character as written, which is what a one-character name would still take.
+  size.spare += written - (JSON.stringify(Array.from(name)[0] ?? '').length - 2)
 }
 
 // How a saved progress spells the start of a mode's solve times.
@@ -185,7 +206,7 @@ export function readStorageUsage(area: Storage): UsageReading {
   const times = new Map<string, { presetId: number; silo: string; chars: number; count: number }>()
   const presets = new Map<number, number>()
   const lookup = { chars: 0, count: 0 }
-  let names = { chars: 0, spare: 0 }
+  const names = { chars: 0, spare: 0 }
   let other = 0
   let used = 0
   const timesRow = (presetId: number, silo: string) => {
@@ -200,6 +221,25 @@ export function readStorageUsage(area: Storage): UsageReading {
     const text = area.getItem(key) ?? ''
     const chars = key.length + text.length
     used += chars
+    // A sync key is counted with its doc (the doc's own key, past the prefix).
+    const ofDoc = key.startsWith(SYNC_KEY_PREFIX) ? key.slice(SYNC_KEY_PREFIX.length) : null
+    if (ofDoc === LOOKUP_HISTORY_KEY) {
+      lookup.chars += chars
+      continue
+    }
+    if (ofDoc === PRESET_REGISTRY_KEY) {
+      const inKey = namesInSyncKey(text)
+      names.chars += inKey.chars
+      names.spare += inKey.spare
+      other += chars - inKey.chars
+      continue
+    }
+    if (ofDoc !== null) {
+      const owner = parsePresetKey(ofDoc)
+      if (owner) presets.set(owner.presetId, (presets.get(owner.presetId) ?? 0) + chars)
+      else other += chars
+      continue
+    }
     const chunk = parseTimesKey(key)
     if (chunk) {
       timesRow(chunk.presetId, chunk.silo).chars += chars
@@ -217,8 +257,10 @@ export function readStorageUsage(area: Storage): UsageReading {
       continue
     }
     if (key === PRESET_REGISTRY_KEY) {
-      names = namesIn(text)
-      other += chars - names.chars // the rest of the list is nobody's to clear
+      const inList = namesIn(text)
+      names.chars += inList.chars
+      names.spare += inList.spare
+      other += chars - inList.chars // the rest of the list is nobody's to clear
       continue
     }
     const owner = parsePresetKey(key)

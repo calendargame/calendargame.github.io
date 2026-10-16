@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { guardedStorage, readItem, writeItem, tryWriteItem, removeItem } from './storageHealth.js'
+import { readItem, writeItem, removeItem } from './storageHealth.js'
+import { door, type CountsSpec } from './syncedDoc.js'
 import { browsingSessionOpen } from './browsingSession.js'
 import { sessionPresetId, recordSessionPreset } from './sessionPreset.js'
 import { nameHasInk } from '../lib/presetNameInk.js'
@@ -113,10 +114,10 @@ export type Preset = {
   // switch here, as a boolean, and live and staging share this registry — so such a build may be
   // reading and writing this field in another tab right now. This build keeps each preset's Amnesic
   // setting with the browsing session instead (store/sessionAmnesic) and NEVER CHANGES this field:
-  // every registry write below passes each preset's value through as it was read, so nothing this
-  // build does can switch an older tab's guest session off, or on. It is read in exactly one place
-  // — store/sessionAmnesic's hand-over from an older build — and a new preset is given `false`,
-  // which is what an older build's own new preset has.
+  // the windows-in-sync door carries each preset's value as its own slice, so an older tab's change
+  // to it is taken as that tab made it and nothing this build does can switch its guest session off,
+  // or on. It is read in exactly one place — store/sessionAmnesic's hand-over from an older build —
+  // and a new preset is given `false`, which is what an older build's own new preset has.
   amnesic: boolean
 }
 
@@ -369,12 +370,11 @@ export const resolveActiveId = (
  * readable there (never saved, a corrupt payload, or a browser that refuses storage).
  *
  * ⚠⚠ IT IS NOT A SECOND SOURCE OF TRUTH AND NO RENDER MAY READ IT. The live registry above is what
- * the app runs on; this reads the same key BEHIND it. It exists for exactly one question, which the
- * in-memory copy cannot answer: has ANOTHER TAB on this origin allocated a preset id since this tab
- * last hydrated? The whole argument is at presetControl's createPreset, which is its only caller —
- * and the reason it must be a fresh READ rather than `usePresets.persist.rehydrate()` is that
- * rehydrating would ADOPT the other tab's registry wholesale, moving the active preset out from
- * under a player mid-run. An id allocation needs one number, not a new reality.
+ * the app runs on — and, since the windows-in-sync door (Round 26), it is merged with the device on
+ * every notice, so another window's presets are in it. This reads the same key BEHIND it, for the two
+ * questions about what is on disk itself: store/presetControl's sweep of a deleted preset's leftovers
+ * (a preset neither list knows), and store/amnesic's check that a preset still exists before a Best
+ * is written for it.
  */
 export function readStoredRegistry(): PresetRegistryValues | null {
   try {
@@ -420,22 +420,155 @@ const PERSISTED_KEYS = Object.keys(makePresetRegistryDefaults()) as (keyof Prese
 // The part of the registry that is saved: its four values, without the store's own function.
 const savedPart = (state: PresetRegistryValues): PresetRegistryValues =>
   Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as PresetRegistryValues
-// ★ EACH PRESET'S `amnesic` IS TAKEN FROM THE DEVICE AT THE MOMENT OF THE WRITE, not from this
-// page's memory. It is an older build's field (see Preset above), and such a build in another tab
-// may have changed it since this page loaded — a guest's session switched on there. Writing back
-// the value this page happened to read would switch that session off at the older tab's next
-// reload, so every write carries what is stored NOW; a preset the device does not list yet keeps
-// the value it was handed.
-const withStoredAmnesic = (next: PresetRegistryValues): PresetRegistryValues => {
-  const stored = new Map(readStoredRegistry()?.presets.map((p) => [p.id, p.amnesic]))
+
+// ── THE REGISTRY THROUGH THE WINDOWS-IN-SYNC DOOR (Round 26, Q2; design-q1-q2.md v4, 8) ─────────────
+// Every window of the app now shows one preset list: a preset made, renamed, moved, or deleted in one is
+// in the others at once. The registry is SLICES, each merged on its own (store/syncCounts' settings
+// rule, design 2.4): the ORDER of the ids; each preset's NAME (`name:<id>`) and its older builds' Amnesic
+// flag (`amn:<id>`, carried as stored, never read); the "Open in" PIN; `next`, the next id; and
+// `active`, the preset that was active last (what a fresh open with no pin lands in). Two rules sit on
+// top (registryRules, below):
+//   • MEMBERSHIP (8.1): a preset one side lists and the other does not is kept, unless the other side's
+//     next id is above its id — that side knew it and does not list it: it was deleted there. So an
+//     older tab's stale whole list never drops a preset a new window made after that tab loaded, and a
+//     delete in one window reaches the others.
+//   • `next` never goes down: the higher of the two, and above every listed id.
+// ★ WHICH PRESET A WINDOW IS ON IS ITS OWN: another window's `active` is saved (it is what a fresh open
+// lands in) but never moves this one. A window whose preset is deleted elsewhere moves to its neighbour
+// (store/presetControl's adoptRegistry, handed the door's patch).
+const isPresetSlice = (x: string) => /^(name|amn):\d+$/.test(x)
+const idOfSlice = (x: string) => Number(x.slice(x.indexOf(':') + 1))
+export function registrySlices(state: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  const presets = Array.isArray(state.presets) ? (state.presets as Partial<Preset>[]) : null
+  if (presets) {
+    const order: number[] = []
+    for (const p of presets) {
+      if (
+        !p ||
+        !Number.isInteger(p.id) ||
+        (p.id as number) < FIRST_PRESET_ID ||
+        order.includes(p.id as number)
+      )
+        continue
+      order.push(p.id as number)
+      out[`name:${p.id}`] = normalizePresetName(p.name as string, p.id as number)
+      out[`amn:${p.id}`] = p.amnesic === true
+    }
+    out.order = order
+  }
+  if ('activeId' in state) out.active = state.activeId
+  if ('nextId' in state) out.next = state.nextId
+  if ('openInPreset' in state) out.pin = state.openInPreset
+  return out
+}
+export function registryState(sl: Record<string, unknown>): Record<string, unknown> {
+  const order = Array.isArray(sl.order) ? (sl.order as number[]) : []
   return {
-    ...next,
-    presets: next.presets.map((p) => {
-      const amnesic = stored.get(p.id) ?? p.amnesic
-      return amnesic === p.amnesic ? p : { ...p, amnesic }
-    }),
+    presets: order.map((id) => ({
+      id,
+      name: typeof sl[`name:${id}`] === 'string' ? sl[`name:${id}`] : defaultPresetName(id),
+      amnesic: sl[`amn:${id}`] === true,
+    })),
+    ...(sl.active !== undefined ? { activeId: sl.active } : {}),
+    ...(sl.next !== undefined ? { nextId: sl.next } : {}),
+    ...(sl.pin !== undefined ? { openInPreset: sl.pin } : {}),
   }
 }
+// MEMBERSHIP (8.1), after every merge: `before` is what this window held, `device` what the doc on the
+// device says, `now` what the merge left.
+export function reconcileRegistry(
+  before: Record<string, unknown>,
+  now: Record<string, unknown>,
+  device: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const ids = (v: unknown) => (Array.isArray(v) ? (v as number[]) : [])
+  const mine = ids(before.order)
+  const theirs = device ? ids(device.order) : []
+  const myNext = typeof before.next === 'number' ? before.next : 0
+  const theirNext = device && typeof device.next === 'number' ? device.next : 0
+  const kept = (id: number) =>
+    mine.includes(id) && theirs.includes(id)
+      ? true
+      : mine.includes(id)
+        ? !(device && theirNext > id) // the device knew it and does not list it: deleted there
+        : !(myNext > id) // this window knew it and does not list it: deleted here
+  const order = ids(now.order).filter(kept)
+  // a member the merge's order left out goes back after the neighbour it followed in its own list
+  for (const source of [mine, theirs])
+    source.forEach((id, i) => {
+      if (order.includes(id) || !kept(id)) return
+      const after = source
+        .slice(0, i)
+        .reverse()
+        .find((q) => order.includes(q))
+      order.splice(after === undefined ? 0 : order.indexOf(after) + 1, 0, id)
+    })
+  const top = order.reduce((m, id) => Math.max(m, id), FIRST_PRESET_ID)
+  const next = Math.max(myNext, theirNext, typeof now.next === 'number' ? now.next : 0, top + 1)
+  const fix: Record<string, unknown> = {}
+  if (JSON.stringify(order) !== JSON.stringify(ids(now.order))) fix.order = order
+  if (next !== now.next) fix.next = next
+  return Object.keys(fix).length ? fix : null
+}
+// What brings another window's registry change into this one: the list, the next id, and the pin -
+// never `activeId` (each window's own; adoptRegistry moves it only if its preset was deleted).
+let adoptRegistryHook: ((patch: Partial<PresetRegistryValues>) => void) | null = null
+/** store/presetControl's adoptRegistry (8.3) - handed every registry change another window made. */
+export const onRegistryAdopt = (fn: (patch: Partial<PresetRegistryValues>) => void): void => {
+  adoptRegistryHook = fn
+}
+/**
+ * The registry as the windows-in-sync door handles it (store/syncedDoc's CountsSpec): its slices, its
+ * whole-doc defaults, the membership rule, and what another window's change patches. `apply` is how a
+ * patch reaches the store (null: a plain setState - the tests' two-window worlds).
+ */
+export const registrySpec = (
+  apply: ((patch: Partial<PresetRegistryValues>) => void) | null,
+): CountsSpec => ({
+  kind: 'registry',
+  key: () => PRESET_REGISTRY_KEY,
+  version: REGISTRY_VERSION,
+  regs: (seen) => [...new Set(['order', 'pin', 'active', 'next', ...seen.filter(isPresetSlice)])],
+  // (what the registry holds where nothing is saved: the one preset of a device that never made another)
+  defaultOf: (x) =>
+    x === 'order'
+      ? [FIRST_PRESET_ID]
+      : x === 'active'
+        ? FIRST_PRESET_ID
+        : x === 'next'
+          ? FIRST_PRESET_ID + 1
+          : x === 'pin'
+            ? 'last'
+            : x.startsWith('name:')
+              ? defaultPresetName(idOfSlice(x))
+              : x.startsWith('amn:')
+                ? false
+                : undefined,
+  toSlices: registrySlices,
+  fromSlices: registryState,
+  sliceState: registrySlices,
+  docState: registryState,
+  reconcile: reconcileRegistry,
+  patchOf(now, changed) {
+    if (changed.every((x) => x === 'active')) return null
+    const listed = new Set(Array.isArray(now.order) ? (now.order as number[]) : [])
+    const shown = registryState(
+      Object.fromEntries(
+        Object.entries(now).filter(([x]) => !isPresetSlice(x) || listed.has(idOfSlice(x))),
+      ),
+    ) as Partial<PresetRegistryValues>
+    return { presets: shown.presets, nextId: shown.nextId, openInPreset: shown.openInPreset }
+  },
+  ...(apply
+    ? { apply: (patch: Record<string, unknown>) => apply(patch as Partial<PresetRegistryValues>) }
+    : {}),
+})
+const REGISTRY_DOOR = door.countsStorage<PresetRegistryValues>(
+  registrySpec((patch) =>
+    adoptRegistryHook ? adoptRegistryHook(patch) : usePresets.setState(patch),
+  ),
+)
 
 export const usePresets = create<PresetRegistryState>()(
   persist(
@@ -446,16 +579,16 @@ export const usePresets = create<PresetRegistryState>()(
         // FIRST: it is what a reload reads, and it must not depend on the permanent write below
         // landing (store/sessionPreset).
         recordSessionPreset(next.activeId)
-        set(() => withStoredAmnesic(next))
+        set(() => next)
       },
     }),
     {
-      // ⚠ The default storage, NOT the scoped adapter below. The registry says which preset you are
+      // ⚠ One un-namespaced key, NOT the scoped adapter below. The registry says which preset you are
       // on; scoping it to a preset would make that question unanswerable.
       name: PRESET_REGISTRY_KEY,
-      // zustand's default localStorage, behind store/storageHealth: a refused save must never throw
-      // out of applyRegistry, and is held for this key until it fits.
-      storage: createJSONStorage(guardedStorage(() => window.localStorage)),
+      // Through the windows-in-sync door (above): a refused save never throws out of applyRegistry -
+      // it is kept as actions and merged before it is retried.
+      storage: REGISTRY_DOOR,
       version: REGISTRY_VERSION,
       partialize: (state) => savedPart(state),
       // No `migrate` yet — v1 is the first shape there has ever been, so there is no older payload
@@ -510,28 +643,17 @@ export const usePresets = create<PresetRegistryState>()(
  * same stamp — so what was seen to fit is what is written. tests/presets.dom pins the two together.
  */
 export function applyRegistryIfRoom(next: PresetRegistryValues): boolean {
-  // ⚠ ONLY "THE BROWSER GIVES THE APP NO STORAGE" IS PASSED OVER, and only where it shows itself:
-  // such a browser throws on the very mention of `localStorage`. The registry lives in memory
-  // there (the store took the same path as it loaded), so there is no room to run out of and the
-  // change is simply applied. Nothing else is caught: the device refusing for ROOM is
-  // tryWriteItem's `false`, and any other failure while saving is a fault that must surface —
-  // exactly as it does out of applyRegistry for every other change to the preset list.
-  let device: Storage | null = null
-  try {
-    device = window.localStorage
-  } catch {
-    /* no storage at all */
-  }
-  if (device) {
-    const saved = JSON.stringify({
-      state: savedPart(withStoredAmnesic(next)),
-      version: REGISTRY_VERSION,
-    })
-    if (!tryWriteItem(device, PRESET_REGISTRY_KEY, saved)) return false
-  }
+  // The door TRIES the save (2.6's trySave: merged with the device first, written, and on a refusal
+  // nothing is held and nothing changed); only once it has landed is the change applied, and the
+  // store's own save of the same values then finds nothing left to write. (A browser that gives the
+  // app no storage at all has no room to run out of: the door lands nothing and reports success.)
+  if (!REGISTRY_DOOR.trySave({ state: savedPart(next), version: REGISTRY_VERSION })) return false
   usePresets.getState().applyRegistry(next)
   return true
 }
+
+/** Merge the registry with the device NOW — before a preset id is allocated (design 8.5). */
+export const syncRegistry = (): void => REGISTRY_DOOR.syncNow()
 
 // ── Where a per-preset store actually reads and writes ────────────────────────────────────────
 //
@@ -608,3 +730,4 @@ export const mergeOverDefaults =
   <V extends object, S>(makeDefaults: () => V) =>
   (persisted: unknown, current: S): S =>
     ({ ...current, ...makeDefaults(), ...(persisted as Partial<S>) }) as S
+REGISTRY_DOOR.attach(usePresets)

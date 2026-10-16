@@ -273,6 +273,53 @@ describe('what is filling the device', () => {
     expect(reading.used).toBe(everything())
   })
 
+  // ★ A SYNC KEY (store/syncedDoc) is counted with its doc: a preset's with that preset, Lookup
+  // history's with Lookup history — and the preset list's as "everything else", less the copy of each
+  // name it keeps (store/syncCounts' KEY_VALUE_MAX: a name too long to copy has only its fingerprint
+  // there), which is counted, and could be given back, with the names.
+  it('a sync key is counted with its doc, and the copies of names in the list’s key as names', () => {
+    localStorage.clear()
+    const registry = JSON.stringify({
+      state: { presets: [{ id: 1, name: 'Weekend', amnesic: false }] },
+      version: 1,
+    })
+    localStorage.setItem('cg-presets-v1', registry)
+    const listKey = JSON.stringify({
+      g: 'g1',
+      at: {
+        'name:1': { st: '§1.ab', fp: 'R"Weekend"', v: 'Weekend' },
+        order: { st: '§1.ab', fp: 'R[1]', v: [1] },
+      },
+      boot: {},
+      old: {},
+    })
+    localStorage.setItem('cg-sync-v1|cg-presets-v1', listKey)
+    localStorage.setItem('cg-sync-v1|cg-settings-v1~p2', '{"g":"g2","at":{}}')
+    localStorage.setItem('cg-sync-v1|cg-lookup-v1', '{"st":"§1.ab","tomb":[]}')
+    localStorage.setItem('cg-sync-v1|cg-nothing-v1', '{}')
+    const reading = readStorageUsage(localStorage)
+    const row = (kind) => reading.rows.find((r) => r.kind === kind)
+    expect(row('names')).toEqual({ kind: 'names', chars: 14, spare: 12 })
+    expect(row('preset')).toEqual({
+      kind: 'preset',
+      presetId: 2,
+      chars: 'cg-sync-v1|cg-settings-v1~p2'.length + '{"g":"g2","at":{}}'.length,
+    })
+    expect(row('lookup').chars).toBe(
+      'cg-sync-v1|cg-lookup-v1'.length + '{"st":"§1.ab","tomb":[]}'.length,
+    )
+    expect(row('other').chars).toBe(
+      'cg-presets-v1'.length +
+        registry.length +
+        'cg-sync-v1|cg-presets-v1'.length +
+        listKey.length +
+        'cg-sync-v1|cg-nothing-v1'.length +
+        2 -
+        14,
+    )
+    expect(reading.rows.reduce((sum, r) => sum + r.chars, 0)).toBe(everything())
+  })
+
   it('no preset list on the device, or one that cannot be read, is no row at all', () => {
     localStorage.clear()
     localStorage.setItem('cg-settings-v1', '{"state":{},"version":9}')
@@ -1429,7 +1476,8 @@ describe('on the mounted app', () => {
       openBreakdown()
       const { rows } = readStorageUsage(localStorage)
       const names = rows.find((r) => r.kind === 'names')
-      expect(names.chars).toBe(600_000 + 'Weekend'.length)
+      // (the short name twice: in the list, and copied into its sync key — the long one is not copied)
+      expect(names.chars).toBe(600_000 + 2 * 'Weekend'.length)
       expect(rowTexts()[0]).toBe(`Preset names${percentText(names.chars, CHROMIUM)}`) // the largest
       expect(percentText(names.chars, CHROMIUM)).toBe('11.4%')
       // The rows still come to the headline or a little under it, never more ("<0.1%" is under a

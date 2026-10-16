@@ -6,11 +6,14 @@ import {
   copyName,
   defaultPresetName,
   readStoredRegistry,
+  normalizeRegistry,
+  onRegistryAdopt,
+  syncRegistry,
   PRESET_STORE_KEYS,
   FIRST_PRESET_ID,
   presetIdOfSuffix,
 } from './presets.js'
-import type { Preset } from './presets.js'
+import type { Preset, PresetRegistryValues } from './presets.js'
 import { discardSessionStats, readSessionStats, dataIdOf, bestsIdOf } from './amnesic.js'
 import { amnesicModeOf, setSessionAmnesic, forgetSessionAmnesicOf } from './sessionAmnesic.js'
 import type { AmnesicMode } from './amnesicMode.js'
@@ -258,10 +261,21 @@ const clearPresetStorage = (presetId: number) => {
   } catch {
     /* storage refused — nothing was ever written, so nothing is left behind */
   }
-  // …and the SECOND place a preset can have written: an amnesic preset's session copy lives in
-  // sessionStorage under the same key, and "remove exactly its keys and nothing else" has to mean
-  // both areas or a deleted preset leaves a session copy behind. Unconditional rather than gated on
-  // its Amnesic value — which goes with it, on the next line.
+  forgetPresetSession(presetId)
+  // Deleting a preset is the likeliest way a player makes room after the storage-full notice, and
+  // this is the moment the room appears — so anything a full device refused is re-saved now, not at
+  // the player's next change (store/storageHealth).
+  storageSpaceFreed()
+}
+
+// What a preset leaves in THIS window's browsing session (sessionStorage) - the half of a delete every
+// window does for itself: the one that deletes, and every other window when it hears of the delete
+// (adoptRegistry, below). Ids are never reused so a leftover is harmless; "remove exactly its keys" is
+// the house rule.
+function forgetPresetSession(presetId: number): void {
+  // An amnesic preset's session copy lives in sessionStorage under the same key, and "remove exactly
+  // its keys and nothing else" has to mean both areas or a deleted preset leaves a session copy
+  // behind. Unconditional rather than gated on its Amnesic value — which goes with it, on the next line.
   discardSessionStats(presetId)
   forgetSessionAmnesicOf(presetId)
   // …and the THIRD place a preset can have written this session: its current-page entry
@@ -277,11 +291,50 @@ const clearPresetStorage = (presetId: number) => {
   // write just before this parked its screens on the way out (src/main.tsx's subscription) — so this
   // line is what has the last word: a deleted preset leaves no history behind.
   discardSessionHistories(presetId)
-  // Deleting a preset is the likeliest way a player makes room after the storage-full notice, and
-  // this is the moment the room appears — so anything a full device refused is re-saved now, not at
-  // the player's next change (store/storageHealth).
-  storageSpaceFreed()
 }
+
+/**
+ * ANOTHER WINDOW CHANGED THE PRESET LIST (design-q1-q2.md v4, 8.3) — the windows-in-sync door hands
+ * every such change here (store/presets' registry door). Renames, moves, new presets, and the "Open in"
+ * pin simply show; nothing remounts. A preset deleted there that this window is NOT on leaves this
+ * window's session too. The preset this window IS on, deleted there: this window moves to its
+ * neighbour - the one after it, or the one before when it was last - exactly as a delete made here
+ * moves it (the registry write schedules the remount, src/main.tsx's subscription; then the stores
+ * reload). ★ ONLY THIS WINDOW'S OWN SESSION IS TOUCHED: the deleted preset's permanent keys were the
+ * deleting window's to remove, and a window never removes saved data on the strength of a list it read.
+ */
+export function adoptRegistry(patch: Partial<PresetRegistryValues>): void {
+  const reg = usePresets.getState()
+  const presets = patch.presets ?? reg.presets
+  const listed = new Set(presets.map((p) => p.id))
+  for (const p of reg.presets)
+    if (!listed.has(p.id) && p.id !== reg.activeId) forgetPresetSession(p.id)
+  let activeId = reg.activeId
+  const moved = !listed.has(activeId)
+  if (moved) {
+    const at = reg.presets.findIndex((p) => p.id === activeId)
+    activeId = (
+      reg.presets.slice(at + 1).find((p) => listed.has(p.id)) ??
+      reg.presets
+        .slice(0, Math.max(0, at))
+        .reverse()
+        .find((p) => listed.has(p.id)) ??
+      presets[0]
+    ).id
+  }
+  usePresets.getState().applyRegistry(
+    normalizeRegistry({
+      presets,
+      activeId,
+      nextId: patch.nextId ?? reg.nextId,
+      openInPreset: patch.openInPreset ?? reg.openInPreset,
+    }),
+  )
+  if (!moved) return
+  forgetPresetSession(reg.activeId)
+  reloadPresetStores()
+}
+onRegistryAdopt(adoptRegistry)
 
 // One preset's saved copy of ONE store, as the raw stored text — or null when there is none (never
 // written, or a browser that refuses localStorage, which is the same answer: nothing is there).
@@ -495,32 +548,18 @@ export const activePreset = (): Preset => {
  * caller can offer "create" without yanking the player out of the run they are in.
  */
 export function createPreset(name?: string): Preset {
-  const reg = usePresets.getState()
   // ★ IDS ARE ALLOCATED FORWARD AND NEVER REUSED (store/presets' normalizeRegistry forces nextId
   // above every listed id, whatever the payload claimed). That is what lets `presetKey` be a pure
   // function of the id: a namespace, once vacated, is never handed to a different preset.
-  // ⚠⚠ MULTI-TAB IS REACHABLE HERE, AND FOR THIS OWNER IT IS ROUTINE: the LIVE PWA and the STAGING
-  // site are the same browser origin, so two tabs really do hold two copies of this registry. If
-  // the other tab created a preset after this tab last hydrated, an allocation from the in-memory
-  // `nextId` alone hands out an id that tab already used, and the two presets SHARE a namespace —
-  // two players' data merged, which is worse than any amount of registry divergence.
-  // ★ SO THE FLOOR IS THE STORED REGISTRY, NOT THE ONE IN MEMORY. The other tab's `applyRegistry`
-  // wrote its `nextId` to disk synchronously, so re-reading the key here sees an id it allocated
-  // even for a preset NOBODY HAS OPENED YET — which is the window the skip loop below cannot see
-  // into, because a preset's four per-preset keys do not exist until it is first opened, and that
-  // is precisely when a just-created preset is most likely to be raced.
-  //   The residual window is one synchronous turn (this read, then the write below) instead of the
-  //   whole life of the tab. Closing that last sliver would take a lock this platform does not
-  //   offer for localStorage; nothing here can be made to wait.
-  //   ⚠ IT DOES NOT FIX THE DIVERGENCE, and cannot: this tab still writes back ITS list, so the
-  //   other tab's new preset is dropped from the registry until one of them reloads. That is a
-  //   listing disagreement between two tabs of the same app, and it heals on any reload; a merged
-  //   namespace never heals.
-  // ⚠ THE SKIP LOOP STAYS, for the case the stored registry cannot answer either: keys left on disk
-  // by a delete that was interrupted between the registry write and the removal. It is also the
-  // second net under the sliver above.
-  // (Both live in allocatePresetId, below, which duplicatePreset shares.)
+  // ★ THE REGISTRY IS MERGED WITH THE DEVICE FIRST (design 8.5), so an id another window - the live
+  // PWA and the staging site are one browser origin - allocated is known here before this one is
+  // drawn, even for a preset nobody has opened yet; and the list written afterwards keeps that
+  // window's preset (the registry's membership rule). What is left is two windows allocating inside
+  // the same instant of the read lag (design R1).
+  // ⚠ THE SKIP LOOP STAYS, for keys left on disk by a delete interrupted between the registry write
+  // and the removal (allocatePresetId, below, which duplicatePreset shares).
   const id = allocatePresetId()
+  const reg = usePresets.getState() // (after the merge: another window's new presets are in it)
   // A new preset is PERMANENT until somebody says otherwise — its Amnesic value starts on Off
   // (setSessionAmnesic, below). Inheriting the current preset's value was rejected on sight: creating
   // a preset is not a decision about where its stats are kept, and the one direction of that mistake
@@ -545,11 +584,11 @@ export function createPreset(name?: string): Preset {
   return preset
 }
 
-// The next preset id: above every id this tab and the device's stored registry have handed out,
-// and past any id whose namespace still holds keys (createPreset argues each half).
+// The next preset id: above every id any window has handed out (the registry merged with the device
+// first), and past any id whose namespace still holds keys (createPreset argues each half).
 function allocatePresetId(): number {
-  const stored = readStoredRegistry()
-  let id = Math.max(usePresets.getState().nextId, stored?.nextId ?? 0, FIRST_PRESET_ID + 1)
+  syncRegistry()
+  let id = Math.max(usePresets.getState().nextId, FIRST_PRESET_ID + 1)
   while (presetStorageInUse(id)) id++
   return id
 }
@@ -578,10 +617,10 @@ function allocatePresetId(): number {
  * opens on (reloadPresetStores' no-storage branch).
  */
 export function duplicatePreset(sourceId: number): Preset | 'unknown' | 'no-room' {
-  const reg = usePresets.getState()
+  const id = allocatePresetId()
+  const reg = usePresets.getState() // (after the merge)
   const index = reg.presets.findIndex((p) => p.id === sourceId)
   if (index < 0) return 'unknown'
-  const id = allocatePresetId()
   let device: Storage | null = null
   try {
     device = window.localStorage

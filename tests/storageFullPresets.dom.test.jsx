@@ -96,7 +96,7 @@ describe('a full device (one shared allowance)', () => {
   // Preset 2 is the player's main preset (500 cards); preset 1 a small one (3), holding one more
   // answer the full device refused.
   function fillWithAnUnsavedAnswer() {
-    const main = createPreset('Main')
+    const main = createPreset('Main practice')
     useProgress.getState().setModeStats('classic', stats(3))
     switchPreset(main.id)
     useProgress.getState().setModeStats('classic', stats(500))
@@ -211,10 +211,11 @@ describe('a full device (one shared allowance)', () => {
     it('on a device that is simply FULL, one more letter is refused the same way — and a shorter name is taken, and lets the held saves land', () => {
       const main = fillWithAnUnsavedAnswer() // the device is exactly full, an answer is waiting
       const before = localStorage.getItem(REGISTRY)
-      expect(renamePreset(main.id, 'Main!')).toBe('no-room')
+      expect(renamePreset(main.id, 'Main practice!')).toBe('no-room')
       expect(localStorage.getItem(REGISTRY)).toBe(before)
       expect(useStorageHealth.getState().unsaved).toBe(true) // the answer is still waiting
-      // Shortening a name makes room: 4 characters back is enough for nothing here…
+      // Shortening a name makes room - twice over, since the name is in the registry and in its sync
+      // key (store/syncedDoc), less the few characters the key spends recording the name before it…
       expect(renamePreset(main.id, 'M')).toBe('renamed')
       // …but it is saved, and what was waiting is tried again at once.
       expect(JSON.parse(localStorage.getItem(REGISTRY)).state.presets[1].name).toBe('M')
@@ -403,7 +404,7 @@ describe('a full device (one shared allowance)', () => {
         expect(
           Storage.prototype.setItem.mock.calls.filter(([key]) => key === REGISTRY),
         ).toHaveLength(
-          3, // the three saves `settle` made, and none since
+          2, // the two saves `settle` made (a new preset, a rename), and none since
         )
       })
 

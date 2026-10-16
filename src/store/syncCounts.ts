@@ -48,6 +48,7 @@ import {
   canonicalJson,
   encodeStamp,
   decodeStamp,
+  cyrb53,
 } from './syncStamp.js'
 import { timesHash, prefixHash, appended } from '../engine/timesPool.js'
 
@@ -233,6 +234,9 @@ export type Dev = {
 
 // ── Counts ────────────────────────────────────────────────────────────────────────────────────────
 
+/** A setting's value longer than this (as JSON) is not copied into the sync key: only its fingerprint. */
+export const KEY_VALUE_MAX = 4096
+const NO_VALUE = Symbol('no value')
 const clone = <T>(o: T): T => (o === undefined ? o : (JSON.parse(JSON.stringify(o)) as T))
 const isStampBase = (b: unknown): b is Stamp => typeof b === 'object' && b !== null
 const sameTimes = (a: readonly number[], b: readonly number[]): boolean =>
@@ -245,8 +249,13 @@ export const blankSilo = (): Silo => ({ pl: 0, gd: 0, sk: 0, bs: 0, t: [], tl: 0
 /** A silo's fingerprint: its counts, its legacy gap, and the hash of its times. */
 export const siloFp = (s: Silo): string =>
   `L${s.pl}|${s.gd}|${s.sk}|${s.bs}|${s.tl}|${s.t.length}|${timesHash(s.t)}`
-/** A setting's fingerprint: its value, spelled one way. */
-export const regFp = (v: unknown): string => (v === undefined ? 'R~' : `R${canonicalJson(v)}`)
+/** A setting's fingerprint: its value, spelled one way - and, past a few characters, the hash of that
+ *  (a preset's name has no length limit, and a fingerprint is written in the envelope and the key). */
+export const regFp = (v: unknown): string => {
+  if (v === undefined) return 'R~'
+  const text = canonicalJson(v)
+  return text.length <= 24 ? `R${text}` : `H${cyrb53(text)}`
+}
 
 // does s equal the version summary tg names?
 const isVersion = (s: Silo, tg: Tag | Summary): boolean =>
@@ -278,7 +287,6 @@ export class CountsBook {
   readonly hooks: CountsHooks
   readonly tag: string
   readonly name: string
-  readonly SL: readonly string[]
   hlc: Clock = { m: 0, c: 0 }
   g: string | null = null
   // per slice
@@ -328,7 +336,19 @@ export class CountsBook {
     this.tag = o.tag
     this.name = o.name ?? o.tag
     this.hooks = o.hooks ?? {}
-    this.SL = [...o.shape.silos, ...o.shape.regs]
+  }
+  // THE SLICES, as the shape names them NOW: a doc whose slices come and go (the preset registry - one
+  // name per preset) names a new one the moment it appears; it starts as "nothing known" (stamp ZERO),
+  // so whatever the device says of it wins.
+  get SL(): readonly string[] {
+    const sl = [...this.shape.silos, ...this.shape.regs]
+    for (const x of sl)
+      if (!this.mem[x]) {
+        const v = this.isSilo(x) ? this.blank() : this.shape.regAbsent
+        this.mem[x] = { v, st: ZERO }
+        this.base[x] = { v, st: ZERO }
+      }
+    return sl
   }
   isSilo = (x: string): boolean => this.shape.silos.includes(x)
   fpOf = (x: string, v: unknown): string => (this.isSilo(x) ? siloFp(v as Silo) : regFp(v))
@@ -448,8 +468,13 @@ export class CountsBook {
       else if (!doc && Sg)
         c = { kind: 'change' } // an older page REMOVED the key (its Full Reset)
       // a setting field ABSENT from an older page's doc is one that build does not know: the newest stands
-      else if (!this.isSilo(x) && disk === undefined && sAt)
-        c = { kind: 'carryReg', st: sAt.st, val: sAt.v }
+      else if (
+        !this.isSilo(x) &&
+        disk === undefined &&
+        sAt &&
+        this.newestValue(x, sAt) !== NO_VALUE
+      )
+        c = { kind: 'carryReg', st: sAt.st, val: this.newestValue(x, sAt) }
       // (2.2 compact) a setting with no entry in the envelope or the key is one no new window has changed
       // since the update: the device's value is its value
       else if (!this.isSilo(x) && Sg && !sAt && !rec) c = { kind: 'boot', st: BOOT }
@@ -495,9 +520,23 @@ export class CountsBook {
     if (sAt && this.fpOf(x, v) === sAt.fp) return { kind: 'current', st: sAt.st }
     // (V2-F6) THE VALUE JUST BEFORE THE NEWEST CHANGE is that page's stale copy - unless an older page
     // has been seen holding the newest value since it was set (then it may have set the old value back)
-    if (sAt && sAt.prev && !sAt.seen && this.fpOf(x, v) === sAt.prev.fp)
-      return { kind: 'carryReg', st: sAt.st, val: sAt.v }
+    if (
+      sAt &&
+      sAt.prev &&
+      !sAt.seen &&
+      this.fpOf(x, v) === sAt.prev.fp &&
+      this.newestValue(x, sAt) !== NO_VALUE
+    )
+      return { kind: 'carryReg', st: sAt.st, val: this.newestValue(x, sAt) }
     return { kind: 'change' }
+  }
+  // The newest value of a setting, to put back over an older page's stale copy: the key's - or, for a
+  // value too long to be copied into the key (KEY_VALUE_MAX), this window's own when it holds that very
+  // version; otherwise none can be put back (part2-issues #4: the older page's copy then stands).
+  newestValue(x: string, sAt: KeyEntry): unknown {
+    if ('v' in sAt) return sAt.v
+    const mine = this.mem[x]?.v
+    return this.fpOf(x, mine) === sAt.fp ? mine : NO_VALUE
   }
   classifySilo(
     x: string,
@@ -1224,7 +1263,9 @@ export class CountsBook {
           : {}),
       }
       if (!this.isSilo(x)) {
-        sAt[x].v = this.mem[x].v
+        // (the value itself, to put back over a stale copy - not when it is too long to copy: a preset's
+        // name has no length limit, and a second copy of a book would halve what the device can hold)
+        if (canonicalJson(this.mem[x].v).length <= KEY_VALUE_MAX) sAt[x].v = this.mem[x].v
         const changed = !p || p.fp !== at[x].fp
         // (the value before it: the previous entry's - or, the first change since the update, the value
         // the window held before it, which every older page then held)
@@ -1357,7 +1398,9 @@ export class CountsBook {
     this.dirty[x] = { reset: true, ops: [] }
   }
   setReg(x: string, v: unknown): void {
-    this.mem[x] = { v, st: this.mem[x].st }
+    void this.SL // (a slice the shape has just begun to name starts as "nothing known")
+    this.mem[x] = { v, st: this.mem[x]?.st ?? ZERO }
+    this.base[x] ??= { v: this.shape.regAbsent, st: ZERO }
     this.dirty[x] = { reset: false, ops: [], set: true }
   }
   /** Whether a held Reset of this slice is pressed and waiting (for the oracle's kills). */

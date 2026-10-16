@@ -25,6 +25,14 @@
 // own, to play two windows in one process.
 
 import { ListBook, type ListEntry, type ListOp, type ListShape } from './syncList.js'
+import {
+  CountsBook,
+  type CountsIO,
+  type CountsShape,
+  type Envelope,
+  type SyncKey,
+} from './syncCounts.js'
+import { sameJson } from './json.js'
 import { type Stamp, ZERO, packSync, unpackSync, randomId } from './syncStamp.js'
 import {
   holdForDoor,
@@ -38,8 +46,9 @@ import { create } from 'zustand'
 import { captureError } from '../observability/sentry.js'
 
 /** The sync key of a doc: no older build reads or writes it. */
-export const syncKeyOf = (docKey: string): string => `cg-sync-v1|${docKey}`
-export const isSyncKey = (key: string): boolean => key.startsWith('cg-sync-v1|')
+export const SYNC_KEY_PREFIX = 'cg-sync-v1|'
+export const syncKeyOf = (docKey: string): string => `${SYNC_KEY_PREFIX}${docKey}`
+export const isSyncKey = (key: string): boolean => key.startsWith(SYNC_KEY_PREFIX)
 
 // ── remoteEpoch: "this doc changed because ANOTHER window changed it" (6.2, B V3) ─────────────────
 // One number per doc kind, bumped in the same turn as the store patch it explains. A screen that has
@@ -67,17 +76,18 @@ const bumpRemote = (kind: DocKind) =>
   useRemoteEpoch.setState((s) => ({ ...s, [kind]: s[kind] + 1 }))
 
 // ── The stores' side ──────────────────────────────────────────────────────────────────────────
-type StoreApi<S> = { getState: () => S; setState: (partial: Partial<S>) => void }
+export type StoreApi<S> = { getState: () => S; setState: (partial: Partial<S>) => void }
 
 interface Binding {
   readonly kind: DocKind
-  readonly docKey: () => string
-  /** A notice for this doc's key or its sync key: merge (no write yet). */
-  notice(key: string, oldValue: string | null): void
+  /** A notice for this doc's key or its sync key - what it held before, and holds now: merge (no write yet). */
+  notice(key: string, oldValue: string | null, newValue: string | null): void
   /** Write what the notices left owed, and patch the store with what they brought. */
   flush(): void
   /** Read the device as it is now (a return from hidden, a missed notice) and settle. */
   sync(): void
+  /** Forget every book ("the page was closed": the test harness, which has no close). */
+  forget(): void
 }
 
 export interface DoorEnv {
@@ -90,6 +100,58 @@ export interface DoorEnv {
 }
 
 export type Door = ReturnType<typeof createDoor>
+
+/** How a counts-and-settings doc maps onto its store (countsStorage). */
+export type CountsSpec = {
+  kind: DocKind
+  /** The doc's key now (a per-preset doc: the active preset's) - null when there is none. */
+  key: () => string | null
+  /** The store's persist version, written into the doc as every build writes it. */
+  version: number
+  /** What the store holds for a slice where the doc has no value (its factory value) - and what a
+   *  doc this window writes says for it, so a doc is always whole. */
+  defaultOf(x: string): unknown
+  /** The doc's slices, given every slice name seen (this window's, the device doc's, the key's). */
+  regs: (seen: readonly string[]) => readonly string[]
+  /** The store's persisted state as slice values, and back (what getItem hands the store). */
+  toSlices(state: Record<string, unknown>): Record<string, unknown>
+  fromSlices(slices: Record<string, unknown>): Record<string, unknown>
+  /** A doc's stored state as slice values, and back (how the slices sit in the doc's text). */
+  sliceState(docState: Record<string, unknown>): Record<string, unknown>
+  docState(slices: Record<string, unknown>): Record<string, unknown>
+  /** The store patch that brings another window's change in (`now`: every slice as the store would
+   *  hold it; `changed`: the slices that moved) - null for nothing to patch. */
+  patchOf(now: Record<string, unknown>, changed: readonly string[]): Record<string, unknown> | null
+  /** How the patch reaches the store, where that is more than a setState (the preset registry's: a
+   *  window whose preset was deleted elsewhere moves off it, store/presetControl's adoptRegistry). */
+  apply?(patch: Record<string, unknown>): void
+  /** This doc's own rules after a merge (the preset registry's membership, design 8.1): slice values to
+   *  set, as the store would hold them - or null. */
+  reconcile?(
+    before: Record<string, unknown>,
+    now: Record<string, unknown>,
+    device: Record<string, unknown> | null,
+  ): Record<string, unknown> | null
+}
+export type CountsStorage<S> = PersistStorage<S> & {
+  attach(store: StoreApi<S>): void
+  /** Save `value` only if the device takes it now; false - nothing changed anywhere (2.6's trySave). */
+  trySave(value: StorageValue<S>): boolean
+  /** Merge the active doc with the device now (the registry before an allocation, 8.5). */
+  syncNow(): void
+  /** The active doc's slices as this window's book holds them (null: not opened). */
+  slices(): Record<string, unknown> | null
+}
+type CountsEntry = {
+  key: string
+  syncKey: string
+  shape: CountsShape
+  book: CountsBook
+  last: Record<string, unknown> | null
+  kept: boolean
+  prev: { forDoc: string | null; old: string | null | undefined }
+  refresh: () => void
+}
 
 export function createDoor(env: DoorEnv) {
   const tag = env.tag ?? randomId(6)
@@ -230,7 +292,6 @@ export function createDoor(env: DoorEnv) {
     }
     const binding: Binding = {
       kind: spec.kind,
-      docKey: () => docKey,
       notice(key) {
         if (!book || (key !== docKey && key !== syncKey)) return
         kept = book.handle(false) || kept
@@ -248,6 +309,11 @@ export function createDoor(env: DoorEnv) {
         book.handle(true)
         adopt()
         settle()
+      },
+      forget() {
+        book = null
+        last = null
+        kept = false
       },
     }
     bindings.push(binding)
@@ -284,20 +350,335 @@ export function createDoor(env: DoorEnv) {
     }
   }
 
+  // ── COUNTS AND SETTINGS (store/syncCounts): every doc but the Lookup history ──
+  // A doc's slices come from the store's persisted state and go back into it (the spec's toSlices /
+  // fromSlices); how they sit inside the doc's text is the doc's own (sliceState / docState). A
+  // per-preset doc has one book per preset's key: the store is on the active preset's, and a book it
+  // left with a save still owed stays, detached, merging and retrying until that save lands (5).
+  function countsStorage<S>(spec: CountsSpec): CountsStorage<S> {
+    const entries = new Map<string, CountsEntry>()
+    let store: StoreApi<S> | null = null
+    let adopting = false
+    const area = () => env.storage()
+    // what the store holds for a slice whose value the book has - its default where the doc has none
+    const asStored = (x: string, v: unknown) => (v === undefined ? spec.defaultOf(x) : v)
+    const valuesOf = (e: CountsEntry): Record<string, unknown> =>
+      Object.fromEntries(e.book.SL.map((x) => [x, asStored(x, e.book.mem[x].v)]))
+    const make = (key: string): CountsEntry => {
+      const syncKey = syncKeyOf(key)
+      const e = {
+        key,
+        syncKey,
+        last: null,
+        kept: false,
+        prev: { forDoc: null, old: undefined },
+      } as unknown as CountsEntry
+      let regs: readonly string[] = []
+      const shape: CountsShape = {
+        silos: [],
+        get regs() {
+          return regs
+        },
+        regAbsent: undefined,
+        parse(text) {
+          if (text == null) return null
+          try {
+            const o = JSON.parse(text) as { state?: unknown; sync?: unknown }
+            const docState =
+              o.state && typeof o.state === 'object' ? (o.state as Record<string, unknown>) : {}
+            const sync = o.sync ? (unpackSync(JSON.stringify(o.sync)) as Envelope) : null
+            return { state: spec.sliceState(docState), sync }
+          } catch {
+            return { state: {}, sync: null }
+          }
+        },
+        silo: () => {
+          throw new Error('syncedDoc: this doc has no silos')
+        },
+        diskSilo: () => {
+          throw new Error('syncedDoc: this doc has no silos')
+        },
+        write: (state, sync) =>
+          JSON.stringify({
+            state: spec.docState(
+              Object.fromEntries(Object.entries(state).map(([x, v]) => [x, asStored(x, v)])),
+            ),
+            version: spec.version,
+            sync: JSON.parse(packSync(sync)),
+          }),
+        readKey(text) {
+          if (text == null) return null
+          try {
+            return unpackSync(text) as SyncKey
+          } catch {
+            return null
+          }
+        },
+        writeKey: (k) => packSync(k),
+      }
+      // The slices the doc has NOW: the doc's own rule over every name this window holds, the device's
+      // doc shows, and the device's key names.
+      e.refresh = () => {
+        const s = area()
+        const dev = shape.parse(s?.getItem(key) ?? null)?.state ?? {}
+        const k = shape.readKey(s?.getItem(syncKey) ?? null)
+        regs = spec.regs([
+          ...Object.keys(e.book?.mem ?? {}),
+          ...Object.keys(e.last ?? {}),
+          ...Object.keys(dev),
+          ...Object.keys(k?.at ?? {}),
+        ])
+      }
+      const io: CountsIO = {
+        view: () => {
+          e.refresh()
+          const s = area()
+          const doc = s?.getItem(key) ?? null
+          return {
+            doc,
+            side: s?.getItem(syncKey) ?? null,
+            prevDoc: e.prev.forDoc === doc ? e.prev.old : undefined,
+          }
+        },
+        deviceKey: () => area()?.getItem(syncKey) ?? null,
+        save(docText, keyText) {
+          const s = area()
+          if (!s) return true
+          const before = s.getItem(key)
+          const ok = landBoth(s, key, docText, syncKey, keyText)
+          if (ok) e.prev = { forDoc: docText, old: before }
+          return ok
+        },
+      }
+      e.shape = shape
+      e.refresh()
+      e.book = new CountsBook({ shape, io, tag })
+      e.book.open()
+      // This doc's own rules apply to what a window opens on as well (an older tab's delete of a preset
+      // is read at a load) - as an action this window will land with its next write, never at the load
+      // itself (G7).
+      const fix = spec.reconcile?.(
+        valuesOf(e),
+        valuesOf(e),
+        shape.parse(area()?.getItem(key) ?? null)?.state ?? null,
+      )
+      if (fix) for (const [x, v] of Object.entries(fix)) e.book.setReg(x, v)
+      return e
+    }
+    const activeEntry = (): CountsEntry | null => {
+      const key = spec.key()
+      return key === null ? null : (entries.get(key) ?? null)
+    }
+    const owing = (e: CountsEntry) => e.book.owes || Object.keys(e.book.dirty).length > 0
+    const open = (key: string): CountsEntry => {
+      const had = entries.get(key)
+      // a (re)hydration reads the doc afresh - unless the book still owes a save (its actions stay)
+      if (had && owing(had)) return had
+      const e = make(key)
+      entries.set(key, e)
+      return e
+    }
+    // merge with the device, put right what this doc's own rules say, and land what is owed
+    const settle = (e: CountsEntry, mayLand: boolean, keptBefore = false): boolean => {
+      const before = valuesOf(e)
+      let kept = e.book.handle(false, keptBefore)
+      const fix = spec.reconcile?.(
+        before,
+        valuesOf(e),
+        e.shape.parse(area()?.getItem(e.key) ?? null)?.state ?? null,
+      )
+      if (fix)
+        for (const [x, v] of Object.entries(fix))
+          if (!sameJson(asStored(x, e.book.mem[x]?.v), v)) {
+            e.book.setReg(x, v)
+            kept = true
+          }
+      if (!mayLand) return kept
+      if (kept || keptBefore || owing(e)) e.book.owes = !e.book.land()
+      hold(e)
+      return false
+    }
+    const hold = (e: CountsEntry) => {
+      const s = area()
+      if (!s) return
+      if (e.book.owes) {
+        const text = JSON.stringify({ state: spec.docState(valuesOf(e)), version: spec.version })
+        holdForDoor(s, e.key, text, () => {
+          settle(e, true)
+          adopt(e)
+          return !e.book.owes
+        })
+        return
+      }
+      releaseDoorHold(s, e.key)
+      // a detached book whose save has landed is let go
+      if (e !== activeEntry()) entries.delete(e.key)
+    }
+    const adopt = (e: CountsEntry) => {
+      if (!store || e !== activeEntry()) return
+      if (hidden) {
+        adoptOwed.add(() => adopt(e))
+        return
+      }
+      const now = valuesOf(e)
+      const shown = e.last ?? {}
+      const changed = Object.keys(now).filter((x) => !sameJson(now[x], shown[x]))
+      const patch = changed.length ? spec.patchOf(now, changed) : null
+      if (!patch || !Object.keys(patch).length) return
+      adopting = true
+      try {
+        if (spec.apply) spec.apply(patch)
+        else store.setState(patch as Partial<S>)
+      } finally {
+        adopting = false
+      }
+      bumpRemote(spec.kind)
+    }
+    const binding: Binding = {
+      kind: spec.kind,
+      notice(key, oldValue, newValue) {
+        for (const e of entries.values()) {
+          if (key !== e.key && key !== e.syncKey) continue
+          if (key === e.key) e.prev = { forDoc: newValue, old: oldValue }
+          e.kept = settle(e, false) || e.kept
+          queueFlush()
+        }
+      },
+      flush() {
+        for (const e of [...entries.values()]) {
+          const kept = e.kept
+          e.kept = false
+          settle(e, true, kept)
+          adopt(e)
+        }
+      },
+      sync() {
+        for (const e of [...entries.values()]) {
+          e.prev = { forDoc: null, old: undefined }
+          settle(e, true)
+          adopt(e)
+        }
+      },
+      forget() {
+        entries.clear()
+      },
+    }
+    bindings.push(binding)
+    // what the store's change WAS: the slices whose values moved since the store's previous value
+    const changesOf = (e: CountsEntry, value: StorageValue<S>): string[] => {
+      const next = spec.toSlices(value.state as Record<string, unknown>)
+      const prev = e.last ?? valuesOf(e)
+      e.last = next
+      return [...new Set([...Object.keys(prev), ...Object.keys(next)])].filter(
+        (x) => !sameJson(prev[x], next[x]),
+      )
+    }
+    return {
+      attach(s) {
+        store = s
+      },
+      getItem(): StorageValue<S> | null {
+        const key = spec.key()
+        if (key === null) return null
+        const e = open(key)
+        e.last = valuesOf(e)
+        const docText = area()?.getItem(key) ?? null
+        if (docText === null && !e.book.g) return null
+        let version = spec.version
+        try {
+          const v = docText === null ? null : (JSON.parse(docText) as { version?: unknown }).version
+          if (typeof v === 'number') version = v
+        } catch {
+          /* unreadable: read as this build's own */
+        }
+        return {
+          state: spec.fromSlices(
+            Object.fromEntries(e.book.SL.map((x) => [x, e.book.mem[x].v])),
+          ) as S,
+          version,
+        }
+      },
+      setItem(_name, value) {
+        const key = spec.key()
+        if (key === null) return
+        const e = entries.get(key) ?? open(key)
+        if (adopting) {
+          e.last = spec.toSlices(value.state as Record<string, unknown>)
+          return
+        }
+        const changed = changesOf(e, value)
+        if (!changed.length && !owing(e)) return
+        settle(e, false) // catch up with the device first (a notice may not have come yet)
+        const next = e.last!
+        e.refresh()
+        for (const x of changed) e.book.setReg(x, next[x])
+        settle(e, true)
+        const now = valuesOf(e)
+        if (Object.keys(now).some((x) => !sameJson(now[x], next[x]))) later(() => adopt(e))
+      },
+      removeItem() {
+        // (a store's own doc is removed with its preset - store/presetControl, through removeDoc)
+      },
+      trySave(value) {
+        const key = spec.key()
+        if (key === null) return true
+        const e = entries.get(key) ?? open(key)
+        const lastBefore = e.last
+        const changed = changesOf(e, value)
+        if (!changed.length) return true
+        settle(e, false)
+        const next = e.last!
+        e.refresh()
+        const memBefore = { ...e.book.mem }
+        const dirtyBefore = { ...e.book.dirty }
+        for (const x of changed) e.book.setReg(x, next[x])
+        if (e.book.land()) {
+          hold(e)
+          return true
+        }
+        e.book.mem = memBefore
+        e.book.dirty = dirtyBefore
+        e.last = lastBefore
+        return false
+      },
+      syncNow() {
+        const e = activeEntry()
+        if (!e) return
+        settle(e, true)
+        adopt(e)
+      },
+      slices() {
+        const e = activeEntry()
+        return e ? valuesOf(e) : null
+      },
+    }
+  }
+
   return {
     tag,
     listStorage,
-    /** A `storage` event: the key another window changed, and what it held before. */
-    notice(key: string | null, oldValue: string | null) {
+    countsStorage,
+    /** A `storage` event: the key another window changed, what it held before, and what it holds now. */
+    notice(key: string | null, oldValue: string | null, newValue: string | null = null) {
       if (key === null) {
         for (const b of bindings) b.sync()
         return
       }
-      for (const b of bindings) b.notice(key, oldValue)
+      for (const b of bindings) b.notice(key, oldValue, newValue)
     },
     /** Read every doc as the device holds it now, and settle (a return from hidden; 2.7). */
     syncAll() {
       for (const b of bindings) b.sync()
+    },
+    /**
+     * Forget every book, i.e. "the page was closed". The app never needs this - a close drops the
+     * books with the page - but the test harness has no close, so tests/setup/dom.js calls it before
+     * every test (as it forgets the storage health).
+     */
+    forget() {
+      for (const b of bindings) b.forget()
+      adoptOwed.clear()
+      hidden = false
     },
     /** The window went into the background (true) or came back (false: what was owed is patched). */
     setHidden(on: boolean) {

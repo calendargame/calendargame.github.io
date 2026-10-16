@@ -9,6 +9,7 @@
 // every key the device then holds for it, and fails on any key no part of the list owns. A new
 // kind of per-preset key — a fifth store, or a store's own sync record beside its save — fails
 // here until DUPLICATE_RULES says whether a copy carries it.
+import { isSyncKey, syncKeyOf } from '../src/store/syncedDoc.js'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   usePresets,
@@ -267,6 +268,8 @@ describe('THE GUARD: every per-preset key has an answer in DUPLICATE_RULES', () 
       // writes by: the four stores' keys and their solve-time chunks; and the session's.)
       const STORE_PARTS = Object.entries(PRESET_STORE_KEYS)
       const partOf = (area, key) => {
+        // A doc's windows-in-sync key (store/syncedDoc) belongs to whatever its doc belongs to.
+        if (area === 'local' && isSyncKey(key)) return partOf(area, key.slice(syncKeyOf('').length))
         if (area === 'local') {
           for (const [name, base] of STORE_PARTS) if (key === presetKey(base, p)) return name
           if (parseTimesKey(key)?.presetId === p) return 'progress'
@@ -282,7 +285,7 @@ describe('THE GUARD: every per-preset key has an answer in DUPLICATE_RULES', () 
       }
       // The keys that belong to no preset at all.
       const GLOBAL = {
-        local: [PRESET_REGISTRY_KEY],
+        local: [PRESET_REGISTRY_KEY, syncKeyOf(PRESET_REGISTRY_KEY)],
         session: ['cg-browsing-session-v1', 'cg-session-preset-v1'],
       }
       const unowned = []

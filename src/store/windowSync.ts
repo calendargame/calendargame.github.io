@@ -40,7 +40,7 @@ export function installWindowSync(d: Door = defaultDoor): () => void {
   }
   const onStorage = (e: StorageEvent) => {
     if (e.storageArea !== area || e.key === SCRATCH_KEY) return
-    d.notice(e.key, e.oldValue)
+    d.notice(e.key, e.oldValue, e.newValue)
   }
   let returning = false
   const onBack = () => {
