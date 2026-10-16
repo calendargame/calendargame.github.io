@@ -59,7 +59,7 @@
 // preventDefault-ed, where settings.dom asks one picker and asserts only that it never reaches the
 // window.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { cleanup, act } from '@testing-library/react'
+import { cleanup, act, within } from '@testing-library/react'
 import { useSettings } from '../src/store/settings.js'
 import {
   mountApp,
@@ -80,6 +80,9 @@ import {
   pickPill,
   arrowPicker,
   LOCKABLE_PICKERS,
+  NOT_IN_EFFECT_PICKERS,
+  expectNotInEffect,
+  picker,
   switchState,
   toggleSwitch,
   typeYear,
@@ -157,7 +160,7 @@ const standUp = () => {
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // GROUP 2 — every picker lock and its exact condition
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe('⚙ Settings → the picker locks and their exact conditions', () => {
+describe('⚙ Settings → the pickers not in effect, the one lock, and their exact conditions', () => {
   beforeEach(() => {
     resetAppState()
   })
@@ -166,139 +169,162 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
     document.getElementById('root')?.remove()
   })
 
-  // G2.1 — the ONLY lock driver that is not a store value. The condition is `mode==='deduction'`
-  // exactly, and five of the six modes that leave Input live had never been exercised: a rewrite
-  // that reached for "not a weekday mode" or "a game mode" would pass every test that existed.
-  // ★ INPUT AND ROTATE DOTS SHARE THAT ONE CONDITION — the two describe one subject, the weekday
-  // dot input, which Deduction does not have — so both are walked through every mode HERE rather
-  // than one being spot-checked elsewhere. The pair is the point: they were written to lock
-  // together, and the failure worth catching is one of them drifting off the condition while the
-  // other still satisfies every case that names it. (Rotate Dots was a SWITCH from round 20 to
-  // round 23, read through isOffered here then; it is a picker again, so both take expectLock.)
-  // ⚠ ROTATE DOTS CARRIES A SECOND LOCK — Input on Buttons, where there are no dots to turn; its
-  // exact condition is pinned in tests/dotRotation.dom with the rest of that setting's story,
-  // rather than copied here. This walk therefore chooses DOTS first: without that the picker is
-  // locked in all seven modes and the case would pass while saying nothing about the MODE lock.
-  it('Input and Rotate Dots are live in every mode except Deduction', () => {
+  // ★ RE-BLESSED (Round 26, the sweep the owner approved: "dimmed means not in effect right now, not
+  // locked"). Every picker below except Amnesic used to LOCK — faded, inert, no tab stop — when it
+  // did not apply. It is now NOT IN EFFECT instead: outlined, still changeable, its reason on every
+  // radio (tests/helpers/settingsPanel's expectNotInEffect asserts the whole state at once). The
+  // exact CONDITIONS are what these cases still pin, and they are unchanged except where Round 26
+  // added one (each says so).
+
+  // G2.1 — the condition that is not a store value: `mode==='deduction'` exactly, for Input and
+  // Rotate Dots together (they describe one subject, the weekday dot input, which Deduction does not
+  // have). Rotate Dots' second condition, Input on Buttons, is tests/dotRotation.dom's; this walk
+  // chooses DOTS first so the MODE condition is the only one in play.
+  it('Input and Rotate Dots are in effect in every mode except Deduction', () => {
     standUp()
     pickPill('Input', 'Dots')
-    const both = (locked) => {
-      expectLock('Input', locked)
-      expectLock('Rotate Dots', locked)
+    const both = (reason) => {
+      expectNotInEffect('Input', reason)
+      expectNotInEffect('Rotate Dots', reason)
     }
-    both(false) // classic, where the app opens
+    both(null) // classic, where the app opens
     for (const mode of ['flash', 'blitz', 'aox', 'lookup']) {
       goMode(mode)
-      both(false)
+      both(null)
     }
     goMode('deduction')
-    both(true)
+    both('Not in use in Deduction.')
     goMode('classic')
-    both(false)
-    goGuide() // How to Play is a mode too, and it leaves both live
-    both(false)
+    both(null)
+    goGuide() // How to Play is a mode too, and it leaves both in effect
+    both(null)
   })
 
-  // G2.2 — REMOVED in the dedup pass, and split rather than dropped: "a lock PRESERVES the pick"
-  // through the lock and the guard behind it is tests/settings.dom ~448 ('Input: live in a weekday
-  // mode, locked in Deduction, value preserved'), which asks the same three questions and also
-  // asserts the STORE value; "and nothing was reset on unlock" is G2.10's Input row below, which
-  // additionally asserts the tab stop came back on the chosen pill. Between them nothing this case
-  // said is unasserted.
-
-  // G2.3 — Date Format's condition, plus the reason its lock sits on the wrapper that spans BOTH
-  // trays: the dim has to cover the Written / Numeric captions too, or the greyed tray reads as
-  // two live captions introducing dead controls.
-  it('the Date Format picker locks with Random Format on, and the dim covers its captions', () => {
+  // G2.3 — Date Format with Random Format on: not in effect only on a page whose dates it does not
+  // set — the four weekday modes. On Lookup and How to Play it is the format of what is shown, and in
+  // Deduction it orders the codes in Show Codes, so it stays in effect there. Its captions stay at
+  // full strength either way: only the trays go hollow.
+  it('Date Format is not in effect with Random Format on, on the weekday pages only, and its captions never fade', () => {
     standUp()
     expect(switchState('Random Format')).toBe('Off')
-    expectLock('Date Format', false)
-    expect(drawnUnavailable(caption('Written'))).toBe(false)
-    expect(drawnUnavailable(caption('Numeric'))).toBe(false)
+    expectNotInEffect('Date Format', null)
     toggleSwitch('Random Format')
     expect(switchState('Random Format')).toBe('On')
-    expectLock('Date Format', true)
-    expect(drawnUnavailable(caption('Written'))).toBe(true)
-    expect(drawnUnavailable(caption('Numeric'))).toBe(true)
-    toggleSwitch('Random Format')
-    expectLock('Date Format', false)
+    const IDLE = 'Practice dates ignore this while Random Format is on.'
+    expectNotInEffect('Date Format', IDLE) // classic
+    for (const mode of ['flash', 'blitz', 'aox']) {
+      goMode(mode)
+      expectNotInEffect('Date Format', IDLE)
+    }
+    for (const mode of ['deduction', 'lookup']) {
+      goMode(mode)
+      expectNotInEffect('Date Format', null)
+    }
+    goGuide()
+    expectNotInEffect('Date Format', null)
+    goMode('classic')
     expect(drawnUnavailable(caption('Written'))).toBe(false)
     expect(drawnUnavailable(caption('Numeric'))).toBe(false)
+    toggleSwitch('Random Format')
+    expectNotInEffect('Date Format', null)
   })
 
-  // G2.4 — REMOVED in the dedup pass. "Leap Year Chance locks when the committed range reaches no
-  // leap year" is tests/settings.dom ~501, which drives the range through the store and also
-  // asserts the pick is preserved and the onChange guard holds; the same lock driven through the
-  // year BOXES, which is the route a user has, is G2.10's Leap Year Chance row below
-  // (commitRange(1900,1900) → locked, commitRange(1,10000) → live), with G2.8 and G2.9 standing the
-  // same range up. The only thing this case owned alone was 1904 standing in for "a leap year is
-  // back in range", which 10000 already does.
-
-  // G2.5 — the third argument. rangeHasLeapYear is evaluated under the ACTIVE calendar, so the
-  // Julian switch alone moves this lock with the range held perfectly still. 1500 is the cleanest
-  // year to say it with: divisible by 4, so Julian grants it a February 29, and a century that is
-  // not a multiple of 400, so Gregorian does not.
-  // (Since Round 26 the switch also chooses which Year Range pair is in use, so both pairs are set to
-  // the same years here: what moves the lock is then the calendar rule alone.)
+  // G2.5 — the third argument. Whether a range has a leap year is asked under the ACTIVE calendar,
+  // so the Julian switch alone moves this state. (Since Round 26 the switch also chooses which Year
+  // Range pair is in use, so both pairs are set to the same years here: what moves it is then the
+  // calendar rule alone.) 1500 is divisible by 4, so Julian grants it a February 29, and a century
+  // that is not a multiple of 400, so Gregorian does not.
   it('the Leap Year Chance picker re-evaluates when the Julian switch alone flips', () => {
     standUp()
     commitRange(1500, 1501, 'on')
     commitRange(1500, 1501, 'off')
     expect(switchState(JULIAN_SWITCH)).toBe('On')
-    expectLock('Leap Year Chance', false) // Julian: 1500 is a leap year (and 1501 is not)
+    expectNotInEffect('Leap Year Chance', null) // Julian: 1500 is a leap year (and 1501 is not)
     toggleSwitch(JULIAN_SWITCH)
     expect(switchState(JULIAN_SWITCH)).toBe('Off')
-    expectLock('Leap Year Chance', true) // Gregorian: it is not, so the range has no leap year
+    expectNotInEffect('Leap Year Chance', 'Not in use: your year range has no leap year.')
     toggleSwitch(JULIAN_SWITCH)
-    expectLock('Leap Year Chance', false)
+    expectNotInEffect('Leap Year Chance', null)
     // …and the range never moved, which is the whole claim.
     expect(yearValue('min')).toBe('1500')
     expect(yearValue('max')).toBe('1501')
   })
-  it('the Leap Year Chance picker is locked on a single leap year — every date is in a leap year whatever it says', () => {
+  // NEW IN ROUND 26: on a single leap year every date is in a leap year whatever the setting says
+  // (lib/dateConfig's leapChanceApplies) — so it is not in effect there either.
+  it('the Leap Year Chance picker is not in effect on a single leap year', () => {
     standUp()
     commitRange(2000, 2000)
-    expectLock('Leap Year Chance', true)
+    expectNotInEffect('Leap Year Chance', 'Not in use: every year in your range is a leap year.')
+    expectNotInEffect('Jan/Feb Chance on Leap Years', null) // it still acts on those dates
     commitRange(2000, 2001)
-    expectLock('Leap Year Chance', false)
+    expectNotInEffect('Leap Year Chance', null)
   })
-
-  // G2.6 — REMOVED in the dedup pass. THE NEGATIVE CONTROL — Jan/Feb Chance has no lock branch at
-  // all, so it stays live and operable sitting directly under a greyed-out Leap Year Chance — is
-  // the second half of tests/settings.dom ~501, in the same order and driven the same way, and
-  // that version asserts the store value the pick writes as well as the pill that lights.
-
-  // G2.7 — the inclusive bounds, which are load-bearing and had never been touched at the edges.
-  // Julian Chance applies only where the two calendars are BOTH in play, i.e. the range straddles
-  // 1582 — and 1582 itself counts on both sides, since the reform falls inside that year.
-  it('the Julian Chance picker is live only when the range straddles 1582 and the switch is on', () => {
+  // NEW IN ROUND 26: Jan/Feb Chance acts only on the dates in leap years, so with none in the range
+  // it is not in effect — it used to stay lit there, doing nothing, while a change to it still
+  // restarted a run.
+  it('Jan/Feb Chance is not in effect when the range has no leap year, beside Leap Year Chance', () => {
     standUp()
-    expect(switchState(JULIAN_SWITCH)).toBe('On')
-    expectLock('Julian Chance', false) // the factory 1–10000 straddles it
-    commitRange(1582, 1582)
-    expectLock('Julian Chance', false) // both bounds inclusive, at the tightest possible range
-    commitRange(1583, 10000)
-    expectLock('Julian Chance', true) // one year past the reform: all Gregorian
-    commitRange(1, 1581)
-    expectLock('Julian Chance', true) // one year short of it: all Julian
-    commitRange(1, 10000)
-    expectLock('Julian Chance', false)
-    toggleSwitch(JULIAN_SWITCH)
-    expectLock('Julian Chance', true) // the switch off locks it whatever the range says
-    commitRange(1582, 1582)
-    expectLock('Julian Chance', true)
+    commitRange(1900, 1900)
+    const NONE = 'Not in use: your year range has no leap year.'
+    expectNotInEffect('Leap Year Chance', NONE)
+    expectNotInEffect('Jan/Feb Chance on Leap Years', NONE)
+    commitRange(1, 11582)
+    expectNotInEffect('Leap Year Chance', null)
+    expectNotInEffect('Jan/Feb Chance on Leap Years', null)
   })
 
-  // G2.8 — ONE boolean, five consequences, asserted as a set for every lockable picker at
-  // once. A picker locked four ways out of five is a real bug and a per-facet test cannot see it.
-  // All the conditions are held simultaneously here, which is not a contrivance: Deduction with
-  // Random Format on, Save Stats off and a [1900,1900] range is a state a user can sit in.
-  it('every lockable picker publishes the whole lock together, and refuses a press', () => {
+  // G2.7 — the inclusive bounds. Julian Chance applies only where the two calendars are BOTH in
+  // play, i.e. the range straddles 1582 — and 1582 itself counts on both sides. Round 26 adds
+  // Deduction, whose puzzles never read it.
+  it('the Julian Chance picker is in effect only when the range straddles 1582 and the switch is on, outside Deduction', () => {
+    standUp()
+    const NO_1582 = 'Not in use: your year range does not include 1582.'
+    expect(switchState(JULIAN_SWITCH)).toBe('On')
+    expectNotInEffect('Julian Chance', null) // the factory 1–11582 straddles it
+    commitRange(1582, 1582)
+    expectNotInEffect('Julian Chance', null) // both bounds inclusive, at the tightest possible range
+    commitRange(1583, 11582)
+    expectNotInEffect('Julian Chance', NO_1582) // one year past the reform: all Gregorian
+    commitRange(1, 1581)
+    expectNotInEffect('Julian Chance', NO_1582) // one year short of it: all Julian
+    commitRange(1, 11582)
+    expectNotInEffect('Julian Chance', null)
+    goMode('deduction')
+    expectNotInEffect('Julian Chance', 'Not in use in Deduction.')
+    goMode('classic')
+    toggleSwitch(JULIAN_SWITCH)
+    // the switch off takes it out of effect whatever the range says
+    expectNotInEffect('Julian Chance', 'Not in use while Julian Calendar is off.')
+    commitRange(1582, 1582)
+    expectNotInEffect('Julian Chance', 'Not in use while Julian Calendar is off.')
+  })
+
+  // G2.8 — NOT IN EFFECT CHANGES NOTHING A PRESS DOES. Every such picker at once, with all its
+  // conditions held together (Deduction, Random Format on, a range of [1900,1900] — a state a player
+  // can sit in): each is outlined AND a press on another pill chooses it, as on any live picker.
+  it('every picker not in effect still takes a press, and says why it is outlined', () => {
     standUp()
     toggleSwitch('Random Format')
-    toggleSwitch('Save Stats')
     commitRange(1900, 1900)
     goMode('deduction')
+    for (const name of NOT_IN_EFFECT_PICKERS.filter((n) => n !== 'Date Format')) {
+      expect(picker(name).getAttribute('aria-disabled')).toBe(null)
+      const other = otherPillName(name)
+      pickPill(name, other)
+      expect(pickerChosen(name)).toEqual([other.replace(/^(Written|Numeric) /, '')])
+    }
+    goMode('classic')
+    const other = otherPillName('Date Format')
+    pickPill('Date Format', other)
+    expect(pickerChosen('Date Format')).toEqual([other.replace(/^(Written|Numeric) /, '')])
+  })
+
+  // G2.8b — THE ONE LOCK. Amnesic while Save Stats is off is the only picker that still LOCKS: a
+  // change to it remounts every screen and throws a run in progress away (components/SettingsPanel's
+  // AMNESIC note), for a setting nothing is being recorded under. The whole lock, and a refused press.
+  it('Amnesic while Save Stats is off is the one locked picker: the whole lock, and a press refused', () => {
+    standUp()
+    toggleSwitch('Save Stats')
     for (const name of LOCKABLE_PICKERS) {
       expectLock(name, true)
       const before = pickerChosen(name)
@@ -307,13 +333,13 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
     }
   })
 
-  // G2.9 — the half of the lock a keyboard user meets. pointer-events-none stops pointers and
-  // nothing else, so a locked group still has to SWALLOW the six keys it owns (an arrow would
-  // otherwise scroll the menu out from under the pills). And App's global handler maps ← / → to the
-  // game's history buttons — so the page behind the panel is given a history to step, and must not
-  // move: no key acts on the page while the ⚙ menu is open (components/overlayStack's isPageCovered,
-  // the one rule — tests/keysUnderMenu holds the whole of it).
-  it('a locked picker swallows the arrows, and they never step the puzzle behind the menu', () => {
+  // G2.9 — the keyboard. A picker not in effect is an ordinary live group (the arrows choose); the
+  // locked one swallows them (an arrow would otherwise scroll the menu out from under the pills).
+  // And App's global handler maps ← / → to the game's history buttons, so the page behind the panel
+  // is given a history to step and must not move either way: no key acts on the page while the ⚙
+  // menu is open (components/overlayStack's isPageCovered — tests/keysUnderMenu holds the whole of
+  // it).
+  it('the arrows choose on a picker not in effect, the locked one swallows them, and neither steps the puzzle behind the menu', () => {
     mountApp()
     // The puzzle on screen: Deduction's partial date, the one visible text with a blank in it.
     const hidden = (el) => {
@@ -329,11 +355,16 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
     pressKey('r')
     pressKey('n')
     openSettings()
-    toggleSwitch('Random Format')
     toggleSwitch('Save Stats')
     commitRange(1900, 1900)
     goMode('deduction')
     const live = puzzle()
+    // Not in effect: the keyboard gets in by a press, as on any picker, and the arrows choose.
+    pickPill('Input', 'Buttons')
+    expect(arrowPicker('Input', 'ArrowRight').prevented).toBe(true)
+    expect(pickerChosen('Input')).toEqual(['Dots'])
+    expect(puzzle()).toBe(live)
+    // Locked: consumed, nothing chosen.
     for (const name of LOCKABLE_PICKERS) {
       const before = pickerChosen(name)
       for (const key of ['ArrowLeft', 'ArrowRight']) {
@@ -350,91 +381,97 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
     expect(puzzle()).not.toBe(live)
   })
 
-  // G2.10 — unlocking restores exactly ONE tab stop, on the pill that is actually chosen, with no
-  // interaction at all: the group's layout effect re-asserts it on the pass that clears the lock.
-  // Asserted for all SIX lockable pickers, and every pick below is deliberately NOT the first pill,
-  // so "restores a tab stop" cannot pass by landing on the front of the tray. (Rotate Dots left this
-  // list in round 20, when it became a switch, and is back since round 23 made it a picker again;
-  // it is locked here by its SECOND condition, Input on Buttons, which the mode walk above does not
-  // reach.)
-  const UNLOCK_CASES = [
+  // G2.10 — a picker going out of effect and back keeps its ONE tab stop on the chosen pill
+  // throughout (it is never withdrawn — the group is live); the locked one appoints nobody while
+  // locked and puts the stop back on the chosen pill when it unlocks. Every pick below is
+  // deliberately NOT the first pill, so the stop cannot pass by landing on the front of the tray.
+  const STATE_CASES = [
     {
       name: 'Rotate Dots',
       pick: '45° CCW',
       arrange: () => pickPill('Input', 'Dots'),
-      lock: () => pickPill('Input', 'Buttons'),
-      unlock: () => pickPill('Input', 'Dots'),
+      out: () => pickPill('Input', 'Buttons'),
+      back: () => pickPill('Input', 'Dots'),
     },
     {
       name: 'Input',
       pick: 'Dots',
-      lock: () => goMode('deduction'),
-      unlock: () => goMode('classic'),
+      out: () => goMode('deduction'),
+      back: () => goMode('classic'),
     },
     {
       name: 'Date Format',
       pick: 'Numeric YMD',
-      lock: () => toggleSwitch('Random Format'),
-      unlock: () => toggleSwitch('Random Format'),
+      out: () => toggleSwitch('Random Format'),
+      back: () => toggleSwitch('Random Format'),
     },
     {
       name: 'Leap Year Chance',
       pick: '100%',
-      lock: () => commitRange(1900, 1900),
-      unlock: () => commitRange(1, 10000),
+      out: () => commitRange(1900, 1900),
+      back: () => commitRange(1, 11582),
+    },
+    {
+      name: 'Jan/Feb Chance on Leap Years',
+      pick: '75%',
+      out: () => commitRange(1900, 1900),
+      back: () => commitRange(1, 11582),
     },
     {
       name: 'Julian Chance',
       pick: '75%',
-      lock: () => toggleSwitch(JULIAN_SWITCH),
-      unlock: () => toggleSwitch(JULIAN_SWITCH),
-    },
-    {
-      name: 'Amnesic',
-      pick: 'Stats Only',
-      lock: () => toggleSwitch('Save Stats'),
-      unlock: () => toggleSwitch('Save Stats'),
+      out: () => toggleSwitch(JULIAN_SWITCH),
+      back: () => toggleSwitch(JULIAN_SWITCH),
     },
   ]
-  UNLOCK_CASES.forEach(({ name, pick, arrange, lock, unlock }) => {
-    it(`unlocking ${name} puts its one tab stop back on the chosen pill, untouched`, () => {
+  STATE_CASES.forEach(({ name, pick, arrange, out, back }) => {
+    it(`${name} out of effect and back keeps its one tab stop on the chosen pill`, () => {
       standUp()
       arrange?.()
       pickPill(name, pick)
       expect(tabStopLabel(name)).toBe(pick)
-      lock()
-      expectLock(name, true)
-      expect(tabStopLabel(name)).toBe(null) // a locked group appoints nobody
-      unlock()
-      expectLock(name, false)
+      out()
+      expect(tabStopLabel(name)).toBe(pick)
+      back()
       expect(tabStopLabel(name)).toBe(pick)
       expect(pickerChosen(name)).toEqual([pick.replace(/^(Written|Numeric) /, '')])
     })
   })
-
-  // G2.11 — the lock is LIVE, not read at open time. A store write made from outside the panel
-  // (another screen, a restore, a future sync) has to withdraw the tab stop on the same pass.
-  it('a lock arriving from a store write outside the panel still withdraws the tab stop', () => {
+  it('unlocking Amnesic puts its one tab stop back on the chosen pill, untouched', () => {
     standUp()
-    expectLock('Leap Year Chance', false)
-    act(() => setRangeInUse({ min: 1900, max: 1900 }))
-    expectLock('Leap Year Chance', true)
+    pickPill('Amnesic', 'Stats Only')
+    expect(tabStopLabel('Amnesic')).toBe('Stats Only')
+    toggleSwitch('Save Stats')
+    expectLock('Amnesic', true)
+    expect(tabStopLabel('Amnesic')).toBe(null) // a locked group appoints nobody
+    toggleSwitch('Save Stats')
+    expectLock('Amnesic', false)
+    expect(tabStopLabel('Amnesic')).toBe('Stats Only')
+    expect(pickerChosen('Amnesic')).toEqual(['Stats Only'])
   })
 
-  // G2.12 — the awkward moment: the picker locks while the keyboard is sitting on one of its own
-  // pills. tabIndex -1 still permits focus, so the keyboard stays exactly where it was — and what
-  // stops that being a trap is that the group goes inert rather than silent: the arrows are
-  // consumed, nothing moves, and nothing escapes to the page behind.
-  it('a picker that locks under the keyboard leaves it there, inert rather than silent', () => {
+  // G2.11 — the state is LIVE, not read at open time. A store write made from outside the panel
+  // (another screen, a restore, a future sync) moves it on the same pass.
+  it('a range arriving from a store write outside the panel takes the chance rows out of effect at once', () => {
     standUp()
-    pickPill('Leap Year Chance', '100%') // clicking a pill is how the keyboard gets into a group
-    expect(document.activeElement.textContent.trim()).toBe('100%')
+    expectNotInEffect('Leap Year Chance', null)
     act(() => setRangeInUse({ min: 1900, max: 1900 }))
-    expectLock('Leap Year Chance', true)
-    expect(document.activeElement.textContent.trim()).toBe('100%') // not stranded, not moved
+    expectNotInEffect('Leap Year Chance', 'Not in use: your year range has no leap year.')
+  })
+
+  // G2.12 — the moment a picker goes out of effect while the keyboard is on one of its own pills:
+  // the keyboard stays where it was and the arrows still choose — nothing is stranded, nothing goes
+  // inert.
+  it('a picker that goes out of effect under the keyboard keeps it, and the arrows still choose', () => {
+    standUp()
+    pickPill('Leap Year Chance', '75%') // clicking a pill is how the keyboard gets into a group
+    expect(document.activeElement.textContent.trim()).toBe('75%')
+    act(() => setRangeInUse({ min: 1900, max: 1900 }))
+    expectNotInEffect('Leap Year Chance', 'Not in use: your year range has no leap year.')
+    expect(document.activeElement.textContent.trim()).toBe('75%') // not stranded, not moved
     expect(arrowPicker('Leap Year Chance', 'ArrowRight').prevented).toBe(true)
     expect(pickerChosen('Leap Year Chance')).toEqual(['100%'])
-    expect(document.activeElement.textContent.trim()).toBe('100%')
+    expect(useSettings.getState().leapChance).toBe('100')
   })
 })
 
@@ -457,13 +494,13 @@ describe('⚙ Settings → the theme block changes SHAPE, never availability', (
 
   // G3.2 — THE CASE THIS GROUP EXISTS FOR. Neither theme row is ever drawn as unavailable, in
   // either state — the row that does not hold the pick is not a locked control, it is a row whose
-  // options simply are not the current answer. The Date Format lock alongside is the control: it
+  // options simply are not the current answer. The Amnesic lock alongside is the control: it
   // proves the question being asked can return true, so the four falses below are real answers and
   // not a predicate that never fires.
   it('neither theme row is ever drawn as unavailable, in either Use-System state', () => {
     standUp()
-    toggleSwitch('Random Format') // a genuine lock in the same panel, as the control
-    expect(drawnUnavailable(caption('Written'))).toBe(true)
+    toggleSwitch('Save Stats') // the panel's one genuine lock (Amnesic), as the control
+    expect(drawnUnavailable(within(picker('Amnesic')).getAllByRole('radio')[0])).toBe(true)
     for (const state of ['On', 'Off']) {
       expect(switchState(USE_SYSTEM)).toBe(state)
       expect(drawnUnavailable(caption('Dark'))).toBe(false)

@@ -24,7 +24,7 @@ import { SETTINGS_DEFAULTS, type SettingsValues } from '../../../src/store/setti
 import { MODE_PREFS_DEFAULTS, type ModePrefsValues } from '../../../src/store/modePrefs'
 import type { AoxBest, BlitzBest, ProgressValues } from '../../../src/store/progress'
 import type { AmnesicMode } from '../../../src/store/amnesicMode'
-import { deriveJulianRange } from '../../../src/store/julianRange'
+import { deriveJulianRange, type JulianRangeValues } from '../../../src/store/julianRange'
 import { bestKeyTail, dateSettingsInEffect } from '../../../src/lib/dateConfig'
 
 export const THEMES = ['dusk', 'midnight', 'nebula', 'light', 'parchment'] as const
@@ -34,7 +34,13 @@ export type Theme = (typeof THEMES)[number]
 // is still a valid save (the app migrates it on load, as it would a returning player's), so a
 // number left behind here cannot break a test silently — and seeds.browser.ts fails until it is
 // brought up to date.
-export const SAVED_VERSION = { settings: 4, modePrefs: 1, progress: 5, presets: 1 } as const
+export const SAVED_VERSION = {
+  settings: 4,
+  julianRange: 1,
+  modePrefs: 1,
+  progress: 5,
+  presets: 1,
+} as const
 
 // The two sessionStorage keys that say "this browsing session is under way, and these are the
 // Amnesic values it is running on" (src/store/browsingSession, src/store/sessionAmnesic — private
@@ -47,6 +53,10 @@ export const SESSION_KEYS = {
 export interface AppSeed {
   /** The ⚙ menu's values that differ from the defaults (preset 1's). */
   settings?: Partial<SettingsValues>
+  /** The Year Range used while the Julian Calendar setting is on (preset 1's). Left out, the app
+   *  derives it from `settings`' range on first open, as for any preset that has none
+   *  (store/julianRange). */
+  julianRange?: JulianRangeValues
   /** The per-mode setup that differs from the defaults (preset 1's). */
   modePrefs?: Partial<ModePrefsValues>
   /** Saved stats and Bests (preset 1's). */
@@ -74,6 +84,8 @@ export function storageFor(seed: AppSeed): SeededStorage {
   const session: Record<string, string> = {}
   if (seed.settings)
     local[PRESET_STORE_KEYS.settings] = envelope(seed.settings, SAVED_VERSION.settings)
+  if (seed.julianRange)
+    local[PRESET_STORE_KEYS.julianRange] = envelope(seed.julianRange, SAVED_VERSION.julianRange)
   if (seed.modePrefs)
     local[PRESET_STORE_KEYS.modePrefs] = envelope(seed.modePrefs, SAVED_VERSION.modePrefs)
   if (seed.progress)
@@ -104,18 +116,19 @@ export const presetsNamed = (...names: string[]): PresetRegistryValues => ({
 // Range a preset with none saved derives (store/julianRange) — which is what a seed gives it.
 // seeds.browser.ts plays a real MoX run and a real Blitz round and fails if the record the app
 // files is not under the key these give.
-const dateConfig = (s: SettingsValues) => bestKeyTail(dateSettingsInEffect(s, deriveJulianRange(s)))
+const dateConfig = (seed: AppSeed) => {
+  const s = { ...SETTINGS_DEFAULTS, ...seed.settings }
+  return bestKeyTail(dateSettingsInEffect(s, seed.julianRange ?? deriveJulianRange(s)))
+}
 
 export function moxBestKey(seed: AppSeed = {}): string {
-  const settings = { ...SETTINGS_DEFAULTS, ...seed.settings }
   const prefs = { ...MODE_PREFS_DEFAULTS, ...seed.modePrefs }
-  return `${prefs.aoxN}|${prefs.aoxAllowMistakes}|${dateConfig(settings)}`
+  return `${prefs.aoxN}|${prefs.aoxAllowMistakes}|${dateConfig(seed)}`
 }
 
 export function blitzBestKey(seed: AppSeed = {}): string {
-  const settings = { ...SETTINGS_DEFAULTS, ...seed.settings }
   const prefs = { ...MODE_PREFS_DEFAULTS, ...seed.modePrefs }
-  return `${prefs.blitzAllowMistakes ? 'm' : 'n'}${prefs.blitzSec}|${dateConfig(settings)}`
+  return `${prefs.blitzAllowMistakes ? 'm' : 'n'}${prefs.blitzSec}|${dateConfig(seed)}`
 }
 
 /** Saved progress holding one MoX Best for the configuration the app opens on. */

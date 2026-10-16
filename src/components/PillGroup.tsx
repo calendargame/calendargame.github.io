@@ -1,6 +1,6 @@
-import { useContext, useLayoutEffect, useRef } from 'react'
+import { useContext, useId, useLayoutEffect, useRef } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import { PillGroupLock } from './pillGroupLock.js'
+import { PillGroupDormant, PillGroupLock } from './pillGroupLock.js'
 
 // PillGroup — the radiogroup HOUSING every ⚙ Settings picker sits in: the role, its accessible
 // name, the lock, and the KEYBOARD CONTRACT that role="radiogroup" promises. Round-8 gave the
@@ -59,6 +59,16 @@ const ARROW_STEP: Record<string, number> = {
   ArrowLeft: -1,
   ArrowUp: -1,
 }
+// ★ THREE LOOKS, THREE MEANINGS (Round 26): FILLED = in effect; OUTLINED = kept but NOT IN EFFECT
+// right now, and still changeable (`dormant` — a chance setting the year range cannot use, Rotate
+// Dots while Input is Buttons); FADED = cannot be used at all (`disabled` — Amnesic while Save Stats
+// is off, where a change would act at once on what is on screen). A dormant group is an ordinary
+// live group in every way but its look and one sentence: its keys, its tab stop, and a press all
+// work; it carries no aria-disabled (the control works, and lib/pointerGestures skips aria-disabled
+// targets); and each of its radios is described by the reason — on the RADIO, not the group,
+// because VoiceOver's touch navigation lands on a radio and does not read a group's description.
+// The reason's words sit in a `hidden` element: referenced by every radio, drawn by none, and never
+// read a second time on their own.
 // The visible half of the lock, for every picker in the panel. `disabled` is the single source of
 // all of it — this dim, aria-disabled on the group and on each segment, PillTray's onChange guard,
 // and the inertness above — so a locked picker cannot be locked four ways out of five.
@@ -67,6 +77,7 @@ const LOCK_CLASS = 'opacity-60 pointer-events-none'
 export function PillGroup({
   label,
   disabled,
+  dormant,
   className,
   children,
 }: {
@@ -80,12 +91,17 @@ export function PillGroup({
   // silently unlock the group it sits inside. An inherited lock carries every behaviour of a
   // declared one but does NOT re-draw its dim (see the render).
   disabled?: boolean
+  // NOT IN EFFECT: the reason, as one sentence ("Not in use while Input is Buttons."), or nothing
+  // while the setting is in effect. Only a real (labelled) group can be dormant.
+  dormant?: string
   // The caller's own layout classes. The lock's dim is appended by this component, so no call
   // site spells it out.
   className?: string
   children: ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const reasonId = useId()
+  const inheritedDormant = useContext(PillGroupDormant)
   const inheritedLock = useContext(PillGroupLock)
   const locked = disabled ?? inheritedLock
   // The dim is drawn ONCE, by the element the lock was DECLARED on — never by one that merely
@@ -154,22 +170,31 @@ export function PillGroup({
   }
 
   const dimmedClass = className ? `${className} ${LOCK_CLASS}` : LOCK_CLASS
+  // The reason a group declares, or the one it sits inside (an unlabelled spacing wrapper).
+  const dormantId = isGroup && dormant ? reasonId : inheritedDormant
   return (
     <PillGroupLock.Provider value={locked}>
-      <div
-        ref={ref}
-        className={disabled === true ? dimmedClass : className}
-        onKeyDown={onKeyDown}
-        role={isGroup ? 'radiogroup' : undefined}
-        aria-label={label}
-        // The lock, announced at GROUP scope as well as on every segment (PillTray reads the same
-        // boolean through the context). Without it a screen reader enters a locked picker being
-        // told it is live and only discovers otherwise one element in. Only a real group carries
-        // it — an unlabelled wrapper has no role for the state to qualify.
-        aria-disabled={(isGroup && locked) || undefined}
-      >
-        {children}
-      </div>
+      <PillGroupDormant.Provider value={dormantId}>
+        <div
+          ref={ref}
+          className={disabled === true ? dimmedClass : className}
+          onKeyDown={onKeyDown}
+          role={isGroup ? 'radiogroup' : undefined}
+          aria-label={label}
+          // The lock, announced at GROUP scope as well as on every segment (PillTray reads the same
+          // boolean through the context). Without it a screen reader enters a locked picker being
+          // told it is live and only discovers otherwise one element in. Only a real group carries
+          // it — an unlabelled wrapper has no role for the state to qualify.
+          aria-disabled={(isGroup && locked) || undefined}
+        >
+          {children}
+          {isGroup && dormant && (
+            <span id={reasonId} hidden>
+              {dormant}
+            </span>
+          )}
+        </div>
+      </PillGroupDormant.Provider>
     </PillGroupLock.Provider>
   )
 }

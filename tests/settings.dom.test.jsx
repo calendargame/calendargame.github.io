@@ -70,12 +70,13 @@ import {
   picker,
   pickerPills,
   pickerLockState,
-  expectLock,
   row,
   settingSwitch,
   switchRow,
   panelButton,
   isOffered,
+  isOutlined,
+  expectNotInEffect,
   resetAppState,
   setRangeInUse,
 } from './helpers/settingsPanel.jsx'
@@ -118,10 +119,12 @@ const st = () => useSettings.getState()
 // concentric radius instead of a plain rounded-xl. A flat picker button — what Input and the three
 // chance rows shipped as before round-9 — wore its own `border` and had no housing, so all three
 // clauses flip together. Class strings are all jsdom can see; the geometry is on-device only.
+// (A tray NOT IN EFFECT — Round 26 — is the same housing drawn hollow, so it counts: the factory
+// panel already has one, Rotate Dots while Input is Buttons.)
 const isTraySegment = (b) =>
   b.className.includes('rounded-[calc(var(--radius-xl)-1px)]') &&
   !/(^|\s)border(\s|$)/.test(b.className) &&
-  b.parentElement.className.includes('surface-tray')
+  (b.parentElement.className.includes('surface-tray') || isOutlined(b.parentElement))
 // Every choice-among-alternatives in the panel, by radiogroup name, with Use System ON — so the
 // theme rows are two groups. Input and the three chance rows shipped as flat gap-separated
 // buttons until round-9; the housing meant nothing while that was true. Turning Use System OFF
@@ -364,25 +367,21 @@ describe('Settings → Display — date-format trays', () => {
     expect(checkedName()).toEqual(['Numeric YMD']) // still exactly one, now in the other tray
   })
 
-  // Random Format dims the whole group. The wrapper's pointer-events-none is the visible half;
-  // these are the two halves it does NOT cover — the lock is published to assistive tech, and
-  // onChange is guarded so a click dispatched past pointer-events-none cannot change the value.
-  it('Random Format ON locks the group: aria-disabled, dimmed wrapper, and onChange guarded', () => {
+  // RE-BLESSED (Round 26): Random Format on takes the group OUT OF EFFECT on a weekday page — it
+  // used to lock it. Outlined, its reason on every radio, and still changeable: the pick lands.
+  it('Random Format ON takes the group out of effect on a weekday page: outlined, described, and still changeable', () => {
     mountPanel()
     clickToggle('Random Format')
     expect(st().randomFormat).toBe(true)
-    const locked = pickerLockState('Date Format')
-    locked.segments.forEach((v) => expect(v).toBe('true'))
-    expect(locked.dimmed).toBe(true)
-    expect(locked.offered).toBe(false)
-    // The radiogroup IS the dim wrapper, so the dim provably covers the captions inside it too.
+    expectNotInEffect('Date Format', 'Practice dates ignore this while Random Format is on.')
+    // The captions are inside the group and stay as they are.
     const wrapper = picker('Date Format')
     expect(within(wrapper).getByText('Written')).toBeInTheDocument()
     expect(within(wrapper).getByText('Numeric')).toBeInTheDocument()
     act(() => {
       fireEvent.click(group('Date Format').getByRole('radio', { name: 'Numeric DMY' }))
     })
-    expect(st().dateFormat).toBe('written-mdy') // unchanged — the guard held
+    expect(st().dateFormat).toBe('numeric-dmy') // it took
   })
 
   it('Random Format OFF leaves the group live and unmarked', () => {
@@ -457,9 +456,9 @@ describe('Settings — THE PICKER RULE', () => {
   // is the one a screen reader meets FIRST — a group announcing itself live while every segment
   // inside it says otherwise.
 
-  it('Input: live in a weekday mode, locked in Deduction, value preserved', () => {
+  it('Input: in effect in a weekday mode, not in effect in Deduction, value kept and changeable', () => {
     mountPanel()
-    expectLock('Input', false)
+    expectNotInEffect('Input', null)
     act(() => {
       fireEvent.click(group('Input').getByRole('radio', { name: 'Dots' }))
     })
@@ -470,70 +469,71 @@ describe('Settings — THE PICKER RULE', () => {
     act(() => {
       fireEvent.keyDown(window, { key: 'G' }) // reopen it
     })
-    expectLock('Input', true)
-    expect(checked('Input')).toEqual(['Dots']) // still shown as the pick, so it survives the lock
+    expectNotInEffect('Input', 'Not in use in Deduction.')
+    expect(checked('Input')).toEqual(['Dots']) // still shown as the pick
     act(() => {
       fireEvent.click(group('Input').getByRole('radio', { name: 'Buttons' }))
     })
-    expect(st().inputStyle).toBe('dots') // the guard held
+    expect(st().inputStyle).toBe('buttons') // and still changeable
     act(() => {
       fireEvent.keyDown(window, { key: 'K' }) // back to Classic
     })
     act(() => {
       fireEvent.keyDown(window, { key: 'G' })
     })
-    expectLock('Input', false)
+    expectNotInEffect('Input', null)
   })
 
-  // Julian Chance needs a range that STRADDLES 1582 — the factory 1–10000 does, 1900–10000 does
+  // Julian Chance needs a range that STRADDLES 1582 — the factory 1–11582 does, 1900–11582 does
   // not — and needs the Julian Calendar switch on.
-  it('Julian Chance: locked unless the range straddles 1582, and by the Julian switch', () => {
+  it('Julian Chance: not in effect unless the range straddles 1582, and by the Julian switch', () => {
     mountPanel()
-    expectLock('Julian Chance', false)
+    expectNotInEffect('Julian Chance', null)
     act(() => {
       fireEvent.click(group('Julian Chance').getByRole('radio', { name: '75%' }))
     })
     expect(st().julianChance).toBe('75')
     act(() => setRangeInUse({ min: 1900 })) // all-Gregorian: nothing for the setting to do
-    expectLock('Julian Chance', true)
-    expect(checked('Julian Chance')).toEqual(['75%']) // preserved while locked
+    expectNotInEffect('Julian Chance', 'Not in use: your year range does not include 1582.')
+    expect(checked('Julian Chance')).toEqual(['75%']) // kept
     act(() => {
-      fireEvent.click(group('Julian Chance').getByRole('radio', { name: 'Random' }))
+      fireEvent.click(group('Julian Chance').getByRole('radio', { name: '25%' }))
     })
-    expect(st().julianChance).toBe('75') // the guard held
+    expect(st().julianChance).toBe('25') // and changeable
     act(() => setRangeInUse({ min: 1 }))
-    expectLock('Julian Chance', false) // and it comes back live, still on 75%
-    expect(checked('Julian Chance')).toEqual(['75%'])
+    expectNotInEffect('Julian Chance', null) // and it comes back in effect, on 25%
+    expect(checked('Julian Chance')).toEqual(['25%'])
     clickToggle('Julian Calendar (pre-Oct 15, 1582)') // the other half of the condition
     expect(st().useJulian).toBe(false)
-    expectLock('Julian Chance', true)
+    expectNotInEffect('Julian Chance', 'Not in use while Julian Calendar is off.')
   })
 
   // 1900 is not a leap year under either rule, so a range of exactly [1900,1900] reaches none.
-  it('Leap Year Chance: locked when no leap year is reachable; Jan/Feb Chance never locks', () => {
+  it('Leap Year Chance and Jan/Feb Chance: not in effect when no leap year is reachable, and still changeable', () => {
     mountPanel()
-    expectLock('Leap Year Chance', false)
+    expectNotInEffect('Leap Year Chance', null)
     act(() => {
       fireEvent.click(group('Leap Year Chance').getByRole('radio', { name: '100%' }))
     })
     expect(st().leapChance).toBe('100')
     act(() => setRangeInUse({ min: 1900, max: 1900 }))
-    expectLock('Leap Year Chance', true)
+    const NONE = 'Not in use: your year range has no leap year.'
+    expectNotInEffect('Leap Year Chance', NONE)
     expect(checked('Leap Year Chance')).toEqual(['100%'])
     act(() => {
-      fireEvent.click(group('Leap Year Chance').getByRole('radio', { name: 'Random' }))
+      fireEvent.click(group('Leap Year Chance').getByRole('radio', { name: '75%' }))
     })
-    expect(st().leapChance).toBe('100') // the guard held
-    // Jan/Feb still applies to whatever leap years a range does contain, so it has no lock branch
-    // at all — the control case for the two rows above.
-    expectLock('Jan/Feb Chance on Leap Years', false)
+    expect(st().leapChance).toBe('75') // changeable while not in effect
+    // Jan/Feb acts only on leap years, so (Round 26) it is not in effect here either.
+    expectNotInEffect('Jan/Feb Chance on Leap Years', NONE)
     act(() => {
       fireEvent.click(group('Jan/Feb Chance on Leap Years').getByRole('radio', { name: '50%' }))
     })
     expect(st().janFebChance).toBe('50')
     act(() => setRangeInUse({ max: 10000 }))
-    expectLock('Leap Year Chance', false)
-    expect(checked('Leap Year Chance')).toEqual(['100%']) // restored, not reset
+    expectNotInEffect('Leap Year Chance', null)
+    expectNotInEffect('Jan/Feb Chance on Leap Years', null)
+    expect(checked('Leap Year Chance')).toEqual(['75%']) // kept, not reset
   })
 })
 
@@ -818,25 +818,27 @@ describe('Settings — the radiogroup keyboard contract', () => {
 
   // The dim's pointer-events-none stops POINTERS. Nothing stopped a keyboard, so a locked picker
   // was still operable by anyone using one — which is exactly the gap the group's inertness fills.
+  // (Since Round 26 the panel's one locked picker is Amnesic while Save Stats is off — every other
+  // picker that does not apply is NOT IN EFFECT instead, an ordinary live group.)
   it('a locked group has no tab stop, ignores the arrows, and never steps the date behind', () => {
     const live = mountPanelOverAHistory()
-    clickToggle('Random Format')
-    pills('Date Format').forEach((b) => expect(b.tabIndex).toBe(-1))
+    clickToggle('Save Stats')
+    pills('Amnesic').forEach((b) => expect(b.tabIndex).toBe(-1))
     // Focus is forced in — the point is that the HANDLER refuses, not merely that Tab can't get
     // there. A locked group must not act on a key even when something has parked focus inside it.
-    const pill = pills('Date Format')[0]
+    const pill = pills('Amnesic')[0]
     pill.focus()
     for (const key of ['ArrowRight', 'ArrowLeft']) {
       press(pill, key)
       expect(document.activeElement).toBe(pill)
-      expect(st().dateFormat).toBe('written-mdy')
+      expect(checked('Amnesic')).toEqual(['Off'])
       // …and refusing to ACT is only half of inert: the press must not step the date behind the
       // open panel either.
       expect(questionText()).toBe(live)
     }
     // Unlocking restores the stop with no interaction at all — the effect re-asserts it.
-    clickToggle('Random Format')
-    expectOneTabStop('Date Format')
+    clickToggle('Save Stats')
+    expectOneTabStop('Amnesic')
   })
 
   it('an arrow that moves the pick never steps the date behind the menu', () => {
@@ -871,24 +873,24 @@ describe('Settings — the radiogroup keyboard contract', () => {
     expect(st().dateFormat).toBe('written-dmy')
     // A locked group hands focus to nobody: the click guard returns before the focus, so a
     // synthetic click past the dim's pointer-events-none cannot park the keyboard inside it.
-    clickToggle('Random Format')
+    clickToggle('Save Stats')
     document.activeElement.blur()
     act(() => {
-      fireEvent.click(pills('Date Format')[3])
+      fireEvent.click(pills('Amnesic')[2])
     })
     expect(document.activeElement).toBe(document.body)
-    expect(st().dateFormat).toBe('written-dmy')
+    expect(checked('Amnesic')).toEqual(['Off'])
   })
 
   // The lock, said once at group scope too. A screen reader entering a locked picker used to be
   // told it was live and only found out one element in, at the first segment's aria-disabled.
   it('a locked group announces its own lock, not just its pills', () => {
     mountPanel()
-    const announced = () => pickerLockState('Date Format').announced
+    const announced = () => pickerLockState('Amnesic').announced
     expect(announced()).toBeNull()
-    clickToggle('Random Format')
+    clickToggle('Save Stats')
     expect(announced()).toBe('true')
-    clickToggle('Random Format')
+    clickToggle('Save Stats')
     expect(announced()).toBeNull()
   })
 
@@ -1076,10 +1078,16 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
   const SELECTED = SEGMENT + ' btn-solid'
   const UNSELECTED = SEGMENT + ' text-(--tx-100-80) hover:bg-(--stgl-hov)'
   const TRAY = 'flex gap-0.5 border surface-tray rounded-xl'
+  // ★ AND THE NOT-IN-EFFECT LOOK (Round 26 — a deliberate visual change the owner approved): the same
+  // housing hollow, and the chosen segment ringed instead of filled. Same box, same size.
+  const SELECTED_DORMANT = SEGMENT + ' pill-dormant-on'
+  const TRAY_DORMANT = 'flex gap-0.5 border tray-dormant rounded-xl'
   const expectUnmovedPixels = () =>
     screen.getAllByRole('radio').forEach((b) => {
-      expect(b.className).toBe(b.getAttribute('aria-checked') === 'true' ? SELECTED : UNSELECTED)
-      expect(b.parentElement.className).toBe(TRAY)
+      const dormant = b.hasAttribute('aria-describedby')
+      const chosen = b.getAttribute('aria-checked') === 'true'
+      expect(b.className).toBe(chosen ? (dormant ? SELECTED_DORMANT : SELECTED) : UNSELECTED)
+      expect(b.parentElement.className).toBe(dormant ? TRAY_DORMANT : TRAY)
     })
 
   it('moved no class on any pill, in any state', () => {
@@ -1087,7 +1095,9 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expectUnmovedPixels()
     clickToggle('Use System Settings')
     expectUnmovedPixels()
-    clickToggle('Random Format') // a locked group is dimmed by its housing, never by its pills
+    clickToggle('Random Format') // a group not in effect is outlined by its housing and chosen pill
+    expectUnmovedPixels()
+    clickToggle('Save Stats') // a locked group is dimmed by its housing, never by its pills
     expectUnmovedPixels()
   })
 
@@ -1105,10 +1115,12 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expect(cls('Jan/Feb Chance on Leap Years')).toBe('')
     expect(rowEl('Dark').parentElement.className).toBe('space-y-2')
     expect(cls('Dark theme')).toBe('space-y-1.5')
-    clickToggle('Random Format')
-    expect(cls('Date Format')).toBe('flex gap-2 opacity-60 pointer-events-none')
-    act(() => setRangeInUse({ min: 1900 })) // all-Gregorian: the Julian row locks, and it has no own class
-    expect(cls('Julian Chance')).toBe('opacity-60 pointer-events-none')
+    clickToggle('Random Format') // not in effect: the trays inside go hollow, the housing is unmoved
+    expect(cls('Date Format')).toBe('flex gap-2')
+    act(() => setRangeInUse({ min: 1900 })) // all-Gregorian: the Julian row is not in effect, no own class
+    expect(cls('Julian Chance')).toBe('')
+    clickToggle('Save Stats') // the one lock left: Amnesic, dimmed on its housing
+    expect(cls('Amnesic')).toBe('opacity-60 pointer-events-none')
   })
 
   // ★ THE ⚙ FOOTER'S THREE BUTTONS — NEW IN ROUND 15, and the honest note is that this gate

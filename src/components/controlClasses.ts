@@ -130,6 +130,10 @@ export const FOOTER_META_ROW_CLASS =
 // their native track/thumb IS the control that index.css styles.)
 export const NUM_INPUT_BASE = 'appearance-none rounded-xl px-2 text-center tabular-nums text-xs'
 export const NUM_INPUT_CLASS = NUM_INPUT_BASE + ' border surface-tray'
+// …NOT IN EFFECT (Round 26 — a Year Range pair while the other Julian setting is chosen): the same
+// box, hollow — index.css's .tray-dormant in place of .surface-tray, the look a ⚙ picker's tray wears
+// in the same state (components/PillGroup says what the three looks mean).
+export const NUM_INPUT_DORMANT_CLASS = NUM_INPUT_BASE + ' border tray-dormant'
 // Presentational primitives (NewBestStar, SectionLabel, Kbd) + their class consts → src/components/primitives.jsx, imported at top.
 // buttonStateClass — picks the className for an answer-grid button based on its
 // persistent state (correct/wrong-latest/wrong-prev/override-wrong) and any active

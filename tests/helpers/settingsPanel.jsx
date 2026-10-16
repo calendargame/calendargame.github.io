@@ -51,8 +51,8 @@ import { forgetSessionAmnesic } from '../../src/store/sessionAmnesic.js'
 // Re-exported so the panel helper's API is complete at one import, while the definition lives in
 // the file that owns the question — mode-screen tests ask "is this offered" about game controls
 // that have nothing to do with settings, and should not be importing from a settings helper.
-import { isOffered, isDimmed } from './offered.js'
-export { isOffered, isDimmed }
+import { isOffered, isDimmed, isOutlined } from './offered.js'
+export { isOffered, isDimmed, isOutlined }
 
 // ── Standing the app up ───────────────────────────────────────────────────────────────────────
 
@@ -671,16 +671,19 @@ export const PICKER_NAMES = [
   'Julian Chance',
   'Amnesic',
 ]
-// The six that can LOCK, and the only six — Jan/Feb Chance is the deliberate negative control
-// (it has no lock branch at all) and the theme groups never take `disabled`. (Amnesic locks while
-// Save Stats is off: with nothing recorded there is nothing for it to be about.)
-export const LOCKABLE_PICKERS = [
+// ★ SINCE ROUND 26 ONE PICKER LOCKS, AND SIX GO OUT OF EFFECT INSTEAD (the owner: "dimmed means not
+// in effect right now, not locked"). A picker NOT IN EFFECT is outlined, still changeable, and says
+// why to a screen reader (components/PillGroup's `dormant`); only Amnesic, while Save Stats is off,
+// is LOCKED — faded and inert — because a change to it would act at once on what is on screen. The
+// theme groups are neither.
+export const LOCKABLE_PICKERS = ['Amnesic']
+export const NOT_IN_EFFECT_PICKERS = [
   'Input',
   'Rotate Dots',
   'Date Format',
   'Leap Year Chance',
+  'Jan/Feb Chance on Leap Years',
   'Julian Chance',
-  'Amnesic',
 ]
 
 // A PICKER'S LOCK, reported as the things the USER meets rather than as the class that happens to
@@ -727,6 +730,34 @@ export function expectLock(name, locked) {
   s.segments.forEach((v) => expect(v).toBe(locked ? 'true' : null))
   expect(s.tabStops).toBe(locked ? 0 : 1)
 }
+
+// A PICKER NOT IN EFFECT, asserted as one claim, like the lock above — every facet a user meets:
+// OUTLINED (every tray in the group drawn hollow) and DESCRIBED (each radio's aria-describedby names
+// the reason, on the radio itself — VoiceOver lands on the radio), and otherwise an ordinary live
+// group: offered, not faded, not announced unavailable on the group or any radio, one tab stop.
+// `reason` is the sentence when it is not in effect; omit it (or pass null) for "in effect".
+export function expectNotInEffect(name, reason) {
+  const group = picker(name)
+  const pills = within(group).getAllByRole('radio')
+  const trays = [...new Set(pills.map((p) => p.parentElement))]
+  expect(isOffered(group)).toBe(true)
+  expect(isDimmed(group)).toBe(false)
+  expect(group.getAttribute('aria-disabled')).toBe(null)
+  pills.forEach((b) => expect(b.getAttribute('aria-disabled')).toBe(null))
+  expect(pills.filter((b) => b.tabIndex === 0)).toHaveLength(1)
+  trays.forEach((t) => expect(isOutlined(t)).toBe(!!reason))
+  for (const b of pills) {
+    const id = b.getAttribute('aria-describedby')
+    expect(id ? document.getElementById(id)?.textContent : null).toBe(reason ?? null)
+  }
+}
+
+// Is this picker IN EFFECT right now — not drawn outlined? (expectNotInEffect asserts the whole state;
+// this is the one-word answer, for a case that walks a condition back and forth.)
+export const pickerInEffect = (name) =>
+  !within(picker(name))
+    .getAllByRole('radio')
+    .some((b) => isOutlined(b.parentElement))
 
 // WHICH pill the keyboard would land on, by name. pickerLockState reports how MANY tab stops a
 // picker has, which is the whole answer for a locked group (zero) and only half of it for an

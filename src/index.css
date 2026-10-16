@@ -640,6 +640,18 @@ input,textarea{user-select:text;-webkit-user-select:text}
    must not brighten as one block on hover; its unselected segments carry their own per-target
    hover (hover:bg-(--stgl-hov)) instead. */
 .surface-tray{background:var(--stgl-bg);border-color:var(--sbtn-bd)}
+/* ★ NOT IN EFFECT — the third look (Round 26; components/PillGroup says what each of the three looks
+   means). A setting kept but not acting right now, and still changeable: its housing goes HOLLOW (no
+   fill, the weaker thin border) and its text keeps full strength, so it reads at a live control's
+   contrast — the faded look (opacity .6) stays for what cannot be used at all. A ⚙ picker's tray and
+   a Year Range box wear .tray-dormant in place of .surface-tray; the picker's chosen segment wears
+   .pill-dormant-on in place of .btn-solid: a quarter-strength accent tint ringed in the accent, its
+   label in the ordinary text colour. The ring is an OUTLINE so the segment keeps its exact size
+   (it is borderless — components/PillTray's concentric housing), and while the segment has the
+   keyboard the keyboard ring, also an outline, takes its place. tests/browser/notInEffect measures
+   the text's contrast in all five themes. */
+.tray-dormant{background:transparent;border-color:var(--thin-bd)}
+.pill-dormant-on{background:color-mix(in oklab,var(--acc) 25%,transparent);color:var(--tx-100-80);outline:1px solid var(--acc);outline-offset:-1px;transition:background-color calc(.2s * var(--motion-scale))}
 /* THE ROW IN THE HAND — the Presets popup's row while it is being dragged by its grip
    (components/PresetManager, which says what the row looks like and why; these are the three rules
    that draw it). They come AFTER the two surface rules above on purpose: .held-piece is worn

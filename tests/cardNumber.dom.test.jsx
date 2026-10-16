@@ -21,6 +21,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useProgress } from '../src/store/progress.js'
 import { wday } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
@@ -116,6 +117,7 @@ function pinSettings() {
   useSettings.getState().setDateFormat('numeric-ymd')
   useSettings.getState().setMinY(1583)
   useSettings.getState().setMaxY(10000)
+  useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
 }
 
 // Play one card wrong and advance past it, so it lands in browsable history with a played behind

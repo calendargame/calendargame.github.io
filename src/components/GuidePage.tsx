@@ -2363,10 +2363,10 @@ export default function GuidePage({
             and the ends wrap around). What counts as one setting is the choice, not the row: Date
             Format is a single five-way choice, so the arrows carry straight from the Written row
             into the Numeric one — and Theme does the same across Dark and Light whenever Use System
-            Settings is off, since that's when the five themes are one pick. A locked setting
-            ignores the keys. No key reaches past the open menu, so these never step the date behind
-            it — and inside the menu <Kbd>Esc</Kbd> and typing in its boxes work as they do
-            everywhere.
+            Settings is off, since that's when the five themes are one pick. A locked (faded)
+            setting ignores the keys; an outlined one takes them as usual. No key reaches past the
+            open menu, so these never step the date behind it — and inside the menu <Kbd>Esc</Kbd>{' '}
+            and typing in its boxes work as they do everywhere.
           </li>
           <li>
             Reset Stats (<Kbd>S</Kbd>) only applies to the casual modes (
@@ -2678,12 +2678,15 @@ export default function GuidePage({
             Blitz&apos;s as its round or question timer and, during a round, as the time left.)
           </li>
           <li>
-            Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: Save
-            Defaults, Reset Settings, Full Reset, and Clear Saved Defaults (at the top of the ⚙
-            menu&apos;s Per-preset section), Show Codes, every locked picker (Amnesic while Save
-            Stats is off is one of them), a timer value you can&apos;t type into right now, and — in
-            Manage Presets — <b>✕</b> when only one preset is left. The reorder grip at the end of
-            each row never greys out; it has no end it cannot move toward. The rest of the
+            An outlined setting in the ⚙ menu — kept, but not in effect right now — is not greyed
+            out and not marked unavailable: it works as usual, and each of its options is described
+            with the reason it is not in effect (for example, &quot;Not in use while Input is
+            Buttons.&quot;). Two kinds of greying out, not one. Marked unavailable while
+            they&apos;re greyed: Save Defaults, Reset Settings, Full Reset, and Clear Saved Defaults
+            (at the top of the ⚙ menu&apos;s Per-preset section), Show Codes, the one locked picker
+            (Amnesic while Save Stats is off), a timer value you can&apos;t type into right now, and
+            — in Manage Presets — <b>✕</b> when only one preset is left. The reorder grip at the end
+            of each row never greys out; it has no end it cannot move toward. The rest of the
             game&apos;s buttons — Reveal, Override / Undo, <b>&lt;</b>, and <b>&gt;</b> — are only
             dimmed, so they still read as ordinary buttons even when pressing one would do nothing.
           </li>
@@ -2758,6 +2761,19 @@ export default function GuidePage({
           looking like an ordinary button: the keyboard's ring on it is dotted instead of solid, and
           on a computer the pointer shows the not-allowed cursor over it. (See Accessibility.)
         </p>
+        <p>
+          A setting can be in one of three looks. <b>Filled</b> — it is in effect. <b>Outlined</b> —
+          its box is hollow and its choice is ringed instead of filled: it is kept, but it is not in
+          effect right now, and you can still change it. Changing an outlined setting never restarts
+          a MoX run or a Blitz round, never redraws a date, and never changes which Bests show; it
+          takes effect when the setting is in effect again. Outlined are: Date Format while Random
+          Format is on, in Classic, Flash, MoX, and Blitz; Input and Rotate Dots in Deduction, and
+          Rotate Dots while Input is Buttons; Leap Year Chance and Jan/Feb Chance on Leap Years when
+          your year range cannot use them; Julian Chance while Julian Calendar is off, when your
+          range does not include 1582, and in Deduction; and the Year Range pair that is not in use.{' '}
+          <b>Faded</b> — it cannot be used right now (Amnesic while Save Stats is off, where a
+          change would act at once on what is on screen).
+        </p>
         <p className="text-(--tx-300-70) text-[calc(12rem/16.458)]">
           Settings changes apply when you <b>close</b> the ⚙ menu, not on each adjustment — so
           changing several at once regenerates the date just once (and never restarts your solve
@@ -2801,9 +2817,11 @@ export default function GuidePage({
         <Subhead>Random Format</Subhead>
         <p>
           When on, it rolls one of the five formats per date in game modes only — your selected
-          format is preserved underneath (the panels just lock visually). Lookup and the Last
-          Updated timestamp ignore Random and always use the selected format; the timestamp uses the
-          numeric version of whichever format you've selected.
+          format is preserved underneath, and still changeable: on Classic, Flash, MoX, and Blitz
+          the Date Format row is outlined (not in effect there), and a change to it redraws nothing.
+          In Deduction it still sets the order of the codes in Show Codes, so it is drawn as usual
+          there. Lookup and the Last Updated timestamp ignore Random and always use the selected
+          format; the timestamp uses the numeric version of whichever format you've selected.
         </p>
         <Subhead>When a format change regenerates the date</Subhead>
         <UL>
@@ -2851,8 +2869,8 @@ export default function GuidePage({
         <p>
           Tap a dot, or press and slide to the one you want and release — exactly like the buttons.
           The setting applies to the weekday modes ({modeList('classic', 'flash', 'aox', 'blitz')}).
-          In Deduction the answers aren't weekdays, so the setting is shown but locked there (it
-          keeps whatever you last chose and applies again in the weekday modes).
+          In Deduction the answers aren't weekdays, so the setting is outlined there — not in
+          effect, and still changeable — and applies again in the weekday modes.
         </p>
         <Subhead>Which dot is which</Subhead>
         <div className="flex justify-center">
@@ -2888,17 +2906,18 @@ export default function GuidePage({
           and their keyboard numbers unchanged — only where each one sits on screen moves. Each dot
           still answers to a touch anywhere in its own share of the space, up to halfway to its
           neighbours; the two empty gaps and the space around the pattern stay dead, so sliding off
-          onto them still cancels a press. Rotate Dots is locked whenever there are no dots to turn:
-          in Deduction, alongside Input and for the same reason, and in every mode while Input is
-          set to Buttons. While locked it keeps whatever you last chose. Your choice doesn&apos;t
-          affect your stats: bests and history are shared across all three.
+          onto them still cancels a press. Rotate Dots is outlined — not in effect, and still
+          changeable — whenever there are no dots to turn: in Deduction, alongside Input and for the
+          same reason, and in every mode while Input is set to Buttons. It keeps whatever you last
+          chose. Your choice doesn&apos;t affect your stats: bests and history are shared across all
+          three.
         </p>
         <p>
           <b>The logo turns with it — but only while Dots is your Input.</b> The mark at the top
           left of every screen <i>is</i> this seven-dot layout, so turning the dots turns that mark
           too (by the same amount, and at 45° shrunk the same way), whenever Input is set to Dots —
           on every page, including the ones with no weekday dots of their own (Deduction, Lookup,
-          and this guide), where Rotate Dots is locked but the mark still shows the rotation you
+          and this guide), where Rotate Dots is outlined but the mark still shows the rotation you
           chose. While Input is set to Buttons the mark stays upright on every page: with Buttons
           there are no dots anywhere in the app for a turned mark to correspond to. What can&apos;t
           follow even when Dots is your Input are the pictures your device saved earlier: the
@@ -2958,12 +2977,13 @@ export default function GuidePage({
         </Lead>
         <UL>
           <li>
-            Only the pair for the Julian Calendar setting as it stands is used. You can still type
-            into the other pair, and it is saved with your settings: changing it lights the ⚙
-            button&apos;s violet bar like any other change, and nothing else happens: no date is
-            redrawn, no Best moves, and no run in MoX or round in Blitz starts over. Switching the
-            Julian Calendar setting swaps which pair is used — so if the two pairs differ, the
-            waiting date is redrawn when you close the ⚙ menu, as it is for any change of range.
+            Only the pair for the Julian Calendar setting as it stands is used; the other is
+            outlined. You can still type into it, and it is saved with your settings: changing it
+            lights the ⚙ button&apos;s violet bar like any other change, and nothing else happens:
+            no date is redrawn, no Best moves, and no run in MoX or round in Blitz starts over.
+            Switching the Julian Calendar setting swaps which pair is used — so if the two pairs
+            differ, the waiting date is redrawn when you close the ⚙ menu, as it is for any change
+            of range.
           </li>
           <li>
             Why 11582: years 10001–11582 follow the modern (Gregorian) calendar, and because 10000
@@ -3042,22 +3062,23 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          Both apply to all game modes' date generation; Lookup is unaffected. Changing any value
-          regenerates the displayed date so the new setting takes effect when you close the ⚙ menu.
-          If you've already wrong-guessed, revealed, or shown codes on the current date, the change
-          is deferred and applies to the next date. In MoX runs and Blitz rounds (active or just
-          ended), a chance change resets the run/round when you close the ⚙ menu.
+          Both apply to all game modes' date generation; Lookup is unaffected. Changing either while
+          it is in effect regenerates the displayed date so the new setting takes effect when you
+          close the ⚙ menu. If you've already wrong-guessed, revealed, or shown codes on the current
+          date, the change is deferred and applies to the next date. In MoX runs and Blitz rounds
+          (active or just ended), a chance change resets the run/round when you close the ⚙ menu.
         </p>
-        <Subhead>Locking</Subhead>
+        <Subhead>When they are not in effect</Subhead>
         <UL>
           <li>
-            If your year range contains no leap years (under the active calendar), the four Leap
-            Year Chance options lock and fade; the previously-selected value stays visually selected
-            so it's restored when you change the range back to one with a leap year reachable.
+            If the year range in use contains no leap years (under the active calendar), Leap Year
+            Chance and Jan/Feb Chance are both outlined: kept, not in effect, and still changeable.
+            Leap Year Chance is also outlined on a range of a single leap year, where every date is
+            in a leap year whatever it says.
           </li>
           <li>
-            Jan/Feb Chance stays unlocked, since the setting still applies on whatever leap years
-            exist in the range.
+            A change to an outlined chance setting regenerates nothing and restarts nothing; it
+            takes effect when your range lets the setting apply again.
           </li>
         </UL>
       </GuideSection>
@@ -3140,7 +3161,10 @@ export default function GuidePage({
           Julian dates, not a force probability. Changing the value always regenerates an unanswered
           date; burned dates defer like every other setting.
         </p>
-        <p>The five options lock and fade in three cases:</p>
+        <p>
+          The row is outlined — kept, not in effect, and still changeable, with nothing redrawn or
+          restarted by a change — in these cases:
+        </p>
         <UL>
           <li>The Julian Calendar toggle above is off (no Julian dates can be generated).</li>
           <li>
@@ -3151,12 +3175,13 @@ export default function GuidePage({
             Your range is entirely pre-Gregorian (maximum year 1581 or earlier), so every date is
             already Julian and the setting has nothing to do.
           </li>
+          <li>In Deduction, whose puzzles do not use it.</li>
         </UL>
         <p>
           Year 1582 itself contains both Julian (Jan–Sep + Oct 1–4) and Gregorian (Oct 15+ + Nov +
-          Dec) dates, so any range that includes 1582 counts as mixed and the row stays unlocked.
-          The previously-selected value stays visually selected while locked, so it's restored when
-          the lock condition clears.
+          Dec) dates, so any range that includes 1582 counts as mixed and the row is in effect. The
+          value you chose stays chosen while the row is outlined, and applies again as soon as it
+          can.
         </p>
       </GuideSection>
       <GuideSection
@@ -3375,10 +3400,12 @@ export default function GuidePage({
             <b>It is not Save Stats.</b> The switch above decides whether a question counts at all;
             this one decides whether what was counted lasts. They are independent, so you can leave
             Save Stats off inside an amnesic preset for throwaway questions and not even move the
-            session&apos;s count. With Save Stats off there is nothing being recorded for Amnesic to
-            be about, so this row dims and locks — it keeps its value, and comes back the moment you
-            turn Save Stats on. Save Stats has no middle value of its own: Stats Only is the way to
-            keep Bests without keeping stats.
+            session&apos;s count. With Save Stats off this row fades and locks — not because it has
+            nothing to do, but because changing it restarts what is on screen at once (every mode
+            starts over on the other side's stats and Bests, and a run in progress goes with it),
+            for a setting nothing is being recorded under. It keeps its value, and comes back the
+            moment you turn Save Stats on. Save Stats has no middle value of its own: Stats Only is
+            the way to keep Bests without keeping stats.
           </li>
           <li>
             <b>It is not a menu setting.</b> It is held for the visit rather than saved with the
@@ -4021,7 +4048,7 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
         and Leap Year Chance, Jan/Feb Chance on Leap Years, and Julian Chance — each of those three
         only while it applies to your range. Changing any of these creates a separate bucket — your
         previous bests remain stored and reappear when you switch back to that exact config. A
-        chance setting that cannot apply (dimmed in the ⚙ menu) does not split them: changing it
+        chance setting that cannot apply (outlined in the ⚙ menu) does not split them: changing it
         leaves the Best shown exactly where it is. Everything else leaves your bests where they are:
         the mode&apos;s name (so the AoX &rarr; MoX rename kept everyone&apos;s), your answer input
         style, Rotate Dots (all three rotations share one set of bests), and the theme.
@@ -4277,9 +4304,9 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
           use, Calendar System (Julian on/off), and Leap Year Chance, Jan/Feb Chance on Leap Years,
           and Julian Chance — each of those three only while it applies to your range. Changing any
           of these creates a separate bucket — your previous bests remain stored and reappear when
-          you switch back. A chance setting that cannot apply (dimmed in the ⚙ menu) does not split
-          them. Everything else leaves your bests untouched: the mode&apos;s name, your answer input
-          style, Rotate Dots (all three rotations share one set of bests), and the theme.
+          you switch back. A chance setting that cannot apply (outlined in the ⚙ menu) does not
+          split them. Everything else leaves your bests untouched: the mode&apos;s name, your answer
+          input style, Rotate Dots (all three rotations share one set of bests), and the theme.
         </li>
         <li>
           Best score and best streak are tracked independently in Per Round and in Per Question with

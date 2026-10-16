@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { usePillGroupLock } from './pillGroupLock.js'
+import { usePillGroupDormant, usePillGroupLock } from './pillGroupLock.js'
 
 // PillTray — the ⚙ Settings panel's segmented picker: one "concentric housing" tray of
 // mutually-exclusive pill segments. Extracted from the Date Format groups (Round-3, rebuilt
@@ -59,10 +59,16 @@ import { usePillGroupLock } from './pillGroupLock.js'
 // The bordered housing. No padding and no overflow-hidden — both would break the flush fill
 // and the press-drag ring (see the idiom note above).
 const TRAY_CLASS = 'flex gap-0.5 border surface-tray rounded-xl'
+// …and NOT IN EFFECT (the group's `dormant`, components/PillGroup): the same housing, hollow — no
+// fill, the weaker thin border (index.css's .tray-dormant) — and the chosen segment outlined instead
+// of filled (.pill-dormant-on), its label in the ordinary text colour. Same box, same size: only the
+// paint differs, so a setting going in and out of effect moves no pixel.
+const TRAY_DORMANT_CLASS = 'flex gap-0.5 border tray-dormant rounded-xl'
 // One segment: borderless, flex-1, concentric radius, popover control tier.
 const SEGMENT_CLASS =
   'flex-1 px-1.5 py-1.5 rounded-[calc(var(--radius-xl)-1px)] text-xs font-medium'
 const SEGMENT_ON_CLASS = 'btn-solid'
+const SEGMENT_ON_DORMANT_CLASS = 'pill-dormant-on'
 const SEGMENT_OFF_CLASS = 'text-(--tx-100-80) hover:bg-(--stgl-hov)'
 
 export interface PillTrayOption<T extends string> {
@@ -89,8 +95,11 @@ export function PillTray<T extends string>({
   // past the dim's pointer-events-none (a synthetic event, a stray AT activation) must not change
   // the value.
   const disabled = usePillGroupLock()
+  // Not in effect: the id of the group's reason, which every segment is described by (PillGroup).
+  const dormant = usePillGroupDormant()
+  const onClass = dormant ? SEGMENT_ON_DORMANT_CLASS : SEGMENT_ON_CLASS
   return (
-    <div className={TRAY_CLASS}>
+    <div className={dormant ? TRAY_DORMANT_CLASS : TRAY_CLASS}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -99,6 +108,7 @@ export function PillTray<T extends string>({
           aria-checked={o.value === value}
           aria-label={o.ariaLabel}
           aria-disabled={disabled || undefined}
+          aria-describedby={dormant ?? undefined}
           // Never a tab stop on its own — a CONSTANT -1, which is also what keeps it constant to
           // React, so React writes it once and never contends with the group that hands out the
           // one 0. Which segment gets that 0 is a group-scope question (the group's value may sit
@@ -118,7 +128,7 @@ export function PillTray<T extends string>({
             e.currentTarget.focus({ preventScroll: true })
             onChange(o.value)
           }}
-          className={`${SEGMENT_CLASS} ${o.value === value ? SEGMENT_ON_CLASS : SEGMENT_OFF_CLASS}`}
+          className={`${SEGMENT_CLASS} ${o.value === value ? onClass : SEGMENT_OFF_CLASS}`}
         >
           {o.label}
         </button>

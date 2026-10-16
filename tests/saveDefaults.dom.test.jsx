@@ -595,8 +595,11 @@ describe('Save Defaults + gear indicator', () => {
       expect(input.value).toBe(year)
       // The uniqueness half of the retired getByDisplayValue(year) — see the same pairing above.
       expect(screen.getAllByDisplayValue(year)).toHaveLength(1)
-      expect(input.className).toContain('border surface-tray')
+      // (Julian is on, so this pair is NOT IN EFFECT — Round 26: the same bordered box, hollow.)
+      expect(input.className).toContain('border tray-dormant')
       expect(input.className).not.toContain('panel')
+      // …and the pair in use wears the interactive surface itself.
+      expect(yearInput(end, 'on').className).toContain('border surface-tray')
     }
   })
 

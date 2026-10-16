@@ -14,6 +14,7 @@ import { render, renderHook, screen, cleanup, fireEvent, act } from '@testing-li
 import { useGameEngine } from '../src/engine/useGameEngine.js'
 import { isPlayerBusy, isRoundLive, onPlayerFree } from '../src/lib/playerBusy.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { wday } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
@@ -242,6 +243,7 @@ describe('each mode: what its screen reports', () => {
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
 
   it('Classic: only with its timing shown, only while it is the page on screen', () => {

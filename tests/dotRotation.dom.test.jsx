@@ -58,7 +58,7 @@ import {
   mountApp,
   openSettings,
   pickPill,
-  expectLock,
+  expectNotInEffect,
   pickerChosen,
   resetAppState,
 } from './helpers/settingsPanel.jsx'
@@ -321,11 +321,11 @@ describe('Settings → Rotate Dots picker', () => {
     expect(DOT_ROTATION_OPTIONS.map((o) => o.label)).toEqual(['Standard', '45° CCW', '90° CCW'])
   })
 
-  it('chooses each rotation in a weekday mode, and is not locked', () => {
+  it('chooses each rotation in a weekday mode, and is in effect there', () => {
     mountApp() // opens in Classic (a weekday mode)
     openSettings('key')
     chooseDots()
-    expectLock('Rotate Dots', false)
+    expectNotInEffect('Rotate Dots', null)
     expect(pickerChosen('Rotate Dots')).toEqual(['Standard'])
     for (const rotation of ['ccw45', 'ccw90', 'standard']) {
       pickPill('Rotate Dots', LABEL[rotation])
@@ -339,42 +339,44 @@ describe('Settings → Rotate Dots picker', () => {
   // exists to catch. ⚠ THE PAIR IS ABOUT THIS CONDITION ONLY: Rotate Dots has a second lock Input
   // does not (Buttons — the case below), because Input chooses whether there are dots at all and
   // cannot lock itself out.
-  it('is locked (value preserved) in Deduction, exactly with Input', () => {
+  // (Round 26: NOT IN EFFECT rather than locked — outlined, its reason on every radio, and still
+  // changeable.)
+  it('is not in effect (value kept, still changeable) in Deduction, exactly with Input', () => {
     mountApp()
     openSettings('key')
-    chooseDots() // …so the lock this case reads is the MODE's, not the Buttons one
+    chooseDots() // …so the state this case reads is the MODE's, not the Buttons one
     pickPill('Rotate Dots', '45° CCW')
-    expectLock('Input', false)
-    expectLock('Rotate Dots', false)
+    expectNotInEffect('Input', null)
+    expectNotInEffect('Rotate Dots', null)
     act(() => {
       fireEvent.keyDown(window, { key: 'D' }) // switch to Deduction
     })
     openSettings('key')
-    expectLock('Input', true)
-    expectLock('Rotate Dots', true)
-    // PillTray's guard behind the lock keeps the value even if a press is dispatched at a pill.
-    pickPill('Rotate Dots', '90° CCW')
-    expect(useSettings.getState().dotRotation).toBe('ccw45')
+    expectNotInEffect('Input', 'Not in use in Deduction.')
+    expectNotInEffect('Rotate Dots', 'Not in use in Deduction.')
     expect(pickerChosen('Rotate Dots')).toEqual(['45° CCW'])
+    pickPill('Rotate Dots', '90° CCW') // a press takes
+    expect(useSettings.getState().dotRotation).toBe('ccw90')
+    expect(pickerChosen('Rotate Dots')).toEqual(['90° CCW'])
   })
 
   // ★ THE SECOND LOCK: with Input on Buttons there are no dots on screen to turn, so the only thing
   // this picker could still move is the title-bar mark — a control whose whole visible effect is
-  // somewhere else, with nothing it corresponds to. So it locks exactly as it does in Deduction.
-  it('is locked while the answer input is Buttons, and unlocks the moment Dots is chosen', () => {
+  // somewhere else, with nothing it corresponds to. So it is not in effect, exactly as in Deduction.
+  it('is not in effect while the answer input is Buttons, and back in effect the moment Dots is chosen', () => {
     mountApp() // Classic, Input at its factory Buttons
     openSettings('key')
-    expectLock('Rotate Dots', true)
-    expectLock('Input', false) // …and Input itself stays live, or there would be no way out
-    pickPill('Rotate Dots', '45° CCW') // the guard behind the lock holds
-    expect(useSettings.getState().dotRotation).toBe('standard')
+    expectNotInEffect('Rotate Dots', 'Not in use while Input is Buttons.')
+    expectNotInEffect('Input', null) // …and Input itself is in effect
+    pickPill('Rotate Dots', '45° CCW') // changeable while not in effect
+    expect(useSettings.getState().dotRotation).toBe('ccw45')
     chooseDots()
-    expectLock('Rotate Dots', false)
+    expectNotInEffect('Rotate Dots', null)
     pickPill('Rotate Dots', '90° CCW')
     expect(useSettings.getState().dotRotation).toBe('ccw90')
-    // …and going back to Buttons re-locks it with the pick intact, rather than resetting it.
+    // …and going back to Buttons takes it out of effect with the pick intact, rather than resetting it.
     pickPill('Input', 'Buttons')
-    expectLock('Rotate Dots', true)
+    expectNotInEffect('Rotate Dots', 'Not in use while Input is Buttons.')
     expect(pickerChosen('Rotate Dots')).toEqual(['90° CCW'])
     expect(useSettings.getState().dotRotation).toBe('ccw90')
   })

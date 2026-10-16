@@ -58,3 +58,9 @@ export const isOffered = (el) =>
 // REACH this element" (an inherited opacity covers every descendant) ask
 // settingsPanel.drawnUnavailable, which walks the containment chain through this predicate.
 export const isDimmed = (el) => el.className.includes('opacity-60')
+
+// `el` is any rendered element. Returns whether the app is drawing it NOT IN EFFECT (Round 26) — kept
+// and changeable, but not acting right now: a ⚙ picker's tray or a Year Range box drawn hollow, the
+// third look beside filled (live) and faded (isDimmed — cannot be used). Like the other two, asked
+// here and nowhere else.
+export const isOutlined = (el) => el.className.includes('tray-dormant')

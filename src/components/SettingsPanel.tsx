@@ -11,10 +11,15 @@
 // Verified by probe in round 14 — swapping this one line back takes `eslint` on this file from
 // reporting a genuine react-hooks/set-state-in-effect error (in the Full Reset safety net, see
 // ~line 545) to clean. Nothing about the code changes; only whether anything is looking at it.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { flushSync } from 'react-dom'
-import { julianChanceApplies, leapChanceApplies, yearRangeInEffect } from '../lib/dateConfig.js'
+import {
+  janFebChanceApplies,
+  julianChanceApplies,
+  leapChanceApplies,
+  yearRangeInEffect,
+} from '../lib/dateConfig.js'
 import { fmt, numericFormatOf } from '../lib/format.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
 import { sharedFitScale } from '../lib/statFit.js'
@@ -53,6 +58,7 @@ import {
   NOT_OFFERED_BTN_CLASS,
   FOOTER_META_ROW_CLASS,
   NUM_INPUT_CLASS,
+  NUM_INPUT_DORMANT_CLASS,
 } from './controlClasses.js'
 import { BUILD_IS_DEPLOYED, DEPLOY_TS } from '../deployStamp.js'
 import { APP_VERSION } from '../appVersion.js'
@@ -167,6 +173,28 @@ export type SettingsPanelProps = {
   onRetireChangelogDot: () => void
 }
 
+// ★ WHY A SETTING IS NOT IN EFFECT (Round 26) — one sentence each, given to a screen reader on every
+// option of the setting (components/PillGroup's `dormant`, and the Year Range boxes'), never drawn:
+// the outlined look is what a sighted player is shown. A setting that is not in effect is still
+// changeable, and changing it changes nothing until it is in effect again (lib/dateConfig: the
+// generator, the resets, and the Best keys all read only the settings in effect).
+const NOT_IN_EFFECT = {
+  randomFormat: 'Practice dates ignore this while Random Format is on.',
+  deduction: 'Not in use in Deduction.',
+  buttons: 'Not in use while Input is Buttons.',
+  noLeapYear: 'Not in use: your year range has no leap year.',
+  onlyLeapYears: 'Not in use: every year in your range is a leap year.',
+  julianOff: 'Not in use while Julian Calendar is off.',
+  julianOn: 'Not in use while Julian Calendar is on.',
+  no1582: 'Not in use: your year range does not include 1582.',
+} as const
+// The pages whose dates Date Format does not set while Random Format is on: the four weekday
+// practice modes. NOT Deduction — its codes panel lays its codes out in Date Format's reading order
+// whatever the puzzle's own format (modes/DeductionMode's MethodBreakdownSection) — and not Lookup or
+// How to Play, where Date Format is the format of everything shown (Lookup's typing order and
+// answers, the menu's own dates).
+const DATE_FORMAT_IDLE_PAGES = new Set(['classic', 'flash', 'aox', 'blitz'])
+
 // ONE YEAR BOX — the Year Range row has four (two pairs), and each behaves exactly as the one pair
 // always did: digits only while typing, the commit on leaving (blur or Enter), Escape throwing the
 // typing away (the ★ notes at the row say why it is written this way).
@@ -175,15 +203,19 @@ function YearBox({
   mirror,
   committed,
   inputRef,
+  reasonId,
 }: {
   name: string
   mirror: YearMirror
   committed: number
   inputRef: RefObject<HTMLInputElement | null>
+  // The id of its pair's "not in effect" reason, while the pair is not the one in use.
+  reasonId?: string
 }) {
   return (
     <input
       ref={inputRef}
+      aria-describedby={reasonId}
       type="text"
       inputMode="numeric"
       pattern="[0-9]*"
@@ -208,11 +240,13 @@ function YearBox({
         blockMinus(e)
       }}
       onBeforeInput={blockMinusBI}
-      className={`${NUM_INPUT_CLASS} py-1.5 flex-1 min-w-0`}
+      // Not in effect: the same box, hollow (index.css's .tray-dormant in place of .surface-tray).
+      className={`${reasonId ? NUM_INPUT_DORMANT_CLASS : NUM_INPUT_CLASS} py-1.5 flex-1 min-w-0`}
     />
   )
 }
-// ONE PAIR — its caption over its two boxes, the "→" between them.
+// ONE PAIR — its caption over its two boxes, the "→" between them. The pair not in use is drawn not
+// in effect (`dormant`, its reason): outlined, still typed into and saved.
 function YearPair({
   caption,
   mirrors,
@@ -220,6 +254,7 @@ function YearPair({
   max,
   minRef,
   maxRef,
+  dormant,
 }: {
   caption: string
   mirrors: YearRangeMirrors
@@ -227,9 +262,17 @@ function YearPair({
   max: number
   minRef: RefObject<HTMLInputElement | null>
   maxRef: RefObject<HTMLInputElement | null>
+  dormant?: string
 }) {
+  const id = useId()
+  const reasonId = dormant ? id : undefined
   return (
     <div className="flex-1 min-w-0 space-y-1.5">
+      {dormant && (
+        <span id={id} hidden>
+          {dormant}
+        </span>
+      )}
       <SectionLabel className="text-center">{caption}</SectionLabel>
       <div className="flex items-center gap-1.5">
         <YearBox
@@ -237,6 +280,7 @@ function YearPair({
           mirror={mirrors.min}
           committed={min}
           inputRef={minRef}
+          reasonId={reasonId}
         />
         <span className="text-(--tx-300-60) text-sm shrink-0">→</span>
         <YearBox
@@ -244,6 +288,7 @@ function YearPair({
           mirror={mirrors.max}
           committed={max}
           inputRef={maxRef}
+          reasonId={reasonId}
         />
       </div>
     </div>
@@ -1347,9 +1392,22 @@ export function SettingsPanel({
                 wrapper is also the dim, so the lock provably covers the captions. Written / Numeric
                 stay plain captions — the halves ride in the pills' accessible names
                 (WRITTEN_FORMATS/NUMERIC_FORMATS), which keeps the two 'MDY's apart. Every picker
-                below states its lock ONCE, as PillGroup's `disabled`: the dim, aria-disabled, the
-                onChange guard and the tab stops all follow from it. */}
-            <PillGroup label="Date Format" disabled={randomFormat} className="flex gap-2">
+                below states its state ONCE, on its PillGroup: `dormant` (not in effect — outlined,
+                still changeable, its reason read to a screen reader) or `disabled` (cannot be used —
+                faded, locked). Round 26 made the first of those the rule for everything kept but
+                idle (the owner: "dimmed means not in effect right now, not locked").
+                ★ DATE FORMAT IS NOT IN EFFECT ONLY WHERE IT IS NOT: Random Format on, on a page
+                whose dates it does not set (DATE_FORMAT_IDLE_PAGES, which says why Deduction,
+                Lookup, and How to Play are not among them). */}
+            <PillGroup
+              label="Date Format"
+              dormant={
+                randomFormat && DATE_FORMAT_IDLE_PAGES.has(mode)
+                  ? NOT_IN_EFFECT.randomFormat
+                  : undefined
+              }
+              className="flex gap-2"
+            >
               <div className="flex-1 space-y-1.5">
                 <SectionLabel className="text-center">Written</SectionLabel>
                 <PillTray value={dateFormat} onChange={setDateFormat} options={WRITTEN_FORMATS} />
@@ -1360,12 +1418,16 @@ export function SettingsPanel({
               </div>
             </PillGroup>
             {/* Input — Buttons / Dots (the logo's 7-dot answer layout). A picker with no families,
-                so: one tray, no captions. Locks/dims in Deduction (answers aren't weekdays; the
-                value is preserved), like Julian/Leap-Year Chance when they don't apply — the lock
-                sits on the GROUP, so the housing greys as one piece. The condition is
-                `==='deduction'` EXACTLY, and it is LIVE: every other mode leaves Input unlocked. */}
+                so: one tray, no captions. Not in effect in Deduction (answers aren't weekdays; the
+                value is kept and still changeable), like Julian/Leap-Year Chance when they don't
+                apply — the state sits on the GROUP, so the housing goes hollow as one piece. The
+                condition is `==='deduction'` EXACTLY, and it is LIVE: every other mode has Input in
+                effect. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Input</div>
-            <PillGroup label="Input" disabled={mode === 'deduction'}>
+            <PillGroup
+              label="Input"
+              dormant={mode === 'deduction' ? NOT_IN_EFFECT.deduction : undefined}
+            >
               <PillTray value={inputStyle} onChange={setInputStyle} options={INPUT_STYLES} />
             </PillGroup>
             {/* Rotate Dots — how far the 7-dot layout is TURNED counterclockwise: Standard / 45° CCW /
@@ -1379,27 +1441,36 @@ export function SettingsPanel({
                 the plain-language win beat the word's second meaning on RotateOverlay's
                 turn-your-device screen): the direction now rides in the pills themselves, so
                 saying it twice would only crowd the row.
-                ★ IT LOCKS WHENEVER THERE ARE NO DOTS ON SCREEN TO TURN, which is two conditions and
+                ★ IT IS NOT IN EFFECT WHENEVER THERE ARE NO DOTS ON SCREEN TO TURN (round 26: drawn
+                outlined and still changeable — it used to lock), which is two conditions and
                 not one: Deduction (whose answers are not weekdays at all — the same
                 `mode === 'deduction'` the Input picker above uses, shared on purpose, because a
                 live control sitting directly beneath a dead one, both about dots, would read as a
                 bug in the lock), and ANY mode while Input is on Buttons — the second half is what
                 makes the mark's own fix (main.tsx's W5Logo call site) necessary in the first place:
                 with Input on Buttons there is nothing on screen for a turned mark to correspond to,
-                so the CONTROL that could turn it locks too, not just the mark itself. Stated once,
-                as PillGroup's `disabled`, like every other picker.
-                ⚠ IT IS A LOCK, NOT A RESET — value preserved while locked, exactly how Julian Chance
-                behaves when the year range makes it moot and exactly how Amnesic behaves while Save
-                Stats is off. Switch Input back to Dots and the rotation you chose is still
-                selected.
+                so the CONTROL that could turn it is not in effect either, not just the mark itself.
+                Stated once, as PillGroup's `dormant`, like every other picker.
+                ⚠ IT IS NEVER A RESET — the value is kept, and can be changed, while it is not in
+                effect, exactly as Julian Chance behaves when the year range makes it moot. Switch
+                Input back to Dots and the rotation you chose is still selected.
                 ⚠ THE LOCK AND THE MARK ARE GATED ON DIFFERENT THINGS, written down so it is not later
-                reported as a bug: this picker locks on Deduction OR Input-on-Buttons, while the
+                reported as a bug: this picker idles on Deduction OR Input-on-Buttons, while the
                 title-bar mark is gated on Input alone (main.tsx passes `<W5Logo>` the setting only
                 while `inputStyle==='dots'`). So on Buttons the mark is upright in every mode; and
-                in Deduction with Input on Dots the picker is locked but the mark still shows the
+                in Deduction with Input on Dots the picker is outlined but the mark still shows the
                 rotation chosen. How to Play says exactly this. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Rotate Dots</div>
-            <PillGroup label="Rotate Dots" disabled={mode === 'deduction' || inputStyle !== 'dots'}>
+            <PillGroup
+              label="Rotate Dots"
+              dormant={
+                mode === 'deduction'
+                  ? NOT_IN_EFFECT.deduction
+                  : inputStyle !== 'dots'
+                    ? NOT_IN_EFFECT.buttons
+                    : undefined
+              }
+            >
               <PillTray
                 value={dotRotation}
                 onChange={setDotRotation}
@@ -1540,6 +1611,7 @@ export function SettingsPanel({
                 max={maxY}
                 minRef={minYearRef}
                 maxRef={maxYearRef}
+                dormant={useJulian ? NOT_IN_EFFECT.julianOn : undefined}
               />
               <YearPair
                 caption="Julian On"
@@ -1548,42 +1620,58 @@ export function SettingsPanel({
                 max={julianMaxY}
                 minRef={julianMinYearRef}
                 maxRef={julianMaxYearRef}
+                dormant={useJulian ? undefined : NOT_IN_EFFECT.julianOff}
               />
             </div>
             {/* ★ THE ORDER OF THIS SECTION (round-12) — Year Range, then the two LEAP rows, then
-                the JULIAN pair last. Julian Chance is locked unless the switch is ON *and* the
-                range straddles 1582, so under any ordinary modern range it is a greyed-out dead
-                control; it used to sit third, ABOVE two live ones. Two pairings constrain any
+                the JULIAN pair last. Julian Chance is not in effect unless the switch is ON *and*
+                the range straddles 1582, so under any ordinary modern range it is an idle control;
+                it used to sit third, ABOVE two live ones. Two pairings constrain any
                 future reshuffle: Jan/Feb Chance is a sub-case of Leap Year Chance and must sit
                 directly under it, and the Julian switch is the thing that explains why Julian
-                Chance greys out, so it must stay directly above it. Move the Julian pair, never one
+                Chance goes out of effect, so it must stay directly above it. Move the Julian pair, never one
                 half of it.
                 The three chance rows (this one, Jan/Feb under it, and Julian Chance at the foot of
                 the section) are pickers, so they are trays (THE PICKER RULE, Display above) —
                 round-9 converted them from the flat gap-separated buttons they shipped as. The
                 conversion costs no height: these rows already captioned ABOVE their control, and
                 the tray's ~2px seams are tighter than the ~6px gaps they replace, so every label
-                gained room. Each row's LOCK now sits on the GROUP instead of on every button, so
-                the housing greys as one piece; the caption stays lit, as it always did. Each lock
-                is written straight into `disabled` because one boolean is now all a lock takes —
-                the IIFEs the two locked rows (Leap Year Chance, Julian Chance) used to need existed
-                only to hand the same derived boolean to a dim class as well.
-                Leap Year Chance: locked when it cannot apply — the active range/calendar has no leap
-                year, or is a single leap year (lib/dateConfig's leapChanceApplies, the same question
-                the generator's settings in effect ask); the selected value is preserved + restored
-                when it can apply again. */}
+                gained room. Each row's state sits on the GROUP instead of on every button, so the
+                housing changes as one piece; the caption stays lit, as it always did.
+                ★ ALL THREE ARE NOT IN EFFECT EXACTLY WHEN lib/dateConfig SAYS — the same three
+                questions (leapChanceApplies, janFebChanceApplies, julianChanceApplies) the settings
+                in effect are built from, asked of the Year Range in use — so what the panel draws
+                as idle is what the generator, the resets, and the Best keys leave out. Outlined,
+                never locked (round 26): the value is kept and can be changed, and comes back into
+                effect with a range it can apply to.
+                Leap Year Chance: not in effect when the range in use has no leap year, or is a
+                single leap year (every date is then in a leap year, whatever it says). */}
             <div className="text-xs text-(--tx-200-80) pt-1">Leap Year Chance</div>
             <PillGroup
               label="Leap Year Chance"
-              disabled={!leapChanceApplies(range.minY, range.maxY, useJulian)}
+              dormant={
+                !janFebChanceApplies(range.minY, range.maxY, useJulian)
+                  ? NOT_IN_EFFECT.noLeapYear
+                  : !leapChanceApplies(range.minY, range.maxY, useJulian)
+                    ? NOT_IN_EFFECT.onlyLeapYears
+                    : undefined
+              }
             >
               <PillTray value={leapChance} onChange={setLeapChance} options={LEAP_CHANCE_OPTIONS} />
             </PillGroup>
             {/* Jan/Feb Chance: the listed % is the exact probability a leap-year date lands on
-                Jan/Feb (Random = natural ~17%). Stays unlocked even when leap years aren't
-                currently reachable, so it is the one chance row with no lock branch at all. */}
+                Jan/Feb (Random = natural ~17%). Not in effect when the range in use has no leap
+                year — before round 26 it stayed lit there, doing nothing, while a change to it
+                still restarted a run. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Jan/Feb Chance on Leap Years</div>
-            <PillGroup label="Jan/Feb Chance on Leap Years">
+            <PillGroup
+              label="Jan/Feb Chance on Leap Years"
+              dormant={
+                janFebChanceApplies(range.minY, range.maxY, useJulian)
+                  ? undefined
+                  : NOT_IN_EFFECT.noLeapYear
+              }
+            >
               <PillTray value={janFebChance} onChange={setJanFebChance} options={CHANCE_OPTIONS} />
             </PillGroup>
             <div className="flex items-center justify-between pt-1">
@@ -1597,14 +1685,23 @@ export function SettingsPanel({
                 {useJulian ? 'On' : 'Off'}
               </button>
             </div>
-            {/* Julian Chance: locked unless the switch directly above is ON *and* the active year
-                range straddles 1582 (= mixed Julian+Gregorian: minY<=1582<=maxY). Year 1582 itself
-                spans both calendars. When locked the selected value stays visually selected, so
-                it's restored when the range becomes mixed again. */}
+            {/* Julian Chance: not in effect unless the switch directly above is ON *and* the year
+                range in use straddles 1582 (= mixed Julian+Gregorian: minY<=1582<=maxY; year 1582
+                itself spans both calendars) — and never in Deduction, whose puzzles do not read it
+                (App leaves it out of Deduction's settings in effect). The selected value stays
+                selected, and changeable. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Julian Chance</div>
             <PillGroup
               label="Julian Chance"
-              disabled={!julianChanceApplies(range.minY, range.maxY, useJulian)}
+              dormant={
+                !useJulian
+                  ? NOT_IN_EFFECT.julianOff
+                  : !julianChanceApplies(range.minY, range.maxY, useJulian)
+                    ? NOT_IN_EFFECT.no1582
+                    : mode === 'deduction'
+                      ? NOT_IN_EFFECT.deduction
+                      : undefined
+              }
             >
               <PillTray value={julianChance} onChange={setJulianChance} options={CHANCE_OPTIONS} />
             </PillGroup>

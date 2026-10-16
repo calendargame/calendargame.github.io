@@ -12,3 +12,11 @@ import { createContext, useContext } from 'react'
 // The default is false: a tray outside any group is simply live.
 export const PillGroupLock = createContext(false)
 export const usePillGroupLock = () => useContext(PillGroupLock)
+
+// ★ AND THE OTHER STATE A PICKER CAN BE IN: NOT IN EFFECT (Round 26). Kept, still changeable, and not
+// acting right now — a chance setting the year range cannot use, Rotate Dots while Input is Buttons.
+// A PillGroup with a `dormant` reason publishes the id of the element that holds the reason's
+// words; the segments inside point their aria-describedby at it and draw the outlined look
+// (components/PillTray). null = in effect. Unlike the lock it changes NOTHING a press does.
+export const PillGroupDormant = createContext<string | null>(null)
+export const usePillGroupDormant = () => useContext(PillGroupDormant)

@@ -44,6 +44,7 @@ import { render, screen, within, cleanup, fireEvent, act } from '@testing-librar
 import StatPanel from '../src/components/StatPanel.jsx'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { wday } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
@@ -348,6 +349,7 @@ describe('Classic — your toggle and Save Stats are two separate signals (the r
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useModePrefs.getState().resetModePrefs()
   })
   afterEach(() => {

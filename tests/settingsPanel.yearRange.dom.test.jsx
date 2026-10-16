@@ -54,7 +54,7 @@ import {
   gearIndicator,
   panelValues,
   pickPill,
-  pickerLockState,
+  pickerInEffect,
   toggleSwitch,
   tapPanelButton,
   fireResetSettings,
@@ -374,27 +374,27 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     })
   })
 
-  it('the two chance locks re-evaluate only once the year is committed', () => {
+  it('the two chance rows go in and out of effect only once the year is committed', () => {
     openPanel()
     // A one-year range on 1900 — a common year in the Gregorian calendar, so no leap year is
-    // reachable and Leap Year Chance locks.
+    // reachable and Leap Year Chance is not in effect.
     setYear('min', '1900')
     setYear('max', '1900')
-    expect(pickerLockState('Leap Year Chance').offered).toBe(false)
-    // Typing a year that WOULD unlock it changes nothing while it is still just text.
+    expect(pickerInEffect('Leap Year Chance')).toBe(false)
+    // Typing a year that WOULD bring it back changes nothing while it is still just text.
     typeYear('max', '1904')
-    expect(pickerLockState('Leap Year Chance').offered).toBe(false)
+    expect(pickerInEffect('Leap Year Chance')).toBe(false)
     commitYear('max', 'blur')
-    expect(pickerLockState('Leap Year Chance').offered).toBe(true)
+    expect(pickerInEffect('Leap Year Chance')).toBe(true)
 
     // Julian Chance is the same contract on a different boundary: it needs the range to span the
     // 1582 changeover, and 1582 itself counts.
     setYear('min', '1583')
-    expect(pickerLockState('Julian Chance').offered).toBe(false)
+    expect(pickerInEffect('Julian Chance')).toBe(false)
     typeYear('min', '1582')
-    expect(pickerLockState('Julian Chance').offered).toBe(false)
+    expect(pickerInEffect('Julian Chance')).toBe(false)
     commitYear('min', 'blur')
-    expect(pickerLockState('Julian Chance').offered).toBe(true)
+    expect(pickerInEffect('Julian Chance')).toBe(true)
   })
 
   // ── What each close route does to a half-typed year ─────────────────────────

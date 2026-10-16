@@ -47,6 +47,7 @@ import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { usePresets } from '../src/store/presets.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useLookupHistory } from '../src/store/lookupHistory.js'
 import {
   createPreset,
@@ -1684,6 +1685,7 @@ describe('on the mounted app, with a timed question on screen', () => {
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useModePrefs.getState().setClassicTimingOff(false) // Classic's times are shown, so recorded
   })
 

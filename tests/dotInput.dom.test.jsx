@@ -11,9 +11,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { wday } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
-import { mountApp, openSettings, pickerLockState, resetAppState } from './helpers/settingsPanel.jsx'
+import {
+  mountApp,
+  openSettings,
+  pickerLockState,
+  expectNotInEffect,
+  resetAppState,
+} from './helpers/settingsPanel.jsx'
 // The live Classic date is the only leaf <div> whose text is a numeric-ymd date (the always-mounted
 // hidden modes show "—"). Pinned numeric-ymd + Gregorian range make it trivially parseable.
 function readDate() {
@@ -61,6 +68,7 @@ describe('7-dot input (Dots layout)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useSettings.getState().setInputStyle('dots')
   })
   afterEach(() => {
@@ -132,16 +140,16 @@ describe('Settings → Input toggle', () => {
     expect(screen.getByRole('radio', { name: 'Dots' }).getAttribute('aria-checked')).toBe('false')
   })
 
-  it('is locked (dimmed, value preserved) in Deduction', () => {
+  // (Round 26: not in effect there rather than locked — still changeable, its reason on each radio.)
+  it('is not in effect in Deduction, and still changeable', () => {
     useSettings.getState().setInputStyle('buttons')
     mountApp()
     act(() => {
       fireEvent.keyDown(window, { key: 'D' }) // switch to Deduction
     })
     openSettings('key') // open the ⚙ popover
-    expect(pickerLockState('Input').offered).toBe(false)
-    // The PillTray onChange guard keeps the value even if a click is dispatched at a segment.
+    expectNotInEffect('Input', 'Not in use in Deduction.')
     fireEvent.click(screen.getByRole('radio', { name: 'Dots' }))
-    expect(useSettings.getState().inputStyle).toBe('buttons')
+    expect(useSettings.getState().inputStyle).toBe('dots')
   })
 })

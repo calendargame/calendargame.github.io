@@ -54,6 +54,8 @@ test('every save the lane seeds carries the version the app writes today', async
 
   for (const [store, key] of [
     ['settings', PRESET_STORE_KEYS.settings],
+    // (the Julian-on Year Range: pinned by the app on its first open of the preset)
+    ['julianRange', PRESET_STORE_KEYS.julianRange],
     ['modePrefs', PRESET_STORE_KEYS.modePrefs],
     ['progress', PRESET_STORE_KEYS.progress],
     ['presets', PRESET_REGISTRY_KEY],
