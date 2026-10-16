@@ -29,7 +29,19 @@
 // 320px Slide Over): the root size that height gives cannot fit "Last Updated: …" beside "Check for
 // updates" there. The line then breaks, the second item stays at the right, and the gap stays the
 // foot's own — which the first half of the sweep holds it to.
-import { test, expect, openApp, openSettings, resizeTo, SAME_PX, type Rect } from './support/app'
+import {
+  test,
+  expect,
+  openApp,
+  openSettings,
+  resizeTo,
+  appReady,
+  textRectOf,
+  rectOf,
+  SAME_PX,
+  THEMES,
+  type Rect,
+} from './support/app'
 import type { Locator } from '@playwright/test'
 
 const WIDTHS = Array.from({ length: 15 }, (_, i) => 320 + i * 10)
@@ -205,3 +217,52 @@ test('at every phone size each pair is on one line: the foot is three lines', as
         expect(visualLines(now).length, named(width, height, factor)).toBe(3)
       }
 })
+
+// THE TWO RIGHT-HAND ITEMS SHARE ONE RIGHT EDGE, AND THE CHANGELOG DOT HANGS PAST IT (Round 26).
+// "Changelog" used to keep a slot in flow for its update dot, so its text ended ~6px short of
+// "Check for updates" on the line below. The dot now hangs past the end of the word, out of flow
+// (components/UpdateDot's `trailing`): the two words' right edges meet, and the lit dot is drawn
+// whole, in the foot's own side padding, inside the menu — in every theme, at the narrowest and
+// widest phones.
+for (const theme of THEMES)
+  test(`${theme}: "Changelog" and "Check for updates" end at one edge, with the lit dot whole beside it`, async ({
+    page,
+  }) => {
+    await openApp(page, { theme })
+    // A changelog that has gained something since this device last looked: the link's dot lit.
+    await page.evaluate(() => window.localStorage.setItem('cg-update-dot-changelog', '1'))
+    await page.reload()
+    await appReady(page)
+    const panel = await openSettings(page)
+    const changelog = panel.getByRole('button', { name: /^Changelog/ })
+    const check = panel.getByRole('button', { name: 'Check for updates' })
+    const dot = changelog.locator('[data-update-dot]')
+    await expect(dot).toHaveAttribute('data-lit', 'true')
+    for (const [width, height] of [
+      [320, 568],
+      [390, 844],
+      [440, 956],
+    ]) {
+      await resizeTo(page, width, height)
+      const at = `${theme} at ${width}×${height}`
+      // The word's own glyphs: its text node alone (a range over the span would take in the dot).
+      const word = await changelog
+        .locator('span')
+        .first()
+        .evaluate((el) => {
+          const range = document.createRange()
+          range.selectNodeContents(el.firstChild!)
+          const { left, right } = range.getBoundingClientRect()
+          return { left, right }
+        })
+      const other = await textRectOf(check)
+      expect(Math.abs(word.right - other.right), `${at}: the two right edges`).toBeLessThanOrEqual(
+        0.5,
+      )
+      const [d, card] = await Promise.all([rectOf(dot), rectOf(panel)])
+      expect(d.width, `${at}: the dot is drawn`).toBeGreaterThan(0)
+      expect(d.left, `${at}: the dot past the word`).toBeGreaterThanOrEqual(word.right)
+      expect(d.right, `${at}: the dot inside the menu`).toBeLessThanOrEqual(card.right - SAME_PX)
+      expect(await dot.evaluate((el) => getComputedStyle(el).visibility)).toBe('visible')
+    }
+  })

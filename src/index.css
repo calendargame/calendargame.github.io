@@ -1064,8 +1064,8 @@ button{touch-action:manipulation}
    open. So on the fill it is the bright amber of the dark themes (--storage-amber, the :root row's),
    whatever the theme. */
 .btn-solid>[data-update-dot][data-reason="storage"]{background:var(--storage-amber)}
-/* Unlit keeps its box and stops painting — that is what makes the inline slot permanent (lighting
-   up must never move the link's text), and it costs the corner form nothing (it is out of flow). */
+/* Unlit keeps its box and stops painting — and both forms are out of flow, so lighting up moves
+   nothing either way. */
 [data-update-dot][data-lit="false"]{visibility:hidden}
 /* The corner badge. PRECONDITION, PER AXIS — the host must clear inset + size (0.64em) so the dot
    can never reach the text. The ⚙ gear satisfies both, which is why it worked there and only there:
@@ -1076,9 +1076,13 @@ button{touch-action:manipulation}
    no ordering constraint between the two (the round-6 recipe had to claim ::before to share the
    gear). The host must also be a containing block — the gear carries a literal `relative`. */
 [data-update-dot="corner"]{position:absolute;top:.21em;right:.21em}
-/* The in-flow marker, for text links: margin-inline-start is the gap from the last glyph, in em
-   again so the gap tracks the type it trails. */
-[data-update-dot="inline"]{display:inline-block;margin-inline-start:.3em}
+/* The marker HANGING PAST A TEXT LINK'S END (Round 26), for the ⚙ foot's Changelog: out of flow,
+   just beyond the text's own span (its `relative` host), centred on it, the gap from the last glyph
+   in em again so it tracks the type it trails. It used to sit IN flow, in a slot the link always
+   kept for it — which put the link's right edge 0.73em past its text, so "Changelog" stood ~6px
+   left of "Check for updates" on the line below, whose right edges the foot lines up. Hanging, the
+   link's box is its text and the two edges meet; the dot sits in the foot's side padding. */
+[data-update-dot="trailing"]{position:absolute;left:100%;top:50%;margin-inline-start:.3em;translate:0 -50%}
 /* The ⚙ panel's "Storage used" line from the warning line up (store/storageUsage). Amber: a caution
    about STATE — unlike the update dot's blue, which means news. Deeper on the light themes (the
    .gear-modified pattern) — --storage-warn, in the theme rows at the top of this file. The gear's

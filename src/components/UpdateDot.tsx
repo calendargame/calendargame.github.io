@@ -32,9 +32,11 @@ export type UpdateDotPlacement =
   // Absolutely positioned in the host's top-right inside corner. Icon buttons only: the host must
   // be a containing block (a literal `relative`) AND clear the inset + the dot in its own padding.
   | 'corner'
-  // In-flow marker trailing the host's text, for text links. Its slot exists whether or not the
-  // marker is lit, so lighting up moves nothing.
-  | 'inline'
+  // Hanging just past the end of a text link's text, OUTSIDE its box (Round 26): the link's box,
+  // and so its right edge, is its text alone, and lighting the marker moves nothing. The host is the
+  // text's own span, which must be a containing block (a literal `relative`), with room for the
+  // marker (0.73em) beyond it — the ⚙ foot has its px-4.
+  | 'trailing'
 
 // What a lit dot is saying, which is its colour: news (an update landed), or the storage warning.
 export type UpdateDotReason = 'update' | 'storage'
@@ -48,8 +50,8 @@ export function UpdateDot({
   lit: boolean
   reason?: UpdateDotReason
 }) {
-  // data-lit rather than conditional rendering: the inline slot has to occupy space in BOTH states
-  // (see above), so one attribute drives the paint (index.css) and the tests alike.
+  // data-lit rather than conditional rendering: one attribute drives the paint (index.css) and the
+  // tests alike, and the marker keeps its place lit or not.
   return (
     <span
       aria-hidden="true"

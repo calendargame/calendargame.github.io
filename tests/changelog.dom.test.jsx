@@ -340,14 +340,16 @@ describe('the two-stage breadcrumb (stamp → dots → cleared)', () => {
     expect(gear().className).not.toContain('update-dot')
     openSettings()
     const link = changelogLink()
-    // The text link gets the in-flow marker — a sibling of the text, never on top of it — and the
-    // underline sits on the text span alone so the rule cannot paint across the gap to the dot.
-    expect(linkMark()).toHaveAttribute('data-update-dot', 'inline')
-    expect(linkMark().parentElement).toBe(link)
-    expect(link.className).not.toContain('underline')
+    // The text link gets the HANGING marker (Round 26): out of flow, from the text's own span —
+    // its containing block — just past the word, never on top of it; the underline sits on that span
+    // alone, and reaches nothing out of flow.
+    expect(linkMark()).toHaveAttribute('data-update-dot', 'trailing')
     const text = link.querySelector('span')
+    expect(linkMark().parentElement).toBe(text)
+    expect(link.className).not.toContain('underline')
     expect(text.textContent).toBe('Changelog')
     expect(text.className).toContain('underline')
+    expect(text.className.split(/\s+/)).toContain('relative')
   })
 
   it('the post-update suppression boot (cg-skip-boot-hold) still lights the dots (no signature stored) — only the screen is suppressed', () => {

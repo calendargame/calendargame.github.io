@@ -1811,13 +1811,15 @@ export function SettingsPanel({
                 second stage of the breadcrumb the gear's dot starts. ⚠ Since 2026-08-10 that dot
                 appears only when the changelog actually GAINED something, so an internal deploy
                 lights the gear and leaves this one dark.
-                ⚠ IT IS ANCHORED AS A WHOLE ELEMENT — its text plus the update-dot slot, which
-                UpdateDot reserves lit or unlit alike (index.css) — so lighting the dot cannot shift
-                the line.
+                ⚠ ITS BOX IS ITS TEXT (Round 26): the dot HANGS past the end of the word, out of flow
+                (UpdateDot's `trailing`, index.css), so the link's right edge — the edge the line
+                anchors at the right — is the word's, level with Check for updates' below it, and
+                lighting the dot cannot shift the line. It used to keep a slot in flow for the dot,
+                which stood the word ~6px left of the line below.
                 Round 8 rebuilt that marker: a text link reserves no room for the gear's corner
                 badge, so the round-6 shared recipe put the dot on top of the word. The link is an
-                inline-flex row now — the text in its own span, the marker its sibling — and the
-                underline moved ONTO that span so the rule can never paint across the gap. Being
+                inline-flex row now — the text in its own span, with the underline ON that span,
+                and the marker hanging from it out of flow, where no underline reaches. Being
                 aria-hidden, the marker needs the sr-only word beside it to reach a screen reader,
                 which is also the only update signal left once the gear's dot has been retired.
                 ⚠ That word carries its own COMMA rather than the gear's "(update)" parenthetical:
@@ -1829,9 +1831,11 @@ export function SettingsPanel({
               onClick={openChangelog}
               className="inline-flex items-center select-none rounded-md px-1 -mx-1"
             >
-              <span className="underline">Changelog</span>
+              <span className="underline relative">
+                Changelog
+                <UpdateDot placement="trailing" lit={changelogDot} />
+              </span>
               {changelogDot && <span className="sr-only">, update</span>}
-              <UpdateDot placement="inline" lit={changelogDot} />
             </button>
           </div>
           {/* THE BUILD STAMP, with Check for updates at the line's right end — the stamp says
