@@ -112,6 +112,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'A preset name that your device draws as nothing at all, such as some pasted symbols, now counts as a blank name: it goes back to "Preset 2" and the like, as a name of spaces does, instead of leaving an empty button. A symbol your device has no picture for, which it shows as a box, still counts as a name.',
       'Fixed: on a very narrow screen, the Mode button no longer covers the end of the Preset button, and the ⚙ no longer runs off the edge. The Preset button keeps room for its arrows and a number, and the Mode button gives way instead, its name cut short where it does not fit.',
       "Fixed: in Manage Presets, pressing your device's Back while typing a preset name no longer throws the name away. It keeps it, as tapping away does, and closes the popup. Escape still throws a name away.",
+      'Fixed: on an iPhone, a flick that started on a button in the ⚙ menu could press that button as your finger lifted, such as opening the Open in list. A flick now only scrolls, wherever it starts.',
     ],
   },
   {

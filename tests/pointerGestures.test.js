@@ -753,7 +753,8 @@ describe('pointerGestures controller — touches that are not quick taps, and th
   }
   // One whole touch, as the phone sends it: pointerdown, touchstart, [wander, wait], pointerup,
   // touchend. Returns the touchstart and the touchend, so a test can ask whether either was cancelled.
-  const press = (el, { held = 0, at = el, via = [], endCancelable = true } = {}) => {
+  // `during`: anything else that happens while the finger is down (a scroll, say), after the moves.
+  const press = (el, { held = 0, at = el, via = [], endCancelable = true, during } = {}) => {
     hit = el
     el.dispatchEvent(ptr('pointerdown'))
     const start = touch('touchstart', 1)
@@ -762,6 +763,7 @@ describe('pointerGestures controller — touches that are not quick taps, and th
       hit = over
       document.dispatchEvent(ptr('pointermove', { x: px }))
     }
+    during?.()
     now += held
     hit = at
     document.dispatchEvent(ptr('pointerup'))
@@ -1044,6 +1046,69 @@ describe('pointerGestures controller — touches that are not quick taps, and th
     dim.addEventListener('click', () => (focusAtPress = document.activeElement))
     press(dim, { held: 1000 })
     expect(focusAtPress).not.toBe(box)
+  })
+
+  // ★ A TOUCH THAT SCROLLED ANYTHING IS A SCROLL (Round 26, the owner's "Open in" report): iOS can
+  // end a touch that scrolled an inner region in a plain pointerup on the control it started on —
+  // no pointercancel — and that used to be pressed as a "moved" touch.
+  const scrolls = (node) => node.dispatchEvent(new Event('scroll'))
+  it('a touch during which the region holding its button scrolled presses nothing — and no click it brings either', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    press(pill, { held: 600, via: [[pill, 60]], during: () => scrolls(region) })
+    expect(clicks).not.toHaveBeenCalled()
+    pill.click() // a click a browser might still send for the scroll
+    expect(clicks).not.toHaveBeenCalled()
+    // …and the next real press is a press.
+    press(pill, { held: 600 })
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  it('…the page scrolling counts too; a scroll of something that does NOT hold the button does not', () => {
+    const pill = domEl('button', {}, document.body)
+    const elsewhere = domEl('div', {}, document.body)
+    const clicks = counted(pill)
+    press(pill, { held: 600, during: () => scrolls(elsewhere) })
+    expect(clicks).toHaveBeenCalledTimes(1)
+    press(pill, { held: 600, during: () => scrolls(document) })
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  it('an open list: a slide rings the option under the finger only once it is on ANOTHER one, and lifting there picks it', () => {
+    const list = domEl('div', { role: 'listbox', 'data-select-group': '' }, document.body)
+    const a = domEl('button', {}, list)
+    const b = domEl('button', {}, list)
+    const [aClicks, bClicks] = [counted(a), counted(b)]
+    hit = a
+    a.dispatchEvent(ptr('pointerdown'))
+    document.dispatchEvent(ptr('pointermove', { x: 2 }))
+    expect(a.classList.contains('drag-target')).toBe(false) // a plain touch rings nothing
+    hit = b
+    document.dispatchEvent(ptr('pointermove', { x: 40 }))
+    expect(b.classList.contains('drag-target')).toBe(true)
+    document.dispatchEvent(ptr('pointerup'))
+    expect(bClicks).toHaveBeenCalledTimes(1)
+    expect(aClicks).not.toHaveBeenCalled()
+    expect(b.classList.contains('drag-target')).toBe(false)
+  })
+
+  it('…and a slide that SCROLLS the list picks nothing and drops its ring', () => {
+    const list = domEl('div', { role: 'listbox', 'data-select-group': '' }, document.body)
+    const a = domEl('button', {}, list)
+    const b = domEl('button', {}, list)
+    const bClicks = counted(b)
+    hit = a
+    a.dispatchEvent(ptr('pointerdown'))
+    hit = b
+    document.dispatchEvent(ptr('pointermove', { x: 40 }))
+    expect(b.classList.contains('drag-target')).toBe(true)
+    scrolls(list)
+    expect(b.classList.contains('drag-target')).toBe(false)
+    document.dispatchEvent(ptr('pointermove', { x: 50 }))
+    expect(b.classList.contains('drag-target')).toBe(false)
+    document.dispatchEvent(ptr('pointerup'))
+    expect(bClicks).not.toHaveBeenCalled()
   })
 
   it('keyboard and screen-reader presses (a click with no pointer events) are untouched before and after', () => {

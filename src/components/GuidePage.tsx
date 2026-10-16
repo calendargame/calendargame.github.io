@@ -1247,7 +1247,9 @@ export default function GuidePage({
           <li>
             How long you hold a button before lifting makes no difference: a long press works just
             like a tap, and so does sliding off a button and back onto it before you lift. Only a
-            press that turns into a scroll does nothing. The dimmed area around a popup works the
+            press that turns into a scroll does nothing — wherever the button is, and however your
+            finger ends up back on it: a flick that starts on a button in the ⚙ menu, a list, or a
+            long page moves that part and presses nothing. The dimmed area around a popup works the
             same way: hold it as long as you like, and the popup still closes when you lift.
           </li>
           <li>

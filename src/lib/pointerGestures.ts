@@ -106,6 +106,21 @@
 //     quick tap is the browser's click, a long or moved one is pressed here, and one that slides
 //     onto the card is cancelled. Before Round 26's follow-up a long press on the dim closed nothing
 //     on an iPhone, for the same missing click as a button's.
+//   • ★ A TOUCH THAT SCROLLED ANYTHING IS A SCROLL, AND PRESSES NOTHING (Round 26, the owner's
+//     iPhone: a flick that started on the ⚙ menu's "Open in" pill scrolled the menu and then OPENED
+//     the list as the finger lifted). The rule above leaves "was it a scroll?" to the browser's
+//     pointercancel — and iOS does not always send one: a touch that scrolls an inner scroll region
+//     can end in a plain pointerup, on the very control it started on (the control travelled with
+//     the finger, so the release point is still on it), and was then pressed here as a "moved"
+//     touch. A regression of this rule: before it, such a release was left to a click iOS never
+//     sent. So the controller watches for itself: any scroll, during the gesture, of something that
+//     holds the pressed control (the page included) marks the touch as a scroll (onScroll) — and a
+//     scroll presses nothing on release, neither the control it began on nor, in a list, another
+//     option under the finger, and draws no ring while it lasts. One rule for every control inside
+//     anything that scrolls: the ⚙ menu, How to Play, Manage Presets' list, a dropdown's list.
+//     (The top bar's own controls sit in no scroller; a press-drag from one into its list scrolls
+//     the LIST, which does not hold the trigger, so the edge auto-scroll below is not a scroll of
+//     the press.)
 //   • NOT CONTROLS OF THIS FILE: links (two mailto addresses — a long press on a link is the
 //     platform's own preview, never a press), the preset reorder grip (it owns its own drag), and the
 //     sliders. Those keep the browser's behaviour.
@@ -333,6 +348,9 @@ export function installPointerGestures(): () => void {
   let moved = 0
   let onText = false
   let withheld = false
+  // Whether something holding the pressed control has scrolled since the press (onScroll): then the
+  // gesture is a scroll, and presses nothing.
+  let scrolled = false
   // …and across touches: when the last TAP ended (a touch the browser did not take for a scroll), whether
   // the touch now down has been taken for one, a touchstart withheld before its pointerdown arrived
   // (no engine checked orders them that way, but the rule must not depend on it), and whether the
@@ -430,6 +448,7 @@ export function installPointerGestures(): () => void {
     moved = 0
     onText = false
     withheld = false
+    scrolled = false
   }
   // Suppress the start button's native click. On touch that click fires the ORIGINAL button regardless
   // of drift AND is DELAYED/async after release (a long press makes the browser "commit" to the pressed
@@ -527,7 +546,7 @@ export function installPointerGestures(): () => void {
       setHilite(memberAt(menu, e.clientX, e.clientY))
       return
     }
-    if (!group) return
+    if (!group || scrolled) return
     const h = nextHilite(memberAt(group, e.clientX, e.clientY), startEl, hasLeftStart)
     hasLeftStart = h.hasLeft
     setHilite(h.show)
@@ -553,6 +572,14 @@ export function installPointerGestures(): () => void {
           if (dismiss) member.dispatchEvent(new CustomEvent('drag-dismiss', { bubbles: true }))
         }
       }
+      return
+    }
+    // A scroll presses nothing (the header's ★ "a touch that scrolled anything"): whatever lies under
+    // the finger now, the gesture is over — and a click a browser might still send for it is
+    // swallowed (the next press disarms that, so no later tap can be lost to it).
+    if (scrolled) {
+      endGesture()
+      armSuppress(start)
       return
     }
     const { suppressStart, activate } = resolveRelease(start, relTarget, group)
@@ -646,6 +673,19 @@ export function installPointerGestures(): () => void {
     cancelTouchEnd = false
     withheldEarly = false
   }
+  // A SCROLL DURING A PRESS (the header's ★ "a touch that scrolled anything"): a scroll of anything
+  // that holds the pressed control — an inner region, or the page (the document holds everything) —
+  // makes the gesture a scroll. Scroll events do not bubble, so this listens in the capture phase,
+  // which every scroll in the document passes through. Only a pressed TRIGGER is exempt: its gesture
+  // is a press-drag into its own list, which this controller scrolls itself (autoScroll), and the
+  // list does not hold the trigger anyway.
+  const onScroll = (e: Event) => {
+    if (!startEl || trigger || scrolled) return
+    const scroller = e.target
+    if (!(scroller instanceof Node) || !scroller.contains(startEl)) return
+    scrolled = true
+    setHilite(null)
+  }
   // KEEP_FOCUS_SELECTOR's half for the presses the BROWSER makes: cancelling the mousedown is how a
   // press asks the browser to leave focus where it is.
   const onMouseDown = (e: MouseEvent) => {
@@ -663,6 +703,7 @@ export function installPointerGestures(): () => void {
   document.addEventListener('touchend', onTouchEnd, active)
   document.addEventListener('touchcancel', onTouchCancel, passive)
   document.addEventListener('mousedown', onMouseDown, true)
+  document.addEventListener('scroll', onScroll, passive)
   return () => {
     if (clearTimer) clearTimeout(clearTimer)
     stopAutoScroll()
@@ -676,5 +717,6 @@ export function installPointerGestures(): () => void {
     document.removeEventListener('touchend', onTouchEnd, true)
     document.removeEventListener('touchcancel', onTouchCancel, true)
     document.removeEventListener('mousedown', onMouseDown, true)
+    document.removeEventListener('scroll', onScroll, true)
   }
 }
