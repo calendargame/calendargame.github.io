@@ -117,8 +117,8 @@ beforeEach(() => {
   if (typeof localStorage !== 'undefined') localStorage.clear()
   door.forget()
   // ⚠⚠ THE REGISTRY GOES BACK FIRST, AND THE ORDER IS THE WHOLE POINT — it decides WHERE every reset
-  // below lands. The four per-preset stores persist through a preset-SCOPED storage (store/presets'
-  // presetScopedStorage), so while the registry still says "preset 2" a reset writes preset 2's
+  // below lands. The per-preset stores persist through a preset-SCOPED storage (store/presets'
+  // presetDoc), so while the registry still says "preset 2" a reset writes preset 2's
   // namespaced keys: a file that switched presets in one test left `cg-settings-v1~p2` behind for the
   // next, written by this very net a moment after the file's own localStorage.clear(). Nothing in the
   // app reads that key afterwards — but store/presetControl's createPreset does (its skip loop refuses

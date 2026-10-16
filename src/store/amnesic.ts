@@ -326,10 +326,10 @@ export function discardParkedStats(presetId: number): void {
 // write picking the wrong one — and the owner ruled it out. Changing the value discards; it never
 // reconciles.
 //
-// This is store/presets' presetScopedStorage with ONE extra question asked per call — WHICH COPY, per
-// key — and it stays a SECOND named adapter rather than an option on the first: the first is the rule
-// for the three stores that are always permanent, and an adapter that could be either would put a
-// condition in front of the sentence above.
+// This is store/presets' presetDoc (the active preset's key, at each read and each write) with ONE
+// extra question asked per call — WHICH COPY, per key — and it stays a SECOND named adapter rather
+// than an option on the first: the first is the rule for the stores that are always permanent, and
+// an adapter that could be either would put a condition in front of the sentence above.
 // ★ IT ONLY CHOOSES THE COPY. How a copy is laid out on the device — the main key, and the sealed
 // chunks a long history of solve times is kept in — is store/progressStorage's, which is handed
 // exactly one (area, preset) per call and can therefore reach no other: while a preset is amnesic
@@ -358,8 +358,8 @@ const readEnvelope = (text: string | null): Envelope | null => {
 }
 
 export const presetStatsStorage = <S>(): PersistStorage<S> | undefined => {
-  // ⚠ EAGER, exactly as presetScopedStorage is and for the same reason: a browser that throws on the
-  // localStorage property access must be found out HERE, so the store lands on persist's
+  // ⚠ EAGER, for the reason the windows-in-sync door opens its storage in a try: a browser that
+  // throws on the localStorage property access must be found out HERE, so the store lands on persist's
   // in-memory-only path (no storage at all), rather than inside every getItem/setItem — i.e. inside
   // hydration and inside every setState. sessionStorage is opened after it, guarded, because it is
   // allowed to be missing on its own.

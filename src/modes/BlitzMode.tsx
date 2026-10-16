@@ -801,9 +801,16 @@ function BlitzMode({
   // timer lengths are in the deps because Reset Settings can now restore them mid-round (round 6):
   // the sliders are idle-locked, so the only in-popover writer of blitzSec/qSec is Reset Settings, and a
   // reset that lands a fresh timer must reconcile the running/ended round exactly as a panel change does.
-  useSettingsCloseEffect(settingsOpen ?? false, [dateDraw, useJulian, blitzSec, qSec], () => {
-    if (active || timerDone) resetRound()
-  })
+  // Per-Round/Question and Allow Mistakes are in the deps for ANOTHER WINDOW'S change of them (the
+  // third case, components/useSettingsCloseEffect): here they are idle-locked, so they never change
+  // under a live or ended round — but a change made in another window does, and resets it the same way.
+  useSettingsCloseEffect(
+    settingsOpen ?? false,
+    [dateDraw, useJulian, blitzSec, qSec, perQ, allowMistakes],
+    () => {
+      if (active || timerDone) resetRound()
+    },
+  )
 
   // Reconcile Best while a round is over — when it ends AND on every post-round Override that moves
   // its stats. Each run REBUILDS the round's record from the pre-round one (engine/blitzBest): a

@@ -157,9 +157,14 @@ export interface CountsShape {
   /** Read the sync key's text (null: none, or unreadable). */
   readKey(text: string | null): SyncKey | null
   writeKey(key: SyncKey): string
-  /** What a setting reads as where the doc has no value for it (the app: undefined - the store's own
-   *  default applies; the model: 0). */
+  /** What a setting reads as where the doc has no value for it: the value every build's store holds
+   *  then, so an older page's save of it reads as the same value (the app: each setting's default,
+   *  `absentOf`; the model: 0, `regAbsent`). */
   readonly regAbsent?: unknown
+  absentOf?(x: string): unknown
+  /** A setting whose value carries its own version tag (the saved defaults' `w`, design 4): true when `v`
+   *  is an object a new build wrote and nobody has changed since - its tag still names its own values. */
+  tagged?(x: string, v: unknown): boolean
 }
 
 /** The fuzz oracle's hooks (store/syncedDoc's tests): a ledger beside the counts, and a log. */
@@ -344,13 +349,15 @@ export class CountsBook {
     const sl = [...this.shape.silos, ...this.shape.regs]
     for (const x of sl)
       if (!this.mem[x]) {
-        const v = this.isSilo(x) ? this.blank() : this.shape.regAbsent
+        const v = this.isSilo(x) ? this.blank() : this.absent(x)
         this.mem[x] = { v, st: ZERO }
         this.base[x] = { v, st: ZERO }
       }
     return sl
   }
   isSilo = (x: string): boolean => this.shape.silos.includes(x)
+  absent = (x: string): unknown =>
+    this.shape.absentOf ? this.shape.absentOf(x) : this.shape.regAbsent
   fpOf = (x: string, v: unknown): string => (this.isSilo(x) ? siloFp(v as Silo) : regFp(v))
 
   // ── the counts algebra, with the oracle's ledger beside it ──
@@ -413,7 +420,7 @@ export class CountsBook {
     return o
   }
   memOfDisk(x: string, d: unknown): unknown {
-    if (!this.isSilo(x)) return d === undefined ? this.shape.regAbsent : d
+    if (!this.isSilo(x)) return d === undefined ? this.absent(x) : d
     if (d === undefined || d === null) return this.blank()
     return this.shape.silo(d).v
   }
@@ -518,6 +525,13 @@ export class CountsBook {
   // A SETTING written by an older page (no tag can ride inside a setting).
   classifyReg(x: string, v: unknown, sAt: KeyEntry | null): Classified {
     if (sAt && this.fpOf(x, v) === sAt.fp) return { kind: 'current', st: sAt.st }
+    // A TAGGED value that is not the newest is a version a new build wrote, carried unchanged by an
+    // older page (however many versions back): the newest stands. Changed by an older page, its tag no
+    // longer names its values, and it is that page's change (below).
+    if (sAt && this.shape.tagged?.(x, v)) {
+      const val = this.newestValue(x, sAt)
+      if (val !== NO_VALUE) return { kind: 'carryReg', st: sAt.st, val }
+    }
     // (V2-F6) THE VALUE JUST BEFORE THE NEWEST CHANGE is that page's stale copy - unless an older page
     // has been seen holding the newest value since it was set (then it may have set the old value back)
     if (
@@ -1400,7 +1414,7 @@ export class CountsBook {
   setReg(x: string, v: unknown): void {
     void this.SL // (a slice the shape has just begun to name starts as "nothing known")
     this.mem[x] = { v, st: this.mem[x]?.st ?? ZERO }
-    this.base[x] ??= { v: this.shape.regAbsent, st: ZERO }
+    this.base[x] ??= { v: this.absent(x), st: ZERO }
     this.dirty[x] = { reset: false, ops: [], set: true }
   }
   /** Whether a held Reset of this slice is pressed and waiting (for the oracle's kills). */

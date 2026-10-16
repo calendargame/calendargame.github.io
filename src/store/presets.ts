@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import { readItem, writeItem, removeItem } from './storageHealth.js'
-import { door, type CountsSpec } from './syncedDoc.js'
+import { persist } from 'zustand/middleware'
+import { readItem } from './storageHealth.js'
+import { door, type CountsSpec, type CountsStorage } from './syncedDoc.js'
 import { browsingSessionOpen } from './browsingSession.js'
 import { sessionPresetId, recordSessionPreset } from './sessionPreset.js'
 import { nameHasInk } from '../lib/presetNameInk.js'
@@ -667,9 +667,9 @@ export const syncRegistry = (): void => REGISTRY_DOOR.syncNow()
 //     OLD preset's values pointed at the NEW preset's key, and any write in that window overwrites
 //     real data with the wrong preset's.
 // Instead the `name` NEVER changes — it stays the base key, forever, in the store file where it has
-// always been — and this adapter rewrites it to the active preset's key at the moment of each read
-// and each write. There is no window at all: the swap IS the registry write, and the very next
-// storage call already goes to the new preset.
+// always been — and the storage below (presetDoc) finds the active preset's key at the moment of
+// each read and each write. There is no window at all: the swap IS the registry write, and the very
+// next storage call already goes to the new preset.
 //
 // ⚠ WHAT HAPPENS TO A STORE THAT IS ALREADY MOUNTED WHEN THE ACTIVE PRESET CHANGES — the question
 // this design has to answer out loud. Its `name` is unaffected, so its next WRITE lands in the new
@@ -681,31 +681,79 @@ export const syncRegistry = (): void => REGISTRY_DOOR.syncNow()
 // the next answered question writes the old preset's stats into the new preset. That was PROVEN
 // against the real stores: a device with 500 cards ended up with 4.
 //
-// ⚠ ORDERING: this adapter asks the registry for `activeId` on every call, so the registry must
+// ⚠ ORDERING: the storage asks the registry for `activeId` on every call, so the registry must
 // exist before any per-preset store hydrates. It does, and by construction rather than by luck —
 // every per-preset store imports this module, so ESM finishes evaluating this file (registry
 // included, hydrated synchronously from localStorage) before that store's `create` runs.
 //
-// ⚠ PRIVATE MODE: `window.localStorage` is read EAGERLY, inside the factory, so that a browser
-// which throws on the property access throws where zustand's createJSONStorage catches it — which
-// returns `undefined` and puts the store on persist's in-memory-only path. Building the object
-// lazily instead would let the throw escape into every getItem/setItem, i.e. into hydration and
-// into every setState. This mirrors zustand's own default storage exactly; it is why the app
-// survives locked-down browsing today, and it must keep doing so.
-export const presetScopedStorage = <T>() =>
-  createJSONStorage<T>(() => {
-    const ls = window.localStorage
-    const scoped = (name: string) => presetKey(name, usePresets.getState().activeId)
-    return {
-      // Through store/storageHealth, all three: a save the device refuses becomes the storage-full
-      // notice instead of a throw out of the store's setter, and is held for THIS preset's key — so
-      // a read of that key (the switch back to this preset) returns it, and its retry can only ever
-      // land here.
-      getItem: (name) => readItem(ls, scoped(name)),
-      setItem: (name, value) => writeItem(ls, scoped(name), value),
-      removeItem: (name) => removeItem(ls, scoped(name)),
-    }
-  })
+// ★ THROUGH THE WINDOWS-IN-SYNC DOOR (store/syncedDoc; design-q1-q2.md v4). Every per-preset doc is
+// read and written as slices merged with what other windows wrote (store/syncCounts), and:
+//   • (8.2) A PER-PRESET DOC IS WRITTEN ONLY WHILE ITS PRESET IS LISTED — in the preset list as this
+//     window merges it with the device first. A preset another window deleted gets nothing written
+//     for it (its keys were that window's to remove, and are not made again by this one's next
+//     answer); what this window had not landed of it is dropped, and the list's own merge moves the
+//     window off it (store/presetControl's adoptRegistry).
+//   • A save the device refuses is held as actions and merged before it is retried
+//     (store/storageHealth): a store that moves to another preset while its save is held leaves that
+//     doc's book behind, detached, still merging, until the save lands.
+//   • PRIVATE MODE: a browser that throws on `window.localStorage` gives the door no storage, and the
+//     store runs on in memory only, as it always has.
+export type PresetDocSpec = Omit<CountsSpec, 'key' | 'gate'> & { base: string }
+export const presetDocSpec = (spec: PresetDocSpec): CountsSpec => ({
+  ...spec,
+  key: () => presetKey(spec.base, usePresets.getState().activeId),
+  gate: (key) => {
+    const id = presetIdOfSuffix(key.slice(spec.base.length))
+    const order = REGISTRY_DOOR.mergeNow()?.order
+    return id !== null && Array.isArray(order) && order.includes(id)
+  },
+})
+export const presetDoc = <S>(spec: PresetDocSpec): CountsStorage<S> =>
+  door.countsStorage<S>(presetDocSpec(spec))
+
+// A doc of plain fields, one slice each (⚙ settings, the mode setup). A field this build does not know
+// (a newer build's) is kept as it is found and written back as it was; one it does is the store's.
+const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]*$/
+const defined = (o: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
+// `migrate`: a doc saved at another version, in this one's shape (applied as it is read).
+// `screen`: what the store may hold - every value on its way to the store passes it, so one this build
+//   cannot use (a value a newer build put back through the sync key, which no migration saw) is never
+//   handed over; a value it drops is not patched in, and a load reads the factory value in its place.
+// `retired`: fields an older shape had and this one's migration rewrites. The store owns them as it
+//   owns its own, so a save removes one that a doc still holds.
+export const presetFieldsSpec = (spec: {
+  kind: CountsSpec['kind']
+  base: string
+  version: number
+  defaults: Record<string, unknown>
+  retired?: readonly string[]
+  migrate?: (docState: Record<string, unknown>, version: number) => Record<string, unknown>
+  screen?: (state: Record<string, unknown>) => Record<string, unknown>
+}): PresetDocSpec => {
+  const known = Object.keys(spec.defaults)
+  const owned = [...known, ...(spec.retired ?? [])]
+  const screen = spec.screen ?? ((state: Record<string, unknown>) => state)
+  return {
+    kind: spec.kind,
+    base: spec.base,
+    version: spec.version,
+    defaultOf: (x) => (Object.hasOwn(spec.defaults, x) ? spec.defaults[x] : undefined),
+    regs: (seen) => [...new Set([...known, ...seen.filter((x) => FIELD_NAME.test(x))])],
+    owned: (x) => owned.includes(x),
+    ...(spec.migrate ? { migrate: spec.migrate } : {}),
+    toSlices: (state) => ({ ...state }),
+    fromSlices: (slices) => screen(defined(slices)),
+    sliceState: (docState) => ({ ...docState }),
+    docState: defined,
+    patchOf: (now, changed) => {
+      const patch = screen(
+        Object.fromEntries(changed.filter((x) => known.includes(x)).map((x) => [x, now[x]])),
+      )
+      return Object.keys(patch).length ? patch : null
+    },
+  }
+}
 
 // ── The hydration rule that makes switching safe ──────────────────────────────────────────────
 //

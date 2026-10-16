@@ -132,6 +132,17 @@ export type CountsSpec = {
     now: Record<string, unknown>,
     device: Record<string, unknown> | null,
   ): Record<string, unknown> | null
+  /** May this doc be written now (design 8.2: a per-preset doc only while its preset is listed)? A doc
+   *  that may not is not written, and what this window had not landed of it is dropped. */
+  gate?(key: string): boolean
+  /** A slice whose value carries its own version tag (store/syncCounts' CountsShape.tagged). */
+  tagged?(x: string, v: unknown): boolean
+  /** The slices the store holds (default: every one): a slice it does not (a field a newer build
+   *  wrote) is never changed by the store's saves - it is kept as the doc has it. */
+  owned?(x: string): boolean
+  /** A doc saved at another version (an older build's shape) in this build's shape: applied as the
+   *  doc is READ, so every merge, and the store, only ever see this build's shape. */
+  migrate?(docState: Record<string, unknown>, version: number): Record<string, unknown>
 }
 export type CountsStorage<S> = PersistStorage<S> & {
   attach(store: StoreApi<S>): void
@@ -139,6 +150,9 @@ export type CountsStorage<S> = PersistStorage<S> & {
   trySave(value: StorageValue<S>): boolean
   /** Merge the active doc with the device now (the registry before an allocation, 8.5). */
   syncNow(): void
+  /** Merge the active doc with the device now and return its slices; the store is patched after the
+   *  caller's turn (the registry, read by a per-preset doc's gate in the middle of that doc's save). */
+  mergeNow(): Record<string, unknown> | null
   /** The active doc's slices as this window's book holds them (null: not opened). */
   slices(): Record<string, unknown> | null
 }
@@ -161,6 +175,30 @@ export function createDoor(env: DoorEnv) {
   const adoptOwed = new Set<() => void>()
   const later = env.later ?? ((fn: () => void) => queueMicrotask(fn))
   const bindings: Binding[] = []
+  // ★ A WRITE THAT FITS MAY MEAN ROOM FOR WHAT IS HELD (store/storageHealth's storageSpaceFreed) - and
+  // the held saves are retried the moment the door's OUTERMOST call returns: never inside it (a retry
+  // is another save, and the book that just landed is still settling; another doc's retry landing in
+  // the middle of this one's would be read back as another window's write), never a turn later (the
+  // player's next save would race it).
+  let depth = 0
+  let freed = false
+  const landed = () => {
+    freed = true
+  }
+  const outer =
+    <A extends unknown[], R>(fn: (...a: A) => R) =>
+    (...a: A): R => {
+      depth++
+      try {
+        return fn(...a)
+      } finally {
+        depth--
+        if (depth === 0 && freed) {
+          freed = false
+          storageSpaceFreed()
+        }
+      }
+    }
   let flushQueued = false
   const queueFlush = () => {
     if (flushQueued) return
@@ -168,10 +206,13 @@ export function createDoor(env: DoorEnv) {
     // Notices are handled in the order they come; a window writes once it has handled the last one
     // queued (2.7: an older page's Full Reset writes a middle state and then removes the doc in one
     // task, and the middle state must never be re-asserted over the removal).
-    setTimeout(() => {
-      flushQueued = false
-      for (const b of bindings) b.flush()
-    }, 0)
+    setTimeout(
+      outer(() => {
+        flushQueued = false
+        for (const b of bindings) b.flush()
+      }),
+      0,
+    )
   }
 
   // ── THE LOOKUP HISTORY (store/syncList; design 4.2) ──
@@ -230,7 +271,7 @@ export function createDoor(env: DoorEnv) {
       save(docText: string, keyText: string) {
         const s = area()
         if (!s) return true
-        return landBoth(s, docKey, docText, syncKey, keyText)
+        return landBoth(s, docKey, docText, syncKey, keyText, landed)
       },
     }
     const open = (): ListBook<E> => {
@@ -281,7 +322,7 @@ export function createDoor(env: DoorEnv) {
     const settle = () => {
       const s = area()
       if (!s || !book) return
-      if (book.owes) holdForDoor(s, docKey, shape.write(book.mem, book.st ?? ZERO), retry)
+      if (book.owes) holdForDoor(s, docKey, shape.write(book.mem, book.st ?? ZERO), outer(retry))
       else releaseDoorHold(s, docKey)
     }
     const retry = (): boolean => {
@@ -327,7 +368,7 @@ export function createDoor(env: DoorEnv) {
         last = spec.normalize(b.mem)
         return { state: { [spec.field]: last } as unknown as S, version: spec.version }
       },
-      setItem(_name, value) {
+      setItem: outer((_name: string, value: StorageValue<S>) => {
         const b = open()
         const next = spec.normalize((value.state as Record<string, unknown>)[spec.field])
         const prev = last ?? []
@@ -343,7 +384,7 @@ export function createDoor(env: DoorEnv) {
         b.owes = !b.land()
         settle()
         if (!sameList(b.mem, next)) later(adopt)
-      },
+      }),
       removeItem() {
         // (nothing removes the Lookup history's key: a Clear is a list of nothing)
       },
@@ -359,6 +400,7 @@ export function createDoor(env: DoorEnv) {
     const entries = new Map<string, CountsEntry>()
     let store: StoreApi<S> | null = null
     let adopting = false
+
     const area = () => env.storage()
     // what the store holds for a slice whose value the book has - its default where the doc has none
     const asStored = (x: string, v: unknown) => (v === undefined ? spec.defaultOf(x) : v)
@@ -379,13 +421,16 @@ export function createDoor(env: DoorEnv) {
         get regs() {
           return regs
         },
-        regAbsent: undefined,
+        absentOf: (x) => spec.defaultOf(x),
+        ...(spec.tagged ? { tagged: spec.tagged } : {}),
         parse(text) {
           if (text == null) return null
           try {
-            const o = JSON.parse(text) as { state?: unknown; sync?: unknown }
-            const docState =
+            const o = JSON.parse(text) as { state?: unknown; sync?: unknown; version?: unknown }
+            let docState =
               o.state && typeof o.state === 'object' ? (o.state as Record<string, unknown>) : {}
+            if (spec.migrate && typeof o.version === 'number' && o.version !== spec.version)
+              docState = spec.migrate(docState, o.version)
             const sync = o.sync ? (unpackSync(JSON.stringify(o.sync)) as Envelope) : null
             return { state: spec.sliceState(docState), sync }
           } catch {
@@ -445,7 +490,7 @@ export function createDoor(env: DoorEnv) {
           const s = area()
           if (!s) return true
           const before = s.getItem(key)
-          const ok = landBoth(s, key, docText, syncKey, keyText)
+          const ok = landBoth(s, key, docText, syncKey, keyText, landed)
           if (ok) e.prev = { forDoc: docText, old: before }
           return ok
         },
@@ -494,7 +539,16 @@ export function createDoor(env: DoorEnv) {
             kept = true
           }
       if (!mayLand) return kept
-      if (kept || keptBefore || owing(e)) e.book.owes = !e.book.land()
+      if (kept || keptBefore || owing(e)) {
+        if (spec.gate && !spec.gate(e.key)) {
+          // (8.2) the doc's preset is gone: nothing is written for it, and nothing it owed is kept
+          const s = area()
+          if (s) releaseDoorHold(s, e.key)
+          entries.delete(e.key)
+          return false
+        }
+        e.book.owes = !e.book.land()
+      }
       hold(e)
       return false
     }
@@ -503,11 +557,16 @@ export function createDoor(env: DoorEnv) {
       if (!s) return
       if (e.book.owes) {
         const text = JSON.stringify({ state: spec.docState(valuesOf(e)), version: spec.version })
-        holdForDoor(s, e.key, text, () => {
-          settle(e, true)
-          adopt(e)
-          return !e.book.owes
-        })
+        holdForDoor(
+          s,
+          e.key,
+          text,
+          outer(() => {
+            settle(e, true)
+            adopt(e)
+            return !e.book.owes
+          }),
+        )
         return
       }
       releaseDoorHold(s, e.key)
@@ -520,6 +579,7 @@ export function createDoor(env: DoorEnv) {
         adoptOwed.add(() => adopt(e))
         return
       }
+
       const now = valuesOf(e)
       const shown = e.last ?? {}
       const changed = Object.keys(now).filter((x) => !sameJson(now[x], shown[x]))
@@ -570,7 +630,7 @@ export function createDoor(env: DoorEnv) {
       const prev = e.last ?? valuesOf(e)
       e.last = next
       return [...new Set([...Object.keys(prev), ...Object.keys(next)])].filter(
-        (x) => !sameJson(prev[x], next[x]),
+        (x) => (spec.owned?.(x) ?? true) && !sameJson(prev[x], next[x]),
       )
     }
     return {
@@ -584,21 +644,15 @@ export function createDoor(env: DoorEnv) {
         e.last = valuesOf(e)
         const docText = area()?.getItem(key) ?? null
         if (docText === null && !e.book.g) return null
-        let version = spec.version
-        try {
-          const v = docText === null ? null : (JSON.parse(docText) as { version?: unknown }).version
-          if (typeof v === 'number') version = v
-        } catch {
-          /* unreadable: read as this build's own */
-        }
+        // (in this build's shape whatever version the doc was saved at: spec.migrate, as it is read)
         return {
           state: spec.fromSlices(
             Object.fromEntries(e.book.SL.map((x) => [x, e.book.mem[x].v])),
           ) as S,
-          version,
+          version: spec.version,
         }
       },
-      setItem(_name, value) {
+      setItem: outer((_name: string, value: StorageValue<S>) => {
         const key = spec.key()
         if (key === null) return
         const e = entries.get(key) ?? open(key)
@@ -615,11 +669,11 @@ export function createDoor(env: DoorEnv) {
         settle(e, true)
         const now = valuesOf(e)
         if (Object.keys(now).some((x) => !sameJson(now[x], next[x]))) later(() => adopt(e))
-      },
+      }),
       removeItem() {
         // (a store's own doc is removed with its preset - store/presetControl, through removeDoc)
       },
-      trySave(value) {
+      trySave: outer((value: StorageValue<S>): boolean => {
         const key = spec.key()
         if (key === null) return true
         const e = entries.get(key) ?? open(key)
@@ -632,6 +686,10 @@ export function createDoor(env: DoorEnv) {
         const memBefore = { ...e.book.mem }
         const dirtyBefore = { ...e.book.dirty }
         for (const x of changed) e.book.setReg(x, next[x])
+        if (spec.gate && !spec.gate(e.key)) {
+          entries.delete(e.key) // (8.2: nothing is written for a preset that is gone)
+          return false
+        }
         if (e.book.land()) {
           hold(e)
           return true
@@ -640,13 +698,21 @@ export function createDoor(env: DoorEnv) {
         e.book.dirty = dirtyBefore
         e.last = lastBefore
         return false
-      },
-      syncNow() {
+      }),
+      syncNow: outer(() => {
         const e = activeEntry()
         if (!e) return
         settle(e, true)
         adopt(e)
-      },
+      }),
+      mergeNow: outer((): Record<string, unknown> | null => {
+        const key = spec.key()
+        if (key === null) return null
+        const e = entries.get(key) ?? open(key)
+        settle(e, true)
+        later(() => adopt(e))
+        return valuesOf(e)
+      }),
       slices() {
         const e = activeEntry()
         return e ? valuesOf(e) : null
@@ -659,17 +725,17 @@ export function createDoor(env: DoorEnv) {
     listStorage,
     countsStorage,
     /** A `storage` event: the key another window changed, what it held before, and what it holds now. */
-    notice(key: string | null, oldValue: string | null, newValue: string | null = null) {
+    notice: outer((key: string | null, oldValue: string | null, newValue: string | null = null) => {
       if (key === null) {
         for (const b of bindings) b.sync()
         return
       }
       for (const b of bindings) b.notice(key, oldValue, newValue)
-    },
+    }),
     /** Read every doc as the device holds it now, and settle (a return from hidden; 2.7). */
-    syncAll() {
+    syncAll: outer(() => {
       for (const b of bindings) b.sync()
-    },
+    }),
     /**
      * Forget every book, i.e. "the page was closed". The app never needs this - a close drops the
      * books with the page - but the test harness has no close, so tests/setup/dom.js calls it before
@@ -681,13 +747,13 @@ export function createDoor(env: DoorEnv) {
       hidden = false
     },
     /** The window went into the background (true) or came back (false: what was owed is patched). */
-    setHidden(on: boolean) {
+    setHidden: outer((on: boolean) => {
       hidden = on
       if (on) return
       const owed = [...adoptOwed]
       adoptOwed.clear()
       for (const fn of owed) fn()
-    },
+    }),
   }
 }
 
@@ -701,13 +767,14 @@ function landBoth(
   docText: string,
   syncKey: string,
   keyText: string,
+  landed: () => void,
 ): boolean {
   const before = s.getItem(docKey)
   if (before !== docText && !tryWriteItem(s, docKey, docText)) return false
-  if (s.getItem(syncKey) === keyText || tryWriteItem(s, syncKey, keyText)) {
-    // A write just fit: anything held may fit now too (store/storageHealth) - retried once this save is
-    // wholly done, never inside it (a retry is another write, and this save's book is still settling).
-    setTimeout(storageSpaceFreed, 0)
+  const keySame = s.getItem(syncKey) === keyText
+  if (keySame || tryWriteItem(s, syncKey, keyText)) {
+    // (a write just fit: what is held is retried once the door's outermost call returns)
+    if (before !== docText || !keySame) landed()
     return true
   }
   if (s.getItem(docKey) === docText && before !== docText) {

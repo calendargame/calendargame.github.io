@@ -123,13 +123,15 @@ export function cyrb53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
 }
 
-/** JSON with every object's keys in order — the one spelling two equal values share. */
+/** JSON with every object's keys in order — the one spelling two equal values share. A key JSON
+ *  leaves out (its value undefined, a function, or a symbol) is left out here too, so a value and its
+ *  saved copy read back always spell the same. */
 export function canonicalJson(v: unknown): string {
   if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null'
   if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`
   const o = v as Record<string, unknown>
   return `{${Object.keys(o)
-    .filter((k) => o[k] !== undefined)
+    .filter((k) => o[k] !== undefined && typeof o[k] !== 'function' && typeof o[k] !== 'symbol')
     .sort()
     .map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`)
     .join(',')}}`

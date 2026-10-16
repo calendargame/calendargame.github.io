@@ -708,10 +708,18 @@ function AoxMode({
   // deps because Reset Settings can now restore the run length mid-run (round 6): the N field is
   // idle-locked (readOnly while running), so its only in-popover writer is Reset Settings, and a
   // reset that changes N (a Best-key dimension) must reconcile the run exactly as a panel change does.
-  useSettingsCloseEffect(settingsOpen ?? false, [dateDraw, useJulian, aoxN], () => {
-    if (runPhase !== 'idle') reset()
-    else eng.regenDate()
-  })
+  // Allow Mistakes and One-by-One are in the deps for ANOTHER WINDOW'S change of them (the third case,
+  // components/useSettingsCloseEffect): here they are idle-locked like N — a change of any of the three
+  // made here, with the panel closed, is not a third case and reconciles nothing — but a change made
+  // in another window reaches a live or ended run, and resets it, or regenerates an idle run's date.
+  useSettingsCloseEffect(
+    settingsOpen ?? false,
+    [dateDraw, useJulian, aoxN, allowMistakes, oneByOne],
+    () => {
+      if (runPhase !== 'idle') reset()
+      else eng.regenDate()
+    },
+  )
 
   const primaryBtn =
     runPhase === 'idle' ? (

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { PRESET_STORE_KEYS, presetScopedStorage, mergeOverDefaults } from './presets.js'
+import { PRESET_STORE_KEYS, presetFieldsSpec, presetDoc, mergeOverDefaults } from './presets.js'
 
 // modePrefs.ts — the per-mode SETUP store (Stage D follow-up, 2026-06-05).
 //
@@ -112,6 +112,15 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
 // The set of keys we persist — exactly the data values (not the setters).
 const PERSISTED_KEYS = Object.keys(MODE_PREFS_DEFAULTS) as (keyof ModePrefsValues)[]
 
+// Through the windows-in-sync door, one slice per pref (store/presets' presetFieldsSpec).
+export const MODE_PREFS_DOC = presetFieldsSpec({
+  kind: 'modePrefs',
+  base: PRESET_STORE_KEYS.modePrefs,
+  version: 1,
+  defaults: MODE_PREFS_DEFAULTS,
+})
+const MODE_PREFS_DOOR = presetDoc<Partial<ModePrefsState>>(MODE_PREFS_DOC)
+
 export const useModePrefs = create<ModePrefsState>()(
   persist(
     (set) => ({
@@ -151,7 +160,7 @@ export const useModePrefs = create<ModePrefsState>()(
       // saved mode setup rather than a copy of it. The adapter beside it is what sends presets 2,
       // 3, 4… to a namespaced key without this `name` ever moving.
       name: PRESET_STORE_KEYS.modePrefs,
-      storage: presetScopedStorage<Partial<ModePrefsState>>(),
+      storage: MODE_PREFS_DOOR,
       version: 1,
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
@@ -163,3 +172,4 @@ export const useModePrefs = create<ModePrefsState>()(
     },
   ),
 )
+MODE_PREFS_DOOR.attach(useModePrefs)

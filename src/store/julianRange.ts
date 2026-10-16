@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, usePresets } from './presets.js'
+import { PRESET_STORE_KEYS, presetDoc } from './presets.js'
+import type { PresetDocSpec } from './presets.js'
 import { useSettings } from './settings.js'
-import { tryWriteItem } from './storageHealth.js'
 import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from '../lib/calendar.js'
 
 // store/julianRange.ts — THE YEAR RANGE USED WHILE THE JULIAN CALENDAR SETTING IS ON (Round 26, Q7).
@@ -27,9 +27,10 @@ import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from '../lib/calendar.js'
 // presence means "already decided" and the pair is whatever is saved, for good: editing the Julian-
 // off pair here or in an older tab can never move it. ⚠ THAT WRITE IS THE ONE EXCEPTION to "loading
 // a preset writes nothing" (store/presetControl's reloadPresetStores): it creates a new key and
-// rewrites nothing that exists, so it migrates no stored data. It is TRIED (store/storageHealth's
-// tryWriteItem — nothing held, no notice): on a full device the pair is simply derived again next
-// time, from the same Julian-off pair.
+// rewrites nothing that exists, so it migrates no stored data. It is TRIED (the door's trySave —
+// nothing held, no notice): on a full device the pair is simply derived again next time, from the
+// same Julian-off pair. Through the windows-in-sync door like every per-preset doc, as one slice (the
+// pair): another window's change to it comes in as the Julian-on range does when it is typed here.
 // ⚠ "An untouched default" cannot be told from a deliberate 1-10000 — the bytes are the same — so a
 // player who chose 1-10000 is moved to 1-11582 once, and an edit back to 10000 then sticks.
 //
@@ -77,6 +78,25 @@ const VERSION = 1
 // Set by `merge` when the preset just loaded had no usable pair, read once by the hydration's end.
 let needsPin = false
 
+export const JULIAN_RANGE_DOC: PresetDocSpec = {
+  kind: 'julianRange',
+  base: PRESET_STORE_KEYS.julianRange,
+  version: VERSION,
+  defaultOf: () => undefined,
+  regs: () => ['range'],
+  toSlices: (state) => ({ range: { julianMinY: state.julianMinY, julianMaxY: state.julianMaxY } }),
+  fromSlices: (slices) =>
+    slices.range && typeof slices.range === 'object' ? { ...slices.range } : {},
+  sliceState: (docState) =>
+    'julianMinY' in docState || 'julianMaxY' in docState
+      ? { range: { julianMinY: docState.julianMinY, julianMaxY: docState.julianMaxY } }
+      : {},
+  docState: (slices) =>
+    slices.range && typeof slices.range === 'object' ? { ...slices.range } : {},
+  patchOf: (now) => readJulianRange(now.range),
+}
+const JULIAN_RANGE_DOOR = presetDoc<JulianRangeValues>(JULIAN_RANGE_DOC)
+
 export const useJulianRange = create<JulianRangeState>()(
   persist(
     (set) => ({
@@ -87,10 +107,10 @@ export const useJulianRange = create<JulianRangeState>()(
     }),
     {
       name: PRESET_STORE_KEYS.julianRange,
-      storage: presetScopedStorage<JulianRangeValues>(),
+      storage: JULIAN_RANGE_DOOR,
       version: VERSION,
-      // A copy saved under another version is judged by its fields, like any other (readJulianRange).
-      migrate: (persisted) => persisted as JulianRangeValues,
+      // (a copy saved under another version is judged by its fields, like any other: readJulianRange
+      // in `merge` - the door hands every doc over at this version)
       partialize: (s) => ({ julianMinY: s.julianMinY, julianMaxY: s.julianMaxY }),
       // The saved pair when there is one; otherwise the derivation, from the settings store — which
       // has just loaded the same preset (it hydrates first, at its creation and in every reload).
@@ -103,19 +123,13 @@ export const useJulianRange = create<JulianRangeState>()(
       onRehydrateStorage: () => (state) => {
         if (!needsPin || !state) return
         needsPin = false
-        try {
-          tryWriteItem(
-            window.localStorage,
-            presetKey(PRESET_STORE_KEYS.julianRange, usePresets.getState().activeId),
-            JSON.stringify({
-              state: { julianMinY: state.julianMinY, julianMaxY: state.julianMaxY },
-              version: VERSION,
-            }),
-          )
-        } catch {
-          /* storage refused: nothing is kept, so the pair is derived again next time */
-        }
+        // (refused: nothing is kept, so the pair is derived again next time)
+        JULIAN_RANGE_DOOR.trySave({
+          state: { julianMinY: state.julianMinY, julianMaxY: state.julianMaxY },
+          version: VERSION,
+        })
       },
     },
   ),
 )
+JULIAN_RANGE_DOOR.attach(useJulianRange)

@@ -23,6 +23,7 @@ import {
   makePresetRegistryDefaults,
   PRESET_STORE_KEYS,
   FIRST_PRESET_ID,
+  registrySpec,
 } from '../src/store/presets.js'
 import {
   createPreset,
@@ -37,7 +38,7 @@ import {
   isPresetFactory,
 } from '../src/store/presetControl.js'
 import { openBrowsingSession, forgetBrowsingSession } from '../src/store/browsingSession.js'
-import { door } from '../src/store/syncedDoc.js'
+import { door, createDoor } from '../src/store/syncedDoc.js'
 import { sessionPresetId, forgetSessionPreset } from '../src/store/sessionPreset.js'
 import { writeSessionMode } from '../src/store/sessionMode.js'
 import { writeSessionRound } from '../src/store/sessionRound.js'
@@ -126,13 +127,17 @@ describe('preset 1 is the data that was already there', () => {
     expect(localStorage.getItem('cg-modeprefs-v1')).not.toBeNull()
     expect(localStorage.getItem('cg-progress-v1')).not.toBeNull()
     expect(localStorage.getItem('cg-userdefaults-v1')).not.toBeNull()
-    // …and nothing else. In particular no per-preset copy and no registry entry: a device on
-    // preset 1 that has never created a second one is byte-for-byte a device that has never heard
-    // of presets.
+    // …and nothing else but each one's SYNC KEY (store/syncedDoc: what lets windows open side by side
+    // merge it - no older build reads or writes one). In particular no per-preset copy and no registry
+    // entry: to an older build, a device on preset 1 that has never created a second one is a device
+    // that has never heard of presets.
     expect(Object.keys(localStorage).sort()).toEqual([
       'cg-modeprefs-v1',
       'cg-progress-v1',
       'cg-settings-v1',
+      'cg-sync-v1|cg-modeprefs-v1',
+      'cg-sync-v1|cg-settings-v1',
+      'cg-sync-v1|cg-userdefaults-v1',
       'cg-userdefaults-v1',
     ])
   })
@@ -170,18 +175,20 @@ describe('preset 1 is the data that was already there', () => {
     expect(fresh.modePrefs.getState().blitzSec).toBe(45)
     expect(fresh.progress.getState().stats.classic).toEqual(PLAYED)
     expect(fresh.userDefaults.getState().saved.prefs.aoxN).toBe('25')
-    // …and storage is byte-for-byte what it was, but for ONE new key: materialising a registry wrote
+    // …and storage is byte-for-byte what it was, but for ONE new doc: materialising a registry wrote
     // nothing, because a default registry says nothing a missing one does not already say. The one
     // write is store/julianRange's pin — the Julian-on Year Range a preset that has none is given
     // the first time this build opens it, derived from its Julian-off range (1583-10000 here),
-    // written once so nothing an older build does later can move it. A new key; nothing that was
-    // there is rewritten.
-    expect({ ...localStorage }).toEqual({
-      ...before,
-      'cg-julianrange-v1': JSON.stringify({
-        state: { julianMinY: 1583, julianMaxY: 10000 },
-        version: 1,
-      }),
+    // written once so nothing an older build does later can move it — with its sync key. New keys;
+    // nothing that was there is rewritten.
+    const after = { ...localStorage }
+    expect(Object.keys(after).sort()).toEqual(
+      [...Object.keys(before), 'cg-julianrange-v1', 'cg-sync-v1|cg-julianrange-v1'].sort(),
+    )
+    for (const k of Object.keys(before)) expect(after[k]).toBe(before[k])
+    expect(JSON.parse(after['cg-julianrange-v1'])).toMatchObject({
+      state: { julianMinY: 1583, julianMaxY: 10000 },
+      version: 1,
     })
   })
 })
@@ -614,10 +621,13 @@ describe('the "open in" pin', () => {
     openBrowsingSession()
     switchPreset(2)
     expect(sessionPresetId()).toBe(2)
-    // Another tab (or the other site on this origin) switches to preset 1 and saves the registry.
-    const saved = JSON.parse(localStorage.getItem('cg-presets-v1'))
-    saved.state.activeId = 1
-    localStorage.setItem('cg-presets-v1', JSON.stringify(saved))
+    // Another tab (or the other site on this origin) switches to preset 1 and saves the registry —
+    // a window of this build, through its own windows-in-sync door.
+    const tab = createDoor({ storage: () => localStorage, tag: 'tab' }).countsStorage(
+      registrySpec(null),
+    )
+    const theirs = tab.getItem('cg-presets-v1')
+    tab.setItem('cg-presets-v1', { ...theirs, state: { ...theirs.state, activeId: 1 } })
     const reloaded = await reopenApp()
     expect(reloaded.usePresets.getState().activeId).toBe(2)
     // After a real close the session is gone, and "last" is whoever saved last.

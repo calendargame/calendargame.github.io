@@ -20,6 +20,7 @@ import QuotedName from './QuotedName.jsx'
 import CustomSelect from './CustomSelect.jsx'
 import { PresetOptionLabel } from './PresetSwitcher.jsx'
 import { usePresets, normalizePresetName } from '../store/presets.js'
+import { useRemoteEpoch } from '../store/syncedDoc.js'
 import type { Preset } from '../store/presets.js'
 import { useSessionAmnesic } from '../store/sessionAmnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
@@ -441,7 +442,17 @@ export default function PresetManager({
   // reason: `presets` is replaced wholesale by applyRegistry (so reference equality is a correct
   // change signal) and `activeId` is the one scalar this card renders a mark for. Everything this
   // card does writes through store/presetControl and lands back here as a new list.
-  const presets = usePresets((s) => s.presets)
+  const livePresets = usePresets((s) => s.presets)
+  // ★ WHILE A ROW IS BEING DRAGGED, ANOTHER WINDOW'S CHANGE TO THE LIST WAITS FOR THE DROP
+  // (design-q1-q2.md v4, 6.7). The drag's whole model is the rows' places measured at the grab
+  // (DragState's slotMidpoints, below), and another window can change the list at any moment (the
+  // windows-in-sync door brings in its new preset, its rename, its reorder): shown mid-drag, that
+  // change would move rows out from under the finger. So the rows a drag shows are its own (`rows`):
+  // the list at the grab, and every change made HERE since (a key pressed on the held grip) — and
+  // the store, which always holds the merged list, is what the drop moves and what shows after it.
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const presets = drag?.rows ?? livePresets
+  const remoteRegistry = useRemoteEpoch((s) => s.registry)
   const amnesicModes = useSessionAmnesic((s) => s.modes)
   const activeId = usePresets((s) => s.activeId)
 
@@ -774,6 +785,10 @@ export default function PresetManager({
   // hijack it nor restart it.
   type DragState = {
     id: number
+    // The rows this drag shows (★ at `presets`, above), and the count of other windows' changes to
+    // the list as it last took them.
+    rows: Preset[]
+    remoteAt: number
     pointerId: number
     startIndex: number
     previewIndex: number
@@ -790,7 +805,7 @@ export default function PresetManager({
     // px), read at the same moment: the band the rows are shown in is the region less this.
     reach: number
   }
-  const [drag, setDrag] = useState<DragState | null>(null)
+  // (`drag` itself is declared with `presets`, near the top: the rows shown depend on it.)
   // The same value, readable from the auto-scroll loop below — a rAF callback closes over the render
   // that started it, so it needs a ref to see the drag as it is NOW. Written only through applyDrag,
   // so the two can never disagree.
@@ -799,6 +814,18 @@ export default function PresetManager({
     dragRef.current = next
     setDrag(next)
   }
+  // The list changed under a drag: a change made here (no other window's arrived with it) is shown at
+  // once; one another window made waits for the drop.
+  useLayoutEffect(() => {
+    const d = dragRef.current
+    if (!d || d.rows === livePresets) return
+    applyDrag(
+      d.remoteAt === remoteRegistry
+        ? { ...d, rows: livePresets }
+        : { ...d, remoteAt: remoteRegistry },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePresets, remoteRegistry])
 
   // ★ WHERE THE DRAGGED ROW IS DRAWN, for a pointer at viewport y `pointerY` — the one place the
   // pointer, the list's scroll position and lib/presetReorder's clamp meet. The row follows the
@@ -891,7 +918,7 @@ export default function PresetManager({
     // implementation to call.
     // ⚠ ALSO try/catch'd, matching this app's own idiom for a browser call that can throw rather
     // than quietly no-op (store/amnesic's openSessionStorage, lib/presetNameWidth's canvas guard,
-    // presetScopedStorage's own localStorage try — this is the same shape of defensiveness applied
+    // the windows-in-sync door's own localStorage try — this is the same shape of defensiveness applied
     // to a browser API instead of storage). setPointerCapture throws `NotFoundError` for a pointer
     // id the browser does not currently recognise as active; the drag has already been armed by
     // the guard above (which refused anything but a genuine primary press), so a throw here is not
@@ -929,6 +956,8 @@ export default function PresetManager({
     const ownRect = rowRefs.current.get(p.id)?.getBoundingClientRect()
     applyDrag({
       id: p.id,
+      rows: presets,
+      remoteAt: remoteRegistry,
       pointerId: e.pointerId,
       startIndex: index,
       previewIndex: index,

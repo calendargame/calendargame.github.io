@@ -48,6 +48,7 @@ import {
   isDimmed,
 } from './helpers/settingsPanel.jsx'
 import { usePresets, PRESET_STORE_KEYS, presetKey } from '../src/store/presets.js'
+import { door } from '../src/store/syncedDoc.js'
 import {
   createPreset,
   renamePreset,
@@ -1181,6 +1182,41 @@ describe('reordering', () => {
       // would mean two presets silently trading saved copies.
       const byId = Object.fromEntries(registry().presets.map((p) => [p.id, p.name]))
       expect(byId).toEqual({ 1: 'Preset 1', 2: 'Timed', 3: 'Guest' })
+    })
+
+    // ★ ANOTHER WINDOW'S CHANGE TO THE LIST WAITS FOR THE DROP (design-q1-q2.md v4, 6.7): the drag's
+    // model is the rows' places measured at the grab, so a preset another window adds mid-drag is
+    // shown once the drag ends — and the drop is applied to the list as it then is.
+    it('a preset another window adds mid-drag shows at the drop, and the drop still lands', async () => {
+      act(() => {
+        createPreset('Timed')
+        createPreset('Guest')
+      })
+      openManager()
+      stubRowRects(['Preset 1', 'Timed', 'Guest'])
+      const handle = reorderHandle('Preset 1')
+      act(() => handle.dispatchEvent(pointerEvt('pointerdown', 20)))
+      act(() => handle.dispatchEvent(pointerEvt('pointermove', 85)))
+      // Another window (an older build: its whole list, no sync data) adds 'Remote'.
+      const old = localStorage.getItem('cg-presets-v1')
+      const saved = JSON.parse(old).state
+      const now = JSON.stringify({
+        state: {
+          ...saved,
+          presets: [...saved.presets, { id: 4, name: 'Remote', amnesic: false }],
+          nextId: 5,
+        },
+        version: 1,
+      })
+      localStorage.setItem('cg-presets-v1', now)
+      await act(async () => {
+        door.notice('cg-presets-v1', old, now)
+        await new Promise((r) => setTimeout(r, 0))
+      })
+      expect(registry().presets.map((p) => p.name)).toContain('Remote') // in the store…
+      expect(listedNames()).toEqual(['Preset 1', 'Timed', 'Guest']) // …not under the finger
+      act(() => handle.dispatchEvent(pointerEvt('pointerup', 85)))
+      expect(listedNames()).toEqual(['Timed', 'Guest', 'Preset 1', 'Remote'])
     })
 
     // ★★ THE INVARIANT THE fix to lib/presetReorder exists for: a drag that goes somewhere and

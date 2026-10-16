@@ -55,7 +55,11 @@ describe('userDefaults store — every saved shape of Rotate Dots rehydrates thr
     expect(saved.settings).not.toHaveProperty('rotateDots')
     expect(saved.prefs).toEqual(PREFS)
     expect(saved.amnesic).toBe(false)
-    // …and the rewrite reached DISK at once (zustand re-saves after a migration), at this version.
+    // …and the load WROTE NOTHING (a load writes nothing: the windows-in-sync door reads a doc saved
+    // at another version in today's shape, design-q1-q2.md v4 G7) — the rewrite reaches disk with the
+    // next save, at this version.
+    expect(stored().version).toBe(2)
+    useUserDefaults.getState().saveDefaults({ ...saved, amnesic: 'off' })
     expect(stored().version).toBe(3)
     expect(stored().state.saved.settings).not.toHaveProperty('rotateDots')
     expect(stored().state.saved.settings.dotRotation).toBe('ccw90')

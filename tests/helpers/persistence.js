@@ -59,34 +59,37 @@ export const STORE_IDS = Object.keys(LIVE_STORES)
 // work replaces, so a helper built on them would go stale in the same commit as the tests it was
 // meant to insulate — the indirection would be a layer of misdirection instead.
 //
-// So the question is answered the way a debugger would answer it: empty the storage, make the store
-// flush itself, and look at what appeared. That resolution holds under EVERY namespacing scheme the
-// preset work might choose — a dynamic `name`, a prefixing storage adapter, a per-preset storage
-// object — because it never assumes how the key is composed, only that writing produces one.
-//
-// ⚠ NON-DESTRUCTIVE BY CONSTRUCTION, and it has to be: cases call this mid-test with real saved
-// data in storage. The full contents are snapshotted and restored byte for byte in a `finally`, and
-// the flush writes the store's CURRENT state, so the payload put back is the payload that was
-// there. Nothing observable changes.
-//
-// ⚠ `setState({})` is the flush, and an empty partial is deliberate — zustand merges it, so no
-// value moves, while persist's wrapped setState still writes the whole partialized payload. It does
-// notify subscribers (v5 builds a new state object for any partial), so with <App/> mounted call it
-// inside act() — every helper below that needs a key does its resolving before touching the DOM.
+// So the question is answered the way a debugger would answer it: ask the store's own storage to
+// read the store's saved copy, and look at which key it read FIRST. That resolution holds under EVERY
+// namespacing scheme — a dynamic `name`, a prefixing storage adapter, a per-preset storage object —
+// because it never assumes how the key is composed, only that reading the saved copy starts there.
+// (A store's storage reads more than that one key: its sync key, through the windows-in-sync door
+// (store/syncedDoc), and a progress store's sealed solve-time chunks. Each comes after the key that
+// names it.)
+// ⚠ IT USED TO WATCH A WRITE (`setState({})`, then see what appeared). The windows-in-sync door writes
+// only what CHANGED — a flush of nothing is no write — so a write can no longer be made to happen
+// without changing what is saved.
+// ⚠ NON-DESTRUCTIVE: a read through the storage hands the store nothing (it is not a rehydrate), and
+// the door reads a doc afresh only when its book owes nothing. A store whose save is HELD (a full
+// device) reads nothing here, and the helper says so rather than guess.
 export function storageKeyFor(store) {
-  const snapshot = snapshotStorage()
-  try {
-    localStorage.clear()
-    store.setState({})
-    const keys = Object.keys(localStorage)
-    if (keys.length !== 1)
-      throw new Error(
-        `storageKeyFor: expected the store to write exactly one place, it wrote ${keys.length} (${keys.join(', ')})`,
-      )
-    return keys[0]
-  } finally {
-    restoreStorage(snapshot)
+  const options = store.persist.getOptions()
+  const real = Storage.prototype.getItem
+  const read = []
+  Storage.prototype.getItem = function (key) {
+    read.push(key)
+    return real.call(this, key)
   }
+  try {
+    options.storage.getItem(options.name)
+  } finally {
+    Storage.prototype.getItem = real
+  }
+  if (!read.length)
+    throw new Error(
+      'storageKeyFor: the store read nothing (its save is held, or it has no storage)',
+    )
+  return read[0]
 }
 
 // Every place the four stores write, right now. The answer to "did this reset clear exactly what it

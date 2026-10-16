@@ -2,7 +2,7 @@
 // per-mode chrome deduped out of the five screens during the Stage-C mode-untangle: they move
 // together because every screen uses some subset and none of them belongs to any one screen.
 import * as React from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { gameReducer, waitingDateMissing } from '../engine/gameReducer.js'
 import type { GameState, Question, Stats } from '../engine/gameReducer.js'
 import type { GameEngine, FlashState } from './modeTypes.js'
@@ -98,6 +98,10 @@ export const timingMismatch = (S: Stats): boolean => S.good - (S.timesLost ?? 0)
 //     is regenerated unless it has been used.
 // So the check and the reset agree by construction: the popup opens when ANY covered silo is
 // mismatched, and accepting it resets exactly the mismatched ones and regenerates the rest.
+// ★ THE RESET-OR-REGENERATE IS WHAT TIMING GOING ON DOES, wherever it was turned on: it runs as the
+// switch's value goes from hidden to shown, not from the tap. So a switch turned on in ANOTHER window
+// (the windows-in-sync door brings the pref in) does here exactly what the tap does there - the player
+// there was the one asked about a reset; this window settles its own engines by the same two rules.
 // (It used to look at, and act on, the engine on screen alone. In Deduction that left the other two
 // sub-types holding a puzzle the player had already studied — its solve time would then start from
 // whenever they next looked at it — and let timing come on over a hidden sub-type whose readouts
@@ -153,15 +157,20 @@ export function useStatsHideToggles({
   // Timing comes back on: each covered engine is reset (mismatched) or has its waiting question
   // regenerated (the engine keeps one that has been used). The screen's own teardown runs only when
   // a question really went — a reset always replaces it; a regeneration says whether it did.
-  const showTiming = () => {
+  // A LAYOUT effect on the value going from hidden to shown, so the reset or the fresh question is in
+  // the same paint as the switch (a tap here, or another window's change arriving).
+  const timingWasOff = useRef(timingOff)
+  useLayoutEffect(() => {
+    const wasOff = timingWasOff.current
+    timingWasOff.current = timingOff
+    if (!wasOff || timingOff) return
     for (const e of timed) {
       let replaced = true
       if (timingMismatch(e.state.stats)) e.fullReset()
       else replaced = e.regenDate()
       if (replaced) onQuestionReplaced?.()
     }
-    setTimingOff(false)
-  }
+  }, [timingOff]) // eslint-disable-line react-hooks/exhaustive-deps
   const toggleTimingOff = () => {
     if (!saveStats) return
     if (!timingOff) {
@@ -172,12 +181,12 @@ export function useStatsHideToggles({
     // reconcile them, so it has to reset that silo's stats. Ask first (the popup renders from the
     // mode component).
     if (timed.some((e) => timingMismatch(e.state.stats))) setEnableResetOpen(true)
-    else showTiming()
+    else setTimingOff(false)
   }
   // Accept: the same act, now that the player has agreed to the reset it includes.
   const confirmEnableReset = () => {
     setEnableResetOpen(false)
-    showTiming()
+    setTimingOff(false)
   }
   // The mode's teardown (onHide — Flash's live-flash stopper) IS a real side effect, so it stays
   // in an effect. [visible]-only: onHide is re-created each render and listing it would re-fire the

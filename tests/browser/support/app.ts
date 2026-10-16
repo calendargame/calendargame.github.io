@@ -146,8 +146,13 @@ const themeSettings = (theme: Theme, seed: AppSeed) => ({
   manualTheme: theme,
 })
 
+// A seeded doc is the WHOLE doc, sync data and all: whatever the windows-in-sync door kept beside it
+// from an earlier open in the same test (its sync key) goes with what it replaces.
 const fillStorage = ({ local, session }: SeededStorage) => {
-  for (const [key, value] of Object.entries(local)) window.localStorage.setItem(key, value)
+  for (const [key, value] of Object.entries(local)) {
+    window.localStorage.removeItem(`cg-sync-v1|${key}`)
+    window.localStorage.setItem(key, value)
+  }
   for (const [key, value] of Object.entries(session)) window.sessionStorage.setItem(key, value)
 }
 

@@ -33,10 +33,10 @@ import {
   discardSessionHistoriesOf,
   hasSessionHistory,
 } from './sessionHistory.js'
-import { useSettings, SETTINGS_DEFAULTS } from './settings.js'
+import { useSettings, SETTINGS_DEFAULTS, SETTINGS_DOC } from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults } from './progress.js'
-import { useUserDefaults, makeUserDefaultsDefaults } from './userDefaults.js'
+import { useUserDefaults, makeUserDefaultsDefaults, USER_DEFAULTS_DOC } from './userDefaults.js'
 import { useJulianRange, JULIAN_RANGE_DEFAULTS } from './julianRange.js'
 import { sameJson } from './json.js'
 
@@ -158,6 +158,9 @@ const presetStore = <T extends object>(
   name: keyof typeof PRESET_STORE_KEYS,
   store: PresetStore<T>,
   makeDefaults: () => Partial<T>,
+  // The store's migration where it is not persist's own: a store saved through the windows-in-sync
+  // door has its doc read in today's shape by the door (its doc spec's `migrate`).
+  docMigrate?: (state: Record<string, unknown>, version: number) => Record<string, unknown>,
 ) => ({
   key: PRESET_STORE_KEYS[name],
   // What Duplicate Preset does with this store (DUPLICATE_RULES, above).
@@ -176,10 +179,10 @@ const presetStore = <T extends object>(
     if (!options?.partialize) return null
     return JSON.stringify({ state: options.partialize(store.getState()), version: options.version })
   },
-  // ★ A SAVED COPY, IN TODAY'S SHAPE — what this preset would actually open holding. zustand runs a
-  // store's `migrate` on a saved copy whose version differs, and only for the preset being OPENED;
+  // ★ A SAVED COPY, IN TODAY'S SHAPE — what this preset would actually open holding. A store's
+  // migration runs on a saved copy whose version differs, and only for the preset being OPENED;
   // every other preset's keys stay in whatever shape the build that last saved them wrote. So a
-  // saved copy from an OLDER version is passed through that same `migrate` here, the store's own.
+  // saved copy from an OLDER version is passed through that same migration here, the store's own.
   // ⚠ null MEANS "THIS BUILD CANNOT VOUCH FOR IT", and isPresetFactory reads null as "ask": a copy
   // with no version, one from a NEWER build (its `migrate` would also run on that, but only to
   // squeeze a shape this build has never seen into one it can draw — which can drop a choice the
@@ -189,7 +192,9 @@ const presetStore = <T extends object>(
     const options = store.persist?.getOptions()
     const current = options?.version ?? 0
     if (version > current) return null
-    const upgraded = version < current && options?.migrate ? options.migrate(state, version) : state
+    const migrate = docMigrate ?? options?.migrate
+    const upgraded =
+      version < current && migrate ? migrate(state as Record<string, unknown>, version) : state
     if (!upgraded || typeof upgraded !== 'object' || upgraded instanceof Promise) return null
     return upgraded as Record<string, unknown>
   },
@@ -209,11 +214,11 @@ const PROGRESS_STORE = presetStore('progress', useProgress, makeProgressDefaults
 // loaded (store/julianRange). Its factory value is the pair a factory preset derives, 1-11582 — which
 // is also what the no-storage branch below sets, since there every preset's settings are factory.
 const PER_PRESET_STORES = [
-  presetStore('settings', useSettings, () => ({ ...SETTINGS_DEFAULTS })),
+  presetStore('settings', useSettings, () => ({ ...SETTINGS_DEFAULTS }), SETTINGS_DOC.migrate),
   presetStore('julianRange', useJulianRange, () => ({ ...JULIAN_RANGE_DEFAULTS })),
   presetStore('modePrefs', useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
   PROGRESS_STORE,
-  presetStore('userDefaults', useUserDefaults, makeUserDefaultsDefaults),
+  presetStore('userDefaults', useUserDefaults, makeUserDefaultsDefaults, USER_DEFAULTS_DOC.migrate),
 ]
 
 // Reload all five from the active preset's keys, in one synchronous turn.
@@ -452,7 +457,7 @@ const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
  *
  * ★★ THE TWO SOURCES, AND WHY BOTH ARE READ. A preset you are NOT on exists only in storage — its
  * values are not in any live store, because the live stores are always the ACTIVE preset's (store/
- * presets' presetScopedStorage). The active preset's truth is the live stores. So:
+ * presets' presetDoc). The active preset's truth is the live stores. So:
  *   • EVERY preset is judged on its SAVED copy, active or not.
  *   • The ACTIVE preset is judged on the LIVE stores AS WELL, and both must say factory.
  * Reading both rather than branching is not belt-and-braces, it closes a real false positive: in a

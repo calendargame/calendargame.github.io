@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { PRESET_STORE_KEYS, presetKey, presetScopedStorage, mergeOverDefaults } from './presets.js'
+import { PRESET_STORE_KEYS, presetKey, presetDoc, mergeOverDefaults } from './presets.js'
+import type { PresetDocSpec } from './presets.js'
+import { cyrb53, canonicalJson } from './syncStamp.js'
 import { readItem } from './storageHealth.js'
 import { SETTINGS_DEFAULTS, migrateDotRotation } from './settings.js'
 import type { SettingsValues, LegacyDotFields } from './settings.js'
@@ -127,7 +129,7 @@ export const effectiveAmnesicDefault = (saved: SavedDefaults | null): AmnesicMod
 
 // ★ THE AMNESIC DEFAULT FOR ANY PRESET, read straight off ITS namespaced userDefaults key rather
 // than through the live store (which is only ever the ACTIVE preset's — persist scopes it via
-// store/presets' presetScopedStorage). store/sessionAmnesic is the one caller: this is what every
+// store/presets' presetDoc). store/sessionAmnesic is the one caller: this is what every
 // preset's Amnesic setting starts a fresh app open on, because the setting is a SESSION value —
 // guest mode is temporary by construction, so a preset left on Stats Only or Full is back to its
 // saved default the next time the app is opened.
@@ -181,6 +183,76 @@ export const prefsMatchDefaults = (live: PrefDefaults, def: PrefDefaults): boole
 // a preset switch and a cold start would come to disagree about what a fresh preset holds.
 export const makeUserDefaultsDefaults = (): Pick<UserDefaultsState, 'saved'> => ({ saved: null })
 
+// ★ THROUGH THE WINDOWS-IN-SYNC DOOR, as ONE slice (`saved`) WITH ITS OWN VERSION TAG INSIDE (design 4):
+// `saved.w`, the hash of the snapshot's own values. Older builds carry a field they do not know
+// through their edits of the snapshot and drop it when they save a new one; so a snapshot whose tag
+// still names its values is one a new build wrote and nobody has changed since - however old a
+// version of it an older tab still holds, the newest stands - and one whose tag does not (or that
+// has none) is an older build's own save. The tag never reaches the store.
+const tagOf = (v: Record<string, unknown>): string => {
+  const own = Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'w'))
+  return cyrb53(canonicalJson(own))
+}
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v)
+const untagged = (v: unknown): unknown =>
+  isObject(v) ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'w')) : v
+// ★ THIS STORE NEEDS ITS OWN COPY OF EVERY SETTINGS MIGRATION, and has twice been the one a migration
+// forgot: `saved.settings` is a FULL SettingsValues SNAPSHOT — not a live copy of that store — so
+// useSettings' own migration (which only ever sees ITS OWN doc at `cg-settings-v1`) can never reach in
+// here. Without this step a snapshot saved under an older shape keeps it forever: the unscreened
+// top-level spread in `merge` below carries the stale nested object through byte-for-byte on every
+// hydrate, `effectiveSettingsDefaults`' spread never finds a `dotRotation` key to override the factory
+// Standard with, and Reset Settings / Full Reset (which both write `effectiveSettingsDefaults(saved)`
+// straight into the live store) silently revert the player's SAVED Rotate Dots choice — forever,
+// since `commitManageDefaults` (components/SettingsPanel) then carries the same stale shape forward on
+// every subsequent Manage-Defaults edit-and-save.
+// v2 = `dotOrientation` → the boolean `rotateDots` (round 20), as store/settings' v1→v2.
+// v3 = `rotateDots` → the three-way `dotRotation` (round 23), as store/settings' v3→v4.
+//   ⚠ AN OLDER BUILD READING A v3 SNAPSHOT is fail-safe AND lossless here, unlike the live settings
+//   key: it finds no `rotateDots`, so its Reset Settings lands on its factory upright layout; and
+//   although it re-saves at once (zustand's migrate-then-save on the version mismatch), its
+//   `partialize` keeps `saved` WHOLE, so `dotRotation` rides through untouched and this build reads
+//   it back intact.
+// ⚠ THE AMNESIC SETTING BECAME THREE-WAY WITH NO VERSION OF ITS OWN, and needs none: nothing is
+// rewritten. Its stored spelling is read by shape on every use (effectiveAmnesicDefault), a snapshot
+// is written in the new spelling only when the player saves one, and that spelling still carries the
+// boolean an older build acts on (store/amnesicMode).
+// The migration is the same pure, idempotent, shape-keyed migrateDotRotation store/settings runs on
+// its own top level, reached one level deeper: into `saved.settings`. Reused rather than
+// reimplemented, so the two stores can never disagree about what the rewrite does (including its
+// screen of a newer build's unknown rotation). It runs as a doc saved at another version is READ
+// (the door's `migrate`), and screens every snapshot on its way to the store besides. A snapshot with
+// no `saved` (nothing ever saved) passes through unchanged.
+const migrateSaved = (saved: unknown): unknown =>
+  isObject(saved) && isObject(saved.settings)
+    ? {
+        ...saved,
+        settings: migrateDotRotation(saved.settings as Partial<SettingsValues> & LegacyDotFields),
+      }
+    : saved
+export const USER_DEFAULTS_DOC: PresetDocSpec = {
+  kind: 'userDefaults',
+  base: PRESET_STORE_KEYS.userDefaults,
+  version: 3,
+  defaultOf: (x) => (x === 'saved' ? null : undefined),
+  regs: () => ['saved'],
+  migrate: (docState) =>
+    'saved' in docState ? { ...docState, saved: migrateSaved(docState.saved) } : docState,
+  toSlices: (state) => ({
+    saved: isObject(state.saved)
+      ? { ...(untagged(state.saved) as object), w: tagOf(state.saved) }
+      : state.saved,
+  }),
+  fromSlices: (slices) =>
+    slices.saved === undefined ? {} : { saved: migrateSaved(untagged(slices.saved)) },
+  sliceState: (docState) => ({ saved: docState.saved }),
+  docState: (slices) => ({ saved: slices.saved }),
+  patchOf: (now) => ({ saved: migrateSaved(untagged(now.saved)) }),
+  tagged: (x, v) => x === 'saved' && isObject(v) && typeof v.w === 'string' && v.w === tagOf(v),
+}
+const USER_DEFAULTS_DOOR = presetDoc<Pick<UserDefaultsState, 'saved'>>(USER_DEFAULTS_DOC)
+
 export const useUserDefaults = create<UserDefaultsState>()(
   persist(
     (set) => ({
@@ -204,54 +276,10 @@ export const useUserDefaults = create<UserDefaultsState>()(
       // personal defaults, which is what makes a Full Reset inside a preset land on THAT preset's
       // saved values rather than on some other preset's.
       name: PRESET_STORE_KEYS.userDefaults,
-      storage: presetScopedStorage<Pick<UserDefaultsState, 'saved'>>(),
-      // ★ THIS STORE NEEDS ITS OWN COPY OF EVERY SETTINGS MIGRATION, and has twice been the one a
-      // migration forgot: `saved.settings` is a FULL SettingsValues SNAPSHOT — not a live copy of
-      // that store — so useSettings' own migrate (which only ever sees ITS OWN persisted blob at
-      // `cg-settings-v1`) can never reach in here. Without this step a snapshot saved under an older
-      // shape keeps it forever: the unscreened top-level spread in `merge` below carries the stale
-      // nested object through byte-for-byte on every hydrate, `effectiveSettingsDefaults`' spread
-      // never finds a `dotRotation` key to override the factory Standard with, and Reset Settings /
-      // Full Reset (which both write `effectiveSettingsDefaults(saved)` straight into the live store)
-      // silently revert the player's SAVED Rotate Dots choice — forever, since
-      // `commitManageDefaults` (components/SettingsPanel) then carries the same stale shape forward
-      // on every subsequent Manage-Defaults edit-and-save.
-      // v2 = `dotOrientation` → the boolean `rotateDots` (round 20), as store/settings' v1→v2.
-      // v3 = `rotateDots` → the three-way `dotRotation` (round 23), as store/settings' v3→v4.
-      //   ⚠ AN OLDER BUILD READING A v3 SNAPSHOT is fail-safe AND lossless here, unlike the live
-      //   settings key: it finds no `rotateDots`, so its Reset Settings lands on its factory upright
-      //   layout; and although it re-saves at once (zustand's migrate-then-save on the version
-      //   mismatch), its `partialize` keeps `saved` WHOLE, so `dotRotation` rides through untouched
-      //   and this build reads it back intact.
-      // ⚠ THE AMNESIC SETTING BECAME THREE-WAY WITH NO VERSION OF ITS OWN, and needs none: nothing
-      // is rewritten. Its stored spelling is read by shape on every use (effectiveAmnesicDefault), a
-      // snapshot is written in the new spelling only when the player saves one, and that spelling
-      // still carries the boolean an older build acts on (store/amnesicMode).
+      storage: USER_DEFAULTS_DOOR,
+      // (its shape history and its migration are at USER_DEFAULTS_DOC above: the door reads every
+      // doc in today's shape, so the persisted state the store is handed is always this version's)
       version: 3,
-      // Saved-shape migration, run at hydrate whenever the stored version differs — the same pure,
-      // idempotent, shape-keyed migrateDotRotation store/settings runs on its own top level, reached
-      // one level deeper: into `saved.settings`. Reused rather than reimplemented, so the two stores
-      // can never disagree about what the rewrite does (including its screen of a newer build's
-      // unknown rotation). A snapshot with no `saved` (nothing ever saved) passes through unchanged.
-      migrate: (persisted) => {
-        const state = persisted as {
-          saved:
-            | (Omit<SavedDefaults, 'settings'> & {
-                settings: Partial<SettingsValues> & LegacyDotFields
-              })
-            | null
-        } | null
-        if (state?.saved?.settings) {
-          return {
-            ...state,
-            saved: {
-              ...state.saved,
-              settings: migrateDotRotation(state.saved.settings) as SettingsValues,
-            },
-          } as Pick<UserDefaultsState, 'saved'>
-        }
-        return state as Pick<UserDefaultsState, 'saved'>
-      },
       // Persist only the snapshot, never the action functions.
       partialize: (state) => ({ saved: state.saved }),
       // Hydration replaces the snapshot rather than patching it over memory. Sharpest here of the
@@ -262,3 +290,4 @@ export const useUserDefaults = create<UserDefaultsState>()(
     },
   ),
 )
+USER_DEFAULTS_DOOR.attach(useUserDefaults)

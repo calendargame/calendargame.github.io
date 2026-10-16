@@ -106,7 +106,7 @@ describe('first open: derived and pinned', () => {
     expect(saved(p.id)).toBe(null)
     switchPreset(p.id)
     expect(pair()).toEqual([1900, 2100])
-    expect(saved(p.id)).toEqual({ state: { julianMinY: 1900, julianMaxY: 2100 }, version: 1 })
+    expect(saved(p.id)).toMatchObject({ state: { julianMinY: 1900, julianMaxY: 2100 }, version: 1 })
     // The Julian-off range moves (here, or in an older tab) — the pinned pair does not.
     writeSettings(p.id, { minY: 1500, maxY: 1700 })
     switchPreset(1)

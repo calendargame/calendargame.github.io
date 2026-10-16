@@ -208,13 +208,17 @@ describe('settings store — every saved shape of Rotate Dots rehydrates through
     localStorage.setItem('cg-settings-v1', JSON.stringify({ state, version }))
   const stored = () => JSON.parse(localStorage.getItem('cg-settings-v1'))
 
-  it('a v3 payload (round 20–22) with rotateDots: true loads as 90° CCW, and is re-saved in today’s shape', async () => {
+  it('a v3 payload (round 20–22) with rotateDots: true loads as 90° CCW, and is saved in today’s shape next time', async () => {
     store({ ...PRE_Q6, rotateDots: true, minY: 1600 }, 3)
     await useSettings.persist.rehydrate()
     const s = useSettings.getState()
     expect(s.dotRotation).toBe('ccw90')
     expect(s.minY).toBe(1600) // everything else passed through untouched
     expect(s).not.toHaveProperty('rotateDots')
+    // The load itself wrote nothing (the windows-in-sync door reads a doc saved at another version
+    // in today's shape; a load writes nothing, design-q1-q2.md v4 G7) — the next save is in it.
+    expect(stored().version).toBe(3)
+    useSettings.getState().setMaxY(9000)
     expect(stored().version).toBe(4)
     expect(stored().state).not.toHaveProperty('rotateDots')
     expect(stored().state.dotRotation).toBe('ccw90')
@@ -262,7 +266,8 @@ describe('settings store — every saved shape of Rotate Dots rehydrates through
   })
 
   // ★ EVERY PRESET, not just preset 1. Presets 2+ keep their own namespaced keys, and nothing
-  // rewrites them in bulk: each is migrated by its own store's rehydrate when the preset is opened.
+  // rewrites them in bulk: each is read in today's shape by its own store when the preset is opened,
+  // and saved in it with that store's next save.
   // This proves that path reaches BOTH per-preset stores that hold the setting — the live settings
   // and the Save Defaults snapshot — on a preset that last saved under a pre-round-23 build.
   it('another preset’s OWN keys — settings and saved defaults — migrate when that preset is opened', async () => {
@@ -293,7 +298,18 @@ describe('settings store — every saved shape of Rotate Dots rehydrates through
     expect(useSettings.getState().dotRotation).toBe('ccw90')
     expect(useUserDefaults.getState().saved.settings.dotRotation).toBe('ccw90')
     expect(useUserDefaults.getState().saved.settings).not.toHaveProperty('rotateDots')
-    // …and both namespaced keys were rewritten in place, at today's versions.
+    // …and both namespaced keys are rewritten in place, at today's versions, by their next saves
+    // (opening the preset wrote nothing to either).
+    expect(
+      JSON.parse(localStorage.getItem(presetKey(PRESET_STORE_KEYS.settings, p2))).version,
+    ).toBe(3)
+    act(() => useSettings.getState().setMaxY(9000))
+    act(() =>
+      useUserDefaults.getState().saveDefaults({
+        ...useUserDefaults.getState().saved,
+        amnesic: 'off',
+      }),
+    )
     const s2 = JSON.parse(localStorage.getItem(presetKey(PRESET_STORE_KEYS.settings, p2)))
     const u2 = JSON.parse(localStorage.getItem(presetKey(PRESET_STORE_KEYS.userDefaults, p2)))
     expect([s2.version, s2.state.dotRotation, 'rotateDots' in s2.state]).toEqual([
