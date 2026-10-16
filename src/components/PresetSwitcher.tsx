@@ -65,6 +65,10 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 // one layer at a time: CustomSelect's grid, its stacked cells, and the name cell (`display:flex`,
 // no width of its own). So a name cell is EXACTLY the room its control really has — in the
 // trigger and in a list row alike — and a name longer than that is cut with an ellipsis inside it.
+//   ★ THE CONTROL HAS A FLOOR, THOUGH ITS NAME CELL HAS NONE (Round 26, the owner's ruling for the
+//   narrowest screens): main.tsx's wrapper never lets this control be narrower than its arrows
+//   plus one digit — so a stock name drawn as its bare number shows whole here up to "9" — and
+//   the Mode button gives way instead (main.tsx's budget block has the rule and the arithmetic).
 //   ⚠ THE CELL HAS NO FLOOR, AND MUST NOT BE GIVEN ONE. It carried a least width (4.5em) from the
 //   days it was a fixed column, kept "defensively". The cell fills its control at every size, so
 //   the floor never held anything open; all it could do was bind where the control was NARROWER
@@ -116,7 +120,8 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 //     the button and its list always agree, a list never mixes "Preset 1" with "P10" or "P1" with
 //     "10", and "Open in" matches the top bar.
 //   • WHERE EVEN THE BARE NUMBER IS CUT, NOTHING MORE IS DONE: it is cut like any other name, with
-//     the ellipsis.
+//     the ellipsis. (In the top bar that is past "9": the control's floor is its arrows and one
+//     digit — the ★ "the control has a floor" note above.)
 //   • IT FOLLOWS THE SCREEN, WITH NOTHING REMEMBERED. The answer is worked out from the full names,
 //     their "P" forms, and the rooms as they are now (lib/presetNameWidth's stockNameForm) — never
 //     from what is drawn — so a rotation or a wider window brings the longer forms straight back.

@@ -1721,17 +1721,19 @@ export default function GuidePage({
           </li>
           <li>
             The mode selector is exactly as wide as its longest mode name needs, and this control
-            fills the rest of the bar. Its list is exactly as wide as the control — one column under
-            it — and the same goes for the ⚙ menu&apos;s <b>Open in</b> list. The one exception is a
-            very narrow screen, where the bar leaves the control too little for a row of its list to
-            show anything: the list is never narrower than a row needs to show a name like
-            &quot;P10&quot; in full. There it is a little wider than the control: it starts at the
-            control&apos;s left edge and reaches part of the way over the mode selector. A name can
-            be any length (see <b>Rename</b> below), so it does not always fit: where it does not,
-            it is shown on one line, cut short with an …, and nothing gets wider to make room for
-            it. A row of the list is where a name has the least room — the row keeps its ✓ column
-            and its own spacing, like every list here — so a name can be whole on the control and
-            cut short in the list under it.
+            fills the rest of the bar. On a very narrow screen this control never gets narrower than
+            its arrows and one digit — room for a &quot;1&quot; — and the mode selector gives way
+            instead, its name cut short with an … where it does not fit. Its list is exactly as wide
+            as the control — one column under it — and the same goes for the ⚙ menu&apos;s{' '}
+            <b>Open in</b> list. The one exception is a very narrow screen, where the bar leaves the
+            control too little for a row of its list to show anything: the list is never narrower
+            than a row needs to show a name like &quot;P10&quot; in full. There it is a little wider
+            than the control: it starts at the control&apos;s left edge and reaches part of the way
+            over the mode selector. A name can be any length (see <b>Rename</b> below), so it does
+            not always fit: where it does not, it is shown on one line, cut short with an …, and
+            nothing gets wider to make room for it. A row of the list is where a name has the least
+            room — the row keeps its ✓ column and its own spacing, like every list here — so a name
+            can be whole on the control and cut short in the list under it.
           </li>
           <li>
             A ready-made name — &quot;Preset 1&quot;, &quot;Preset 2&quot;, and so on, or a name you

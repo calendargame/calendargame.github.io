@@ -2339,17 +2339,31 @@ import BlitzMode from './modes/BlitzMode.jsx'
             from the screen edge, matching the left gutter, i.e. the row still fits with no
             horizontal overflow (scrollWidth == clientWidth, measured, at both sizes below).
 
-            THE PRESET SWITCHER STILL CANNOT FORCE AN OVERFLOW, and that is still structural: its
-            wrapper is `flex-1 min-w-0`, so it can be squeezed all the way to 0, and nothing inside
-            it has a width of its own to push back with — the name cell in the trigger is exactly
-            as wide as the trigger's inside. A growing fixed sum costs the switcher display room,
-            never the row its fit. (The cell carried a least width until a narrow, tall phone
-            showed it wider than the trigger it sat in; components/PresetSwitcher's ⚠ "no floor"
-            note has it. On such a phone the switcher's LIST is allowed a little more than the
-            switcher's width — the one least width in that file — and the bar is untouched by it:
-            the list is an overlay.) tests/topBar.dom guards the structural half (which children
-            carry `shrink-0` vs `flex-1 min-w-0`) as class reads, which is the most a jsdom suite
-            can do about geometry no jsdom suite can compute.
+            ★★ WHEN THE ROW RUNS OUT OF ROOM (Round 26, the owner's ruling): THE PRESET BUTTON HAS A
+            FLOOR, AND THE MODE BUTTON GIVES WAY. The switcher used to have no floor at all
+            (`flex-1 min-w-0`, squeezable to 0) — but its trigger's own padding and border could
+            not be squeezed, so below ~292px wide the trigger spilled out of its 0-wide slot and
+            the Mode button was drawn over its right end (12px of it at 280), and at 240 the ⚙ ran
+            off the screen. Now:
+              • THE PRESET BUTTON IS NEVER NARROWER THAN ITS ARROWS PLUS ONE DIGIT — the bare
+                number "1", the last form a stock name steps down to (components/PresetSwitcher's
+                ★★ "drawn short" block). The floor is on the switcher's wrapper (below), written
+                from the trigger's own padding and border plus `1ch` in the trigger's own text size;
+                a digit is never wider than `1ch` (the width of a "0"), so a "1" shows whole.
+              • THE MODE BUTTON IS THE ONE THAT SHRINKS, its name cut with an "…" — its wrapper
+                may shrink (`min-w-0`) and its trigger is its list's width at most
+                (components/CustomSelect's triggerMatchesDropdown). The switcher's flex basis is 0,
+                so while there is ANY room past its floor, the room goes to it and the Mode button
+                is untouched: nothing changes until the switcher is down to its floor (just under
+                300px wide on the lane's fonts; 320 and up is exactly as before).
+              • The logo and the ⚙ never shrink. With the switcher at its floor and the Mode button
+                down to its own padding, the row still fits a 240px screen with room to spare.
+            tests/browser/topBar.browser.ts sweeps 240-320 (no overlap between the bar's children,
+            nothing off screen, the "1" whole) and holds 320 and up unchanged; tests/topBar.dom
+            guards the structural half as class reads.
+            (On a narrow, tall phone the switcher's LIST is allowed a little more than the
+            switcher's width — the one least width in components/PresetSwitcher — and the bar is
+            untouched by it: the list is an overlay.)
             ⚠ AND CHROMIUM IS NOT AN IPHONE. Glyph advances differ, the system UI stack differs, and
             ONLY THE OWNER'S DEVICE can confirm the real thing. What is claimed here is that the
             arithmetic is no longer guesswork, not that the phone has agreed. (All of the numbers
@@ -2461,7 +2475,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   the ONE control in this row that GROWS rather than sizing to content, with a
                   MINIMUM name-cell width rather than the fixed one it shipped with. wrapperRef is
                   REQUIRED there and feeds the ⚙ press-outside exclusion above — see that handler.
-                  ⚠ `flex-1 min-w-0` LIVES ON THIS WRAPPING DIV, NOT ON THE TRIGGER ITSELF, and
+                  ⚠ `flex-1` AND THE FLOOR LIVE ON THIS WRAPPING DIV, NOT ON THE TRIGGER ITSELF, and
                   that split is deliberate rather than incidental: CustomSelect's own top-level div
                   (the actual flex ITEM of the row above) is internal to that component and takes
                   no className from any caller, so THIS div is what stands in for it as the row's
@@ -2469,18 +2483,26 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   own div, `position:relative` and otherwise unstyled, defaults to filling 100% of
                   it (ordinary block behaviour, not a flex property). PresetSwitcher's OWN
                   `w-full min-w-0` on the trigger button is the other half of this chain — see that
-                  file's export for where it picks up from here. */}
-              <div className="flex-1 min-w-0">
+                  file's export for where it picks up from here.
+                  ★ THE FLOOR (the ★★ "when the row runs out of room" note in the budget block
+                  above): the trigger's padding (px-2.5 then pr-6: 0.625rem + 1.5rem) and its
+                  1px border on each side, plus `1ch` — and `text-sm` here, which is the trigger's
+                  own text size, is what makes that `1ch` the width of a digit in the trigger's
+                  font. Nothing in this div draws text at this size but the trigger, which sets it
+                  itself; the rows inside CustomSelect set their own. */}
+              <div className="flex-1 text-sm min-w-[calc(2.125rem+2px+1ch)]">
                 <PresetSwitcher wrapperRef={presetSelectRef} />
               </div>
-              {/* THE MODE SELECTOR. Wrapped in its own `shrink-0` div for the identical structural
-                  reason the switcher above is wrapped in `flex-1 min-w-0`: CustomSelect's own
-                  top-level div takes no className, so making IT a `shrink-0` row item — rather than
-                  leaving its sizing to flexbox's default (which shrinks by default, and would let
-                  this control get squeezed once the switcher next to it is free to grow) — needs a
-                  div of this file's own to carry the class. Nothing about the CONTROL changed: it
-                  is still exactly as content-sized as it always was, just explicitly protected now
-                  that content-sized is no longer everyone's default in this row.
+              {/* THE MODE SELECTOR. Wrapped in a div of this file's own for the identical structural
+                  reason the switcher above is wrapped: CustomSelect's own top-level div takes no
+                  className, so the row's flex rules for this control need a div here to carry them.
+                  It is `min-w-0` and may SHRINK — the one control in the row that gives way, and
+                  only once the switcher is down to its floor (the ★★ "when the row runs out of
+                  room" note in the budget block above): the switcher's flex basis is 0, so any
+                  room past its floor is the switcher's to grow into, and this control is shrunk
+                  only by what the row truly lacks. Its width otherwise is exactly what it always
+                  was — its own list's width (triggerMatchesDropdown) — and when it does give way,
+                  its name is cut with an "…".
                   Mode CustomSelect. Replaced the original native <select> as part of the
                   site-wide CustomSelect rollout that fixed iOS Safari's native picker
                   auto-close bug — see the CustomSelect component for full context.
@@ -2500,7 +2522,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                   ~20px of clearance between the label and a glyph that needs ~8. pr-6 is what the
                   preset switcher beside it already wears, so the two now match by construction
                   instead of by coincidence. */}
-              <div className="shrink-0">
+              <div className="min-w-0">
                 <CustomSelect wrapperRef={modeSelectRef} value={mode} onChange={(v)=>{switchMode(v);setSettingsOpen(false);}} options={PAGE_OPTIONS} ariaLabel="Mode" showChevron pressDrag triggerMatchesDropdown className="panel rounded-xl px-2.5 py-2 pr-6 text-sm text-left"/>
               </div>
               {/* THE ⚙ AT THE FAR EDGE. The gear moved from the INSIDE of the old right-hand pair

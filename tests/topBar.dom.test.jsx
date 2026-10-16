@@ -196,27 +196,31 @@ describe('the width cuts that paid for the fourth control', () => {
     expect(row().className.split(/\s+/)).toContain('gap-1.5')
   })
 
-  it("keeps the logo, mode selector, and gear content-sized — only the switcher's wrapper grows", () => {
+  it('keeps the logo and gear content-sized, gives the switcher a floor, and lets only the mode selector give way', () => {
     mountApp()
-    // Round 20's invariant, replacing the old "neither group may shrink" one: the bar's failure mode is
-    // still deliberately "spill", not "squash" for three of the four controls — a truncated mode
-    // name or a clipped gear would be worse than an overflow nobody can hit. What changed is WHICH
-    // element absorbs the bar's slack: not a `justify-between` gap between two groups any more, but
-    // the preset switcher's own wrapper, which is the one child that is flex-1/min-w-0 instead of
-    // shrink-0 (main.tsx's budget block argues why it is the switcher and not one of the other
-    // three). tests/presetSwitcher.dom pins what growing actually does to that control's own cell.
+    // Round 26 (the owner's ruling for the narrowest screens; main.tsx's budget block): the
+    // switcher's wrapper is the one child that GROWS (flex-1), with a FLOOR of its arrows plus one
+    // digit — so it can no longer be squeezed under its own padding, which is what drew the Mode
+    // button over it below ~292px. The logo and the ⚙ never shrink. The mode selector's wrapper
+    // MAY shrink (min-w-0, no shrink-0): it is the control that gives way, and only once the
+    // switcher is at its floor. tests/browser/topBar.browser.ts holds the geometry these classes
+    // produce, which jsdom cannot compute.
     const [logoEl, switcherWrap, modeWrap, gearWrap] = [...row().children]
     // `getAttribute('class')`, not `.className` — the logo is an <svg>, whose `className` is an
     // SVGAnimatedString rather than a plain string (an HTML element's `.split` would work fine,
     // which is exactly the trap: a helper written against the HTML case only breaks the moment an
     // SVG joins the same loop). `getAttribute` reads the same thing uniformly for both.
-    for (const el of [logoEl, modeWrap, gearWrap]) {
+    for (const el of [logoEl, gearWrap]) {
       expect(el.getAttribute('class').split(/\s+/)).toContain('shrink-0')
     }
     const switcherClasses = switcherWrap.className.split(/\s+/)
     expect(switcherClasses).toContain('flex-1')
-    expect(switcherClasses).toContain('min-w-0')
+    expect(switcherClasses).toContain('min-w-[calc(2.125rem+2px+1ch)]')
+    expect(switcherClasses).toContain('text-sm') // the trigger's own size, so 1ch is its digit
     expect(switcherClasses).not.toContain('shrink-0')
+    const modeClasses = modeWrap.className.split(/\s+/)
+    expect(modeClasses).toContain('min-w-0')
+    expect(modeClasses).not.toContain('shrink-0')
   })
 
   // Round 21: the mode trigger is pinned to its OWN dropdown's width, the preset dropdown to

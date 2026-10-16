@@ -276,9 +276,14 @@ export default function CustomSelect({
   // dropdown. The mode selector wants this: its dropdown rows use a bigger text tier and more
   // padding than the trigger, so "both size to content" would never make them equal. A hidden
   // mirror of the panel (rendered below, out of flow, aria-hidden) is measured and its width
-  // applied as the trigger's min-width — the same "compute the dropdown's natural width once and
-  // pin the trigger to it" the panel already does for its own position. The preset switcher does
-  // NOT set this: its trigger sizing (w-full, filling flex-1) is owned by main.tsx's row.
+  // applied as the trigger's width — the same "compute the dropdown's natural width once and
+  // pin the trigger to it" the panel already does for its own position.
+  // ★ …AND NO WIDER THAN WHAT HOLDS IT (max-width 100%). Where the row it sits in has less room
+  // than that — the top bar on the narrowest screens, where the mode selector is the control that
+  // gives way (src/main.tsx's budget block) — the trigger takes what it is given and its label is
+  // cut with an "…" (each label is `truncate`, and the label grid's one track shrinks with it).
+  // The preset switcher does NOT set this: its trigger sizing (w-full, filling flex-1) is owned by
+  // main.tsx's row.
   triggerMatchesDropdown?: boolean
   // Enable press-drag-select (the mode selector). The trigger toggles on POINTERDOWN (so a press can
   // drag straight into the just-opened menu and release on an option to pick it — handled by the global
@@ -330,14 +335,14 @@ export default function CustomSelect({
   const panelRef = useRef<HTMLDivElement>(null)
   const [panelPos, setPanelPos] = useState<PanelPos | null>(null)
   // triggerMatchesDropdown only: measureRef points at the hidden panel-mirror rendered below;
-  // triggerMinWidth is its measured outer width, applied as the trigger's min-width so the trigger
+  // triggerWidth is its measured outer width, applied as the trigger's width so the trigger
   // ends up exactly as wide as the real dropdown. null until measured (and in jsdom, which reports
   // 0 for everything — the trigger then just keeps its natural width, which is all a layout-free
   // environment can mean by "match").
   // A call site may hand over a fresh options array on every render; the measurement depends on a
   // stable signature of it, not its identity. The mirror re-renders with the new labels
   // regardless, and its observer catches any width change that causes.
-  const [measureRef, triggerMinWidth] = useMirrorWidth(
+  const [measureRef, triggerWidth] = useMirrorWidth(
     triggerMatchesDropdown,
     options.map((o) => o.value).join(OPTION_VALUE_SEPARATOR),
   )
@@ -699,12 +704,12 @@ export default function CustomSelect({
         onKeyUp={handleTriggerKeyUp}
         data-select-trigger={pressDrag || undefined}
         className={className}
-        // Pin the trigger to its dropdown's measured outer width (triggerMatchesDropdown). Both
-        // this button and the mirror are border-box, so the mirror's rect width IS the min-width the
-        // trigger needs; its natural content is narrower, so it settles at exactly that.
+        // Pin the trigger to its dropdown's measured outer width (triggerMatchesDropdown), but
+        // never wider than what holds it (the ★ at the prop). Both this button and the mirror are
+        // border-box, so the mirror's rect width IS the width the trigger needs.
         style={
-          triggerMatchesDropdown && triggerMinWidth != null
-            ? { minWidth: `${triggerMinWidth}px` }
+          triggerMatchesDropdown && triggerWidth != null
+            ? { width: `${triggerWidth}px`, maxWidth: '100%' }
             : undefined
         }
         // Label + value (see the two ids above). With no `ariaLabel` there is nothing to compose,
