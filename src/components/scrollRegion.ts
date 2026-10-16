@@ -377,15 +377,25 @@ export function writeScrollbarWidth(region: HTMLElement): void {
   region.style.setProperty('--scrollbar-w', `${classicScrollbarWidth(region)}px`)
 }
 
-export function holdScrollRegion(from: Element | null): (() => void) | undefined {
+/**
+ * The nearest scroll region an element sits in: its closest ancestor whose computed overflow-y is
+ * auto or scroll (a scroll container, whether or not it has anything to scroll right now), short of
+ * <body> — or null when there is none. The one walk that asks, for holdScrollRegion (below) and for
+ * lib/barLine, which leaves a control inside a scroller of its own to that scroller.
+ */
+export function nearestScrollRegion(from: Element | null): HTMLElement | null {
   let el = from?.parentElement ?? null
   while (el && el !== document.body) {
     const { overflowY } = getComputedStyle(el)
-    if (overflowY === 'auto' || overflowY === 'scroll') break
+    if (overflowY === 'auto' || overflowY === 'scroll') return el
     el = el.parentElement
   }
-  if (!el || el === document.body) return undefined
-  const region = el
+  return null
+}
+
+export function holdScrollRegion(from: Element | null): (() => void) | undefined {
+  const region = nearestScrollRegion(from)
+  if (!region) return undefined
   const classicBar = classicScrollbarWidth(region) > 0
   const prevOverflowY = region.style.overflowY
   const prevGutter = region.style.scrollbarGutter

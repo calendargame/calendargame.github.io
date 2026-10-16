@@ -29,6 +29,7 @@
 // anything but Tab, and a control inside a scroller of its own (a list that scrolls by itself
 // brings its own rows into view).
 import { DOCK_LINE_BAND_PX } from './guideDock.js'
+import { nearestScrollRegion } from '../components/scrollRegion.js'
 
 /**
  * The fixed bar's height in px — the viewport y of its underside. --bar-h is a literal px token App
@@ -55,14 +56,12 @@ export function addStandingRule(rule: StandingRule): () => void {
   return () => standingRules.delete(rule)
 }
 
-// Is `el` inside a scroller of its own, between it and the app's scroller? That scroller brings its
-// own content into view, and the page's place is not this module's to correct.
+// Is `el` inside a scroller of its own — one with something to scroll — between it and the app's
+// scroller? That scroller brings its own content into view, and the page's place is not this
+// module's to correct.
 function inOwnScroller(el: HTMLElement, scroller: HTMLElement): boolean {
-  for (let p = el.parentElement; p && p !== scroller; p = p.parentElement) {
-    const overflowY = getComputedStyle(p).overflowY
-    if ((overflowY === 'auto' || overflowY === 'scroll') && p.scrollHeight > p.clientHeight)
-      return true
-  }
+  for (let r = nearestScrollRegion(el); r && r !== scroller; r = nearestScrollRegion(r))
+    if (r.scrollHeight > r.clientHeight) return true
   return false
 }
 
