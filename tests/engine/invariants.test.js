@@ -6,8 +6,8 @@ import { checkGameInvariants, checkStatsInvariants } from '../../src/engine/inva
 import { initEngine, gameReducer } from '../../src/engine/gameReducer.js'
 import { wday } from '../../src/lib/calendar.js'
 
-const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
-const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
+const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd' }
+const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd' }
 const C = wday(2024, 1, 1) // correct weekday index for DATE
 const join = (arr) => arr.join(' | ')
 

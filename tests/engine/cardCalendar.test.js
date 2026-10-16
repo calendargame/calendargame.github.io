@@ -9,7 +9,7 @@
 // The rule now: the first thing that JUDGES a card stamps the calendar onto it, and everything that
 // judges, shows or re-derives that card afterwards reads the stamp (gameReducer's calendarOf). These
 // are the named cases — every judging action, every reader, and what the restore door does with a
-// card an older build parked without a stamp. engine/invariants holds every state to the same rule
+// card an older build parked without a stamp (it refuses it, quietly). engine/invariants holds every state to the same rule
 // and the fuzz's reference model keeps its own copy of it (tests/engine/referenceModel).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
@@ -33,10 +33,9 @@ beforeEach(() => vi.mocked(captureError).mockClear())
 const J = wdayJulian(1066, 10, 14)
 const G = wday(1066, 10, 14)
 const OTHER = [0, 1, 2, 3, 4, 5, 6].find((i) => i !== J && i !== G) // wrong in both calendars
-// `_jul` is the setting the date was DRAWN under. Nothing judges by it; the cases draw under the
-// setting OPPOSITE to the one they answer under wherever that could matter.
-const hastings = (drawn) => ({ y: 1066, m: 10, d: 14, _fmt: 'numeric-ymd', _jul: drawn })
-const MODERN = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: true }
+// A weekday date carries no calendar of its own: until something judges it, it follows the setting.
+const HASTINGS = { y: 1066, m: 10, d: 14, _fmt: 'numeric-ymd' }
+const MODERN = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd' }
 
 const act = (s, a) => gameReducer(s, { saveStats: true, tracking: true, elapsed: 1, ...a })
 const answer = (s, idx, useJulian, nextDate = MODERN, extra = {}) =>
@@ -65,18 +64,14 @@ it('the fixture: the two calendars disagree about October 14, 1066', () => {
 
 describe('calendarOf — which calendar a card is read in', () => {
   it('a weekday date nothing has judged follows the setting as it stands, whatever it was drawn under', () => {
-    const s = initEngine(hastings(true))
+    const s = initEngine(HASTINGS)
     expect(s.card.jul).toBeUndefined()
     expect(calendarOf(s.card, s.date, true)).toBe(true)
     expect(calendarOf(s.card, s.date, false)).toBe(false)
   })
   it('a judged card is read in its own calendar, whatever the setting says now', () => {
-    expect(calendarOf({ wrongTime: null, answered: null, jul: true }, hastings(false), false)).toBe(
-      true,
-    )
-    expect(calendarOf({ wrongTime: null, answered: null, jul: false }, hastings(true), true)).toBe(
-      false,
-    )
+    expect(calendarOf({ wrongTime: null, answered: null, jul: true }, HASTINGS, false)).toBe(true)
+    expect(calendarOf({ wrongTime: null, answered: null, jul: false }, HASTINGS, true)).toBe(false)
   })
   it('a Deduction puzzle nothing has judged is read in the calendar it was BUILT in', () => {
     const puzzle = { type: 'day', y: 1066, m: 10, d: 14, w: J, options: [14, 15], _jul: true }
@@ -117,7 +112,7 @@ describe('every judging action stamps the calendar in force, once', () => {
   for (const jul of [true, false]) {
     it.each(JUDGES)(`%s under Julian ${jul ? 'on' : 'off'}`, (_name, judge, where) => {
       // Drawn under the OPPOSITE setting: the draw has no say.
-      const s = judge(initEngine(hastings(!jul)), jul)
+      const s = judge(initEngine(HASTINGS), jul)
       const card = where(s)
       expect(card.meta.jul).toBe(jul)
       // Whatever answer the grid marks is the answer in that calendar.
@@ -127,13 +122,13 @@ describe('every judging action stamps the calendar in force, once', () => {
   }
 
   it('a correct answer leaves the NEXT date unstamped — the stamp went with the card', () => {
-    const s = answer(initEngine(hastings(true)), G, false)
+    const s = answer(initEngine(HASTINGS), G, false)
     expect(s.stack[0].meta.jul).toBe(false)
     expect(s.card).toEqual({ wrongTime: null, answered: null })
   })
 
   it('with Save Stats off a judged date is still stamped (the stamp is about the answer, not the score)', () => {
-    const s = answer(initEngine(hastings(true)), OTHER, false, MODERN, { saveStats: false })
+    const s = answer(initEngine(HASTINGS), OTHER, false, MODERN, { saveStats: false })
     expect(s.card.jul).toBe(false)
     expect(s.stats.played).toBe(0)
     healthy(s)
@@ -143,7 +138,7 @@ describe('every judging action stamps the calendar in force, once', () => {
 describe('the reported defect — drawn under one setting, answered under the other, browsed back', () => {
   it('the green, the codes calendar, and the breakdown letter are all the calendar it was ANSWERED in', () => {
     // Drawn with Julian on; the player switches it off, then answers what is now correct.
-    let s = answer(initEngine(hastings(true)), G, false)
+    let s = answer(initEngine(HASTINGS), G, false)
     expect(s.stats.good).toBe(1) // judged by the setting at the answer, as before
     s = back(s)
     expect(marked(s.persistBtns)).toEqual([G]) //                       the highlighted answer
@@ -154,7 +149,7 @@ describe('the reported defect — drawn under one setting, answered under the ot
   })
 
   it('the same the other way round — drawn with Julian off, answered with it on', () => {
-    let s = answer(initEngine(hastings(false)), J, true)
+    let s = answer(initEngine(HASTINGS), J, true)
     expect(s.stats.good).toBe(1)
     s = back(s)
     expect(marked(s.persistBtns)).toEqual([J])
@@ -164,7 +159,7 @@ describe('the reported defect — drawn under one setting, answered under the ot
   })
 
   it('one history can hold both, and each card keeps its own through Back and Forward', () => {
-    let s = answer(initEngine(hastings(true)), J, true, hastings(true)) // card 1, Julian
+    let s = answer(initEngine(HASTINGS), J, true, HASTINGS) // card 1, Julian
     s = answer(s, G, false) //                                             card 2, Gregorian
     expect(buildRunBreakdown(s, true).rows.map((r) => r.wday)).toEqual([J, G])
     s = back(back(s))
@@ -180,7 +175,7 @@ describe('the reported defect — drawn under one setting, answered under the ot
 
 describe('a card that has been judged cannot be judged again in the other calendar', () => {
   // Answered wrong with Julian on, then the setting is switched off with the date still on screen.
-  const burned = () => answer(initEngine(hastings(true)), OTHER, true)
+  const burned = () => answer(initEngine(HASTINGS), OTHER, true)
 
   it('a Reveal after the switch shows the answer it was being judged by', () => {
     const s = reveal(burned(), false)
@@ -220,7 +215,7 @@ describe('a card that has been judged cannot be judged again in the other calend
 
 describe('an Override reads the card, not the setting', () => {
   it('the newest history card, overridden after a switch: its answer stays where it was judged', () => {
-    let s = gameReducer(answer(initEngine(hastings(false)), OTHER, true), {
+    let s = gameReducer(answer(initEngine(HASTINGS), OTHER, true), {
       type: 'NEW',
       nextDate: MODERN,
       useJulian: true,
@@ -234,7 +229,7 @@ describe('an Override reads the card, not the setting', () => {
     healthy(s)
   })
   it('a browsed card, its credit taken away after a switch: the mark is on its own answer', () => {
-    let s = back(answer(initEngine(hastings(true)), G, false))
+    let s = back(answer(initEngine(HASTINGS), G, false))
     s = override(s, true)
     expect(s.persistBtns).toEqual({ [G]: 'override-wrong' })
     healthy(s)
@@ -243,7 +238,7 @@ describe('an Override reads the card, not the setting', () => {
     healthy(s)
   })
   it('the live card, credited and held after a switch', () => {
-    let s = answer(initEngine(hastings(true)), OTHER, true)
+    let s = answer(initEngine(HASTINGS), OTHER, true)
     s = override(s, false, { hold: true })
     expect(s.persistBtns).toEqual({ [J]: 'correct' })
     healthy(s)
@@ -269,15 +264,15 @@ describe('a Deduction puzzle is judged in the calendar it was built in', () => {
 
 describe('a card nothing has judged carries no calendar', () => {
   it('a Reset, a kept date, and a regenerated date are all unstamped', () => {
-    let s = answer(initEngine(hastings(true)), OTHER, true)
+    let s = answer(initEngine(HASTINGS), OTHER, true)
     s = gameReducer(s, { type: 'RESET', timingOff: true, nextDate: MODERN })
     expect(s.card.jul).toBeUndefined()
-    s = gameReducer(initEngine(hastings(true)), { type: 'REGEN_DATE', nextDate: hastings(false) })
+    s = gameReducer(initEngine(HASTINGS), { type: 'REGEN_DATE', nextDate: HASTINGS })
     expect(s.card.jul).toBeUndefined()
     healthy(s)
   })
   it('a mid-round Reset clears it with the grid', () => {
-    const s = gameReducer(reveal(initEngine(hastings(true)), true), { type: 'RESET_ROUND' })
+    const s = gameReducer(reveal(initEngine(HASTINGS), true), { type: 'RESET_ROUND' })
     expect(s.card.jul).toBeUndefined()
     healthy(s)
   })
@@ -286,32 +281,32 @@ describe('a card nothing has judged carries no calendar', () => {
 describe('the tripwires (engine/invariants)', () => {
   const join = (v) => v.join(' | ')
   it('8 — a judged card with no calendar, on screen and in history', () => {
-    const s = answer(initEngine(hastings(true)), OTHER, true)
+    const s = answer(initEngine(HASTINGS), OTHER, true)
     const { jul: _j, ...bare } = s.card
     expect(join(checkGameInvariants({ ...s, card: bare }, true))).toContain(
       'on-screen card: a judged card carries no calendar',
     )
-    const h = answer(initEngine(hastings(true)), J, true)
+    const h = answer(initEngine(HASTINGS), J, true)
     const { jul: _k, ...bareMeta } = h.stack[0].meta
     expect(
       join(checkGameInvariants({ ...h, stack: [{ ...h.stack[0], meta: bareMeta }] }, true)),
     ).toContain('stack[0]: a judged card carries no calendar')
   })
   it('8 — a calendar on a card nothing has judged', () => {
-    const s = initEngine(hastings(true))
+    const s = initEngine(HASTINGS)
     expect(join(checkGameInvariants({ ...s, card: { ...s.card, jul: true } }, true))).toContain(
       'a card nothing has judged carries a calendar',
     )
   })
   it('9 — a green that is not the answer in the card’s calendar (the defect itself)', () => {
     // Exactly what the older builds stored: judged Gregorian, read back as Julian.
-    const s = back(answer(initEngine(hastings(true)), G, false))
+    const s = back(answer(initEngine(HASTINGS), G, false))
     expect(join(checkGameInvariants({ ...s, card: { ...s.card, jul: true } }, false))).toContain(
       'its grid marks an answer that is not the answer in its calendar',
     )
   })
   it('9 — …or an overridden card whose stored as-answered grid names another day', () => {
-    let s = gameReducer(answer(initEngine(hastings(true)), OTHER, true), {
+    let s = gameReducer(answer(initEngine(HASTINGS), OTHER, true), {
       type: 'NEW',
       nextDate: MODERN,
       useJulian: true,
@@ -332,8 +327,8 @@ describe('the tripwires (engine/invariants)', () => {
   // last state that passed in full). Three ways that memory could go wrong, each held shut:
   describe('the memory of which history cards passed', () => {
     const played = () => {
-      let s = initEngine(hastings(true))
-      for (let i = 0; i < 3; i++) s = answer(s, J, true, hastings(true))
+      let s = initEngine(HASTINGS)
+      for (let i = 0; i < 3; i++) s = answer(s, J, true, HASTINGS)
       return s // three judged cards behind the one on screen
     }
     const FAULT = 'its grid marks an answer that is not the answer in its calendar'
@@ -481,7 +476,7 @@ describe('a date only the Julian calendar has (February 29, 1500)', () => {
       expect(regen(s).date).toBe(MODERN) // …and the one REGEN_DATE replaces it
     })
     it('an ordinary date never is, whichever way the setting is switched', () => {
-      for (const q of [hastings(true), hastings(false), MODERN, { ...leapDay(), d: 28 }])
+      for (const q of [HASTINGS, HASTINGS, MODERN, { ...leapDay(), d: 28 }])
         for (const jul of [true, false]) expect(waitingDateMissing(initEngine(q), jul)).toBe(false)
     })
     it.each([
@@ -520,11 +515,12 @@ describe('a date only the Julian calendar has (February 29, 1500)', () => {
 })
 
 // ── WHAT AN OLDER BUILD PARKED ───────────────────────────────────────────────────────────────────
-// Builds up to v2.27.3 park in these same slots and stamp nothing. `asOlderBuild` turns a state this
-// build produced into what they would have parked: the same state with every stamp removed. Where the
-// case needs the older build's DEFECT too, the grid is rewritten by hand to what it would have stored.
-// ⏰ TEMPORARY, with the code it tests: this block goes in the release that turns sealing on and
-// deletes `SEAL_NEW_SILOS` (src/store/progressStorage.ts) — engine/parkedEngine's header says why.
+// Builds up to v2.27.3 park in these same slots and stamp nothing. Every build since stamps its own
+// cards, and a tab last used on one of those builds — evicted and reloaded by the browser, or reopened
+// from history — can still hand this one such a blob (engine/parkedEngine). A judged card in it is
+// REFUSED, quietly: the mode starts from its saved stats, and nothing is reported, because it is an
+// honest path and not a defect. `asOlderBuild` turns a state this build produced into what they would
+// have parked: the same state with every stamp removed.
 describe('the restore door — a card an older build parked without its calendar', () => {
   const strip = ({ jul: _j, ...meta }) => meta
   const asOlderBuild = (s) => {
@@ -537,210 +533,43 @@ describe('the restore door — a card an older build parked without its calendar
     }
   }
 
-  it('the card the stamp exists for: its green names one calendar, and that is its stamp', () => {
-    // Drawn with Julian on (`_jul: true`), answered with it off — green on the Gregorian day.
-    const s = answer(initEngine(hastings(true)), G, false)
-    const old = asOlderBuild(s)
-    expect(old.stack[0].meta.jul).toBeUndefined()
-    // Restored with the setting either way: the green decides, not the setting and not the draw.
-    for (const now of [true, false]) {
-      const back = restoreParkedEngine(old, now, 'classic')
-      expect(back.stack[0].meta.jul).toBe(false)
-      expect(marked(back.stack[0].btns)).toEqual([G])
+  it('a judged card with no calendar is refused — wherever it sits — and nothing is reported', () => {
+    const inHistory = answer(initEngine(HASTINGS), G, false)
+    const onScreen = answer(initEngine(HASTINGS), OTHER, true) // a wrong pick, still on screen
+    let ahead = answer(initEngine(HASTINGS), G, false, HASTINGS)
+    ahead = back(answer(ahead, J, true)) // browsed back: the judged card parked ahead of it
+    for (const [s, where] of [
+      [inHistory, 'in the history'],
+      [onScreen, 'on screen'],
+      [ahead, 'parked ahead of a browsed card'],
+    ]) {
+      const old = asOlderBuild(s)
+      expect(restoreParkedEngine(old, true, 'classic'), where).toBe(null)
+      expect(restoreParkedEngine(old, false, 'classic'), where).toBe(null)
     }
+    // …and a casual history from such a build, through parkedHistory: the mode starts from its stats.
+    const text = parkedText(asOlderBuild({ ...inHistory, stats: inHistory.stats }), { config: 'c' })
+    expect(restoreParked(JSON.parse(text), inHistory.stats, true, 'classic')).toBe(null)
     expect(captureError).not.toHaveBeenCalled()
   })
 
-  it('…and the other way round', () => {
-    const old = asOlderBuild(answer(initEngine(hastings(false)), J, true))
-    expect(restoreParkedEngine(old, false, 'flash').stack[0].meta.jul).toBe(true)
-  })
-
-  it('a green both calendars agree on falls back to the calendar the date was drawn under', () => {
-    // A date after the reform has one weekday, so its green cannot tell — and cannot be wrong.
-    const s = answer(initEngine(MODERN), wday(2024, 1, 1), false)
-    expect(restoreParkedEngine(asOlderBuild(s), false, 'classic').stack[0].meta.jul).toBe(true)
-    // …and with no record of the draw either, the setting now.
-    const bare = asOlderBuild(s)
-    delete bare.stack[0]._jul
-    expect(restoreParkedEngine(bare, false, 'classic').stack[0].meta.jul).toBe(false)
-  })
-
-  // ── A LIVE DATE HOLDING ONLY WRONG PICKS — no green on the grid to read the calendar off ──
-  it('wrong picks that are neither calendar’s answer: the calendar the date was drawn under', () => {
-    const old = asOlderBuild(answer(initEngine(hastings(true)), OTHER, true))
-    const back = restoreParkedEngine(old, false, 'classic')
-    expect(back.card.jul).toBe(true)
-    // …so the answer it goes on to show is that calendar's, whatever the setting is now.
-    expect(marked(reveal(back, false).persistBtns)).toEqual([J])
-  })
-  it('a wrong pick ON one calendar’s answer: the card was not judged in that calendar', () => {
-    // Drawn with Julian on; the setting was switched off; the player picked the JULIAN day and was
-    // told it was wrong. Stamped by its draw, the card would come back with its own answer marked
-    // wrong — the day the player had already been refused, now the one that finishes the card.
-    for (const now of [true, false]) {
-      const back = restoreParkedEngine(
-        asOlderBuild(answer(initEngine(hastings(true)), J, false)),
-        now,
-        'classic',
-      )
-      expect(back.card.jul).toBe(false)
-      expect(back.persistBtns[J]).toBe('wrong-latest')
-      expect(marked(reveal(back, now).persistBtns)).toEqual([G])
-      healthy(back)
-    }
-    // …and the same the other way round.
-    const other = restoreParkedEngine(
-      asOlderBuild(answer(initEngine(hastings(false)), G, true)),
-      false,
-      'classic',
-    )
-    expect(other.card.jul).toBe(true)
-    expect(marked(reveal(other, false).persistBtns)).toEqual([J])
-  })
-  it('wrong picks on BOTH calendars’ answers say nothing: the drawn calendar, then the setting', () => {
-    // Reachable only in an older build: one day refused under each setting.
-    const old = asOlderBuild(answer(initEngine(hastings(true)), OTHER, true))
-    old.persistBtns = { [J]: 'wrong-prev', [G]: 'wrong-latest' }
-    expect(restoreParkedEngine(old, false, 'classic').card.jul).toBe(true)
-    delete old.date._jul
-    expect(restoreParkedEngine(old, false, 'classic').card.jul).toBe(false)
-  })
-  it('the green decides before the wrong picks do', () => {
-    // Revealed with Julian off after the Julian day was refused… and the Gregorian day too, earlier,
-    // under the other setting: the green names the card's calendar, whatever the reds say.
-    const old = asOlderBuild(reveal(answer(initEngine(hastings(true)), J, false), false))
-    expect(marked(old.persistBtns)).toEqual([G])
-    expect(restoreParkedEngine(old, true, 'classic').card.jul).toBe(false)
-  })
-
-  it('a live date nothing has judged stays unstamped', () => {
-    const back = restoreParkedEngine(asOlderBuild(initEngine(hastings(true))), true, 'classic')
+  it('a live date nothing has judged has no calendar to carry, and comes back', () => {
+    const old = asOlderBuild(initEngine(HASTINGS))
+    const back = restoreParkedEngine(old, true, 'classic')
+    expect(back).toEqual(old)
     expect(back.card.jul).toBeUndefined()
   })
 
-  it('a puzzle is stamped with the calendar it was built in', () => {
-    const p = { type: 'day', y: 1066, m: 10, d: 14, w: J, options: [13, 14, 15], _jul: true }
-    const old = asOlderBuild(answer(initEngine(p), 0, false))
-    expect(restoreParkedEngine(old, false, 'dedDay').card.jul).toBe(true)
-  })
-
-  it('the parked LIVE card and the cards ahead of a browsed one are stamped too', () => {
-    let s = answer(initEngine(hastings(true)), G, false, hastings(true))
-    s = answer(s, J, true, hastings(false))
-    s = reveal(s, false) //    the live card: revealed, Gregorian
-    s = back(back(s)) //       browsed to card 1; card 2 and the live card are parked ahead
-    const restored = restoreParkedEngine(asOlderBuild(s), true, 'classic')
-    expect(restored.card.jul).toBe(false)
-    expect(restored.forwardStack.map((e) => e.meta.jul)).toEqual([false, true])
-    healthy(restored)
-  })
-
   it('a state THIS build parked comes back as the very same object', () => {
-    const j = JSON.parse(JSON.stringify(back(answer(initEngine(hastings(true)), G, false))))
+    const j = JSON.parse(JSON.stringify(back(answer(initEngine(HASTINGS), G, false))))
     expect(restoreParkedEngine(j, true, 'classic')).toBe(j)
   })
 
-  // ── AN OVERRIDDEN CARD — its calendar is the one it was ANSWERED in, and its Override mark is
-  // put on that calendar's answer. The older build marked the answer of the setting at the press,
-  // so with the setting switched in between, the Override's green and the as-answered grid stored
-  // under it named two different days — and an Undo moved the green. (This card used to cost the
-  // whole history: no stamp made both grids right, so the blob was refused.)
-  describe('an overridden card whose Override was pressed under the other setting', () => {
-    const jsonOf = (s) => JSON.parse(JSON.stringify(s))
-    // A miss answered with Julian on, pushed into history, then credited by Override.
-    const overriddenInHistory = () =>
-      override(
-        gameReducer(answer(initEngine(hastings(true)), OTHER, true), {
-          type: 'NEW',
-          nextDate: MODERN,
-          useJulian: true,
-          saveStats: true,
-        }),
-        true,
-      )
-
-    it('in history: it comes back exactly as this build would have left it', () => {
-      const s = overriddenInHistory()
-      expect(s.stack[0].btns).toEqual({ [J]: 'correct' })
-      const old = asOlderBuild(s)
-      old.stack[0].btns = { [G]: 'correct' } // pressed with Julian off: the green on the Gregorian day
-      for (const now of [true, false]) {
-        const back = restoreParkedEngine(jsonOf(old), now, 'classic')
-        expect(back).toEqual(jsonOf(s))
-        healthy(back)
-        // …and the Undo lands on the grid it was answered with, green on the same day.
-        const undone = override(back, now)
-        expect(marked(undone.stack[0].btns)).toEqual([J])
-        expect(undone.stack[0].btns[OTHER]).toBe('wrong-prev')
-        healthy(undone)
-      }
-      expect(captureError).not.toHaveBeenCalled()
-    })
-
-    it('a credit taken away under the other setting: the mark moves the same way', () => {
-      const s = override(back(answer(initEngine(hastings(true)), J, true)), true)
-      expect(s.persistBtns).toEqual({ [J]: 'override-wrong' })
-      const old = asOlderBuild(s)
-      old.persistBtns = { [G]: 'override-wrong' }
-      expect(restoreParkedEngine(old, false, 'classic')).toEqual(jsonOf(s))
-    })
-
-    it('the live card, its wrong pick on one calendar’s answer: answered in the other, so the mark goes there', () => {
-      // The Julian day refused with the setting off; the setting switched on; Override pressed.
-      const s = override(answer(initEngine(hastings(true)), J, false), false, { hold: true })
-      expect(s.persistBtns).toEqual({ [G]: 'correct' })
-      const old = asOlderBuild(s)
-      old.persistBtns = { [J]: 'correct' } // …so that build's green sat on the day it had just refused
-      const restored = restoreParkedEngine(old, true, 'classic')
-      expect(restored).toEqual(jsonOf(s))
-      healthy(restored)
-    })
-
-    it('the live card, its wrong picks saying nothing: the Override’s own mark is all there is, and stays', () => {
-      const s = override(answer(initEngine(hastings(false)), OTHER, true), true, { hold: true })
-      expect(s.persistBtns).toEqual({ [J]: 'correct' })
-      // Drawn with Julian off — but the green on screen is the Julian day, and nothing contradicts it.
-      const restored = restoreParkedEngine(asOlderBuild(s), false, 'classic')
-      expect(restored.card.jul).toBe(true)
-      expect(restored.persistBtns).toEqual({ [J]: 'correct' })
-      healthy(restored)
-    })
-
-    it('an as-answered grid that marks BOTH calendars’ days is no card at all: refused', () => {
-      const old = asOlderBuild(overriddenInHistory())
-      old.stack[0].meta.answered.btns = { [J]: 'correct', [G]: 'correct' }
-      expect(restoreParkedEngine(old, true, 'classic')).toBe(null)
-      expect(vi.mocked(captureError).mock.calls[0][1].reason).toBe('breaks an engine invariant')
-    })
-  })
-
-  it('a card of a date only the Julian calendar has is never read in the other one', () => {
-    const leap = { y: 1500, m: 2, d: 29, _fmt: 'numeric-ymd', _jul: true }
-    const JL = wdayJulian(1500, 2, 29)
-    const NEVER = wday(1500, 2, 29)
-    // Wrong picks only — one of them the Julian day itself, refused by the older build's Gregorian
-    // reading of a day that calendar never had. There is still only one calendar to read it in.
-    const live = asOlderBuild(answer(initEngine(leap), NEVER, true))
-    live.persistBtns = { [JL]: 'wrong-latest' }
-    expect(restoreParkedEngine(live, false, 'classic').card.jul).toBe(true)
-    // …and a green on the day that reading called right fits no calendar that has the date: refused.
-    const judged = asOlderBuild(reveal(initEngine(leap), true))
-    judged.persistBtns = { [NEVER]: 'correct' }
-    expect(restoreParkedEngine(judged, false, 'classic')).toBe(null)
-  })
-
-  it('a green that is the answer in NEITHER calendar is refused', () => {
-    const old = asOlderBuild(back(answer(initEngine(hastings(true)), G, false)))
-    old.persistBtns = { [OTHER]: 'correct' }
-    expect(restoreParkedEngine(old, true, 'classic')).toBe(null)
-  })
-
-  it('a casual history from an older build comes back whole, through parkedHistory', () => {
-    const s = back(answer(initEngine(hastings(true)), G, false))
-    const text = parkedText(asOlderBuild({ ...s, stats: s.stats }), { config: 'c' })
-    const restored = restoreParked(JSON.parse(text), s.stats, true, 'classic')
-    expect(restored.engine.card.jul).toBe(false)
-    expect(marked(restored.engine.persistBtns)).toEqual([G])
+  it('a card that is unstamped for any other reason is still a defect, and still reported', () => {
+    // Stamped but never judged (no mark on its grid): no build parks this.
+    const s = initEngine(HASTINGS)
+    const odd = { ...JSON.parse(JSON.stringify(s)), card: { ...s.card, jul: true } }
+    expect(restoreParkedEngine(odd, true, 'classic')).toBe(null)
+    expect(vi.mocked(captureError).mock.calls[0][1].reason).toBe('breaks an engine invariant')
   })
 })

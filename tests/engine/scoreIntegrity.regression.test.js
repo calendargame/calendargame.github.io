@@ -20,9 +20,9 @@ import { gameReducer, initEngine, liveCredited } from '../../src/engine/gameRedu
 import { wday } from '../../src/lib/calendar.js'
 import { checkStrongScoreOracle } from './fuzzHarness.js'
 
-const D1 = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
-const D2 = { y: 2024, m: 2, d: 2, _fmt: 'numeric-ymd', _jul: false }
-const D3 = { y: 2024, m: 3, d: 3, _fmt: 'numeric-ymd', _jul: false }
+const D1 = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd' }
+const D2 = { y: 2024, m: 2, d: 2, _fmt: 'numeric-ymd' }
+const D3 = { y: 2024, m: 3, d: 3, _fmt: 'numeric-ymd' }
 const C = wday(2024, 1, 1) // correct weekday index for D1
 const ctx = { useJulian: false, saveStats: true }
 const cOf = (d) => wday(d.y, d.m, d.d) // the correct weekday index for a date

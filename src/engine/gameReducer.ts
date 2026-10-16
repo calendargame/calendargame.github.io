@@ -44,11 +44,8 @@ export interface WeekdayQuestion {
   m: number
   d: number
   _fmt?: FormatId //  the date-format this question was generated in
-  // The Julian Calendar setting when the date was DRAWN. It decided which dates could be drawn, and
-  // nothing reads it to judge or show a card: a date nobody has answered follows the setting as it
-  // stands, and an answered one carries its own calendar (CardMeta.jul). Its one reader is the
-  // restore door (engine/parkedEngine), for a card an older build parked without that stamp.
-  _jul?: boolean
+  // (No calendar: a date nobody has answered follows the Julian Calendar setting as it stands, and
+  // an answered one carries its own — CardMeta.jul.)
 }
 // One of a Deduction puzzle's answer boxes (Month sub-mode): a label + the months it covers.
 export interface DedBox {
@@ -211,7 +208,7 @@ export interface Stats {
 
 // ── The full engine state ────────────────────────────────────────────────────
 export interface GameState {
-  date: Question //                 current question {y,m,d,_fmt,_jul} (or a Deduction puzzle)
+  date: Question //                 current question {y,m,d,_fmt} (or a Deduction puzzle)
   questionId: number //             bumps on every advance / RESET — the hook resets the solve-timer on this, NOT on raw date changes (Back/Forward change date but must not reset the timer; no Override ever moves it backwards)
   gridEpoch: number //              bumps ONLY on RESET / RESET_ROUND — the UI keys the answer grids on it, so every reset REMOUNTS them and the cleared colors SNAP to idle (a remounted element never CSS-transitions from its predecessor's state; .surface-button's hover transition would otherwise fade the green away). NOT bumped on advance / REGEN_DATE: a remount there would restart in-flight flash keyframes
   persistBtns: Btns //              answer-grid state {idx: 'correct'|'wrong-latest'|'wrong-prev'|'override-wrong'}
@@ -386,8 +383,8 @@ const showsAnswer = (btns: Btns | undefined): boolean =>
 // A stack / forward entry carries the question's date-or-puzzle fields PLUS bookkeeping (btns,
 // hasCredit, isLive, liveState, solveTime, meta). Strip the bookkeeping to recover just the
 // date/puzzle fields — so FORWARD restores a clean `date` that still keeps Deduction's puzzle
-// fields (type/options/w/…), not only y/m/d/_fmt/_jul. For weekday entries the result is exactly
-// {y,m,d,_fmt,_jul}, identical to the previous explicit field pick.
+// fields (type/options/w/_jul/…), not only y/m/d/_fmt. For weekday entries the result is exactly
+// {y,m,d,_fmt}, identical to the previous explicit field pick.
 const stripEntryMeta = ({
   btns,
   hasCredit,

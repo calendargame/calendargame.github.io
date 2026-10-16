@@ -27,7 +27,7 @@ import { checkGameInvariants } from '../../src/engine/invariants.js'
 let n = 0
 const q = () => {
   n++
-  return { y: 1900 + (n % 200), m: 1 + (n % 12), d: 1 + (n % 28), _fmt: 'numeric-ymd', _jul: false }
+  return { y: 1900 + (n % 200), m: 1 + (n % 12), d: 1 + (n % 28), _fmt: 'numeric-ymd' }
 }
 // Play `cards` answers (every third one wrong first, then right) with timing tracked, then Back `back`
 // times — a history with credits, misses, times and a browsed position.

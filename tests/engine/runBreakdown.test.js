@@ -23,10 +23,10 @@ import { buildRunBreakdown } from '../../src/engine/runBreakdown.js'
 import { calcAvg, calcMed } from '../../src/engine/stats.js'
 import { wday, wdayJulian } from '../../src/lib/calendar.js'
 
-const D1 = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
-const D2 = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
-const D3 = { y: 2019, m: 3, d: 9, _fmt: 'numeric-ymd', _jul: false }
-const D4 = { y: 2001, m: 11, d: 30, _fmt: 'numeric-ymd', _jul: false }
+const D1 = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd' }
+const D2 = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd' }
+const D3 = { y: 2019, m: 3, d: 9, _fmt: 'numeric-ymd' }
+const D4 = { y: 2001, m: 11, d: 30, _fmt: 'numeric-ymd' }
 const cor = (d) => wday(d.y, d.m, d.d)
 const wrong = (d) => (cor(d) + 1) % 7
 
@@ -269,16 +269,14 @@ describe('runBreakdown — the weekday on each row', () => {
   // Gregorian one. The two are asserted to DIFFER first, so the case cannot pass by the two agreeing.
   // (tests/engine/cardCalendar holds the whole rule; these are the breakdown's rows.)
   const HASTINGS = { y: 1066, m: 10, d: 14, _fmt: 'numeric-ymd' }
-  it('a pre-1582 date reads in the calendar it was JUDGED in — not the setting now, not the draw', () => {
+  it('a pre-1582 date reads in the calendar it was JUDGED in — not the setting now', () => {
     expect(wdayJulian(1066, 10, 14)).toBe(6) //                         Saturday, as history has it
     expect(wday(1066, 10, 14)).not.toBe(6) //                            …and proleptic Gregorian disagrees
-    // Judged with Julian on (though DRAWN with it off): the Julian weekday, even with the setting
-    // now saying Gregorian.
-    let s = answer(initEngine({ ...HASTINGS, _jul: false }), 6, 2, D2, { useJulian: true })
+    // Judged with Julian on: the Julian weekday, even with the setting now saying Gregorian.
+    let s = answer(initEngine(HASTINGS), 6, 2, D2, { useJulian: true })
     expect(buildRunBreakdown(s, false).rows[0].wday).toBe(6)
-    // Judged with Julian off (though drawn with it on): the Gregorian weekday, even with the
-    // setting now saying Julian.
-    s = answer(initEngine({ ...HASTINGS, _jul: true }), wday(1066, 10, 14), 2, D2)
+    // Judged with Julian off: the Gregorian weekday, even with the setting now saying Julian.
+    s = answer(initEngine(HASTINGS), wday(1066, 10, 14), 2, D2)
     expect(buildRunBreakdown(s, true).rows[0].wday).toBe(wday(1066, 10, 14))
   })
 
@@ -297,7 +295,7 @@ describe('runBreakdown — the weekday on each row', () => {
   })
 
   it('a post-1582 date reads the same under either system — Julian has no say there', () => {
-    const s = answer(initEngine({ ...D1, _jul: true }), cor(D1), 2, D2)
+    const s = answer(initEngine(D1), cor(D1), 2, D2)
     expect(buildRunBreakdown(s, false).rows[0].wday).toBe(wday(D1.y, D1.m, D1.d))
   })
 })

@@ -103,16 +103,13 @@ import BlitzMode from './modes/BlitzMode.jsx'
     //   _fmt      — date format ID at generation (e.g. 'written-mdy', 'numeric-dmy').
     //               Random Format on → random roll per date; off → current dateFormat.
     //               Display layer always trusts _fmt over the live dateFormat setting.
-    //   _jul      — useJulian boolean at generation: the setting the date was DRAWN under.
-    //               ⚠ It is NOT the calendar a date is answered or shown in. A weekday date
-    //               nobody has answered follows the setting as it stands, and the first answer,
-    //               Reveal or Show Codes stamps that calendar onto the CARD (the engine's
-    //               CardMeta.jul, read through calendarOf) — which is what the highlighted answer,
-    //               Show Codes, an Override, history browsing and a run breakdown all use. A
-    //               Deduction puzzle is the exception: the weekday it shows was worked out under
-    //               `_jul`, so that IS its calendar.
-    // Deduction puzzles additionally carry: _abx (abCrossOnly), _julx (julCrossOnly),
-    // _m1582 (monthOnly1582) — informational snapshots of per-mode toggles at spawn.
+    // A weekday date carries no calendar: one nobody has answered follows the Julian Calendar
+    // setting as it stands, and the first answer, Reveal or Show Codes stamps that calendar onto
+    // the CARD (the engine's CardMeta.jul, read through calendarOf) — which is what the highlighted
+    // answer, Show Codes, an Override, history browsing and a run breakdown all use.
+    // Deduction puzzles additionally carry: _jul (useJulian when the puzzle was BUILT — the weekday
+    // it shows was worked out under it, so that IS its calendar), _abx (abCrossOnly), _julx
+    // (julCrossOnly), _m1582 (monthOnly1582) — informational snapshots of per-mode toggles at spawn.
     // ─────────────────────────────────────────────────────────────────────────
     // Shared control className tokens + buttonStateClass -> src/components/controlClasses.ts. App
     // no longer imports it: its last tokens (RESET_BTN_CLASS, PANEL_RESET_BTN_CLASS,
@@ -1740,20 +1737,18 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // legacy date without _fmt slips through (defensive).
       const fmtDate=(y: number,m: number,d: number,storedFmt?: FormatId)=>fmt(y,m,d,storedFmt||dateFormat);
       // Generate a new game-mode date with the current settings baked in.
-      // Stamps _fmt and _jul at generation. _fmt is always present — random roll
+      // Stamps _fmt at generation. _fmt is always present — random roll
       // when randomFormat is on, current dateFormat when off. The display layer always
       // trusts _fmt.
       // A format change regenerates a waiting question like any other date setting a date is drawn
       // under (each screen compares `dateDraw` as the panel closes); with Random Format on, a Date
       // Format change is no change to `dateDraw` and regenerates nothing.
-      // _jul is the Julian Calendar setting the date was drawn under — a record of the draw, not
-      // the calendar it is answered in (see the snapshot-fields note at the top of this file): an
-      // untouched date follows the setting as it stands, so toggling Julian over it updates the
-      // answer, and the first judgement stamps the calendar onto the card.
+      // No calendar is stamped (see the snapshot-fields note at the top of this file): an untouched
+      // date follows the setting as it stands, so toggling Julian over it updates the answer, and
+      // the first judgement stamps the calendar onto the card.
       const genDate=(lo: number,hi: number)=>{
         const dt=randomDate(lo,hi,useJulian,dateIn.leapChance,dateIn.janFebChance,dateIn.julianChance);
         dt._fmt=randomFormat?rollFormat():dateFormat;
-        dt._jul=useJulian;
         return dt;
       };
       const settingsRef=useRef<HTMLDivElement | null>(null);

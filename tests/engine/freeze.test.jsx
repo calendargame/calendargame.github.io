@@ -28,7 +28,6 @@ const q = (i) => ({
   m: 1 + (i % 12),
   d: 1 + (i % 28),
   _fmt: 'numeric-ymd',
-  _jul: false,
 })
 const right = (s) => correctIndexOf(s.date, false)
 const wrong = (s) => (right(s) + 1) % 7
@@ -128,7 +127,7 @@ describe('every door into the engine works on a frozen state, and returns one th
     expect(everythingFrozen(s)).toBe(true)
   })
 
-  it('forgetting the oldest cards, and the restore door — a blob this build parked and an older build’s', () => {
+  it('forgetting the oldest cards, and the restore door — a blob this build parked', () => {
     let s = deepFreeze(initEngine(q(0)))
     for (let i = 1; i <= 4; i++)
       s = deepFreeze(
@@ -148,16 +147,6 @@ describe('every door into the engine works on a frozen state, and returns one th
 
     const blob = deepFreeze(JSON.parse(JSON.stringify(s)))
     expect(restoreParkedEngine(blob, false, 'classic')).toBe(blob)
-    // An older build's: no calendar on any card — the door must make new cards, not stamp the old.
-    const strip = ({ jul: _j, ...meta }) => meta
-    const older = deepFreeze({
-      ...JSON.parse(JSON.stringify(s)),
-      card: strip(s.card),
-      stack: s.stack.map((e) => ({ ...e, meta: strip(e.meta) })),
-    })
-    const back = restoreParkedEngine(older, false, 'classic')
-    expect(back).toEqual(JSON.parse(JSON.stringify(s)))
-    expect(older.stack[0].meta.jul).toBeUndefined()
   })
 })
 

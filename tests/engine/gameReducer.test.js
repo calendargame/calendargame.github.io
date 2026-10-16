@@ -17,8 +17,8 @@ import { checkGameInvariants } from '../../src/engine/invariants.js'
 import { buildRunBreakdown } from '../../src/engine/runBreakdown.js'
 import { calcAvg, calcLast } from '../../src/engine/stats.js'
 
-const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false }
-const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd', _jul: false }
+const DATE = { y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd' }
+const NEXT = { y: 2025, m: 6, d: 15, _fmt: 'numeric-ymd' }
 const C = wday(2024, 1, 1) // the correct weekday index for the fixed date
 const W = (C + 1) % 7 // a wrong index
 
@@ -377,7 +377,7 @@ describe('gameReducer — REGEN_DATE', () => {
   // stack — and it is the one a regen is about. (The case used to bail outright, leaving the waiting
   // question as it was: a date outside a just-narrowed year range, or — after a reload — a question
   // the player had already read, back with a fresh clock.)
-  const OTHER = { y: 2031, m: 3, d: 9, _fmt: 'numeric-ymd', _jul: false }
+  const OTHER = { y: 2031, m: 3, d: 9, _fmt: 'numeric-ymd' }
   const regenOther = (s) => gameReducer(s, { type: 'REGEN_DATE', nextDate: OTHER })
 
   it('while browsing: the browsed card is untouched, and the UNUSED live question behind it is replaced', () => {
@@ -762,7 +762,7 @@ describe('gameReducer — Override ⇄ Undo, the per-card toggle', () => {
   })
 
   it('an advancing Override and its Undo never draw a date: the free re-roll is gone', () => {
-    const OTHER = { y: 1999, m: 9, d: 9, _fmt: 'numeric-ymd', _jul: false }
+    const OTHER = { y: 1999, m: 9, d: 9, _fmt: 'numeric-ymd' }
     let s = answer(initEngine(DATE), W) // burned live card
     s = override(s) // credits it and moves on to NEXT — the one date this ever draws
     expect(s.date).toBe(NEXT)

@@ -12,7 +12,7 @@ import { restoreParkedEngine } from '../../src/engine/parkedEngine.js'
 import { wday } from '../../src/lib/calendar.js'
 
 // A deterministic genDate (fixed Gregorian date — value doesn't matter for these checks).
-const genDate = () => ({ y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd', _jul: false })
+const genDate = () => ({ y: 2024, m: 1, d: 1, _fmt: 'numeric-ymd' })
 const C = wday(2024, 1, 1)
 const W = (C + 1) % 7
 const opts = {

@@ -8,13 +8,10 @@
 // shape check (the fields the invariant walk and the first render need before they can be asked) and
 // the engine's own invariants, run inside a catch.
 //
-// ⚠ There is one thing an older build's blob is given at the door, and it is not tested here: the
-// slots this build reads (`cg-round-v2`, `cg-history-v1`) are also written by builds that stamp no
-// calendar on a judged card, and the door stamps those from the card's own grid, puts an overridden
-// card's Override mark on that calendar's answer (or refuses the blob when the grid fits neither
-// calendar). tests/engine/cardCalendar.test.js owns that — until the release that turns sealing on
-// removes it (engine/parkedEngine's header). Any other difference in shape is refused like every
-// blob that is not a healthy engine state.
+// ⚠ One refusal is NOT reported, and it is tested in tests/engine/cardCalendar.test.js: a judged
+// card with no calendar, which builds up to v2.27.3 parked in these same slots and a tab last used on
+// one of them can still hold (engine/parkedEngine's header). Any other difference in shape is
+// refused, and reported, like every blob that is not a healthy engine state.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { restoreParkedEngine } from '../../src/engine/parkedEngine.js'
 import { captureError } from '../../src/observability/sentry.js'
@@ -22,7 +19,7 @@ vi.mock('../../src/observability/sentry.js', () => ({ captureError: vi.fn() }))
 import { gameReducer, initEngine, correctIndexOf } from '../../src/engine/gameReducer.js'
 import { checkGameInvariants } from '../../src/engine/invariants.js'
 
-const d = (y, m, dd) => ({ y, m, d: dd, _fmt: 'numeric-ymd', _jul: false })
+const d = (y, m, dd) => ({ y, m, d: dd, _fmt: 'numeric-ymd' })
 const DATES = [d(2024, 1, 1), d(2024, 2, 2), d(2024, 3, 3), d(2024, 4, 4), d(2024, 5, 5)]
 
 // A reachable state with everything in it: a clean credit, a wrong-then-right, a revealed miss that

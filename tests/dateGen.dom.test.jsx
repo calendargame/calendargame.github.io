@@ -20,10 +20,10 @@ import { mulberry32 } from './helpers/rng.js'
 const realWday = (y, m, d, jul) =>
   jul && isJulianDate(y, m, d) ? wdayJulian(y, m, d) : wday(y, m, d)
 
-// A generated weekday question must be a real, answerable date.
-function checkWeekday(q, lo, hi) {
+// A generated weekday question must be a real, answerable date — in the calendar it was drawn
+// under (`jul`, the Julian Calendar setting passed to randomDate; a weekday date carries none).
+function checkWeekday(q, lo, hi, jul) {
   const v = []
-  const jul = !!q._jul
   if (!Number.isInteger(q.y)) v.push(`y not integer (${q.y})`)
   else if (q.y < Math.max(1, lo) || q.y > hi) v.push(`y ${q.y} out of [${Math.max(1, lo)},${hi}]`)
   if (!(Number.isInteger(q.m) && q.m >= 1 && q.m <= 12)) v.push(`m out of 1-12 (${q.m})`)
@@ -144,7 +144,7 @@ describe('date-generation fuzz — every setting yields a real, answerable quest
           pick(rnd, CHANCES),
         )
         count++
-        const v = checkWeekday(q, lo, hi)
+        const v = checkWeekday(q, lo, hi, julian)
         if (v.length) {
           violations.push(`[${lo},${hi}] jul=${julian} → ${JSON.stringify(q)} :: ${v.join('; ')}`)
           if (violations.length >= 5) break
