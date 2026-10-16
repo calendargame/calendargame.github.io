@@ -190,8 +190,8 @@ export const BASE_BTN = 'w-full rounded-2xl border px-4 py-3 text-base select-no
 // they ever disagree. Change this and change --answer-gap with it.
 export const ANSWER_GRID_GAP = 'gap-3'
 
-// THE DATE CARD'S CENTRE AND ITS DATE — the same two in every mode (index.css's .date-card and
-// .date-line say why the date is one line at one size per screen; components/CardNumber's badge is
-// positioned against the centre, which is why it stays `relative`).
-export const DATE_CARD_CLASS = 'text-center relative date-card'
+// THE DATE CARD'S CENTRE AND ITS DATE — the same two in every mode (index.css's .date-line and
+// components/DateLine say why the date is one line at one size per card, clear of the card number;
+// components/CardNumber's badge is positioned against the centre, which is why it stays `relative`).
+export const DATE_CARD_CLASS = 'text-center relative'
 export const DATE_LINE_CLASS = 'date-line font-bold'

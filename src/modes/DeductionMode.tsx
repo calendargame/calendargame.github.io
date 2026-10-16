@@ -25,15 +25,16 @@ import {
   buttonStateClass,
   RESET_STATS_BTN_CLASS,
   DATE_CARD_CLASS,
-  DATE_LINE_CLASS,
 } from '../components/controlClasses.js'
+import { dateLineFormats } from '../lib/dateLineFit.js'
+import DateLine from '../components/DateLine.jsx'
 import { YEAR_OPTION_DEFAULT, yearGridLayout, makeDedPuzzle } from '../lib/dedPuzzle.js'
 import { answerGridHitPad, colSpanClass } from '../lib/answerGrid.js'
 import { isJulianDate, wday, wdayJulian } from '../lib/calendar.js'
 import { DAY, fmtPartial, fmtYear } from '../lib/format.js'
 import type { FormatId, DatePart } from '../lib/format.js'
 import { rollFormat, isTouch } from '../lib/modeFormat.js'
-import { creditsLiveCard } from '../engine/gameReducer.js'
+import { creditsLiveCard, topCardNumber } from '../engine/gameReducer.js'
 import type { DedPuzzle } from '../engine/gameReducer.js'
 import StatPanel from '../components/StatPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
@@ -576,9 +577,17 @@ function DeductionMode({
         <div className="mt-4 rounded-2xl panel p-4">
           <div className={DATE_CARD_CLASS}>
             <CardNumber state={state} show={state.backDepth > 0} />
-            <div className={DATE_LINE_CLASS}>
+            <DateLine
+              numberDigits={String(topCardNumber(state)).length}
+              formats={dateLineFormats(
+                [state.date, ...state.stack, ...state.forwardStack],
+                dateFormat,
+                randomFormat,
+              )}
+              partial
+            >
               {date ? fmtDatePartial(date.y, date.m, date.d, date._fmt, date.type) : '—'}
-            </div>
+            </DateLine>
             {date && (
               <div className="mt-1 text-lg text-(--tx-100)">
                 Weekday: <span className="font-semibold">{DAY[date.w]}</span>

@@ -34,6 +34,8 @@ vi.mock('../src/components/CardNumber.jsx', () => ({
     if (crash.on) throw new Error('the Q# badge crashed (test)')
     return null
   },
+  // The room the date card keeps for the badge (components/DateLine) — drawn, never crashing.
+  CardNumberSizer: () => null,
 }))
 vi.mock('../src/components/Expander.jsx', async (original) => {
   const { default: Expander } = await original()

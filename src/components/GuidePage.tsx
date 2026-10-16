@@ -1528,10 +1528,15 @@ export default function GuidePage({
             red alongside the green.
           </li>
           <li>
-            The date on the card is always one line. On a phone too narrow for the longest dates (a
-            five-digit year such as September 10, 10000) at full size, every date on that screen is
-            drawn a little smaller — all at the same size, so nothing on the card moves from one
-            date to the next.
+            The date on the card is always one line, centred, and never touches the <b>Q#</b> label
+            in its corner. Where the longest date the card can show (a five-digit year such as
+            September 10, 10000) would not fit at full size — on a narrow phone, or in a wide font —
+            every date on that card is drawn a little smaller, all at the same size, so nothing on
+            the card moves from one date to the next. The size depends only on your screen, your
+            device&apos;s font, the Date Format (with Random Format on, it suits all five formats),
+            and how many digits your card count has: the room kept for the <b>Q#</b> label grows
+            only when the count gains a digit (Q9 to Q10, Q99 to Q100), so on a narrow phone the
+            date may get a little smaller at that moment, and at no other.
           </li>
           <li>
             While browsing back, a small <b>Q#</b> label at the top-right of the date card numbers

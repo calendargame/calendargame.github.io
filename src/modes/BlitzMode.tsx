@@ -6,7 +6,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { useButtonFlash, useMountedBestsId, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
-import { RESET_BTN_CLASS, DATE_CARD_CLASS, DATE_LINE_CLASS } from '../components/controlClasses.js'
+import { RESET_BTN_CLASS, DATE_CARD_CLASS } from '../components/controlClasses.js'
+import { dateLineFormats } from '../lib/dateLineFit.js'
+import DateLine from '../components/DateLine.jsx'
 import {
   fmtTime,
   truncTime,
@@ -46,6 +48,7 @@ import {
   liveCredited,
   overrideAdvances,
   showCodesPenalizes,
+  topCardNumber,
 } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound } from '../store/sessionRound.js'
@@ -168,6 +171,7 @@ function BlitzMode({
   useJulian,
   saveStats,
   dateFormat,
+  randomFormat = false,
   dateDraw,
   inputStyle = 'buttons',
   dotRotation = 'standard',
@@ -1224,7 +1228,16 @@ function BlitzMode({
       <div className="mt-4 rounded-2xl panel p-4">
         <div className={DATE_CARD_CLASS}>
           <CardNumber state={state} show={state.backDepth > 0} />
-          <div className={DATE_LINE_CLASS}>{dateText}</div>
+          <DateLine
+            numberDigits={String(topCardNumber(state)).length}
+            formats={dateLineFormats(
+              [state.date, ...state.stack, ...state.forwardStack],
+              dateFormat,
+              randomFormat,
+            )}
+          >
+            {dateText}
+          </DateLine>
         </div>
         <WeekdayAnswer
           key={state.gridEpoch}

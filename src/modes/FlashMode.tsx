@@ -21,8 +21,9 @@ import {
   RESET_BTN_CLASS,
   RESET_STATS_BTN_CLASS,
   DATE_CARD_CLASS,
-  DATE_LINE_CLASS,
 } from '../components/controlClasses.js'
+import { dateLineFormats } from '../lib/dateLineFit.js'
+import DateLine from '../components/DateLine.jsx'
 import { fmtFlashT, SLIDER_READOUT_WIDEST } from '../lib/modeFormat.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
@@ -35,7 +36,12 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { creditsLiveCard, overrideAdvances, regenReplaces } from '../engine/gameReducer.js'
+import {
+  creditsLiveCard,
+  overrideAdvances,
+  regenReplaces,
+  topCardNumber,
+} from '../engine/gameReducer.js'
 import { useBackButton } from '../components/overlayStack.js'
 import { parkedFlag } from '../engine/parkedHistory.js'
 
@@ -59,6 +65,7 @@ function FlashMode({
   useJulian,
   saveStats,
   dateFormat,
+  randomFormat = false,
   dateDraw,
   inputStyle = 'buttons',
   dotRotation = 'standard',
@@ -573,7 +580,16 @@ function FlashMode({
         <div className="mt-4 rounded-2xl panel p-4">
           <div className={DATE_CARD_CLASS}>
             <CardNumber state={state} show={state.backDepth > 0} />
-            <div className={DATE_LINE_CLASS}>{dateText}</div>
+            <DateLine
+              numberDigits={String(topCardNumber(state)).length}
+              formats={dateLineFormats(
+                [state.date, ...state.stack, ...state.forwardStack],
+                dateFormat,
+                randomFormat,
+              )}
+            >
+              {dateText}
+            </DateLine>
           </div>
           <WeekdayAnswer
             key={state.gridEpoch}

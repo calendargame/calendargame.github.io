@@ -1,12 +1,12 @@
-// lib/textFit.ts — TEXT SIZED TO ITS ROOM IN THE DEVICE'S OWN FONT: the engine behind Lookup's
-// history rows (components/LookupCard), and the one any other line that must fit its room uses.
+// lib/textFit.ts — TEXT SIZED TO ITS ROOM IN THE DEVICE'S OWN FONT: the one engine behind the date
+// on the card (lib/dateLineFit) and Lookup's history rows (components/LookupCard).
 //
 // ★ WHY ANYTHING IS MEASURED. The app names no font of its own (index.css), so every device sets its
 // text in its own system font — Segoe UI on Windows, San Francisco on an iPhone, Roboto on most
 // Androids, DejaVu Sans on a Linux desktop, a font of its owner's choosing on some phones — and the
 // same words are a different width in each (DejaVu Sans sets "September 10, 10000" 22% wider than
-// Segoe UI). A layout that holds a long line in a narrow room by a constant (index.css's date line,
-// "the card's width over 10.97em") is right only for the fonts it was measured in. So where a line must fit and could not
+// Segoe UI). A layout that holds a long line in a narrow room by a constant ("the card's width over
+// 10.97em") is right only for the fonts it was measured in. So where a line must fit and could not
 // at its full size, the device is asked how wide the text is.
 //
 // ★ WHAT IT DOES. A caller registers a ROOM (an element whose content width is the space its text

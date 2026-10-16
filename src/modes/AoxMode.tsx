@@ -28,12 +28,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { FLASH_MS, useButtonFlash, useMountedBestsId, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
-import {
-  NUM_INPUT_CLASS,
-  RESET_BTN_CLASS,
-  DATE_CARD_CLASS,
-  DATE_LINE_CLASS,
-} from '../components/controlClasses.js'
+import { NUM_INPUT_CLASS, RESET_BTN_CLASS, DATE_CARD_CLASS } from '../components/controlClasses.js'
+import { dateLineFormats } from '../lib/dateLineFit.js'
+import DateLine from '../components/DateLine.jsx'
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
@@ -55,7 +52,7 @@ import { useProgress } from '../store/progress.js'
 import type { AoxBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { creditsLiveCard, questionIdAfterReset } from '../engine/gameReducer.js'
+import { creditsLiveCard, questionIdAfterReset, topCardNumber } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound } from '../store/sessionRound.js'
 import { fileRoundBest, roundBests, parkRound, unparkRound } from '../store/screenPool.js'
@@ -127,6 +124,7 @@ function AoxMode({
   genDate = randomDate,
   dateDraw,
   dateFormat = 'written-mdy',
+  randomFormat = false,
   inputStyle = 'buttons',
   dotRotation = 'standard',
   saveStats = true,
@@ -944,9 +942,16 @@ function AoxMode({
       <div className="mt-4 rounded-2xl panel p-4">
         <div className={DATE_CARD_CLASS}>
           <CardNumber state={state} show={inBack || (isLocked && liveCardScored)} />
-          <div className={DATE_LINE_CLASS}>
+          <DateLine
+            numberDigits={String(topCardNumber(state)).length}
+            formats={dateLineFormats(
+              [state.date, ...state.stack, ...state.forwardStack],
+              dateFormat,
+              randomFormat,
+            )}
+          >
             {dateVisible ? fmtDate(date.y, date.m, date.d, date._fmt) : '—'}
-          </div>
+          </DateLine>
         </div>
         <WeekdayAnswer
           key={state.gridEpoch}

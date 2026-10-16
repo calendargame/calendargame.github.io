@@ -671,19 +671,15 @@ input,textarea{user-select:text;-webkit-user-select:text}
    keyboard the keyboard ring, also an outline, takes its place. tests/browser/notInEffect measures
    the text's contrast in all five themes. */
 /* ★ THE DATE LINE (Round 26, Q7) — the big date on every mode's card, ONE LINE AT ONE SIZE PER
-   SCREEN. Years past 10000 (the Julian-on range runs to 11582, and the Julian-off one includes
-   10000) made the widest written date — "September 10, 10000", 9.97em of this bold text in WebKit,
-   9.90em in Chromium (the lane measured every date) — longer than a 360- or 390-wide phone's card
-   at the full 1.875rem, so it took a second line and moved the answer buttons down for that one
-   date. The cure is a rule, not a measurement: the card is a size container, and the date is set at
-   1.875rem or at the card's width over 10.97em, whichever is smaller — the widest date a tenth wider
-   than WebKit sets it here (the lane's stand-in for an iPhone's wider system font, as
-   tests/browser/settingsFoot's), so it fits there too. The same size for every date on that
-   screen, never per date, and the line height stays 2.25rem whatever the size, so nothing round it
-   moves. On a standard 390×844 phone the date is drawn 4.9% smaller than before; on a 430-wide one,
-   unchanged. tests/browser/dateLine holds it to one line in every date format. */
-.date-card{container-type:inline-size}
-.date-line{font-size:min(1.875rem,100cqi / 10.97);line-height:2.25rem;white-space:nowrap}
+   CARD. 1.875rem is its full size, and the size it has wherever the widest date the card can show
+   fits at it. Where that date would not fit (five-digit years made "September 10, 10000" too long
+   for a narrow phone's card, by how much depending on the device's font), lib/dateLineFit sets the
+   line's size to the largest at which it does, measured in the device's own font — the same size
+   for every date on that card, never per date. The line height stays 2.25rem whatever the size, so
+   nothing round it moves. Never a fixed ratio of the card's width: that is one font's glyph widths
+   (the first cut, "the card's width over 10.97em", ran 24px out of the card in DejaVu Sans).
+   tests/browser/dateLine holds it in every date format, in three fonts. */
+.date-line{font-size:1.875rem;line-height:2.25rem;white-space:nowrap}
 .tray-dormant{background:transparent;border-color:var(--thin-bd)}
 .pill-dormant-on{background:color-mix(in oklab,var(--acc) 25%,transparent);color:var(--tx-100-80);outline:1px solid var(--acc);outline-offset:-1px;transition:background-color calc(.2s * var(--motion-scale))}
 /* THE ROW IN THE HAND — the Presets popup's row while it is being dragged by its grip

@@ -149,6 +149,40 @@ describe('Q# badge — Classic counts the player’s lifetime cards', () => {
     expect(statValue('Score')).toBe('471/501') // …and the box beside it says so
   })
 
+  // The corner is kept for as many digits as the count has now (components/CardNumber, DateLine; the
+  // owner's ruling): the number is drawn at its full size, always inside its room, and the room grows a
+  // digit only when the count does. (That the date never meets the number, in every font, is the
+  // browser lane's: tests/browser/dateLine.)
+  it('the corner is kept for the count’s own digits: a five-digit number at full size, in a five-digit room', () => {
+    useProgress.getState().setModeStats('classic', priorRecord(12344, 12000))
+    mountApp()
+    click('New')
+    missOneCardAndAdvance() // the 12,345th card
+    click('<')
+    expect(badge()).toBe('Q12345')
+    const leaf = Array.from(document.querySelectorAll('span')).find(
+      (e) => e.children.length === 0 && e.textContent === 'Q12345' && !isHidden(e),
+    )
+    expect(leaf.style.fontSize).toBe('')
+    const rooms = Array.from(document.querySelectorAll('span[aria-hidden]'))
+      .filter((e) => !isHidden(e) && /^Q0+\s/.test(e.textContent))
+      .map((e) => e.textContent.split(/\s/)[0])
+    expect(rooms).toEqual(['Q00000', 'Q00000']) // (the live card is the 12,346th: five digits)
+  })
+
+  it('a count of nine keeps a one-digit corner, and the tenth card gives it a second digit', () => {
+    mountApp()
+    click('New')
+    const room = () =>
+      Array.from(document.querySelectorAll('span[aria-hidden]'))
+        .find((e) => !isHidden(e) && /^Q0+\s/.test(e.textContent))
+        .textContent.split(/\s/)[0]
+    for (let i = 1; i < 9; i++) missOneCardAndAdvance()
+    expect(room()).toBe('Q0') // nine cards: Q9 at most
+    missOneCardAndAdvance()
+    expect(room()).toBe('Q00') // the tenth
+  })
+
   it('steps down one per card browsed, and back up on Forward', () => {
     useProgress.getState().setModeStats('classic', priorRecord(500, 471))
     mountApp()

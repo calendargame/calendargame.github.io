@@ -17,11 +17,9 @@ import {
   useSaveStatsOnRegen,
   useDateSettingsOnRegen,
 } from './modeHooks.js'
-import {
-  RESET_STATS_BTN_CLASS,
-  DATE_CARD_CLASS,
-  DATE_LINE_CLASS,
-} from '../components/controlClasses.js'
+import { RESET_STATS_BTN_CLASS, DATE_CARD_CLASS } from '../components/controlClasses.js'
+import { dateLineFormats } from '../lib/dateLineFit.js'
+import DateLine from '../components/DateLine.jsx'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
@@ -31,7 +29,7 @@ import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
-import { creditsLiveCard } from '../engine/gameReducer.js'
+import { creditsLiveCard, topCardNumber } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/overlayStack.js'
 
 // ============================================================
@@ -52,6 +50,7 @@ function ClassicMode({
   useJulian,
   saveStats,
   dateFormat,
+  randomFormat = false,
   dateDraw,
   inputStyle = 'buttons',
   dotRotation = 'standard',
@@ -199,7 +198,16 @@ function ClassicMode({
         <div className="mt-4 rounded-2xl panel p-4">
           <div className={DATE_CARD_CLASS}>
             <CardNumber state={state} show={state.backDepth > 0} />
-            <div className={DATE_LINE_CLASS}>{fmtDate(date.y, date.m, date.d, date._fmt)}</div>
+            <DateLine
+              numberDigits={String(topCardNumber(state)).length}
+              formats={dateLineFormats(
+                [state.date, ...state.stack, ...state.forwardStack],
+                dateFormat,
+                randomFormat,
+              )}
+            >
+              {fmtDate(date.y, date.m, date.d, date._fmt)}
+            </DateLine>
           </div>
           <WeekdayAnswer
             key={state.gridEpoch}

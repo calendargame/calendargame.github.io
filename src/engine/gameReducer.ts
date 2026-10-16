@@ -493,6 +493,12 @@ export function waitingDateMissing(state: GameState, useJulian: boolean): boolea
 // engine, so a mode with its own Score box (Deduction's Day/Month/Year each run their own) numbers
 // separately, which is exactly the rule "the badge follows the Score box it sits beside".
 export const cardNumber = (state: GameState): number => state.historyBase + state.stack.length + 1
+// …and the HIGHEST number the badge can show now: the live card's, wherever the player is browsing (the
+// cards browsed back past wait on the forward stack, the live one at its bottom). What the date line keeps
+// its corner for (components/DateLine): it gains a digit only as the count does - Q9 to Q10 - never
+// from one question to the next otherwise.
+export const topCardNumber = (state: GameState): number =>
+  state.historyBase + state.stack.length + state.forwardStack.length + 1
 
 // DID THIS CARD EARN ITS POINT? — the rule, in one place, because four callers need it and two of
 // them used to spell it out for themselves. "Earned" is NOT "the grid shows green": a Reveal, a Show

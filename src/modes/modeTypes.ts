@@ -21,8 +21,9 @@ export type GameEngine = ReturnType<typeof useGameEngine>
 // setting that is not in effect never reaches a screen at all, and changing it cannot reset,
 // regenerate, or re-file anything. Date Format as stored still comes, for what it is in effect for on
 // every page: the order of the codes in Deduction, and the format of a date that carries none of its
-// own. (Deduction draws its own puzzles, so it alone is also handed the in-effect leap chances and
-// Random Format — DedScreenProps.)
+// own — and Random Format as stored, for which formats the date card must have room for (and, in
+// Deduction, which draws its own puzzles, the format each is drawn in). (Deduction alone is also
+// handed the in-effect leap chances — DedScreenProps.)
 export interface ModeProps {
   visible: boolean
   minY: number
@@ -30,6 +31,9 @@ export interface ModeProps {
   useJulian: boolean
   saveStats: boolean
   dateFormat: FormatId
+  // Random Format as stored: whether a new date can come in any of the five formats (the date
+  // card's size is chosen for every format it can show — components/DateLine).
+  randomFormat: boolean
   dateDraw: string
   inputStyle?: InputStyle // day-of-week answer layout (buttons | dots); weekday modes only — Deduction ignores it
   dotRotation?: DotRotation // how far that dot layout is turned (standard | ccw45 | ccw90); read only when inputStyle is 'dots'
@@ -38,7 +42,6 @@ export interface ModeProps {
   onFreshChange?: (fresh: boolean) => void
 }
 export interface DedScreenProps extends ModeProps {
-  randomFormat: boolean
   leapChance: string // in effect: 'random' wherever it cannot apply
   janFebChance: string // in effect, likewise
 }

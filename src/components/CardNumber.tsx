@@ -14,9 +14,34 @@
 import type { GameState } from '../engine/gameReducer.js'
 import { cardNumber } from '../engine/gameReducer.js'
 
-const CARD_NUMBER_CLASS = 'absolute right-0 top-0 text-[11px] tabular-nums text-(--tx-300-60)'
+// The number's type, shared with its sizer so the room kept for it is set exactly as it is.
+const CARD_NUMBER_TYPE = 'text-[11px] tabular-nums'
+const CARD_NUMBER_CLASS = `absolute right-0 top-0 ${CARD_NUMBER_TYPE} text-(--tx-300-60)`
 
-const CardNumber = ({ state, show }: { state: GameState; show: boolean }) =>
-  show ? <span className={CARD_NUMBER_CLASS}>Q{cardNumber(state)}</span> : null
+// ★ THE CORNER IS KEPT FOR AS MANY DIGITS AS THE COUNT HAS NOW (the owner's ruling; components/DateLine
+// keeps the date out of it, by the same inset on both sides). The room is CardNumberSizer: "Q" and a run
+// of each digit `digits` long, one per line, invisible and of no height, in the number's own type — as wide
+// as the widest of them in the device's font, so as wide as any number of that many digits. `digits` is
+// the digit count of the HIGHEST number the badge can show now (gameReducer's topCardNumber), so the
+// number never needs more room than it has, and the date stays as large as it can be: it gives a little
+// only at the moment the count gains a digit (Q9 to Q10, Q99 to Q100), and never from one question to the
+// next otherwise. (Where the date would not reach the corner anyway - a card wider than the widest date
+// and its corner - keeping it costs the date nothing: it is drawn at full size, centred, either way.)
+const sizerText = (digits: number) =>
+  [...'0123456789'].map((d) => `Q${d.repeat(digits)}`).join('\n')
+
+export const CardNumberSizer = ({ digits }: { digits: number }) => (
+  <span
+    aria-hidden
+    className={`${CARD_NUMBER_TYPE} h-0 overflow-clip invisible whitespace-pre text-left`}
+  >
+    {sizerText(digits)}
+  </span>
+)
+
+const CardNumber = ({ state, show }: { state: GameState; show: boolean }) => {
+  if (!show) return null
+  return <span className={CARD_NUMBER_CLASS}>Q{cardNumber(state)}</span>
+}
 
 export default CardNumber
