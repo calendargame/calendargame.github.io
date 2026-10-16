@@ -29,6 +29,7 @@ import OverrideButton from '../components/OverrideButton.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
+import { saveModeStats } from '../store/screenPool.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/overlayStack.js'
@@ -100,10 +101,10 @@ function ClassicMode({
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
-  const setModeStats = useProgress((s) => s.setModeStats)
+  // Mirrored through store/screenPool, which writes it only into the copy this screen was drawn for.
   useEffect(() => {
-    setModeStats('classic', state.stats)
-  }, [state.stats, setModeStats])
+    saveModeStats(dataId, 'classic', state.stats)
+  }, [state.stats, dataId])
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
   // Hideable stats chrome (show/hide toggles + the "Enable and Reset Stats?" desync confirm + the
   // 6-box stats strip), shared with Deduction/Flash via useStatsHideToggles.

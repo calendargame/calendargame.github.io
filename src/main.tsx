@@ -1847,7 +1847,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // run a commit LATER, leaving one render in which the stores hold the new preset while the
       // screens still hold the old one; that render is harmless only for as long as no mode
       // screen's stat-mirror effect happens to re-fire in it, which is a dependency array's
-      // business and not a contract anyone signed.
+      // business and not a contract anyone signed. (Since Round 26 a mirror that did would be
+      // refused anyway — every screen write names the copy it was drawn for to store/screenPool —
+      // but the one-commit order is what keeps the screens from ever showing the wrong copy.)
       // ⚠ THE COMPARISON IS activeDataId AND NOT activeId — store/amnesic owns that expression, and
       // owning it there rather than spelling it out here is the point. It answers one question:
       // WHICH BYTES are underneath the always-mounted screens — which preset, and which copy of that

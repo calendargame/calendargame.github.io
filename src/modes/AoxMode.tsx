@@ -24,9 +24,9 @@
 // string anywhere in it — and the store field is `aoxBest`, untouched. So a player who had a Best
 // Average yesterday sees the same number under "Best Mean" today, with no migration and no version
 // bump. (Pinned by tests/moxRename.dom — a Best recorded under the old label is still found.)
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
-import { FLASH_MS, useButtonFlash, useMountedBestsId } from './modeHooks.js'
+import { FLASH_MS, useButtonFlash, useMountedBestsId, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import {
   NUM_INPUT_CLASS,
@@ -57,7 +57,8 @@ import { useUserDefaults, effectivePrefDefaults, normalizeAoxN } from '../store/
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard, questionIdAfterReset } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
-import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
+import { readSessionRound } from '../store/sessionRound.js'
+import { fileRoundBest, roundBests, parkRound, unparkRound } from '../store/screenPool.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/parkedEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
@@ -146,8 +147,11 @@ function AoxMode({
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
     setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
   // ★ THE BESTS COPY THIS SCREEN WAS MOUNTED ON, read once — see modes/modeHooks' useMountedBestsId
-  // for why a run is parked and restored ONLY against the Best records it was scored on.
+  // for why a run is parked and restored ONLY against the Best records it was scored on — and the
+  // STATS copy, which every write below names to store/screenPool, so a write from this screen can
+  // only ever land in the copy it was drawn for.
   const bestsId = useMountedBestsId()
+  const dataId = useMountedDataId()
   const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
   // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes, then
   // the date settings IN EFFECT (`dateDraw`: the format bucket, the three chances, the year range) and
@@ -254,8 +258,8 @@ function AoxMode({
   // AoX all-time bests (avg/median, config-keyed) persist across reloads (Stage D1): from the
   // progress store. Their ★ markers are not stored anywhere — each is DERIVED from the record's run id
   // (engine/roundId's isNewBest) — and the rollback ref below stays local.
-  const bests = useProgress((s) => s.aoxBest),
-    setBests = useProgress((s) => s.setAoxBest)
+  // Every write to them goes through store/screenPool's door, named with this screen's copy.
+  const bests = useProgress((s) => s.aoxBest)
   // ★ THE RUN ON SCREEN — its id, from Begin until Reset (null while there is none). A Best tagged
   // with it is a best this run set, which is the whole ★ rule (round 23). State, not a ref, because
   // the ★ renders from it. NEVER-REPEATING (engine/roundId's newRoundId), because the id is SAVED
@@ -337,7 +341,13 @@ function AoxMode({
   // all shared a line, so one comment covered everything; prettier splits them, and a line
   // directive only covers the line it sits on. The main.tsx split is a verbatim move, so these are repositioned
   // and annotated, never restructured. ▶ Queued for proper review as its own item.
-  useEffect(() => {
+  // ★ A LAYOUT EFFECT, AND THE PARK BELOW IS ONE TOO (Round 26, F1 — modes/BlitzMode's reconcile has
+  // the whole story): both run inside the commit the run ends in, so no tap can land between an ended
+  // run on screen and its filing and parking. A MoX run only ever ends on a tap today, whose effects
+  // React already ran in the same task — so this closes no gap that was reachable here, but it keeps
+  // the two round screens one design. And the phase flip below re-renders synchronously, so the
+  // "running with N credits and a Best already filed" commit is never one an event can see.
+  useLayoutEffect(() => {
     const completes = runPhase === 'running' && doneCount >= runN
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (completes) setRunPhase('done')
@@ -357,18 +367,16 @@ function AoxMode({
     // metric from that other run and an Undo gives it back, it goes back to THAT run's record — the
     // one saved record cannot hold both. (The park effect below re-parks on every change this effect
     // reacts to, so the parked snapshot is always the current one.)
-    const floor = aoxBestWithoutRun(
-      preRunBestRef.current,
-      useProgress.getState().aoxBest[run.bestKey],
-      runId,
-    )
+    const saved = roundBests(dataId)
+    if (!saved) return // drawn for a copy that is no longer live: nothing of it is read or written
+    const floor = aoxBestWithoutRun(preRunBestRef.current, saved.aoxBest[run.bestKey], runId)
     preRunBestRef.current = floor
     const next = reconcileAoxStanding(floor, S.good, runN, S.times, runId)
     // No ★ bookkeeping here: the ★ is read off the record's run ids, so a write that improves a metric
     // lights it and a write that restores the floor puts it out, with nothing to keep in step.
-    setBests((p) => fileBest(p, run.bestKey, next))
+    fileRoundBest(dataId, 'aoxBest', (p) => fileBest(p, run.bestKey, next))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runPhase, doneCount, runN, saveStats, S.good, S.times, runId, setBests])
+  }, [runPhase, doneCount, runN, saveStats, S.good, S.times, runId, dataId])
 
   // Round 21 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the bests copy
   // this screen was mounted on (`bestsId`), exactly as the effect above mirrors the run's Best to
@@ -383,9 +391,9 @@ function AoxMode({
   // in, effects run top-to-bottom, so the write below always sees the verdict.
   // `runId` and `run` are written only by begin() / reset(), so they are stable whenever a phase is
   // ended (they are deps only because they are state this effect reads).
-  useEffect(() => {
+  useLayoutEffect(() => {
     if ((runPhase === 'done' || runPhase === 'failed') && run)
-      writeSessionRound(bestsId, 'aox', {
+      parkRound(dataId, bestsId, 'aox', {
         engine: state,
         runPhase,
         revealedQ,
@@ -394,8 +402,8 @@ function AoxMode({
         preRunBest: preRunBestRef.current,
         recorded: recordedRef.current === true,
       } satisfies AoxRunSnapshot)
-    else discardSessionRound(bestsId, 'aox')
-  }, [runPhase, revealedQ, state, runId, run, bestsId])
+    else unparkRound(dataId, bestsId, 'aox')
+  }, [runPhase, revealedQ, state, runId, run, bestsId, dataId])
 
   // Settings reconcile now fires on the ⚙ popover CLOSE — the useSettingsCloseEffect is below,
   // after reset() is defined (a RUNNING or ENDED run resets, an idle run regenerates its hidden date).

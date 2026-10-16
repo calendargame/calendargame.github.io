@@ -33,6 +33,7 @@ import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
+import { saveModeStats } from '../store/screenPool.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard, overrideAdvances, regenReplaces } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/overlayStack.js'
@@ -146,10 +147,10 @@ function FlashMode({
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
-  const setModeStats = useProgress((s) => s.setModeStats)
+  // Mirrored through store/screenPool, which writes it only into the copy this screen was drawn for.
   useEffect(() => {
-    setModeStats('flash', state.stats)
-  }, [state.stats, setModeStats])
+    saveModeStats(dataId, 'flash', state.stats)
+  }, [state.stats, dataId])
   const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
 
   const resetFlashBar = () => {

@@ -41,6 +41,7 @@ import OverrideButton from '../components/OverrideButton.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
+import { saveModeStats } from '../store/screenPool.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
 import { parkedFlag } from '../engine/parkedHistory.js'
@@ -238,16 +239,16 @@ function DeductionMode({
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
-  const setModeStats = useProgress((s) => s.setModeStats)
+  // Mirrored through store/screenPool, which writes it only into the copy this screen was drawn for.
   useEffect(() => {
-    setModeStats('dedDay', dayEng.state.stats)
-  }, [dayEng.state.stats, setModeStats])
+    saveModeStats(dataId, 'dedDay', dayEng.state.stats)
+  }, [dayEng.state.stats, dataId])
   useEffect(() => {
-    setModeStats('dedMonth', monthEng.state.stats)
-  }, [monthEng.state.stats, setModeStats])
+    saveModeStats(dataId, 'dedMonth', monthEng.state.stats)
+  }, [monthEng.state.stats, dataId])
   useEffect(() => {
-    setModeStats('dedYear', yearEng.state.stats)
-  }, [yearEng.state.stats, setModeStats])
+    saveModeStats(dataId, 'dedYear', yearEng.state.stats)
+  }, [yearEng.state.stats, dataId])
   // One flash for the active grid (only one sub-mode visible at a time). setFlash is cleared
   // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
   const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse

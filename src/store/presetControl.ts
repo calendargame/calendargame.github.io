@@ -821,7 +821,9 @@ export function movePreset(id: number, delta: number): boolean {
  *     screens come back ALREADY holding the incoming preset. An effect keyed on activeId would
  *     leave one commit in which the stores hold the new preset while the screens still hold the
  *     old — safe only for as long as no mode screen's stat-mirror effect happens to re-fire in it,
- *     which is a dependency array's business and not a contract anybody signed.
+ *     which is a dependency array's business and not a contract anybody signed. (Since Round 26
+ *     such a write would be refused anyway: store/screenPool lets a screen write only to the copy
+ *     it was drawn for.)
  *   ⚠ WHAT main.tsx MUST **NOT** DO on a switch is the rest of fullReset. resetSettings /
  *     resetProgress / resetModePrefs would overwrite the preset you just opened with defaults — a
  *     switch that wipes its own destination. Only the discard half.

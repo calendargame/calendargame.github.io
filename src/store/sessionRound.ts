@@ -47,8 +47,9 @@
 //   • sessionStorage, so a full app close clears the lot (the browser does it; nothing here
 //     schedules a wipe) and a reload keeps it — the same lifetime store/amnesic and store/sessionMode
 //     use, and the owner's rule that a reload is the SAME session (store/browsingSession).
-//   • A manual Reset takes the round to idle, at which point the mode's mirror effect deletes the
-//     key (discardSessionRound). Full Reset clears the preset's rounds itself, both copies', BEFORE
+//   • A manual Reset takes the round to idle, at which point the mode's park effect deletes the
+//     key (store/screenPool's unparkRound — every screen's write and discard of a slot goes through
+//     that door, which refuses one named with a copy that is no longer live). Full Reset clears the preset's rounds itself, both copies', BEFORE
 //     its remount (src/main.tsx — the remounted screens would otherwise read the parked blob back),
 //     and discardSessionRounds does the same when a preset is deleted (store/presetControl's
 //     clearPresetStorage).
@@ -125,7 +126,7 @@ export const readSessionRound = <T>(dataId: string, mode: RoundMode): T | null =
   return v == null ? null : (v as T)
 }
 
-/** Park this (bests copy, mode)'s ended round. Called from the mode's mirror effect while it is ended. */
+/** Park this (bests copy, mode)'s ended round — for a screen, only through store/screenPool's parkRound. */
 export const writeSessionRound = (dataId: string, mode: RoundMode, snapshot: unknown): void => {
   const store = read()
   store[slot(dataId, mode)] = snapshot

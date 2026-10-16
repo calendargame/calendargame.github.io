@@ -130,6 +130,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Fixed: in How to Play, tapping section titles quickly one after another could leave the last one resting a little below the top bar, or with the start of its section hidden under it. It now comes to rest exactly where it would if you had waited between taps.',
       'Fixed: stepping back with Shift+Tab onto something hidden under the top bar jumped the page away from it, leaving it partway down the screen, and in How to Play near the start of the guide all the way to the top. It now comes to rest right under the bar, on every screen.',
       "Fixed: in How to Play, a section title docked under the top bar had no top edge, because its section's border had scrolled away behind the bar. The border now runs along the title's top, flush against the bar.",
+      "Fixed: a Blitz round that ran out of time at the very moment you changed Amnesic, switched preset, or pressed Full Reset could have its result saved in the wrong place: a guest's round as one of your own bests, one preset's best in another preset, or a best back after Full Reset. A round's result now always goes with the preset and Amnesic setting it was played under.",
     ],
   },
   {

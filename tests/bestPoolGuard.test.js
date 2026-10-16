@@ -26,7 +26,7 @@ const SUBSCRIBED = new RegExp(`useProgress\\(\\(s\\) => s\\.${MAPS}\\)`)
 const FLOORS = {
   'modes/AoxMode.tsx': [
     // the reconcile's floor: the run's own key's record as it stands, less this run
-    'useProgress.getState().aoxBest[run.bestKey],',
+    'const floor = aoxBestWithoutRun(preRunBestRef.current, saved.aoxBest[run.bestKey], runId)',
     // Begin's snapshot of the record the run will rebuild from
     'preRunBestRef.current = bests[bestKey] // the floor its Best is rebuilt from',
   ],

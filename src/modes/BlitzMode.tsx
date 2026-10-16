@@ -4,7 +4,7 @@
 // props, so nothing about its behaviour changes by living here.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
-import { useButtonFlash, useMountedBestsId } from './modeHooks.js'
+import { useButtonFlash, useMountedBestsId, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS, DATE_CARD_CLASS, DATE_LINE_CLASS } from '../components/controlClasses.js'
 import {
@@ -48,7 +48,8 @@ import {
   showCodesPenalizes,
 } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
-import { readSessionRound, writeSessionRound, discardSessionRound } from '../store/sessionRound.js'
+import { readSessionRound } from '../store/sessionRound.js'
+import { fileRoundBest, roundBests, parkRound, unparkRound } from '../store/screenPool.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/parkedEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
@@ -182,8 +183,11 @@ function BlitzMode({
   const timingOff = useModePrefs((s) => s.blitzTimingOff),
     setTimingOff = useModePrefs((s) => s.setBlitzTimingOff) // persisted; VISUAL-ONLY — blanks the timing trio, the engine clock never stops (no arm/reset)
   // ★ THE BESTS COPY THIS SCREEN WAS MOUNTED ON, read once — every parked-round read, write and
-  // discard below uses it (modes/modeHooks' useMountedBestsId argues why).
+  // discard below uses it (modes/modeHooks' useMountedBestsId argues why) — and the STATS copy, which
+  // every one of those writes names to store/screenPool, so a write from this screen can only ever
+  // land in the copy it was drawn for.
   const bestsId = useMountedBestsId()
+  const dataId = useMountedDataId()
   const blitzSec = useModePrefs((s) => s.blitzSec),
     setBlitzSec = useModePrefs((s) => s.setBlitzSec) // persisted (mode-prefs store)
   const qSec = useModePrefs((s) => s.blitzQSec),
@@ -280,12 +284,10 @@ function BlitzMode({
   // (blitzBest), per-Q sudden death (suddenBest), and per-Q + Allow Mistakes (suddenAmBest).
   // Their ★ markers are not stored anywhere: each is DERIVED from the record's own round id (see
   // `roundId` below and engine/roundId's isNewBest).
-  const blitzBest = useProgress((s) => s.blitzBest),
-    setBlitzBest = useProgress((s) => s.setBlitzBest)
-  const suddenBest = useProgress((s) => s.suddenBest),
-    setSuddenBest = useProgress((s) => s.setSuddenBest)
-  const suddenAmBest = useProgress((s) => s.suddenAmBest),
-    setSuddenAmBest = useProgress((s) => s.setSuddenAmBest)
+  // Every write to them goes through store/screenPool's door, named with this screen's copy.
+  const blitzBest = useProgress((s) => s.blitzBest)
+  const suddenBest = useProgress((s) => s.suddenBest)
+  const suddenAmBest = useProgress((s) => s.suddenAmBest)
   // ★ THE ROUND ON SCREEN — its id, from Begin until Reset (null while there is none). Every Best field
   // this round sets is tagged with it (the reconcile below), and a Best marked with it IS "a best the
   // round on screen set", which is the whole of the ★ rule (engine/roundId's isNewBest; round 23
@@ -498,7 +500,9 @@ function BlitzMode({
   // sub-modes' refs are stamped unconditionally — the idle one's accumulator is reset by armClock
   // (Begin / a fresh question clock / a resume / an Undo) before its clock ever reads it; the
   // null-guards make the fold a no-op if the round was torn down mid-pause (stopRound nulls them).
-  useEffect(() => {
+  // A LAYOUT effect, for the park's sake: the park (below) relies on this cleanup moving a 'toggle'
+  // end's stamp before its own body runs, which holds only while the two share a phase.
+  useLayoutEffect(() => {
     if (!clockPaused) return
     const at = performance.now()
     blitzPausedAtRef.current = at
@@ -622,18 +626,24 @@ function BlitzMode({
     // Only a round that COUNTS (recordedRef) ever saved anything to take back: a practice round
     // writes no Best, in either direction. What is taken back is THIS round's part of the record,
     // and nothing anyone else has put there since (roundFloor).
-    if (recordedRef.current) {
+    // (Through store/screenPool: a press on a screen drawn for a copy that is no longer live takes
+    // nothing back from the one that is — that screen is about to be remounted anyway.)
+    const saved = recordedRef.current ? roundBests(dataId) : null
+    if (saved) {
       const snap = (prevRoundBestRef.current = roundFloor(
         prevRoundBestRef.current,
-        useProgress.getState(),
+        saved,
         perQ,
         allowMistakes,
         roundId,
       ))
-      if (!perQ) setBlitzBest((prev) => fileBest(prev, snap.blitzBk, snap.blitz))
+      if (!perQ)
+        fileRoundBest(dataId, 'blitzBest', (prev) => fileBest(prev, snap.blitzBk, snap.blitz))
       else if (allowMistakes)
-        setSuddenAmBest((prev) => fileBest(prev, snap.suddenBk, snap.suddenAm))
-      else setSuddenBest((prev) => fileBest(prev, snap.suddenBk, snap.sudden))
+        fileRoundBest(dataId, 'suddenAmBest', (prev) =>
+          fileBest(prev, snap.suddenBk, snap.suddenAm),
+        )
+      else fileRoundBest(dataId, 'suddenBest', (prev) => fileBest(prev, snap.suddenBk, snap.sudden))
     }
     setActive(true)
     setTimerDone(false)
@@ -815,41 +825,39 @@ function BlitzMode({
   // does afterwards — and a recorded one keeps being reconciled whatever the setting does afterwards.
   // The verdict is taken here, ONCE, in the commit the round first ends in, from the Save Stats value
   // that commit rendered with; a round put back in play and ended again keeps the one it has.
-  useEffect(() => {
+  // ★ A LAYOUT EFFECT, AND THE PARK BELOW IS ONE TOO (Round 26, F1): both run INSIDE the commit the
+  // round ends in, so there is no moment in which an ended round is on screen and not yet filed and
+  // parked — and so no tap (an Amnesic change, a preset switch, Full Reset) can land between the two.
+  // As passive effects they ran in a later task when the round ended on its clock (a frame callback,
+  // not a tap), and a tap in that gap had already swapped the copy under them: a guest's score was
+  // filed as a permanent Best (tests/screenPool.gap.dom). Every write also names this screen's copy
+  // to store/screenPool, which refuses it once that copy is not the live one — whatever the timing.
+  useLayoutEffect(() => {
     if (!timerDone) return
     if (recordedRef.current === null) recordedRef.current = saveStats
     if (!recordedRef.current) return
+    const saved = roundBests(dataId)
+    if (!saved) return
     const pre = (prevRoundBestRef.current = roundFloor(
       prevRoundBestRef.current,
-      useProgress.getState(),
+      saved,
       perQ,
       allowMistakes,
       roundId,
     ))
     if (!perQ)
-      setBlitzBest((prev) =>
+      fileRoundBest(dataId, 'blitzBest', (prev) =>
         fileBest(prev, pre.blitzBk, reconcileBlitzBest(pre.blitz, S.good, S.best, roundId)),
       )
     else if (allowMistakes)
-      setSuddenAmBest((prev) =>
+      fileRoundBest(dataId, 'suddenAmBest', (prev) =>
         fileBest(prev, pre.suddenBk, reconcileBlitzBest(pre.suddenAm, S.good, S.best, roundId)),
       )
     else
-      setSuddenBest((prev) =>
+      fileRoundBest(dataId, 'suddenBest', (prev) =>
         fileBest(prev, pre.suddenBk, reconcileSuddenBest(pre.sudden, S.good, roundId)),
       )
-  }, [
-    timerDone,
-    saveStats,
-    S.good,
-    S.best,
-    perQ,
-    allowMistakes,
-    roundId,
-    setBlitzBest,
-    setSuddenBest,
-    setSuddenAmBest,
-  ])
+  }, [timerDone, saveStats, S.good, S.best, perQ, allowMistakes, roundId, dataId])
 
   // Round 21 — mirror an ENDED round to sessionStorage, keyed by the bests copy this screen was
   // mounted on (`bestsId`), exactly as the effect above mirrors the round's Best to store/progress. On
@@ -872,12 +880,14 @@ function BlitzMode({
   // without a re-park the blob kept the stamp from before the pause — so a preset switch after a
   // rotation charged the restored round for every second the overlay was up. The release runs as that
   // effect's CLEANUP, and React runs every cleanup of a commit before any effect body, so this body —
-  // re-run because `clockPaused` changed in the same commit — always parks the moved stamp.
-  useEffect(() => {
+  // re-run because `clockPaused` changed in the same commit — always parks the moved stamp. That holds
+  // only while the two share a PHASE: both are layout effects (the reconcile above says why this one
+  // is), so the pause's cleanup still runs before this body.
+  useLayoutEffect(() => {
     // (`endKind` is set by the same call that sets `timerDone` — settleEnded — so the two tests are
     // one fact; naming both is what lets the snapshot's `endKind` be the plain type.)
     if (timerDone && endKind)
-      writeSessionRound(bestsId, 'blitz', {
+      parkRound(dataId, bestsId, 'blitz', {
         engine: state,
         timerDone,
         showTimerDate,
@@ -894,8 +904,8 @@ function BlitzMode({
         // has already run in the commit that first ended the round.
         recorded: recordedRef.current === true,
       } satisfies BlitzRoundSnapshot)
-    else discardSessionRound(bestsId, 'blitz')
-  }, [timerDone, active, showTimerDate, state, endKind, clockPaused, roundId, bestsId])
+    else unparkRound(dataId, bestsId, 'blitz')
+  }, [timerDone, active, showTimerDate, state, endKind, clockPaused, roundId, bestsId, dataId])
 
   // Both toggles are bare idle-gated flips — fully independent since Per Question gained Allow Mistakes (the old auto-off
   // coupling died with the sudden-death-only per-Q). The idle lock (also mirrored by the
