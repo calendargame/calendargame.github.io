@@ -115,7 +115,8 @@
 //     the finger, so the release point is still on it), and was then pressed here as a "moved"
 //     touch. A regression of this rule: before it, such a release was left to a click iOS never
 //     sent. So the controller watches for itself: any scroll, during the gesture, of something that
-//     holds the pressed control (the page included) marks the touch as a scroll (onScroll) — and a
+//     holds the pressed control (the page included) — one that MOVED it since the press, not merely
+//     one reported since (onScroll's ⚠) — marks the touch as a scroll (onScroll) — and a
 //     scroll presses nothing on release, neither the control it began on nor, in a list, another
 //     option under the finger, and draws no ring while it lasts. One rule for every control inside
 //     anything that scrolls: the ⚙ menu, How to Play, Manage Presets' list, a dropdown's list.
@@ -127,7 +128,7 @@
 //     sliders. Those keep the browser's behaviour.
 //
 // TESTABILITY: gestureTarget, controlOf, resolveRelease, resolveTriggerRelease, nextHilite, menuFor,
-// pressedHere, withholdsSecondTap, canStartScroll, bandDirection, and scrollDelta are pure (or layout-free DOM reads) and unit-tested, as are the pointer
+// pressedHere, withholdsSecondTap, canStartScroll, scrollPlaces, movedSince, bandDirection, and scrollDelta are pure (or layout-free DOM reads) and unit-tested, as are the pointer
 // latch, click suppression, and the touch rules above via synthetic events; the browser lane
 // (tests/browser/touchPress.browser.ts) drives them in Chromium and WebKit. What only the phone can show
 // — what iOS sends after a long press, whether a cancelled touchstart keeps its pointer events — was
@@ -329,6 +330,29 @@ export const scrollDelta = (dtMs: number, distFromEdge: number): number =>
   Math.min(1, Math.max(0, (EDGE - distFromEdge) / EDGE)) *
   (Math.min(Math.max(dtMs, 0), DT_CLAMP_MS) / 1000)
 
+// WHERE THE BOXES HOLDING A PRESSED CONTROL STOOD WHEN IT WAS PRESSED (onScroll's ⚠): every
+// ancestor of `el` (any of them may be a scroller; one that is not reads 0, 0), and the document's
+// scrolling element, which a scroll of the page is reported against. Read once, at the press.
+export type ScrollPlace = { box: Element; top: number; left: number }
+const pageScroller = () => document.scrollingElement ?? document.documentElement
+export function scrollPlaces(el: Element): ScrollPlace[] {
+  const places: ScrollPlace[] = []
+  for (let box = el.parentElement; box; box = box.parentElement)
+    places.push({ box, top: box.scrollTop, left: box.scrollLeft })
+  const page = pageScroller()
+  if (!places.some((p) => p.box === page))
+    places.push({ box: page, top: page.scrollTop, left: page.scrollLeft })
+  return places
+}
+// Whether the box a scroll event names (`target`: an element, or the document for the page) now
+// stands somewhere other than it did at the press. A box with no place recorded — it did not hold
+// the control when it was pressed — counts as moved, as every reported scroll did before.
+export function movedSince(places: readonly ScrollPlace[], target: Node): boolean {
+  const box = target === document ? pageScroller() : target
+  const at = places.find((p) => p.box === box)
+  return !at || !(box instanceof Element) || box.scrollTop !== at.top || box.scrollLeft !== at.left
+}
+
 // Install the controller on `document`. Returns a cleanup that removes every listener. Call once (an App
 // effect). Safe to call where `document` exists; a no-op-ish guard keeps it import-safe in non-DOM envs.
 export function installPointerGestures(): () => void {
@@ -351,8 +375,10 @@ export function installPointerGestures(): () => void {
   let onText = false
   let withheld = false
   // Whether something holding the pressed control has scrolled since the press (onScroll): then the
-  // gesture is a scroll, and presses nothing.
+  // gesture is a scroll, and presses nothing. `heldAt` is where each box holding the control stood
+  // when it was pressed (scrollPlaces), which is what "since the press" is measured against.
   let scrolled = false
+  let heldAt: ScrollPlace[] = []
   // …and across touches: when the last TAP ended (a touch the browser did not take for a scroll), whether
   // the touch now down has been taken for one, a touchstart withheld before its pointerdown arrived
   // (no engine checked orders them that way, but the rule must not depend on it), and whether the
@@ -451,6 +477,7 @@ export function installPointerGestures(): () => void {
     onText = false
     withheld = false
     scrolled = false
+    heldAt = []
   }
   // Suppress the start button's native click. On touch that click fires the ORIGINAL button regardless
   // of drift AND is DELAYED/async after release (a long press makes the browser "commit" to the pressed
@@ -526,6 +553,7 @@ export function installPointerGestures(): () => void {
     lastY = downY = e.clientY
     downAt = performance.now()
     onText = !!target?.closest(TEXT_SELECTOR)
+    heldAt = scrollPlaces(el)
     withheld = withheldEarly
     withheldEarly = false
     // Deliberately NO hilite on press: in a group the ring appears only after the pointer LEAVES the
@@ -681,10 +709,19 @@ export function installPointerGestures(): () => void {
   // which every scroll in the document passes through. Only a pressed TRIGGER is exempt: its gesture
   // is a press-drag into its own list, which this controller scrolls itself (autoScroll), and the
   // list does not hold the trigger anyway.
+  // ⚠ A SCROLL EVENT IS NOT A SCROLL. The browser reports a scroll at the next frame it draws, not
+  // when the box moved — so a scroll that ENDED BEFORE the press (a wheel turn, a programmatic
+  // scrollIntoView, the guide's own scroll back) can be reported after the pointerdown, and was read
+  // as the press scrolling: the tap that followed it was swallowed. (Found as a flaky browser-lane
+  // test, every time a How to Play header was scrolled into view and pressed in the same frame on a
+  // loaded machine; a person scrolling and then tapping at once can meet the same thing.) So the
+  // event only says WHERE TO LOOK: the gesture is a scroll when the box it names now stands
+  // somewhere other than where it stood at the press (movedSince).
   const onScroll = (e: Event) => {
     if (!startEl || trigger || scrolled) return
     const scroller = e.target
     if (!(scroller instanceof Node) || !scroller.contains(startEl)) return
+    if (!movedSince(heldAt, scroller)) return
     scrolled = true
     setHilite(null)
   }

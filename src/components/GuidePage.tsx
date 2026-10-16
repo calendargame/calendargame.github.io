@@ -1326,8 +1326,9 @@ export default function GuidePage({
             like a tap, and so does sliding off a button and back onto it before you lift. Only a
             press that turns into a scroll does nothing — wherever the button is, and however your
             finger ends up back on it: a flick that starts on a button in the ⚙ menu, a list, or a
-            long page moves that part and presses nothing. The dimmed area around a popup works the
-            same way: hold it as long as you like, and the popup still closes when you lift.
+            long page moves that part and presses nothing. A scroll that had already stopped when
+            you pressed doesn&apos;t count: that press works. The dimmed area around a popup works
+            the same way: hold it as long as you like, and the popup still closes when you lift.
           </li>
           <li>
             On an iPhone, a quick double tap and hold doesn&apos;t bring up the magnifier on a

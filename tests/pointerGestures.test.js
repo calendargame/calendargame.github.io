@@ -20,6 +20,8 @@ import {
   pressedHere,
   withholdsSecondTap,
   canStartScroll,
+  scrollPlaces,
+  movedSince,
   EDGE,
   MAX_SPEED,
   TAP_MS,
@@ -626,6 +628,33 @@ describe('pointerGestures controller — pointer latch + click suppression', () 
 // or moved press that lifts on its button brings pointerup + touchend and NO click), and the second tap
 // of a double tap is withheld at its touchstart (the text magnifier). The browser's click is simulated
 // with .click(); a touch event is a plain Event carrying `touches`, which is all the controller reads.
+describe('pointerGestures.scrollPlaces / movedSince — a scroll is a box that MOVED since the press', () => {
+  afterEach(() => (document.body.innerHTML = ''))
+  it('records every box holding the control, the page included, and says moved only when one has', () => {
+    const outer = domEl('div', {}, document.body)
+    const inner = domEl('div', {}, outer)
+    const button = domEl('button', {}, inner)
+    inner.scrollTop = 30
+    const places = scrollPlaces(button)
+    const page = document.scrollingElement ?? document.documentElement
+    for (const box of [inner, outer, document.body, page])
+      expect(places.some((p) => p.box === box)).toBe(true)
+    expect(movedSince(places, inner)).toBe(false) // reported, but where it was at the press
+    expect(movedSince(places, document)).toBe(false)
+    inner.scrollTop = 31
+    expect(movedSince(places, inner)).toBe(true)
+    inner.scrollLeft = 5
+    expect(movedSince(places, outer)).toBe(false)
+    page.scrollTop = 12
+    expect(movedSince(places, document)).toBe(true)
+    page.scrollTop = 0
+  })
+  it('a box with no place recorded counts as moved, as every reported scroll once did', () => {
+    const button = domEl('button', {}, document.body)
+    expect(movedSince(scrollPlaces(button), domEl('div', {}, document.body))).toBe(true)
+  })
+})
+
 describe('pointerGestures.pressedHere — a quick, still tap stays the browser’s; anything else is pressed here', () => {
   it('a quick still tap → the browser’s click', () => {
     expect(pressedHere(0, 0, false)).toBe(false)
@@ -1051,7 +1080,12 @@ describe('pointerGestures controller — touches that are not quick taps, and th
   // ★ A TOUCH THAT SCROLLED ANYTHING IS A SCROLL (Round 26, the owner's "Open in" report): iOS can
   // end a touch that scrolled an inner region in a plain pointerup on the control it started on —
   // no pointercancel — and that used to be pressed as a "moved" touch.
-  const scrolls = (node) => node.dispatchEvent(new Event('scroll'))
+  // A scroll MOVES its box and is then reported, as a browser does (onScroll's ⚠ is why both).
+  const scrolls = (node) => {
+    const box = node === document ? (document.scrollingElement ?? document.documentElement) : node
+    box.scrollTop += 40
+    node.dispatchEvent(new Event('scroll'))
+  }
   it('a touch during which the region holding its button scrolled presses nothing — and no click it brings either', () => {
     const region = domEl('div', {}, document.body)
     const pill = domEl('button', {}, region)
@@ -1063,6 +1097,24 @@ describe('pointerGestures controller — touches that are not quick taps, and th
     // …and the next real press is a press.
     press(pill, { held: 600 })
     expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  // ★ A SCROLL REPORTED DURING A PRESS IS NOT A SCROLL DURING IT (onScroll's ⚠): the browser reports
+  // a scroll at the next frame it draws, so one that ended before the press — here the region moved,
+  // and pressed, before its report arrives — can be heard mid-press. Found as a flaky lane test (How
+  // to Play's headers, scrolled into view and pressed in one frame on a loaded machine).
+  it('a scroll that happened BEFORE the press, reported during it, does not stop the press', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    region.scrollTop = 120 // scrolled into view…
+    press(pill, { held: 600, during: () => region.dispatchEvent(new Event('scroll')) }) // …reported late
+    expect(clicks).toHaveBeenCalledTimes(1)
+    // …and the same for the page.
+    const page = document.scrollingElement ?? document.documentElement
+    page.scrollTop = 80
+    press(pill, { held: 600, during: () => document.dispatchEvent(new Event('scroll')) })
+    expect(clicks).toHaveBeenCalledTimes(2)
   })
 
   it('…the page scrolling counts too; a scroll of something that does NOT hold the button does not', () => {
