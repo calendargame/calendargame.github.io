@@ -357,33 +357,41 @@ test.describe('real touches (Chromium)', () => {
     await expect(dim).toHaveCount(1)
   })
 
-  // ★ SCROLLING IS NEVER GIVEN UP FOR THE LENS (the owner's ruling, Round 26): a flick that starts
-  // 100 ms after a tap, on the text of something that scrolls, moves it — the touch is not withheld.
-  // `mark` picks the plain text to tap and flick from (no control, no link), in the scroller's
-  // visible middle with room to scroll under it.
-  async function flickAfterTap(page: Page, scroller: Locator) {
+  // ★ SCROLLING WINS EVERYWHERE (the owner's ruling, Round 26): a flick that starts 100 ms after a
+  // tap, inside something that scrolls, moves it — the touch is not withheld, on text or on a
+  // control. The place to tap and flick from is picked in the scroller's visible middle, with room
+  // to scroll under it: plain text, or (`onControl`) a button.
+  async function flickAfterTap(page: Page, scroller: Locator, onControl = false) {
     await page.evaluate(() => {
       const w = window as unknown as { touchStarts: boolean[] }
       w.touchStarts = []
       window.addEventListener('touchstart', (e) => w.touchStarts.push(e.defaultPrevented))
     })
-    await scroller.evaluate((el) => {
+    await scroller.evaluate((el, onControl) => {
       const view = el.getBoundingClientRect()
       const mid = (view.top + view.bottom) / 2
       const text = [...el.querySelectorAll('span, p, div, li')]
         .filter((t) => t.childElementCount === 0 && (t.textContent ?? '').trim().length > 3)
         .filter((t) => !t.closest('button, a, input, [role="button"]'))
-        .map((t) => ({ t, r: t.getBoundingClientRect() }))
-        .filter(({ r }) => r.height > 0 && r.top > view.top + 20 && r.bottom < view.bottom - 20)
-        .sort((a, b) => Math.abs(a.r.top - mid) - Math.abs(b.r.top - mid))[0]
-      text.t.setAttribute('data-flick-from', '')
-    })
+      const buttons = [...el.querySelectorAll('button')].filter(
+        (b) => b.getAttribute('aria-disabled') !== 'true',
+      )
+      const nearest = (els: Element[]) =>
+        els
+          .map((t) => ({ t, r: t.getBoundingClientRect() }))
+          .filter(({ r }) => r.height > 0 && r.top > view.top + 20 && r.bottom < view.bottom - 20)
+          .sort((a, b) => Math.abs(a.r.top - mid) - Math.abs(b.r.top - mid))[0].t
+      // The tap is always on plain text, so it presses nothing itself.
+      nearest(text).setAttribute('data-tap-at', '')
+      nearest(onControl ? buttons : text).setAttribute('data-flick-from', '')
+    }, onControl)
+    const tapAt = await centre(scroller.locator('[data-tap-at]'))
     const from = await centre(scroller.locator('[data-flick-from]'))
     const before = await scroller.evaluate((el) => el.scrollTop)
     const finger = await touchscreen(page)
-    await finger.down(from) // a tap…
+    await finger.down(tapAt) // a tap…
     await finger.up()
-    await hold(page, 100) // …and 100 ms later, a flick from the same place
+    await hold(page, 100) // …and 100 ms later, a flick
     await finger.down(from)
     for (let dy = 10; dy <= 200; dy += 10) await finger.move({ x: from.x, y: from.y - dy })
     await finger.up()
@@ -396,6 +404,26 @@ test.describe('real touches (Chromium)', () => {
     await openApp(page)
     const panel = await openSettings(page)
     await flickAfterTap(page, panel.locator('[data-drag-scroll]').first())
+  })
+
+  test('…and so does one that starts on a ⚙ pill, pressing nothing', async ({ page }) => {
+    await openApp(page)
+    const panel = await openSettings(page)
+    const scroller = panel.locator('[data-drag-scroll]').first()
+    const before = await panel.evaluate((p) =>
+      [...p.querySelectorAll('[aria-pressed], [aria-checked]')].map(
+        (b) => b.getAttribute('aria-pressed') ?? b.getAttribute('aria-checked'),
+      ),
+    )
+    await flickAfterTap(page, scroller, true)
+    expect(
+      await panel.evaluate((p) =>
+        [...p.querySelectorAll('[aria-pressed], [aria-checked]')].map(
+          (b) => b.getAttribute('aria-pressed') ?? b.getAttribute('aria-checked'),
+        ),
+      ),
+      'the flick pressed nothing',
+    ).toEqual(before)
   })
 
   test('a flick 100 ms after a tap scrolls How to Play', async ({ page }) => {

@@ -105,7 +105,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "In Blitz, the time slider and the countdown are now one. Press Begin and the slider becomes the round's countdown in the same place, with the time left where the slider's value was; Reset brings the slider back. The Blitz page is a little shorter for it.",
       "In Blitz, a small line under each best now gives that round's other number: its streak under Best Score, and its score under Best Streak — so even a narrow phone can tell whether one round set both. A best from before this update shows a dash there until you beat it.",
       'A button now works however long you hold it before lifting your finger, and when you slide off it and back on before lifting. On an iPhone, a press held for a couple of seconds, or moved about, used to do nothing. The same goes for the dimmed area around a popup: a long press there now closes the popup.',
-      'On an iPhone, a quick double tap and hold no longer brings up the magnifier on a button, or on the labels and numbers of a screen that does not scroll. Boxes you type in keep it.',
+      'On an iPhone, a quick double tap and hold no longer brings up the magnifier on a screen that does not scroll, on its buttons, labels, and numbers alike. Boxes you type in keep it.',
       'The figures at the top of a MoX or Blitz breakdown are in a new order: Solves, Fastest, Slowest, and Spread down the left, and Accuracy, Mean, and Median down the right.',
     ],
   },

@@ -84,21 +84,18 @@
 //     -webkit-touch-callout or cancelling selectstart/contextmenu — all tried on the device). What
 //     stopped it was cancelling the SECOND tap's touchstart, so that iOS never sees a double tap
 //     (onTouchStart): a touch that begins within DOUBLE_TAP_MS of a TAP ending (not of a scroll — a
-//     flick after a flick must still scroll). WHERE (withholdsSecondTap):
-//       – on a control this controller presses: a cancelled touchstart gets no click, so that touch
-//         is pressed here on release like any other;
-//       – on anything else — a label, a stat's number, a grid's gaps — ONLY where the touch could not
-//         start a scroll (canStartScroll: no scrollable box, the page included, holds it, or a
-//         touch-action:none box stands between). A cancelled touchstart cannot start a scroll, and
-//         SCROLLING IS NEVER GIVEN UP FOR THE LENS (the owner's ruling, Round 26): a flick on the
-//         ⚙ menu's text, a list, or a page long enough to scroll, straight after a tap, must move it.
-//         Nothing else was found that stops the lens without cancelling the touch, so over plain
-//         text in a scrolling area the lens can still appear — the accepted residual;
-//       – never on text a player can select or type in, or on a link (the browser's own gestures
-//         are the point there).
-//     ⚠ What remains of the cost: a flick that starts ON A CONTROL within DOUBLE_TAP_MS of a tap does
-//     not scroll — the control's touch is cancelled so its lens cannot come, as Q3 first shipped.
-//     A flick after a FLICK is never withheld.
+//     flick after a flick must still scroll). WHERE (withholdsSecondTap): ONLY WHERE THE TOUCH COULD
+//     NOT START A SCROLL (canStartScroll: no scrollable box holds it, the page included, or a
+//     touch-action:none box stands between — the answer grids) — there on everything, a control or
+//     a label or a stat's number alike; and never on text a player can select or type in, or on a
+//     link (the browser's own gestures are the point there). On a control a cancelled touchstart
+//     gets no click, so that touch is pressed here on release like any other.
+//     ★ SCROLLING WINS EVERYWHERE (the owner's ruling, Round 26). A cancelled touchstart cannot
+//     start a scroll, and nothing else was found that stops the lens without cancelling the touch —
+//     so inside anything that can scroll (the ⚙ menu, a list, a page too long for the screen) no
+//     second touch is held back, a button's included, and a flick there straight after a tap always
+//     moves it. The accepted residual: the lens can come up on a double tap and hold anywhere inside
+//     a scrolling area. A flick after a FLICK is never withheld either.
 //   • TEXT KEEPS EVERYTHING. A touch that begins on text a player can select or type in (TEXT_SELECTOR
 //     — the guide's titles and body, the Contact address, every box) is left wholly to the browser:
 //     its caret, its selection handles, and its lens are the point of it.
@@ -224,13 +221,13 @@ export function pressedHere(heldMs: number, movedPx: number, withheld: boolean):
 }
 
 // Does a touch landing on `target` have its touchstart cancelled when it is a double tap's second
-// half? (The header's ★, THE MAGNIFIER.) On a control this controller presses (so the cancelled
-// touch is still pressed, on release); on anything else that presses nothing — a label, a stat's
-// number, a grid's gaps — only where the touch could not start a scroll; never on text a player can
-// select or type in, which keeps its own lens, and never on a link, which the browser presses.
+// half? (The header's ★, THE MAGNIFIER.) Only where the touch could not start a scroll — scrolling
+// wins everywhere — and there on a control (its touch is still pressed, on release) and on what
+// presses nothing (a label, a stat's number, a grid's gaps) alike; never on text a player can select
+// or type in, which keeps its own lens, and never on a link, which the browser presses.
 export function withholdsSecondTap(target: Element | null): boolean {
   if (!(target instanceof Element) || target.closest(BROWSER_OWNED_SELECTOR)) return false
-  return !!controlOf(target, 'button') || !canStartScroll(target)
+  return !canStartScroll(target)
 }
 
 // Could a touch that starts on `target` start a scroll? Yes when a box around it can scroll — its

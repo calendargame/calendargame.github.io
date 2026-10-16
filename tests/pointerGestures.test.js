@@ -695,17 +695,19 @@ describe('pointerGestures.withholdsSecondTap — where a double tap’s second t
     Object.defineProperty(box, 'clientHeight', { value: shows })
     return box
   }
-  it('in a box that can scroll: a label is left alone, so a flick from it scrolls — a control is still held', () => {
+  it('in a box that can scroll nothing is held back — a label, a button, a popup’s dim — so a flick from it scrolls', () => {
     const box = scroller()
     const label = domEl('span', {}, domEl('div', {}, box))
     expect(canStartScroll(label)).toBe(true)
     expect(withholdsSecondTap(label)).toBe(false)
-    expect(withholdsSecondTap(domEl('button', {}, box))).toBe(true)
-    expect(withholdsSecondTap(domEl('span', {}, domEl('button', {}, box)))).toBe(true)
+    expect(withholdsSecondTap(domEl('button', {}, box))).toBe(false)
+    expect(withholdsSecondTap(domEl('span', {}, domEl('button', {}, box)))).toBe(false)
+    expect(withholdsSecondTap(domEl('div', { 'data-press-surface': '' }, box))).toBe(false)
   })
-  it('a box that cannot scroll (it shows all it holds, or its overflow does not scroll) holds the label back', () => {
+  it('a box that cannot scroll (it shows all it holds, or its overflow does not scroll) holds back a label and a button', () => {
     expect(withholdsSecondTap(domEl('span', {}, scroller('auto', 400, 400)))).toBe(true)
     expect(withholdsSecondTap(domEl('span', {}, scroller('hidden')))).toBe(true)
+    expect(withholdsSecondTap(domEl('button', {}, scroller('hidden')))).toBe(true)
   })
   it('a touch-action:none box between the touch and the scroller (an answer grid) cannot scroll: held', () => {
     const grid = domEl('div', { 'data-answer-grid': '', style: 'touch-action:none' }, scroller())
