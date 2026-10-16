@@ -15,7 +15,7 @@
 // entry has actually changed since this device last looked. The cases that discriminate are below,
 // and they matter because the pre-existing "lights BOTH" case passes either way: it stores no
 // signature, which is the migration branch, where the old behaviour is deliberately preserved.
-// Opening ⚙ Settings retires the gear's dot, and the first tap on the footer's Changelog link
+// Opening ⚙ Settings retires the gear's dot, and the first tap on the foot's Changelog link
 // (right of Check for updates) retires the link's. The popup follows the established settings-
 // modal contract (focus-on-open, capture Escape, close-with-settings, Android Back, the shared
 // Tab trap, the [data-settings-modal] marker). Round 8 split the one dot into the two forms
@@ -62,6 +62,8 @@ const openChangelog = () => act(() => fireEvent.click(changelogLink()))
 // on the host. That is the round 8 contract: the hosts mount DIFFERENT forms of the same dot.
 const gearMark = () => gear().querySelector('[data-update-dot]')
 const linkMark = () => changelogLink().querySelector('[data-update-dot]')
+const checkUpdatesLine = () =>
+  screen.getByRole('button', { name: 'Check for updates' }).parentElement
 const changelogTitle = () => screen.queryByText("What's new")
 const changelogDialog = () => modalCard("What's new")
 
@@ -624,38 +626,42 @@ describe('the Changelog popup (modal parity + content)', () => {
     expect(screen.queryByRole('button', { name: 'Reset Settings' })).toBeNull()
   })
 
-  it('the Changelog link sits RIGHT of Check for updates in the same footer row', () => {
+  it('the Changelog link ends the foot’s Storage used line, and Check for updates the line under it', () => {
     mountApp()
     openSettings()
-    const check = screen.getByRole('button', { name: 'Check for updates' })
+    // Round 26: the foot is three information lines. Changelog shares its line with Storage used
+    // and comes AFTER it — the line's right-hand end — and Check for updates ends the next line,
+    // beside the Last Updated stamp, so the two update links stand in one right-hand column.
     const link = changelogLink()
-    expect(check.parentElement).toBe(link.parentElement)
-    expect(check.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const storage = screen.getByRole('button', { name: /^Storage used/ })
+    const check = screen.getByRole('button', { name: 'Check for updates' })
+    expect(link.parentElement).toBe(storage.parentElement)
+    expect(link.parentElement.lastElementChild).toBe(link)
+    expect(check.parentElement).toBe(link.parentElement.nextElementSibling)
+    expect(check.parentElement.lastElementChild).toBe(check)
+    expect(check.parentElement.firstElementChild.textContent).toMatch(/^Last Updated:/)
   })
 
-  it('the metadata row anchors its ends and keeps the ring-gap floor — and no longer shares the saved-defaults row’s class', () => {
+  it('both two-item foot lines anchor their second item at the right and keep the ring-gap floor', () => {
     mountApp()
     openSettings()
-    // ⚠ THIS CASE REPLACES "both settings-footer link rows share one row class" (round 7). That
-    // one asserted the two classNames were EQUAL, on the argument that the View/Clear row and this
-    // one were the same kind of row. They are not any more: the saved-defaults pair became two
-    // plain pill buttons on a `flex gap-2` row (round 21), while this row spreads edge-to-edge
-    // as FOOTER_META_ROW_CLASS. Keeping the equality assertion would have meant a test that can
-    // only pass by re-uniting rows that must differ, so what is pinned now is what each row
-    // separately promises.
-    const metaRow = screen.getByRole('button', { name: 'Check for updates' }).parentElement
-    // justify-between is the whole anchoring rule in one token: the stamp hard left, Changelog hard
-    // right, and — because every footer link's px-1 is cancelled by an equal -mx-1, so the flex
-    // margin boxes ARE the text boxes — the slack split into two EQUAL visible gaps, which is
-    // "Check for updates sits exactly halfway between its two neighbours".
-    expect(metaRow.className).toContain('justify-between')
-    // gap-3 survives as the FLOOR under those two gaps (12px between margin boxes → ~4px between
-    // the press-drag rings the px-1 draws), never as their size. Its legacy gap-2 left them
-    // touching at 0px, which is the regression this half of the old case existed to catch.
-    expect(metaRow.className).toContain('gap-3')
-    // And the split is real: two different rows, two different classes.
-    const defaultsRow = screen.getByRole('button', { name: 'View Saved Defaults' }).parentElement
-    expect(defaultsRow).not.toBe(metaRow)
-    expect(defaultsRow.className).not.toBe(metaRow.className)
+    // ⚠ THIS CASE REPLACES "the metadata row anchors its ends" (round 21), which pinned one
+    // three-item row spread by justify-between. Round 26 made the foot two-item lines, and what
+    // each line promises is pinned here as classes; where they land is measured by
+    // tests/browser/settingsFoot.
+    for (const line of [changelogLink().parentElement, checkUpdatesLine()]) {
+      const classes = line.className.split(/\s+/)
+      // The right anchor: the LAST child's auto left margin, which also keeps a wrapped right item
+      // at the right (justify-between would drop a lone item to the left).
+      expect(classes).toContain('[&>:last-child]:ml-auto')
+      expect(classes).not.toContain('justify-between')
+      // gap-x-3 is the FLOOR between the two items (12px between margin boxes → ~4px between the
+      // press-drag rings the px-1 draws), never their size.
+      expect(classes).toContain('gap-x-3')
+      // A line that ever has to break does so at the foot's own line spacing (space-y-0.5), not at
+      // the 12px a single gap-3 gave it — the gap the owner saw on his iPhone in Round 25.
+      expect(classes).toContain('gap-y-0.5')
+      expect(classes).not.toContain('gap-3')
+    }
   })
 })

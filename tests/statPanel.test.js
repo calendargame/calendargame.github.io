@@ -28,10 +28,10 @@ describe('StatPanel.fitScale — value auto-fit', () => {
   })
 })
 
-// The GROUP version (Round-2): one shared scale for the ⚙ footer button trio — the tightest
+// The GROUP version (Round-2): one shared scale for the ⚙ panel's button trio — the tightest
 // caption governs so all three shrink together (the DOM wiring is pinned in
-// tests/footerFit.dom.test.jsx).
-describe('sharedFitScale — footer-button group auto-fit (Round-2)', () => {
+// tests/trioFit.dom.test.jsx).
+describe('sharedFitScale — the ⚙ trio’s group auto-fit (Round-2)', () => {
   it('returns the tightest pair ratio, capped at 1', () => {
     expect(sharedFitScale([120, 80, 40], [60, 60, 60])).toBe(0.5) // 120→60 governs
     expect(sharedFitScale([40, 50, 60], [60, 60, 60])).toBe(1) // everything already fits

@@ -32,8 +32,8 @@
 // dropped; it moved to the file that owns that kind of claim.
 //
 // NOT COVERED HERE, deliberately, and on the device checklist instead:
-//   • G12.5 — the three footer captions sharing one font size and never falling below the 11px
-//     floor. fitFooterBtns measures widths, every width in jsdom is 0, and the fit is a no-op.
+//   • G12.5 — the trio's three captions sharing one font size and never falling below the 11px
+//     floor. fitTrioCaptions measures widths, every width in jsdom is 0, and the fit is a no-op.
 //     Nothing below implies otherwise.
 //   • G11.7's "…including when the build change is detected while the panel is ALREADY open".
 //     The detection effect runs at mount and the panel mounts closed, so that ordering is
@@ -50,6 +50,8 @@ import {
   OPEN_ROUTE_NAMES,
   panelEl,
   panelScroller,
+  panelFooter,
+  perPresetButtonBlock,
   panelFades,
   footerShade,
   changelogLink,
@@ -61,6 +63,7 @@ import {
   tap,
 } from './helpers/settingsPanel.jsx'
 import { SCROLL_REGION_CLASS } from '../src/components/scrollRegion.js'
+import { FOOTER_META_ROW_CLASS } from '../src/components/controlClasses.js'
 import { BUILD_ID_META, UPDATE_CHECK_LABEL, UPDATE_RESULT_MS } from '../src/lib/updateCheck.js'
 import { writeBuildStamp } from '../src/lib/buildStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY } from '../src/changelog.js'
@@ -377,9 +380,9 @@ describe('G12 — the panel scrolls its list, not itself', () => {
     document.documentElement.style.removeProperty('--shade-ramp')
   })
 
-  it('keeps the list in a scroll region with the footer inside the card but outside it', () => {
+  it('keeps the list in a scroll region with the foot inside the card but outside it', () => {
     // WHAT "STICKY" ACTUALLY MEANS HERE, and it is containment rather than a CSS position: there
-    // is no position:sticky anywhere in the panel. The footer stays put because it simply is not
+    // is no position:sticky anywhere in the panel. The foot stays put because it simply is not
     // a thing the list can scroll — it is the card's own child, beside the scroller rather than
     // inside it. That is fully checkable without a layout engine, and it survives any
     // re-authoring of the markup the extraction performs.
@@ -387,20 +390,67 @@ describe('G12 — the panel scrolls its list, not itself', () => {
     openSettings()
     const card = panelEl()
     const list = panelScroller()
-    // The footer's controls are resolved GLOBALLY, off `screen` — not through the panel scope,
+    // The foot's controls are resolved GLOBALLY, off `screen` — not through the panel scope,
     // which would find them by querying inside the card and make the first assertion true by
-    // construction. Asked this way, a footer portaled out of the card fails the first and a footer
+    // construction. Asked this way, a foot portaled out of the card fails the first and a foot
     // that ended up inside the scroller fails the second, which is the whole point of asking.
-    const saveDefaults = screen.getByRole('button', { name: 'Save Defaults' })
-    expect(card.contains(saveDefaults)).toBe(true)
-    expect(list.contains(saveDefaults)).toBe(false)
-    expect(
-      list.compareDocumentPosition(saveDefaults) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    const foot = [
+      screen.getByRole('link', { name: 'dayoftheweekcalculation@gmail.com' }),
+      screen.getByRole('button', { name: /^Storage used/ }),
+      screen.getByRole('button', { name: /^Changelog/ }),
+      screen.getByRole('button', { name: 'Check for updates' }),
+    ]
+    for (const el of foot) {
+      expect(card.contains(el)).toBe(true)
+      expect(list.contains(el)).toBe(false)
+      expect(list.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    // ★ AND THE FOOT IS ONLY THE INFORMATION LINES (Round 26): the five buttons are IN the list,
+    // the first thing under the Per-preset heading, so they scroll with it.
+    const five = [
+      'Save Defaults',
+      'Reset Settings',
+      'Full Reset',
+      'View Saved Defaults',
+      'Clear Saved Defaults',
+    ].map((name) => screen.getByRole('button', { name }))
+    const block = perPresetButtonBlock()
+    for (const el of five) {
+      expect(list.contains(el)).toBe(true)
+      expect(block.contains(el)).toBe(true)
+    }
+    // Nothing else is in the block, and the foot holds no button of its own beyond its three links.
+    expect(block.querySelectorAll('button')).toHaveLength(5)
+    expect(panelFooter().querySelectorAll('button, a')).toHaveLength(foot.length)
     // And the list scrolls through the app's one shared scroll-region recipe rather than a local
     // copy of it — the recipe carries the scrollbar lane the fades below are measured against.
     // A published constant, not a Tailwind token: the app states this contract out loud.
     expect(list.className).toContain(SCROLL_REGION_CLASS)
+  })
+
+  // THE FOOT'S LINES, in reading order — Contact; Storage used with Changelog; Last Updated with
+  // Check for updates — which is also the keyboard's order through them. Where each pair actually
+  // lands on screen (one line, the right one at the right edge, equal gaps) is layout, and
+  // tests/browser/settingsFoot measures it.
+  it('reads Contact, then Storage used and Changelog, then Last Updated and Check for updates', () => {
+    mountApp()
+    openSettings()
+    const lines = [...panelFooter().children]
+    expect(lines.map((line) => line.textContent.trim().replace(/\s+/g, ' '))).toEqual([
+      'Contact: dayoftheweekcalculation@gmail.com',
+      expect.stringMatching(/^Storage used: .+Changelog$/),
+      expect.stringMatching(/^Last Updated: .+Check for updates$/),
+    ])
+    expect(lines[1].className).toBe(FOOTER_META_ROW_CLASS)
+    expect(lines[2].className).toBe(FOOTER_META_ROW_CLASS)
+    // Resolved by role and name, so the order asked about is the order a keyboard and a screen
+    // reader meet them in — not text the hidden width strut in Check for updates doubles.
+    expect([...panelFooter().querySelectorAll('button, a')]).toEqual([
+      screen.getByRole('link', { name: 'dayoftheweekcalculation@gmail.com' }),
+      screen.getByRole('button', { name: /^Storage used/ }),
+      changelogLink(),
+      screen.getByRole('button', { name: 'Check for updates' }),
+    ])
   })
 
   it('feathers exactly the edges that have content past them, and neither when it fits by a hair', () => {

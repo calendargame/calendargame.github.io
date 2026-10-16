@@ -5,17 +5,17 @@
 import type { ButtonState } from '../engine/answerButtons.js'
 
 // Reset-style button shared className. Used by Reset Stats (Classic/Deduction/Flash),
-// Round Reset (Blitz active), AoX Reset, and the Save-Defaults Clear. (The ⚙ footer's Reset
-// Settings / Full Reset pair uses the derived FOOTER_RESET_BTN_CLASS below.)
+// Round Reset (Blitz active), AoX Reset, and the Save-Defaults Clear. (The ⚙ panel's Reset
+// Settings / Full Reset pair uses the derived PANEL_RESET_BTN_CLASS below.)
 // border border-transparent completes the RENDERED height (round 8, the round-4 lesson):
 // a solid fill carries no visible border, but every control it is measured against does — the
-// grid neighbours Reveal / Override / ‹ › wear `border surface-button`, and the ⚙ footer's
+// grid neighbours Reveal / Override / ‹ › wear `border surface-button`, and the ⚙ panel's
 // View/Clear Saved Defaults pair wears `border surface-toggle`. A border counts toward rendered
 // height, so without it this button's own height sat 2px under its row's (masked so far only
 // because every host stretches its items).
 // ⚠ THE NEIGHBOUR NAMED HERE USED TO BE "the Save-Defaults Cancel beside Clear", and round 22 removed
 // every Cancel button in the app — so the EXAMPLE moved to a surviving `surface-toggle` pair while
-// the RULE did not move at all. It is still measured against real neighbours: the ⚙ footer's trio
+// the RULE did not move at all. It is still measured against real neighbours: the ⚙ panel's trio
 // (Save Defaults / Reset Settings / Full Reset share one row), and the mode screens' reset buttons
 // beside their bordered grid controls. The two places this class now stands ALONE in its row — a
 // ConfirmModal's confirm and the preset manager's Delete, both `w-full` since round 22 — keep the border
@@ -26,22 +26,24 @@ import type { ButtonState } from '../engine/answerButtons.js'
 // for the purple).
 export const RESET_BTN_CLASS =
   'px-3 py-2 rounded-xl bg-rose-600/90 text-white ring-on-fill border border-transparent text-sm font-medium'
-// Settings-footer variant (Round-3 font normalization, Round-4 one-height tier): the ⚙
-// popover's Reset Settings / Full Reset buttons rest at the popover control tier in BOTH
+// Settings-panel variant (Round-3 font normalization, Round-4 one-height tier): the ⚙
+// popover's Reset Settings / Full Reset buttons (the panel's pinned footer until Round 26 moved
+// them to head the Per-preset section — hence no longer FOOTER_RESET_BTN_CLASS) rest at the popover control tier in BOTH
 // font (text-xs) and height (py-1.5) — same button in every other way, so it's derived.
 // The tier's other controls (the On/Off switches and every PillTray housing — the only two
 // kinds the panel has, per THE PICKER RULE) all carry a 1px border, which this pair now
 // inherits from RESET_BTN_CLASS rather than appending.
 // The game-mode Reset buttons keep text-sm/py-2.
-export const FOOTER_RESET_BTN_CLASS = RESET_BTN_CLASS.replace('text-sm', 'text-xs').replace(
+export const PANEL_RESET_BTN_CLASS = RESET_BTN_CLASS.replace('text-sm', 'text-xs').replace(
   'py-2',
   'py-1.5',
 )
-// HOW A BUTTON SAYS "YOU CANNOT PRESS THIS" (round 15) — appended by the ⚙ footer's three
-// buttons (Save Defaults / Reset Settings / Full Reset) while the app is not offering them, and
-// ALWAYS alongside aria-disabled on the same element. The pair is the whole convention: the class
-// draws it, the attribute announces it, and the button's own handler guard is what actually makes
-// it inert. Three independent statements of one fact, deliberately — see the note at the footer.
+// HOW A BUTTON SAYS "YOU CANNOT PRESS THIS" (round 15) — appended by the ⚙ panel's trio
+// (Save Defaults / Reset Settings / Full Reset) and Clear Saved Defaults while the app is not
+// offering them, and ALWAYS alongside aria-disabled on the same element. The pair is the whole
+// convention: the class draws it, the attribute announces it, and the button's own handler guard is
+// what actually makes it inert. Three independent statements of one fact, deliberately — see the
+// note at the trio, in SettingsPanel's Per-preset section.
 //
 // ⚠ NO pointer-events-none, and its ABSENCE is the load-bearing part. These three carried
 // `opacity-60 pointer-events-none` until round 15 and nothing else: CSS-only withholding, which
@@ -54,7 +56,7 @@ export const FOOTER_RESET_BTN_CLASS = RESET_BTN_CLASS.replace('text-sm', 'text-x
 //
 // ⚠ AND IT IS WHY lib/pointerGestures NOW FILTERS aria-disabled EXPLICITLY (gestureTarget). Becoming
 // hit-testable made these three visible to the press-drag controller for the first time: a drag from
-// the ⚙ gear into the panel drew the drag-select ring on a greyed-out footer button that then did
+// the ⚙ gear into the panel drew the drag-select ring on a greyed-out trio button that then did
 // nothing on release. The invariant "a ring means a release will act" used to ride on
 // pointer-events-none too, so removing the block here means the gesture layer has to state it. If
 // you ever put pointer-events-none back on these, that filter stays — it is the honest rule and no
@@ -70,30 +72,38 @@ export const NOT_OFFERED_BTN_CLASS = 'opacity-60 cursor-not-allowed'
 // never changes colour or text now.
 export const RESET_STATS_BTN_CLASS =
   'w-full px-3 py-1.5 rounded-xl btn-solid border border-transparent text-sm font-medium'
-// ── THE ⚙ FOOTER'S METADATA ROW ─────────────────────────────────────────────────────────────
-// Round 7 once hoisted a single FOOTER_LINK_ROW_CLASS over this row AND the View/Clear
-// saved-defaults row, on the argument that they were "the same kind of row". That stopped being
-// true — the saved-defaults pair moved into the pinned button block — and round 21 finished
-// the divergence: those two are now plain equal-width PILL BUTTONS (the RESET_BTN_CLASS family,
-// see SettingsPanel), a simple `flex gap-2` row that needs no named token at all. So only this
-// one is left here, and it is a named token because it still carries an argument.
+// ── THE ⚙ FOOT'S TWO-ITEM LINES ─────────────────────────────────────────────────────────────
+// The pinned foot of the ⚙ panel is three information lines (Round 26): Contact; Storage used with
+// Changelog at the right; Last Updated with Check for updates at the right. The last two are this
+// token, and it is a named token because it carries an argument.
 //
-// ⚠ THE ~4px RING-CLEARANCE RULE: every footer text link wears `rounded-md px-1 -mx-1` — the
+// ⚠ THE ~4px RING-CLEARANCE RULE: every foot text link wears `rounded-md px-1 -mx-1` — the
 // padding gives the press-drag ring 4px of breathing room around the glyphs, and the equal
 // negative margin cancels it so the TEXT keeps its exact flow position. So a row's margin boxes
 // ARE its text boxes, and a 12px gap between them leaves 12 − 4 − 4 = 4px between the rings the
-// padding draws. gap-3 is that 12px.
+// padding draws. gap-x-3 is that 12px, and it is the FLOOR between the two items — the free space
+// only ever widens it.
 //
-// justify-between is what puts the stamp hard left and Changelog hard right, and because the three
-// margin boxes are the three text boxes it also splits the slack into two EQUAL text-to-text gaps
-// — which is precisely "Check for updates sits halfway between the facing edges of its neighbours"
-// (owner's call). gap-3 becomes the MINIMUM those two gaps can reach, so the ring clearance above
-// is a floor the free space only ever widens. items-center keeps the Last Updated caption
-// vertically aligned with its two button links; flex-wrap is the narrow-viewport fallback — at
-// normal widths the row stays one line, and on a line that DOES wrap justify-between spreads
-// whatever landed on it, which is the honest consequence of anchoring the ends rather than a
-// second rule.
-export const FOOTER_META_ROW_CLASS = 'flex items-center flex-wrap justify-between gap-3'
+// THE RIGHT ANCHOR is the last child's auto left margin (`[&>:last-child]:ml-auto`), written here
+// so the rule lives once and no item has to carry it: the first item sits hard left, the second
+// hard right, under each other from line to line, so the foot reads as a left column and a right
+// column. An auto margin rather than justify-between because of the one case the two differ in.
+//
+// ⚠ THE ONE CASE: A LINE TOO NARROW FOR ITS PAIR. At every phone size both lines hold their pair
+// on one line (tests/browser/settingsFoot sweeps it, with the text made a tenth wider to stand for
+// the iPhone's wider font), but a window narrower than any phone and as tall as one — an iPad's
+// 320px-wide Slide Over — cannot fit "Last Updated: …" beside "Check for updates" at the root size
+// that height gives. Dropping flex-wrap would make that line run out of the card;
+// wrapping is the honest answer, and three things keep it looking like the rest of the foot:
+//   • gap-y-0.5 — the wrapped line sits the foot's own line spacing (its space-y-0.5) below the
+//     first, not the 12px the column gap would give it. Round 25's foot wore a single gap-3, and
+//     on the owner's iPhone that put Changelog's wrapped line 12.7px down where every other line
+//     sat 2.1px apart — the defect this token was rewritten for.
+//   • the auto margin keeps a wrapped right item at the RIGHT, in the right column, where
+//     justify-between would have dropped a lone item to the left;
+//   • items-center keeps the stamp's caption level with its button on the line they share.
+export const FOOTER_META_ROW_CLASS =
+  'flex flex-wrap items-center gap-x-3 gap-y-0.5 [&>:last-child]:ml-auto'
 // Boxed numeric-input shared className (split into base + surface in round 7) — the app's
 // second shared input idiom beside SliderValueEditor: a bordered box with centered tabular
 // digits at the text-xs control tier. Used by the AoX run-length field (mode screen + the

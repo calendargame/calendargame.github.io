@@ -29,7 +29,7 @@
 //
 // ⚠ WHAT THIS FILE STILL CANNOT DO, so no group of the net may imply it does. jsdom has no layout
 // engine and no pointer engine. Three panel behaviours are therefore DEVICE CHECKS and nothing
-// here pretends otherwise: the footer's auto-fit (fitFooterBtns measures at width 0, so it is a
+// here pretends otherwise: the trio's caption auto-fit (fitTrioCaptions measures at width 0, so it is a
 // no-op in every test), the press-drag gestures as GESTURES (the geometry — hit-testing, the
 // edge-band auto-scroll, the feel), and whether the gear's onPointerDown + onClick pair
 // double-toggles on real touch hardware. What IS reachable here is the controller's DECISIONS —
@@ -291,7 +291,7 @@ export const pressKeyOn = (el, key, init = {}) => {
 // This is the app's press-drag menu gesture end to end, against the REAL controller
 // (installPointerGestures, mounted by App): pointerdown on the gear opens the panel, the finger
 // travels into it, and the release acts on whatever is under it — clicking a pill and asking the
-// panel to dismiss (data-drag-dismiss), clicking a footer control without dismissing
+// panel to dismiss (data-drag-dismiss), clicking a modal opener without dismissing
 // (data-drag-stay), or focusing a year box for typing (data-drag-focus). Which of the three
 // happens is the controller's decision, never this helper's; all this supplies is the hit-test
 // jsdom cannot perform.
@@ -406,7 +406,7 @@ const CLOSE_ROUTES = {
     tapModeMenu()
     tap(screen.getByRole('option', { name: mode }))
   },
-  // Full Reset — the footer button then its confirmation popup, which closes the panel as one of
+  // Full Reset — the panel's button then its confirmation popup, which closes the panel as one of
   // its many outcomes.
   fullReset: () => {
     tap(fullResetButton())
@@ -781,26 +781,28 @@ export function arrowPicker(name, key) {
   return pressKeyOn(document.activeElement, key)
 }
 
-// ── The footer ────────────────────────────────────────────────────────────────────────────────
+// ── The panel's buttons ───────────────────────────────────────────────────────────────────────
 
-// ANY control in the panel, by its accessible name — the three footer buttons (Save Defaults,
-// Reset Settings, Full Reset) and the footer's four text links (View Saved Defaults, Clear Saved
-// Defaults, Check for updates, Changelog) alike. They are all <button>, and one accessor covers
-// them because the only thing that differs is which tier of affordance they wear, which is paint.
+// ANY control in the panel, by its accessible name — the five buttons that head the Per-preset
+// section (Save Defaults, Reset Settings, Full Reset, View Saved Defaults, Clear Saved Defaults) and
+// the pinned foot's text links (Storage used, Check for updates, Changelog) alike. They are all
+// <button>, and one accessor covers them because the only thing that differs is which tier of
+// affordance they wear, which is paint. (It was `footerButton` while the five were the panel's
+// pinned footer, until Round 26 moved them into the scrolling page.)
 //
 // Scoped to the panel, so it can never accidentally resolve to a same-named button inside one of
 // the modals that portal OUT of the card — 'Save' and 'Close' exist in both places. A RegExp is
 // accepted because two of these controls RENAME themselves: Full Reset's caption swaps to
 // 'Confirm?' once armed, and Check for updates has four labels because the label is its state.
-export const footerButton = (name) => panel().getByRole('button', { name })
+export const panelButton = (name) => panel().getByRole('button', { name })
 
 // The Full Reset FOOTER BUTTON. Its caption is static now (round 21 replaced the two-tap arm —
 // which swapped it to "Confirm?" — with a ConfirmModal), so a plain name match is enough. The
 // popup's own confirm button is reached through confirmFullReset() / fullResetConfirmCard() below,
 // not through this.
-export const fullResetButton = () => footerButton('Full Reset')
+export const fullResetButton = () => panelButton('Full Reset')
 
-// THE FULL RESET CONFIRMATION POPUP (round 21) — the shared ConfirmModal the footer button now
+// THE FULL RESET CONFIRMATION POPUP (round 21) — the shared ConfirmModal the Full Reset button now
 // opens. Resolved by its published accessible name, like every other modal in the suite.
 export const FULL_RESET_CONFIRM_TITLE = 'Full Reset this preset?'
 export const fullResetConfirmCard = () =>
@@ -808,28 +810,28 @@ export const fullResetConfirmCard = () =>
 export const queryFullResetConfirmCard = () =>
   screen.queryByRole('dialog', { name: FULL_RESET_CONFIRM_TITLE })
 
-// FIRE FULL RESET END TO END — the footer button opens the ConfirmModal, the modal's own "Full
+// FIRE FULL RESET END TO END — the panel's button opens the ConfirmModal, the modal's own "Full
 // Reset" button confirms. Two real taps, like the old two-tap arm, but now they land on two
 // different controls: this is the user's whole gesture. The confirm button is resolved WITHIN the
-// dialog, so it never collides with the footer button of the same name.
+// dialog, so it never collides with the panel's button of the same name.
 export function fireFullReset() {
   tap(fullResetButton())
   tap(within(fullResetConfirmCard()).getByRole('button', { name: 'Full Reset' }))
 }
 
 // THE RESET SETTINGS CONFIRMATION POPUP (round 21) — Reset Settings had no confirmation before
-// this round; it is the shared ConfirmModal now, opened by the footer button.
+// this round; it is the shared ConfirmModal now, opened by the panel's button.
 export const RESET_SETTINGS_CONFIRM_TITLE = 'Reset Settings for this preset?'
 export const resetSettingsConfirmCard = () =>
   screen.getByRole('dialog', { name: RESET_SETTINGS_CONFIRM_TITLE })
 export const queryResetSettingsConfirmCard = () =>
   screen.queryByRole('dialog', { name: RESET_SETTINGS_CONFIRM_TITLE })
 
-// FIRE RESET SETTINGS END TO END — the footer button opens the ConfirmModal, its own "Reset
+// FIRE RESET SETTINGS END TO END — the panel's button opens the ConfirmModal, its own "Reset
 // Settings" button applies. Mirrors fireFullReset; use it wherever a test used to expect the
-// footer tap to apply immediately.
+// button's tap to apply immediately.
 export function fireResetSettings() {
-  tap(footerButton('Reset Settings'))
+  tap(panelButton('Reset Settings'))
   tap(within(resetSettingsConfirmCard()).getByRole('button', { name: 'Reset Settings' }))
 }
 
@@ -837,9 +839,9 @@ export function fireResetSettings() {
 // reason: its accessible name grows to 'Changelog, update' while its dot is lit (see updateDot
 // above), so an exact match goes blind in the state worth reading. Everything that reaches this
 // link — the dot reader, the modal opener — comes through here, so there is one definition.
-export const changelogLink = () => footerButton(/^Changelog/)
+export const changelogLink = () => panelButton(/^Changelog/)
 
-// Press a footer control. Deliberately usable on a control the app is NOT offering, and it stays
+// Press a panel button. Deliberately usable on a control the app is NOT offering, and it stays
 // usable BY DESIGN across two rounds of changing how the app withholds these three. The dim has
 // never been enforced by jsdom — first because it was pure CSS, now because these three withhold
 // with `aria-disabled`, which is an announcement and not a browser-level block. Either way a
@@ -848,20 +850,20 @@ export const changelogLink = () => footerButton(/^Changelog/)
 // ⚠ AND THAT QUESTION IS THE REASON THE APP DOES NOT USE A REAL `disabled`: jsdom refuses to
 // dispatch activation on one, so the guards would become unaskable. All three carry a guard now
 // (round 14 added the two that were missing); this helper is how the net proves it.
-export const tapFooter = (name) => tap(footerButton(name))
+export const tapPanelButton = (name) => tap(panelButton(name))
 
 // THE FOUR OFFERS, in one read — the question G6 asks nine different ways and G5 asks about a
 // window where the four DISAGREE.
 //
 // ⚠ THE GEAR IS READ FROM ITS NAME, not from its violet bar, and that is required rather than
-// convenient: the bar is drawn only while the panel is CLOSED, and the three footer buttons exist
+// convenient: the bar is drawn only while the panel is CLOSED, and the trio's buttons exist
 // only while it is OPEN, so no single moment shows both. The accessible name carries the same flag
 // in both states. The exact composition of that name is gearIndicator()'s subject, not this one's.
 export function offers() {
   return {
     gear: /\bmodified\b/.test(gearIndicator().name ?? ''),
-    saveDefaults: isOffered(footerButton('Save Defaults')),
-    resetSettings: isOffered(footerButton('Reset Settings')),
+    saveDefaults: isOffered(panelButton('Save Defaults')),
+    resetSettings: isOffered(panelButton('Reset Settings')),
     fullReset: isOffered(fullResetButton()),
   }
 }
@@ -877,8 +879,8 @@ export function offers() {
 // Round 15 chose aria-disabled over a real `disabled` so a keyboard user can still REACH the button and
 // be told why it does nothing. A `disabled` would report tabStop false here, which is why the facet
 // is in the tuple: it is the one that tells the two spellings apart.
-export function footerOfferState(name) {
-  const el = name === 'Full Reset' ? fullResetButton() : footerButton(name)
+export function offerState(name) {
+  const el = name === 'Full Reset' ? fullResetButton() : panelButton(name)
   return {
     offered: isOffered(el),
     dimmed: isDimmed(el),
@@ -887,11 +889,11 @@ export function footerOfferState(name) {
   }
 }
 
-// The three footer captions in left-to-right order — what the row READS. All three are static text
+// The trio's three captions in left-to-right order — what the row READS. All three are static text
 // now (round 21 froze the last one — "Full Reset" no longer swaps to "Confirm?").
-export const footerCaptions = () => [
-  footerButton('Save Defaults').textContent.trim(),
-  footerButton('Reset Settings').textContent.trim(),
+export const trioCaptions = () => [
+  panelButton('Save Defaults').textContent.trim(),
+  panelButton('Reset Settings').textContent.trim(),
   fullResetButton().textContent.trim(),
 ]
 
@@ -917,6 +919,17 @@ export function panelFooter() {
   const el = panelEl()?.querySelector('.popover-sticky-footer')
   if (!el) throw new Error('panelFooter(): the panel is not open, or its sticky footer is gone')
   return el
+}
+
+// THE PER-PRESET SECTION'S FIVE BUTTONS, as the block they stand in (Round 26: Save Defaults, Reset
+// Settings, Full Reset, View Saved Defaults, and Clear Saved Defaults moved out of the pinned foot to
+// be the FIRST thing under the "Per-preset" heading, in the scrolling page). Resolved from the
+// HEADING, never from a button, so "the buttons are in it" is a claim that can come back false.
+export function perPresetButtonBlock() {
+  const heading = within(panelScroller()).getByText('Per-preset', { exact: true })
+  const block = heading.nextElementSibling
+  if (!block) throw new Error('perPresetButtonBlock(): nothing follows the Per-preset heading')
+  return block
 }
 
 // How strongly the footer says "there is more list above me" — the continuous 0…1 the edge hook
@@ -1113,7 +1126,7 @@ export function panelValues() {
 // cannot say whether it did.
 export const documentTheme = () => document.documentElement.getAttribute('data-theme')
 
-// The footer's build stamp, as the user reads it. Its date follows the Date Format setting through
+// The pinned foot's build stamp, as the user reads it. Its date follows the Date Format setting through
 // the numeric-coercing recipe, so a WRITTEN format still renders it numerically — which is the
 // assertion, and it needs the whole string.
 export const lastUpdatedText = () =>
@@ -1127,7 +1140,7 @@ export const lastUpdatedText = () =>
 // LABEL IS THE STATE, so an accessor tied to the resting name would lose the control exactly when
 // there is something to observe.
 export const checkUpdatesControl = () =>
-  footerButton(/^(Check for updates|Checking…|Up to date|No connection)$/)
+  panelButton(/^(Check for updates|Checking…|Up to date|No connection)$/)
 
 // The three things one variable drives, read together because they are only correct together:
 //   label      — what it says, which IS the state.
@@ -1173,7 +1186,7 @@ export function checkUpdatesState() {
 // and tests/presetManager.dom is where those live.
 //
 // ⚠ `fullReset` and `resetSettings` (round 21) are the shared ConfirmModal, opened by their
-// footer buttons. Like `save`, they open only while `settingsModified` — so any sweep over
+// Per-preset buttons. Like `save`, they open only while `settingsModified` — so any sweep over
 // MODAL_KEYS that already arranges a divergence for `save` (every one does, via makeSaveable())
 // reaches them too. Their `openModal` only OPENS the popup; the reset itself needs the modal's own
 // confirm button (fireFullReset / the dedicated cases in settingsPanel.defaults).
@@ -1217,23 +1230,22 @@ export function modalScrim(key) {
   return scrim
 }
 
-// The ⚙ panel's Presets section — its one control, at the HEAD of the card rather than in the
-// footer with the other four modal openers. Resolved by its accessible name and scoped to the
-// panel, which is the same resolution footerButton makes; it is a separate export only because
-// calling a button in the first section a "footer" button would be a lie the next reader has to
-// unpick. (Why the section sits first at all is argued in components/SettingsPanel: a preset is the
+// The ⚙ panel's Global section's Manage Presets button — at the HEAD of the card, above the
+// Per-preset section's five buttons. Resolved by its accessible name and scoped to the panel, which
+// is the same resolution panelButton makes; it is a separate export because it is the one modal
+// opener that is not the active preset's. (Why the section sits first at all is argued in components/SettingsPanel: a preset is the
 // CONTAINER every setting under it belongs to.)
 export const managePresetsButton = () => panel().getByRole('button', { name: 'Manage Presets' })
 
-// How each modal is OPENED from the panel — three footer links, one footer button, and the Presets
-// section's. Keyed the same way, so `openModal('clear')` reads as the user's route and not as a
+// How each modal is OPENED from the panel — five Per-preset buttons, the foot's Changelog link, and
+// the Global section's Manage Presets. Keyed the same way, so `openModal('clear')` reads as the user's route and not as a
 // lookup.
 const MODAL_OPENERS = {
-  save: () => footerButton('Save Defaults'),
-  manage: () => footerButton('View Saved Defaults'),
-  clear: () => footerButton('Clear Saved Defaults'),
+  save: () => panelButton('Save Defaults'),
+  manage: () => panelButton('View Saved Defaults'),
+  clear: () => panelButton('Clear Saved Defaults'),
   fullReset: () => fullResetButton(),
-  resetSettings: () => footerButton('Reset Settings'),
+  resetSettings: () => panelButton('Reset Settings'),
   changelog: changelogLink,
   presets: managePresetsButton,
 }
@@ -1246,7 +1258,7 @@ export function openModal(key) {
 // THE PRECONDITION FOR REACHING THE SAVE POPUP AT ALL, and it is deliberately explicit rather than
 // folded into openModal('save').
 //
-// Round 14 closed defect D7: all three ⚙ footer buttons now short-circuit their own handlers while
+// Round 14 closed defect D7: all three ⚙ trio buttons now short-circuit their own handlers while
 // they are dimmed, so Save Defaults opens its popup only while something actually diverges from the
 // effective defaults. Before that, the dim was CSS-only and a programmatic press opened the popup
 // from a pristine state — which is how a dozen cases whose SUBJECT is the popup (its chrome, its

@@ -488,14 +488,14 @@ describe('the guide keeps its place when the data underneath is swapped', () => 
 // that MEANS a new launch, from inside the guide and from outside it.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 describe('Full Reset returns the guide to a launch state', () => {
-  // The footer button is dimmed and short-circuited while the whole app sits at launch state, so
+  // The panel's button is dimmed and short-circuited while the whole app sits at launch state, so
   // every case here has to diverge something first. The gear is scoped to the sticky bar: the
   // guide itself has a section titled "Settings", so a bare name match finds two buttons.
   const fullReset = (container) => {
     const bar = container.querySelector('.htp-sticky-bar')
     act(() => fireEvent.click(within(bar).getByRole('button', { name: /^Settings/ })))
-    // Round 21: the footer button opens a ConfirmModal; its own "Full Reset" button confirms
-    // (resolved within the dialog so it never collides with the footer button of the same name).
+    // Round 21: the panel's button opens a ConfirmModal; its own "Full Reset" button confirms
+    // (resolved within the dialog so it never collides with the panel's button of the same name).
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Full Reset' })))
     act(() =>
       fireEvent.click(

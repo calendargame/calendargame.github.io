@@ -179,7 +179,7 @@ beforeEach(() => {
   // and it was the one this net was missing — found by a shuffled run (round 22's fixer), where a
   // file that saves a snapshot left it standing for whatever file ran next in the same worker.
   // It is the widest leak of the lot, because almost nothing reads the snapshot directly: what reads
-  // it is the word "default" everywhere else — the gear indicator, both footer dims, Full Reset's
+  // it is the word "default" everywhere else — the gear indicator, both trio dims, Full Reset's
   // own dim, every mode screen's freshness report — so the symptom is never "a default is wrong", it
   // is a button in the wrong state three files away. A file that wants a snapshot saves it in its
   // own beforeEach, as several already do; this only guarantees nobody INHERITS one.

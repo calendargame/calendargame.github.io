@@ -62,7 +62,7 @@ const closeAndReopen = () => {
 // Everything on the device, every key — "a fresh open writes nothing permanent" is a claim about
 // bytes.
 const device = () => JSON.stringify(Object.entries({ ...localStorage }).sort())
-// Save the ACTIVE preset's defaults with this Amnesic value — the ⚙ footer's own call.
+// Save the ACTIVE preset's defaults with this Amnesic value — the ⚙ panel's own call.
 const saveDefault = (amnesic) =>
   useUserDefaults.getState().saveDefaults({
     settings: { ...useSettings.getState() },

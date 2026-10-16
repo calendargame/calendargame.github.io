@@ -1106,7 +1106,7 @@ describe('Blitz — Per Question + Allow Mistakes', () => {
 
 // ── Freshness: the Per Question + Allow Mistakes map joins Blitz's fully-reset report, and Full Reset wipes it ─────────
 // Pristine settings here (no per-test overrides) so App's isFullyReset can actually be true: the
-// Full Reset footer button is dimmed exactly when EVERYTHING is at launch state, so a lone
+// Full Reset button is dimmed exactly when EVERYTHING is at launch state, so a lone
 // suddenAmBest record must light it, and resetProgress (what Full Reset runs) must re-dim it.
 describe('Blitz — freshness (suddenAmBest blocks fully-reset until wiped)', () => {
   beforeEach(() => {

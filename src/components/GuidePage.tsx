@@ -1197,23 +1197,24 @@ export default function GuidePage({
         </p>
         <p>
           To see what an update actually changed, the <b>Changelog</b> link — at the right-hand end
-          of the ⚙ panel&apos;s last line, with Check for updates before it — opens a plain-words
-          list of what recent updates changed, each entry dated and listed newest first — the dates
-          use the numeric form of your selected format, and the list scrolls within the popup once
-          it grows long. Its heading also carries the app&apos;s <b>version number</b>, dimmed in
-          the top-right corner — that is the one to quote if you ever need to say exactly which copy
-          of the app you have. Each dated entry covers a whole day: if a day brought more than one
-          update, that day's changes are gathered under the one date. The list shows the ten most
-          recent days that had an update — anything older than that is no longer listed. After an
-          update, a small <b>light-blue dot</b> points the way there: it appears in the top-right
-          corner of the gear button (⚙) until you open the menu, and just after the Changelog link's
-          own text until the first time you open the changelog. The one beside Changelog appears
-          only when this list has actually gained something since you last saw it, so it never sends
-          you to something you have already read; the gear's dot marks every update either way. The
-          gear's dot is separate from the small violet bar that marks modified settings (see the
-          Save Defaults section), and the two can show at once. The gear&apos;s dot has one other
-          colour: <b>amber</b> means this device is running short of room for the app (see Saved
-          Progress), not an update — and if both are true at once, it is amber.
+          of the <b>Storage used</b> line at the foot of the ⚙ panel, with Check for updates under
+          it — opens a plain-words list of what recent updates changed, each entry dated and listed
+          newest first — the dates use the numeric form of your selected format, and the list
+          scrolls within the popup once it grows long. Its heading also carries the app&apos;s{' '}
+          <b>version number</b>, dimmed in the top-right corner — that is the one to quote if you
+          ever need to say exactly which copy of the app you have. Each dated entry covers a whole
+          day: if a day brought more than one update, that day's changes are gathered under the one
+          date. The list shows the ten most recent days that had an update — anything older than
+          that is no longer listed. After an update, a small <b>light-blue dot</b> points the way
+          there: it appears in the top-right corner of the gear button (⚙) until you open the menu,
+          and just after the Changelog link's own text until the first time you open the changelog.
+          The one beside Changelog appears only when this list has actually gained something since
+          you last saw it, so it never sends you to something you have already read; the gear's dot
+          marks every update either way. The gear's dot is separate from the small violet bar that
+          marks modified settings (see the Save Defaults section), and the two can show at once. The
+          gear&apos;s dot has one other colour: <b>amber</b> means this device is running short of
+          room for the app (see Saved Progress), not an update — and if both are true at once, it is
+          amber.
         </p>
         <Subhead>The book and contact</Subhead>
         <p>
@@ -1307,8 +1308,8 @@ export default function GuidePage({
             So does the Settings gear (⚙): press it and drag straight into the panel — it
             auto-scrolls when you drag near its top or bottom edge — then release on a setting to
             change it; the panel closes and the change applies. Releasing on a Year Range field
-            opens the keyboard to type instead, and the buttons at the foot of the panel keep the
-            panel open.
+            opens the keyboard to type instead, and releasing on a button that opens a popup, or on
+            Check for updates, keeps the panel open.
           </li>
           <li>
             Your device's own Back — Android's Back button, or your browser's back arrow or
@@ -2438,12 +2439,13 @@ export default function GuidePage({
           the mode-screen range inputs carry no aria-label (the DefaultsCard copies do); and the
           GAME SCREENS' dimmed buttons are opacity-60 + pointer-events-none and announce nothing.
           ⚠ THAT LAST ONE IS ABOUT THE GAME SCREENS, NOT ABOUT aria-disabled BEING RARE — the
-          attribute appears in five places (the ⚙ footer's three buttons, MethodBreakdown's Show
-          Codes, the locked ⚙ pickers via PillGroup/PillTray, and SliderValueEditor's accented
-          readout). The ⚙ footer and Show Codes are the two the prose names as announced; the
+          attribute appears in five places (the ⚙ panel's three buttons and Clear Saved Defaults,
+          MethodBreakdown's Show Codes, the locked ⚙ pickers via PillGroup/PillTray, and
+          SliderValueEditor's accented readout). The ⚙ panel's buttons and Show Codes are the two
+          the prose names as announced; the
           pickers and the readout are announced too but are also pointer-blocked, which is why the
           bullet is about the game's Reveal/Override/history buttons specifically. An earlier draft
-          of this note claimed the footer was aria-disabled's only site, which the section's own
+          of this note claimed the ⚙ buttons were aria-disabled's only site, which the section's own
           Show Codes sentence — and GAP 4's exemption for it — already contradicted.
           If any of these is ever fixed, delete its
           line here in the same change. Overstating support would be worse than saying nothing. */}
@@ -2670,14 +2672,14 @@ export default function GuidePage({
             Blitz&apos;s as its round or question timer and, during a round, as the time left.)
           </li>
           <li>
-            Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: the
-            three buttons at the foot of the ⚙ menu and the Clear Saved Defaults link under them,
-            Show Codes, every locked picker (Amnesic while Save Stats is off is one of them), a
-            timer value you can&apos;t type into right now, and — in Manage Presets — <b>✕</b> when
-            only one preset is left. The reorder grip at the end of each row never greys out; it has
-            no end it cannot move toward. The rest of the game&apos;s buttons — Reveal, Override /
-            Undo, <b>&lt;</b>, and <b>&gt;</b> — are only dimmed, so they still read as ordinary
-            buttons even when pressing one would do nothing.
+            Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: Save
+            Defaults, Reset Settings, Full Reset, and Clear Saved Defaults (at the top of the ⚙
+            menu&apos;s Per-preset section), Show Codes, every locked picker (Amnesic while Save
+            Stats is off is one of them), a timer value you can&apos;t type into right now, and — in
+            Manage Presets — <b>✕</b> when only one preset is left. The reorder grip at the end of
+            each row never greys out; it has no end it cannot move toward. The rest of the
+            game&apos;s buttons — Reveal, Override / Undo, <b>&lt;</b>, and <b>&gt;</b> — are only
+            dimmed, so they still read as ordinary buttons even when pressing one would do nothing.
           </li>
         </UL>
       </GuideSection>
@@ -2695,8 +2697,8 @@ export default function GuidePage({
           across the menu, with <b>Per-preset</b> centred under it, marks everything below as
           belonging to the preset you are on, grouped into three categories. Those two centred
           headings are the only ones of their kind — <b>Display</b>, <b>Dates</b>, and <b>Stats</b>{' '}
-          sit inside the second half rather than beside it. The Save Defaults and Reset buttons stay
-          at the bottom.
+          sit inside the second half rather than beside it. A short foot under the list stays put
+          while the rest scrolls.
         </Lead>
         <UL>
           <li>
@@ -2712,10 +2714,11 @@ export default function GuidePage({
           </li>
           <li>
             <b>Per-preset</b> — the label over everything that is saved for the current preset and
-            captured by <b>Save Defaults</b>. Directly under it: <b>Default Mode</b> — the page this
-            preset opens on (any of the six modes, or How to Play). Whatever page you were last on
-            in a preset comes back if you switch away and return during the same visit; a fresh
-            start of the app uses Default Mode instead.
+            captured by <b>Save Defaults</b>. First under it come the five buttons that act on this
+            preset (below), then <b>Default Mode</b> — the page this preset opens on (any of the six
+            modes, or How to Play). Whatever page you were last on in a preset comes back if you
+            switch away and return during the same visit; a fresh start of the app uses Default Mode
+            instead.
           </li>
           <li>
             <b>Display</b> — how dates are shown and how you answer: Date Format (incl. Random
@@ -2730,17 +2733,16 @@ export default function GuidePage({
           </li>
         </UL>
         <p>
-          At the foot of the menu, in one block: <b>Save Defaults</b>, <b>Reset Settings</b>, and{' '}
-          <b>Full Reset</b> (see the Data section), and directly under them the{' '}
-          <b>View Saved Defaults</b> and <b>Clear Saved Defaults</b> links — both always there;
-          Clear dims and locks until you&apos;ve saved your own defaults, the same way the three
-          buttons above it do. Those two sit in the gaps between the three buttons above rather than
-          under them. Below the block: your Contact email; then <b>Storage used</b> on a line of its
-          own — how much of this device&apos;s room for the app is in use, as a percentage to one
-          decimal place (a dash if the app could not measure the device), and a tap on it opens the
-          breakdown (see Saved Progress); then a last line with the Last Updated timestamp at the
-          left edge, the <b>Changelog</b> link at the right edge, and <b>Check for updates</b>{' '}
-          midway between the two.
+          The first thing under <b>Per-preset</b>, in two rows: <b>Save Defaults</b>,{' '}
+          <b>Reset Settings</b>, and <b>Full Reset</b> (see the Data section), and directly under
+          them <b>View Saved Defaults</b> and <b>Clear Saved Defaults</b> — both always there; Clear
+          dims and locks until you&apos;ve saved your own defaults, the same way the three buttons
+          above it do. They scroll with the list. The foot of the menu stays put, in three short
+          lines: your Contact email; then <b>Storage used</b> — how much of this device&apos;s room
+          for the app is in use, as a percentage to one decimal place (a dash if the app could not
+          measure the device), and a tap on it opens the breakdown (see Saved Progress) — with the{' '}
+          <b>Changelog</b> link at the right; then the Last Updated timestamp, with{' '}
+          <b>Check for updates</b> at the right.
         </p>
         <p>
           Each of those three buttons greys out whenever pressing it would do nothing — there is
@@ -2952,7 +2954,7 @@ export default function GuidePage({
           <li>
             Dates keep coming from the stored range until the year counts — but the menu notices the
             typing straight away. As soon as a box shows something other than the stored year, the ⚙
-            button&apos;s violet bar lights and all three buttons at the foot of the menu become
+            button&apos;s violet bar lights and Save Defaults, Reset Settings, and Full Reset become
             active, the same as any other change. Finishing the year does not put them back: once it
             counts, your range differs from your defaults, which is a change in its own right. They
             settle only when nothing is left that differs — so pressing <Kbd>Esc</Kbd> on a year you
@@ -3562,8 +3564,8 @@ export default function GuidePage({
         durationMs={motionMs}
       >
         <Lead>
-          Three buttons at the foot of the ⚙ menu — save your own defaults, restore the menu, or
-          reset the preset you are on.
+          Three buttons at the top of the ⚙ menu&apos;s Per-preset section — save your own defaults,
+          restore the menu, or reset the preset you are on.
         </Lead>
         <p>
           All three, and the saved defaults they read and write, belong to{' '}
@@ -3638,12 +3640,12 @@ export default function GuidePage({
           </li>
           <li>
             Your saved defaults survive Full Reset — that's the point: Full Reset restores{' '}
-            <i>them</i>. <b>View Saved Defaults</b>, at the foot of the ⚙ menu (below the reset
-            buttons), opens a popup with the same four rows as the Save Defaults popup, showing your
-            saved mode-screen values (every menu setting is also part of the snapshot, captured as
-            it was when you saved). The link is always there: before you've saved any defaults it
-            shows the factory values instead, labelled as such. At rest the popup carries no buttons
-            — tap outside it, press <Kbd>Esc</Kbd>, or use your device's Back to close it.
+            <i>them</i>. <b>View Saved Defaults</b>, directly under the reset buttons, opens a popup
+            with the same four rows as the Save Defaults popup, showing your saved mode-screen
+            values (every menu setting is also part of the snapshot, captured as it was when you
+            saved). The link is always there: before you've saved any defaults it shows the factory
+            values instead, labelled as such. At rest the popup carries no buttons — tap outside it,
+            press <Kbd>Esc</Kbd>, or use your device's Back to close it.
           </li>
           <li>
             That popup is also where you edit your defaults directly. Adjust any row — here the run
@@ -3659,9 +3661,9 @@ export default function GuidePage({
             launch defaults. It is always there too, but dims and locks until you have saved
             defaults to clear — the same treatment the three buttons above it use for "nothing to do
             right now". Tapping it asks for confirmation in a small popup before it forgets the
-            snapshot; your current settings are untouched. The links live in the footer rather than
-            the Save Defaults popup because that button — and with it its popup — dims whenever
-            everything already matches your defaults; the footer links are always reachable.
+            snapshot; your current settings are untouched. These two are buttons of their own rather
+            than part of the Save Defaults popup because that button — and with it its popup — dims
+            whenever everything already matches your defaults; these two are always there.
           </li>
         </UL>
         <Subhead>Reset Settings (middle)</Subhead>

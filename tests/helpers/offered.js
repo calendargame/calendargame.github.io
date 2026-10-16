@@ -13,11 +13,11 @@
 // this file changes and nothing else does.
 //
 // ★ THAT DAY WAS ROUND 15, AND THIS IS THE ONLY FILE IT TOUCHED — which is the whole return on
-// the abstraction. The ⚙ footer's three buttons now withhold with `aria-disabled` and DROP
+// the abstraction. The ⚙ panel's three buttons now withhold with `aria-disabled` and DROP
 // pointer-events-none (a pointer-events:none element cannot be hovered, so the not-allowed cursor
 // they now carry could never have painted). Two spellings are live at once and the app is honest
 // about that: the pickers, Show Codes and the accented slider readouts still block pointers, while
-// the footer relies on its handler guards. So the predicate asks BOTH questions and a control is
+// the trio relies on its handler guards. So the predicate asks BOTH questions and a control is
 // offered only if neither says otherwise. It is a strictly wider "not offered", so every caller
 // written against the old spelling keeps its exact meaning.
 // (Check for updates is the one real `disabled` ATTRIBUTE in the app, deliberately — it is

@@ -10,7 +10,7 @@ import type { AmnesicMode, StoredAmnesic } from './amnesicMode.js'
 
 // userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, "Save Defaults").
 //
-// The ⚙ footer's Save Defaults button snapshots the full 16-value settings panel PLUS the four
+// The ⚙ panel's Save Defaults button snapshots the full 16-value settings panel PLUS the four
 // capturable mode-screen prefs (Flash reveal speed, both Blitz timer lengths, the AoX run length —
 // deliberately NOT Blitz Per-Round/Per-Question, Deduction sub-type, Allow Mistakes, One-by-One,
 // or the show/hide stat toggles) PLUS, since round 20, the active preset's Amnesic setting (Off,
@@ -36,9 +36,10 @@ import type { AmnesicMode, StoredAmnesic } from './amnesicMode.js'
 // A THIRD store (not a settings-store v2) because the capture spans two stores — it belongs to
 // neither — and because surviving Full Reset must be an explicit property: Full Reset deliberately
 // does NOT clear this store (restoring "your" defaults requires them to outlive it); the only way
-// back to factory is the ⚙ footer's "Clear Saved Defaults" link (clearDefaults) — the single clear
+// back to factory is the ⚙ panel's "Clear Saved Defaults" button (clearDefaults) — the single clear
 // affordance (Round-4 removed the Save Defaults popup's duplicate link), always reachable: at
-// steady state live == saved dims + locks the Save Defaults button, but never the footer link.
+// steady state live == saved dims + locks the Save Defaults button, but never Clear Saved Defaults
+// (which dims only while nothing is saved).
 //
 // `saved` is null until the user saves (null = factory semantics everywhere, via the effective*
 // helpers below). Same persist pattern as the other stores (localStorage 'cg-userdefaults-v1',

@@ -27,7 +27,8 @@
 //     (typing can start) instead of clicking. After a click-activation, a menu marked data-drag-dismiss
 //     is asked to close via a bubbling "drag-dismiss" CustomEvent from the member (App listens and closes
 //     Settings — its apply-on-close pass then runs naturally) unless the member sits inside a
-//     [data-drag-stay] opt-out container (both footer rows, which must stay open).
+//     [data-drag-stay] opt-out container (the ⚙ panel's modal openers and its pinned foot, which must
+//     stay open).
 //     For a menu taller than its viewport, dragging near its scroller's ([data-drag-scroll] wrapper, else
 //     the menu itself) top/bottom edge AUTO-SCROLLS it so options below the fold are reachable in the one
 //     gesture (autoScroll, below). Because the trigger toggles on pointerdown, its click is ALWAYS
@@ -173,7 +174,7 @@ export const DOUBLE_TAP_MS = 400
 // ⚠ WHY IT HAD TO BECOME EXPLICIT. Until round 15 every withheld control in the app also wore
 // `pointer-events-none`, and THAT is what kept them out of this file: a pointer-events:none element is
 // never returned by elementFromPoint and never targeted by a pointerdown, so `closest('button')` walked
-// straight past it. Round 15 removed the pointer block from the ⚙ footer's three buttons (so the not-allowed
+// straight past it. Round 15 removed the pointer block from the ⚙ panel's three buttons (so the not-allowed
 // cursor could paint at all — see controlClasses' NOT_OFFERED_BTN_CLASS), and with it went the only
 // thing keeping them out: a press-drag from the ⚙ gear into the panel started drawing the drag ring on
 // a greyed-out Save Defaults / Reset Settings / Full Reset, which then did nothing on release. A ring
@@ -185,9 +186,10 @@ export const DOUBLE_TAP_MS = 400
 // ⚠ ENUMERATED BY HAND, because a green suite is not a blast radius. Every OTHER aria-disabled element
 // in src/ still carries pointer-events-none as well and so was already invisible here — the locked ⚙
 // pickers (PillGroup's LOCK_CLASS on the container, PillTray's segments inside it), SliderValueEditor's
-// accented readout, and MethodBreakdown's Show Codes. The ⚙ footer's three buttons are the only
-// hit-testable aria-disabled controls in the app, so this predicate changes the behaviour of exactly
-// those three, and changes it back to what it was before round 15.
+// accented readout, and MethodBreakdown's Show Codes. The ⚙ panel's three buttons were the first
+// hit-testable aria-disabled controls in the app, and every one since wears the same
+// NOT_OFFERED_BTN_CLASS (controlClasses); this predicate gives each of them the behaviour the three
+// had before round 15.
 //
 // Exported for the unit net: jsdom has no layout, so elementFromPoint never fires there and the full
 // gesture cannot be driven — the predicate is the testable seam (tests/pointerGestures).
@@ -284,7 +286,7 @@ export function nextHilite(
 // action, and whether the menu should be dismissed afterwards. Focus targets never dismiss (the whole
 // point is leaving the panel open to type); click targets dismiss only when the menu opted in
 // (data-drag-dismiss) and the member has no [data-drag-stay] ancestor opt-out (closest, so a container
-// exempts its whole region — the footer rows).
+// exempts its whole region — the ⚙ panel's five-button block and its pinned foot).
 export function resolveTriggerRelease(
   menu: Element | null,
   releaseEl: Element | null,
@@ -508,7 +510,7 @@ export function installPointerGestures(): () => void {
     // gestureTarget on the START too, not only on the release/hilite hit-tests: an announced-unavailable
     // button must latch no gesture at all, which is precisely what pointer-events-none used to give
     // these for free (the pointerdown landed on the row behind and closest('button') found nothing).
-    // Without it a press on a dimmed ⚙ footer button would latch, then resolve its own release to null
+    // Without it a press on a dimmed ⚙ panel button would latch, then resolve its own release to null
     // through targetAt, and resolveRelease would read that as a slide-off — arming a click suppression
     // on a button that was never going to act. Same predicate, same reason, one gesture earlier.
     const target = e.target as Element | null

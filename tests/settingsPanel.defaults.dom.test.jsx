@@ -40,14 +40,14 @@
 //     rewrite reaching for it is G7's saved-values case, and that is the whole of this file's answer
 //     to it. (Round 15 renamed the action from `resetSettings`, so it no longer shares a name with
 //     the panel's button — but a name is not a gate, and G7's case is still the only one.)
-//   • D7, the guard asymmetry, is CLOSED as of round 14: all three ⚙ footer buttons short-circuit
+//   • D7, the guard asymmetry, is CLOSED as of round 14: all three ⚙ trio buttons short-circuit
 //     when they would be a no-op, so a dimmed Save Defaults no longer opens its popup for a
 //     keyboard or a programmatic press. Cases below whose subject is the popup therefore arrange a
 //     real offer first, via makeSaveable(). G6 owns asserting the three guards as a claim.
 //
-// ⚠ WHAT IS NOT HERE, deliberately: the footer row's caption auto-fit. The fit is a no-op at
+// ⚠ WHAT IS NOT HERE, deliberately: the trio's caption auto-fit. The fit is a no-op at
 // width 0 (jsdom lays nothing out), so the only honest coverage is the mocked-measurement wiring
-// in tests/footerFit.dom plus a device check. This file asserts only that all three captions are
+// in tests/trioFit.dom plus a device check. This file asserts only that all three captions are
 // static text (round 21 froze the last one — no more "Confirm?" swap) and claims nothing about pixels.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, within, cleanup, fireEvent, act } from '@testing-library/react'
@@ -68,8 +68,8 @@ import {
   focusModalEdge,
   fireFullReset as fireFullResetHelper,
   fireResetSettings,
-  footerButton,
-  footerCaptions,
+  panelButton,
+  trioCaptions,
   fullResetButton,
   fullResetConfirmCard,
   fullResetState,
@@ -93,7 +93,7 @@ import {
   resetAppState,
   tabInModal,
   tap,
-  tapFooter,
+  tapPanelButton,
   toggleSwitch,
   typeYear,
   yearValue,
@@ -394,7 +394,7 @@ describe('⚙ Full Reset — reach, outcomes, and the confirmation popup (net gr
     document.getElementById('root')?.remove()
   })
 
-  // Fire Full Reset end to end: the footer button opens the ConfirmModal, its own "Full Reset"
+  // Fire Full Reset end to end: the panel's button opens the ConfirmModal, its own "Full Reset"
   // button confirms. (Imported as `fireFullReset` from the panel helper; aliased here so the
   // outcome cases below read the same as they did against the old two-tap arm.)
   const fireFullReset = fireFullResetHelper
@@ -578,17 +578,17 @@ describe('⚙ Full Reset — reach, outcomes, and the confirmation popup (net gr
     fireFullReset()
     expect(useUserDefaults.getState().saved).toEqual(savedBefore) // restoring YOUR defaults needs them to survive
     openSettings()
-    expect(footerButton('Clear Saved Defaults')).toBeInTheDocument() // still the one way back to factory
+    expect(panelButton('Clear Saved Defaults')).toBeInTheDocument() // still the one way back to factory
     expect(changelogDot()).toBe('true') // the update breadcrumb is not gameplay state
   })
 
-  it('the footer button opens a confirmation popup that names what Full Reset does — per-preset, and the shared Lookup history', () => {
+  it('the Full Reset button opens a confirmation popup that names what Full Reset does — per-preset, and the shared Lookup history', () => {
     act(() => useSettings.getState().setLeapChance('75'))
     mountApp()
     openSettings()
     expect(fullResetState()).toEqual({ caption: 'Full Reset', offered: true, confirmOpen: false })
     // The caption is static now — no "Confirm?" swap — so the whole trio reads plain text.
-    expect(footerCaptions()).toEqual(['Save Defaults', 'Reset Settings', 'Full Reset'])
+    expect(trioCaptions()).toEqual(['Save Defaults', 'Reset Settings', 'Full Reset'])
     tap(fullResetButton())
     expect(fullResetState().confirmOpen).toBe(true)
     const card = fullResetConfirmCard()
@@ -661,7 +661,7 @@ describe('⚙ Reset Settings — the confirmation popup (net group 8b)', () => {
     mountApp()
     openSettings()
     expect(anyModalOpen()).toBe(false)
-    tapFooter('Reset Settings')
+    tapPanelButton('Reset Settings')
     const card = modalCard('resetSettings')
     expect(card).toBeInTheDocument()
     expect(card.textContent).toMatch(/saved defaults/i)
@@ -680,7 +680,7 @@ describe('⚙ Reset Settings — the confirmation popup (net group 8b)', () => {
     act(() => useSettings.getState().setLeapChance('75'))
     mountApp()
     openSettings()
-    tapFooter('Reset Settings')
+    tapPanelButton('Reset Settings')
     expect(modalButtons('resetSettings')).toEqual(['Reset Settings'])
     closeModal('resetSettings', 'escape')
     expect(queryModalCard('resetSettings')).toBeNull()
@@ -691,7 +691,7 @@ describe('⚙ Reset Settings — the confirmation popup (net group 8b)', () => {
     mountApp() // pristine → nothing diverges
     openSettings()
     expect(offers().resetSettings).toBe(false)
-    tapFooter('Reset Settings')
+    tapPanelButton('Reset Settings')
     expect(queryModalCard('resetSettings')).toBeNull()
     expect(isSettingsOpen()).toBe(true)
   })
@@ -791,15 +791,15 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     divergeCapturable()
     mountApp()
     openSettings()
-    expect(footerButton('View Saved Defaults')).toBeInTheDocument()
-    expect(footerButton('Clear Saved Defaults')).toBeInTheDocument() // mounted, not absent
+    expect(panelButton('View Saved Defaults')).toBeInTheDocument()
+    expect(panelButton('Clear Saved Defaults')).toBeInTheDocument() // mounted, not absent
     expect(offers()).toMatchObject({ gear: true }) // sanity: the fixture really diverged
-    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false) // nothing saved yet
+    expect(isOffered(panelButton('Clear Saved Defaults'))).toBe(false) // nothing saved yet
     openModal('manage')
     expect(modalCard('Default settings')).toBeInTheDocument() // the FACTORY view, said out loud
     closeModal('manage')
     saveSnapshot()
-    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(true)
+    expect(isOffered(panelButton('Clear Saved Defaults'))).toBe(true)
     openModal('manage')
     expect(modalCard('Your saved defaults')).toBeInTheDocument()
   })
@@ -872,7 +872,7 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     expect(
       within(panelEl()).getByRole('button', { name: 'Clear Saved Defaults' }),
     ).toBeInTheDocument()
-    expect(isOffered(footerButton('Clear Saved Defaults'))).toBe(false)
+    expect(isOffered(panelButton('Clear Saved Defaults'))).toBe(false)
   })
 
   it('a snapshot saved before a setting existed reads factory for it, and never strands the gear lit', () => {

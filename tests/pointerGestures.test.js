@@ -155,7 +155,7 @@ describe('pointerGestures.resolveTriggerRelease — press-drag menu release', ()
       dismiss: false,
     })
   })
-  it('member inside a [data-drag-stay] container → click, no dismiss (the footer rows)', () => {
+  it('member inside a [data-drag-stay] container → click, no dismiss (the ⚙ panel’s buttons and foot)', () => {
     const menu = domEl('div', { 'data-drag-dismiss': '' })
     const stay = domEl('div', { 'data-drag-stay': '' }, menu)
     const opt = domEl('button', {}, stay)
@@ -180,7 +180,7 @@ describe('pointerGestures.resolveTriggerRelease — press-drag menu release', ()
 // resolves goes through it: the button a press latches onto, the member the ring is drawn on, and the
 // member a release acts on. Until round 15 the filter was implicit — every withheld control also wore
 // pointer-events-none, so elementFromPoint and pointerdown both walked past it — and round 15 removing that
-// block from the ⚙ footer's three buttons is what made the rule need saying out loud.
+// block from the ⚙ panel's three buttons is what made the rule need saying out loud.
 describe('pointerGestures.gestureTarget — an announced-unavailable control is not a target', () => {
   it('an ordinary element passes through unchanged', () => {
     const b = domEl('button')
@@ -470,14 +470,14 @@ describe('pointerGestures controller — pointer latch + click suppression', () 
     document.removeEventListener('drag-dismiss', dismiss)
   })
 
-  it('trigger flow: a WITHHELD member is never ringed and never activated — the ⚙ footer regression round 15 opened', () => {
+  it('trigger flow: a WITHHELD member is never ringed and never activated — the ⚙ trio regression round 15 opened', () => {
     // The gesture is the app's signature one: press the ⚙ gear, drag into the panel, release on a
-    // control. The panel's footer holds three buttons that go aria-disabled when the app has nothing
+    // control. The panel holds three buttons that go aria-disabled when the app has nothing
     // to save / reset / clear. Round 15 took pointer-events-none off them so the not-allowed cursor could
     // paint — and pointer-events-none was the only thing keeping them out of this controller, so the
     // ring started appearing on a greyed-out button that then did nothing on release. A ring is a
     // promise that a release will act; this asserts the promise is never made.
-    // ⚠ THE STAY MEMBER IS PART OF THE SHAPE, not decoration: the real footer row carries
+    // ⚠ THE STAY MEMBER IS PART OF THE SHAPE, not decoration: the real button block carries
     // data-drag-stay, so even the release path resolved dismiss:false and the whole defect was
     // VISUAL. Nothing but a hilite assertion could have caught it.
     const trigger = domEl(
@@ -506,7 +506,7 @@ describe('pointerGestures controller — pointer latch + click suppression', () 
 
   it('a press that STARTS on a withheld button latches no gesture at all', () => {
     // The other half of the same rule, and the one that keeps a stray click-suppression from being
-    // armed: with the start filtered, a dimmed footer button behaves exactly as it did when
+    // armed: with the start filtered, a dimmed panel button behaves exactly as it did when
     // pointer-events-none meant the pointerdown never found a button in the first place. Were the
     // start left unfiltered, targetAt would resolve its own release to null, resolveRelease would
     // read that as a slide-off, and the button's next second of clicks would be swallowed.

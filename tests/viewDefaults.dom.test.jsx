@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The defaults manager (made editable in round 6) — the ⚙ footer's window onto the
+// The defaults manager (made editable in round 6) — the ⚙ panel's window onto the
 // saved (or factory) defaults, on the ONE shared DefaultsCard with the Save Defaults popup.
 //
 // Drives the real <App/> like a user: the "View Saved Defaults" link is ALWAYS visible, LEFT of
@@ -31,9 +31,10 @@ import {
   modalCard,
   queryModalCard,
   panelFooter,
+  perPresetButtonBlock,
   resetAppState,
   isOffered,
-  footerOfferState,
+  offerState,
   drainHistory,
 } from './helpers/settingsPanel.jsx'
 
@@ -89,7 +90,7 @@ describe('The defaults manager', () => {
     // locks instead, the identical three-part convention (drawn, announced, inert) the three
     // buttons above it withhold with.
     expect(btn('Clear Saved Defaults')).toBeInTheDocument()
-    expect(footerOfferState('Clear Saved Defaults')).toMatchObject({
+    expect(offerState('Clear Saved Defaults')).toMatchObject({
       offered: false,
       dimmed: true,
       announced: 'true',
@@ -145,7 +146,7 @@ describe('The defaults manager', () => {
     ).toBeInTheDocument()
   })
 
-  it('lives in the pinned button block as two equal-width pill buttons filling the row (round 21)', () => {
+  it('stands under the trio, in the Per-preset section, as two equal-width pill buttons filling the row (round 21; Round 26)', () => {
     useModePrefs.getState().setAoxN('25') // something to save, so Save Defaults is offered
     mountApp()
     openSettings()
@@ -165,10 +166,12 @@ describe('The defaults manager', () => {
       expect(b.className).toContain('surface-toggle')
       expect(b.className).not.toContain('underline')
     }
-    // Its home is the PINNED BUTTON BLOCK — the same fenced block as Save Defaults / Reset Settings
-    // / Full Reset — directly under the three-button row.
-    expect(row.parentElement).toBe(panelFooter())
-    expect(panelFooter().contains(btn('Full Reset'))).toBe(true)
+    // Its home is the FIVE-BUTTON BLOCK at the head of the Per-preset section — the same block as
+    // Save Defaults / Reset Settings / Full Reset, directly under their row — and no longer the
+    // pinned foot (Round 26).
+    expect(row.parentElement).toBe(perPresetButtonBlock())
+    expect(row.previousElementSibling.contains(btn('Full Reset'))).toBe(true)
+    expect(panelFooter().contains(view())).toBe(false)
     // Both buttons are PERMANENT equal siblings, nothing saved or not — Clear just dims and locks.
     expect(clear()).toBeInTheDocument()
     expect(isOffered(clear())).toBe(false) // nothing saved yet

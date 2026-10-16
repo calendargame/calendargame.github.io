@@ -77,7 +77,7 @@ import BestReadout from './BestReadout.jsx'
 //      sets a smaller font-size on the value span; a smaller span has a shorter line box, and in
 //      this top-packed column that put its glyphs HIGHER than its un-shrunk neighbours' — the
 //      owner's photo of "940/1001" sitting smaller AND higher than the "93.9%" beside it. It is the
-//      same class as the ⚙ footer-button catch (SettingsPanel's fitFooterBtns, 2026-07-13): a
+//      same class as the ⚙ trio-button catch (SettingsPanel's fitTrioCaptions, 2026-07-13): a
 //      fitted size and an un-fitted strut in the same box do not share a line. Here the fix cannot
 //      be that one's ("size the container so the strut shrinks WITH the text") — these six boxes fit
 //      INDEPENDENTLY, so a shrinking strut would make each cell a different height. Instead the box

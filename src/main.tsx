@@ -111,7 +111,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
     // _m1582 (monthOnly1582) — informational snapshots of per-mode toggles at spawn.
     // ─────────────────────────────────────────────────────────────────────────
     // Shared control className tokens + buttonStateClass -> src/components/controlClasses.ts. App
-    // no longer imports it: its last tokens (RESET_BTN_CLASS, FOOTER_RESET_BTN_CLASS,
+    // no longer imports it: its last tokens (RESET_BTN_CLASS, PANEL_RESET_BTN_CLASS,
     // FOOTER_META_ROW_CLASS and NUM_INPUT_CLASS) left with the ⚙ card. Consumed now by
     // components/SettingsPanel + DefaultsCard + WeekdayAnswer and all five mode screens.
     // DOT_CELLS — the logo's 7-position layout for the Dots input, in all three rotations →
@@ -1390,7 +1390,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // The two update-signal dots ARE the PERSISTED flags (src/changelog), read live rather
       // than mirrored: the detection below marks the GEAR flag on every build change and the CHANGELOG
       // flag only when the newest entry actually changed (2026-08-10), opening Settings
-      // retires the gear's (toggleSettings, immediately below), and the first tap on the footer's
+      // retires the gear's (toggleSettings, immediately below), and the first tap on the pinned foot's
       // Changelog link retires the link's — the two-stage breadcrumb to the changelog popup.
       // Declared HERE, above the effect that sets them.
       // ★ READ STRAIGHT FROM THE PERSISTED FLAGS — no React state, deliberately. These were two
@@ -1923,7 +1923,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         switchMode(readSessionMode(pid)??readStoredDefaultMode(pid));
       },[switchMode]);
       // The two inner scroll regions the panel owns (its own list and the changelog popup's),
-      // their useScrollEdgeState hooks, and the footer-button caption auto-fit with its dep-less
+      // their useScrollEdgeState hooks, and the trio-button caption auto-fit with its dep-less
       // layout effect and its ResizeObserver -> components/SettingsPanel. Every one of them reads
       // or writes an element that only exists while the panel is open, so all of them belong to
       // the component that owns that DOM.
@@ -2046,7 +2046,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // no-op for the ordinary reason — nothing here changed them — not because of that guarantee).
         // ⚠ resetSettings is ALSO fullReset's delegate for the
         // ENTIRE settings restore (see the note above pressResetSettings), so this line means Full
-        // Reset restores the saved Amnesic value too — not just the footer's own Reset Settings button.
+        // Reset restores the saved Amnesic value too — not just the ⚙ panel's own Reset Settings button.
         // That reading is deliberate, not incidental: it keeps this function's "total, unconditional
         // contract" intact rather than special-casing Amnesic out of Full Reset's path, and it cannot
         // resurrect anything either way — fullReset's own discardParkedStats call below reads the
@@ -2106,7 +2106,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // (the net four-pref result is identical) — resetSettings keeps its standalone contract.
         // ⚠ UNCONDITIONAL, AND IT HAS TO BE. This is Full Reset's ONLY write to the settings store,
         // so resetSettings must stay total: the round-14 dimmed-button guard therefore lives on the
-        // footer button (pressResetSettings) and not in here, or a Full Reset stops restoring the
+        // panel button (pressResetSettings) and not in here, or a Full Reset stops restoring the
         // very values "modified" is blind to. See the note above pressResetSettings.
         resetSettings();
         // Saved gameplay progress → wiped (Stage D1): clears lifetime stats + all-time bests in the
@@ -2569,7 +2569,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                     wrapper. Anywhere else, or inside a wrapper of its own, and the panel silently
                     detaches from the bar.
                   • NOT MEMOISED. No React.memo, no useMemo around this element, no memoised props
-                    object: PillGroup's tab-stop layout effect and the panel's footer fit both have
+                    object: PillGroup's tab-stop layout effect and the panel's trio fit both have
                     NO dependency array on purpose and must re-read the DOM on every pass. */}
             {settingsOpen&&<SettingsPanel
               cardRef={settingsPopoverRef}

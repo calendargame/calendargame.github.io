@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 //
-// Footer-button caption auto-fit (Round-2) — the ⚙ Save Defaults / Reset Settings / Full Reset
+// The ⚙ trio's caption auto-fit (Round-2) — the Save Defaults / Reset Settings / Full Reset
 // trio shares ONE font-size so no caption overflows on a narrow phone.
 //
 // ★ Round 21 REMOVED THE HIDDEN STATIC TWINS. They existed only because Full Reset's caption
 // swapped to "Confirm?" while the two-tap arm was live, which would have shrunk a live measurement
 // mid-arm and jiggled the row. Round 21 replaced that arm with a ConfirmModal, so every caption in the
-// trio is static text now — fitFooterBtns measures the live [data-fitlabel] spans directly, after
+// trio is static text now — fitTrioCaptions measures the live [data-fitlabel] spans directly, after
 // resetting each button's inline fontSize to '' so a re-run of the dep-less effect reads the true
 // natural width instead of compounding the previous pass's shrink (12·s, 12·s², … → the floor).
 // That is the exact feedback-loop guard StatPanel's fitAll uses.
 //
-// jsdom has no layout, so this pins the WIRING by feeding fitFooterBtns mock measurements:
+// jsdom has no layout, so this pins the WIRING by feeding fitTrioCaptions mock measurements:
 //   • a scrollWidth getter — every [data-fitlabel] span reports a 100px natural caption;
 //   • a clientWidth getter — each trio button reports btnWidth of content width;
 //   • a getComputedStyle shim that MODELS INHERITANCE — a caption's computed fontSize is whatever
@@ -41,7 +41,7 @@ let btnWidth = 50 // trio-button content width the mocks report; tests vary it t
 // needs. See the comment there for why a store poke will not do.
 const pill = (group, label) => within(picker(group)).getByRole('radio', { name: label })
 
-describe('footer-button auto-fit wiring (Round-2, twin-free since round 21)', () => {
+describe('the trio’s caption auto-fit wiring (Round-2, twin-free since round 21)', () => {
   beforeEach(() => {
     resetAppState()
     btnWidth = 50
@@ -60,7 +60,7 @@ describe('footer-button auto-fit wiring (Round-2, twin-free since round 21)', ()
       },
     })
     // Model inheritance: a caption's computed fontSize is its BUTTON's inline size, or 12px
-    // (text-xs) when the button carries none. fitFooterBtns resets the button to '' before reading
+    // (text-xs) when the button carries none. fitTrioCaptions resets the button to '' before reading
     // the base off the caption, so this shim returns 12px on that read — which is the whole point:
     // a version that skipped the reset would read the previous pass's shrink back in.
     window.getComputedStyle = (el, pseudo) => {
@@ -123,8 +123,8 @@ describe('footer-button auto-fit wiring (Round-2, twin-free since round 21)', ()
     // the base off a still-shrunk caption would step 11.4 → 10.83 → 11 (the floor) here.
     //
     // ⚠ THE RE-RENDER IS DRIVEN THROUGH THE PANEL'S OWN CONTROLS. A tap on a pill inside the panel
-    // is a re-render the footer's component cannot fail to observe, by construction — where a store
-    // poke would only prove App re-rendered, which stops implying the footer did once the panel is
+    // is a re-render the trio's component cannot fail to observe, by construction — where a store
+    // poke would only prove App re-rendered, which stops implying the trio did once the panel is
     // a memoisable component of its own. Each tap is CHECKED to have landed, because a stability
     // claim passes trivially when nothing happened.
     const chosen = () => pickerLockState('Jan/Feb Chance on Leap Years').chosen

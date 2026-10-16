@@ -1287,7 +1287,7 @@ describe('the Amnesic pill in the ⚙ panel', () => {
   // it out once left Save Defaults dimmed and INERT whenever Amnesic was the only thing a player had
   // changed. Every offer that lights here really acts on the value.
   for (const label of ['Stats Only', 'Full'])
-    it(`${label} lights the gear ON ITS OWN, and offers all three footer buttons with it`, () => {
+    it(`${label} lights the gear ON ITS OWN, and offers all three trio buttons with it`, () => {
       openPanel()
       const none = { gear: false, saveDefaults: false, resetSettings: false, fullReset: false }
       const all = { gear: true, saveDefaults: true, resetSettings: true, fullReset: true }

@@ -520,7 +520,7 @@ describe('⚙ Settings → the Use-System round trip', () => {
   })
 
   // Saving the CURRENT panel state as the user's personal defaults, by the route a user has: the
-  // footer button, then Save in the popup it opens. From then on "default" means this.
+  // button, then Save in the popup it opens. From then on "default" means this.
   const saveDefaults = () => {
     openModal('save')
     closeModal('save', 'save')
@@ -595,7 +595,7 @@ describe('⚙ Settings → the Use-System round trip', () => {
 
   // G4.5 — THE ACCEPTED COST, and it must survive the extraction unchanged. Because only the
   // values IN EFFECT are compared, a divergence parked in a dormant value is invisible to the gear
-  // and to both footer offers — and while Use System is off the panel gives the user no affordance
+  // and to both trio offers — and while Use System is off the panel gives the user no affordance
   // that reaches it at all. That is the deliberate price of never lighting the gear falsely, and a
   // rewrite that "fixes" it reintroduces the permanent-violet-bar bug.
   it('a dormant dark-theme divergence leaves the gear dark and both offers withheld', () => {

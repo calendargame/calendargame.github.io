@@ -409,7 +409,7 @@ describe('saved personal defaults outlive a Full Reset', () => {
     expect(settings.getState().leapChance).toBe('75')
     expect(modePrefs.getState().blitzSec).toBe(120)
     // …and the snapshot outlived the reset, on disk as well as in memory — clearing it is the ⚙
-    // footer's own link, never Full Reset's business.
+    // panel's own Clear Saved Defaults, never Full Reset's business.
     expect(readSavedState(userDefaults).saved.settings.minY).toBe(1600)
     const fresh = await reopenApp()
     expect(fresh.userDefaults.getState().saved.prefs.aoxN).toBe('25')

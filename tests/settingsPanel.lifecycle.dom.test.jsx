@@ -59,7 +59,9 @@ import {
   picker,
   pickPill,
   pickerChosen,
-  footerButton,
+  panelButton,
+  panelFooter,
+  changelogLink,
   fullResetState,
   fireResetSettings,
   toggleSwitch,
@@ -109,7 +111,7 @@ function freshApp(setup) {
 }
 
 // A PERSONAL DEFAULTS SNAPSHOT, seeded before the mount. Needed by every case that involves the
-// 'Clear Saved Defaults' link, which the footer now always renders but leaves dimmed and locked
+// 'Clear Saved Defaults' link, which the panel now always renders but leaves dimmed and locked
 // until a snapshot exists (round 20) — this is what makes it reachable.
 function seedSavedDefaults() {
   const prefs = useModePrefs.getState()
@@ -242,7 +244,7 @@ describe('the settings panel — opening and closing by every route (group 1)', 
     // offered to the panel underneath as a press outside it.
     seedSavedDefaults()
     // The snapshot leaves live == saved, so Save Defaults sits dimmed — and since round 14 closed
-    // defect D7 a dimmed footer button is genuinely inert, so the Save modal is unreachable until
+    // defect D7 a dimmed panel button is genuinely inert, so the Save modal is unreachable until
     // something diverges. One unrelated setting, and all four modals are reachable again.
     makeSaveable()
     mountApp()
@@ -592,7 +594,7 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
     expect(pickerChosen('Date Format')).toEqual(['DMY'])
   })
 
-  it('a press-drag release on any footer control acts without dismissing the panel', () => {
+  it('a press-drag release on any of the panel’s modal openers acts without dismissing the panel', () => {
     const cases = [
       ['Save Defaults', () => `save popup ${queryModalCard('save') !== null}`, 'save popup true'],
       // Reset Settings and Full Reset each open a confirmation popup on the drag-release (round
@@ -613,7 +615,7 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
     const acted = []
     for (const [name, read] of cases) {
       freshApp(() => useSettings.getState().setLeapChance('50'))
-      pressDragFromGear(() => footerButton(name))
+      pressDragFromGear(() => panelButton(name))
       acted.push(`${name}: panel ${isSettingsOpen()}, ${read()}`)
     }
     expect(acted).toEqual(cases.map(([name, , want]) => `${name}: panel true, ${want}`))
@@ -631,7 +633,7 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
     expect(focused).toEqual(['min: panel true, focused true', 'max: panel true, focused true'])
   })
 
-  it('the panel publishes one scroll region, inside the card and holding the list but not the footer', () => {
+  it('the panel publishes one scroll region, inside the card and holding the list and its buttons but not the foot', () => {
     mountApp()
     openSettings()
     // The controller resolves this element live as the menu's auto-scroll target and acts on the
@@ -646,9 +648,12 @@ describe('the settings panel — the markers that carry its behaviour (group 13)
     // are the forms of the claim that can come back false.
     expect(panelScrollerCount()).toBe(1)
     expect(panelScroller().contains(picker('Date Format'))).toBe(true)
-    // The footer is the card's own child, outside the scroller — which is what makes it stick
-    // while the list moves under it.
-    expect(panelScroller().contains(footerButton('Save Defaults'))).toBe(false)
+    // The five buttons scroll with the list since Round 26 — they head its Per-preset section.
+    expect(panelScroller().contains(panelButton('Save Defaults'))).toBe(true)
+    // The foot is the card's own child, outside the scroller — which is what makes it stick while
+    // the list moves under it.
+    expect(panelScroller().contains(panelFooter())).toBe(false)
+    expect(panelScroller().contains(changelogLink())).toBe(false)
   })
 
   it('every settings modal renders outside the panel card yet still counts as inside it', () => {

@@ -157,8 +157,8 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
     // case that catches the one way this button could be broken while looking fine. The ⚙ card is
     // data-drag-dismiss, so a release on a control inside it clicks the control AND closes the
     // panel — which for a modal opener means the panel unmounts the panel component, and the modal
-    // it just opened goes with it. The button opts out with data-drag-stay, exactly as the footer's
-    // four modal openers do; without it this reads "panel false, card false" and the gesture looks
+    // it just opened goes with it. The button opts out with data-drag-stay, exactly as the Per-preset
+    // section's five buttons do; without it this reads "panel false, card false" and the gesture looks
     // like a button that does nothing.
     mountApp()
     pressDragFromGear(() => managePresetsButton())
@@ -211,7 +211,7 @@ describe('the ⚙ panel offers it, and the card reads the registry', () => {
       const quoted = section.querySelector('b')
       expect(quoted.textContent).toBe(QUOTED)
       expect(quoted.className).toBe('wrap-anywhere')
-      expect(section.textContent).toContain(`You are on ${QUOTED}. The three buttons`)
+      expect(section.textContent).toContain(`You are on ${QUOTED}. Everything under Per-preset`)
     })
 
     it('the delete question quotes its start — as the preset going, and as the one that opens', () => {

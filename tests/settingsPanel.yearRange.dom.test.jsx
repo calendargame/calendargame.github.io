@@ -14,7 +14,7 @@
 //     survive — "has anything changed" and "is the whole app fresh" — and both are drawn as the
 //     same grey dim, so a rewrite that collapses them into one looks like a tidy-up and is a
 //     behaviour change nobody can see. There were THREE when this file was written, and the third
-//     was the disagreement: half-typed text counted as a change for two of the four footer offers
+//     was the disagreement: half-typed text counted as a change for two of the four offers
 //     and not for the other two. Round 14 closed that (defect D1) on the owner's call, and the case
 //     that pinned it now asserts the agreement instead. ⚠ Round 15 then REVERSED WHICH AGREEMENT:
 //     the owner asked for half-typed text to count for all four rather than none, so that case
@@ -57,10 +57,10 @@ import {
   pickPill,
   pickerLockState,
   toggleSwitch,
-  tapFooter,
+  tapPanelButton,
   fireResetSettings,
   fullResetState,
-  footerOfferState,
+  offerState,
   yearInput,
   yearValue,
   typeYear,
@@ -478,7 +478,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     document.getElementById('root')?.remove()
   })
 
-  it('at launch with nothing saved, the gear is unmodified and none of the three footer buttons is offered', () => {
+  it('at launch with nothing saved, the gear is unmodified and none of the three trio buttons is offered', () => {
     openPanel()
     expect(offers()).toEqual({
       gear: false,
@@ -679,7 +679,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     expect(gearIndicator().name).toBe('Settings (modified, update)')
   })
 
-  // ── What a NOT-OFFERED footer button says, and what a press on one does ─────
+  // ── What a NOT-OFFERED trio button says, and what a press on one does ─────
   //
   // TWO ROUNDS OF THE SAME DEFECT, and it is worth reading as one story.
   // Round 14 (D7) found the BEHAVIOUR half: the dim was CSS only (pointer-events-none), which stops
@@ -693,14 +693,14 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
   // `disabled`, which would have removed them from the tab order instead of explaining them. The
   // first case below is that half, and it asserts all three facets together on purpose.
 
-  it('a not-offered footer button is DRAWN, ANNOUNCED, and still reachable — all three of them', () => {
+  it('a not-offered trio button is DRAWN, ANNOUNCED, and still reachable — all three of them', () => {
     // The three facets have to be one assertion: they are three statements of a single fact, and
     // every way of splitting them up lets a real bug through. Greyed but announced live is what round 15
     // fixed; announced dead but pressable is what round 14 fixed; and either one alone passes a
     // per-facet test suite.
     openPanel()
     for (const name of ['Save Defaults', 'Reset Settings', 'Full Reset'])
-      expect(footerOfferState(name), name).toEqual({
+      expect(offerState(name), name).toEqual({
         offered: false,
         dimmed: true,
         announced: 'true',
@@ -710,7 +710,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     // always dimmed. One committed setting change lights all three at once.
     setYear('min', '1900')
     for (const name of ['Save Defaults', 'Reset Settings', 'Full Reset'])
-      expect(footerOfferState(name), name).toEqual({
+      expect(offerState(name), name).toEqual({
         offered: true,
         dimmed: false,
         announced: null, // the attribute is ABSENT when offered, never aria-disabled="false"
@@ -721,7 +721,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
   it('a press on the not-offered Full Reset does nothing at all', () => {
     openPanel()
     expect(fullResetState().offered).toBe(false)
-    tapFooter('Full Reset')
+    tapPanelButton('Full Reset')
     // The dimmed-button short-circuit holds: the confirmation popup never opens.
     expect(fullResetState()).toEqual({ caption: 'Full Reset', offered: false, confirmOpen: false })
     expect(isSettingsOpen()).toBe(true)
@@ -734,7 +734,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     // keyboard user can no longer land in a confirmation popup with nothing to confirm.
     openPanel()
     expect(offers().saveDefaults).toBe(false)
-    tapFooter('Save Defaults')
+    tapPanelButton('Save Defaults')
     expect(queryModalCard('save')).toBeNull()
   })
 
@@ -746,7 +746,7 @@ describe('The four offers — gear, Save Defaults, Reset Settings, Full Reset (n
     openPanel()
     const before = panelValues()
     expect(offers().resetSettings).toBe(false)
-    tapFooter('Reset Settings')
+    tapPanelButton('Reset Settings')
     expect(panelValues()).toEqual(before)
     expect(anyModalOpen()).toBe(false)
     expect(isSettingsOpen()).toBe(true)

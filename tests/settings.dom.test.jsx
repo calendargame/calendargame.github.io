@@ -49,7 +49,7 @@
 // ── HOW THIS FILE IS ORGANISED, since the settings-panel extraction ──────────────────────────
 // Everything above the PIXEL GATES divider is BEHAVIOUR, and every one of those tests reaches the
 // panel through tests/helpers/settingsPanel — mounting, opening, finding a switch by its setting's
-// name, asking whether a picker is locked, asking whether a footer button is being offered. None
+// name, asking whether a picker is locked, asking whether a panel button is being offered. None
 // of them names a DOM position, an element id, or a Tailwind token, so none of them has to change
 // when the panel stops being part of App. That is the point: the extraction's gate is that this
 // net passes with ZERO edits, and a test you have to fix afterwards cannot be part of that gate.
@@ -74,7 +74,7 @@ import {
   row,
   settingSwitch,
   switchRow,
-  footerButton,
+  panelButton,
   isOffered,
   resetAppState,
 } from './helpers/settingsPanel.jsx'
@@ -305,7 +305,7 @@ describe('Settings → Display — flipping Use System Settings OFF never change
     mountPanel()
     // Reset Settings stops being OFFERED exactly when the panel sits at its effective defaults,
     // so it is the readable proxy for "nothing is modified".
-    const offered = () => isOffered(footerButton('Reset Settings'))
+    const offered = () => isOffered(panelButton('Reset Settings'))
     expect(offered()).toBe(false) // factory-fresh
     flipOff()
     expect(st().manualTheme).toBe('light') // the seed diverges from the 'dusk' default…
@@ -1113,12 +1113,12 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
 
   // ★ THE ⚙ FOOTER'S THREE BUTTONS — NEW IN ROUND 15, and the honest note is that this gate
   // did NOT cover them before. That round was expected to force a re-blessing here and could not, because
-  // nothing in this describe had ever named a footer class string: the owner's zero-pixel rule was
+  // nothing in this describe had ever named a trio class string: the owner's zero-pixel rule was
   // being enforced over the pickers, the theme rows and the panel's layout, and the one row that
   // was about to change its look was outside it. So this is the gate catching up, not a drift being
-  // blessed — and from here a future edit to the footer's treatment cannot be silent.
+  // blessed — and from here a future edit to the trio's treatment cannot be silent.
   //
-  // ★ WHAT CHANGED, AND THAT THE OWNER APPROVED IT. Until round 15 a withheld footer button wore
+  // ★ WHAT CHANGED, AND THAT THE OWNER APPROVED IT. Until round 15 a withheld trio button wore
   // `opacity-60 pointer-events-none`. It now wears `opacity-60 cursor-not-allowed` and carries
   // aria-disabled. pointer-events-none had to GO for the cursor to exist at all — a
   // pointer-events:none element is never hit-tested, so a cursor declared on it can never paint —
@@ -1130,7 +1130,7 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
   // tests/classGlueGuard, which fails the build unless a className literal puts a space BEFORE its
   // `${`; when the conditional then contributes nothing, that space is what is left. Normalising it
   // away here would be pinning a string the app does not emit.
-  it('pins the footer buttons’ offered and not-offered class strings, and how they announce', () => {
+  it('pins the trio buttons’ offered and not-offered class strings, and how they announce', () => {
     mountPanel()
     const foot = (label) =>
       screen.getAllByRole('button').find((b) => b.textContent.trim() === label)
@@ -1154,15 +1154,14 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     for (const label of ['Save Defaults', 'Reset Settings', 'Full Reset'])
       expect(foot(label).getAttribute('aria-disabled'), label).toBeNull()
     // Round 21: the two-tap arm is gone — pressing Full Reset opens a ConfirmModal and the
-    // footer button's own class string does not change (no more "Confirm?" caption, no armed ring).
+    // trio button's own class string does not change (no more "Confirm?" caption, no armed ring).
     // The popup's own confirm button carries the same accessible name, so scope past it to the
-    // footer button by the panel's published id.
+    // panel's button by the panel's published id.
     fireEvent.click(foot('Full Reset'))
-    const footerFullReset = within(document.getElementById('settings-popover')).getByRole(
-      'button',
-      { name: 'Full Reset' },
-    )
-    expect(footerFullReset.className).toBe(ROSE)
+    const panelFullReset = within(document.getElementById('settings-popover')).getByRole('button', {
+      name: 'Full Reset',
+    })
+    expect(panelFullReset.className).toBe(ROSE)
     expect(screen.getByRole('dialog', { name: 'Full Reset this preset?' })).toBeInTheDocument()
   })
 

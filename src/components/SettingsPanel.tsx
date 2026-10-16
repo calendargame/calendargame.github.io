@@ -49,7 +49,7 @@ import {
 } from './settingsOptions.js'
 import { PRACTICE_MODE_OPTIONS, OTHER_PAGE_OPTIONS } from '../lib/modes.js'
 import {
-  FOOTER_RESET_BTN_CLASS,
+  PANEL_RESET_BTN_CLASS,
   NOT_OFFERED_BTN_CLASS,
   FOOTER_META_ROW_CLASS,
   NUM_INPUT_CLASS,
@@ -95,7 +95,7 @@ import type { YearRangeMirrors } from './useYearRangeMirrors.js'
 //
 // ★ IT MUST NOT BE MEMOISED, and it must never call useSettingsCloseEffect.
 //   • No React.memo, no useMemo around the element, no memoised props object. PillGroup's tab-stop
-//     layout effect and the footer fit's below both deliberately have NO dependency array, because
+//     layout effect and the trio's caption fit below both deliberately have NO dependency array, because
 //     they must re-read the DOM on every pass; memoising the panel out of a render leaves a stale
 //     tab stop and a stale fit.
 //   • useSettingsCloseEffect seeds its "was open" ref from the FIRST value it sees, so a caller
@@ -123,7 +123,7 @@ export type SettingsPanelProps = {
   cardRef: RefObject<HTMLDivElement | null>
   /** Live state diverges from the effective defaults, in EITHER store. Computed in App because the
    *  GEAR renders it while the panel is closed; passing it is what stops the gear's violet bar and
-   *  the two footer dims from drifting apart. */
+   *  the two Per-preset buttons' dims from drifting apart. */
   settingsModified: boolean
   /** The whole app is at launch state. Thirteen terms, six of which App owns and five of which are
    *  reported UP from the mode screens — the panel gets the answer, never the inputs. */
@@ -310,7 +310,7 @@ export function SettingsPanel({
   const pendSettingsRef = useRef<SettingsValues | null>(null)
   const [pendPrefs, setPendPrefs] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
   const [pendSeed, setPendSeed] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
-  // Defaults manager (editable since round 6) popup state — the footer link's window onto the
+  // Defaults manager (editable since round 6) popup state — View Saved Defaults' window onto the
   // saved (or, with nothing saved, factory) defaults, on the SAME shared card as the Save popup.
   // managePrefs is its pending snapshot, seeded from the EFFECTIVE defaults (defPrefs) at open; the
   // seed itself needs no copy — defPrefs cannot change while the modal is up (this modal owns the
@@ -318,11 +318,11 @@ export function SettingsPanel({
   const [manageDefaultsOpen, setManageDefaultsOpen] = useState(false)
   const [managePrefs, setManagePrefs] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
   // Clear-saved-defaults confirm popup (round 6; folded onto the shared ConfirmModal in round
-  // 21): the footer's Clear button asks before it forgets the snapshot. Just a boolean now — the
+  // 21): the Clear Saved Defaults button asks before it forgets the snapshot. Just a boolean now — the
   // portal, the scrim, focus-on-open, capture Escape and Android Back all live in ConfirmModal.
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
   // Changelog popup — the plain-words what-changed list (src/changelog), opened from the
-  // footer's Changelog link. Its two dot flags live up in App with the build-stamp detection that
+  // pinned foot's Changelog link. Its two dot flags live up in App with the build-stamp detection that
   // lights them; this popup only READS the link's and asks App to retire it.
   const [changelogOpen, setChangelogOpen] = useState(false)
   // The preset manager (sub-group 4C) — another user of the modal contract, opened from the
@@ -372,8 +372,9 @@ export function SettingsPanel({
   // previous open — is now delivered by remounting instead, from the same initial values the hook's
   // deactivation cleanup used to restore.
   //
-  // ★ AND IT IS DECLARED BEFORE THE FOOTER FIT BELOW, deliberately: the first painted frame's
-  // fade/shadow answer is measured against the pre-fit footer height and corrected asynchronously.
+  // ★ AND IT IS DECLARED BEFORE THE TRIO'S CAPTION FIT BELOW, deliberately: the first painted
+  // frame's fade/shadow answer is measured against the pre-fit button height (the trio heads the
+  // Per-preset section, inside this scroll region, since Round 26) and corrected asynchronously.
   // Keep the relative order.
   const popoverInnerScrollRef = useRef<HTMLDivElement | null>(null)
   const popoverFooterRef = useRef<HTMLDivElement | null>(null)
@@ -386,7 +387,8 @@ export function SettingsPanel({
   const changelogScrollRef = useRef<HTMLDivElement | null>(null)
   const { scrolledFromTop: changelogScrolledFromTop, atBottom: changelogAtBottom } =
     useScrollEdgeState(changelogScrollRef, changelogOpen)
-  // Footer-button caption auto-fit (Round-2) — the StatPanel value-fit pattern applied to the
+  // The trio's caption auto-fit (Round-2, when the trio was the panel's pinned footer; it heads the
+  // Per-preset section since Round 26) — the StatPanel value-fit pattern applied to the
   // Save Defaults / Reset Settings / Full Reset trio: on a narrow phone the three flex-1 buttons
   // can get too tight for their captions, so ONE shared font-size (never per-button — unequal
   // caption sizes across a matched row read as a glitch) shrinks all three together. The math is
@@ -404,9 +406,9 @@ export function SettingsPanel({
   // fontSize to '' BEFORE reading its scrollWidth — the exact feedback-loop guard StatPanel's
   // fitAll uses, so a re-run of this dep-less effect reads the true natural width every time
   // instead of compounding the previous pass's shrink (12·s, 12·s², … → pinned at the floor).
-  const footerFitRef = useRef<HTMLDivElement | null>(null)
-  const fitFooterBtns = () => {
-    const row = footerFitRef.current
+  const trioRef = useRef<HTMLDivElement | null>(null)
+  const fitTrioCaptions = () => {
+    const row = trioRef.current
     if (!row) return
     const labels = Array.from(row.querySelectorAll<HTMLElement>('[data-fitlabel]'))
     if (labels.length === 0) return
@@ -449,19 +451,19 @@ export function SettingsPanel({
   // open, so there is no closed state to bail out of. It re-reads on EVERY render pass on purpose —
   // do not give it a dependency array and do not memoise this component out of a pass.
   useLayoutEffect(() => {
-    fitFooterBtns()
+    fitTrioCaptions()
   })
   // A web-font swap changes the natural widths, so document.fonts.ready refits too. Deps are []
   // rather than the old [settingsOpen]: mount IS the open now.
   useEffect(() => {
-    const row = footerFitRef.current
+    const row = trioRef.current
     if (!row || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => fitFooterBtns())
+    const ro = new ResizeObserver(() => fitTrioCaptions())
     ro.observe(row)
     let cancelled = false
     if (typeof document !== 'undefined' && document.fonts?.ready)
       document.fonts.ready.then(() => {
-        if (!cancelled) fitFooterBtns()
+        if (!cancelled) fitTrioCaptions()
       })
     return () => {
       cancelled = true
@@ -486,7 +488,7 @@ export function SettingsPanel({
   // stores (panel captured whole; the four mode-screen prefs become editable rows). The seed is
   // kept alongside the pending copy for the shared card's dirty-row highlight.
   const openSaveDefaults = () => {
-    // The same short-circuit the other two footer buttons carry — all three are equally inert while
+    // The same short-circuit the other two trio buttons carry — all three are equally inert while
     // dimmed. Without it, a keyboard user could open this popup with nothing to save. It can sit
     // INSIDE this function because the function IS the press and nothing else calls it; that is
     // exactly what is not true of App's resetSettings, whose guard had to go on the button.
@@ -587,7 +589,7 @@ export function SettingsPanel({
   // ⚙-panel values pass through AS-SAVED, byte-identical (never re-captured from the live store —
   // the owner's rule: this popup edits exactly what it shows). With nothing saved yet it CREATES
   // the snapshot — the factory ⚙ values plus these edits, the natural flow from the factory view
-  // (the footer's Clear link appears with it).
+  // (Clear Saved Defaults is offered from then on).
   // ⚠ amnesic PASSES THROUGH UNCHANGED, THE SAME AS THE 15 SETTINGS (round 20) — this popup shows
   // and edits none of it (Amnesic is set only in ⚙ → Stats), so it is not this popup's to
   // re-capture. Previously-saved value when one exists, factory (Off — a fresh preset is never
@@ -681,7 +683,7 @@ export function SettingsPanel({
       />
     </Popup>
   )
-  // The defaults manager popup (made editable in round 6): the footer link's window onto
+  // The defaults manager popup (made editable in round 6): View Saved Defaults' window onto
   // the defaults — the same shared popup shell as the Save popup, rendering the SAME shared
   // DefaultsCard in manage mode. It seeds from the EFFECTIVE defaults (defPrefs — forward-merged, so a legacy
   // snapshot missing a field shows factory, never undefined) and rests read-only with NO button row
@@ -718,7 +720,7 @@ export function SettingsPanel({
   // and Android Back call.)
 
   // Changelog popup: the plain-words what-changed list (src/changelog, newest day first),
-  // opened from the footer's Changelog link — the same shared popup shell and card recipes as the
+  // opened from the pinned foot's Changelog link — the same shared popup shell and card recipes as the
   // popups above. It carries NO dismiss control at all: the scrim tap, Escape and Android Back
   // already dismiss it, and the owner wanted the row back. CHANGELOG renders AS-IS: the ten-day cap
   // lives in the data itself (see the charter in
@@ -729,7 +731,7 @@ export function SettingsPanel({
   // is the text-free lane the iOS scrollbar paints in; SCROLL_REGION_CLASS + scrollFadeClass (fed
   // by the changelogScrollRef edge listener up with the popover's) add the edge fades, and max-h
   // keeps a long history scrolling within the card without growing it off-screen. Entry dates
-  // render through the footer's Last-Updated recipe (fmt + numericFormatOf) so they follow the
+  // render through the foot's Last-Updated recipe (fmt + numericFormatOf) so they follow the
   // user's Date Format setting; the bullet list is the guide's UL idiom (list-disc + the
   // --mut-color marker). The card is heading row → list and NOTHING else — the heading row
   // gained the app's version on its right on 2026-08-10 (the note at the row explains the markup and
@@ -854,15 +856,15 @@ export function SettingsPanel({
           Press-drag contract (lib/pointerGestures): the CARD is the ⚙ trigger's menu —
           id="settings-popover" pairs it via the gear's aria-controls (the id IS the pairing; the
           card deliberately carries no [data-select-group], so a drag that STARTS inside it still
-          scrolls natively instead of drag-selecting); the whole card is in drag scope, footer rows
-          included. data-drag-dismiss opts it into close-on-drag-pick (App's drag-dismiss listener →
-          the apply-on-close pass); the data-drag-stay regions (BOTH footer rows — the theme block
-          was the third until round-8 dropped it, so a drag-pick on a theme pill now dismisses like
-          the date-format pills) opt back out: Save Defaults, Reset Settings and Full Reset each
-          open a confirmation popup (all of which portal OUT of this card, so a drag-release on
-          popup content can never drag-dismiss the panel), and the panel has to stay up behind
-          them; the View / Clear Saved Defaults links are the same. The Year Range inputs are data-drag-focus (release = focus for typing, panel
-          stays open). The inner scroll wrapper is data-drag-scroll — the controller's auto-scroll
+          scrolls natively instead of drag-selecting); the whole card is in drag scope, the pinned
+          foot included. data-drag-dismiss opts it into close-on-drag-pick (App's drag-dismiss
+          listener → the apply-on-close pass); the data-drag-stay regions opt back out — the
+          Per-preset section's five buttons, the pinned foot, the Open in list, and the Manage
+          Presets button (the theme block was one until round-8 dropped it, so a drag-pick on a
+          theme pill now dismisses like the date-format pills). Each of those opens a popup or a
+          list (every popup portals OUT of this card, so a drag-release on popup content can never
+          drag-dismiss the panel), and the panel has to stay up behind it. The Year Range inputs
+          are data-drag-focus (release = focus for typing, panel stays open). The inner scroll wrapper is data-drag-scroll — the controller's auto-scroll
           target + edge-band geometry.
           Scroll recipe (round 7): the wrapper wears SCROLL_REGION_CLASS + scrollFadeClass
           (components/scrollRegion) — this popover IS the reference treatment (card py-4 only, the
@@ -913,8 +915,8 @@ export function SettingsPanel({
               no longer the panel's first, so it is no longer the exception.
               ⚠ THE LINE OF PROSE IS NOT DUPLICATION OF THE GUIDE. How to Play explains what a
               preset IS and what Save Defaults captures; this says which preset you are in, that the
-              three buttons at the foot of THIS card act on it, and that "Open in" does not — a
-              question asked by someone whose finger is already over Full Reset.
+              Per-preset half of THIS card — its five buttons first — acts on it, and that "Open in"
+              does not — a question asked by someone whose finger is already over Full Reset.
               THE MANAGE PRESETS BUTTON is a full-width `surface-toggle` — the app's no-fill
               interactive recipe (shared with View/Clear Saved Defaults below and with the manager's
               own row controls) at the panel's control tier (text-xs, py-1.5), not btn-solid: opening
@@ -925,9 +927,9 @@ export function SettingsPanel({
           <div className="space-y-2">
             <GroupLabel>Global</GroupLabel>
             <div className="text-xs text-(--tx-200-80)">
-              You are on <QuotedName name={activePresetName} strong />. The three buttons at the
-              foot of this card, and your saved defaults, belong to that preset alone. The two
-              settings here apply to the whole app.
+              You are on <QuotedName name={activePresetName} strong />. Everything under Per-preset,
+              your saved defaults included, belongs to that preset alone. The two settings here
+              apply to the whole app.
             </div>
             {/* OPEN IN (round 21) — where a fresh app open lands. "Last used" is today's
                 behaviour (the preset that was active when the app last closed); pick a preset to
@@ -978,9 +980,10 @@ export function SettingsPanel({
                 setting — release on a theme pill and the panel gets out of the way — and it is
                 catastrophic for a MODAL OPENER: the panel closing unmounts this component, and the
                 modal it just opened goes with it, so the gesture would look like a button that does
-                nothing. The ⚙ footer already carries this attribute for exactly this reason (its
-                Save Defaults, View/Clear Saved Defaults and Changelog links all open modals); this
-                is the first modal opener OUTSIDE that footer, so it has to say it for itself. */}
+                nothing. Every other modal opener in this card says the same for the same reason —
+                the Per-preset section's five buttons (their wrapper) and the pinned foot's Storage
+                used and Changelog links (the foot itself) — and this button stands alone in its
+                section, so it says it for itself. */}
             <button
               type="button"
               data-drag-stay
@@ -991,11 +994,17 @@ export function SettingsPanel({
             </button>
           </div>
           {/* ── PER-PRESET — the header the owner asked for over everything that is saved per
-              preset (round 21). Display / Dates / Stats and the footer's Save Defaults / Reset
-              Settings all act on the ACTIVE preset; this label makes that visible instead of
-              leaving it to How to Play. Default Mode — the page this preset opens on — is the first
-              such setting and lives right under the label; it IS captured by Save Defaults, which
-              the caption states so the reader does not have to cross-reference the guide.
+              preset (round 21). Display / Dates / Stats and the five buttons all act on the ACTIVE
+              preset; this label makes that visible instead of leaving it to How to Play.
+              ★ THE FIVE BUTTONS ARE THE SECTION'S FIRST THING (Round 26, the owner's call). They
+              were the panel's pinned foot until then, and the foot took ~217 of the panel's 760px
+              on a 390×844 phone — a list squeezed into the top two thirds of its own card by
+              buttons pressed a few times a session. In the scrolling page they cost the list
+              nothing, and FIRST under this label is where they belong: they act on everything
+              below it and on nothing above it, so the heading names their reach. The pinned foot
+              keeps only the information lines. Then the caption, which points DOWN at what the
+              buttons act on; then Default Mode — the page this preset opens on — the first such
+              setting, captured by Save Defaults like the rest.
               ★★ THE PANEL'S ONE HEAVY DIVIDER, and it is the ONLY place `border-t-2` and the
               --bd-500-40 tone appear in this card: every section divider below is `border-t` on
               --bd-500-20, so this rule is twice the weight and twice the contrast of any of them,
@@ -1022,9 +1031,133 @@ export function SettingsPanel({
               panel's second half starts here", and every other divider stays in the column. */}
           <div className="space-y-2 pt-4 -mx-4 px-4 border-t-2 border-(--bd-500-40)">
             <GroupLabel>Per-preset</GroupLabel>
+            {/* THE FIVE BUTTONS — two rows, one block. data-drag-stay on the block, because every
+                one of the five opens a popup: the card is data-drag-dismiss, so a press-drag from
+                the ⚙ that released here would otherwise click the button AND close the panel, and
+                the popup it just opened would unmount with it (the Manage Presets button above
+                argues it at length). The rows sit space-y-2 apart — the same 0.5rem as the gap-2
+                between the buttons inside each row, so the five read as one grid. */}
+            <div data-drag-stay className="space-y-2">
+              <div ref={trioRef} className="flex gap-2">
+                {/* No hidden caption twins any more (round 21): every caption in this trio is
+                    static text now that the Full Reset two-tap arm — the one caption that swapped
+                    ("Full Reset" → "Confirm?") — is a ConfirmModal. fitTrioCaptions measures the
+                    live data-fitlabel spans directly, resetting each to its base size first so the
+                    shrink cannot compound. */}
+                {/* ★ HOW THESE THREE SAY "NOT RIGHT NOW" — one convention, stated three ways, and
+                    round 15 is the round that finished it. Each is
+                      (a) DRAWN unavailable — NOT_OFFERED_BTN_CLASS (controlClasses);
+                      (b) ANNOUNCED unavailable — aria-disabled, so a screen reader stops calling it
+                          an ordinary button while it does nothing;
+                      (c) INERT — the handler guard inside each onClick, which round 14 added and
+                          which is the only one of the three that is actually the BEHAVIOUR.
+                    Belt and braces on purpose: (a) and (b) are what the user is told, (c) is what
+                    is true. Delete any one of them and the other two start lying.
+                    ⚠ AND (b) DOES ONE MORE JOB, off this file: lib/pointerGestures reads
+                    aria-disabled to decide these are not gesture targets, so a press-drag from the
+                    ⚙ gear neither rings one under the finger nor synthesizes a click on it. That job
+                    used to belong to the pointer-events-none round 15 removed — see
+                    NOT_OFFERED_BTN_CLASS. So the attribute is load-bearing twice over; it is not
+                    decoration you can drop for a `title` or a tooltip.
+                    ⚠ aria-disabled AND NOT `disabled`, decided on evidence and not on taste:
+                      • It is already this app's convention — PillGroup, PillTray, SliderValueEditor
+                        and MethodBreakdown's Show Codes all withhold with aria-disabled, and
+                        index.css names `.btn-solid[aria-disabled="true"]` FIRST in its unavailable
+                        rule. The one real `disabled` is Check for updates, which is a different
+                        thing: momentarily busy, not conditionally meaningless.
+                      • A real `disabled` DROPS FOCUS when it is applied to the focused element.
+                        These three go dim as a RESULT of being pressed — press Reset Settings and
+                        it dims itself — so a keyboard user would be thrown back to <body> by their
+                        own successful action. aria-disabled leaves focus where it is and
+                        re-announces.
+                      • It keeps them discoverable. `disabled` removes them from the tab order
+                        outright, which trades "reachable but silent" for "not there at all"; the
+                        complaint this fixes is the silence, not the reachability.
+                      • And it keeps the guards TESTABLE: jsdom refuses to dispatch activation on a
+                        real `disabled` button, so the net could no longer ask what pressing a
+                        dimmed button does — the exact question round 14's guards exist to answer.
+                    Save Defaults is constructive → btn-solid purple (the Begin-button language),
+                    keeping rose exclusively for the two destructive neighbors. It dims when live
+                    state already equals the saved defaults (factory when none saved) — nothing new
+                    to save. Each caption sits in a data-fitlabel span (whitespace-nowrap so it
+                    MEASURES at full width instead of wrapping; overflow-hidden on the button
+                    contains the pre-fit paint). */}
+                <button
+                  type="button"
+                  onClick={openSaveDefaults}
+                  aria-disabled={!settingsModified || undefined}
+                  className={`flex-1 px-3 py-1.5 rounded-xl btn-solid border border-transparent text-xs font-medium overflow-hidden ${!settingsModified ? NOT_OFFERED_BTN_CLASS : ''}`}
+                >
+                  <span data-fitlabel className="whitespace-nowrap">
+                    Save Defaults
+                  </span>
+                </button>
+                {/* Reset Settings and Full Reset both open a ConfirmModal now (round 21). Reset
+                    Settings had no confirmation before; Full Reset was a two-tap in-place arm whose
+                    caption swapped to "Confirm?" and whose button wore an armed ring — all of that
+                    is gone, the caption is static, and the popup carries the warning instead. */}
+                <button
+                  type="button"
+                  onClick={openResetSettingsConfirm}
+                  aria-disabled={!settingsModified || undefined}
+                  className={`flex-1 ${PANEL_RESET_BTN_CLASS} overflow-hidden ${!settingsModified ? NOT_OFFERED_BTN_CLASS : ''}`}
+                >
+                  <span data-fitlabel className="whitespace-nowrap">
+                    Reset Settings
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openFullResetConfirm}
+                  aria-disabled={isFullyReset || undefined}
+                  className={`flex-1 ${PANEL_RESET_BTN_CLASS} overflow-hidden ${isFullyReset ? NOT_OFFERED_BTN_CLASS : ''}`}
+                >
+                  <span data-fitlabel className="whitespace-nowrap">
+                    Full Reset
+                  </span>
+                </button>
+              </div>
+              {/* ── THE SAVED-DEFAULTS PAIR — the block's SECOND ROW (round 6; restyled round 21).
+                  Two plain EQUAL-WIDTH PILL BUTTONS filling the row directly under the trio — the
+                  RESET_BTN_CLASS pill geometry (px-3 py-1.5 rounded-xl border, text-xs
+                  font-medium, the border-transparent rendered-height rule) on the neutral
+                  `surface-toggle` surface, NOT the rose fill: View only navigates and Clear only
+                  OPENS a confirm, so neither is a destructive act in its own right (the same
+                  reasoning that keeps PresetManager's ✕ off the rose fill). Plain flex-1 siblings
+                  with the trio's own gap read as one control tier with the trio above.
+                  Order: View LEFT of Clear, matching the trio's left→right escalation.
+                  Both are ALWAYS MOUNTED (round 20). View Saved Defaults opens the defaults manager
+                  on its clearly-labelled FACTORY view when nothing is saved. Clear Saved Defaults
+                  opens a small CONFIRM modal (one red-tier Clear button) rather than firing
+                  immediately — and with nothing saved there is nothing FOR it to clear, so it DIMS
+                  AND LOCKS instead of disappearing: the identical three-part convention the trio
+                  withholds with (see the trio's comment above) — NOT_OFFERED_BTN_CLASS draws it
+                  unavailable, aria-disabled announces it, and the onClick guard is what actually
+                  makes it inert. View is always offered, unlike Save Defaults directly above it,
+                  which dims and locks whenever live == saved. */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={openManageDefaults}
+                  className="flex-1 px-3 py-1.5 rounded-xl text-xs font-medium border surface-toggle text-(--tx-100-80)"
+                >
+                  View Saved Defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (savedDefaults !== null) setClearConfirmOpen(true)
+                  }}
+                  aria-disabled={savedDefaults === null || undefined}
+                  className={`flex-1 px-3 py-1.5 rounded-xl text-xs font-medium border surface-toggle text-(--tx-100-80) ${savedDefaults === null ? NOT_OFFERED_BTN_CLASS : ''}`}
+                >
+                  Clear Saved Defaults
+                </button>
+              </div>
+            </div>
             <div className="text-[0.6875rem] text-(--tx-300-60)">
-              Saved for this preset. Save Defaults captures these; the two Reset buttons restore
-              them.
+              Everything below is saved for this preset. Save Defaults captures it, and the two
+              Reset buttons restore it.
             </div>
             <div className="text-xs text-(--tx-200-80) pt-1">Default Mode</div>
             {/* Two stacked trays, one setting — the Date Format family pattern. The row that does
@@ -1424,151 +1557,38 @@ export function SettingsPanel({
             </PillGroup>
           </div>
         </div>
-        {/* The panel's bottom boundary. elev-shadow-up is UNCONDITIONAL: its strength is the
+        {/* ── THE PINNED FOOT — the information lines, and nothing else (Round 26, the owner's
+            call: the five buttons moved up to head the Per-preset section, so the foot that once
+            took ~217 of a 390×844 phone's 760px panel is three short lines). Contact; then
+            Storage used, with Changelog at the right; then Last Updated, with Check for updates at
+            the right. It stays pinned because each line is something to SEE at any scroll
+            position — the Changelog dot above all, the second stage of the update breadcrumb the
+            gear's dot starts, and Storage used, which the owner asked to be always visible
+            (Round 24).
+            The panel's bottom boundary. elev-shadow-up is UNCONDITIONAL: its strength is the
             --shade the edge hook writes onto this element (0 when the list is scrolled to the end,
             ramping to full over the last --shade-ramp of travel), so there is no class to toggle and
             nothing left to animate.
+            data-drag-stay: Storage used and Changelog open popups, and Check for updates must keep
+            the panel up to show its answer — a press-drag from the ⚙ that releases on any of them
+            must not close the panel.
+            Every TEXT LINK here — Contact, Storage used, Check for updates, Changelog — carries
+            rounded-md px-1 -mx-1: the padding gives the press-drag ring breathing room around the
+            text and the radius rounds its corners (vs a square outline hugging the glyphs); the
+            negative margin cancels the padding so the text keeps its exact flow position (see
+            FOOTER_META_ROW_CLASS, which owns the ring-clearance derivation).
+            The lines sit space-y-0.5 apart; FOOTER_META_ROW_CLASS's row gap is the same 0.125rem,
+            so a row that ever has to break (a window narrower than any phone's) adds a line at
+            exactly the spacing of the others. tests/browser/settingsFoot pins both: one line per
+            row at every phone size, and equal gaps between the lines at every size.
             ⚠ .popover-sticky-footer HAS NO CSS RULE ANYWHERE — round 13 removed it, and
             tests/guideScroll.dom separately asserts it is ABSENT from the stylesheet. It reads as
-            dead markup and is not: it is this footer's only stable identity, and two tests query
+            dead markup and is not: it is this footer's only stable identity, and the tests query
             it. Do not delete it. */}
         <div
           ref={popoverFooterRef}
           data-drag-stay
-          className="popover-sticky-footer elev-shadow-up pt-4 px-4 border-t border-(--bd-500-20)"
-        >
-          <div ref={footerFitRef} className="flex gap-2">
-            {/* No hidden caption twins any more (round 21): every caption in this trio is static
-                text now that the Full Reset two-tap arm — the one caption that swapped ("Full
-                Reset" → "Confirm?") — is a ConfirmModal. fitFooterBtns measures the live
-                data-fitlabel spans directly, resetting each to its base size first so the shrink
-                cannot compound. */}
-            {/* ★ HOW THESE THREE SAY "NOT RIGHT NOW" — one convention, stated three ways, and
-                round 15 is the round that finished it. Each is
-                  (a) DRAWN unavailable — NOT_OFFERED_BTN_CLASS (controlClasses);
-                  (b) ANNOUNCED unavailable — aria-disabled, so a screen reader stops calling it an
-                      ordinary button while it does nothing;
-                  (c) INERT — the handler guard inside each onClick, which round 14 added and which
-                      is the only one of the three that is actually the BEHAVIOUR.
-                Belt and braces on purpose: (a) and (b) are what the user is told, (c) is what is
-                true. Delete any one of them and the other two start lying.
-                ⚠ AND (b) DOES ONE MORE JOB, off this file: lib/pointerGestures reads aria-disabled
-                to decide these are not gesture targets, so a press-drag from the ⚙ gear neither
-                rings one under the finger nor synthesizes a click on it. That job used to belong to
-                the pointer-events-none this round removed — see NOT_OFFERED_BTN_CLASS. So the
-                attribute is load-bearing twice over; it is not decoration you can drop for a
-                `title` or a tooltip.
-                ⚠ aria-disabled AND NOT `disabled`, decided on evidence and not on taste:
-                  • It is already this app's convention — PillGroup, PillTray, SliderValueEditor and
-                    MethodBreakdown's Show Codes all withhold with aria-disabled, and index.css
-                    names `.btn-solid[aria-disabled="true"]` FIRST in its unavailable rule. The one
-                    real `disabled` is Check for updates, which is a different thing: momentarily
-                    busy, not conditionally meaningless.
-                  • A real `disabled` DROPS FOCUS when it is applied to the focused element. These
-                    three go dim as a RESULT of being pressed — press Reset Settings and it dims
-                    itself — so a keyboard user would be thrown back to <body> by their own
-                    successful action. aria-disabled leaves focus where it is and re-announces.
-                  • It keeps them discoverable. `disabled` removes them from the tab order outright,
-                    which trades "reachable but silent" for "not there at all"; the complaint this
-                    fixes is the silence, not the reachability.
-                  • And it keeps the guards TESTABLE: jsdom refuses to dispatch activation on a real
-                    `disabled` button, so the net could no longer ask what pressing a dimmed button
-                    does — the exact question round 14's guards exist to answer.
-                Save Defaults is constructive → btn-solid purple (the Begin-button language),
-                keeping rose exclusively for the two destructive neighbors. It dims when live state
-                already equals the saved defaults (factory when none saved) — nothing new to save.
-                Each caption sits in a data-fitlabel span (whitespace-nowrap so it MEASURES at full
-                width instead of wrapping; overflow-hidden on the button contains the pre-fit
-                paint). */}
-            <button
-              type="button"
-              onClick={openSaveDefaults}
-              aria-disabled={!settingsModified || undefined}
-              className={`flex-1 px-3 py-1.5 rounded-xl btn-solid border border-transparent text-xs font-medium overflow-hidden ${!settingsModified ? NOT_OFFERED_BTN_CLASS : ''}`}
-            >
-              <span data-fitlabel className="whitespace-nowrap">
-                Save Defaults
-              </span>
-            </button>
-            {/* Reset Settings and Full Reset both open a ConfirmModal now (round 21). Reset
-                Settings had no confirmation before; Full Reset was a two-tap in-place arm whose
-                caption swapped to "Confirm?" and whose button wore an armed ring — all of that is
-                gone, the caption is static, and the popup carries the warning instead. */}
-            <button
-              type="button"
-              onClick={openResetSettingsConfirm}
-              aria-disabled={!settingsModified || undefined}
-              className={`flex-1 ${FOOTER_RESET_BTN_CLASS} overflow-hidden ${!settingsModified ? NOT_OFFERED_BTN_CLASS : ''}`}
-            >
-              <span data-fitlabel className="whitespace-nowrap">
-                Reset Settings
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={openFullResetConfirm}
-              aria-disabled={isFullyReset || undefined}
-              className={`flex-1 ${FOOTER_RESET_BTN_CLASS} overflow-hidden ${isFullyReset ? NOT_OFFERED_BTN_CLASS : ''}`}
-            >
-              <span data-fitlabel className="whitespace-nowrap">
-                Full Reset
-              </span>
-            </button>
-          </div>
-          {/* Every footer TEXT LINK — Check for updates, Changelog, and the Contact address below —
-              carries rounded-md px-1 -mx-1: the padding gives the press-drag ring breathing room
-              around the text and the radius rounds its corners (vs a square outline hugging the
-              glyphs); the negative margin cancels the padding so the text keeps its exact flow
-              position. It is stated here, at the top of the footer, because it applies to the
-              metadata row below and to Contact — the saved-defaults pair is no longer part of it
-              (round 21 — see the row directly below). */}
-          {/* ── THE SAVED-DEFAULTS PAIR — the pinned block's SECOND ROW (round 6;
-              moved up here round 20; restyled round 21). It is now two plain EQUAL-WIDTH PILL
-              BUTTONS filling the row directly under the three-button trio — the RESET_BTN_CLASS pill
-              geometry (px-3 py-1.5 rounded-xl border, text-xs font-medium, the border-transparent
-              rendered-height rule) on the neutral `surface-toggle` surface, NOT the rose fill: View
-              only navigates and Clear only OPENS a confirm, so neither is a destructive act in its
-              own right (the same reasoning that keeps PresetManager's ✕ off the rose fill). They
-              replaced the retired three-thirds overlap grid — two links centred on the row's 1/3
-              and 2/3 so they interlocked with the trio's gaps — which round 20 had already reduced
-              to an unconditional two-column split and which was tight to the point of the rings
-              overlapping on a narrow phone. Plain flex-1 siblings with a small gap have none of
-              that cost and read as one control tier with the trio above.
-              Order is unchanged: View LEFT of Clear, matching the trio's left→right escalation.
-              Both are ALWAYS MOUNTED (round 20). View Saved Defaults opens the defaults manager
-              on its clearly-labelled FACTORY view when nothing is saved. Clear Saved Defaults opens
-              a small CONFIRM modal (one red-tier Clear button, above) rather than firing
-              immediately — and with nothing saved there is nothing FOR it to clear, so it DIMS AND
-              LOCKS instead of disappearing: the identical three-part convention the three buttons
-              above it withhold with (see the Reset Settings button's own comment) —
-              NOT_OFFERED_BTN_CLASS draws it unavailable, aria-disabled announces it, and the
-              onClick guard is what actually makes it inert. The row is always reachable, unlike
-              Save Defaults directly above it, which dims and locks whenever live == saved.
-              data-drag-stay is inherited from the pinned footer container, so a drag-release on
-              either still opens its modal with the panel staying up. */}
-          <div className="flex gap-2 pt-3">
-            <button
-              type="button"
-              onClick={openManageDefaults}
-              className="flex-1 px-3 py-1.5 rounded-xl text-xs font-medium border surface-toggle text-(--tx-100-80)"
-            >
-              View Saved Defaults
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (savedDefaults !== null) setClearConfirmOpen(true)
-              }}
-              aria-disabled={savedDefaults === null || undefined}
-              className={`flex-1 px-3 py-1.5 rounded-xl text-xs font-medium border surface-toggle text-(--tx-100-80) ${savedDefaults === null ? NOT_OFFERED_BTN_CLASS : ''}`}
-            >
-              Clear Saved Defaults
-            </button>
-          </div>
-        </div>
-        <div
-          data-drag-stay
-          className="pt-3 px-4 border-t border-(--bd-500-20) text-[0.6875rem] text-(--tx-300-60) space-y-0.5"
+          className="popover-sticky-footer elev-shadow-up pt-3 px-4 border-t border-(--bd-500-20) text-[0.6875rem] text-(--tx-300-60) space-y-0.5"
         >
           <div>
             Contact:{' '}
@@ -1585,12 +1605,11 @@ export function SettingsPanel({
               rows use (percentText) — drawn the way they draw theirs (StoragePercent, which gives
               a screen reader words for the one figure written with a sign), in tabular figures, so
               the line keeps its width as the digits change. A dash on a device whose limit could
-              not be measured — there is no
-              honest percentage without one. On a row of its own:
-              the metadata row below is already full at a phone's width. From the warning line up
+              not be measured — there is no honest percentage without one. From the warning line up
               it wears the warning colour (index.css's .storage-warn), with the words for it for a
-              screen reader — colour alone says nothing to one. */}
-          <div>
+              screen reader — colour alone says nothing to one.
+              It shares its line with Changelog, which FOOTER_META_ROW_CLASS anchors at the right. */}
+          <div className={FOOTER_META_ROW_CLASS}>
             <button
               type="button"
               onClick={openStorageUsage}
@@ -1607,23 +1626,37 @@ export function SettingsPanel({
               )}
               {storageWarning && <span className="sr-only">, almost full</span>}
             </button>
+            {/* Changelog wears the INLINE UpdateDot until its first tap after a build change — the
+                second stage of the breadcrumb the gear's dot starts. ⚠ Since 2026-08-10 that dot
+                appears only when the changelog actually GAINED something, so an internal deploy
+                lights the gear and leaves this one dark.
+                ⚠ IT IS ANCHORED AS A WHOLE ELEMENT — its text plus the update-dot slot, which
+                UpdateDot reserves lit or unlit alike (index.css) — so lighting the dot cannot shift
+                the line.
+                Round 8 rebuilt that marker: a text link reserves no room for the gear's corner
+                badge, so the round-6 shared recipe put the dot on top of the word. The link is an
+                inline-flex row now — the text in its own span, the marker its sibling — and the
+                underline moved ONTO that span so the rule can never paint across the gap. Being
+                aria-hidden, the marker needs the sr-only word beside it to reach a screen reader,
+                which is also the only update signal left once the gear's dot has been retired.
+                ⚠ That word carries its own COMMA rather than the gear's "(update)" parenthetical:
+                the name-from-content algorithm trims each child's text before joining them, so a
+                leading space is dropped and the two would run together ("Changelog(update)"). A
+                printing separator is the only one that survives the join. */}
+            <button
+              type="button"
+              onClick={openChangelog}
+              className="inline-flex items-center select-none rounded-md px-1 -mx-1"
+            >
+              <span className="underline">Changelog</span>
+              {changelogDot && <span className="sr-only">, update</span>}
+              <UpdateDot placement="inline" lit={changelogDot} />
+            </button>
           </div>
-          {/* ── THE APP-METADATA ROW, now the last thing in the panel and SPREAD ACROSS IT (owner's
-              call, this round — it was left-packed behind a gap-3 until the saved-defaults pair
-              moved out of this block and took the "same kind of row" argument with it; see
-              FOOTER_META_ROW_CLASS, which still owns the ring-clearance derivation).
-              The stamp ANCHORS LEFT, Changelog ANCHORS RIGHT, and Check for updates sits exactly
-              halfway between the two facing edges — all three out of one justify-between, because
-              every link's px-1 is cancelled by an equal -mx-1 and so the flex margin boxes ARE the
-              text boxes: spreading them equally spreads the visible gaps equally. gap-3 stays as
-              the FLOOR under those two gaps (the ~4px ring clearance), never as their size.
-              ⚠ NEITHER END MOVES WHEN ITS CONTENT CHANGES, which is what makes the middle stable:
-              Changelog is anchored as a WHOLE ELEMENT — its text plus the update-dot slot, which
-              UpdateDot reserves lit or unlit alike (index.css), so lighting the dot cannot shift
-              the row — and Check for updates is width-locked by the hidden strut described below,
-              so none of its four labels can move its neighbours either. The only thing here that
-              legitimately changes width is the stamp itself, and it grows from the left edge it is
-              anchored to. */}
+          {/* THE BUILD STAMP, with Check for updates at the line's right end — the stamp says
+              which copy you have, the button asks whether there is a newer one. The stamp is the
+              widest of the four items and the only one whose width changes (a different date, a
+              different Date Format); it grows from the left edge it is anchored to. */}
           <div className={FOOTER_META_ROW_CLASS}>
             <span>
               Last Updated:{' '}
@@ -1654,18 +1687,14 @@ export function SettingsPanel({
                   • THE HIDDEN STRUT. The button is a one-cell grid holding the resting label twice
                     — an aria-hidden copy that only reserves width, and the live label stacked on
                     it. So the button is always exactly as wide as "Check for updates" (the longest
-                    of the four by construction — lib/updateCheck pins it) and the Changelog link
-                    beside it can never shift when the label changes. justify-items-CENTER splits
-                    the slack evenly, so each shorter label sits centred in the gap between the Last
-                    Updated stamp and Changelog rather than hugging one edge (owner's call
-                    2026-08-02, overriding an earlier justify-items-start that anchored them left).
-                    The resting label is the widest, so it fills the cell exactly and centring
-                    cannot move it — only the three status labels shift, which is the whole point.
-                    Note that THIS centring is inside the button's own fixed cell and is a separate
-                    question from where the button sits in the row: the row's justify-between is
-                    what places the button (halfway between the stamp and Changelog, and a wider
-                    date does move it there — as a whole, still halfway), while the strut is what
-                    guarantees the label inside can never be the thing that moves anything.
+                    of the four by construction — lib/updateCheck pins it): its width never changes
+                    with its state, so whether this line fits is decided once, by the resting label,
+                    and a status label can never be the thing that breaks it. justify-items-END
+                    puts each shorter status label against the line's right edge, under Changelog's,
+                    so the right-hand column stays one column (Round 26; while this button sat
+                    between the stamp and Changelog the labels were centred, the owner's call of
+                    2026-08-02 for that middle position). The resting label is the widest, so it
+                    fills the cell exactly and the alignment cannot move it.
                   • UNDERLINE ONLY AT REST. The other three labels are STATUS, not actions; wearing
                     the interaction signal while not being the interaction is the round-3
                     block-hover mistake. The button still IS pressable during a result — a tap
@@ -1681,7 +1710,7 @@ export function SettingsPanel({
               type="button"
               onClick={onCheckUpdates}
               disabled={updateCheck === 'checking'}
-              className="select-none rounded-md px-1 -mx-1 grid justify-items-center"
+              className="select-none rounded-md px-1 -mx-1 grid justify-items-end"
             >
               <span
                 aria-hidden="true"
@@ -1694,35 +1723,6 @@ export function SettingsPanel({
               >
                 {UPDATE_CHECK_LABEL[updateCheck]}
               </span>
-            </button>
-            {/* Changelog, RIGHT of Check for updates — the two update-flavored links live
-                together, force-the-latest then read-what-changed — and LAST in the row, which is
-                now also the row's right ANCHOR (see the row's own comment): justify-between pins
-                this element's trailing edge to the panel's, and "this element" means the text plus
-                the dot slot, not the word alone. Same footer-link recipe as the other three;
-                wears the INLINE UpdateDot until its first tap after a build change — the
-                second stage of the breadcrumb the gear's dot starts. ⚠ Since 2026-08-10 that dot
-                appears only when the changelog actually GAINED something, so an internal deploy
-                lights the gear and leaves this one dark.
-                Round 8 rebuilt that marker: a text link reserves no room for the gear's corner
-                badge, so the round-6 shared recipe put the dot on top of the word. The link is an
-                inline-flex row now — the text in its own span, the marker its sibling — and the
-                underline moved ONTO that span so the rule can never paint across the gap. The
-                marker's slot is reserved lit or not (index.css), so lighting up shifts nothing;
-                being aria-hidden, it needs the sr-only word beside it to reach a screen reader,
-                which is also the only update signal left once the gear's dot has been retired.
-                ⚠ That word carries its own COMMA rather than the gear's "(update)" parenthetical:
-                the name-from-content algorithm trims each child's text before joining them, so a
-                leading space is dropped and the two would run together ("Changelog(update)"). A
-                printing separator is the only one that survives the join. */}
-            <button
-              type="button"
-              onClick={openChangelog}
-              className="inline-flex items-center select-none rounded-md px-1 -mx-1"
-            >
-              <span className="underline">Changelog</span>
-              {changelogDot && <span className="sr-only">, update</span>}
-              <UpdateDot placement="inline" lit={changelogDot} />
             </button>
           </div>
         </div>
@@ -1754,7 +1754,7 @@ export function SettingsPanel({
       />
       {/* Confirm labels above deliberately REPEAT the action verb ("Full Reset" / "Reset
           Settings"), so screen-reader users hear the same words on the trigger and on the
-          confirm. The footer buttons those triggers are portal OUT of this component's card, so
+          confirm. The popups those buttons open portal OUT of this component's card, so
           a name query scoped to the ⚙ panel never sees the popup's button and vice versa. */}
       <ConfirmModal
         open={clearConfirmOpen}

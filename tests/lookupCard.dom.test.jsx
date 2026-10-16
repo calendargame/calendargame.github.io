@@ -451,7 +451,7 @@ describe('Lookup — a pre-reform date shows BOTH calendars (round 11)', () => {
 })
 
 // ── The isFullyReset contract, at App level (round 8) ─────────────────────────────────────
-// The Full Reset footer button is dimmed and locked exactly while the whole app sits at launch
+// The Full Reset button is dimmed and locked exactly while the whole app sits at launch
 // state, and App reads `lookupOutput === ""` as one of the terms. Round 8 changed who writes
 // that state: a successful lookup used to store its result sentence there and now stores nothing
 // (the answer is derived from the selected history entry). This test is the direct consequence pin

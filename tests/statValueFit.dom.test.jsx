@@ -6,9 +6,9 @@
 // boxes fits INDEPENDENTLY: a long value gets a smaller inline font-size so it stays in its cell.
 // A smaller font-size means a shorter line box, and the cell packs its children from the top, so a
 // shrunken value used to sit HIGHER than its un-shrunk neighbours as well as smaller — "940/1001"
-// riding above the "93.9%" beside it. Same class as the ⚙ footer-button catch of 2026-07-13
-// (SettingsPanel's fitFooterBtns): a fitted size and an un-fitted strut in one box do not share a
-// line. The footer's answer — size the CONTAINER so the strut shrinks with the text — cannot be
+// riding above the "93.9%" beside it. Same class as the ⚙ trio-button catch of 2026-07-13
+// (SettingsPanel's fitTrioCaptions): a fitted size and an un-fitted strut in one box do not share a
+// line. The trio's answer — size the CONTAINER so the strut shrinks with the text — cannot be
 // borrowed here, because these six shrink by different amounts and a shrinking container would make
 // six different cell heights out of one row. So the box stopped depending on its content instead:
 // a fixed-height `h-[1lh]` cell with the value CENTRED in it.
@@ -63,7 +63,7 @@ describe('StatPanel value auto-fit — the fitted size lands on the value span a
 
   // ★ THE APPLY PATH. A value measuring twice its cell gets exactly half the base size, written
   // inline on the span. The CELL keeps no inline size at all — if the fit ever moved up to the
-  // container the way the footer-button fit did, `h-[1lh]` would resolve against a shrunken
+  // container the way the trio-button fit did, `h-[1lh]` would resolve against a shrunken
   // line-height and the box would collapse with the text, reintroducing the defect at cell scale.
   it('a too-wide value is scaled on the span; its cell is never inline-sized', () => {
     styleBase()
