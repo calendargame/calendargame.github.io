@@ -408,8 +408,13 @@ export function GuideSection({
         className="guide-head elev-shadow-down w-full text-left px-4 py-3 flex items-center justify-between"
       >
         <span className="text-sm font-semibold text-(--tx-50) select-text">{title}</span>
+        {/* The ▼ and the body below are on the root's scale, pinned to a standard phone: N px at
+            the 16.458px root of a 390×844 phone, where they were tuned, and the same share of the
+            root everywhere else (Round 26 — they were fixed pixels, so below a 14.9px root the
+            body read larger than its own section title). The small-print paragraphs are the same,
+            at 12. */}
         <span
-          className={`text-[7px] text-(--tx-w90) leading-none transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`text-[calc(7rem/16.458)] text-(--tx-w90) leading-none transition-transform ${isOpen ? 'rotate-180' : ''}`}
           // Read the panel's clock and curve EXACTLY (.expander declares the identical calc —
           // same var, same .24s fallback — and the identical curve) so the triangle and the
           // slide finish together, and honor the reduce-motion --motion-scale, so both snap
@@ -426,7 +431,7 @@ export function GuideSection({
       <Expander open={isOpen} durationMs={durationMs ?? undefined}>
         <div
           id={panelDomId(id)}
-          className="px-4 pb-4 pt-1 text-[13px] text-(--tx-100-90) leading-relaxed space-y-2 select-text"
+          className="px-4 pb-4 pt-1 text-[calc(13rem/16.458)] text-(--tx-100-90) leading-relaxed space-y-2 select-text"
         >
           {children}
         </div>
@@ -2752,7 +2757,7 @@ export default function GuidePage({
           looking like an ordinary button: the keyboard's ring on it is dotted instead of solid, and
           on a computer the pointer shows the not-allowed cursor over it. (See Accessibility.)
         </p>
-        <p className="text-(--tx-300-70) text-[12px]">
+        <p className="text-(--tx-300-70) text-[calc(12rem/16.458)]">
           Settings changes apply when you <b>close</b> the ⚙ menu, not on each adjustment — so
           changing several at once regenerates the date just once (and never restarts your solve
           timer mid-adjustment). The sections below cover each setting and exactly when a change
@@ -2852,7 +2857,7 @@ export default function GuidePage({
         <div className="flex justify-center">
           <DotDiagram />
         </div>
-        <p className="text-(--tx-300-70) text-[12px] text-center">
+        <p className="text-(--tx-300-70) text-[calc(12rem/16.458)] text-center">
           Sunday sits in the centre. The dots are deliberately unlabelled — their positions follow
           the day-of-week practice movement, so choosing one is the same motion you trace when
           calculating. The diagram above always matches your Rotate Dots setting.
@@ -3684,7 +3689,7 @@ export default function GuidePage({
             Theme back to Use System Settings, with Dusk on the Dark row and Light on the Light row
           </li>
         </UL>
-        <p className="text-(--tx-300-70) text-[12px]">
+        <p className="text-(--tx-300-70) text-[calc(12rem/16.458)]">
           Default Mode is restored like any other value, but it only decides where a preset{' '}
           <i>opens</i> — pressing Reset Settings does not move you off the page you are on now.
         </p>

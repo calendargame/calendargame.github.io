@@ -51,19 +51,14 @@ const STILL_IN_PIXELS = [
     why: 'a comment naming the dropdown row`s size above, where the Mode control`s width is derived from it',
   },
   {
-    file: 'src/components/GuidePage.tsx',
-    sizes: { 'text-[13px]': 1, 'text-[12px]': 3, 'text-[7px]': 1 },
-    why: 'How to Play`s body text, its small print, and a header`s ▼. One fixed reading size, consistent within the page — but below a 14.9px root the body is larger than its own section titles (text-sm). Converting it re-flows the whole guide on every device: the owner`s to see first.',
-  },
-  {
     file: 'src/components/primitives.tsx',
-    sizes: { 'text-[8px]': 1, 'text-[10px]': 1, 'text-[11px]': 2 },
-    why: 'the ★ beside a new Best (never larger than its text at any root); the <kbd> chip, which belongs to the guide`s fixed reading size; and the ⚙ menu`s two heading tiers, whose exact strings tests/settings.dom freezes as a look to be re-blessed on a device — below a 13.3px root the smaller heading is larger than the rows under it.',
+    sizes: { 'text-[8px]': 1 },
+    why: 'the ★ beside a new Best: never larger than its text at any root. (The <kbd> chip and the ⚙ menu`s two heading tiers left this list in Round 26, onto the root`s scale pinned to a standard phone — as did How to Play`s body, small print, and ▼.)',
   },
   {
     file: 'src/components/LookupCard.tsx',
     sizes: { 'text-[13px]': 1, 'text-[12px]': 1, 'text-[11px]': 1 },
-    why: 'a history row`s date and readings, and the History heading: consistent with each other, and the row is width-tuned so that no reachable date is cut. Larger than the card`s own text-base below a 13px root.',
+    why: 'a history row`s date and readings, and the History heading: consistent with each other. HELD BACK FROM ROUND 26`s CONVERSION ON PURPOSE: the row "February 29, 1300 — J: Mon · G: Does Not Exist" already has its date cut short below ~375px wide at a full root (and at 375-390 with the iPhone`s wider font), and on the root`s scale it is cut in two more tall, narrow windows. The row`s wording (or a two-line row) is the owner`s call; the conversion goes with that fix, not before it.',
   },
   {
     file: 'src/components/CardNumber.tsx',

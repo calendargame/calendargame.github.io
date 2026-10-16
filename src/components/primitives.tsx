@@ -14,17 +14,18 @@ import type { ReactNode } from 'react'
 // unchanged, and the convention note in components/SettingsPanel points at this block.
 //
 //   1. GROUP   — GroupLabel.               Global · Per-preset
-//                CENTERED, 11px, semibold, wide tracking, --tx-100-80 (the panel's bright label
+//                CENTERED, 11px*, semibold, wide tracking, --tx-100-80 (the panel's bright label
 //                tone). The panel divides into exactly two of these and everything else nests
 //                inside one of them, so they are the only headings that get a rule of their own —
 //                a heavier, brighter border-t than any section divider (the class is in
 //                SettingsPanel, beside the sections that wear it, because it is a DIVIDER rather
 //                than a label).
 //   2. SECTION — SectionLabel, LEFT.       Display · Dates · Stats
-//                10px, normal weight, --tx-300-60. A category INSIDE a group.
+//                10px*, normal weight, --tx-300-60. A category INSIDE a group.
 //   3. CAPTION — SectionLabel, CENTERED.   Dark · Light · Written · Numeric
-//                The same 10px muted string, centered — a sub-label naming one FAMILY of
+//                The same 10px* muted string, centered — a sub-label naming one FAMILY of
 //                alternatives within a single setting's picker.
+//   * At the 16.458px root of a 390×844 phone; on the root's scale everywhere (below).
 //
 // ⚠ TIERS 1 AND 3 ARE BOTH CENTERED AND THAT IS NOT A COLLISION — it is why tier 1 is a separate
 // component rather than `<SectionLabel className="text-center">`. Before the two group headings existed the centered spelling
@@ -34,6 +35,14 @@ import type { ReactNode } from 'react'
 // the one thing they share and never the thing that distinguishes them. Do not "unify" these back
 // into one component with a modifier: the reason there are two is that they must not be able to
 // drift into looking alike.
+//
+// ★ ON THE ROOT'S SCALE, PINNED TO A STANDARD PHONE (Round 26): the two heading tiers and the <kbd>
+// chip are written as calc(N rem ÷ 16.458) — N px exactly at the 16.458px root of a 390×844
+// phone (the root is 1.95vh there, index.css's html rule), where they were tuned, and the same
+// share of the root everywhere else. They were plain pixels until then, so they did not follow the
+// fluid root the rows around them follow: below a 13.3px root the section heading was larger than
+// the rows it heads. The same convention as BestReadout's BEST_COLUMN_FLOOR, for the same reason.
+// The ★ keeps its pixels (tests/textSizeGuard says why).
 //
 // Each carries its own className constant (kept beside the component that uses it,
 // the single source of truth). Pure visual, no state. Extracted from main.jsx in
@@ -45,19 +54,21 @@ const NEW_BEST_STAR_CLASS = 'text-(--acc) font-bold ml-0.5 text-[8px]'
 // Settings popover section label className (small uppercase tracking-widest). Exported for the one
 // place that needs the raw class on a non-div element (GuidePage's Divider <span>); everything else
 // should use the SectionLabel component.
-export const SECTION_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-(--tx-300-60)'
+export const SECTION_LABEL_CLASS =
+  'text-[calc(10rem/16.458)] uppercase tracking-widest text-(--tx-300-60)'
 // The ⚙ panel's TOP-tier group heading (tier 1 above). Shares the uppercase treatment so it still
 // reads as the same family of heading, and differs on every other axis: centered rather than left,
-// 11px rather than 10, semibold rather than normal, tracking a notch wider than `tracking-widest`
+// 11 rather than 10, semibold rather than normal, tracking a notch wider than `tracking-widest`
 // (0.1em) so the extra weight does not read as merely bolder, and --tx-100-80 — the tone the panel's
 // own setting NAMES wear, two steps up from the muted --tx-300-60 the tier below it uses. An
 // arbitrary tracking value rather than a Tailwind step because there is none between widest and
 // nothing; 0.18em is the measured point where the two sizes' letter rhythm stops matching.
 const GROUP_LABEL_CLASS =
-  'text-center text-[11px] uppercase font-semibold tracking-[0.18em] text-(--tx-100-80)'
-// <kbd> styling used by the keyboard shortcut rows in HtP.
+  'text-center text-[calc(11rem/16.458)] uppercase font-semibold tracking-[0.18em] text-(--tx-100-80)'
+// <kbd> styling used by the keyboard shortcut rows in HtP — 11px at the standard root, two below
+// the guide's own body text there, and on the root's scale like it.
 const KBD_CLASS =
-  'inline-block panel rounded-sm px-1.5 py-0.5 text-[11px] font-mono min-w-6 text-center shrink-0'
+  'inline-block panel rounded-sm px-1.5 py-0.5 text-[calc(11rem/16.458)] font-mono min-w-6 text-center shrink-0'
 
 export const NewBestStar = () => <sup className={NEW_BEST_STAR_CLASS}>★</sup>
 // ⚠ NO `className` PROP, unlike SectionLabel below, and that is the point rather than an omission:

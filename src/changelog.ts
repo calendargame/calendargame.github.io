@@ -112,6 +112,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'The figures at the top of a MoX or Blitz breakdown are in a new order: Solves, Fastest, Slowest, and Spread down the left, and Accuracy, Mean, and Median down the right.',
       'On the narrowest phones, where even "P1" would be cut, the ready-made preset names ("Preset 1", "Preset 2", and so on) are now shown as just their numbers: "1", "2", and so on, all of them together.',
       'A preset name that your device draws as nothing at all, such as some pasted symbols, now counts as a blank name: it goes back to "Preset 2" and the like, as a name of spaces does, instead of leaving an empty button. A symbol your device has no picture for, which it shows as a box, still counts as a name.',
+      "How to Play's text, the keyboard keys it shows, and the ⚙ menu's headings now grow and shrink with the rest of the app's text on smaller and bigger screens, so they never read larger than what is around them. On a typical phone they look just as before.",
       'The Show Codes box now has as much room above its codes as below them, like the stats boxes. That room grows with the text on a bigger screen.',
       "Fixed: in the ⚙ menu, scrolled all the way down, the Amnesic picker's bottom edge is no longer cut off.",
       'Fixed: on a very narrow screen, the Mode button no longer covers the end of the Preset button, and the ⚙ no longer runs off the edge. The Preset button keeps room for its arrows and a number, and the Mode button gives way instead, its name cut short where it does not fit.',

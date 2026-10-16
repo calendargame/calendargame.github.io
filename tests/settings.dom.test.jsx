@@ -1021,15 +1021,17 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
   // three strings. The strings are written out here rather than imported from components/primitives
   // for the reason every gate in this block is: a test that read the constant back would agree with
   // it no matter what it said. Changing any of them is a deliberate re-blessing of the panel's look
-  // — change it, look at it on a device, and update this case in the same commit.
+  // — change it, look at it on a device, and update this case in the same commit. (Re-blessed in
+  // Round 26: the sizes moved from 11px / 10px onto the root's scale, pinned so a 390×844 phone's
+  // 16.458px root draws them at exactly 11 and 10 — tests/browser/textScale measures that.)
   // ⚠ TIER 1 AND TIER 3 SHARE `text-center`, which is exactly the collision the three-tier rule is
   // written to survive, so the last assertion is the one that matters most: all three strings are
   // DIFFERENT, and tier 1 differs from tier 3 by more than its alignment.
   it('Global / Per-preset out-rank the category headers, which out-rank the family captions', () => {
     mountPanel()
     const GROUP =
-      'text-center text-[11px] uppercase font-semibold tracking-[0.18em] text-(--tx-100-80)'
-    const SECTION = 'text-[10px] uppercase tracking-widest text-(--tx-300-60)'
+      'text-center text-[calc(11rem/16.458)] uppercase font-semibold tracking-[0.18em] text-(--tx-100-80)'
+    const SECTION = 'text-[calc(10rem/16.458)] uppercase tracking-widest text-(--tx-300-60)'
     const CAPTION = SECTION + ' text-center'
     for (const label of ['Global', 'Per-preset'])
       expect(panel().getByText(label).className).toBe(GROUP)
