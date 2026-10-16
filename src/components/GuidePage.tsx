@@ -105,31 +105,42 @@ function headerDockGeometry(id: string, lineY: number): HeaderDockGeometry | nul
   }
 }
 
+// foldingAround — how much of the page is still to FOLD AWAY above and below a section: the rendered
+// height of every OTHER section's panel, split by whether it comes before this one in the page or
+// after it. Only one section is open at a time, so when `section` is the open one — or the one a
+// tap is opening — every other panel is shut at rest, and what it shows now is exactly what has yet
+// to go: nothing once the page is still, and while folds are running, what each has left (after a
+// quick second or third tap, what two or three folds have yet to give up between them).
+const shownHeight = (el: Element | null | undefined) => el?.getBoundingClientRect().height ?? 0
+function foldingAround(section: Element): { above: number; below: number } {
+  let above = 0
+  let below = 0
+  let past = false
+  // In document order, so the sections met before this one are the ones above it.
+  for (const other of section
+    .closest('[data-guide]')
+    ?.querySelectorAll(`[id^="${sectionDomId('')}"]`) ?? []) {
+    if (other === section) past = true
+    else if (past) below += shownHeight(other.querySelector(':scope > .expander'))
+    else above += shownHeight(other.querySelector(':scope > .expander'))
+  }
+  return { above, below }
+}
+
 // stillToCome — what has yet to happen to the OPEN section's place before the page is at rest, as
 // lib/guideDock's restGeometry takes it. Measured, on any frame:
-//   • comingUp — how far its top has yet to come up the page. Everything still FOLDING AWAY above
-//     it: the rendered height of every panel before it in the page. Only one section is open at a
-//     time, so those all belong to closed sections — at rest that is nothing (a closed panel has no
-//     height); while a tap's fold runs it is what has yet to go, and after a quick second tap, what
-//     TWO folds have yet to give up between them. Plus what is left of the glide (`glideLeft`: the
-//     page scrolling on by that much brings the section up by that much).
+//   • comingUp — how far its top has yet to come up the page: everything still folding away above
+//     it (foldingAround), plus what is left of the glide (`glideLeft`: the page scrolling on by that
+//     much brings the section up by that much).
 //   • growing — how far its foot has yet to go down: what its own panel has yet to open (the body's
 //     natural height, less the track that already shows — the coordinator's own measure).
 function stillToCome(openId: string, glideLeft: number): { comingUp: number; growing: number } {
   const section = document.getElementById(sectionDomId(openId))
-  const guide = section?.closest('[data-guide]')
   const body = document.getElementById(panelDomId(openId))
-  if (!section || !guide || !body) return { comingUp: glideLeft, growing: 0 }
-  const shown = (el: Element | null | undefined) => el?.getBoundingClientRect().height ?? 0
-  let folding = 0
-  // In document order, so the sections met before this one are the ones above it.
-  for (const other of guide.querySelectorAll(`[id^="${sectionDomId('')}"]`)) {
-    if (other === section) break
-    folding += shown(other.querySelector(':scope > .expander'))
-  }
+  if (!section || !body) return { comingUp: glideLeft, growing: 0 }
   return {
-    comingUp: folding + glideLeft,
-    growing: Math.max(0, shown(body) - shown(body.closest('.expander'))),
+    comingUp: foldingAround(section).above + glideLeft,
+    growing: Math.max(0, shownHeight(body) - shownHeight(body.closest('.expander'))),
   }
 }
 
@@ -230,8 +241,9 @@ const scrollBack = (el: HTMLElement, px: number): void => {
 // the old teleport-past-max clamp). Any real user scroll input (touchstart/wheel) cancels the writer instantly —
 // the user always wins — and the returned cancel function serves mid-flight re-toggles,
 // leaving the guide for another mode, the app being backgrounded, and unmount (see
-// scrollWriterRef below). `onTakenOver` is told when it was the READER who ended it — the one
-// ending that leaves the page somewhere the tap did not plan (startArrival's caller, below).
+// scrollWriterRef below). `onEnd` is told when it ends BY ITSELF — at the end of the clock, or
+// because the READER took over (`takenOver`: the one ending that leaves the page somewhere the tap
+// did not plan — startArrival's caller, below) — and never after the cancel.
 // ⚠ THE CANCEL LISTENERS STAY ON `window`, deliberately, now that the scrolled thing is
 // not the window. They are not scroll listeners — they are "the reader touched the page"
 // listeners, and a touch or a wheel anywhere on the screen means the same thing whether or
@@ -243,7 +255,7 @@ function startScrollWriter(
   from: number,
   to: number,
   clock: FoldClock,
-  onTakenOver: () => void,
+  onEnd: (takenOver: boolean) => void,
 ): () => void {
   let raf = 0
   const cancel = () => {
@@ -253,7 +265,7 @@ function startScrollWriter(
   }
   const takeOver = () => {
     cancel()
-    onTakenOver()
+    onEnd(true)
   }
   window.addEventListener('touchstart', takeOver, { passive: true })
   window.addEventListener('wheel', takeOver, { passive: true })
@@ -261,7 +273,10 @@ function startScrollWriter(
     const p = clock.at(now)
     el.scrollTop = from + (to - from) * accordionEase(p)
     if (p < 1) raf = requestAnimationFrame(step)
-    else cancel()
+    else {
+      cancel()
+      onEnd(false)
+    }
   }
   raf = requestAnimationFrame(step)
   return cancel
@@ -642,9 +657,13 @@ export default function GuidePage({
   // finish their CSS transition and the browser to hold position (the guide-scoped
   // overflow-anchor:none in index.css guarantees "hold"). Nothing is re-armed on return:
   // foregrounding is not a navigation and must never move the reading position.
-  const scrollWriterRef = useRef<(() => void) | null>(null)
+  // ★ IT KEEPS WHERE IT IS TAKING THE PAGE (`to`), for the one reader of that: the next tap, which
+  // plans from there while the glide is still running (lib/accordionMotion's restingY says why).
+  // So it is null from the moment the glide is over — by its own clock, by the reader's hand, or
+  // cancelled — and a page standing still is never planned from a destination it has left behind.
+  const scrollWriterRef = useRef<{ to: number; cancel: () => void } | null>(null)
   const cancelScrollWriter = useCallback(() => {
-    scrollWriterRef.current?.()
+    scrollWriterRef.current?.cancel()
     scrollWriterRef.current = null
   }, [])
   // ── THE BAR'S SHARE OF ITS SHADOW HAS TWO SOURCES, AND ONE WRITER ──────────────────────────────
@@ -878,7 +897,10 @@ export default function GuidePage({
     (id: string) => {
       // Whatever the last tap set moving stops where it stands — the glide, and the arrival's clock
       // with it. Neither writes anything on its way out, so everything below reads, and starts
-      // from, exactly what is on screen.
+      // from, exactly what is on screen. Where that glide was TAKING the page is kept: this tap
+      // plans from there (lib/accordionMotion's restingY), and carries it on when it has nothing of
+      // its own to correct.
+      const glidingTo = scrollWriterRef.current?.to ?? null
       cancelScrollWriter()
       endArrival()
       const opens = open !== id
@@ -906,9 +928,11 @@ export default function GuidePage({
       // ⚠ block in main.tsx carries the reader list and the transform caveat that applies here
       // too: a transform on a panel would make these VISUAL heights, not layout ones). The three
       // roundings this coordinator used to carry are not equal in cost:
-      //   • closingH is the worst, worth about twice the bar: it is subtracted from the document
-      //     height AND — when the closing panel sits above the tapped header — from that header's
-      //     final position, so one rounding error moves the scroll target through two terms.
+      //   • closingH is the worst, worth about twice the bar — and so is every other panel still
+      //     folding away, which the scroll coordination below counts beside it (foldingAround): each
+      //     is subtracted from the document height AND — when it sits above the tapped header — from
+      //     that header's final position, so one rounding error moves the scroll target through two
+      //     terms.
       //   • openingH moves the landing least of the three, but it is a DIFFERENCE OF TWO
       //     INDEPENDENTLY ROUNDED INTEGERS, so its own error reaches a full 1.0px — twice either
       //     other — and it feeds finalMaxScroll, the clamp that decides whether the target can
@@ -1055,8 +1079,14 @@ export default function GuidePage({
       }
       const scrollY = scroller.scrollTop
       const tappedRect = tapped.getBoundingClientRect()
+      const folding = foldingAround(tapped)
       const target = accordionScrollTarget({
         scrollY,
+        // Where the page will rest if this tap moves nothing: here — or, while the glide an earlier
+        // tap started was still running, where it was taking the page. That is a place in the page,
+        // not a distance, so the step back a close of a pinned header has just taken (above) does
+        // not move it: it already is where the page, folds and all, was going to be at rest.
+        restingY: glidingTo ?? scrollY,
         // The scroller's own visible height. This is where round 10's caveat about
         // window.innerHeight vs documentElement.clientHeight DIES rather than moves: the question
         // was which of two whole-viewport measures the document scroller meant, and there is no
@@ -1087,24 +1117,29 @@ export default function GuidePage({
         // rect read.)
         headerDocTop:
           tappedRect.top + tapped.clientTop - scroller.getBoundingClientRect().top + scrollY,
-        closingH,
-        // A closing panel above the tapped header pulls it up by its own collapse; the
-        // tapped section's own panel sits BELOW its header, so a plain close never does.
-        closingAbove:
-          closingExpander !== null && closingExpander.getBoundingClientRect().top < tappedRect.top,
+        // EVERY panel still to fold away, this tap's and any an earlier tap left folding
+        // (lib/accordionMotion says why both): a panel above the tapped header pulls it up by its
+        // collapse, and one below only shortens the page. The tapped section's own panel sits BELOW
+        // its header, so a plain close puts it there; an open counts it as openingH instead.
+        foldingAboveH: folding.above,
+        foldingBelowH: folding.below + (opens ? 0 : closingH),
         openingH,
       })
       if (target === null) return arrive(null)
       // The glide. A reader who takes the page over stops it: nothing is carrying the page any more,
       // so where the header will come to rest has just changed — and the arrival sets off again from
       // exactly what is on screen (the tracker's last word), over what is left of its clock.
-      scrollWriterRef.current = startScrollWriter(scroller, scrollY, target, clock, () => {
+      const glide = { to: target, cancel: () => {} }
+      glide.cancel = startScrollWriter(scroller, scrollY, target, clock, (takenOver) => {
+        if (scrollWriterRef.current === glide) scrollWriterRef.current = null
+        if (!takenOver) return
         const arriving = arrivingRef.current
         if (arriving?.id !== id) return
         arriving.glideTo = null
         arriving.arrival.from = openShadesRef.current
         arriving.arrival.since = arriving.arrival.progress
       })
+      scrollWriterRef.current = glide
       arrive(target)
     },
     [
@@ -1348,8 +1383,10 @@ export default function GuidePage({
             that's needed to keep your place: instead of sliding off-screen, the section you tapped
             comes to rest right under the bar at the top, with its title fully readable — a title
             that was partly tucked under the bar when you tapped it slides down into place with the
-            rest of its section, it doesn't jump there ahead of it. The last section or two are the
-            exception — the page has already run out of room to scroll by then, so they settle
+            rest of its section, it doesn't jump there ahead of it. Tap one title and then another
+            before the first has finished moving, as quickly as you like, and the page comes to rest
+            exactly where it would have if you had waited between them. The last section or two are
+            the exception — the page has already run out of room to scroll by then, so they settle
             wherever the bottom of the page allows.
           </li>
           <li>

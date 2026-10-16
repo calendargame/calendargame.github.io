@@ -126,6 +126,12 @@ const mockRects = (taller) => {
   })
 }
 
+// The one section these cases open first ('overview') shows a 600.5px panel; every other panel is
+// shut, as at rest. (A panel that measures taller than nothing is one still to fold away — the
+// coordinator counts every one of them, not only the panel its own tap closes.)
+const openPanelOnly = (el) =>
+  el.classList.contains('expander') && el.parentElement?.id === 'guide-sec-overview' ? 600.5 : 0
+
 const tap = (container, id) =>
   act(() => {
     fireEvent.click(container.querySelector(`#guide-sec-${id} button`))
@@ -667,7 +673,7 @@ describe('tapping a section carries the reading position with it', () => {
     // also why it is deliberately NOT ceiled: rounding it up aims past the end of the page, where
     // the engine's own clamp eats the last frames and the motion reads as stalling.
     const { container, g } = readingPage(2500)
-    mockRects((el) => (el.classList.contains('expander') ? 600.5 : 0))
+    mockRects(openPanelOnly)
     const frames = manualFrames()
     tap(container, 'overview')
     tap(container, 'buttons')
@@ -792,7 +798,7 @@ describe('tapping a section carries the reading position with it', () => {
 
     it('when a section above is closing, it is THAT fold the page keeps time with', () => {
       const { container, g } = readingPage(2500)
-      mockRects((el) => (el.classList.contains('expander') ? 600.5 : 0))
+      mockRects(openPanelOnly)
       tap(container, 'overview')
       const frames = manualFrames()
       tap(container, 'buttons')
@@ -844,6 +850,63 @@ describe('tapping a section carries the reading position with it', () => {
     expect(waitingFrames(frames)).toEqual([])
     expect(g.writes).toEqual([])
     expect(g.pos()).toBe(stopped)
+  })
+
+  // Q15: a tap that lands while a glide is still carrying the page plans from where the glide was
+  // TAKING it (lib/accordionMotion's restingY) — so with nothing of its own to correct, the glide
+  // carries on there, and two quick taps end where the same two taps end one at a time. Once the
+  // reader has taken the page over, nothing is carrying it: the next tap plans from where they left
+  // it.
+  it('a tap mid-glide with nothing of its own to correct carries the glide on to where it was going', () => {
+    const { container, g } = readingPage()
+    g.setSeat(60)
+    openingPanelHeight(400)
+    const frames = manualFrames()
+    tap(container, 'overview') // glides to 440: the header 500 into the page, on the line at 60
+    runFrames(frames, 0)
+    runFrames(frames, 120)
+    expect(g.pos()).toBeGreaterThan(440)
+    tap(container, 'overview') // closed again on the way: it needs no glide of its own
+    runGlide(frames)
+    expect(g.pos()).toBe(440)
+  })
+
+  it.each(['touchstart', 'wheel'])(
+    'after a %s took the page over, the next tap plans from where it was left',
+    (type) => {
+      const { container, g } = readingPage()
+      g.setSeat(60)
+      openingPanelHeight(400)
+      const frames = manualFrames()
+      tap(container, 'overview')
+      runFrames(frames, 0)
+      runFrames(frames, 120)
+      act(() => {
+        fireEvent(window, new Event(type))
+      })
+      const left = g.pos()
+      g.clearWrites()
+      tap(container, 'overview')
+      runGlide(frames)
+      expect(g.writes).toEqual([])
+      expect(g.pos()).toBe(left)
+    },
+  )
+
+  it('after a glide has landed, the next tap plans from where it landed', () => {
+    const { container, g } = readingPage()
+    g.setSeat(60)
+    openingPanelHeight(400)
+    const frames = manualFrames()
+    tap(container, 'overview')
+    runGlide(frames)
+    expect(g.pos()).toBe(440)
+    g.scrollTo(700) // the reader scrolls on, by hand
+    g.clearWrites()
+    tap(container, 'overview')
+    runGlide(frames)
+    expect(g.writes).toEqual([])
+    expect(g.pos()).toBe(700)
   })
 
   it('drops a glide already in flight when another section is tapped', () => {

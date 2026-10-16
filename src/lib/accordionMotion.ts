@@ -91,6 +91,9 @@ export const accordionEase = (t: number): number => {
 // arrive FRACTIONAL — GuidePage measures every one of them with getBoundingClientRect (round 10),
 // and docH is the single exception, an integer because the platform offers nothing else:
 //   scrollY       the scroller's offset at the tap (may sit negative mid rubber-band)
+//   restingY      where the page will come to rest if this tap moves nothing: scrollY — or, while a
+//                 glide an EARLIER tap started is still carrying the page, where that glide was
+//                 taking it (★ below)
 //   viewportH     the scroller's own clientHeight — the height of the box the reader sees through.
 //                 Round 10 argued at length here about window.innerHeight vs
 //                 documentElement.clientHeight, because with a document scroller there were two
@@ -110,20 +113,40 @@ export const accordionEase = (t: number): number => {
 //                 which is a clamp, so nothing downstream compounds it.
 //   headerDocTop  the tapped section HEADER's natural top in the scroller's content space (its
 //                 wrapper's top plus the wrapper's border)
-//   closingH      the closing panel's current RENDERED height (0 when nothing closes;
-//                 mid-flight re-toggles pass the interpolated value, keeping the math exact)
-//   closingAbove  true when that panel sits above the tapped header, so its collapse
-//                 pulls the header up by closingH
+//   foldingAboveH everything still to FOLD AWAY above the tapped header — the current RENDERED
+//                 height of every panel above it that will be shut at rest — and so how far its
+//                 collapse will pull the header up the page
+//   foldingBelowH the same below the header (the tapped section's own panel, when the tap closes it)
 //   openingH      the opening panel's remaining travel to its natural height (0 when the
 //                 tap only closes; its full body height at rest)
+// ★ "EVERYTHING STILL TO FOLD AWAY" IS NOT ONLY THIS TAP'S PANEL. It is the one this tap closes (the
+// open section, at whatever height it has reached — mid-flight re-toggles pass the interpolated
+// value) AND every panel an EARLIER tap set folding that has not finished: tap three headers in
+// quick succession and the first section is still folding when the third is tapped, the glide that
+// was compensating for it has just been stopped, and the rest of its fold will move the page all
+// the same. Counting only this tap's panel planned the page as though that remainder would stay:
+// the tapped header then came to rest wherever the leftover fold dragged it — some pixels below the
+// line, its section's start hidden under it above the line, or (where the remainder was large) the
+// page run on past the section altogether. With every fold in the sums, the target is where the
+// page will really be at rest, however many folds are in flight.
+// ★ AND A GLIDE IN FLIGHT IS THE PAGE'S MOTION TOO. The tap that interrupts a glide stops it where
+// it stands — but the reader never asked the page to stop THERE: they tapped a header while the page
+// was on its way somewhere. Planned from wherever the glide happened to have got to, a section
+// tapped a moment after another came to rest a timing-dependent few pixels from anywhere in
+// particular — the header just closed mostly hidden behind the bar, a sliver of it showing above the
+// one just opened. So the plan starts from where the page was GOING (restingY), exactly as from a
+// page at rest there, and when this tap has nothing of its own to correct, the glide carries on to
+// it (scenario C, below). Two taps in quick succession then end exactly where the same two taps end
+// slowly.
 export interface AccordionToggleGeometry {
   scrollY: number
+  restingY: number
   viewportH: number
   seatTop: number
   docH: number
   headerDocTop: number
-  closingH: number
-  closingAbove: boolean
+  foldingAboveH: number
+  foldingBelowH: number
   openingH: number
 }
 
@@ -134,7 +157,7 @@ export interface AccordionToggleGeometry {
 //
 // Scenario A — a panel OPENS (owner rule): compensate ONLY when the opened panel's start
 // (its header) would land above the reading line. The comparison baseline is where the
-// browser will have settled AFTER the toggle — scrollY clamped into the final scroll
+// browser will have settled AFTER the toggle — restingY clamped into the final scroll
 // range — plus the seat the header must clear. Target: the header seated exactly on the
 // reading line. (The final-range clamps on the target are pure defense: A's own inequality
 // already bounds it below the settled position.) A returns null when the glide would be
@@ -171,7 +194,7 @@ export interface AccordionToggleGeometry {
 // at zero — correct, since any other integer target is a full pixel away — and it still earns its
 // keep at fractional ones (a rubber-band release, a native smooth-scroll landing).
 //
-// Scenario B — the toggle SHRINKS the document past the current position: the browser
+// Scenario B — the toggle SHRINKS the document past the current position (past restingY): the browser
 // would clamp scrollY the instant the panel finished, flinging the page in a single
 // frame (the captured 744px/150ms clamp-fling). Gliding to the final max-scroll on the
 // panels' own clock makes the collapse and the travel one coherent motion. Checked for
@@ -180,17 +203,22 @@ export interface AccordionToggleGeometry {
 // rounding it up aims the writer PAST the end of the document, where the browser's own clamp
 // absorbs every frame beyond the edge: the last stretch of the glide would move nothing and the
 // motion could read as stalling just before it stops.
+//
+// Scenario C — neither: the page would be left where it is, but a glide from an earlier tap was
+// carrying it on to restingY. It carries on, on this tap's clock — with no epsilon, because nothing
+// new is set moving: the page was already on its way, and stopping a fraction short would leave it
+// a fraction off a position chosen to the pixel (A's ceil says why that fraction is not free).
 export const accordionScrollTarget = (g: AccordionToggleGeometry): number | null => {
-  const finalDocH = g.docH - g.closingH + g.openingH
+  const finalDocH = g.docH - g.foldingAboveH - g.foldingBelowH + g.openingH
   const finalMaxScroll = Math.max(0, finalDocH - g.viewportH)
   if (g.openingH > 0) {
-    const finalHeaderTop = g.headerDocTop - (g.closingAbove ? g.closingH : 0)
-    const settledY = Math.min(Math.max(g.scrollY, 0), finalMaxScroll)
+    const finalHeaderTop = g.headerDocTop - g.foldingAboveH
+    const settledY = Math.min(Math.max(g.restingY, 0), finalMaxScroll)
     if (finalHeaderTop < settledY + g.seatTop) {
       const target = Math.min(Math.max(Math.ceil(finalHeaderTop - g.seatTop), 0), finalMaxScroll)
       return Math.abs(target - g.scrollY) < 1 ? null : target
     }
   }
-  if (g.scrollY > finalMaxScroll) return finalMaxScroll
-  return null
+  if (g.restingY > finalMaxScroll) return finalMaxScroll
+  return g.restingY === g.scrollY ? null : g.restingY
 }

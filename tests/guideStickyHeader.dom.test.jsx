@@ -1008,7 +1008,12 @@ describe('a header tapped above the line is brought down to it, never dropped on
     expect(frames.pending()).toBe(0)
   })
 
-  it('closed again on the way, it is held where it stands until its panel has folded', () => {
+  // ★ A SECOND TAP ON THE WAY NO LONGER STOPS THE PAGE WHERE IT STANDS (Q15, lib/accordionMotion's
+  // restingY): the glide carries on to where it was taking the page, so two taps in quick
+  // succession end where the same two taps end one at a time. What is still pinned here is the
+  // header's OWN offset: held for the length of the fold — never dropped on the line ahead of the
+  // page — and let go when its panel has folded.
+  it('closed again on the way, it is held by its own offset until its panel has folded, and the page carries it to the line', () => {
     const { container } = tapAboveTheLine()
     frame(0)
     frame(FOLD_MS * 0.25)
@@ -1017,14 +1022,20 @@ describe('a header tapped above the line is brought down to it, never dropped on
     expect(stoodAt).toBeLessThan(LINE - 1) // really still on its way
     tap(container, 'stats')
     expect(header(container, 'stats').getAttribute('aria-expanded')).toBe('false')
+    expect(top(container)).toBe(stoodAt) // the frame of the tap moves nothing
     // The fold: the section still has room under its header until the end of it.
+    let last = stoodAt
     for (const t of [0, 0.5, 0.9]) {
       frame(5000 + FOLD_MS * t)
-      expect([top(container), offset(container)]).toEqual([stoodAt, held])
+      expect(offset(container)).toBe(held)
+      expect(top(container)).toBeGreaterThanOrEqual(last) // only ever down, with the page
+      expect(top(container)).toBeLessThanOrEqual(LINE)
+      last = top(container)
     }
     act(() => frames.at(5000 + FOLD_MS))
     follow(0) // folded: no room left to stick in
-    expect([top(container), offset(container)]).toEqual([stoodAt, ''])
+    // …where the same two taps one at a time leave it: closed, on the line.
+    expect([top(container), offset(container)]).toEqual([LINE, ''])
     expect(frames.pending()).toBe(0)
   })
 
@@ -1038,10 +1049,13 @@ describe('a header tapped above the line is brought down to it, never dropped on
     below('overview', 300)
     tap(container, 'overview')
     expect(offset(container)).toBe(held) // the header left behind
+    expect(top(container)).toBe(stoodAt)
     expect(header(container, 'overview').style.top).toBe('') // the one opened is below the line
     frame(5000)
     frame(5000 + FOLD_MS * 0.5)
-    expect([top(container), offset(container)]).toEqual([stoodAt, held])
+    expect(offset(container)).toBe(held)
+    expect(top(container)).toBeGreaterThanOrEqual(stoodAt)
+    expect(top(container)).toBeLessThanOrEqual(LINE)
     act(() => frames.at(5000 + FOLD_MS))
     expect(offset(container)).toBe('')
   })
@@ -1050,16 +1064,16 @@ describe('a header tapped above the line is brought down to it, never dropped on
     const { container } = tapAboveTheLine()
     frame(0)
     frame(FOLD_MS * 0.25)
-    const stoodAt = top(container)
     tap(container, 'stats') // closed…
     frame(5000)
     frame(5000 + FOLD_MS * 0.5)
+    const standsAt = top(container)
     tap(container, 'stats') // …and opened again, half-way through the fold
-    expect(top(container)).toBe(stoodAt)
+    expect(top(container)).toBe(standsAt)
     frame(9000)
     frame(9000 + FOLD_MS * 0.5)
-    expect(top(container)).toBeGreaterThan(stoodAt)
-    expect(top(container)).toBeLessThan(LINE)
+    expect(top(container)).toBeGreaterThanOrEqual(standsAt)
+    expect(top(container)).toBeLessThanOrEqual(LINE)
     frame(9000 + FOLD_MS)
     expect(offset(container)).toBe('')
     expect(frames.pending()).toBe(0)
