@@ -72,6 +72,7 @@ import {
   overriddenLiveFlags,
 } from './gameReducer.js'
 import { isJulianOnlyDate } from '../lib/calendar.js'
+import { summaryOf } from './timesPool.js'
 import type { CardMeta, EntryMeta, GameState, Question, StackEntry, Stats } from './gameReducer.js'
 import type { Btns } from './answerButtons.js'
 
@@ -95,8 +96,10 @@ export function checkStatsInvariants(s: Stats, where: string): string[] {
   if (!Array.isArray(s.times)) {
     v.push(`${where}: times is not an array`)
   } else {
-    if (s.times.some((t) => typeof t !== 'number' || !Number.isFinite(t) || t < 0))
-      v.push(`${where}: times has a non-finite/negative value`)
+    // Read from the pool's summary (engine/timesPool): worked out once per array and carried
+    // forward by every change the engine makes, so this check no longer walks every time after
+    // every answer — it is the same question, asked of every time, either way.
+    if (!summaryOf(s.times).valid) v.push(`${where}: times has a non-finite/negative value`)
     if (isCount(s.good) && s.times.length > s.good)
       v.push(`${where}: times.length(${s.times.length}) > good(${s.good})`)
     // The legacy baseline (Stats.timesLost): the times an old build discarded are still credits.

@@ -26,9 +26,13 @@ import { deepFreeze } from '../../src/engine/freeze.js'
 import { computeStreaks } from '../../src/engine/streak.js'
 import { computeHasCredit } from '../../src/engine/answerButtons.js'
 import { createRefModel, applyRefModel, compareRefModel } from './referenceModel.js'
+import { auditTimesPool } from '../../src/engine/timesPool.js'
 
 // Big-sweep knob: FUZZ_SCALE multiplies every profile's sequence COUNT (not its step length).
 export const SCALE = Math.max(1, Math.floor(Number(process.env.FUZZ_SCALE) || 1))
+// …and a deep sweep checks EVERY times-pool summary the engine makes against a from-scratch Mean and
+// Median (engine/timesPool audits every 64th in the ordinary run).
+if (SCALE > 1) auditTimesPool(1)
 
 // Seeded PRNG (mulberry32) — deterministic, so a failing seed reproduces exactly.
 export function mulberry32(a) {

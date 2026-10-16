@@ -62,10 +62,13 @@ describe('calcMed — the middle of the pool, selected rather than sorted', () =
 
   // A generous bound (a sort of this pool takes several times longer than it on any machine this
   // runs on), so a loaded test run cannot flake it; it fails only if the median goes back to sorting.
-  it('stays fast on a very large pool (200,000 times)', () => {
+  // Timed on a pool it has NEVER seen — a pool's median is worked out once and then kept beside it
+  // (engine/timesPool), so it is that first answer, for a pool just loaded, that must stay linear.
+  it('stays fast on a very large pool it has never seen (200,000 times)', () => {
     const rnd = mulberry32(7)
-    const t = Array.from({ length: 200_000 }, () => solveTimeFromMs(500 + rnd() * 9000))
-    calcMed(t) // warm
+    const pool = () => Array.from({ length: 200_000 }, () => solveTimeFromMs(500 + rnd() * 9000))
+    calcMed(pool()) // warm the code, on another pool
+    const t = pool()
     const start = performance.now()
     const m = calcMed(t)
     const took = performance.now() - start

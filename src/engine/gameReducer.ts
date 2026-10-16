@@ -30,6 +30,7 @@
 import { isJulianDate, isJulianOnlyDate, wday, wdayJulian } from '../lib/calendar.js'
 import { computeStreaks } from './streak.js'
 import { withoutLast } from './arrayCopy.js'
+import { appended, retimed } from './timesPool.js'
 import { computeHasCredit, markBtns, mkBtnsWithCorrect, greenOnMiss } from './answerButtons.js'
 import type { ButtonState, Btns } from './answerButtons.js'
 import type { FormatId } from '../lib/format.js'
@@ -722,12 +723,13 @@ const poolSlot = (s: GameState, before: number): number => {
 // A toggle's effect on the counters: `good` moves by one in the card's new direction, and the card's
 // old contribution leaves its slot as its new one takes it. `played` never moves — a toggle neither
 // adds nor removes a card — which is why historyBase and timesBase are never touched by one either.
-const retime = (stats: Stats, at: number, before: CardFields, after: CardFields): Stats => {
-  const times = [...stats.times] // a spread, never `slice` (engine/arrayCopy says why)
-  if (before.solveTime != null) times.splice(at, 1)
-  if (after.solveTime != null) times.splice(at, 0, after.solveTime)
-  return { ...stats, good: stats.good + (after.hasCredit ? 1 : -1), times }
-}
+// The new pool comes from engine/timesPool, which carries the pool's Mean and Median across the
+// change instead of leaving the stat strip to walk every time again.
+const retime = (stats: Stats, at: number, before: CardFields, after: CardFields): Stats => ({
+  ...stats,
+  good: stats.good + (after.hasCredit ? 1 : -1),
+  times: retimed(stats.times, at, before.solveTime != null, after.solveTime),
+})
 
 // ── THE CREDIT SEQUENCE — every scored card in play order, as credit / miss ──────────────────────
 // What streak and best are recomputed from after a toggle, because a toggle can change ANY card's
@@ -929,7 +931,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           next.liveSolveTime = recorded
           let stats = state.stats
           if (recorded != null) {
-            stats = { ...stats, times: [...stats.times, recorded] }
+            // engine/timesPool: the new pool, its Mean and Median carried one answer forward.
+            stats = { ...stats, times: appended(stats.times, recorded) }
           }
           if (effective) {
             const streak = stats.streak + 1
