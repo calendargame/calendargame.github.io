@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 import { useUserDefaults, effectiveAmnesicDefault } from '../src/store/userDefaults.js'
 import { activeAmnesicMode } from '../src/store/amnesic.js'
@@ -70,6 +71,8 @@ describe('Save Defaults + gear indicator', () => {
   it('Save → Reset Settings restores the personal panel values (store + year-range mirrors)', () => {
     useSettings.getState().setLeapChance('75')
     useSettings.getState().setMinY(1600)
+    // …and the Julian-on Year Range, which the snapshot carries beside the 16 (store/julianRange).
+    useJulianRange.getState().applyJulianRange({ julianMinY: 300, julianMaxY: 11000 })
     mountApp()
     openSettings()
     openPopup()
@@ -78,11 +81,14 @@ describe('Save Defaults + gear indicator', () => {
     act(() => {
       useSettings.getState().setLeapChance('random')
       useSettings.getState().setMinY(1583)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1, julianMaxY: 11582 })
     })
     fireResetSettings()
     expect(useSettings.getState().leapChance).toBe('75')
     expect(useSettings.getState().minY).toBe(1600)
-    expect(yearInput('min').value).toBe('1600') // the min-year text mirror
+    expect(yearInput('min', 'off').value).toBe('1600') // the min-year text mirror
+    expect(useJulianRange.getState()).toMatchObject({ julianMinY: 300, julianMaxY: 11000 })
+    expect([yearInput('min', 'on').value, yearInput('max', 'on').value]).toEqual(['300', '11000'])
     // …and it is the ONLY box in the document showing 1600. This line looks redundant and is not:
     // it is the second half of the retired `getByDisplayValue('1600')`, which was a throwing,
     // ambiguity-rejecting query and so asserted uniqueness as well as presence. yearInput() names
@@ -585,7 +591,7 @@ describe('Save Defaults + gear indicator', () => {
       ['min', '1600'],
       ['max', '1900'],
     ]) {
-      const input = yearInput(end) // the min/max text mirrors
+      const input = yearInput(end, 'off') // the min/max text mirrors of the Julian-off pair
       expect(input.value).toBe(year)
       // The uniqueness half of the retired getByDisplayValue(year) — see the same pairing above.
       expect(screen.getAllByDisplayValue(year)).toHaveLength(1)

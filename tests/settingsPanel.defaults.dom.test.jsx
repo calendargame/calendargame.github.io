@@ -51,6 +51,7 @@
 // static text (round 21 froze the last one — no more "Confirm?" swap) and claims nothing about pixels.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, within, cleanup, fireEvent, act } from '@testing-library/react'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
@@ -246,8 +247,8 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     expect(panelValues()).not.toEqual(atDefaults) // the fixture really diverged
     fireResetSettings()
     expect(panelValues()).toEqual(atDefaults)
-    expect(yearValue('min')).toBe(String(SETTINGS_DEFAULTS.minY)) // the text mirrors, not just the store
-    expect(yearValue('max')).toBe(String(SETTINGS_DEFAULTS.maxY))
+    expect(yearValue('min', 'off')).toBe(String(SETTINGS_DEFAULTS.minY)) // the text mirrors, not just the store
+    expect(yearValue('max', 'off')).toBe(String(SETTINGS_DEFAULTS.maxY))
     expect(prefs(CAPTURABLE)).toEqual(factoryPrefs(CAPTURABLE))
   })
 
@@ -338,7 +339,13 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     // "the reset landed" and "the reset was applied to the question" are different observations.
     act(() =>
       useUserDefaults.getState().saveDefaults({
-        settings: { ...SETTINGS_DEFAULTS, dateFormat: 'numeric-ymd', minY: 1700, maxY: 1700 },
+        settings: {
+          ...SETTINGS_DEFAULTS,
+          dateFormat: 'numeric-ymd',
+          useJulian: false,
+          minY: 1700,
+          maxY: 1700,
+        },
         prefs: pick(MODE_PREFS_DEFAULTS, CAPTURABLE),
         amnesic: 'off',
       }),
@@ -346,6 +353,7 @@ describe('⚙ Reset Settings — its full reach, positive and negative (net grou
     act(() => {
       const s = useSettings.getState()
       s.setDateFormat('numeric-ymd')
+      s.setUseJulian(false) // so the range in use is the Julian-off pair these years are written to
       s.setMinY(1600)
       s.setMaxY(1600)
     })
@@ -536,6 +544,8 @@ describe('⚙ Full Reset — reach, outcomes, and the confirmation popup (net gr
       s.setRandomFormat(false)
       s.setDateFormat('numeric-ymd')
       s.setMinY(1583)
+      // …the range in use, with the Julian Calendar setting on (store/julianRange): modern years only.
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 11582 })
     })
     act(() => {
       const p = useProgress.getState()
@@ -760,7 +770,12 @@ describe('⚙ The defaults snapshot — Save, the manager, Clear (net group 9)',
     openSettings()
     const personalView = panelValues()
     saveSnapshot()
-    expect(useUserDefaults.getState().saved.settings).toEqual(PERSONAL_SETTINGS)
+    // (…with the Julian-on Year Range beside them, which the snapshot carries too — store/julianRange.)
+    expect(useUserDefaults.getState().saved.settings).toEqual({
+      ...PERSONAL_SETTINGS,
+      julianMinY: 1,
+      julianMaxY: 11582,
+    })
     // …and the round trip is completed through the panel, not just read out of the store: send
     // everything back to factory, then ask the defaults to restore it.
     applySettings(SETTINGS_DEFAULTS)

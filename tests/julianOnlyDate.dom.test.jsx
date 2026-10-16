@@ -27,6 +27,7 @@ import {
   closeSettings,
 } from './helpers/settingsPanel.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { dim, wday, wdayJulian } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
 
@@ -63,6 +64,7 @@ function pin1500() {
     s.setDateFormat('numeric-ymd')
     s.setMinY(1496)
     s.setMaxY(1500)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1496, julianMaxY: 1500 })
     s.setLeapChance('random')
     s.setJanFebChance('100')
     s.setUseJulian(true)
@@ -187,6 +189,7 @@ describe('Classic — the Julian Calendar setting switched in the ⚙ panel', ()
       s.setUseJulian(false)
       s.setMinY(1600)
       s.setMaxY(1600)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1600, julianMaxY: 1600 })
     })
     closeSettings()
     expect(shownDate()).toMatch(/^1600-/)

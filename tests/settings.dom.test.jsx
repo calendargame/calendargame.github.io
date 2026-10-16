@@ -77,6 +77,7 @@ import {
   panelButton,
   isOffered,
   resetAppState,
+  setRangeInUse,
 } from './helpers/settingsPanel.jsx'
 import { questionText } from './helpers/modeScreen.jsx'
 
@@ -493,14 +494,14 @@ describe('Settings — THE PICKER RULE', () => {
       fireEvent.click(group('Julian Chance').getByRole('radio', { name: '75%' }))
     })
     expect(st().julianChance).toBe('75')
-    act(() => st().setMinY(1900)) // all-Gregorian: nothing for the setting to do
+    act(() => setRangeInUse({ min: 1900 })) // all-Gregorian: nothing for the setting to do
     expectLock('Julian Chance', true)
     expect(checked('Julian Chance')).toEqual(['75%']) // preserved while locked
     act(() => {
       fireEvent.click(group('Julian Chance').getByRole('radio', { name: 'Random' }))
     })
     expect(st().julianChance).toBe('75') // the guard held
-    act(() => st().setMinY(1))
+    act(() => setRangeInUse({ min: 1 }))
     expectLock('Julian Chance', false) // and it comes back live, still on 75%
     expect(checked('Julian Chance')).toEqual(['75%'])
     clickToggle('Julian Calendar (pre-Oct 15, 1582)') // the other half of the condition
@@ -516,10 +517,7 @@ describe('Settings — THE PICKER RULE', () => {
       fireEvent.click(group('Leap Year Chance').getByRole('radio', { name: '100%' }))
     })
     expect(st().leapChance).toBe('100')
-    act(() => {
-      st().setMinY(1900)
-      st().setMaxY(1900)
-    })
+    act(() => setRangeInUse({ min: 1900, max: 1900 }))
     expectLock('Leap Year Chance', true)
     expect(checked('Leap Year Chance')).toEqual(['100%'])
     act(() => {
@@ -533,7 +531,7 @@ describe('Settings — THE PICKER RULE', () => {
       fireEvent.click(group('Jan/Feb Chance on Leap Years').getByRole('radio', { name: '50%' }))
     })
     expect(st().janFebChance).toBe('50')
-    act(() => st().setMaxY(10000))
+    act(() => setRangeInUse({ max: 10000 }))
     expectLock('Leap Year Chance', false)
     expect(checked('Leap Year Chance')).toEqual(['100%']) // restored, not reset
   })
@@ -1109,7 +1107,7 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expect(cls('Dark theme')).toBe('space-y-1.5')
     clickToggle('Random Format')
     expect(cls('Date Format')).toBe('flex gap-2 opacity-60 pointer-events-none')
-    act(() => st().setMinY(1900)) // all-Gregorian: the Julian row locks, and it has no own class
+    act(() => setRangeInUse({ min: 1900 })) // all-Gregorian: the Julian row locks, and it has no own class
     expect(cls('Julian Chance')).toBe('opacity-60 pointer-events-none')
   })
 

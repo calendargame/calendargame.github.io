@@ -28,6 +28,7 @@ import { amnesicModeOf } from '../src/store/sessionAmnesic.js'
 import { loadPage, closeApp } from './helpers/pageLoad.js'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress } from '../src/store/progress.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
@@ -71,6 +72,7 @@ const pinReadable = () =>
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
 // The ⚙ pill, as one call: true is Full (the guest mode this file is about), false is Off; the last
 // block passes 'stats'.
@@ -455,6 +457,7 @@ describe('a guest who changes the setup never changes your saved bests', () => {
     act(() => {
       useSettings.getState().setMinY(2000)
       useSettings.getState().setMaxY(2001)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
     })
     setAmnesic(false)
     // Restored, an Override on the revealed card resumed the round drawing 2000–2001 dates and the
@@ -487,7 +490,7 @@ describe('a guest who changes the setup never changes your saved bests', () => {
     const before = JSON.stringify(permanent().blitzBest)
     unmount()
     act(() => {
-      useSettings.getState().setMinY(1900) // another tab on this origin moved the shared settings
+      useJulianRange.getState().setJulianMinY(1900) // another tab on this origin moved the shared settings
     })
     mountApp()
     press('B')

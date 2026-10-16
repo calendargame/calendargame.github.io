@@ -77,15 +77,37 @@ export const janFebChanceApplies = (minY: number, maxY: number, useJulian: boole
 export const julianChanceApplies = (minY: number, maxY: number, useJulian: boolean): boolean =>
   useJulian && minY <= 1582 && maxY >= 1582
 
-export function dateSettingsInEffect(s: DateSettings): DateSettingsInEffect {
+// THE YEAR RANGE IN EFFECT (Round 26, Q7): the ⚙ panel holds two pairs, one used while the Julian
+// Calendar setting is off (the settings store's minY / maxY, capped at 10000) and one used while it
+// is on (store/julianRange, capped at 11582). The pair not in use reaches nothing: App hands every
+// screen this one, so editing the other pair cannot regenerate, reset, or move a Best.
+export interface JulianPair {
+  julianMinY: number
+  julianMaxY: number
+}
+export const yearRangeInEffect = (
+  useJulian: boolean,
+  off: { minY: number; maxY: number },
+  on: JulianPair,
+): { minY: number; maxY: number } =>
+  useJulian ? { minY: on.julianMinY, maxY: on.julianMaxY } : { minY: off.minY, maxY: off.maxY }
+
+// The settings in effect. `s.minY` / `s.maxY` are the Julian-off pair; given the Julian-on pair too,
+// the range is the one in use (yearRangeInEffect). Without it — a stored Best key, whose own range is
+// the one it was played on — `s`'s range is taken as it is.
+export function dateSettingsInEffect(
+  s: DateSettings,
+  julianPair?: JulianPair,
+): DateSettingsInEffect {
+  const { minY, maxY } = julianPair ? yearRangeInEffect(s.useJulian, s, julianPair) : s
   return {
     format: s.randomFormat ? 'random' : s.dateFormat,
-    minY: s.minY,
-    maxY: s.maxY,
+    minY,
+    maxY,
     useJulian: s.useJulian,
-    leapChance: leapChanceApplies(s.minY, s.maxY, s.useJulian) ? s.leapChance : 'random',
-    janFebChance: janFebChanceApplies(s.minY, s.maxY, s.useJulian) ? s.janFebChance : 'random',
-    julianChance: julianChanceApplies(s.minY, s.maxY, s.useJulian) ? s.julianChance : 'random',
+    leapChance: leapChanceApplies(minY, maxY, s.useJulian) ? s.leapChance : 'random',
+    janFebChance: janFebChanceApplies(minY, maxY, s.useJulian) ? s.janFebChance : 'random',
+    julianChance: julianChanceApplies(minY, maxY, s.useJulian) ? s.julianChance : 'random',
   }
 }
 

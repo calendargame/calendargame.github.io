@@ -60,6 +60,7 @@ import {
   setPresetAmnesic,
 } from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
@@ -969,6 +970,7 @@ const pinReadableQuestions = () =>
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
 
 const ctrl = (name) => screen.getByRole('button', { name })

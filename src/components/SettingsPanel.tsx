@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { flushSync } from 'react-dom'
-import { julianChanceApplies, leapChanceApplies } from '../lib/dateConfig.js'
+import { julianChanceApplies, leapChanceApplies, yearRangeInEffect } from '../lib/dateConfig.js'
 import { fmt, numericFormatOf } from '../lib/format.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
 import { sharedFitScale } from '../lib/statFit.js'
@@ -58,6 +58,7 @@ import { BUILD_IS_DEPLOYED, DEPLOY_TS } from '../deployStamp.js'
 import { APP_VERSION } from '../appVersion.js'
 import { CHANGELOG } from '../changelog.js'
 import { useSettings, SETTINGS_DEFAULTS } from '../store/settings.js'
+import { useJulianRange } from '../store/julianRange.js'
 import type { SettingsValues } from '../store/settings.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import {
@@ -66,12 +67,12 @@ import {
   effectiveAmnesicDefault,
   normalizeAoxN,
 } from '../store/userDefaults.js'
-import type { PrefDefaults } from '../store/userDefaults.js'
+import type { PrefDefaults, SavedSettings } from '../store/userDefaults.js'
 import { usePresets } from '../store/presets.js'
 import { useActiveAmnesicMode } from '../store/amnesic.js'
 import type { AmnesicMode } from '../store/amnesicMode.js'
 import { setPresetAmnesic, setOpenInPreset } from '../store/presetControl.js'
-import type { YearRangeMirrors } from './useYearRangeMirrors.js'
+import type { YearMirror, YearRangeMirrors } from './useYearRangeMirrors.js'
 
 // ============================================================
 // SettingsPanel — the ⚙ popover card and its modals: Save Defaults, the defaults manager, the
@@ -148,10 +149,14 @@ export type SettingsPanelProps = {
   /** The EFFECTIVE pref defaults. Passed rather than recomputed: it is a useMemo in App whose
    *  IDENTITY matters (prefsAtDefaults is a zustand selector closing over it). */
   defPrefs: PrefDefaults
-  /** The Year Range boxes' text mirrors — App state, because a half-typed year survives a close. */
-  yearRange: YearRangeMirrors
+  /** The Year Range boxes' text mirrors, one per pair (Julian off, Julian on) — App state, because a
+   *  half-typed year survives a close. */
+  yearRangeOff: YearRangeMirrors
+  yearRangeOn: YearRangeMirrors
   minYearRef: RefObject<HTMLInputElement | null>
   maxYearRef: RefObject<HTMLInputElement | null>
+  julianMinYearRef: RefObject<HTMLInputElement | null>
+  julianMaxYearRef: RefObject<HTMLInputElement | null>
   /** The update-check state machine's label-state and its trigger. THE LABEL IS THE STATE. */
   updateCheck: UpdateCheckState
   onCheckUpdates: () => void
@@ -160,6 +165,89 @@ export type SettingsPanelProps = {
    *  only reader and its only retirer. */
   changelogDot: boolean
   onRetireChangelogDot: () => void
+}
+
+// ONE YEAR BOX — the Year Range row has four (two pairs), and each behaves exactly as the one pair
+// always did: digits only while typing, the commit on leaving (blur or Enter), Escape throwing the
+// typing away (the ★ notes at the row say why it is written this way).
+function YearBox({
+  name,
+  mirror,
+  committed,
+  inputRef,
+}: {
+  name: string
+  mirror: YearMirror
+  committed: number
+  inputRef: RefObject<HTMLInputElement | null>
+}) {
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      aria-label={name}
+      data-drag-focus
+      value={mirror.value}
+      onChange={(e) => {
+        if (e.target.value === '' || /^\d*$/.test(e.target.value)) mirror.setValue(e.target.value)
+      }}
+      onBlur={mirror.commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          mirror.commit()
+          e.currentTarget.blur()
+        }
+        if (e.key === 'Escape') {
+          const el = e.currentTarget
+          flushSync(() => mirror.setValue(String(committed)))
+          el.blur()
+        }
+        blockMinus(e)
+      }}
+      onBeforeInput={blockMinusBI}
+      className={`${NUM_INPUT_CLASS} py-1.5 flex-1 min-w-0`}
+    />
+  )
+}
+// ONE PAIR — its caption over its two boxes, the "→" between them.
+function YearPair({
+  caption,
+  mirrors,
+  min,
+  max,
+  minRef,
+  maxRef,
+}: {
+  caption: string
+  mirrors: YearRangeMirrors
+  min: number
+  max: number
+  minRef: RefObject<HTMLInputElement | null>
+  maxRef: RefObject<HTMLInputElement | null>
+}) {
+  return (
+    <div className="flex-1 min-w-0 space-y-1.5">
+      <SectionLabel className="text-center">{caption}</SectionLabel>
+      <div className="flex items-center gap-1.5">
+        <YearBox
+          name={`Earliest Year, ${caption}`}
+          mirror={mirrors.min}
+          committed={min}
+          inputRef={minRef}
+        />
+        <span className="text-(--tx-300-60) text-sm shrink-0">→</span>
+        <YearBox
+          name={`Latest Year, ${caption}`}
+          mirror={mirrors.max}
+          committed={max}
+          inputRef={maxRef}
+        />
+      </div>
+    </div>
+  )
 }
 
 export function SettingsPanel({
@@ -172,9 +260,12 @@ export function SettingsPanel({
   mode,
   activeTheme,
   defPrefs,
-  yearRange,
+  yearRangeOff,
+  yearRangeOn,
   minYearRef,
   maxYearRef,
+  julianMinYearRef,
+  julianMaxYearRef,
   updateCheck,
   onCheckUpdates,
   changelogDot,
@@ -193,7 +284,12 @@ export function SettingsPanel({
   const setManualTheme = useSettings((s) => s.setManualTheme)
   const minY = useSettings((s) => s.minY)
   const maxY = useSettings((s) => s.maxY)
+  const julianMinY = useJulianRange((s) => s.julianMinY)
+  const julianMaxY = useJulianRange((s) => s.julianMaxY)
   const useJulian = useSettings((s) => s.useJulian)
+  // The Year Range in effect — the pair for the Julian Calendar setting as it stands — which is the
+  // range the chance rows' "does it apply?" questions are asked about (lib/dateConfig).
+  const range = yearRangeInEffect(useJulian, { minY, maxY }, { julianMinY, julianMaxY })
   const setUseJulian = useSettings((s) => s.setUseJulian)
   const saveStats = useSettings((s) => s.saveStats)
   const setSaveStats = useSettings((s) => s.setSaveStats)
@@ -307,7 +403,7 @@ export function SettingsPanel({
   const [saveDefaultsOpen, setSaveDefaultsOpen] = useState(false)
   // A ref, and it is safe to re-create it per panel open: it is written by openSaveDefaults and
   // read only at commit, and the popup cannot outlive the panel that opened it.
-  const pendSettingsRef = useRef<SettingsValues | null>(null)
+  const pendSettingsRef = useRef<SavedSettings | null>(null)
   const [pendPrefs, setPendPrefs] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
   const [pendSeed, setPendSeed] = useState<PrefDefaults>(() => effectivePrefDefaults(null))
   // Defaults manager (editable since round 6) popup state — View Saved Defaults' window onto the
@@ -494,9 +590,16 @@ export function SettingsPanel({
     // exactly what is not true of App's resetSettings, whose guard had to go on the button.
     if (!settingsModified) return
     const s = useSettings.getState()
-    pendSettingsRef.current = Object.fromEntries(
-      Object.keys(SETTINGS_DEFAULTS).map((k) => [k, s[k as keyof SettingsValues]]),
-    ) as SettingsValues
+    const j = useJulianRange.getState()
+    pendSettingsRef.current = {
+      ...(Object.fromEntries(
+        Object.keys(SETTINGS_DEFAULTS).map((k) => [k, s[k as keyof SettingsValues]]),
+      ) as SettingsValues),
+      // …and the Julian-on Year Range, which rides in the snapshot's settings (store/userDefaults'
+      // SavedSettings says why there).
+      julianMinY: j.julianMinY,
+      julianMaxY: j.julianMaxY,
+    }
     const p = useModePrefs.getState()
     const seeded = {
       flashMs: p.flashMs,
@@ -1384,100 +1487,67 @@ export function SettingsPanel({
           <div className="space-y-2 pt-3 border-t border-(--bd-500-20)">
             <SectionLabel>Dates</SectionLabel>
             <div className="text-xs text-(--tx-200-80)">Year Range</div>
-            <div className="flex items-center gap-2">
-              {/* ★ BOTH YEAR BOXES NAME THEMSELVES (aria-label), for the same reason the four
-                  switches above do: their only context is the "Year Range" caption above the row
-                  and a "→" between them, neither of which a screen reader attaches to either input
-                  — so without a name they announce as two bare, indistinguishable edit boxes.
-                  "Earliest"/"Latest" rather than "Minimum"/"Maximum" to match the guide's own
-                  framing of the range ("Defaults to 1-10000 AD", GuidePage "Dates — Year Range").
-                  Purely additive: no visible label is added, so the row's geometry is untouched.
-                  ⚠ These names are also the TEST HANDLE for the two boxes. Do not remove them
-                  expecting the suite to catch it by other means: the boxes carry no other stable
-                  identity, and the previous handle — data-drag-focus — is a GENERAL press-drag
-                  opt-in (src/lib/pointerGestures.ts), so any third control in the panel adopting it
-                  would have broken every year-range test at once.
-                  ⚠ THE TEXT IN THESE BOXES IS NOT PANEL STATE. It lives in App
-                  (components/useYearRangeMirrors) and arrives as the `yearRange` prop, together
-                  with the two refs, precisely so a half-typed year survives closing and reopening
-                  the panel — which it would not if this component owned it and remounted per open.
-                  The committed years (minY/maxY) come straight from the store, as everywhere else
-                  in the panel. */}
-              {/* ★ WHAT ESCAPE DOES IN A YEAR BOX, and why it is written this awkwardly (round 14 —
-                  it did neither of these things before, and the intent had always been to).
-                  THROW THE EDIT AWAY: put the committed year back in the box. The revert used to be
-                  a plain setValue followed by the blur() below, and the two landed in ONE React
-                  batch — so onBlur's commit still closed over the PRE-revert text and committed the
-                  very value Escape was discarding. (Only unparseable text appeared to revert, via
-                  the commit's own cannot-parse branch, which is presumably why it went unnoticed.)
-                  flushSync lands the revert BEFORE the blur, so the commit that follows re-reads
-                  the restored year and is a no-op. currentTarget is captured first because it is
-                  only valid during dispatch.
-                  AND KEEP THE PANEL OPEN: Escape also closes the top open layer — this panel
-                  (components/overlayStack) — but that rule stands aside while a text box has the
-                  keyboard, which is what leaves this press to the box.
-                  Escape still BLURS, deliberately. It keeps the pair the author wrote (Enter = keep
-                  it and let go, Escape = discard it and let go), it drops the numeric keyboard on a
-                  phone, and it leaves a second Escape free to close the panel — a dismissal ladder,
-                  rather than an input that swallows Escape forever. */}
-              <input
-                ref={minYearRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                aria-label="Earliest Year"
-                data-drag-focus
-                value={yearRange.min.value}
-                onChange={(e) => {
-                  if (e.target.value === '' || /^\d*$/.test(e.target.value))
-                    yearRange.min.setValue(e.target.value)
-                }}
-                onBlur={yearRange.min.commit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    yearRange.min.commit()
-                    e.currentTarget.blur()
-                  }
-                  if (e.key === 'Escape') {
-                    const el = e.currentTarget
-                    flushSync(() => yearRange.min.setValue(String(minY)))
-                    el.blur()
-                  }
-                  blockMinus(e)
-                }}
-                onBeforeInput={blockMinusBI}
-                className={`${NUM_INPUT_CLASS} py-1.5 w-16`}
+            {/* ★ TWO PAIRS OF BOXES ON ONE ROW (Round 26, Q7): the range used while the Julian
+                Calendar setting is off (up to 10000), and the one used while it is on (up to 11582
+                — lib/calendar's caps). Two captioned families side by side, Date Format's pattern;
+                each family and each box takes an equal share of the row (flex-1 min-w-0 — a fixed
+                width cannot hold four). Only the pair for the setting as it stands is in effect
+                (lib/dateConfig's yearRangeInEffect); the other is still typed into and saved, and
+                changing it changes no date. */}
+            {/* ★ EVERY YEAR BOX NAMES ITSELF (aria-label), for the same reason the four
+                switches above do: their only context is the "Year Range" caption above the row,
+                its pair's caption, and a "→" between them, none of which a screen reader attaches
+                to an input — so without a name they announce as bare, indistinguishable edit
+                boxes. Each name carries its pair ("Earliest Year, Julian Off").
+                "Earliest"/"Latest" rather than "Minimum"/"Maximum" to match the guide's own
+                framing of the range (GuidePage "Dates — Year Range").
+                Purely additive: no visible label is added, so the row's geometry is untouched.
+                ⚠ These names are also the TEST HANDLE for the four boxes. Do not remove them
+                expecting the suite to catch it by other means: the boxes carry no other stable
+                identity, and the previous handle — data-drag-focus — is a GENERAL press-drag
+                opt-in (src/lib/pointerGestures.ts), so any third control in the panel adopting it
+                would have broken every year-range test at once.
+                ⚠ THE TEXT IN THESE BOXES IS NOT PANEL STATE. It lives in App
+                (components/useYearRangeMirrors, one per pair) and arrives as the `yearRangeOff`
+                and `yearRangeOn` props, together with the four refs, precisely so a half-typed
+                year survives closing and reopening the panel — which it would not if this
+                component owned it and remounted per open.
+                The committed years come straight from their stores, as everywhere else in the
+                panel: the Julian-off pair is the settings store's minY/maxY, the Julian-on pair
+                store/julianRange's. */}
+            {/* ★ WHAT ESCAPE DOES IN A YEAR BOX, and why it is written this awkwardly (round 14 —
+                it did neither of these things before, and the intent had always been to).
+                THROW THE EDIT AWAY: put the committed year back in the box. The revert used to be
+                a plain setValue followed by the blur() below, and the two landed in ONE React
+                batch — so onBlur's commit still closed over the PRE-revert text and committed the
+                very value Escape was discarding. (Only unparseable text appeared to revert, via
+                the commit's own cannot-parse branch, which is presumably why it went unnoticed.)
+                flushSync lands the revert BEFORE the blur, so the commit that follows re-reads
+                the restored year and is a no-op. currentTarget is captured first because it is
+                only valid during dispatch.
+                AND KEEP THE PANEL OPEN: Escape also closes the top open layer — this panel
+                (components/overlayStack) — but that rule stands aside while a text box has the
+                keyboard, which is what leaves this press to the box.
+                Escape still BLURS, deliberately. It keeps the pair the author wrote (Enter = keep
+                it and let go, Escape = discard it and let go), it drops the numeric keyboard on a
+                phone, and it leaves a second Escape free to close the panel — a dismissal ladder,
+                rather than an input that swallows Escape forever. */}
+            <div className="flex gap-2">
+              <YearPair
+                caption="Julian Off"
+                mirrors={yearRangeOff}
+                min={minY}
+                max={maxY}
+                minRef={minYearRef}
+                maxRef={maxYearRef}
               />
-              <span className="text-(--tx-300-60) text-sm shrink-0">→</span>
-              <input
-                ref={maxYearRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                aria-label="Latest Year"
-                data-drag-focus
-                value={yearRange.max.value}
-                onChange={(e) => {
-                  if (e.target.value === '' || /^\d*$/.test(e.target.value))
-                    yearRange.max.setValue(e.target.value)
-                }}
-                onBlur={yearRange.max.commit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    yearRange.max.commit()
-                    e.currentTarget.blur()
-                  }
-                  if (e.key === 'Escape') {
-                    const el = e.currentTarget
-                    flushSync(() => yearRange.max.setValue(String(maxY)))
-                    el.blur()
-                  }
-                  blockMinus(e)
-                }}
-                onBeforeInput={blockMinusBI}
-                className={`${NUM_INPUT_CLASS} py-1.5 w-16`}
+              <YearPair
+                caption="Julian On"
+                mirrors={yearRangeOn}
+                min={julianMinY}
+                max={julianMaxY}
+                minRef={julianMinYearRef}
+                maxRef={julianMaxYearRef}
               />
             </div>
             {/* ★ THE ORDER OF THIS SECTION (round-12) — Year Range, then the two LEAP rows, then
@@ -1505,7 +1575,7 @@ export function SettingsPanel({
             <div className="text-xs text-(--tx-200-80) pt-1">Leap Year Chance</div>
             <PillGroup
               label="Leap Year Chance"
-              disabled={!leapChanceApplies(minY, maxY, useJulian)}
+              disabled={!leapChanceApplies(range.minY, range.maxY, useJulian)}
             >
               <PillTray value={leapChance} onChange={setLeapChance} options={LEAP_CHANCE_OPTIONS} />
             </PillGroup>
@@ -1532,7 +1602,10 @@ export function SettingsPanel({
                 spans both calendars. When locked the selected value stays visually selected, so
                 it's restored when the range becomes mixed again. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Julian Chance</div>
-            <PillGroup label="Julian Chance" disabled={!julianChanceApplies(minY, maxY, useJulian)}>
+            <PillGroup
+              label="Julian Chance"
+              disabled={!julianChanceApplies(range.minY, range.maxY, useJulian)}
+            >
               <PillTray value={julianChance} onChange={setJulianChance} options={CHANCE_OPTIONS} />
             </PillGroup>
           </div>

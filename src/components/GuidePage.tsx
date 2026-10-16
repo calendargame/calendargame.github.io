@@ -2492,8 +2492,9 @@ export default function GuidePage({
           <li>
             The four On/Off switches carry their setting&apos;s name — Random Format, Use System
             Settings, Julian Calendar, Save Stats — rather than reading as four identical buttons
-            called &quot;On&quot;. Both Year Range boxes name themselves Earliest Year and Latest
-            Year.
+            called &quot;On&quot;. The four Year Range boxes name themselves with their pair:
+            Earliest Year, Julian Off; Latest Year, Julian Off; Earliest Year, Julian On; and Latest
+            Year, Julian On.
           </li>
           <li>
             The ⚙ button says what&apos;s behind it: that a setting has been changed, that an update
@@ -2949,8 +2950,29 @@ export default function GuidePage({
         onToggle={toggle}
         durationMs={motionMs}
       >
-        <Lead>Controls which years dates are drawn from. Defaults to 1–10000 AD.</Lead>
+        <Lead>
+          Controls which years dates are drawn from. Two pairs of boxes on one row: the range used
+          while the Julian Calendar setting is off (Julian Off — 1–10000 AD by default, and up to
+          10000), and the one used while it is on (Julian On — 1–11582 AD by default, and up to
+          11582).
+        </Lead>
         <UL>
+          <li>
+            Only the pair for the Julian Calendar setting as it stands is used. You can still type
+            into the other pair, and it is saved with your settings: changing it lights the ⚙
+            button&apos;s violet bar like any other change, and nothing else happens: no date is
+            redrawn, no Best moves, and no run in MoX or round in Blitz starts over. Switching the
+            Julian Calendar setting swaps which pair is used — so if the two pairs differ, the
+            waiting date is redrawn when you close the ⚙ menu, as it is for any change of range.
+          </li>
+          <li>
+            Why 11582: years 10001–11582 follow the modern (Gregorian) calendar, and because 10000
+            years is a whole number of 400-year calendar cycles, each one has exactly the weekdays,
+            leap year, and codes of the year 10000 before it under the modern calendar — 11582 reads
+            like 1582 would if the modern calendar had always been in use. So they let you practise
+            the year endings of 1–1582 the way the modern calendar reads them, while the years
+            1–1582 themselves are read in the Julian calendar.
+          </li>
           <li>
             A year you type counts once you leave the box — press <Kbd>Enter</Kbd>, or tap anywhere
             else. <Kbd>Esc</Kbd> does the opposite: it throws the typing away, puts the stored year
@@ -2981,6 +3003,12 @@ export default function GuidePage({
             when you close the ⚙ menu.
           </li>
         </UL>
+        <p>
+          Your MoX and Blitz Bests belong to the exact year range they were set on, so a range that
+          was the standard 1–10000 with the Julian Calendar setting on, now 1–11582, shows its own
+          Bests: the ones from 1–10000 are kept, and show again if you set the Julian On top year
+          back to 10000.
+        </p>
         <Subhead>Year sub-mode auto-disable</Subhead>
         <p>
           Deduction's Year sub-mode requires either a range of at least 5 years (so a 5-year window
@@ -3042,6 +3070,7 @@ export default function GuidePage({
       >
         <Lead>
           Treats early dates as Julian; on by default. Includes the Julian Chance frequency control.
+          It also chooses which Year Range pair is in use.
         </Lead>
         <p>
           When on, dates on or before October 4, 1582 are treated as Julian, which has different
@@ -3067,7 +3096,9 @@ export default function GuidePage({
             the weekday it shows you was worked out in it.)
           </li>
           <li>
-            <b>Classic and Flash</b> — the date on screen stays when you change the setting. If
+            <b>Classic and Flash</b> — the date on screen stays when you change the setting, as long
+            as the change leaves every other date setting as it acts: the same Year Range in use
+            (the two pairs are the same), and no chance setting starting or stopping to apply. If
             nothing has been judged on it yet, its correct answer and its codes follow the new
             setting. If you&apos;ve already answered it wrong, revealed it, or shown its codes, it
             keeps the calendar it was first judged in — a day that would be right under the new
@@ -3103,7 +3134,7 @@ export default function GuidePage({
         <Subhead>Julian Chance</Subhead>
         <p>
           Sets how often a generated date lands in the Julian period (pre-Oct 15, 1582). Random uses
-          the natural rate (depends on your year range, ~16% on the default 1–10000 range); 25%,
+          the natural rate (depends on your year range, ~14% on the default 1–11582 range); 25%,
           50%, 75%, and 100% force higher rates. The listed percentage is the exact final rate of
           Julian dates, not a force probability. Changing the value always regenerates an unanswered
           date; burned dates defer like every other setting.
@@ -3682,7 +3713,7 @@ export default function GuidePage({
           <li>Input on Buttons, Rotate Dots on Standard</li>
           <li>Default Mode back to Classic</li>
           <li>Julian on, Julian Chance Random</li>
-          <li>Year range 1–10000</li>
+          <li>Year Range 1–10000 with Julian off, and 1–11582 with it on</li>
           <li>Leap Year Chance Random, Jan/Feb Chance Random</li>
           <li>Save Stats on, Amnesic Off</li>
           <li>
@@ -3982,12 +4013,14 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
       </p>
       <p>
         Bests are tracked per exact configuration: MoX run length, Allow Mistakes, Date Format (or
-        Random Format on its own bucket), Leap Year Chance, Jan/Feb Chance on Leap Years, Julian
-        Chance, year range, and Calendar System (Julian on/off). Changing any of these creates a
-        separate bucket — your previous bests remain stored and reappear when you switch back to
-        that exact config. Everything else leaves your bests where they are: the mode&apos;s name
-        (so the AoX &rarr; MoX rename kept everyone&apos;s), your answer input style, Rotate Dots
-        (all three rotations share one set of bests), and the theme.
+        Random Format on its own bucket), the year range in use, Calendar System (Julian on/off),
+        and Leap Year Chance, Jan/Feb Chance on Leap Years, and Julian Chance — each of those three
+        only while it applies to your range. Changing any of these creates a separate bucket — your
+        previous bests remain stored and reappear when you switch back to that exact config. A
+        chance setting that cannot apply (dimmed in the ⚙ menu) does not split them: changing it
+        leaves the Best shown exactly where it is. Everything else leaves your bests where they are:
+        the mode&apos;s name (so the AoX &rarr; MoX rename kept everyone&apos;s), your answer input
+        style, Rotate Dots (all three rotations share one set of bests), and the theme.
       </p>
       <p>
         The small <b>Q#</b> label at the top-right of the date card appears not only while
@@ -4236,12 +4269,13 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
         </li>
         <li>
           Best scores are tracked per exact configuration: timer duration, Allow Mistakes, Per
-          Round/Per Question, Date Format (or Random Format as its own bucket), Leap Year Chance,
-          Jan/Feb Chance on Leap Years, Julian Chance, year range, and Calendar System (Julian
-          on/off). Changing any of these creates a separate bucket — your previous bests remain
-          stored and reappear when you switch back. Everything else leaves your bests untouched: the
-          mode&apos;s name, your answer input style, Rotate Dots (all three rotations share one set
-          of bests), and the theme.
+          Round/Per Question, Date Format (or Random Format as its own bucket), the year range in
+          use, Calendar System (Julian on/off), and Leap Year Chance, Jan/Feb Chance on Leap Years,
+          and Julian Chance — each of those three only while it applies to your range. Changing any
+          of these creates a separate bucket — your previous bests remain stored and reappear when
+          you switch back. A chance setting that cannot apply (dimmed in the ⚙ menu) does not split
+          them. Everything else leaves your bests untouched: the mode&apos;s name, your answer input
+          style, Rotate Dots (all three rotations share one set of bests), and the theme.
         </li>
         <li>
           Best score and best streak are tracked independently in Per Round and in Per Question with

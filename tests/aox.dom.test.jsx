@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 import { useProgress } from '../src/store/progress.js'
@@ -151,6 +152,7 @@ function pin() {
   s.setDateFormat('numeric-ymd')
   s.setMinY(1583)
   s.setMaxY(10000)
+  useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
 }
 
 // ── Batch 1: a clean Ao2 run (Allow Mistakes off, default) ──────────────────────
@@ -980,7 +982,7 @@ describe('AoX — a config change on popover close resets a done/failed run', ()
     answerCorrect() // run done
     expect(ctrl('Reset')).toBeInTheDocument() // done → Reset shown
     toggleSettings() // open ⚙ → snapshot
-    act(() => useSettings.getState().setMinY(1700)) // change a config setting while open
+    act(() => useJulianRange.getState().setJulianMinY(1700)) // change a config setting while open
     expect(ctrl('Reset')).toBeInTheDocument() // still done while open (deferred)
     toggleSettings() // close ⚙ → fire → reset()
     expect(ctrl('Begin')).toBeInTheDocument() // done run reset to idle
@@ -1013,7 +1015,7 @@ describe('AoX — a config change on popover close resets a done/failed run', ()
     expect(dayState(green)).toBe('correct')
     const before = DAY.map((nm) => dayBtn(nm))
     toggleSettings()
-    act(() => useSettings.getState().setMinY(1700))
+    act(() => useJulianRange.getState().setJulianMinY(1700))
     toggleSettings() // close → reset() → RESET bumps gridEpoch → the keyed grid remounts
     DAY.forEach((nm, i) => expect(dayBtn(nm)).not.toBe(before[i])) // all-new nodes
     expect(dayState(green)).toBe('idle') // and the green is gone

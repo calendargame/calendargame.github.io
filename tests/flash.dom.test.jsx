@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 import { useProgress } from '../src/store/progress.js'
@@ -113,6 +114,7 @@ describe('Flash — characterization (batch 1: the brief-reveal flow)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -192,6 +194,7 @@ describe('Flash — characterization (batch 2: Reveal, Override, consecutive rou
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -279,6 +282,7 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -365,6 +369,7 @@ describe('Flash — bug fix (back-browse shows the browsed date)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -423,6 +428,7 @@ describe('Flash — mode switch mid-flash stops the flash', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -500,6 +506,7 @@ describe('Flash — Override ⇄ Undo', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -721,6 +728,7 @@ describe('Flash — a regenerated question takes its flash with it; a kept one k
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -740,7 +748,7 @@ describe('Flash — a regenerated question takes its flash with it; a kept one k
       () => {},
       () => {
         toggleSettings()
-        act(() => useSettings.getState().setMaxY(9000))
+        act(() => useJulianRange.getState().setJulianMaxY(9000))
         toggleSettings()
       },
     ],

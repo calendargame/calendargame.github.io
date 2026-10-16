@@ -37,6 +37,7 @@ import {
   deletePreset,
 } from '../src/store/presetControl.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useProgress } from '../src/store/progress.js'
 import { resetAppState, mountApp, tap, documentTheme } from './helpers/settingsPanel.jsx'
 import { statValue, readDate, correctDayName } from './helpers/modeScreen.jsx'
@@ -57,6 +58,7 @@ const pinReadableQuestions = () =>
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
 
 // A theme this preset can be recognised by on sight — the owner asked that the theme be per-preset
@@ -345,6 +347,7 @@ describe('a browser that refuses localStorage', () => {
         s.setDateFormat('numeric-ymd')
         s.setMinY(1583)
         s.setMaxY(10000)
+        useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
       })
     const wearHere = (name) =>
       act(() => {

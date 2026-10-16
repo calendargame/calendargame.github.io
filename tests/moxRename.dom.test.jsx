@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useProgress } from '../src/store/progress.js'
 
 function mountApp() {
@@ -59,6 +60,7 @@ function pin() {
   s.setDateFormat('numeric-ymd')
   s.setMinY(1583)
   s.setMaxY(10000)
+  useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
 }
 
 describe('MoX — the rename', () => {

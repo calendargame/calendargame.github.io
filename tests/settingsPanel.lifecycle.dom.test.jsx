@@ -35,6 +35,7 @@
 // route that is not a click.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { cleanup, screen, act, within } from '@testing-library/react'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useSettings } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
@@ -329,6 +330,7 @@ describe('the settings panel — what a close applies (group 10)', () => {
 
   it('a committed year-range change applies on close, and the question lands inside the new range', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setUseJulian(false) // the range in use is then the Julian-off pair
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(1599)
     mountApp()
@@ -350,13 +352,17 @@ describe('the settings panel — what a close applies (group 10)', () => {
     expect(Number(questionText().split('-')[0])).toBe(1700)
   })
 
-  it('the Julian Calendar switch does NOT regenerate the live question on close', () => {
+  it('the Julian Calendar switch does NOT regenerate the live question on close — when it changes nothing else in effect', () => {
     // ⚠ PINNED AS IT IS TODAY, and it contradicts the net's own spec (group 10 case 2 lists the
     // Julian switch alongside the pills that DO regenerate). The code is the authority: useJulian
     // is deliberately absent from the deferred pass's dependency list, because the live setting
     // flows straight through to the answer and the method codes — regenerating would throw away a
     // question the user is part-way through for a change that does not invalidate it.
+    // RE-BLESSED (Round 26, Q7): the switch also chooses WHICH Year Range pair is in use, so it
+    // keeps the question only when the two pairs are the same (here both 1-10000) — and when it
+    // takes no chance setting in or out of effect (lib/dateConfig). The next case is the other half.
     useSettings.getState().setDateFormat('numeric-ymd')
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1, julianMaxY: 10000 })
     mountApp()
     act(() => useSettings.getState().setDateFormat('numeric-dmy'))
     const before = questionText()
@@ -365,6 +371,20 @@ describe('the settings panel — what a close applies (group 10)', () => {
     closeSettings('gear')
     expect(questionText()).toBe(before)
     expect(questionShape()).toBe('numeric YMD')
+  })
+
+  it('the Julian Calendar switch DOES regenerate it when the two Year Range pairs differ — the range in use moved', () => {
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1900)
+    useSettings.getState().setMaxY(1900)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 11000, julianMaxY: 11000 })
+    mountApp()
+    expect(questionText()).toMatch(/^11000-/) // Julian on: the Julian-on pair
+    openSettings()
+    toggleSwitch('Julian Calendar (pre-Oct 15, 1582)')
+    expect(questionText()).toMatch(/^11000-/) // deferred to the close, like every date setting
+    closeSettings('gear')
+    expect(questionText()).toMatch(/^1900-/) // Julian off: the Julian-off pair
   })
 
   it('a change reverted before the panel closes applies nothing', () => {

@@ -18,6 +18,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { DAY } from '../src/lib/format.js'
 import { isGapDate, isJulianDate, dim } from '../src/lib/calendar.js'
 import { activeWday } from '../src/engine/gameReducer.js'
@@ -199,6 +200,8 @@ function pin({ minY = 1583, maxY = 10000, useJulian = true } = {}) {
   s.setUseJulian(useJulian)
   s.setMinY(minY)
   s.setMaxY(maxY)
+  // …and the Julian-on pair (store/julianRange), so the range in use is this one either way.
+  useJulianRange.getState().applyJulianRange({ julianMinY: minY, julianMaxY: maxY })
 }
 
 // ── Batch 1: Day basics ───────────────────────────────────────────────────────
@@ -1044,6 +1047,7 @@ describe('Deduction — turning timing back on settles all three sub-types', () 
     act(() => {
       useSettings.getState().setMinY(1900)
       useSettings.getState().setMaxY(1900) // one year: no Year puzzle can be built
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1900, julianMaxY: 1900 })
     })
     expect(isOffered(ctrl('Year'))).toBe(false)
     tapStat('Last')
@@ -1067,6 +1071,7 @@ describe('Deduction — turning timing back on settles all three sub-types', () 
     act(() => {
       useSettings.getState().setMinY(1900)
       useSettings.getState().setMaxY(1900)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1900, julianMaxY: 1900 })
     })
     tapStat('Last')
     expect(dialog().textContent).toContain('stats changed in the Day and Year sub-types,')

@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs'
 import { BestLine, BestColumn } from '../src/components/BestReadout.jsx'
 import { useProgress } from '../src/store/progress.js'
 import { SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { JULIAN_RANGE_DEFAULTS } from '../src/store/julianRange.js'
 import { MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 import { bestKeyTail, dateSettingsInEffect } from '../src/lib/dateConfig.js'
 import { resetAppState, mountApp } from './helpers/settingsPanel.jsx'
@@ -44,7 +45,7 @@ const bestLine = () => {
 // app's own builders (lib/dateConfig), so the test does not restate how one is composed; the head
 // is the factory run length / timer and Allow Mistakes. (It used to be a map answering every key,
 // which the Best shown can no longer be read from: engine/bestPool walks the map's keys.)
-const TAIL = bestKeyTail(dateSettingsInEffect(SETTINGS_DEFAULTS))
+const TAIL = bestKeyTail(dateSettingsInEffect(SETTINGS_DEFAULTS, JULIAN_RANGE_DEFAULTS))
 const P = MODE_PREFS_DEFAULTS
 const MOX_KEY = `${P.aoxN}|${P.aoxAllowMistakes}|${TAIL}`
 const BLITZ_KEY = `${P.blitzAllowMistakes ? 'm' : 'n'}${P.blitzSec}|${TAIL}`

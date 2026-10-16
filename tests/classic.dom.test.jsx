@@ -17,6 +17,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { wday } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
 import { isOffered } from './helpers/offered.js'
@@ -108,6 +109,7 @@ describe('Classic — characterization (batch 1: basics)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -189,6 +191,7 @@ describe('Classic — characterization (batch 2: live Override paths)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -231,6 +234,7 @@ describe('Classic — characterization (batch 3: Back/Forward + history Override
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -297,6 +301,7 @@ describe('Classic — Override ⇄ Undo', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -414,6 +419,7 @@ describe('Classic — characterization (batch 4: Show Codes, streaks, Reset Stat
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -468,6 +474,7 @@ describe('Classic — characterization (batch 5: timing-on, history & override n
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -557,6 +564,7 @@ describe('Classic — Save Stats / Override availability (fix 2026-06-06)', () =
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -629,6 +637,7 @@ describe('Classic — Show Codes while browsing back is read-only (fix 2026-06-0
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -665,6 +674,7 @@ describe('Classic — a question is never credited twice (owner scenarios, 2026-
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -809,6 +819,7 @@ describe('Classic — back-browse Override past a live miss (fix 2026-06-08)', (
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -861,6 +872,7 @@ describe('Classic — settings regen deferred to popover close', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()
@@ -877,8 +889,8 @@ describe('Classic — settings regen deferred to popover close', () => {
     const newY = d0.y === 1600 ? 1601 : 1600 // a single-year range guaranteed != the current date
     toggleSettings() // open → snapshot the settings
     act(() => {
-      useSettings.getState().setMinY(newY)
-      useSettings.getState().setMaxY(newY)
+      useJulianRange.getState().setJulianMinY(newY)
+      useJulianRange.getState().setJulianMaxY(newY)
     })
     expect(readDate().y).toBe(d0.y) // still on the old date while the popover is open (deferred)
     toggleSettings() // close → regen fires once
@@ -907,6 +919,7 @@ describe('Classic — Reset Stats confirmation popup', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     cleanup()

@@ -89,6 +89,7 @@ import {
   offers,
   openModal,
   closeModal,
+  setRangeInUse,
 } from './helpers/settingsPanel.jsx'
 
 // The Julian switch's setting name is long enough that spelling it inline at a dozen call sites
@@ -111,16 +112,17 @@ const USE_SYSTEM = 'Use System Settings'
 // floors at minY), so raising the min above the standing max, or lowering the max below the
 // standing min, silently lands somewhere else. Opening the range to the bottom first makes every
 // (min ≤ max) pair reachable in three commits with no clamp in the way.
-function commitRange(min, max) {
+// (The pair in use unless one is named — tests/helpers/settingsPanel's yearInput.)
+function commitRange(min, max, pair) {
   for (const [which, value] of [
     ['min', 1],
     ['max', max],
     ['min', min],
   ]) {
-    typeYear(which, String(value))
+    typeYear(which, String(value), pair)
     // Enter, not blur: Enter is a keydown the app handles directly, so it commits whether or not
     // the box happens to hold focus.
-    commitYear(which, 'enter')
+    commitYear(which, 'enter', pair)
   }
 }
 
@@ -236,9 +238,12 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   // Julian switch alone moves this lock with the range held perfectly still. 1500 is the cleanest
   // year to say it with: divisible by 4, so Julian grants it a February 29, and a century that is
   // not a multiple of 400, so Gregorian does not.
+  // (Since Round 26 the switch also chooses which Year Range pair is in use, so both pairs are set to
+  // the same years here: what moves the lock is then the calendar rule alone.)
   it('the Leap Year Chance picker re-evaluates when the Julian switch alone flips', () => {
     standUp()
-    commitRange(1500, 1501)
+    commitRange(1500, 1501, 'on')
+    commitRange(1500, 1501, 'off')
     expect(switchState(JULIAN_SWITCH)).toBe('On')
     expectLock('Leap Year Chance', false) // Julian: 1500 is a leap year (and 1501 is not)
     toggleSwitch(JULIAN_SWITCH)
@@ -412,10 +417,7 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
   it('a lock arriving from a store write outside the panel still withdraws the tab stop', () => {
     standUp()
     expectLock('Leap Year Chance', false)
-    act(() => {
-      useSettings.getState().setMinY(1900)
-      useSettings.getState().setMaxY(1900)
-    })
+    act(() => setRangeInUse({ min: 1900, max: 1900 }))
     expectLock('Leap Year Chance', true)
   })
 
@@ -427,10 +429,7 @@ describe('⚙ Settings → the picker locks and their exact conditions', () => {
     standUp()
     pickPill('Leap Year Chance', '100%') // clicking a pill is how the keyboard gets into a group
     expect(document.activeElement.textContent.trim()).toBe('100%')
-    act(() => {
-      useSettings.getState().setMinY(1900)
-      useSettings.getState().setMaxY(1900)
-    })
+    act(() => setRangeInUse({ min: 1900, max: 1900 }))
     expectLock('Leap Year Chance', true)
     expect(document.activeElement.textContent.trim()).toBe('100%') // not stranded, not moved
     expect(arrowPicker('Leap Year Chance', 'ArrowRight').prevented).toBe(true)

@@ -1845,11 +1845,16 @@ describe('the breakdown names what is saved at every size', () => {
   // places a percentage is drawn — the ⚙ line, the popup's title, a row of the breakdown — and a
   // screen reader has no reliable reading of "<": in each of them it is given "under 0.1%" instead,
   // and what is on screen is exactly what it was.
+  // ⚠ ON THE LARGEST LIMIT, so the case is about how the figure is SAID and not about how big the
+  // app's own saves happen to be this round: on Chromium's limit a device holding only the app's own
+  // keys sat 9 characters under 0.1% — the newest changelog entry's signature (cg-changelog-seen) is
+  // most of it and grows with every entry — and Round 26's Julian-on Year Range key took it over.
   it('"<0.1%" is said "under 0.1%" on the ⚙ line, in the title, and in every row that shows it', () => {
+    freshPage(MAX_STORAGE_LIMIT)
     useLookupHistory.getState().setHistory([{ id: 'a', y: 2001, m: 1, d: 1 }])
     mountApp()
     openSettings()
-    expect(percentText(everything(), CHROMIUM)).toBe('<0.1%') // the whole device, not just a row
+    expect(percentText(everything(), MAX_STORAGE_LIMIT)).toBe('<0.1%') // the whole device, not just a row
     // The ⚙ line.
     expect(shownText(line())).toBe('Storage used: <0.1%')
     expect(spokenText(line())).toBe('Storage used: under 0.1%')

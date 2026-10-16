@@ -23,6 +23,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { wday, wdayJulian } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
@@ -91,6 +92,7 @@ beforeEach(() => {
   s.setDateFormat('numeric-ymd')
   s.setMinY(1000)
   s.setMaxY(1099)
+  useJulianRange.getState().applyJulianRange({ julianMinY: 1000, julianMaxY: 1099 })
   s.setUseJulian(true)
   useModePrefs.getState().resetToFactory?.()
 })

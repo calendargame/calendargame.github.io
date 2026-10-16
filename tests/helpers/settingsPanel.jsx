@@ -108,11 +108,12 @@ export function resetAppState() {
   for (const preset of usePresets.getState().presets) discardSessionStats(preset.id)
   forgetSessionAmnesic()
   usePresets.setState(makePresetRegistryDefaults())
-  // The Julian-on Year Range back to a factory preset's, and then off the disk with everything else:
-  // an absent pair is the factory one (store/julianRange derives it), as on a device never played on.
-  useJulianRange.getState().applyJulianRange({ ...JULIAN_RANGE_DEFAULTS })
   localStorage.clear()
   useSettings.getState().resetToFactory()
+  // The Julian-on Year Range back to a factory preset's — and SAVED, as on any device this build has
+  // opened: the first open of a preset pins its pair (store/julianRange), so a device with no such key
+  // is one this build has never loaded, which no mounted app is.
+  useJulianRange.getState().applyJulianRange({ ...JULIAN_RANGE_DEFAULTS })
   useModePrefs.getState().resetModePrefs()
   useUserDefaults.getState().clearDefaults()
   useProgress.getState().resetProgress()
@@ -983,21 +984,51 @@ export function panelFades() {
 // two boxes today only because nothing else in the panel has opted in yet. The day something does,
 // a positional query over it would silently return the wrong element or throw across every
 // year-range case at once. A name is the box's own identity; the marker is a mechanism it borrows.
+// ★ SINCE ROUND 26 THERE ARE TWO PAIRS (Q7) — the range used while the Julian Calendar setting is
+// off, and the one used while it is on — named "Earliest Year, Julian Off" and so on. A case asks for
+// one by `pair` ('off' / 'on'); with none it gets the pair IN USE, the one the setting as it stands
+// draws from — which is what every case written before there were two pairs means by "the range".
 const YEAR_INPUT_NAMES = { min: 'Earliest Year', max: 'Latest Year' }
-export function yearInput(which) {
+const PAIR_NAMES = { off: 'Julian Off', on: 'Julian On' }
+export const pairInUse = () => (useSettings.getState().useJulian ? 'on' : 'off')
+export function yearInput(which, pair = pairInUse()) {
   const name = YEAR_INPUT_NAMES[which]
   if (!name) throw new Error(`yearInput: expected 'min' or 'max', got ${JSON.stringify(which)}`)
-  return panel().getByRole('textbox', { name })
+  if (!PAIR_NAMES[pair])
+    throw new Error(`yearInput: expected pair 'off' or 'on', got ${JSON.stringify(pair)}`)
+  return panel().getByRole('textbox', { name: `${name}, ${PAIR_NAMES[pair]}` })
+}
+// A store write to the pair IN USE, the way a write from outside the panel delivers one (another
+// screen, a restore): either end, or both. Call inside act().
+export function setRangeInUse({ min, max }) {
+  if (pairInUse() === 'on') {
+    const j = useJulianRange.getState()
+    if (min != null) j.setJulianMinY(min)
+    if (max != null) j.setJulianMaxY(max)
+  } else {
+    const st = useSettings.getState()
+    if (min != null) st.setMinY(min)
+    if (max != null) st.setMaxY(max)
+  }
+}
+// The committed years of a pair (the pair in use when none is named), from their store.
+export function committedRange(pair = pairInUse()) {
+  if (pair === 'off') {
+    const { minY, maxY } = useSettings.getState()
+    return [minY, maxY]
+  }
+  const { julianMinY, julianMaxY } = useJulianRange.getState()
+  return [julianMinY, julianMaxY]
 }
 
 // What the box SHOWS. Not what the store holds — the whole of G5 is about the window in which
 // those two disagree.
-export const yearValue = (which) => yearInput(which).value
+export const yearValue = (which, pair) => yearInput(which, pair).value
 
 // Put the keyboard in the box. Load-bearing well beyond the typing cases: the two store→text sync
 // effects bail while the box has focus, so "a store write from elsewhere does not overwrite what
 // is being typed" is only a real test if the box is genuinely focused.
-export const focusYear = (which) => act(() => yearInput(which).focus())
+export const focusYear = (which, pair) => act(() => yearInput(which, pair).focus())
 
 // TYPE into a box. `change` is the honest event here — it is what React's controlled input sees
 // for every route text arrives by (keystrokes, paste, IME, autofill), and the box's own filter
@@ -1008,12 +1039,12 @@ export const focusYear = (which) => act(() => yearInput(which).focus())
 // state the at-defaults booleans used to disagree about — three of them, before round 14 collapsed
 // them into one. They agree now, and since round 15 that one boolean COUNTS the typed text, so this
 // helper is what moves all four offers without moving a single setting.
-export const typeYear = (which, text) =>
-  act(() => fireEvent.change(yearInput(which), { target: { value: text } }))
+export const typeYear = (which, text, pair) =>
+  act(() => fireEvent.change(yearInput(which, pair), { target: { value: text } }))
 
 // A raw key press into a box, returning whether the app refused it — the minus block lives on
 // keydown (and separately on beforeInput, below), and "refused" is the only observable it has.
-export const keyInYear = (which, key) => pressKeyOn(yearInput(which), key)
+export const keyInYear = (which, key, pair) => pressKeyOn(yearInput(which, pair), key)
 
 // The OTHER half of the minus block: the beforeInput path, which is what catches an insertion the
 // keydown never described. `char` is ONE character; returns `prevented`, same as keyInYear.
@@ -1033,13 +1064,13 @@ export const keyInYear = (which, key) => pressKeyOn(yearInput(which), key)
 // ⚠ WHAT IT CANNOT DO: a MULTI-character insertion (a paste of "-5", an IME commit). The fallback
 // carries exactly one char, so there is no honest way to express one here — that stays a device
 // check, and no case may imply the net covers it.
-export function beforeInputYear(which, char) {
+export function beforeInputYear(which, char, pair) {
   if (typeof char !== 'string' || char.length !== 1)
     throw new Error(
       `beforeInputYear: expected ONE character, got ${JSON.stringify(char)} — a multi-character ` +
         'insertion is not reachable in jsdom (see this helper).',
     )
-  const el = yearInput(which)
+  const el = yearInput(which, pair)
   let delivered = true
   act(() => {
     const e = new KeyboardEvent('keypress', { bubbles: true, cancelable: true, key: char })
@@ -1052,9 +1083,9 @@ export function beforeInputYear(which, char) {
 // COMMIT what is typed, by either route a user has. 'blur' is a REAL blur when the box holds focus
 // (which is what the app's own press-outside close forces before unmounting), falling back to a
 // dispatched blur when it does not. 'enter' is the key, which commits and then blurs itself.
-export function commitYear(which, via = 'blur') {
-  const el = yearInput(which)
-  if (via === 'enter') return keyInYear(which, 'Enter')
+export function commitYear(which, via = 'blur', pair) {
+  const el = yearInput(which, pair)
+  if (via === 'enter') return keyInYear(which, 'Enter', pair)
   if (via !== 'blur')
     throw new Error(`commitYear: expected 'blur' or 'enter', got ${JSON.stringify(via)}`)
   act(() => {
@@ -1083,9 +1114,9 @@ export function commitYear(which, via = 'blur') {
 // does — to the box that HAS the keyboard, so it focuses the box first — which is the only way to
 // exercise either fix; an Escape with no text box focused closes the panel, which is correct and
 // is a different case.
-export const escapeYear = (which) => {
-  focusYear(which)
-  return keyInYear(which, 'Escape')
+export const escapeYear = (which, pair) => {
+  focusYear(which, pair)
+  return keyInYear(which, 'Escape', pair)
 }
 
 // ── Everything the panel currently reads ──────────────────────────────────────────────────────
@@ -1109,8 +1140,10 @@ export function panelValues() {
     // shows" round-trip covers it too.
     defaultMode: pickerChosen('Default Mode'),
     useSystem: switchState('Use System Settings'),
-    minYear: yearValue('min'),
-    maxYear: yearValue('max'),
+    minYear: yearValue('min', 'off'),
+    maxYear: yearValue('max', 'off'),
+    julianMinYear: yearValue('min', 'on'),
+    julianMaxYear: yearValue('max', 'on'),
     leapChance: pickerChosen('Leap Year Chance'),
     janFebChance: pickerChosen('Jan/Feb Chance on Leap Years'),
     useJulian: switchState('Julian Calendar (pre-Oct 15, 1582)'),

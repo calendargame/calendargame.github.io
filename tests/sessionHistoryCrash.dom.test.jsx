@@ -25,6 +25,7 @@ import { readSessionHistory } from '../src/store/sessionHistory.js'
 import { readSessionRound } from '../src/store/sessionRound.js'
 import { readGuidePlace, writeGuidePlace } from '../src/store/sessionGuide.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 
 const crash = vi.hoisted(() => ({ on: false, guide: false }))
@@ -88,6 +89,7 @@ describe('a crashed casual screen', () => {
       s.setDateFormat('numeric-ymd')
       s.setMinY(1583)
       s.setMaxY(10000)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     })
     tap(ctrl('New'))
     answerRight()
@@ -153,6 +155,7 @@ describe('a timed screen that crashes while restoring its parked round', () => {
       s.setDateFormat('numeric-ymd')
       s.setMinY(1583)
       s.setMaxY(10000)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     })
   // The date on the screen that is SHOWING: Classic's own question is still in the page, hidden.
   const shown = (el) => !el.closest('[style*="display: none"]')

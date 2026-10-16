@@ -19,6 +19,8 @@ import { createRoot } from 'react-dom/client'
 import { fmt } from './lib/format.js'
 import { randomDate } from './lib/dateGen.js'
 import { dateSettingsInEffect, dateDrawKey } from './lib/dateConfig.js'
+import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from './lib/calendar.js'
+import { useJulianRange } from './store/julianRange.js'
 import { makeDedPuzzle } from './lib/dedPuzzle.js'
 import { UpdateDot } from './components/UpdateDot.jsx'
 import CustomSelect from './components/CustomSelect.jsx'
@@ -56,7 +58,7 @@ import { useStorageHealth, showStorageNotice } from './store/storageHealth.js'
 import { readGuidePlace, discardGuidePlace } from './store/sessionGuide.js'
 import { readLookupScreen, writeLookupScreen, discardLookupScreen } from './store/sessionLookup.js'
 import { useModePrefs } from './store/modePrefs.js'
-import { useUserDefaults, effectiveSettingsDefaults, effectivePrefDefaults, effectiveAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
+import { useUserDefaults, effectiveSettingsDefaults, effectiveJulianRangeDefaults, effectivePrefDefaults, effectiveAmnesicDefault, prefsMatchDefaults } from './store/userDefaults.js'
 import { useProgress } from './store/progress.js'
 import { useLookupHistory, useLookupSession, addLookupEntry, moveEntryToTop, mergeForDisplay } from './store/lookupHistory.js'
 import type { LookupEntry } from './store/lookupHistory.js'
@@ -516,6 +518,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const manualTheme=useSettings(s=>s.manualTheme);
       const minY=useSettings(s=>s.minY),setMinY=useSettings(s=>s.setMinY);
       const maxY=useSettings(s=>s.maxY),setMaxY=useSettings(s=>s.setMaxY);
+      // ★ minY/maxY ARE THE JULIAN-OFF PAIR (Round 26, Q7); the pair used while the Julian Calendar
+      // setting is on lives in store/julianRange, bound here beside them. Neither pair is "the range":
+      // the range in use is lib/dateConfig's yearRangeInEffect, inside `dateIn` below.
+      const julianMinY=useJulianRange(s=>s.julianMinY),setJulianMinY=useJulianRange(s=>s.setJulianMinY);
+      const julianMaxY=useJulianRange(s=>s.julianMaxY),setJulianMaxY=useJulianRange(s=>s.setJulianMaxY);
+      const applyJulianRange=useJulianRange(s=>s.applyJulianRange);
       const useJulian=useSettings(s=>s.useJulian);
       const saveStats=useSettings(s=>s.saveStats);
       const dateFormat=useSettings(s=>s.dateFormat);
@@ -546,6 +554,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // tapped.
       const amnesic=useActiveAmnesicMode();
       const defSettings=useMemo(()=>effectiveSettingsDefaults(savedDefaults),[savedDefaults]);
+      const defJulianRange=useMemo(()=>effectiveJulianRangeDefaults(savedDefaults),[savedDefaults]);
       const defPrefs=useMemo(()=>effectivePrefDefaults(savedDefaults),[savedDefaults]);
       // prefsAtDefaults: do the four capturable mode-screen prefs match their effective defaults?
       // A BOOLEAN zustand selector, so App re-renders only when the answer FLIPS — a slider drag
@@ -663,14 +672,16 @@ import BlitzMode from './modes/BlitzMode.jsx'
         mq.addEventListener("change",h);
         return()=>mq.removeEventListener("change",h);
       },[]);
-      // minY/maxY now from the settings store (bound at top of App). The two transient TEXT MIRRORS
-      // that back the Year Range boxes -> components/useYearRangeMirrors, called further down
+      // The two Year Range pairs (minY/maxY from the settings store, the Julian-on pair from
+      // store/julianRange, both bound at top of App). Each pair's two transient TEXT MIRRORS
+      // that back its Year Range boxes -> components/useYearRangeMirrors, called further down
       // (beside where their commits used to sit, so the two sync effects keep their exact position
       // in App's effect order). They stay App state, not panel state, so a half-typed year survives
       // closing and reopening the panel — see that module's header. The two element refs stay
       // App-side useRefs, exactly like settingsPopoverRef: the panel attaches them, the hook's two
       // focus guards read them, and nothing else touches them.
       const minInputRef=useRef<HTMLInputElement | null>(null),maxInputRef=useRef<HTMLInputElement | null>(null);
+      const julianMinInputRef=useRef<HTMLInputElement | null>(null),julianMaxInputRef=useRef<HTMLInputElement | null>(null);
       // Lookup history persists across reloads (Stage D1), and since round 20 is SHARED across
       // every preset instead of living inside the progress store: sourced from store/lookupHistory's
       // two stores instead of local useState. lookupHistory is the PERMANENT shared list;
@@ -1665,7 +1676,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // store→text sync effects — one unit, in components/useYearRangeMirrors. Called HERE rather
       // than up beside the store bindings so those two effects keep the exact ordinal position in
       // App's effect order that they had when they were written out on these lines.
-      const yearRange=useYearRangeMirrors(minY,maxY,setMinY,setMaxY,minInputRef,maxInputRef);
+      // One call per pair, each with its own cap (lib/calendar's yearMaxFor).
+      const yearRangeOff=useYearRangeMirrors(minY,maxY,setMinY,setMaxY,minInputRef,maxInputRef,YEAR_MAX_GREGORIAN);
+      const yearRangeOn=useYearRangeMirrors(julianMinY,julianMaxY,setJulianMinY,setJulianMaxY,julianMinInputRef,julianMaxInputRef,YEAR_MAX_JULIAN);
       // Newest to the front, and every one kept — the rule lives in store/lookupHistory (addLookupEntry).
       // ⚠ WHICH LIST an entry joins is decided HERE, once, at the moment it is added, by the ACTIVE
       // preset's Amnesic value (store/amnesic's keepsLookups). Under Off and Stats Only it joins the
@@ -1713,7 +1726,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // handed the stored values, and a Julian Chance the range could not use made it drop the leap
       // filters on a share of dates: lib/dateConfig's header.) Deduction never reads Julian Chance, so
       // its string leaves it out — it is not in effect there.
-      const dateIn=dateSettingsInEffect({randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance});
+      const dateIn=dateSettingsInEffect({randomFormat,dateFormat,useJulian,minY,maxY,leapChance,janFebChance,julianChance},{julianMinY,julianMaxY});
       const dateDraw=dateDrawKey(dateIn);
       const dedDateDraw=dateDrawKey({...dateIn,julianChance:'random'});
       // FORMAT_IDS and rollFormat are defined at module scope (see top of file)
@@ -2044,7 +2057,11 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // text mirrors that live locally, then the 4 capturable mode-screen prefs (store/modePrefs
         // applyPrefs — the same call Full Reset makes; the other mode-prefs keep their live values).
         applySettingsStore(defSettings);
-        yearRange.resetTo(defSettings.minY,defSettings.maxY);
+        yearRangeOff.resetTo(defSettings.minY,defSettings.maxY);
+        // …and the Julian-on Year Range, which Save Defaults captures beside the 16 (store/julianRange;
+        // store/userDefaults' effectiveJulianRangeDefaults derives it for a snapshot without one).
+        applyJulianRange(defJulianRange);
+        yearRangeOn.resetTo(defJulianRange.julianMinY,defJulianRange.julianMaxY);
         applyModePrefs(defPrefs);
         // …and (round 20, owner's explicit, confirmed decision) the SAVED AMNESIC VALUE, onto the
         // ACTIVE preset. setPresetAmnesic no-ops when the value already matches; when it actually
@@ -2273,7 +2290,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // while it is on Full — and factory (Off) only when none does. A literal Off would leave such a player's gear permanently lit with a Reset Settings that undid
       // nothing, which is the dormant-theme false positive one store over.
       const amnesicAtDefault=amnesic===effectiveAmnesicDefault(savedDefaults);
-      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&dotRotation===defSettings.dotRotation&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&themeAtDefaults&&amnesicAtDefault&&yearRange.min.value===String(defSettings.minY)&&yearRange.max.value===String(defSettings.maxY);
+      const settingsAtDefaults=randomFormat===defSettings.randomFormat&&dateFormat===defSettings.dateFormat&&inputStyle===defSettings.inputStyle&&dotRotation===defSettings.dotRotation&&defaultMode===defSettings.defaultMode&&useJulian===defSettings.useJulian&&minY===defSettings.minY&&maxY===defSettings.maxY&&leapChance===defSettings.leapChance&&janFebChance===defSettings.janFebChance&&julianChance===defSettings.julianChance&&saveStats===defSettings.saveStats&&useSystem===defSettings.useSystem&&julianMinY===defJulianRange.julianMinY&&julianMaxY===defJulianRange.julianMaxY&&themeAtDefaults&&amnesicAtDefault&&yearRangeOff.min.value===String(defSettings.minY)&&yearRangeOff.max.value===String(defSettings.maxY)&&yearRangeOn.min.value===String(defJulianRange.julianMinY)&&yearRangeOn.max.value===String(defJulianRange.julianMaxY);
       // The one derived boolean behind THREE of the four offers: the ⚙ gear indicator, the Save
       // Defaults dim AND the Reset Settings dim. True when live state diverges from the effective
       // defaults in EITHER store — any menu setting, either year BOX, or any of the four capturable
@@ -2592,9 +2609,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
               mode={mode}
               activeTheme={activeTheme}
               defPrefs={defPrefs}
-              yearRange={yearRange}
+              yearRangeOff={yearRangeOff}
+              yearRangeOn={yearRangeOn}
               minYearRef={minInputRef}
               maxYearRef={maxInputRef}
+              julianMinYearRef={julianMinInputRef}
+              julianMaxYearRef={julianMaxInputRef}
               updateCheck={updateCheck}
               onCheckUpdates={onCheckUpdates}
               changelogDot={changelogDot}

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { RefObject } from 'react'
 
-// components/useYearRangeMirrors.ts — the ⚙ panel's two Year Range TEXT BOXES, as state.
+// components/useYearRangeMirrors.ts — ONE PAIR of the ⚙ panel's Year Range TEXT BOXES, as state.
+// (Since Round 26 there are two pairs — the range used while the Julian Calendar setting is off, and
+// the one used while it is on (store/julianRange) — so App calls this once per pair, each with its
+// own cap: 10000 and 11582, lib/calendar's yearMaxFor.)
 //
 // The boxes are not the setting. minY/maxY in the settings store are the setting; these are
 // transient string mirrors that deliberately DISAGREE with the store between a keystroke and its
@@ -67,6 +70,8 @@ export function useYearRangeMirrors(
   setMaxY: (v: number) => void,
   minInputRef: RefObject<HTMLInputElement | null>,
   maxInputRef: RefObject<HTMLInputElement | null>,
+  // The highest year this pair takes.
+  cap: number,
 ): YearRangeMirrors {
   // ★ SEEDED FROM THE STORE, and round 15 is the round that had to do it. These two used to
   // initialise to the FACTORY literals '1' / '10000' rather than to the persisted minY/maxY, so a
@@ -109,7 +114,7 @@ export function useYearRangeMirrors(
       setMaxInputVal(String(maxY))
       return
     }
-    const v = Math.max(minY, Math.min(10000, p))
+    const v = Math.max(minY, Math.min(cap, p))
     applyMaxValue(v)
     setMaxInputVal(String(v))
   }

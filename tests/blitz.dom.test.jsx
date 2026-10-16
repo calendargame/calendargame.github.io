@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { useJulianRange, JULIAN_RANGE_DEFAULTS } from '../src/store/julianRange.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from '../src/store/modePrefs.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 import { useProgress } from '../src/store/progress.js'
@@ -174,6 +175,7 @@ describe('Blitz — characterization (batch 1: Per Round)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -254,6 +256,7 @@ describe('Blitz — characterization (batch 2: Per Question / sudden death)', ()
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -287,6 +290,7 @@ describe('Blitz — characterization (batch 3: Override)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -344,6 +348,7 @@ describe('Blitz — bug fixes (override-to-wrong + Show Codes end the round)', (
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -398,6 +403,7 @@ describe('Blitz — Best Score cross-round rollback', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -448,6 +454,7 @@ describe('Blitz — fix (mode switch mid-round abandons the round)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -504,6 +511,7 @@ describe('Blitz — Override resumes a misclick-ended round', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -563,6 +571,7 @@ describe('Blitz — Reveal / Show Codes then Override resumes the round', () => 
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -616,6 +625,7 @@ describe('Blitz — Save Stats off: misclick rescue, no Best recorded', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useSettings.getState().setSaveStats(false) // practice mode
   })
   afterEach(() => {
@@ -669,6 +679,7 @@ describe('Blitz — a config change on popover close resets the round', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -687,7 +698,7 @@ describe('Blitz — a config change on popover close resets the round', () => {
     begin()
     expect(ctrl('Reset')).toBeInTheDocument() // active → Reset shown
     toggleSettings() // open ⚙ → snapshot
-    act(() => useSettings.getState().setMinY(1700)) // change a config setting while open
+    act(() => useJulianRange.getState().setJulianMinY(1700)) // change a config setting while open
     expect(ctrl('Reset')).toBeInTheDocument() // still active while open (deferred)
     toggleSettings() // close ⚙ → fire → resetRound
     expect(ctrl('Begin')).toBeInTheDocument() // round reset to idle
@@ -700,7 +711,7 @@ describe('Blitz — a config change on popover close resets the round', () => {
     clickText('Reveal') // ends the round → timerDone
     expect(ctrl('Reset')).toBeInTheDocument()
     toggleSettings()
-    act(() => useSettings.getState().setMinY(1700))
+    act(() => useJulianRange.getState().setJulianMinY(1700))
     toggleSettings()
     expect(ctrl('Begin')).toBeInTheDocument() // ended round reset on close
   })
@@ -724,7 +735,7 @@ describe('Blitz — a config change on popover close resets the round', () => {
       const played = Object.keys(useProgress.getState()[field])
       expect(played).toHaveLength(1)
       toggleSettings()
-      act(() => useSettings.getState().setMinY(1700)) // the live key moves; the round is still up
+      act(() => useJulianRange.getState().setJulianMinY(1700)) // the live key moves; the round is still up
       expect(Object.keys(useProgress.getState()[field])).toEqual(played)
       toggleSettings()
       expect(ctrl('Begin')).toBeInTheDocument()
@@ -756,7 +767,7 @@ describe('Blitz — a config change on popover close resets the round', () => {
     click(wrongName(readDate())) // wrong → the round ends; red + revealed green persist
     const before = DAY.map((nm) => dayBtn(nm))
     toggleSettings()
-    act(() => useSettings.getState().setMinY(1700))
+    act(() => useJulianRange.getState().setJulianMinY(1700))
     toggleSettings() // close → resetRound → RESET bumps gridEpoch → the keyed grid remounts
     expect(ctrl('Begin')).toBeInTheDocument()
     DAY.forEach((nm, i) => expect(dayBtn(nm)).not.toBe(before[i])) // all-new nodes — snap, no fade
@@ -843,6 +854,7 @@ describe('Blitz — Per Question + Allow Mistakes', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -1113,6 +1125,7 @@ describe('Blitz — freshness (suddenAmBest blocks fully-reset until wiped)', ()
     vi.useFakeTimers()
     localStorage.clear()
     useSettings.getState().resetToFactory()
+    useJulianRange.getState().applyJulianRange({ ...JULIAN_RANGE_DEFAULTS })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -1169,6 +1182,7 @@ describe('Blitz — visual-only timing hide', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useModePrefs.getState().resetModePrefs() // blitzTimingOff starts false (shown)
   })
   afterEach(() => {
@@ -1346,6 +1360,7 @@ describe('Blitz — the settings net: an in-progress round vs Reset Settings and
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -1564,6 +1579,7 @@ describe('Blitz — Override ⇄ Undo', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useModePrefs.getState().setBlitzSec(30)
   })
   afterEach(() => {
@@ -1814,6 +1830,7 @@ describe('Blitz — the ★ marks exactly the bests the round on screen set', ()
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()
@@ -1911,6 +1928,7 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useModePrefs.getState().setBlitzSec(30)
     useModePrefs.getState().setBlitzQSec(10)
   })
@@ -2011,6 +2029,7 @@ describe('Blitz — the small lines under each Best (Q10)', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()

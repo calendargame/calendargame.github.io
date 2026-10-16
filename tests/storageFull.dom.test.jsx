@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress } from '../src/store/progress.js'
 import { useStorageHealth } from '../src/store/storageHealth.js'
@@ -51,6 +52,7 @@ describe('storage full — play goes on, and the player is told', () => {
     useSettings.getState().setDateFormat('numeric-ymd')
     useSettings.getState().setMinY(1583)
     useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     useModePrefs.getState().resetModePrefs()
     progressKey = storageKeyFor(useProgress)
     full = new Set()

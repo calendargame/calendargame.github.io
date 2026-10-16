@@ -22,6 +22,7 @@ import {
 } from './helpers/settingsPanel.jsx'
 import { installSeededRandom } from './helpers/rng.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useProgress } from '../src/store/progress.js'
 import { correctDayName } from './helpers/modeScreen.jsx'
 
@@ -53,6 +54,7 @@ it('Julian on, 1901-1904, Julian Chance 100% (not in effect there), Leap Year Ch
     s.setUseJulian(true)
     s.setMinY(1901)
     s.setMaxY(1904)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1901, julianMaxY: 1904 })
     s.setJulianChance('100')
     s.setLeapChance('100')
   })
@@ -90,6 +92,7 @@ describe('a MoX Best filed under a stored value', () => {
       s.setUseJulian(false)
       s.setMinY(1583)
       s.setMaxY(10000)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     })
     act(() => useProgress.setState({ aoxBest: { [KEY]: record(1.5) } }))
     act(() => void fireEvent.keyDown(window, { key: 'A' }))
@@ -108,6 +111,7 @@ describe('a MoX Best filed under a stored value', () => {
       s.setUseJulian(true)
       s.setMinY(1900)
       s.setMaxY(2100)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1900, julianMaxY: 2100 })
       s.setLeapChance('100')
       s.setJulianChance('50')
     })
@@ -135,6 +139,7 @@ describe('changing a setting that is not in effect never restarts a run', () => 
       s.setUseJulian(false)
       s.setMinY(1701)
       s.setMaxY(1703)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 1701, julianMaxY: 1703 })
     })
     mountApp()
     act(() => void fireEvent.keyDown(window, { key: 'A' }))

@@ -19,6 +19,7 @@ import { screen, cleanup, act, fireEvent } from '@testing-library/react'
 import { resetAppState, mountApp } from './helpers/settingsPanel.jsx'
 import { readDate, correctDayName } from './helpers/modeScreen.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 
 // The component's window, mirrored here so the cases below read as "a beat later" rather than as a
 // magic number. A press exactly this long after the last one is the first that lands (the guard is a
@@ -75,6 +76,7 @@ describe('the Override ⇄ Undo button ignores a double-tap', () => {
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
   afterEach(() => {
     vi.runOnlyPendingTimers()

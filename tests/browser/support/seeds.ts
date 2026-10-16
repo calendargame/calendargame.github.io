@@ -24,6 +24,8 @@ import { SETTINGS_DEFAULTS, type SettingsValues } from '../../../src/store/setti
 import { MODE_PREFS_DEFAULTS, type ModePrefsValues } from '../../../src/store/modePrefs'
 import type { AoxBest, BlitzBest, ProgressValues } from '../../../src/store/progress'
 import type { AmnesicMode } from '../../../src/store/amnesicMode'
+import { deriveJulianRange } from '../../../src/store/julianRange'
+import { bestKeyTail, dateSettingsInEffect } from '../../../src/lib/dateConfig'
 
 export const THEMES = ['dusk', 'midnight', 'nebula', 'light', 'parchment'] as const
 export type Theme = (typeof THEMES)[number]
@@ -96,11 +98,13 @@ export const presetsNamed = (...names: string[]): PresetRegistryValues => ({
 //
 // A Best is filed under the exact configuration it was set on, as one string (modes/AoxMode's
 // `bestKey`, modes/BlitzMode's `blitzBk`). These two spell that string for the configuration the app
-// opens on — the stores' defaults, with whatever the same seed changes laid over them. The spelling
-// is the app's, repeated; seeds.browser.ts plays a real MoX run and a real Blitz round and fails if
-// the record the app files is not under the key these give.
-const dateConfig = (s: SettingsValues) =>
-  `${s.randomFormat ? 'random' : s.dateFormat}|${s.leapChance}|${s.janFebChance}|${s.julianChance}|${s.minY}-${s.maxY}|${s.useJulian}`
+// opens on — the stores' defaults, with whatever the same seed changes laid over them. The head
+// (run length / timer, Allow Mistakes) is the app's spelling, repeated; the date half since Round 26
+// is the app's own builder (lib/dateConfig: the date settings IN EFFECT), over the Julian-on Year
+// Range a preset with none saved derives (store/julianRange) — which is what a seed gives it.
+// seeds.browser.ts plays a real MoX run and a real Blitz round and fails if the record the app
+// files is not under the key these give.
+const dateConfig = (s: SettingsValues) => bestKeyTail(dateSettingsInEffect(s, deriveJulianRange(s)))
 
 export function moxBestKey(seed: AppSeed = {}): string {
   const settings = { ...SETTINGS_DEFAULTS, ...seed.settings }

@@ -39,7 +39,6 @@
 // the existing mode tests take and is deliberately not re-exported by the panel helper.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { cleanup, act } from '@testing-library/react'
-import { useSettings } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { markUpdateDot, GEAR_DOT_KEY } from '../src/changelog.js'
 import {
@@ -70,13 +69,21 @@ import {
   keyInYear,
   beforeInputYear,
   resetAppState,
+  committedRange,
 } from './helpers/settingsPanel.jsx'
+// The Julian-on pair's store, for the two FIXTURE writes that have to come from outside the panel
+// (G5.5 is specifically about a write the panel did not make). Never used to assert — every
+// assertion below reads what the panel SHOWS.
+import { useJulianRange } from '../src/store/julianRange.js'
 
 // ── Local harness ─────────────────────────────────────────────────────────────
-// The settings store, for the two FIXTURE writes that have to come from outside the panel (G5.5 is
-// specifically about a write the panel did not make). Never used to assert — every assertion below
-// reads what the panel SHOWS.
-const settings = () => useSettings.getState()
+// The committed years of the pair IN USE — the factory has the Julian Calendar setting on, so that is
+// the Julian-on pair (store/julianRange) unless a case switches it off. Every case below written
+// before there were two pairs means this by "the range"; the two pairs' own cases follow the group.
+const inUse = () => {
+  const [minY, maxY] = committedRange()
+  return { minY, maxY }
+}
 // The mode-prefs store. The seventeen per-mode setup values live on the MODE SCREENS, not in this
 // panel, so there is no panel gesture for them and the store is the honest driver — the same route
 // tests/saveDefaults.dom and the mode files already take.
@@ -93,9 +100,9 @@ const openPanel = () => {
 }
 
 // The panel's own year boxes, driven as a user drives them: type, then commit by blur.
-const setYear = (which, text) => {
-  typeYear(which, text)
-  commitYear(which)
+const setYear = (which, text, pair) => {
+  typeYear(which, text, pair)
+  commitYear(which, 'blur', pair)
 }
 
 describe('Year Range — commit, revert, clamp, and what half-typed text does NOT move (net group 5)', () => {
@@ -150,7 +157,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     typeYear('min', '1900')
     commitYear('min', 'enter')
     expect(yearValue('min')).toBe('1900')
-    expect(settings().minY).toBe(1900)
+    expect(inUse().minY).toBe(1900)
     // The box hands the keyboard back — this is what makes Enter feel like "done" rather than like
     // a keystroke the field swallowed.
     expect(document.activeElement).not.toBe(yearInput('min'))
@@ -163,7 +170,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     typeYear('max', '2000')
     commitYear('max', 'blur')
     expect(yearValue('max')).toBe('2000')
-    expect(settings().maxY).toBe(2000)
+    expect(inUse().maxY).toBe(2000)
   })
 
   it('clearing a year box and leaving it restores the committed year', () => {
@@ -175,7 +182,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     expect(yearValue('min')).toBe('')
     commitYear('min', 'blur')
     expect(yearValue('min')).toBe('1900')
-    expect(settings().minY).toBe(1900)
+    expect(inUse().minY).toBe(1900)
   })
 
   it('Escape in a year box throws the edit away and leaves the panel standing', () => {
@@ -196,7 +203,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     focusYear('min')
     typeYear('min', '2500')
     escapeYear('min')
-    expect(settings().minY).toBe(1900) // the stored range never heard about the edit…
+    expect(inUse().minY).toBe(1900) // the stored range never heard about the edit…
     expect(yearValue('min')).toBe('1900') // …and the box put the stored year back
     expect(isSettingsOpen()).toBe(true)
     // The press was consumed, not swallowed forever: with the box no longer holding the keyboard, a
@@ -216,7 +223,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     focusYear('min')
     typeYear('min', '')
     escapeYear('min')
-    expect(settings().minY).toBe(1900)
+    expect(inUse().minY).toBe(1900)
     expect(yearValue('min')).toBe('1900')
     expect(isSettingsOpen()).toBe(true)
   })
@@ -229,7 +236,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     focusYear('max')
     typeYear('max', '2500')
     escapeYear('max')
-    expect(settings().maxY).toBe(1950)
+    expect(inUse().maxY).toBe(1950)
     expect(yearValue('max')).toBe('1950')
     expect(isSettingsOpen()).toBe(true)
   })
@@ -253,7 +260,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     setYear('max', '2000')
     setYear('min', '5000')
     expect(yearValue('min')).toBe('2000')
-    expect(settings().minY).toBe(2000)
+    expect(inUse().minY).toBe(2000)
   })
 
   it('a first year below 1 clamps up to 1', () => {
@@ -262,16 +269,21 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     expect(yearValue('min')).toBe('50')
     setYear('min', '0')
     expect(yearValue('min')).toBe('1')
-    expect(settings().minY).toBe(1)
+    expect(inUse().minY).toBe(1)
   })
 
-  it('a last year above 10000 clamps down to 10000', () => {
+  // The ceiling is the pair's own (lib/calendar's caps): 10000 for the Julian-off pair, 11582 for the
+  // Julian-on one — whichever pair is in use, and whichever is not.
+  it.each([
+    ['off', '10000'],
+    ['on', '11582'],
+  ])('a last year above the cap clamps down to it — Julian %s: %s', (pair, cap) => {
     openPanel()
-    setYear('max', '5000') // off the ceiling first, for the same reason
-    expect(yearValue('max')).toBe('5000')
-    setYear('max', '99999')
-    expect(yearValue('max')).toBe('10000')
-    expect(settings().maxY).toBe(10000)
+    setYear('max', '5000', pair) // off the ceiling first, for the same reason
+    expect(yearValue('max', pair)).toBe('5000')
+    setYear('max', '99999', pair)
+    expect(yearValue('max', pair)).toBe(cap)
+    expect(committedRange(pair)[1]).toBe(Number(cap))
   })
 
   it('a last year below the first year clamps up to it', () => {
@@ -279,7 +291,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     setYear('min', '9000')
     setYear('max', '5')
     expect(yearValue('max')).toBe('9000')
-    expect(settings().maxY).toBe(9000)
+    expect(inUse().maxY).toBe(9000)
   })
 
   // ── Focus wins while it is held ─────────────────────────────────────────────
@@ -289,16 +301,16 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     focusYear('min')
     // A range change made from outside the panel entirely — the case this guard exists for is a
     // sync effect landing mid-keystroke and clobbering what is being typed.
-    write(() => settings().setMinY(1700))
+    write(() => useJulianRange.getState().setJulianMinY(1700))
     expect(yearValue('min')).toBe('1')
     // PINS TODAY: and when the keyboard leaves, the BOX wins — its untouched '1' is committed back
     // over the 1700 that arrived while it held focus. That is the same commit-on-blur that makes
     // typing work, applied to text the user never changed.
     commitYear('min', 'blur')
     expect(yearValue('min')).toBe('1')
-    expect(settings().minY).toBe(1)
+    expect(inUse().minY).toBe(1)
     // With the keyboard gone the box tracks the range again.
-    write(() => settings().setMinY(1700))
+    write(() => useJulianRange.getState().setJulianMinY(1700))
     expect(yearValue('min')).toBe('1700')
   })
 
@@ -322,7 +334,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     // the owner wants, a split verdict here is the defect. Do not weaken this to three keys.
     openPanel()
     typeYear('min', '1900')
-    expect(settings().minY).toBe(1) // …and the store has NOT moved: this is text, not a setting
+    expect(inUse().minY).toBe(1) // …and the store has NOT moved: this is text, not a setting
     expect(offers()).toEqual({
       gear: true,
       saveDefaults: true,
@@ -353,7 +365,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     })
     typeYear('min', '1900')
     commitYear('min', 'blur')
-    expect(settings().minY).toBe(1900) // the store moved this time
+    expect(inUse().minY).toBe(1900) // the store moved this time
     expect(offers()).toEqual({
       gear: true,
       saveDefaults: true,
@@ -399,7 +411,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     expect(isSettingsOpen()).toBe(false)
     // The press-outside close blurs the focused box before it unmounts the panel, on purpose —
     // without that, the typed value is silently dropped on every tap-away.
-    expect(settings().minY).toBe(1900)
+    expect(inUse().minY).toBe(1900)
     openSettings()
     expect(yearValue('min')).toBe('1900')
   })
@@ -415,7 +427,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     typeYear('min', '1900')
     closeSettings('gear')
     expect(isSettingsOpen()).toBe(false)
-    expect(settings().minY).toBe(1)
+    expect(inUse().minY).toBe(1)
   })
 
   it('Escape does not close the panel while a year box has the keyboard', () => {
@@ -426,7 +438,7 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     typeYear('min', '1900')
     closeSettings('escape')
     expect(isSettingsOpen()).toBe(true)
-    expect(settings().minY).toBe(1)
+    expect(inUse().minY).toBe(1)
   })
 
   it('Reset Settings while a year box is half-typed and focused leaves the box reading the default', () => {
@@ -443,9 +455,12 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     typeYear('min', '1800')
     fireResetSettings()
     expect(yearValue('min')).toBe('1')
-    expect(yearValue('max')).toBe('10000')
-    expect(settings().minY).toBe(1)
-    expect(settings().maxY).toBe(10000)
+    expect(yearValue('max')).toBe('11582')
+    expect(inUse().minY).toBe(1)
+    expect(inUse().maxY).toBe(11582)
+    // …and the other pair's boxes and years too.
+    expect([yearValue('min', 'off'), yearValue('max', 'off')]).toEqual(['1', '10000'])
+    expect(committedRange('off')).toEqual([1, 10000])
     // And it does not close the panel — the reset is meant to be inspectable.
     expect(isSettingsOpen()).toBe(true)
   })
@@ -460,10 +475,10 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
     typeYear('min', '1900')
     closeSettings('key')
     expect(isSettingsOpen()).toBe(false)
-    expect(settings().minY).toBe(1)
+    expect(inUse().minY).toBe(1)
     openSettings()
     expect(yearValue('min')).toBe('1900')
-    expect(settings().minY).toBe(1)
+    expect(inUse().minY).toBe(1)
   })
 })
 

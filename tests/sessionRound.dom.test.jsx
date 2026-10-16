@@ -17,6 +17,7 @@ import { screen, cleanup, act, fireEvent, render } from '@testing-library/react'
 import { createPreset, switchPreset, deletePreset } from '../src/store/presetControl.js'
 import { readSessionRound } from '../src/store/sessionRound.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress } from '../src/store/progress.js'
 import {
@@ -80,6 +81,7 @@ const pinReadable = () =>
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
 
 // Finish a Blitz round the deterministic way — no fake timers. Begin, answer `nCorrect` correctly,

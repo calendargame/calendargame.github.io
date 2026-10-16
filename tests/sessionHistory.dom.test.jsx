@@ -41,6 +41,7 @@ import {
 } from '../src/store/presetControl.js'
 import { readSessionHistory, writeSessionHistory } from '../src/store/sessionHistory.js'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress } from '../src/store/progress.js'
 import { forgetBrowsingSession } from '../src/store/browsingSession.js'
@@ -93,6 +94,7 @@ const pinReadable = () =>
     s.setDateFormat('numeric-ymd')
     s.setMinY(1583)
     s.setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
 // One Classic card answered right, first time.
 const answerRight = () => tap(ctrl(dayName(readDate())))
@@ -430,6 +432,7 @@ describe('the question that was waiting', () => {
       act(() => {
         useSettings.getState().setMinY(2000)
         useSettings.getState().setMaxY(2001)
+        useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
       }),
     )
     expect(readDate()).not.toBe(waiting)
@@ -443,6 +446,7 @@ describe('the question that was waiting', () => {
       act(() => {
         useSettings.getState().setMinY(2000)
         useSettings.getState().setMaxY(2001)
+        useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
       }),
     )
     expect(readDate()).toBe(waiting)
@@ -454,6 +458,7 @@ describe('the question that was waiting', () => {
     act(() => {
       useSettings.getState().setMinY(2000)
       useSettings.getState().setMaxY(2001)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
     })
     // The panel never closed, so the question on screen was never regenerated — and it must not be
     // parked as if it belonged to the new range.
@@ -470,6 +475,7 @@ describe('the question that was waiting', () => {
     act(() => {
       useSettings.getState().setMinY(2000)
       useSettings.getState().setMaxY(2001)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
     })
     closeSettings('key')
     forward()
@@ -674,7 +680,7 @@ describe('Flash and Deduction', () => {
   it.each(WAYS_BACK)(
     'Deduction, %s: the puzzle filters come back with the history',
     (_, comeBack) => {
-      act(() => useSettings.getState().setMinY(1500)) // a range the 1582 filters can be offered on
+      act(() => useJulianRange.getState().setJulianMinY(1500)) // a range the 1582 filters can be offered on
       press('D')
       tap(ctrl('Year'))
       tap(ctrl('ab Cross'))

@@ -47,6 +47,7 @@ import {
 } from './helpers/settingsPanel.jsx'
 import { readDate, statValue } from './helpers/modeScreen.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useLookupHistory } from '../src/store/lookupHistory.js'
 import { wday } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
@@ -58,6 +59,7 @@ beforeEach(() => {
   s.setDateFormat('numeric-ymd')
   s.setMinY(1583)
   s.setMaxY(10000)
+  useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
 })
 afterEach(() => {
   cleanup()

@@ -23,6 +23,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { wday } from '../src/lib/calendar.js'
 import { DAY, DAY_LETTER } from '../src/lib/format.js'
@@ -113,6 +114,7 @@ function pin() {
   s.setDateFormat('numeric-ymd')
   s.setMinY(1583)
   s.setMaxY(10000)
+  useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
 }
 // An Mo2 run, finished clean: two correct answers 2s and 6s apart.
 function finishedMo2() {
