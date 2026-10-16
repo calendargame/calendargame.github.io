@@ -299,6 +299,10 @@ export default function CustomSelect({
   // trigger's aria-controls={listboxId} pairs it with the portaled listbox, resolved live by id);
   // its click is suppressed there to avoid a double-toggle. A quick tap still toggles; keyboard (the Tab
   // shortcut's .click(), arrows, Enter) is unaffected — those clicks have no preceding pointer gesture.
+  // ⚠ THIS PROP IS ONLY THE PRESS ON THE TRIGGER. Sliding a finger around a list that is ALREADY open
+  // is every list's (the ★ at the listbox below) — a press-drag-select caller differs only in that a
+  // press on its trigger can carry straight on into the list (the top bar's mode and preset lists; the
+  // owner's "that press-drag-into-list gesture belongs to the top-bar triggers only").
   pressDrag?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -864,7 +868,13 @@ export default function CustomSelect({
             ref={panelRef}
             id={listboxId}
             role="listbox"
-            data-select-group={pressDrag || undefined}
+            // ★ EVERY OPEN LIST IS A SELECTION GROUP for lib/pointerGestures (Round 26, the owner):
+            // press an option, slide the finger, and the option under it is ringed — only once the
+            // finger is on ANOTHER option than the one it went down on, so a plain touch rings
+            // nothing — and lifting on an option picks it, lifting off picks nothing. ONE mechanism
+            // for every list (the top bar's two, "Open in", Duplicate), so they cannot come to
+            // differ; and a slide that scrolls the list is a scroll, which picks nothing.
+            data-select-group
             aria-label={ariaLabel}
             // The options' scroll region inside carries the p-1 (below); this box is the frosted
             // frame, a flex column so that region can shrink to the maxHeight and scroll.

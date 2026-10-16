@@ -1291,6 +1291,15 @@ export default function GuidePage({
             in the bar while the page coasts to a stop behind it, and you can open it mid-glide.
           </li>
           <li>
+            Every list that drops down — the mode selector, the preset list beside it, the ⚙
+            menu&apos;s <b>Open in</b>, and <b>Duplicate</b> in Manage Presets — works the same way
+            once it is open: touch an option and nothing is highlighted yet; slide your finger onto
+            another and that one is highlighted as you go; lift on an option to choose it, or off
+            the list to choose nothing. A slide that scrolls the list chooses nothing. Only the two
+            in the top bar can also be pressed and dragged straight into in one go; the others open
+            when you lift your finger on them.
+          </li>
+          <li>
             So does the preset control on the other side of the bar, which is the same kind of list
             and behaves the same way — see <b>Presets</b> below.
           </li>

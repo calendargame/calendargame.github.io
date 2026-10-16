@@ -849,8 +849,8 @@ button{touch-action:manipulation}
 .btn-solid,.ring-on-fill,.btn-correct-persist,.btn-wrong-persist{--kbd-ring:#fff;--kbd-ring-offset:-4px}
 .ring-outside{--kbd-ring:var(--tx-50);--kbd-ring-offset:2px}
 .ring-outside.drag-target{outline-offset:2px}
-/* The mode-selector dropdown (the only [data-select-group] portal) has a theme-INVARIANT frosted-light
-   surface with dark text (CustomSelect's portaled listbox), so the per-theme ring tuned for the app
+/* Every dropdown list (CustomSelect's portaled listbox, a [data-select-group] since Round 26) has a
+   theme-INVARIANT frosted-light surface with dark text, so the per-theme ring tuned for the app
    surfaces would vanish on it — pin its ring to the fixed dark brand accent in every theme. */
 [role="listbox"][data-select-group]{--drag-ring:rgba(120,53,175,.5)}
 /* Selected/answered buttons carry theme-INVARIANT solid fills (brand purple / persist green / persist
