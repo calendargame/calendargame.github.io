@@ -83,6 +83,13 @@ const RANGES = [
   [100, 200],
   [9990, 10000],
   [1500, 1700],
+  // Years past 10000, which a range reaches with the Julian Calendar setting on (Round 26, Q7):
+  // the whole stretch, across the 10000 boundary, its last few years, and a span around 10100 (a
+  // century boundary for Deduction's Year windows).
+  [10001, 11582],
+  [9990, 10010],
+  [11578, 11582],
+  [10095, 10105],
 ]
 const CHANCES = ['random', 0, 0.5, 1]
 const FORMATS = ['numeric-ymd', 'numeric-mdy', 'numeric-dmy', 'written-mdy', 'written-dmy']
