@@ -893,6 +893,59 @@ export default function GuidePage({
       paintBarShare()
     }
   }, [visible, open, scroller, paintBarShare])
+  // ★ A HEADER YOU TAB TO FROM ABOVE THE LINE IS BROUGHT TO THE LINE (Q16) — the docking line's third
+  // way in (index.css's #appScroll: a header you Tab to, a header you open, and a header that docks
+  // all rest on one pixel). The browser's own focus scroll keeps that promise only for a header that
+  // is PARTLY under the bar: it aligns the nearest edge, and #appScroll's scroll-padding-top makes
+  // the nearest edge the line. A header ENTIRELY above the line — behind the opaque bar, or scrolled
+  // further away — counts to both engines as not visible at all, and for that they CENTRE it: a
+  // header near the top of the guide was centred past the top, and the page went to the very top
+  // (Chromium at once, before the focus event; WebKit a moment later). So for a header that stood
+  // above the line when the Tab went down, the guide puts it on the line itself: from where the page
+  // was (the key's own snapshot — Chromium has already moved it by the time focus arrives), by the
+  // stick's own rule for where the header stood then (restGeometry: a closed header at its natural
+  // spot, an open one held between the line and its section's foot), and CEILED to a whole pixel for
+  // lib/accordionMotion's reason — a fraction too far hides a fraction more of what is behind the bar;
+  // a fraction short shows a sliver of the section above between the header and the bar. Written in
+  // the focus event, so no frame shows where the browser put it; WebKit's own pass, after it, then
+  // finds the header on the line and has nothing to do. Anything else — a header already on or
+  // below the line, focus moved by anything but Tab — is left to the browser.
+  useEffect(() => {
+    if (!visible || !scroller) return
+    let tabFrom: number | null = null
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      tabFrom = scroller.scrollTop
+      // Only for this key's own turn: a Tab that moved nothing here must not speak for a later focus.
+      setTimeout(() => {
+        tabFrom = null
+      })
+    }
+    const onFocusIn = (e: FocusEvent) => {
+      const from = tabFrom
+      tabFrom = null
+      const header = e.target
+      if (
+        from === null ||
+        !(header instanceof HTMLElement) ||
+        !header.matches('[data-guide] .guide-head')
+      )
+        return
+      const lineY = scroller.getBoundingClientRect().top + readBarHeight(getComputedStyle(scroller))
+      const now = headerDockGeometry(header.id.slice(headerDomId('').length), lineY)
+      if (!now || !Number.isFinite(lineY)) return
+      // Where the header stood when the key went down: the page was `from - scrollTop` further on.
+      const then = restGeometry(now, from - scroller.scrollTop, 0)
+      if (then.headerTop >= lineY - DOCK_LINE_BAND_PX) return
+      scroller.scrollTop = Math.ceil(from - (lineY - then.headerTop))
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('focusin', onFocusIn, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('focusin', onFocusIn, true)
+    }
+  }, [visible, scroller])
   const toggle = useCallback(
     (id: string) => {
       // Whatever the last tap set moving stops where it stands — the glide, and the arrival's clock
@@ -2362,8 +2415,11 @@ export default function GuidePage({
             <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> is the browser&apos;s own step backwards, and it is how
             the keyboard reaches the page&apos;s controls that have no key of their own — a section
             of this guide, a stats box, a time readout, the strip of an ended run or round (
-            <Kbd>Enter</Kbd> or <Kbd>Space</Kbd> then presses what it is on). Tab plus any other
-            modifier (Ctrl+Tab, Ctrl+Shift+Tab, etc.) passes through to the browser.
+            <Kbd>Enter</Kbd> or <Kbd>Space</Kbd> then presses what it is on). A section title of
+            this guide that it steps back onto while the title is hidden under the bar, or scrolled
+            away above it, is brought down to rest right under the bar, where a section you open
+            comes to rest. Tab plus any other modifier (Ctrl+Tab, Ctrl+Shift+Tab, etc.) passes
+            through to the browser.
           </li>
           <li>
             Every list opens from the keyboard once the keyboard is on its button: <Kbd>Enter</Kbd>{' '}

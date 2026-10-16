@@ -160,3 +160,44 @@ for (const [docked, then] of [
     expect(quick.last.offLine, 'its header is not above the line').toBeGreaterThan(-1)
   })
 }
+
+// Q16. Shift+Tab onto a header that stands above the line. Partly under the bar, the browser's own
+// focus scroll brings it to the line; wholly under it, or scrolled away above, both engines CENTRE
+// it instead — and a header near the top of the guide was centred past the top: the page went to
+// the very top. The guide now brings it to the line itself. (Plain Tab is the app's own key — it
+// opens the mode list — so Shift+Tab is how the keyboard walks onto a header.)
+for (const [above, what] of [
+  [30, 'partly under the bar'],
+  [60, 'wholly under the bar'],
+  [300, 'scrolled away above the bar'],
+] as const) {
+  test(`Shift+Tab onto a header ${what} brings it to rest on the line`, async ({ page }) => {
+    await openApp(page)
+    await switchMode(page, 'guide')
+    await place(page, 5, -above)
+    await settled(page)
+    expect((await read(page, 5)).offLine, 'the header starts above the line').toBeLessThan(
+      -above + 1,
+    )
+    await head(page, 6).evaluate((h) => h.focus({ preventScroll: true }))
+    await page.keyboard.press('Shift+Tab')
+    await expect(head(page, 5)).toBeFocused()
+    await atRest(page)
+    const rest = await read(page, 5)
+    expect(rest.offLine, 'on the line (a whole pixel, so up to one above it)').toBeGreaterThan(-1)
+    expect(rest.offLine, 'on the line, not below it').toBeLessThanOrEqual(SAME_PX)
+  })
+}
+
+test('Shift+Tab onto a header already below the line moves nothing', async ({ page }) => {
+  await openApp(page)
+  await switchMode(page, 'guide')
+  await place(page, 5, 200)
+  await settled(page)
+  const before = await scrollTop(page)
+  await head(page, 6).evaluate((h) => h.focus({ preventScroll: true }))
+  await page.keyboard.press('Shift+Tab')
+  await expect(head(page, 5)).toBeFocused()
+  await atRest(page)
+  expect(await scrollTop(page)).toBe(before)
+})
