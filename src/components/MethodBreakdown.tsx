@@ -123,12 +123,19 @@ function MethodExplanation({
   )
 }
 
+// ★ THE CODES BOX — one look for all six codes panels (the five modes and Lookup), written ONCE here
+// so they cannot drift apart again. Its padding is py-2 top and bottom, the stats strip's cells' own
+// (components/StatPanel), against the px-4 sides: rem steps, so it follows the app's fluid root
+// like everything round it. (It was a fixed 3px on top and 0.375rem below, at every call site — the
+// tightest box in the app, and the only part of it that did not scale.) tests/browser/codesBox
+// holds the two paddings equal and on the root's scale, in every mode.
+const CODES_BOX_CLASS = 'mt-2 rounded-2xl thin px-4 py-2'
+
 export function MethodBreakdownSection({
   date,
   open: controlledOpen,
   onOpenChange,
   className,
-  contentClassName,
   useJulian = false,
   displayedFormat = 'written-mdy',
   cellDates = null,
@@ -136,11 +143,10 @@ export function MethodBreakdownSection({
   date?: CodeDate | null
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  // Both are REQUIRED: every call site states its own wrapper and panel classes (the wrapper is
-  // "" in the game modes and a stable name in Lookup), so a default here would be unreachable
-  // code that only invites a future site to skip the decision.
+  // REQUIRED: every call site states its own wrapper class (it is "" in the game modes and a stable
+  // name in Lookup), so a default here would be unreachable code that only invites a future site
+  // to skip the decision. (The box inside is the same at every site: CODES_BOX_CLASS.)
   className: string
-  contentClassName: string
   useJulian?: boolean
   displayedFormat?: FormatId
   cellDates?: CodeDate[] | null
@@ -289,7 +295,7 @@ export function MethodBreakdownSection({
           agreement explicit rather than a coincidence of two literals (round 8); the
           .expander var fallback in index.css is now pure defense and never a live path. */}
       <Expander open={open && hasDate} durationMs={ACCORDION_MS_FLOOR}>
-        <div id={panelId} className={contentClassName}>
+        <div id={panelId} className={CODES_BOX_CLASS}>
           <MethodExplanation
             date={frozenDate}
             useJulian={frozenUseJulian}

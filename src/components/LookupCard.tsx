@@ -702,7 +702,6 @@ export default function LookupCard({
         <MethodBreakdownSection
           date={cdv}
           className="lookup-method-section"
-          contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5"
           open={cov}
           onOpenChange={sco}
           useJulian={codesUseJulian(cdv, useJulian)}

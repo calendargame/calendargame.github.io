@@ -31,11 +31,12 @@ const OTHER = { y: 1999, m: 12, d: 31 }
 // What the body renders once the snapshot has been released to a null date.
 const RELEASED = 'Show Codes is only supported for AD dates.'
 
-const section = (props) => (
-  <MethodBreakdownSection className="" contentClassName="codes-body" {...props} />
-)
+const section = (props) => <MethodBreakdownSection className="" {...props} />
 // Container-scoped, not by id: a couple of these tests mount a second tree as an oracle.
-const bodyText = (container) => container.querySelector('.codes-body').textContent
+// The codes box: the panel the toggle's aria-controls names.
+const bodyText = (container) =>
+  document.getElementById(container.querySelector('button').getAttribute('aria-controls'))
+    .textContent
 
 // The oracle for "the snapshot is showing date X": what a panel opened fresh on X renders.
 const codesTextFor = (date) => {

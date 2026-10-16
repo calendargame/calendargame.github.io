@@ -261,7 +261,6 @@ function ClassicMode({
             open={state.calcOpen}
             onOpenChange={(open) => eng.showCodes(open)}
             className=""
-            contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5"
             useJulian={eng.julian}
             displayedFormat={date?._fmt || dateFormat}
           />

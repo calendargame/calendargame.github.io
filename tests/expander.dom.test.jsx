@@ -307,8 +307,7 @@ describe('GuidePage toggle coordinator (the shared clock, exclusive open)', () =
 
 describe('MethodBreakdownSection wiring into the Expander (the codes panel)', () => {
   const DATE = { y: 2024, m: 3, d: 15 }
-  const mount = (date = DATE) =>
-    render(<MethodBreakdownSection date={date} className="" contentClassName="codes-body" />)
+  const mount = (date = DATE) => render(<MethodBreakdownSection date={date} className="" />)
 
   it('states its duration: ACCORDION_MS_FLOOR, the same clock the guide bottoms out at', () => {
     // Not the CSS fallback by omission (that was the earlier coincidence of 280ms vs 240ms) —
@@ -325,7 +324,8 @@ describe('MethodBreakdownSection wiring into the Expander (the codes panel)', ()
     expect(button.getAttribute('aria-expanded')).toBe('false')
     const panel = document.getElementById(button.getAttribute('aria-controls'))
     expect(panel).not.toBeNull()
-    expect(panel.className).toBe('codes-body')
+    // …which is the codes box, the same at every site (MethodBreakdown's CODES_BOX_CLASS).
+    expect(panel.className).toBe('mt-2 rounded-2xl thin px-4 py-2')
     // The controlled region is the panel body INSIDE the slider, matching the guide's shape.
     expect(panel.closest('.expander')).not.toBeNull()
   })
@@ -350,8 +350,8 @@ describe('MethodBreakdownSection wiring into the Expander (the codes panel)', ()
     // would put five duplicates in the document — hence useId rather than a caller-supplied id.
     const { container } = render(
       <>
-        <MethodBreakdownSection date={DATE} className="" contentClassName="codes-body" />
-        <MethodBreakdownSection date={DATE} className="" contentClassName="codes-body" />
+        <MethodBreakdownSection date={DATE} className="" />
+        <MethodBreakdownSection date={DATE} className="" />
       </>,
     )
     const ids = [...container.querySelectorAll('button')].map((b) =>

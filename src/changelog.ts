@@ -100,7 +100,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    date: '2026-10-15',
+    date: '2026-10-16',
     items: [
       "In Blitz, the time slider and the countdown are now one. Press Begin and the slider becomes the round's countdown in the same place, with the time left where the slider's value was; Reset brings the slider back. The Blitz page is a little shorter for it.",
       "In Blitz, a small line under each best now gives that round's other number: its streak under Best Score, and its score under Best Streak — so even a narrow phone can tell whether one round set both. A best from before this update shows a dash there until you beat it.",
@@ -111,6 +111,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'The figures at the top of a MoX or Blitz breakdown are in a new order: Solves, Fastest, Slowest, and Spread down the left, and Accuracy, Mean, and Median down the right.',
       'On the narrowest phones, where even "P1" would be cut, the ready-made preset names ("Preset 1", "Preset 2", and so on) are now shown as just their numbers: "1", "2", and so on, all of them together.',
       'A preset name that your device draws as nothing at all, such as some pasted symbols, now counts as a blank name: it goes back to "Preset 2" and the like, as a name of spaces does, instead of leaving an empty button. A symbol your device has no picture for, which it shows as a box, still counts as a name.',
+      'The Show Codes box now has as much room above its codes as below them, like the stats boxes. That room grows with the text on a bigger screen.',
       'Fixed: on a very narrow screen, the Mode button no longer covers the end of the Preset button, and the ⚙ no longer runs off the edge. The Preset button keeps room for its arrows and a number, and the Mode button gives way instead, its name cut short where it does not fit.',
       "Fixed: in Manage Presets, pressing your device's Back while typing a preset name no longer throws the name away. It keeps it, as tapping away does, and closes the popup. Escape still throws a name away.",
       'Fixed: on an iPhone, a flick that started on a button in the ⚙ menu could press that button as your finger lifted, such as opening the Open in list. A flick now only scrolls, wherever it starts.',
