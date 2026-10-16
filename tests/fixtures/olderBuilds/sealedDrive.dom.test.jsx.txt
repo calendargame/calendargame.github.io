@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 // Drives an OLDER build's real app (this file is copied into that build's tests/ folder) over a
-// seeded SEALED save, and writes down what it stored after each step.
+// seeded SEALED save, and writes down what it stored after each step (run with SEALED_OUT=<file>).
+// Recorded on v2.26.0 and v2.27.3 (Round 24: builds that never heard of `sealed`) and on v2.28.0 and
+// v2.29.0 (Round 26: the READER builds — they load and keep a sealed save, and never start sealing a
+// plain one). Two things differ between the two lines, and each is settled here, not by hand:
+//   • the chunk ids: SEALED_REAL_IDS=1 names each chunk by the hash of its text, as a sealing save
+//     does, which is the only save a reader build can read; without it the ids are the placeholders
+//     the Round 24 records were made with (a build that never reads a chunk cannot tell);
+//   • the Amnesic switch: a boolean up to v2.27.3, a value ('off' / 'full') from v2.28.0 — told
+//     apart by whether the build has store/amnesicMode.
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, within, cleanup, fireEvent, act } from '@testing-library/react'
 import { writeFileSync } from 'node:fs'
@@ -54,7 +62,25 @@ const tap = (el) =>
   })
 
 const TAIL = Array.from({ length: 300 }, (_, i) => 2 + (i % 50) / 10)
-const IDS = ['aaa0', 'bbb1', 'ccc2', 'ddd3']
+// cyrb53, as store/progressStorage names a chunk by its text.
+function chunkId(text) {
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507)
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507)
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
+}
+const IDS =
+  process.env.SEALED_REAL_IDS === '1'
+    ? [0, 1, 2, 3].map(() => chunkId(JSON.stringify(TAIL.slice(0, 250))))
+    : ['aaa0', 'bbb1', 'ccc2', 'ddd3']
 const SEED = {
   state: {
     stats: {
@@ -162,14 +188,18 @@ describe('an older build over a sealed save', () => {
       log.push({ popupStillOpen: !!screen.queryByRole('dialog', { name: 'Enable and Reset Stats?' }) })
       snap('the false popup was declined')
     }
+    const threeWay = await import('../src/store/amnesicMode.js').then(
+      () => true,
+      () => false,
+    )
     act(() => {
-      setPresetAmnesic(1, true)
+      setPresetAmnesic(1, threeWay ? 'full' : true)
     })
     snap('amnesic on')
     answer(true)
     snap('an answer while amnesic')
     act(() => {
-      setPresetAmnesic(1, false)
+      setPresetAmnesic(1, threeWay ? 'off' : false)
     })
     snap('amnesic off')
     let p2

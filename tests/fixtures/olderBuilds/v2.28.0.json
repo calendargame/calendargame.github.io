@@ -1,0 +1,506 @@
+[
+  {
+    "step": "seeded",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1400,
+        "good": 1300,
+        "streak": 3,
+        "best": 40,
+        "times": 300,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [6.8, 6.9]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "loaded",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1400,
+        "good": 1300,
+        "streak": 3,
+        "best": 40,
+        "times": 300,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [6.8, 6.9]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "mounted",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1400,
+        "good": 1300,
+        "streak": 3,
+        "best": 40,
+        "times": 300,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [6.8, 6.9]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "3 timed answers",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1403,
+        "good": 1303,
+        "streak": 6,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "a wrong answer",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "1 more timed answer",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "override in the tail (credit taken back)",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1304,
+        "streak": 7,
+        "best": 40,
+        "times": 304,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.2807, 0.1689]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "override undone",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "timing hidden",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "timing shown again",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "amnesic on",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": {
+      "version": 5,
+      "classic": {
+        "played": 0,
+        "good": 0,
+        "streak": 0,
+        "best": 0,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "an answer while amnesic",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": {
+      "version": 5,
+      "classic": {
+        "played": 1,
+        "good": 1,
+        "streak": 1,
+        "best": 1,
+        "times": 1,
+        "lastTimes": [0.334]
+      }
+    },
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "amnesic off",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": null,
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "switched to a new preset and answered",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1404,
+        "good": 1303,
+        "streak": 0,
+        "best": 40,
+        "times": 303,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3465, 0.2807]
+      }
+    },
+    "p2": {
+      "version": 5,
+      "classic": {
+        "played": 1,
+        "good": 1,
+        "streak": 1,
+        "best": 1,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "switched back and answered",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1405,
+        "good": 1304,
+        "streak": 1,
+        "best": 40,
+        "times": 304,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.2807, 0.3172]
+      }
+    },
+    "p2": {
+      "version": 5,
+      "classic": {
+        "played": 1,
+        "good": 1,
+        "streak": 1,
+        "best": 1,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "reloaded and answered",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1406,
+        "good": 1305,
+        "streak": 2,
+        "best": 40,
+        "times": 305,
+        "timesLost": 1000,
+        "sealed": {
+          "n": 1000,
+          "ids": ["17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a", "17qm20bjy8a"]
+        },
+        "lastTimes": [0.3172, 0.2759]
+      }
+    },
+    "p2": {
+      "version": 5,
+      "classic": {
+        "played": 1,
+        "good": 1,
+        "streak": 1,
+        "best": 1,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "session": null,
+    "chunkKeys": 4,
+    "dialog": []
+  },
+  {
+    "step": "Reset Stats",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 0,
+        "good": 0,
+        "streak": 0,
+        "best": 0,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "p2": {
+      "version": 5,
+      "classic": {
+        "played": 1,
+        "good": 1,
+        "streak": 1,
+        "best": 1,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "session": null,
+    "chunkKeys": 0,
+    "dialog": []
+  },
+  {
+    "step": "trim: loaded a 999-time tail",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 1999,
+        "good": 1999,
+        "streak": 3,
+        "best": 40,
+        "times": 999,
+        "timesLost": 1000,
+        "lastTimes": [6.7, 6.8]
+      }
+    },
+    "p2": {
+      "version": 5,
+      "classic": {
+        "played": 1,
+        "good": 1,
+        "streak": 1,
+        "best": 1,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "session": null,
+    "chunkKeys": 0,
+    "dialog": []
+  },
+  {
+    "step": "trim: 3 timed answers past 1,000",
+    "main": {
+      "version": 5,
+      "classic": {
+        "played": 2002,
+        "good": 2002,
+        "streak": 6,
+        "best": 40,
+        "times": 1002,
+        "timesLost": 1000,
+        "lastTimes": [0.2318, 0.2878]
+      }
+    },
+    "p2": {
+      "version": 5,
+      "classic": {
+        "played": 1,
+        "good": 1,
+        "streak": 1,
+        "best": 1,
+        "times": 0,
+        "lastTimes": []
+      }
+    },
+    "session": null,
+    "chunkKeys": 0,
+    "dialog": []
+  }
+]

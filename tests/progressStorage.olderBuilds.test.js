@@ -1,9 +1,15 @@
 // progressStorage.olderBuilds — THE OLDER-BUILD MODELS, HELD TO WHAT THE REAL BUILDS STORED.
 //
-// Live and staging share one browser origin, so v2.27.3 and v2.26.0 read and write the same saved
-// progress this build does. The sealed layout (store/progressStorage) rests on one claim about them:
-// a build that has never heard of `sealed` carries it, and the `timesLost` beside it, through every
-// write it makes, and drops both only on a reset.
+// Live and staging share one browser origin, so older builds read and write the same saved progress
+// this build does. Two lines of them:
+//   • v2.27.3 and v2.26.0 have never heard of `sealed`. The sealed layout (store/progressStorage)
+//     rests on one claim about them: such a build carries `sealed`, and the `timesLost` beside it,
+//     through every write it makes, and drops both only on a reset.
+//   • v2.28.0 and v2.29.0 are the READER: they load and keep a sealed save, seal it further as its
+//     tail grows, delete the chunks of a silo they reset — and never start sealing a plain one.
+//     Round 26 turned sealing on in this build and deleted the switch, so they are modelled by a
+//     verbatim record of their code (tests/fixtures/olderBuilds/progressStorage-v2.29.0.ts), held to
+//     the real builds below.
 // ★ THAT CLAIM WAS RUN, NOT READ. tests/fixtures/olderBuilds/v2.27.3.json and v2.26.0.json are what
 // the real app at each tag (fcdcf56, ff506f8) left in storage after each step of
 // sealedDrive.dom.test.jsx.txt — mounted, answered, overridden, timing hidden and shown, Amnesic on
@@ -13,7 +19,16 @@
 // builds.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { Disk, olderPage, blankState, MAIN } from './helpers/progressWorld.js'
+import {
+  Disk,
+  olderPage,
+  newPage,
+  blankState,
+  chunkId,
+  family,
+  MAIN,
+} from './helpers/progressWorld.js'
+import { createProgressCodec as createReaderCodec } from './fixtures/olderBuilds/progressStorage-v2.29.0.ts'
 
 const recorded = (build) =>
   JSON.parse(readFileSync(new URL(`./fixtures/olderBuilds/${build}.json`, import.meta.url), 'utf8'))
@@ -146,6 +161,127 @@ describe.each(['v2.27.3', 'v2.26.0'])(
       expect(stored(disk)).toEqual(after)
       expect(after.classic.times).toBe(build === 'v2.26.0' ? 1000 : 1002)
       expect(after.classic.timesLost).toBe(1000) // carried, never recomputed, by both
+    })
+  },
+)
+
+// ── THE READER BUILDS ────────────────────────────────────────────────────────────────────────────
+// The same drive (sealedDrive.dom.test.jsx.txt, with SEALED_REAL_IDS=1: chunks named by the hash of
+// their text, the only save a reader can read), run on the real v2.28.0 and v2.29.0, replayed through
+// their recorded code. One difference from the builds above: the reader's five mode screens write the
+// whole doc as they mount, so a load is followed by a save (`mount`), as the app does.
+describe.each(['v2.29.0', 'v2.28.0'])(
+  '%s (the reader), replayed against what the real build stored',
+  (build) => {
+    const steps = new Map(recorded(build))
+    const at = (step) => steps.get(step).main
+    const counts = (step) => {
+      const { played, good, streak, best } = at(step).classic
+      return { played, good, streak, best }
+    }
+    const CHUNK_TEXT = JSON.stringify(TAIL.slice(0, 250))
+    const REAL = { n: 1000, ids: [0, 1, 2, 3].map(() => chunkId(CHUNK_TEXT)) }
+    const sealedSeed = (disk) => {
+      REAL.ids.forEach((id, j) => disk.put(`${family(1)}classic:${j}.${id}`, CHUNK_TEXT))
+      disk.put(
+        MAIN,
+        seed({
+          played: 1400,
+          good: 1300,
+          streak: 3,
+          best: 40,
+          times: TAIL,
+          timesLost: 1000,
+          sealed: REAL,
+        }),
+      )
+    }
+    const mount = (disk) => {
+      const page = newPage(createReaderCodec, disk, { name: build })
+      page.load()
+      page.save()
+      return page
+    }
+
+    it('keeps a sealed save sealed through every write, seals it no further at this length, and deletes its chunks on a reset', () => {
+      const disk = new Disk()
+      sealedSeed(disk)
+      expect(stored(disk)).toEqual(at('seeded'))
+      const page = mount(disk)
+      expect(stored(disk)).toEqual(at('mounted'))
+      const step = (name, change) => {
+        page.update('classic', change)
+        expect(stored(disk), name).toEqual(at(name))
+        expect(disk.chunkKeys(), name).toHaveLength(steps.get(name).chunkKeys)
+      }
+      const [t0, t1] = at('3 timed answers').classic.lastTimes
+      step('3 timed answers', (s) => ({
+        ...s,
+        ...counts('3 timed answers'),
+        times: [...s.times, t0, t0, t1],
+      }))
+      step('a wrong answer', (s) => ({ ...s, ...counts('a wrong answer') }))
+      const given = at('override in the tail (credit taken back)')
+      step('override in the tail (credit taken back)', (s) => ({
+        ...s,
+        ...counts('override in the tail (credit taken back)'),
+        times: [...s.times, given.classic.lastTimes[1]],
+      }))
+      step('override undone', (s) => ({
+        ...s,
+        ...counts('override undone'),
+        times: s.times.slice(0, -1),
+      }))
+      // Timing hidden and shown, Amnesic on and off (the session copy, elsewhere), a switch to another
+      // preset: none of them changed this key in the real build.
+      for (const name of ['timing hidden', 'timing shown again', 'amnesic on', 'amnesic off'])
+        expect(at(name), name).toEqual(at('override undone'))
+      expect(at('switched to a new preset and answered')).toEqual(at('override undone'))
+      // A reload: the sealed save is read back whole, and kept sealed.
+      const again = mount(disk)
+      expect(again.state.stats.classic.times).toHaveLength(1303)
+      expect(stored(disk).classic.sealed).toEqual(REAL)
+      expect(at('reloaded and answered').classic.sealed).toEqual(REAL)
+      // Reset Stats: the silo saved blank, and the chunks this page knew deleted with it.
+      again.reset('classic')
+      expect(stored(disk)).toEqual({
+        ...at('Reset Stats'),
+        classic: { ...at('Reset Stats').classic, lastTimes: [] },
+      })
+      expect(disk.chunkKeys()).toHaveLength(steps.get('Reset Stats').chunkKeys)
+      expect(steps.get('Reset Stats').chunkKeys).toBe(0)
+    })
+
+    it('never STARTS sealing: a plain silo played past 1,000 times stays plain', () => {
+      const disk = new Disk()
+      // The drive's second seed: a 999-time tail whose `sealed` names chunks the reset above deleted.
+      disk.put(
+        MAIN,
+        seed({
+          played: 1999,
+          good: 1999,
+          streak: 3,
+          best: 40,
+          times: Array.from({ length: 999 }, (_, i) => 2 + (i % 50) / 10),
+          timesLost: 1000,
+          sealed: REAL,
+        }),
+      )
+      const page = mount(disk)
+      expect(stored(disk)).toEqual(at('trim: loaded a 999-time tail'))
+      const after = at('trim: 3 timed answers past 1,000')
+      for (let i = 1; i <= 3; i++)
+        page.update('classic', (s) => ({
+          ...s,
+          played: 1999 + i,
+          good: 1999 + i,
+          streak: 3 + i,
+          times: [...s.times, after.classic.lastTimes[i < 3 ? 0 : 1]],
+        }))
+      expect(stored(disk)).toEqual(after)
+      expect(after.classic.times).toBe(1002)
+      expect('sealed' in after.classic).toBe(false)
+      expect(disk.chunkKeys()).toEqual([])
     })
   },
 )
