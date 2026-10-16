@@ -327,10 +327,11 @@ describe('a browser that refuses localStorage', () => {
     vi.resetModules()
     // Imported with no #root in the document, so main.jsx's real-build auto-mount stays skipped and
     // this case owns the only copy of the app.
-    const [{ App: FreshApp }, control, settings] = await Promise.all([
+    const [{ App: FreshApp }, control, settings, julian] = await Promise.all([
       import('../src/main.jsx'),
       import('../src/store/presetControl.js'),
       import('../src/store/settings.js'),
+      import('../src/store/julianRange.js'),
     ])
     const root = document.createElement('div')
     root.id = 'root'
@@ -347,7 +348,7 @@ describe('a browser that refuses localStorage', () => {
         s.setDateFormat('numeric-ymd')
         s.setMinY(1583)
         s.setMaxY(10000)
-        useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
+        julian.useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
       })
     const wearHere = (name) =>
       act(() => {

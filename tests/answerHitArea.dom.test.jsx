@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { useSettings } from '../src/store/settings.js'
+import { useJulianRange } from '../src/store/julianRange.js'
 import { DAY } from '../src/lib/format.js'
 import { wday } from '../src/lib/calendar.js'
 import { answerGridHitPad } from '../src/lib/answerGrid.js'
@@ -79,6 +80,8 @@ function pin({ minY = 1583, maxY = 10000, useJulian = true } = {}) {
   s.setUseJulian(useJulian)
   s.setMinY(minY)
   s.setMaxY(maxY)
+  // …and the Julian-on pair (store/julianRange), so the range in use is this one either way.
+  useJulianRange.getState().applyJulianRange({ julianMinY: minY, julianMaxY: maxY })
 }
 const switchToDeduction = () => act(() => fireEvent.keyDown(window, { key: 'D' }))
 
