@@ -43,6 +43,7 @@ import {
   autoScrollDirection,
 } from '../lib/presetReorder.js'
 import { bandDirection, scrollDelta } from '../lib/pointerGestures.js'
+import { scrollBoxTo } from '../lib/appScroll.js'
 
 // ============================================================
 // PresetManager — the card behind the ⚙ menu's "Manage Presets" button: make a preset, rename one,
@@ -663,7 +664,7 @@ export default function PresetManager({
       createPreset()
     })
     const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el) scrollBoxTo(el, el.scrollHeight)
   }
 
   // ── Duplicating ─────────────────────────────────────────────────────────────────────────────
@@ -862,8 +863,11 @@ export default function PresetManager({
         if (dir !== 0) {
           const dt = prevTs == null ? 0 : ts - prevTs
           prevTs = ts
-          list.scrollTop +=
-            dir * scrollDelta(dt, dir < 0 ? d.pointerY - r.top : r.bottom - d.pointerY)
+          scrollBoxTo(
+            list,
+            list.scrollTop +
+              dir * scrollDelta(dt, dir < 0 ? d.pointerY - r.top : r.bottom - d.pointerY),
+          )
           applyDrag(dragFrame(d, d.pointerY))
         } else prevTs = null
       }

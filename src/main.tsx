@@ -39,6 +39,7 @@ import { installPointerGestures } from './lib/pointerGestures.js'
 import { installSelectAllOnEntry } from './lib/textEntry.js'
 import { installKeyboardFocus, shortcutActed } from './lib/keyboardFocus.js'
 import { installTabLanding } from './lib/barLine.js'
+import { scrollBoxTo, scrollWindowHome } from './lib/appScroll.js'
 import { readBuildStamp, writeBuildStamp, buildChanged } from './lib/buildStamp.js'
 import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
@@ -950,10 +951,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
       useLayoutEffect(()=>{
         syncBarHeight();
         const el=appScrollRef.current;if(!el)return;
-        if(mode!=="guide"){el.scrollTop=0;if(document.activeElement===el)el.blur();return;}
+        if(mode!=="guide"){scrollBoxTo(el,0);if(document.activeElement===el)el.blur();return;}
         const stopWaiting=whenAppCssInLayout(()=>{
           syncBarHeight(); // the bar's real height, which the offset is clamped against
-          el.scrollTop=guideScrollYRef.current;
+          scrollBoxTo(el,guideScrollYRef.current);
           saveReadingPosRef.current=()=>{guideScrollYRef.current=el.scrollTop;};
         });
         el.focus({preventScroll:true});
@@ -1119,7 +1120,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       //     it, so there was never a root-scroll invariant for this listener to defend — in EVERY
       //     mode. The guide's in-flight scroll writer is cancelled when the app is backgrounded
       //     by GuidePage itself, which is where that concern belongs.
-      useEffect(()=>{const reset=()=>{window.scrollTo(0,0);if(document.documentElement.scrollTop!==0)document.documentElement.scrollTop=0;if(document.body.scrollTop!==0)document.body.scrollTop=0;if(appScrollRef.current)appScrollRef.current.scrollTop=0;};const onPageShow=(e: PageTransitionEvent)=>{if(e.persisted)return;reset();requestAnimationFrame(reset);setTimeout(reset,0);};reset();window.addEventListener('pageshow',onPageShow);return()=>{window.removeEventListener('pageshow',onPageShow);};},[]);
+      useEffect(()=>{const reset=()=>{scrollWindowHome();if(document.documentElement.scrollTop!==0)scrollBoxTo(document.documentElement,0);if(document.body.scrollTop!==0)scrollBoxTo(document.body,0);if(appScrollRef.current)scrollBoxTo(appScrollRef.current,0);};const onPageShow=(e: PageTransitionEvent)=>{if(e.persisted)return;reset();requestAnimationFrame(reset);setTimeout(reset,0);};reset();window.addEventListener('pageshow',onPageShow);return()=>{window.removeEventListener('pageshow',onPageShow);};},[]);
       // Keyboard input — desktop convenience, mobile-no-op.
       // Three categories of keys are handled, all subject to the same gates: not in
       // an input/textarea/contentEditable, no modifiers held (Cmd+L stays browser),
@@ -1899,7 +1900,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           parkCasualHistories();
           if(presetMoved)switchMode(readSessionMode(now.presetId)??readStoredDefaultMode(now.presetId));
           remountScreens();
-          if(presetMoved&&modeRef.current!=='guide'&&appScrollRef.current)appScrollRef.current.scrollTop=0;
+          if(presetMoved&&modeRef.current!=='guide'&&appScrollRef.current)scrollBoxTo(appScrollRef.current,0);
         };
         const offPresets=usePresets.subscribe(onChange),offAmnesic=useSessionAmnesic.subscribe(onChange);
         return()=>{offPresets();offAmnesic();};
@@ -2219,7 +2220,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
         discardGuidePlace();
         // App container to the top, synchronously — the scroll-ownership effect would do it one
         // commit later, and this avoids the flash in between.
-        if(appScrollRef.current)appScrollRef.current.scrollTop=0;
+        if(appScrollRef.current)scrollBoxTo(appScrollRef.current,0);
       };
       // Android hardware Back leaves How-to-Play (the 'guide' mode) for the previous game mode
       // instead of quitting the app — it mirrors the H-key toggle. A page state, so Back is the only

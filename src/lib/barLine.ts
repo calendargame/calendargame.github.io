@@ -30,6 +30,7 @@
 // brings its own rows into view).
 import { DOCK_LINE_BAND_PX } from './guideDock.js'
 import { nearestScrollRegion } from '../components/scrollRegion.js'
+import { scrollBoxTo } from './appScroll.js'
 
 /**
  * The fixed bar's height in px — the viewport y of its underside. --bar-h is a literal px token App
@@ -98,7 +99,7 @@ export function installTabLanding(scroller: HTMLElement): () => void {
     }
     thenTop ??= el.getBoundingClientRect().top - comingUp
     if (thenTop >= lineY - DOCK_LINE_BAND_PX) return
-    scroller.scrollTop = Math.floor(from - (lineY - thenTop))
+    scrollBoxTo(scroller, Math.floor(from - (lineY - thenTop)))
   }
   window.addEventListener('keydown', onKeyDown, true)
   document.addEventListener('focusin', onFocusIn, true)

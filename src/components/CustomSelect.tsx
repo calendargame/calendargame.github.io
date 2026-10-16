@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { isPageCovered, useLayer } from './overlayStack.js'
+import { scrollBoxTo } from '../lib/appScroll.js'
 import {
   ROW_LANE_SCROLLER_CLASS,
   ROW_LABEL_INTO_SCROLLBAR_LANE_CLASS,
@@ -670,7 +671,7 @@ export default function CustomSelect({
     const list = listRef.current
     const opt = selectedIdx >= 0 ? list?.children[selectedIdx] : null
     if (!list || !(opt instanceof HTMLElement)) return
-    list.scrollTop = opt.offsetTop - (list.clientHeight - opt.offsetHeight) / 2
+    scrollBoxTo(list, opt.offsetTop - (list.clientHeight - opt.offsetHeight) / 2)
     // On OPEN only: a later re-measure (rotation, --bar-h) must not yank the list back to the ✓.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelShown])

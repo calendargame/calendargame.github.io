@@ -29,6 +29,7 @@ import {
   DOUBLE_TAP_MS,
   installPointerGestures,
 } from '../src/lib/pointerGestures.js'
+import { scrollBoxTo, scrollWindowHome } from '../src/lib/appScroll.js'
 
 const el = () => ({}) // identity-only stand-in for a DOM element
 const groupContaining = (...members) => ({ contains: (n) => members.includes(n) })
@@ -1124,6 +1125,73 @@ describe('pointerGestures controller — touches that are not quick taps, and th
     press(pill, { held: 600, during: () => scrolls(elsewhere) })
     expect(clicks).toHaveBeenCalledTimes(1)
     press(pill, { held: 600, during: () => scrolls(document) })
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  // ★ A SCROLL THE APP MAKES IS NOT THE PERSON'S (lib/appScroll): How to Play's opening glide, its
+  // scroll back, the Shift+Tab rest under the bar, a list keeping its row in view, a screen sent to
+  // its top. Each goes through the door, and a press resting on a control while it moves is still a
+  // press. (Without the door's word to the controller, every one of these presses is swallowed.)
+  it('a scroll the APP makes during a touch press — reported at once or late — does not stop the press', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    // The guide's glide moving the region frame by frame under a resting finger, each frame reported.
+    press(pill, {
+      held: 600,
+      during: () => {
+        for (let frame = 1; frame <= 3; frame++) {
+          scrollBoxTo(region, frame * 30)
+          region.dispatchEvent(new Event('scroll'))
+        }
+      },
+    })
+    expect(clicks).toHaveBeenCalledTimes(1)
+    // A screen sent back to its top, and the window reset, reported after the release's nearest frame.
+    const page = document.scrollingElement ?? document.documentElement
+    page.scrollTop = 50
+    press(pill, {
+      held: 600,
+      during: () => {
+        scrollWindowHome()
+        scrollBoxTo(region, 0)
+        document.dispatchEvent(new Event('scroll'))
+        region.dispatchEvent(new Event('scroll'))
+      },
+    })
+    expect(clicks).toHaveBeenCalledTimes(2)
+  })
+
+  it('…but the PERSON scrolling after (or as well as) the app still makes the touch a scroll', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    press(pill, {
+      held: 600,
+      during: () => {
+        scrollBoxTo(region, 30) // the app…
+        region.dispatchEvent(new Event('scroll'))
+        scrolls(region) // …then the finger
+      },
+    })
+    expect(clicks).not.toHaveBeenCalled()
+    // The app's scroll of a box that does not hold the control changes nothing either way.
+    const elsewhere = domEl('div', {}, document.body)
+    press(pill, { held: 600, during: () => scrollBoxTo(elsewhere, 10) })
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  // A MOUSE press is never a scroll (the header: mouse presses are left alone, a mouse always gets
+  // its click) — a wheel turned while the button is held down does not swallow the click.
+  it('a mouse press during which the region holding its button scrolled still gets its click', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    hit = pill
+    pill.dispatchEvent(ptr('pointerdown', { pointerType: 'mouse' }))
+    scrolls(region) // a wheel turn
+    document.dispatchEvent(ptr('pointerup', { pointerType: 'mouse' }))
+    pill.click() // the browser's click for the mouse
     expect(clicks).toHaveBeenCalledTimes(1)
   })
 

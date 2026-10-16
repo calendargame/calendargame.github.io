@@ -24,6 +24,7 @@ import {
 } from '../lib/accordionMotion.js'
 import { observeScrollExtent, readShadeRampPx, writeShade } from './scrollRegion.js'
 import { addStandingRule, readBarHeight } from '../lib/barLine.js'
+import { scrollBoxTo } from '../lib/appScroll.js'
 import {
   dockShades,
   restGeometry,
@@ -235,7 +236,7 @@ function foldClock(panel: HTMLElement | null, durationMs: number): FoldClock {
 // finger as its section closes; the toggle says why). Its own function because the scroller reaches
 // GuidePage as a prop, and the page's position is the one thing about it this screen writes.
 const scrollBack = (el: HTMLElement, px: number): void => {
-  el.scrollTop -= px
+  scrollBoxTo(el, el.scrollTop - px)
 }
 // startScrollWriter — the coordinator's per-frame scroll driver, pointed at the element
 // the guide scrolls. Runs on the fold's own clock (foldClock, above) and on its curve:
@@ -275,7 +276,7 @@ function startScrollWriter(
   window.addEventListener('wheel', takeOver, { passive: true })
   const step = (now: number) => {
     const p = clock.at(now)
-    el.scrollTop = from + (to - from) * accordionEase(p)
+    scrollBoxTo(el, from + (to - from) * accordionEase(p))
     if (p < 1) raf = requestAnimationFrame(step)
     else {
       cancel()
@@ -1327,8 +1328,11 @@ export default function GuidePage({
             press that turns into a scroll does nothing — wherever the button is, and however your
             finger ends up back on it: a flick that starts on a button in the ⚙ menu, a list, or a
             long page moves that part and presses nothing. A scroll that had already stopped when
-            you pressed doesn&apos;t count: that press works. The dimmed area around a popup works
-            the same way: hold it as long as you like, and the popup still closes when you lift.
+            you pressed doesn&apos;t count, and neither does one the app makes itself, such as How
+            to Play gliding to a section you just opened: that press works. With a mouse, turning
+            the wheel while you hold a button down doesn&apos;t cancel it either. The dimmed area
+            around a popup works the same way: hold it as long as you like, and the popup still
+            closes when you lift.
           </li>
           <li>
             On an iPhone, a quick double tap and hold doesn&apos;t bring up the magnifier on a

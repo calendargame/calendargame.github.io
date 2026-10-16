@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { flushSync } from 'react-dom'
+import { scrollBoxTo } from '../lib/appScroll.js'
 
 // The site-wide scroll-region treatment (round 7) — the ⚙ Settings recipe, extracted here so
 // no scroll region can quietly diverge from it again (settings, the changelog popup, and the
@@ -504,9 +505,9 @@ type RowView = RowMetrics & { clientHeight: number; scrollTop: number; rows: num
 export function scrollBandIntoView(el: HTMLElement, top: number, height: number): void {
   // No fade depth to read where no stylesheet is served.
   const margin = readFadeDepthPx() || 0
-  if (top - margin < el.scrollTop) el.scrollTop = top - margin
+  if (top - margin < el.scrollTop) scrollBoxTo(el, top - margin)
   else if (top + height + margin > el.scrollTop + el.clientHeight)
-    el.scrollTop = top + height + margin - el.clientHeight
+    scrollBoxTo(el, top + height + margin - el.clientHeight)
 }
 
 export function useWindowedRows<T extends HTMLElement>(
@@ -583,7 +584,7 @@ export function useWindowedRows<T extends HTMLElement>(
       ) {
         // The row at the top of the view stays at the top: the same number of rows scrolled past,
         // at the rows' new size. (A box that only changed height needs nothing — scrollTop held.)
-        if (was.pitch !== pitch) el.scrollTop = was.rows * pitch
+        if (was.pitch !== pitch) scrollBoxTo(el, was.rows * pitch)
         // …and the wanted row stays in view if it was whole in view.
         const wanted = revealIndexRef.current
         const wasTop = wanted * was.pitch
@@ -639,7 +640,7 @@ export function useWindowedRows<T extends HTMLElement>(
     revealedRef.current = { index: revealIndex, key: revealKey }
     if (revealIndex < 0) return
     const top = revealIndex * pitch
-    if (last === null) el.scrollTop = top - (el.clientHeight - rowHeight) / 2
+    if (last === null) scrollBoxTo(el, top - (el.clientHeight - rowHeight) / 2)
     else scrollBandIntoView(el, top, rowHeight)
     syncRef.current()
   }, [ref, revealIndex, revealKey, pitch, rowHeight])

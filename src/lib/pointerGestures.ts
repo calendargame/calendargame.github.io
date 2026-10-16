@@ -116,13 +116,15 @@
 //     touch. A regression of this rule: before it, such a release was left to a click iOS never
 //     sent. So the controller watches for itself: any scroll, during the gesture, of something that
 //     holds the pressed control (the page included) — one that MOVED it since the press, not merely
-//     one reported since (onScroll's ⚠) — marks the touch as a scroll (onScroll) — and a
-//     scroll presses nothing on release, neither the control it began on nor, in a list, another
+//     one reported since (onScroll's ⚠), and moved it by the PERSON, not by the app (every scroll
+//     the app makes goes through lib/appScroll, which tells this controller where it put the box) —
+//     marks the touch as a scroll (onScroll) — and a scroll presses nothing on release, neither the control it began on nor, in a list, another
 //     option under the finger, and draws no ring while it lasts. One rule for every control inside
 //     anything that scrolls: the ⚙ menu, How to Play, Manage Presets' list, a dropdown's list.
 //     (The top bar's own controls sit in no scroller; a press-drag from one into its list scrolls
 //     the LIST, which does not hold the trigger, so the edge auto-scroll below is not a scroll of
-//     the press.)
+//     the press.) A MOUSE press is never a scroll: like every other touch rule here it is left
+//     alone, so a wheel turned while the button is held down costs it nothing.
 //   • NOT CONTROLS OF THIS FILE: links (two mailto addresses — a long press on a link is the
 //     platform's own preview, never a press), the preset reorder grip (it owns its own drag), and the
 //     sliders. Those keep the browser's behaviour.
@@ -136,6 +138,7 @@
 // elementFromPoint/getBoundingClientRect don't work there.
 // ─────────────────────────────────────────────────────────────────────────
 import { opensKeyboard } from './textEntry.js'
+import { onAppScroll, scrollBoxTo } from './appScroll.js'
 
 const HILITE = 'drag-target' // the live "this will be selected" class toggled during a drag (index.css)
 const GROUP_SELECTOR = '[data-answer-grid],[data-select-group]'
@@ -379,6 +382,17 @@ export function installPointerGestures(): () => void {
   // when it was pressed (scrollPlaces), which is what "since the press" is measured against.
   let scrolled = false
   let heldAt: ScrollPlace[] = []
+  // A box the APP moved during the press (lib/appScroll: How to Play's glide and scroll back, the
+  // Shift+Tab rest, a list keeping its row in view, a screen sent to its top) stands, from then on,
+  // where the app put it — so the move is never read as the finger's (onScroll). Told synchronously,
+  // inside the write, so no frame can show the app's move as a move.
+  const offAppScroll = onAppScroll((box) => {
+    for (const place of heldAt)
+      if (place.box === box) {
+        place.top = box.scrollTop
+        place.left = box.scrollLeft
+      }
+  })
   // …and across touches: when the last TAP ended (a touch the browser did not take for a scroll), whether
   // the touch now down has been taken for one, a touchstart withheld before its pointerdown arrived
   // (no engine checked orders them that way, but the rule must not depend on it), and whether the
@@ -446,7 +460,10 @@ export function installPointerGestures(): () => void {
     }
     const dt = prevTs == null ? 0 : ts - prevTs
     prevTs = ts
-    scroller.scrollTop += dir * scrollDelta(dt, dir < 0 ? lastY - rect.top : rect.bottom - lastY)
+    scrollBoxTo(
+      scroller,
+      scroller.scrollTop + dir * scrollDelta(dt, dir < 0 ? lastY - rect.top : rect.bottom - lastY),
+    )
     setHilite(memberAt(menu, lastX, lastY)) // content moved under the finger
     rafId = requestAnimationFrame(autoScroll)
   }
@@ -716,9 +733,11 @@ export function installPointerGestures(): () => void {
   // test, every time a How to Play header was scrolled into view and pressed in the same frame on a
   // loaded machine; a person scrolling and then tapping at once can meet the same thing.) So the
   // event only says WHERE TO LOOK: the gesture is a scroll when the box it names now stands
-  // somewhere other than where it stood at the press (movedSince).
+  // somewhere other than where it stood at the press (movedSince) — or since the APP last put it
+  // somewhere (offAppScroll, above): a scroll the app made is never the person's.
+  // A MOUSE press is exempt, like every touch rule in this file: a mouse always gets its click.
   const onScroll = (e: Event) => {
-    if (!startEl || trigger || scrolled) return
+    if (!startEl || trigger || scrolled || pointerKind === 'mouse') return
     const scroller = e.target
     if (!(scroller instanceof Node) || !scroller.contains(startEl)) return
     if (!movedSince(heldAt, scroller)) return
@@ -744,6 +763,7 @@ export function installPointerGestures(): () => void {
   document.addEventListener('mousedown', onMouseDown, true)
   document.addEventListener('scroll', onScroll, passive)
   return () => {
+    offAppScroll()
     if (clearTimer) clearTimeout(clearTimer)
     stopAutoScroll()
     setHilite(null)
