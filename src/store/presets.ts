@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { guardedStorage, readItem, writeItem, tryWriteItem, removeItem } from './storageHealth.js'
 import { browsingSessionOpen } from './browsingSession.js'
 import { sessionPresetId, recordSessionPreset } from './sessionPreset.js'
+import { nameHasInk } from '../lib/presetNameInk.js'
 
 // store/presets.ts — THE PRESET REGISTRY, and the storage layer every per-preset store sits on.
 //
@@ -186,9 +187,12 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
 })
 
 // ── A name with nothing in it to see ──────────────────────────────────────────────────────────
-// A name is EMPTY when no character in it would be drawn: a preset named with a zero-width space
-// showed as a blank pill and a blank row. The pattern below finds one VISIBLE character, which is
-// any character that is none of these:
+// A name is EMPTY when nothing in it would be drawn: a preset named with a zero-width space showed
+// as a blank pill and a blank row. TWO QUESTIONS DECIDE IT, in this order, and both are asked here
+// (normalizePresetName, below) and nowhere else.
+//
+// ★ FIRST, THE UNICODE RULE. The pattern below finds one VISIBLE character, which is any character
+// that is none of these:
 //   • White_Space — every kind of space, tab, and line break — EXCEPT the Ogham space mark
 //     (U+1680). Unicode counts it as a space, and it is drawn: it is the stroke an Ogham text is
 //     written along. It is the one "space" with something to see, so it is a visible character
@@ -199,25 +203,36 @@ export const makePresetRegistryDefaults = (): PresetRegistryValues => ({
 //     selectors, the tag characters, and the Hangul fillers (U+115F, U+1160, U+3164, U+FFA0);
 //   • Cc — the control characters;
 //   • U+2800, the Braille pattern with no dots raised. It is a symbol to Unicode and in none of the
-//     three sets above, and it is drawn as an empty cell: the one blank character named by hand.
+//     three sets above, and it is drawn as an empty cell: the one blank character named by hand,
+//     so that the rule alone — which is all there is where nothing can be drawn — still knows it.
 // The first three are read from the Unicode tables the browser carries, so they are never a list
 // kept here, and they grow with the browser.
 // ⚠ NOT "Cf", the format characters as a whole: that category also holds the Arabic number sign and
 // its like (U+0600–U+0605, U+06DD, U+070F, U+08E2), which ARE drawn. The format characters that draw
 // nothing are in Default_Ignorable_Code_Point already.
+//
+// ★ THEN, THE INK CHECK — for a name the rule calls visible: drawn in the app's own font on THIS
+// device, does it put a single pixel on the screen (lib/presetNameInk)? No table can say that of
+// every character: the object replacement character (U+FFFC), the interlinear annotation marks
+// (U+FFF9–U+FFFB), a private-use character, or a code point nothing is assigned to yet is drawn as
+// whatever the device's fonts make of it — often nothing. So the device is asked, by drawing.
+//   • A CHARACTER THE DEVICE HAS NO PICTURE FOR IS DRAWN AS A BOX, and a box is something to see:
+//     such a name is kept. Only a device that draws a name as nothing at all calls it empty.
+//   • WHERE NOTHING CAN BE DRAWN (no canvas — the test suite's jsdom; or the app's font not yet
+//     ready to draw, which lib/presetNameInk checks before it draws), the rule above answers alone,
+//     and a name it calls visible is kept: a blank name kept is a blank row, a real name thrown
+//     away is the player's text lost.
+//   • IT IS THE DEVICE'S ANSWER, AND ONLY EVER FOR WHAT THIS DEVICE SHOWS. Two devices can judge one
+//     name differently (fonts differ). A name is judged as it is saved and as it is read, and a
+//     name read as empty is shown as the default name WITHOUT the device being rewritten for it
+//     (normalizePresetName says how that goes) — so the stored text is never changed on the say-so
+//     of the device that happened to read it.
+//
 // ⚠ ONLY THE WHOLE NAME IS JUDGED. An invisible character inside a name that has something to see
 // is left exactly where it is — it is what joins a family emoji, spells a flag, and shapes some
 // scripts — so nothing is ever taken out of a name.
-// ⚠ WHAT THIS CANNOT KNOW: whether the device has a font for a character. One it has none for is
-// drawn as an empty box, or as nothing, on that device only; nothing here can see that, and such a
-// name is kept.
-// ⚠ KNOWINGLY STILL ACCEPTED, THOUGH THEY MAY DRAW AS NOTHING: the object replacement character
-// (U+FFFC) and the interlinear annotation marks (U+FFF9–U+FFFB), which are symbols and format
-// characters Unicode does NOT list as ignorable; private-use characters, which draw whatever a
-// font says, or nothing; and code points nothing is assigned to yet. No table the browser carries
-// says "this draws nothing" of any of them, and a list of them kept here would be a guess that
-// goes stale — U+2800 is the one such character named, and it stays the only one.
 const VISIBLE_CHARACTER = /[^\p{White_Space}\p{Default_Ignorable_Code_Point}\p{Cc}⠀]|\u1680/u
+const hasVisibleCharacter = (text: string): boolean => VISIBLE_CHARACTER.test(text)
 // The spaces trimmed from the two ends of a name: what `String.prototype.trim` takes (every
 // White_Space character, and the byte-order mark) less the Ogham space mark, which is drawn.
 const OUTER_SPACE = /[\p{White_Space}\uFEFF]/u
@@ -234,13 +249,15 @@ const outerSpacesTrimmed = (name: string): string => {
 }
 
 // A name, made safe to store: its outer spaces trimmed, and never empty — one that is empty, has
-// nothing visible in it (above), or is not text at all becomes the default name for its preset.
+// nothing in it to see (the two questions above), or is not text at all becomes the default name
+// for its preset.
 // ★ THIS IS THE ONE PLACE THAT DECIDES A NAME IS EMPTY. A rename, a new preset, the note under the
-// rename field, and a registry read from the device all ask it, so they cannot disagree. A name
-// with nothing visible in it that an older build saved is therefore SHOWN as the default name, and
-// the device is not rewritten for it: reading writes nothing, and the name goes to the device as
-// the default one with the next change to the preset list — exactly what has always happened to a
-// stored name of spaces.
+// rename field, a registry read from the device, and therefore the stock-name test that decides how
+// a name is drawn (shortStockName, which only ever sees names that came through here) all ask it,
+// so they cannot disagree. A name with nothing to see that an older build — or another device —
+// saved is therefore SHOWN as the default name, and the device is not rewritten for it: reading
+// writes nothing, and the name goes to the device as the default one with the next change to the
+// preset list — exactly what has always happened to a stored name of spaces.
 // ★ THERE IS NO LENGTH LIMIT, AND NOTHING HERE CUTS A NAME. A name is whatever the player typed or
 // pasted, a whole book included; the places that show it shorten what they DRAW (lib/presetNameText,
 // and the ellipsis in components/PresetSwitcher), never what is stored. So no part of a name is
@@ -249,7 +266,8 @@ const outerSpacesTrimmed = (name: string): string => {
 // its id).
 export const normalizePresetName = (name: string, id: number): string => {
   const trimmed = typeof name === 'string' ? outerSpacesTrimmed(name) : ''
-  return VISIBLE_CHARACTER.test(trimmed) ? trimmed : defaultPresetName(id)
+  const seen = hasVisibleCharacter(trimmed) && nameHasInk(trimmed, hasVisibleCharacter) !== false
+  return seen ? trimmed : defaultPresetName(id)
 }
 
 // ★ THE REGISTRY IS READ FROM UNTRUSTED STORAGE, exactly as store/lookupHistory's own list is, and

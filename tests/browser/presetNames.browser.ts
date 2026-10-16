@@ -161,3 +161,95 @@ for (const [width, height] of [
     expect(Math.abs(whole) >= CLOSE_PX || Math.abs(cut) >= CLOSE_PX).toBe(true)
   })
 }
+
+// ── A name that draws nothing ────────────────────────────────────────────────────────────────
+//
+// store/presets' normalizePresetName calls a name empty when nothing in it is drawn: first by
+// Unicode's rule, then — for a name that passes it — by drawing it in the page's font on this
+// device (lib/presetNameInk). Three characters a player can paste that draw nothing: the blank
+// Braille pattern (U+2800, named in the rule by hand), the Hangul filler (U+3164, which Unicode
+// lists as ignorable), and the object replacement character (U+FFFC), which no table calls
+// invisible — only drawing it finds it blank. And one that must be KEPT: a code point nothing is
+// assigned to (U+0378), which a device has no picture for and draws as an empty box.
+//
+// THE ORACLE IS A SECOND DRAWING, made here: the name set in the page's font at another size on a
+// fresh canvas, its pixels counted — the device's own answer to "does this show anything", asked
+// independently of the app. Each of the three must BE blank on the engines this lane runs, or the
+// test would be about nothing. Together they are not, everywhere: WebKit draws the object
+// replacement character as nothing alone and as a box beside anything else (measured), so the
+// three in one name are kept there and empty in Chromium — the app follows the device, and so does
+// the test.
+
+const inked = (page: Page, name: string) =>
+  page.evaluate((name) => {
+    const family = getComputedStyle(document.documentElement).fontFamily
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
+    ctx.canvas.width = 600
+    ctx.canvas.height = 120
+    ctx.font = `48px ${family}`
+    ctx.fillText(name, 20, 80)
+    return ctx.getImageData(0, 0, 600, 120).data.some((v, i) => i % 4 === 3 && v !== 0)
+  }, name)
+
+const savedNames = (page: Page) =>
+  page.evaluate(() => {
+    const raw = window.localStorage.getItem('cg-presets-v1')
+    return raw && (JSON.parse(raw).state.presets as { name: string }[]).map((p) => p.name)
+  })
+
+// The name the top bar's control is showing (it holds every preset's; the one on show is not
+// aria-hidden).
+const shownInBar = (page: Page) =>
+  topBar(page).preset.locator('[aria-hidden="false"] [data-preset-name-cell]')
+
+const BLANK = {
+  'the blank Braille pattern': String.fromCodePoint(0x2800),
+  'the Hangul filler': String.fromCodePoint(0x3164),
+  'the object replacement character': String.fromCodePoint(0xfffc),
+}
+const TOGETHER = ` ${String.fromCodePoint(0xfffc, 0x2800, 0x3164, 0xfffc)} `
+const NO_PICTURE = String.fromCodePoint(0x0378)
+
+test('a name this device draws as nothing is an empty name: typed, it goes back to the stock name', async ({
+  page,
+}) => {
+  await openApp(page)
+  const dialog = await openPresetManager(page)
+  const box = dialog.getByRole('textbox', { name: 'Preset name' })
+  const rename = async (name: string, expected: string, what: string) => {
+    await box.click()
+    await box.fill('Mornings')
+    await box.press('Enter')
+    await expect(box, what).toHaveValue('Mornings')
+    await box.click()
+    await box.fill(name)
+    await box.press('Enter')
+    await expect(box, what).toHaveValue(expected)
+    await expect(shownInBar(page), what).toHaveText(expected)
+    expect(await savedNames(page), what).toEqual([expected])
+  }
+  for (const [what, name] of Object.entries(BLANK)) {
+    expect(await inked(page, name), `${what} draws nothing here`).toBe(false)
+    await rename(name, 'Preset 1', what)
+  }
+  const together = (await inked(page, TOGETHER.trim())) ? TOGETHER.trim() : 'Preset 1'
+  await rename(TOGETHER, together, 'the three together')
+  // A character with no picture is drawn as a box — something to see — and is kept.
+  expect(await inked(page, NO_PICTURE), 'a box is drawn').toBe(true)
+  await rename(NO_PICTURE, NO_PICTURE, 'a character with no picture')
+})
+
+test('a saved name this device draws as nothing is shown as the stock name, and the saved text is left alone', async ({
+  page,
+}) => {
+  const blank = BLANK['the object replacement character']
+  await openApp(page, { seed: { presets: presetsNamed(blank, 'Evenings') } })
+  const before = await page.evaluate(() => window.localStorage.getItem('cg-presets-v1'))
+  expect(before).toContain(blank)
+  await expect(shownInBar(page)).toHaveText('Preset 1')
+  const dialog = await openPresetManager(page)
+  const boxes = dialog.getByRole('textbox', { name: 'Preset name' })
+  await expect(boxes.nth(0)).toHaveValue('Preset 1')
+  await expect(boxes.nth(1)).toHaveValue('Evenings')
+  expect(await page.evaluate(() => window.localStorage.getItem('cg-presets-v1'))).toBe(before)
+})

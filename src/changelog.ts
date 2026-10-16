@@ -107,6 +107,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'A button now works however long you hold it before lifting your finger, and when you slide off it and back on before lifting. On an iPhone, a press held for a couple of seconds, or moved about, used to do nothing. The same goes for the dimmed area around a popup: a long press there now closes the popup.',
       'On an iPhone, a quick double tap and hold no longer brings up the magnifier on a screen that does not scroll, on its buttons, labels, and numbers alike. Boxes you type in keep it.',
       'The figures at the top of a MoX or Blitz breakdown are in a new order: Solves, Fastest, Slowest, and Spread down the left, and Accuracy, Mean, and Median down the right.',
+      'A preset name that your device draws as nothing at all, such as some pasted symbols, now counts as a blank name: it goes back to "Preset 2" and the like, as a name of spaces does, instead of leaving an empty button. A symbol your device has no picture for, which it shows as a box, still counts as a name.',
     ],
   },
   {

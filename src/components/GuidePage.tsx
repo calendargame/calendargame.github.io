@@ -1644,7 +1644,8 @@ export default function GuidePage({
           presets skip the confirmation entirely = that file's isPresetFactory, whose comment
           also argues the one entry of clearPresetStorage it deliberately does not count; the screen
           clear = main.tsx's registry subscription calling remountScreens; a name of any length =
-          store/presets' normalizePresetName (it trims, and names an empty one — nothing else);
+          store/presets' normalizePresetName (it trims, and names an empty one — by Unicode's
+          rule, then by drawing it, lib/presetNameInk — nothing else);
           whether a name is cut short, and the note that says so = lib/presetNameWidth, measured
           against every cell components/PresetSwitcher's PresetOptionLabel draws (the control, a row
           of its list, and Open in's); the short form of a ready-made name = store/presets'
@@ -1776,7 +1777,12 @@ export default function GuidePage({
             trimmed there to the line it is on. Two presets can have the same name. A name with
             nothing in it to see goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on:
             that is one left blank, or one made up only of spaces and other characters that show
-            nothing on screen. (While you type, the note under the box treats such a name as the
+            nothing on screen. Whether a name shows anything is judged on the device you are using,
+            by drawing it: a character your device draws as nothing counts as nothing, and one it
+            has no picture for, which it shows as an empty box, counts as something to see — so the
+            same name can be kept on one device and shown as &quot;Preset 2&quot; on another. Only
+            what is shown changes; the name as it was saved is not touched until you next change the
+            list. (While you type, the note under the box treats such a name as the
             &quot;Preset&quot; name it is about to become.) If the device has no room left to save a
             name, it is not changed: the box goes back to the name it had, and a note under it says
             &quot;This device has no room to save that name, so it was not changed.&quot; That is so
