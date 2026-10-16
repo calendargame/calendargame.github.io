@@ -757,6 +757,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ⚠ getBoundingClientRect() is TRANSFORM-AWARE — it reports the VISUAL box. The bar carries
       // no transform today and must not gain one: a scale on the bar would silently corrupt all
       // seven readers at once (animate a child instead).
+      // ⚠ THE WRITE IS MADE INSIDE THE OBSERVER'S CALLBACK, and resizes the scroller (its padding),
+      // which observers of its own watch. That is only clean because the scroller sits DEEPER in
+      // the page than the bar — the box round #appScroll below says why, and must stay.
       // ⚠ Do NOT "modernise" this into ResizeObserver's borderBoxSize (fractional too): this
       // callback is ALSO invoked directly from the mode-change layout effect below, where there is
       // no observer entry to read, so a rect read is needed regardless — and two sources for one
@@ -2580,6 +2583,23 @@ import BlitzMode from './modes/BlitzMode.jsx'
             order, so the app-wide Tab binding and the modals' tab traps (which enumerate
             button,input) are untouched. App focuses it on entry to the guide so the desktop
             keyboard scroll keys work immediately; see that effect for why. */}
+        {/* ★ THE SCROLLER SITS ONE LEVEL DEEPER THAN THE BAR, AND THIS BOX IS WHY (Round 26). The bar's
+            ResizeObserver (syncBarHeight) answers a change in the bar's height by writing --bar-h,
+            which is the scroller's padding-top: so the scroller's own box changes INSIDE that
+            observer's callback, and the scroller is watched by observers of its own (its scroll
+            extent: the edge shadows and masks, How to Play's dock tracker). A ResizeObserver
+            reports a change made during its delivery in the same frame only for an element DEEPER
+            in the tree than the shallowest one it has just reported. As the bar's sibling the
+            scroller was at the bar's own depth, so on every change of the bar's height (a turn, a
+            resize) its report was put off to the next frame and the browser logged "ResizeObserver
+            loop completed with undelivered notifications". One level down, it is reported in the
+            frame the bar changed in, before anything is painted — no frame late, nothing logged.
+            Nothing else about the scroller changes: this box is `absolute inset-0` of #root, as the
+            scroller was, so the scroller's own `absolute inset-0` fills the same rectangle; it has
+            no z-index, so it makes no stacking context; and it never scrolls, so the guide's sticky
+            headers still pin against the scroller. ⚠ Do not flatten it — and any box that --bar-h
+            sizes, if a ResizeObserver watches it, has to sit deeper than the bar for the same reason. */}
+        <div className="absolute inset-0">
         <div ref={attachAppScroll} id="appScroll" tabIndex={-1} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 ${SCROLLER_CORE_CLASS} ${scrollFadeClass(appScrolledFromTop,appAtBottom)}`}>
         {/* Mode-content wrapper. min-h-full + flex column: the scroller above has a definite
             height, so "at least a screenful" gives a mode that wants to FIT the screen (Lookup) a
@@ -2646,6 +2666,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
               so App — which owns the container — passes it down: the element itself, from state
               (appScroller, above), so that its arriving is a render the guide's effects answer. */}
           <ModeErrorBoundary key={"guide-"+guideResetKey} mode="How to Play" active={mode==="guide"} onCrash={discardGuidePlace}><GuidePage visible={mode==="guide"} scroller={appScroller} readingOffset={readGuideOffset} onBarYield={yieldBarShade}/></ModeErrorBoundary>
+        </div>
         </div>
         </div>
         {/* The guide's two soft edges — ⚠ KEPT ACROSS ROUND 13, and the reason changed. They exist

@@ -186,7 +186,9 @@
         in main.tsx for why the sub-pixel matters to all seven readers.
      2. #appScroll (the scroll container, ref={appScrollRef}): position:absolute
         inset:0, with padding-top:var(--bar-h) so its content starts below the
-        bar instead of being covered by it. overflow-y:auto with
+        bar instead of being covered by it. It sits inside a plain absolute
+        inset:0 box, one level deeper than the bar, so that the bar's observer
+        can resize it without a ResizeObserver loop (main.tsx says why). overflow-y:auto with
         overscroll-contain keeps rubber-band bounce LOCAL — the bounce happens
         inside this container and cannot affect the fixed bar above. THE APP HAS
         EXACTLY ONE MAIN SCROLLER and this is it: How to Play, the app's one long

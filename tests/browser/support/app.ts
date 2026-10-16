@@ -94,8 +94,11 @@ async function watch(context: BrowserContext, baseURL: string): Promise<() => vo
   // page (its own `error` and `unhandledrejection` events) rather than through the browser's
   // debugging channel, because the engines disagree about what that channel carries: WebKit passes
   // a ResizeObserver loop error along it and Chromium does not, though both raise it.
+  // ⚠ THERE IS NO LIST OF ERRORS TO LET THROUGH. The lane once carried one (Round 25's Q20), for
+  // the ResizeObserver loop the top bar's height observer raised; Round 26 fixed it at the root
+  // (src/main.tsx, the box around #appScroll) and the list went with it. A known defect is fixed,
+  // not allowed for.
   const errors: string[] = []
-  pageErrors.set(context, errors)
   await context.exposeBinding(REPORT, (_source, message: string) => void errors.push(message))
   await context.addInitScript((REPORT) => {
     const report = (message: string) =>
@@ -108,33 +111,10 @@ async function watch(context: BrowserContext, baseURL: string): Promise<() => vo
   context.on('console', (m) => {
     if (m.type() === 'error') errors.push(`console.error: ${m.text()}`)
   })
-  return () =>
-    expect(
-      errors.filter((e) => !KNOWN_PAGE_ERRORS.some((known) => e.includes(known))),
-      'the page raised or logged an error',
-    ).toEqual([])
+  return () => expect(errors, 'the page raised or logged an error').toEqual([])
 }
 
 const REPORT = '__browserLaneReport'
-const pageErrors = new WeakMap<BrowserContext, string[]>()
-/** Every error the pages of this context have raised or logged so far, known ones included. */
-export const pageErrorsOf = (context: BrowserContext): readonly string[] => pageErrors.get(context)!
-
-// ── ⚠ KNOWN DEFECTS THE LANE MEETS AND DOES NOT FAIL ON. THIS LIST IS MEANT TO BE EMPTY. ─────
-// An entry is an error the APP raises today, already known and waiting for its own fix, that a
-// test here cannot avoid setting off. Without the entry every test that touches it would be red
-// for a reason that is not its own; with it, the lane must not let the entry outlive the defect —
-// so EVERY ENTRY HAS A TEST IN knownDefects.browser.ts THAT FAILS THE DAY THE ERROR STOPS
-// HAPPENING. Fix the defect, watch that test fail, delete both. Never add an entry without one.
-export const KNOWN_PAGE_ERRORS: readonly string[] = [
-  // The top bar's height observer (src/main.tsx's syncBarHeight) answers a change in the bar's
-  // height by writing --bar-h, which the page is laid out from — from inside the observer's own
-  // callback, so the browser has new sizes to report before it has finished reporting the last,
-  // and raises this. A change of the window's size that moves the root font sets it off (a
-  // different height, or a tablet or desktop width), which a sweep here cannot avoid. Nothing is
-  // drawn wrong; on the live site it is an error in the log.
-  'ResizeObserver loop completed with undelivered notifications.',
-]
 
 export interface OpenOptions {
   /** The window's size. Left out, it is the lane's 390×844 phone. */
