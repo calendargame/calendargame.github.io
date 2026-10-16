@@ -102,10 +102,10 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-15',
     items: [
+      "In Blitz, the time slider and the countdown are now one. Press Begin and the slider becomes the round's countdown in the same place, with the time left where the slider's value was; Reset brings the slider back. The Blitz page is a little shorter for it.",
       'A button now works however long you hold it before lifting your finger, and when you slide off it and back on before lifting. On an iPhone, a press held for a couple of seconds, or moved about, used to do nothing. The same goes for the dimmed area around a popup: a long press there now closes the popup.',
       'On an iPhone, a quick double tap and hold no longer brings up the magnifier anywhere but on text you can select. Boxes you type in keep it.',
       'The figures at the top of a MoX or Blitz breakdown are in a new order: Solves, Fastest, Slowest, and Spread down the left, and Accuracy, Mean, and Median down the right.',
-      'Fixed: in Blitz, Reset now puts the countdown back to its full time. Its number used to stay where the round had left it.',
     ],
   },
   {

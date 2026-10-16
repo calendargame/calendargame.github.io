@@ -256,13 +256,14 @@ function BlitzMode({
     blitzPausedAtRef = useRef<number | null>(null),
     blitzPausedAccRef = useRef(0),
     clockRemainRef = useRef(parkedRound?.remain ?? (perQ ? qSec : blitzSec))
-  const blitzBarRef = useRef<HTMLSpanElement | null>(null),
-    blitzTimeRef = useRef<HTMLSpanElement | null>(null)
   const qDeadlineRef = useRef<number | null>(null),
     qPausedAtRef = useRef<number | null>(null),
     qPausedAccRef = useRef(0)
-  const suddenBarRef = useRef<HTMLSpanElement | null>(null),
-    suddenTimeRef = useRef<HTMLSpanElement | null>(null)
+  // The countdown's bar and readout — ONE of each, for whichever timing sub-mode is in play (it is
+  // idle-locked, so they can never belong to two at once). Painted by drawClock alone: neither has
+  // any content React renders, so nothing React does can put back a value drawClock has replaced.
+  const clockBarRef = useRef<HTMLSpanElement | null>(null),
+    clockTimeRef = useRef<HTMLSpanElement | null>(null)
   // Blitz all-time bests persist across reloads (Stage D1): from the progress store — per-round
   // (blitzBest), per-Q sudden death (suddenBest), and per-Q + Allow Mistakes (suddenAmBest).
   // Their ★ markers are not stored anywhere: each is DERIVED from the record's own round id (see
@@ -389,15 +390,11 @@ function BlitzMode({
   // writing the base back — storing the charged value while the stamp stood still would charge the
   // same seconds again on the next frame, and the clock would drain at compounding speed.
   const drawClock = (r: number) => {
-    if (!perQ) {
-      const sx = Math.max(0, Math.min(1, r / blitzSec))
-      if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(' + sx + ')'
-      if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(r)
-    } else {
-      const sx = qSec > 0 ? Math.max(0, Math.min(1, r / qSec)) : 1
-      if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(' + sx + ')'
-      if (suddenTimeRef.current) suddenTimeRef.current.textContent = Math.ceil(r) + 's'
-    }
+    const length = perQ ? qSec : blitzSec
+    const sx = length > 0 ? Math.max(0, Math.min(1, r / length)) : 1
+    if (clockBarRef.current) clockBarRef.current.style.transform = 'scaleX(' + sx + ')'
+    if (clockTimeRef.current)
+      clockTimeRef.current.textContent = perQ ? Math.ceil(r) + 's' : fmtBlitzT(r)
   }
   // …and the same draw that also records `r` as the round's remaining. Everything that CHANGES the
   // clock goes through here; only the derived drain loop uses drawClock directly.
@@ -414,13 +411,16 @@ function BlitzMode({
     endKind === 'toggle' && endedAtRef.current != null
       ? Math.max(0, clockRemainRef.current - (Date.now() - endedAtRef.current) / 1000)
       : clockRemainRef.current
-  // A restored ended round shows the clock it stopped on — the readout and bar it had before the
-  // switch — rather than the full length the markup renders. A layout effect so the first paint is
-  // already right. Mount-only: after this, every change to the clock is drawn by the code that makes it.
+  // The countdown's first drawing: a restored ended round shows the clock it stopped on — the readout
+  // and bar it had before the switch — and with nothing parked it is the configured length. The
+  // markup renders neither (clockBarRef), so this is the one draw before Begin. A layout effect so the
+  // first paint is already right. Mount-only: after this, every change to the clock is drawn by the
+  // code that makes it — and while no round is up the countdown is not on screen at all (the slot
+  // shows the slider), so a length changed in the meantime is drawn by the Begin that uses it.
   // A round parked mid-'toggle'-gap is drawn at its CHARGED reading (drawClock, so the stamped base
   // survives for remainNow to keep charging against) — the seconds spent in the other preset count.
   useLayoutEffect(() => {
-    if (parkedRound) drawClock(remainNow())
+    drawClock(remainNow())
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design (see above)
   }, [])
   // The round-over state with the clock stopped — the ONE writer of `timerDone = true`, and of
@@ -1044,6 +1044,34 @@ function BlitzMode({
   ]
   const date = state.date
   const dateText = shouldShowTimerDate ? fmtDate(date.y, date.m, date.d, date._fmt) : '—'
+  // A round is UP from Begin until Reset — running, or ended and not yet reset. It locks the round's
+  // set-up controls, swaps Begin for Reset, and is which face the ONE slot shows (the ★ above the
+  // slot in the markup). The slider = the time limit of the timing sub-mode in play, with everything
+  // its two controls need.
+  const roundUp = active || timerDone
+  const slider = perQ
+    ? {
+        min: 1,
+        max: 30,
+        step: 0.5,
+        value: qSec,
+        set: setQSec,
+        label: 'Blitz question timer',
+        inputMode: 'decimal' as const,
+        format: (v: number) => v + 's',
+        fill: Math.round(((qSec - 1) / 29) * 100) + '%',
+      }
+    : {
+        min: 10,
+        max: 300,
+        step: 5,
+        value: blitzSec,
+        set: setBlitzSec,
+        label: 'Blitz round timer',
+        inputMode: 'numeric' as const,
+        format: fmtBlitzT,
+        fill: Math.round(((blitzSec - 10) / 290) * 100) + '%',
+      }
   const bScore = blitzBest[blitzBk],
     sScore = suddenBest[suddenBk],
     saScore = suddenAmBest[suddenBk]
@@ -1088,204 +1116,162 @@ function BlitzMode({
         <button
           type="button"
           onClick={toggleAllowMistakes}
-          className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${allowMistakes ? 'btn-solid border-transparent' : 'surface-toggle text-(--tx-100-80)'}${active || timerDone ? ' opacity-60 pointer-events-none' : ''}`}
+          className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border ${allowMistakes ? 'btn-solid border-transparent' : 'surface-toggle text-(--tx-100-80)'}${roundUp ? ' opacity-60 pointer-events-none' : ''}`}
         >
           Allow Mistakes
         </button>
         <button
           type="button"
           onClick={togglePerQ}
-          className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border btn-solid border-transparent ${active || timerDone ? ' opacity-60 pointer-events-none' : ''}`}
+          className={`flex-1 px-2 py-1 rounded-xl text-xs font-medium border btn-solid border-transparent ${roundUp ? ' opacity-60 pointer-events-none' : ''}`}
         >
           {perQ ? 'Per Question' : 'Per Round'}
         </button>
       </div>
-      <div className="mt-3">
-        {!perQ ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="range"
-              min="10"
-              max="300"
-              step="5"
-              value={blitzSec}
-              onChange={(e) => {
-                const v = +e.target.value
-                setBlitzSec(v)
-                if (!active) {
-                  clockRemainRef.current = v
-                  if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(v)
-                  if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
-                }
-              }}
-              disabled={active || timerDone}
-              style={
-                {
-                  '--rng-fill': Math.round(((blitzSec - 10) / 290) * 100) + '%',
-                } as React.CSSProperties
-              }
-              className="flex-1 disabled:opacity-40"
-            />
-            <SliderValueEditor
-              value={blitzSec}
-              min={10}
-              max={300}
-              snap={5}
-              disabled={active || timerDone}
-              inputMode="numeric"
-              label="Blitz round timer"
-              format={fmtBlitzT}
-              toText={String}
-              widest={SLIDER_READOUT_WIDEST}
-              onCommit={(v) => {
-                setBlitzSec(v)
-                if (!active) {
-                  clockRemainRef.current = v
-                  if (blitzTimeRef.current) blitzTimeRef.current.textContent = fmtBlitzT(v)
-                  if (blitzBarRef.current) blitzBarRef.current.style.transform = 'scaleX(1)'
-                }
-              }}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <input
-              type="range"
-              min="1"
-              max="30"
-              step="0.5"
-              value={qSec}
-              onChange={(e) => {
-                const v = +e.target.value
-                setQSec(v)
-                if (!active) {
-                  if (suddenTimeRef.current) suddenTimeRef.current.textContent = v + 's'
-                  if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(1)'
-                }
-              }}
-              disabled={active || timerDone}
-              style={
-                { '--rng-fill': Math.round(((qSec - 1) / 29) * 100) + '%' } as React.CSSProperties
-              }
-              className="flex-1 disabled:opacity-40"
-            />
-            <SliderValueEditor
-              value={qSec}
-              min={1}
-              max={30}
-              snap={0.5}
-              disabled={active || timerDone}
-              inputMode="decimal"
-              label="Blitz question timer"
-              format={(v) => v + 's'}
-              toText={String}
-              widest={SLIDER_READOUT_WIDEST}
-              onCommit={(v) => {
-                setQSec(v)
-                if (!active) {
-                  if (suddenTimeRef.current) suddenTimeRef.current.textContent = v + 's'
-                  if (suddenBarRef.current) suddenBarRef.current.style.transform = 'scaleX(1)'
-                }
-              }}
-            />
-          </div>
-        )}
-      </div>
-      <div className="mt-5">
-        {!perQ && (
-          <div className="mb-3">
-            <div className="text-center text-xs tabular-nums text-(--tx-200-80) mb-1">
-              <span ref={blitzTimeRef}>{fmtBlitzT(blitzSec)}</span>
-            </div>
-            <div className="bar">
-              <span ref={blitzBarRef} style={{ width: '100%' }}></span>
-            </div>
-          </div>
-        )}
-        {perQ && (
-          <div className="mb-3">
-            <div className="text-center text-xs tabular-nums text-(--tx-200-80) mb-1">
-              <span ref={suddenTimeRef}>{qSec}s</span>
-            </div>
-            <div className="bar">
-              <span ref={suddenBarRef} style={{ width: '100%' }}></span>
-            </div>
-          </div>
-        )}
-        <div className="mt-4 rounded-2xl panel p-4">
-          <div className="text-center relative">
-            <CardNumber state={state} show={state.backDepth > 0} />
-            <div className="text-3xl font-bold">{dateText}</div>
-          </div>
-          <WeekdayAnswer
-            key={state.gridEpoch}
-            inputStyle={inputStyle}
-            dotRotation={dotRotation}
-            persistBtns={state.persistBtns}
-            flash={flash}
-            optionsDisabled={optionsDisabled}
-            onPick={onAnswer}
+      {/* ★ ONE SLOT: THE TIME LIMIT'S SLIDER, AND THE COUNTDOWN IT SETS (Q12, the owner's idea — a try
+          for his phone). The two were never useful at the same moment: idle, the countdown under the
+          slider only repeated the slider's own number; from Begin until Reset the slider was a dimmed
+          control nobody could move. So they share one row:
+            • IDLE — the slider and its value box (tap the value to type), as before.
+            • FROM BEGIN UNTIL RESET (`roundUp`) — the same track is the countdown. The slider fades
+              out, thumb and fill with it, and the countdown's track fades in exactly over it: the same
+              size, the same unfilled colour (the range rules in index.css), full at Begin and draining
+              from there. The value box's place shows the time left, in the same cell and the same type,
+              so the number never moves. A round that has ENDED keeps its countdown on screen, where it
+              stopped (or still draining, after a tap ended it — see EndKind), until Reset brings the
+              slider back. Nothing changes size: the input stays mounted under the countdown, so the
+              track keeps its box, and the value cell keeps the widest-value strut.
+            • The cross-fade is decorative and runs on --motion-scale (index.css's .range-slot /
+              .range-clock): with Reduce Motion it is instant. The drain itself is the countdown's
+              functional motion, transform:scaleX on a GPU layer, exactly the .bar countdown's.
+            • KEYBOARD AND SCREEN READERS: while it is a countdown the slider is disabled (not
+              operable, not focusable) and hidden from assistive tech, the value box with it; what is
+              there instead is a timer, read as "Time left" and its value. */}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="relative flex-1 min-w-0">
+          <input
+            type="range"
+            min={slider.min}
+            max={slider.max}
+            step={slider.step}
+            value={slider.value}
+            onChange={(e) => slider.set(+e.target.value)}
+            disabled={roundUp}
+            aria-hidden={roundUp || undefined}
+            aria-label={slider.label}
+            style={{ '--rng-fill': slider.fill } as React.CSSProperties}
+            className={`range-slot block w-full ${roundUp ? 'opacity-0' : 'opacity-100'}`}
           />
+          <span
+            aria-hidden="true"
+            className={`range-clock ${roundUp ? 'opacity-100' : 'opacity-0'}`}
+          >
+            <span ref={clockBarRef} />
+          </span>
+        </span>
+        {/* The value cell: the value box and the time left stacked in ONE grid area, so they share a
+            box — the value box's widest-value strut sets it, and both are one text-xs line in it, on
+            one baseline. (The flex wrapper keeps the value box's inline-block from sitting on a line
+            of the row's own, larger, text.) */}
+        <span className="grid shrink-0">
+          <span className={`col-start-1 row-start-1 flex ${roundUp ? 'invisible' : 'visible'}`}>
+            <SliderValueEditor
+              key={perQ ? 'question' : 'round'}
+              value={slider.value}
+              min={slider.min}
+              max={slider.max}
+              snap={slider.step}
+              disabled={roundUp}
+              inputMode={slider.inputMode}
+              label={slider.label}
+              format={slider.format}
+              toText={String}
+              widest={SLIDER_READOUT_WIDEST}
+              onCommit={slider.set}
+            />
+          </span>
+          <span
+            role="timer"
+            className={`col-start-1 row-start-1 whitespace-nowrap tabular-nums text-xs text-right ${roundUp ? 'visible' : 'invisible'}`}
+          >
+            <span className="sr-only">Time left </span>
+            <span ref={clockTimeRef} />
+          </span>
+        </span>
+      </div>
+      <div className="mt-4 rounded-2xl panel p-4">
+        <div className="text-center relative">
+          <CardNumber state={state} show={state.backDepth > 0} />
+          <div className="text-3xl font-bold">{dateText}</div>
         </div>
-        <div className="mt-4 rounded-2xl panel p-3 space-y-3">
-          <div className="grid grid-cols-4 gap-2">
-            {active || timerDone ? (
-              <button
-                type="button"
-                data-key="N"
-                className={`col-span-1 ${RESET_BTN_CLASS}`}
-                onClick={resetRound}
-              >
-                Reset
-              </button>
-            ) : (
-              <button
-                type="button"
-                data-key="N"
-                className="col-span-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium"
-                onClick={begin}
-              >
-                Begin
-              </button>
-            )}
-            <div className="col-span-1 flex gap-1">
-              <button
-                type="button"
-                data-key="ArrowLeft"
-                className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${timerBusy || state.stack.length === 0 ? 'opacity-60 pointer-events-none' : ''}`}
-                onClick={eng.back}
-              >
-                <span style={{ position: 'relative', top: '-1.5px' }}>&lt;</span>
-              </button>
-              <button
-                type="button"
-                data-key="ArrowRight"
-                className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${timerBusy || state.forwardStack.length === 0 ? 'opacity-60 pointer-events-none' : ''}`}
-                onClick={eng.forward}
-              >
-                <span style={{ position: 'relative', top: '-1.5px' }}>&gt;</span>
-              </button>
-            </div>
+        <WeekdayAnswer
+          key={state.gridEpoch}
+          inputStyle={inputStyle}
+          dotRotation={dotRotation}
+          persistBtns={state.persistBtns}
+          flash={flash}
+          optionsDisabled={optionsDisabled}
+          onPick={onAnswer}
+        />
+      </div>
+      <div className="mt-4 rounded-2xl panel p-3 space-y-3">
+        <div className="grid grid-cols-4 gap-2">
+          {roundUp ? (
             <button
               type="button"
-              data-key="R"
-              className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealDisabled ? 'opacity-60 pointer-events-none' : ''}`}
-              onClick={onReveal}
+              data-key="N"
+              className={`col-span-1 ${RESET_BTN_CLASS}`}
+              onClick={resetRound}
             >
-              Reveal
+              Reset
             </button>
-            <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
+          ) : (
+            <button
+              type="button"
+              data-key="N"
+              className="col-span-1 px-3 py-2 rounded-xl btn-solid text-sm font-medium"
+              onClick={begin}
+            >
+              Begin
+            </button>
+          )}
+          <div className="col-span-1 flex gap-1">
+            <button
+              type="button"
+              data-key="ArrowLeft"
+              className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${timerBusy || state.stack.length === 0 ? 'opacity-60 pointer-events-none' : ''}`}
+              onClick={eng.back}
+            >
+              <span style={{ position: 'relative', top: '-1.5px' }}>&lt;</span>
+            </button>
+            <button
+              type="button"
+              data-key="ArrowRight"
+              className={`flex-1 px-1 py-2 rounded-xl border surface-button text-sm font-medium flex items-center justify-center ${timerBusy || state.forwardStack.length === 0 ? 'opacity-60 pointer-events-none' : ''}`}
+              onClick={eng.forward}
+            >
+              <span style={{ position: 'relative', top: '-1.5px' }}>&gt;</span>
+            </button>
           </div>
-          <MethodBreakdownSection
-            date={shouldShowTimerDate ? date : null}
-            open={state.calcOpen}
-            onOpenChange={onShowCodes}
-            className=""
-            contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5"
-            useJulian={eng.julian}
-            displayedFormat={date?._fmt || dateFormat}
-          />
+          <button
+            type="button"
+            data-key="R"
+            className={`col-span-1 px-3 py-2 rounded-xl border surface-button text-sm font-medium text-center ${revealDisabled ? 'opacity-60 pointer-events-none' : ''}`}
+            onClick={onReveal}
+          >
+            Reveal
+          </button>
+          <OverrideButton avail={overrideAvail} overridden={overridden} onToggle={onOverride} />
         </div>
+        <MethodBreakdownSection
+          date={shouldShowTimerDate ? date : null}
+          open={state.calcOpen}
+          onOpenChange={onShowCodes}
+          className=""
+          contentClassName="mt-2 rounded-2xl thin px-4 pt-[3px] pb-1.5"
+          useJulian={eng.julian}
+          displayedFormat={date?._fmt || dateFormat}
+        />
       </div>
     </div>
   )

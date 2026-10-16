@@ -520,17 +520,14 @@ describe('a restored Blitz round resumes with the time it had left', () => {
   })
 
   const tick = (ms) => act(() => vi.advanceTimersByTime(ms))
-  // The round clock's readout: the visible Blitz-time span sitting directly above the countdown bar
-  // (the slider's own value readout shows a time too, and is not the clock).
+  // The round clock's readout: the visible Blitz timer's value (the slider's own value box shows a
+  // time too, and is not the clock — and while a round is up it is not on screen at all).
   const readout = () => {
-    const hits = Array.from(document.querySelectorAll('span')).filter(
-      (el) =>
-        !isHidden(el) &&
-        /^(\d+m )?\d+s$/.test(el.textContent) &&
-        el.parentElement?.nextElementSibling?.classList.contains('bar'),
+    const hits = Array.from(document.querySelectorAll('[role="timer"]')).filter(
+      (el) => !isHidden(el),
     )
     if (hits.length !== 1) throw new Error(`expected one clock readout, found ${hits.length}`)
-    return hits[0].textContent
+    return hits[0].lastElementChild.textContent
   }
   const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
   // A 30-second Per Round round, sudden death, ended by a wrong answer with 24.5 seconds left.
@@ -677,12 +674,7 @@ describe('a rotate pause in a toggle-ended round survives the park', () => {
       settingsOpen: false,
       clockPaused: false,
     }
-    const readout = () =>
-      Array.from(document.querySelectorAll('span')).find(
-        (el) =>
-          /^(\d+m )?\d+s$/.test(el.textContent) &&
-          el.parentElement?.nextElementSibling?.classList.contains('bar'),
-      ).textContent
+    const readout = () => document.querySelector('[role="timer"]').lastElementChild.textContent
     const { rerender, unmount } = render(<BlitzMode {...props} />)
     tap(ctrl('Begin'))
     tick(1500)

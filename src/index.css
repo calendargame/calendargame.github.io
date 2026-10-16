@@ -1127,7 +1127,8 @@ button{touch-action:manipulation}
    NOT width, so the countdown is GPU-composited (no per-frame layout) and stays smooth on
    weak devices. transform-origin:left makes it empty from the right (matching the old
    width animation); will-change promotes the layer up front to avoid a start-of-animation hitch. */
-.bar>span{display:block;height:100%;transform-origin:left;will-change:transform;background:linear-gradient(90deg,#a855f7,#7c3aed)}
+/* …and Blitz's countdown, drawn on its slider's track (.range-clock, below), fills the same way. */
+.range-clock>span,.bar>span{display:block;height:100%;transform-origin:left;will-change:transform;background:linear-gradient(90deg,#a855f7,#7c3aed)}
 /* Fluid type + spacing: ONE fluid root font-size scales every rem-based size at once — Tailwind's
    text-*, p-*, gap-*, etc. are rem, and the column max-width is set in rem too — so the whole app grows
    / shrinks proportionally with the viewport. The preferred size is min(width-term, height-term): the
@@ -1152,7 +1153,7 @@ html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
    animations should multiply their duration by var(--motion-scale) to respect the setting for free.
    ★ THE CONSUMER LIST IS NOW COMPLETE (round 16), and it was not before: the token first shipped with
    only TWO readers, so four decorative animations quietly ignored the setting for four rounds. All
-   six are now here, and this is the whole list — the guide's Accessibility section states it in
+   eight are now here (Round 26 added Blitz's slot, the last two), and this is the whole list — the guide's Accessibility section states it in
    plain words, so a new consumer (or a lost one) means editing that prose in the same change:
      • .expander        — the accordion slide, below
      • GuidePage        — its inline transitionDuration + the scroll-glide writer (JS, reads the
@@ -1160,6 +1161,8 @@ html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
      • .surface-button  ⎫
      • .surface-toggle  ⎬ the three .2s background fades, ~line 365 and ~line 410
      • .btn-solid       ⎭
+     • .range-slot  ⎫ Blitz's time-limit slider and its countdown cross-fading in one slot (Q12),
+     • .range-clock ⎭ beside the range rules at the foot of this file
      • .boot-d          — the Updating screen's three-dot pulse, ~line 590 (duration + both delays)
    ⚠ THE BOOT SPLASH IN index.html IS NOT ON THIS LIST AND DOES NOT NEED TO BE: that separate
    body-level #boot markup is inline-styled and fully STATIC (no animation at all), and it paints
@@ -1196,5 +1199,15 @@ input[type="range"]::-moz-range-thumb{width:22px;height:14px;border-radius:7px;b
 input[type="range"]::-webkit-slider-runnable-track{height:5px;border-radius:3px;}
 input[type="range"]::-moz-range-track{height:5px;border-radius:3px;background:transparent;}
 input[type="range"]:disabled{opacity:.4;cursor:not-allowed;}
+/* BLITZ'S ONE SLOT (Q12, modes/BlitzMode's ★ above the slot): the time-limit slider, and the
+   countdown it sets, drawn on the slider's own track. .range-slot is the slider (its opacity is set
+   by a utility — opacity-100 idle, opacity-0 while it is a countdown, which also outranks the
+   :disabled dim above, a utility being a later layer); .range-clock is the countdown laid exactly
+   over its track — the track's height, rounding, and unfilled colour, from the range rules above —
+   faded in as the slider fades out. The two fades are decorative and run on --motion-scale: with
+   Reduce Motion the slot changes at once. The drain inside .range-clock is the countdown's
+   functional motion (transform:scaleX, set by JS, the .bar fill's rule), and is never scaled. */
+.range-slot{transition:opacity calc(.2s * var(--motion-scale))}
+.range-clock{position:absolute;left:0;right:0;top:50%;height:5px;margin-top:-2.5px;border-radius:3px;overflow:hidden;background:var(--panel-bd);pointer-events:none;transition:opacity calc(.2s * var(--motion-scale))}
 } /* ← closes @layer components. NOTHING MAY FOLLOW THIS LINE — see the ★★ block at the opening
      brace; a rule out here is unlayered and beats every Tailwind utility in the app. */

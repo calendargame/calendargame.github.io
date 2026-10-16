@@ -49,6 +49,13 @@ function readDate() {
   const [y, m, d] = els[0].textContent.trim().split('-').map(Number)
   return { y, m, d }
 }
+// The countdown (Q12: drawn in the time slider's own slot): its readout, the timer read as "Time
+// left" and its value — the value alone here — and the scale of its bar, laid over the slider's track.
+const clockCell = () =>
+  Array.from(document.querySelectorAll('[role="timer"]')).find((t) => !isHidden(t))
+const clockText = () => clockCell().lastElementChild.textContent.trim()
+const barScale = () =>
+  clockCell().parentElement.parentElement.querySelector('.range-clock > span').style.transform
 const correctName = ({ y, m, d }) => DAY[wday(y, m, d)]
 const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
 const wrongName2 = ({ y, m, d }) => DAY[(wday(y, m, d) + 2) % 7] // a SECOND distinct wrong day
@@ -1565,11 +1572,6 @@ describe('Blitz — Override ⇄ Undo', () => {
     cleanup()
     document.getElementById('root')?.remove()
   })
-  // The visible countdown readout — the label sitting directly above the visible timer bar.
-  const clockText = () => {
-    const bar = Array.from(document.querySelectorAll('.bar')).find((b) => !isHidden(b))
-    return bar.previousElementSibling.textContent.trim()
-  }
   const roundLive = () => !isDisabled(dayBtn('Sunday')) // the grid only answers while a round runs
   const bestScore = () => screen.getByText(/Best Score:/).textContent
 
@@ -1918,9 +1920,6 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
     cleanup()
     document.getElementById('root')?.remove()
   })
-  const visibleBar = () => Array.from(document.querySelectorAll('.bar')).find((b) => !isHidden(b))
-  const clockText = () => visibleBar().previousElementSibling.textContent.trim()
-  const barScale = () => visibleBar().firstElementChild.style.transform
 
   it('Per Round: begun, part-drained, Reset → the full length, on the readout and the bar', () => {
     mountApp()

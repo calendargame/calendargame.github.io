@@ -2371,10 +2371,11 @@ export default function GuidePage({
           the ⚙ menu holding the keyboard = the `reach` src/main.tsx registers for it; the accordions =
           aria-expanded/aria-controls here and in MethodBreakdown; the mode list = CustomSelect's
           open-state key handler; the motion paragraph = a full grep of --motion-scale, which now
-          has SIX consumers — index.css's .expander rule, this file's own inline transitionDuration
+          has EIGHT consumers — index.css's .expander rule, this file's own inline transitionDuration
           + scroll glide (and, on that same read, a closing header's shadow hand-back and a header
           tapped above the line being brought down to it), the three
-          `transition:background-color` surface fades, and .boot-d's bootPulse — so those are the only things the paragraph may claim, and index.css's own
+          `transition:background-color` surface fades, .boot-d's bootPulse, and Blitz's slider and
+          countdown cross-fading in one slot (.range-slot, .range-clock) — so those are the only things the paragraph may claim, and index.css's own
           words for the rest are "Functional motion — the .bar countdown and the color flashes — is
           deliberately NOT scaled". ⚠ THE PARAGRAPH IS NOW A COMPLETE ACCOUNT, WHICH IT WAS NOT
           BEFORE, and that is exactly what makes it fragile: round 15 had to add a sentence naming
@@ -2598,9 +2599,10 @@ export default function GuidePage({
           If your device is set to reduce motion, nothing decorative moves. The panels that slide
           open — the sections of this guide, and Show Codes — open instantly instead, this guide
           stops gliding when it scrolls itself, the short colour fade a button does under your
-          finger arrives at once, and the three dots on the updating screen stop pulsing. Countdown
-          bars and the right/wrong colour flashes are unchanged, because those are telling you
-          something rather than decorating.
+          finger arrives at once, Blitz&apos;s time slider turns into its countdown (and back) at
+          once, and the three dots on the updating screen stop pulsing. Countdown bars and the
+          right/wrong colour flashes are unchanged, because those are telling you something rather
+          than decorating.
         </p>
         <Subhead>Where it falls short</Subhead>
         <p>Stated plainly, so you know before you try:</p>
@@ -2620,8 +2622,9 @@ export default function GuidePage({
           </li>
           <li>
             Not everything is named yet: the <b>&lt;</b> and <b>&gt;</b> history buttons are only
-            their symbols, and the timer sliders on the Flash and Blitz screens have no name of
-            their own (the copies inside Save Defaults do).
+            their symbols, and the timer slider on the Flash screen has no name of its own (the
+            copies inside Save Defaults do, and so does Blitz&apos;s, which is read as its round or
+            question timer and, during a round, as the time left).
           </li>
           <li>
             Two kinds of greying out, not one. Marked unavailable while they&apos;re greyed: the
@@ -4107,6 +4110,14 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
           with its slider or tap the value to type. The two switches are independent — any
           combination of Per Round / Per Question and Allow Mistakes plays (and keeps its own
           bests).
+        </li>
+        <li>
+          <b>The slider is the countdown.</b> When you press Begin, the time slider becomes the
+          round&apos;s countdown in the same place. Its handle fades away and the bar, now full,
+          starts to run down; where the slider&apos;s value was, the time left counts down. When a
+          round ends, its countdown stays on screen until you press Reset, which brings the slider
+          back. You can&apos;t move the slider or type a time while a round is up — the settings for
+          the round are locked until Reset, as before.
         </li>
       </UL>
       <Subhead>Ending a round and Override</Subhead>
