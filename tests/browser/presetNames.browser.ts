@@ -17,50 +17,11 @@
 // one more character is several pixels — the answer must be the app's.
 import { test, expect, openApp, openPresetManager, resizeTo, settled, topBar } from './support/app'
 import { presetsNamed } from './support/seeds'
+import { CLOSE_PX, expectStockNameShown, nameCells } from './support/presetNameCells'
 import { defaultPresetName, shortStockName, stockNumber } from '../../src/store/presets'
 import type { Page } from '@playwright/test'
 
-const CLOSE_PX = 0.5
 const NOTE = 'Some places will show this name cut short.'
-
-interface Cell {
-  /** The words in the cell as drawn, and how far they overrun it (more than 0 = cut). */
-  text: string
-  overrun: number
-  /** For each of `names`: how far that name, set in this cell's font, would overrun it. */
-  wouldOverrun: number[]
-}
-
-// Every laid-out cell a preset name is drawn in (lib/presetNameWidth's one hook), and how each of
-// `names` would fit it — measured by laying the name out in a plain element in the cell's font.
-const cells = (page: Page, names: string[]): Promise<Cell[]> =>
-  page.evaluate((names) => {
-    const probe = document.createElement('span')
-    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:0;top:0'
-    document.body.appendChild(probe)
-    const widthIn = (font: string, text: string) => {
-      probe.style.font = font
-      probe.textContent = text
-      return probe.getBoundingClientRect().width
-    }
-    const out = [...document.querySelectorAll('[data-preset-name-cell]')]
-      .filter((cell) => cell.getClientRects().length > 0)
-      .map((cell) => {
-        const room = cell.getBoundingClientRect().width
-        const font = getComputedStyle(cell).font
-        const words = cell.firstElementChild!
-        const range = document.createRange()
-        range.selectNodeContents(words)
-        return {
-          text: words.textContent ?? '',
-          // The text's own laid-out width against the cell: an ellipsis hides what is over.
-          overrun: Math.max(range.getBoundingClientRect().width, words.scrollWidth) - room,
-          wouldOverrun: names.map((name) => widthIn(font, name) - room),
-        }
-      })
-    probe.remove()
-    return out
-  }, names)
 
 // ── Stock names ──────────────────────────────────────────────────────────────────────────────
 
@@ -78,7 +39,7 @@ test('stock names are drawn short everywhere, exactly when one of them would not
   const seen = { full: 0, short: 0, number: 0, tooClose: 0 }
   for (let width = 240; width <= 480; width += 2) {
     await resizeTo(page, width, 844)
-    const now = await cells(page, [...names, ...short])
+    const now = await nameCells(page, [...names, ...short])
     const at = `at ${width}px`
     expect(now.length, `${at}: name cells laid out`).toBeGreaterThan(0)
     // One form everywhere: every cell shows a full stock name, or every cell a short one, or every
@@ -149,7 +110,9 @@ for (const [width, height] of [
       const text = TYPED.slice(0, length)
       await box.fill(text)
       await settled(page)
-      const worst = Math.max(...(await cells(page, [text.trim()])).map((c) => c.wouldOverrun[0]))
+      const worst = Math.max(
+        ...(await nameCells(page, [text.trim()])).map((c) => c.wouldOverrun[0]),
+      )
       const shown = await note.isVisible()
       if (Math.abs(worst) >= CLOSE_PX)
         expect(shown, `"${text}" (overruns by ${worst.toFixed(2)}px): the note`).toBe(worst > 0)
@@ -168,7 +131,7 @@ for (const [width, height] of [
       await box.press('Enter')
       await expect(topBar(page).preset.locator('[data-preset-name-cell]')).toHaveText(text.trim())
       await settled(page)
-      const showing = (await cells(page, [])).filter((cell) => cell.text === text.trim())
+      const showing = (await nameCells(page, [])).filter((cell) => cell.text === text.trim())
       expect(showing.length, `"${text}" is drawn somewhere`).toBeGreaterThan(0)
       return Math.max(...showing.map((cell) => cell.overrun))
     }
@@ -245,7 +208,9 @@ test('a name this device draws as nothing is an empty name: typed, it goes back 
     await box.fill(name)
     await box.press('Enter')
     await expect(box, what).toHaveValue(expected)
-    await expect(shownInBar(page), what).toHaveText(expected)
+    if (stockNumber(expected) !== null)
+      await expectStockNameShown(page, shownInBar(page), expected, { what })
+    else await expect(shownInBar(page), what).toHaveText(expected)
     expect(await savedNames(page), what).toEqual([expected])
   }
   for (const [what, name] of Object.entries(BLANK)) {
@@ -266,7 +231,7 @@ test('a saved name this device draws as nothing is shown as the stock name, and 
   await openApp(page, { seed: { presets: presetsNamed(blank, 'Evenings') } })
   const before = await page.evaluate(() => window.localStorage.getItem('cg-presets-v1'))
   expect(before).toContain(blank)
-  await expect(shownInBar(page)).toHaveText('Preset 1')
+  await expectStockNameShown(page, shownInBar(page), 'Preset 1')
   const dialog = await openPresetManager(page)
   const boxes = dialog.getByRole('textbox', { name: 'Preset name' })
   await expect(boxes.nth(0)).toHaveValue('Preset 1')

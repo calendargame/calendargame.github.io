@@ -10,6 +10,7 @@
 // The lane drives Back as the browser's own history step (page.goBack), which is what each of
 // those gestures is to a web page.
 import { test, expect, openApp, openPresetManager, topBar } from './support/app'
+import { expectStockNameShown } from './support/presetNameCells'
 import type { Page } from '@playwright/test'
 
 const savedNames = (page: Page) =>
@@ -18,8 +19,11 @@ const savedNames = (page: Page) =>
     return raw && (JSON.parse(raw).state.presets as { name: string }[]).map((p) => p.name)
   })
 
-const shownInBar = (page: Page) =>
-  topBar(page).preset.locator('[aria-hidden="false"] [data-preset-name-cell] > :first-child')
+// The name cell the top bar's control is showing (it holds every preset's; the one on show is not
+// aria-hidden), and the words drawn in it.
+const nameCellInBar = (page: Page) =>
+  topBar(page).preset.locator('[aria-hidden="false"] [data-preset-name-cell]')
+const shownInBar = (page: Page) => nameCellInBar(page).locator('> :first-child')
 
 test('Back with a name typed in the box keeps the name, and closes the popup', async ({ page }) => {
   await openApp(page)
@@ -86,5 +90,5 @@ test('Back with a name too big for the device to save: refused as any way of lea
   await page.goBack()
   await expect(dialog).toHaveCount(0)
   await expect(page.locator('#settings-popover')).toBeVisible()
-  await expect(shownInBar(page)).toHaveText('Preset 1')
+  await expectStockNameShown(page, nameCellInBar(page), 'Preset 1')
 })
