@@ -139,9 +139,15 @@ describe('text size guard — a pixel text size cannot follow the fluid root', (
   })
 
   // ★ THE CASE THAT FOUND IT. The sub-line is sized from the line above it, in the same block, so
-  // it is eleven twelfths of that line at every root — what 11px was at a 16px root.
-  it('MoX`s Best sub-lines are sized from the line above them', () => {
-    const aox = readFileSync(join(root, 'src/modes/AoxMode.tsx'), 'utf8')
-    expect(aox.match(/className="text-\[0\.917em\] opacity-70"/g)).toHaveLength(2)
+  // it is eleven twelfths of that line at every root — what 11px was at a 16px root. Since Round 26
+  // it is one component (BestReadout's BestSubLine) that MoX's and Blitz's Best rows both draw.
+  it('the Best sub-lines (MoX and Blitz) are sized from the line above them', () => {
+    const read = (file) => readFileSync(join(root, file), 'utf8')
+    const readout = read('src/components/BestReadout.tsx')
+    expect(readout.match(/className="text-\[0\.917em\] opacity-70"/g)).toHaveLength(1)
+    expect(readout.match(/className="text-\[0\.917em\] invisible"/g)).toHaveLength(1) // the spacer
+    expect(read('src/modes/AoxMode.tsx').match(/<BestSubLine>/g)).toHaveLength(2)
+    expect(read('src/components/BlitzBestRow.tsx').match(/<BestSubLine>/g)).toHaveLength(2)
+    expect(read('src/modes/BlitzMode.tsx').match(/<BestSubLine spacer \/>/g)).toHaveLength(1)
   })
 })

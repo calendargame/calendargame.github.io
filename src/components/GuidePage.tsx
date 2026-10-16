@@ -4200,6 +4200,16 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
           the tag is left out when there is no room for it beside the two bests. Per Question with
           Allow Mistakes off keeps a single best score (streak would equal it).
         </li>
+        <li>
+          Under each best, a small line gives that round&apos;s other number: under Best Score, the
+          best streak of the round that set it; under Best Streak, that round&apos;s score. When
+          each small line matches the other best, one round set both — and you can see that on any
+          screen, whether the tag shows or not. If an Override changes a round&apos;s score or
+          streak afterwards, its small line follows. A best set before this was added shows a dash
+          there until it is beaten, and a best that an older copy of the app (open in another tab,
+          say) changes loses its small lines the same way — they are never guessed. Per Question
+          with Allow Mistakes off has one number, so no small line.
+        </li>
       </UL>
       <Subhead>Leaving and resetting</Subhead>
       <p>

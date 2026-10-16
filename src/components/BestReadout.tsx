@@ -73,6 +73,30 @@ export function BestColumn({ children }: { children: ReactNode }) {
   )
 }
 
+// ── BestSubLine — THE SMALL LINE UNDER A READOUT: the holder's OTHER number (MoX's "Median:" under
+// Best Mean and "Mean:" under Best Median; Blitz's "Streak:" under Best Score and "Score:" under Best
+// Streak, since Round 26). One component so the two modes' notes are one size and one tone.
+// ⚠ SIZED IN em, FROM THE LINE ABOVE IT (eleven twelfths of it — what 11px was beside text-xs at a
+// 16px root). Written in px it did not follow the fluid root: on a 320px phone, where text-xs is
+// 9px, the note drew LARGER than the Best it annotates (tests/textSizeGuard).
+// `spacer` draws nothing and is hidden from screen readers, but takes the line's height: a column
+// with no note (Blitz's sudden death, one number) keeps the row the height it has beside its notes.
+export function BestSubLine({
+  children,
+  spacer = false,
+}: {
+  children?: ReactNode
+  spacer?: boolean
+}) {
+  return spacer ? (
+    <div aria-hidden="true" className="text-[0.917em] invisible">
+      &nbsp;
+    </div>
+  ) : (
+    <div className="text-[0.917em] opacity-70">{children}</div>
+  )
+}
+
 // ── BestLine — THE READOUTS' LINE, AND THE TAG AT THE END OF IT ("Same Run" / "Different Runs" in
 // MoX, "Same Round" / "Different Rounds" in Blitz: did one run set both Bests, or two?).
 //

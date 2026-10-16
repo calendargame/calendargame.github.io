@@ -33,7 +33,7 @@ import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
-import { BestColumn, BestLine } from '../components/BestReadout.jsx'
+import { BestColumn, BestLine, BestSubLine } from '../components/BestReadout.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import RunBreakdown from '../components/RunBreakdown.jsx'
@@ -775,10 +775,7 @@ function AoxMode({
         // These four readouts sit in a wrapping line of BestColumn columns (BestLine), so on a
         // narrow phone a bare value would break across two lines mid-number and read as two numbers.
         // The label may still wrap — "Best" / "Mean:" is legible; "1m" / "2.34s" is not.
-        // ⚠ EACH SUB-LINE IS SIZED IN em, FROM THE LINE ABOVE IT (eleven twelfths of it — what 11px was
-        // beside text-xs at a 16px root). Written in px it did not follow the fluid root: on a 320px
-        // phone, where text-xs is 9px, the note drew LARGER than the Best it annotates
-        // (tests/textSizeGuard).
+        // (Each sub-line is components/BestReadout's BestSubLine, which says how it is sized.)
         bests={
           <BestLine
             // Did one run set both Bests, or two? Shown in the longer wording's room, and left out
@@ -798,18 +795,18 @@ function AoxMode({
                 Best Mean: <span className="whitespace-nowrap">{fmtTime(bestData.avg)}</span>
                 {isNewBest(bestData.avgRoundId, runId) && <NewBestStar />}
               </div>
-              <div className="text-[0.917em] opacity-70">
+              <BestSubLine>
                 Median: <span className="whitespace-nowrap">{fmtTime(bestData.avgMed)}</span>
-              </div>
+              </BestSubLine>
             </BestColumn>
             <BestColumn>
               <div>
                 Best Median: <span className="whitespace-nowrap">{fmtTime(bestData.med)}</span>
                 {isNewBest(bestData.medRoundId, runId) && <NewBestStar />}
               </div>
-              <div className="text-[0.917em] opacity-70">
+              <BestSubLine>
                 Mean: <span className="whitespace-nowrap">{fmtTime(bestData.medAvg)}</span>
-              </div>
+              </BestSubLine>
             </BestColumn>
           </BestLine>
         }

@@ -135,10 +135,18 @@ const statsOf = (n) => ({
   classic: { played: n, good: n, streak: n, best: n, times: [900, 1100] },
   flash: { played: 2, good: 1, streak: 0, best: 1, times: [1500] },
 })
+const BLITZ_REC = (n) => ({
+  score: n,
+  scoreStreak: n,
+  scoreRoundId: 1,
+  streak: n,
+  streakScore: n,
+  streakRoundId: 1,
+})
 const bestsOf = (n) => ({
-  blitzBest: { '60|false': { score: n, streak: n, scoreRoundId: 1, streakRoundId: 1 } },
+  blitzBest: { '60|false': BLITZ_REC(n) },
   suddenBest: { '10|false': { score: n, roundId: 1 } },
-  suddenAmBest: { '10|true': { score: n, streak: n, scoreRoundId: 1, streakRoundId: 1 } },
+  suddenAmBest: { '10|true': BLITZ_REC(n) },
   aoxBest: {
     [AOX_KEY]: { avg: n, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: n, medRoundId: 1 },
   },
@@ -680,7 +688,14 @@ describe('Stats Only: the stats are the session’s, the Bests are the permanent
 //     being deleted there), and it is not brought back.
 describe('Stats Only: this page’s Bests and another tab’s saves of the permanent copy', () => {
   const KEY = 'cg-progress-v1'
-  const REC = (score) => ({ score, streak: score, scoreRoundId: score, streakRoundId: score })
+  const REC = (score) => ({
+    score,
+    scoreStreak: score,
+    scoreRoundId: score,
+    streak: score,
+    streakScore: score,
+    streakRoundId: score,
+  })
   const onDevice = (key = KEY) => JSON.parse(localStorage.getItem(key)).state
   const answer = (n) =>
     useProgress.getState().setModeStats('classic', { ...ZERO.stats.classic, played: n, good: n })
@@ -736,14 +751,43 @@ describe('Stats Only: this page’s Bests and another tab’s saves of the perma
   })
 
   it('…field by field: each of the two records keeps what it is better at', () => {
+    // The other tab's record is an OLDER BUILD's — no companions — so the field it wins has none.
     otherTabSaves(loaded, { old: { score: 12, streak: 5, scoreRoundId: 77, streakRoundId: 77 } })
     answer(1)
     expect(onDevice().blitzBest.old).toEqual({
       score: 12,
+      scoreStreak: null,
       scoreRoundId: 77,
       streak: 8,
+      streakScore: 8,
       streakRoundId: 8,
     })
+  })
+
+  // ★ ROUND 26 (Q10, review finding F5): A COMPANION MOVED BY AN OVERRIDE, AND A STALE SAVE IN
+  // BETWEEN. This page's record for a round changes only its companion (an Override after the round
+  // ended raised that round's score; its Best Streak did not move), then another tab saves the copy
+  // it loaded BEFORE that — the old companion is back on the device, under the same holder and the
+  // same streak. This page's next save must put its own back: the two records are the same round
+  // seen twice, and this page's is the later sighting.
+  it('★ a companion this page moved is not lost to a stale save of the same round', () => {
+    const before = localStorage.getItem(KEY) // a copy holding old: REC(8), as a second tab loads it
+    useProgress.getState().setBlitzBest((b) => ({ ...b, old: { ...REC(8), streakScore: 9 } }))
+    expect(onDevice().blitzBest.old.streakScore).toBe(9)
+    otherTab(KEY, before) // the other tab saves what it loaded
+    expect(onDevice().blitzBest.old.streakScore).toBe(8)
+    answer(1)
+    expect(onDevice().blitzBest.old).toEqual({ ...REC(8), streakScore: 9 })
+  })
+  it('★ …and the same for MoX: a run’s companion stat this page moved survives a stale save', () => {
+    // Run 5 holds Best Mean; run 6 holds Best Median. An Override moves run 5's median, not its mean.
+    const RUN = { avg: 3.5, avgMed: 3.4, avgRoundId: 5, med: 3, medAvg: 3.6, medRoundId: 6 }
+    useProgress.getState().setAoxBest({ k: RUN })
+    const before = localStorage.getItem(KEY)
+    useProgress.getState().setAoxBest({ k: { ...RUN, avgMed: 3.3 } })
+    otherTab(KEY, before)
+    answer(1)
+    expect(onDevice().aoxBest.k).toEqual({ ...RUN, avgMed: 3.3 })
   })
 
   it('a BETTER record the other tab saved stands — until this page beats it again', () => {

@@ -31,9 +31,9 @@
 import { calcAvg, calcMed } from './stats.js'
 import { roundCentis } from '../lib/modeFormat.js'
 
-// The shape the persisted store keeps per config (store/progress.ts owns the canonical copy; redeclared
-// here, like blitzBest.ts's BlitzBest/SuddenBest, so the engine layer carries no store dependency — the
-// two are structurally identical, so a store value passes straight into reconcileAoxBest).
+// The shape the persisted store keeps per config. This file builds every one, so it owns the shape;
+// store/progress re-exports it (as it does engine/blitzBest's), and the engine layer still carries no
+// store dependency.
 export interface AoxBest {
   avg: number | null
   avgMed: number | null
@@ -104,20 +104,30 @@ export function reconcileAoxBest(
 // ★ WHICH OF TWO RECORDS IS THE BETTER — the one comparison, metric by metric, at display precision
 // (the two ★ notes above): `b` takes a metric from `a` only by being STRICTLY faster on it, and takes
 // that metric's companion stat and holder with it; a metric it merely ties — or does not have — stays
-// with `a`. A run completing is this comparison (above: the run's own mean and median, as a record,
-// against the one that stood), and so is anything else holding two records for one set-up that must
-// keep the better — store/amnesic, when two tabs have each saved one.
+// with `a`, companion included, EXCEPT when both name the same holder run. Then they are the same
+// run seen at two moments, and `b` is the later sighting, so its companion is the current one: a run
+// that holds only one metric can have its OTHER stat moved by an Override after it completed (the
+// mean shifts while the median holds), and a copy saved before that Override must not put the old
+// companion back (Round 26, found with Blitz's companions — engine/blitzBest's header). A run
+// completing is this comparison (above: the run's own mean and median, as a record, against the one
+// that stood — where `a` never names the run, so the exception cannot arise), and so is anything else
+// holding two records for one set-up that must keep the better — store/amnesic, when two tabs have
+// each saved one (there `b` is this page's own record, the later one).
 const faster = (a: number | null, b: number | null): boolean =>
   b != null && (a == null || roundCentis(b) < roundCentis(a))
+const sameRun = (aId: number | null, bId: number | null, a: number | null, b: number | null) =>
+  aId != null && aId === bId && a != null && b != null && roundCentis(a) === roundCentis(b)
 export function betterAoxBest(a: AoxBest, b: AoxBest): AoxBest {
   const avgImp = faster(a.avg, b.avg)
   const medImp = faster(a.med, b.med)
+  const avgSeen = avgImp || sameRun(a.avgRoundId, b.avgRoundId, a.avg, b.avg)
+  const medSeen = medImp || sameRun(a.medRoundId, b.medRoundId, a.med, b.med)
   return {
     avg: avgImp ? b.avg : a.avg,
-    avgMed: avgImp ? b.avgMed : a.avgMed,
+    avgMed: avgSeen ? b.avgMed : a.avgMed,
     avgRoundId: avgImp ? b.avgRoundId : a.avgRoundId,
     med: medImp ? b.med : a.med,
-    medAvg: medImp ? b.medAvg : a.medAvg,
+    medAvg: medSeen ? b.medAvg : a.medAvg,
     medRoundId: medImp ? b.medRoundId : a.medRoundId,
   }
 }

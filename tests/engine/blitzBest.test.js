@@ -14,38 +14,58 @@
 //     (a later round that only ties does not take the record — strict improvement);
 //   • the same pair for Best Streak over each round's streak high-water;
 //   • and no record at all while no round has ever scored.
+// ★ ROUND 26 (Q10): each field also carries its COMPANION — the holder round's other number as it
+// FINALLY stood (that round's streak high-water under Best Score, its score under Best Streak), and
+// null exactly when there is no holder. The oracle reads it off the same per-round arrays, so a
+// post-round Override that moves only the holder's OTHER number must move the companion too.
 // The end-to-end reachability of the same bugs through the real UI is pinned in blitz.dom.
 import { describe, it, expect } from 'vitest'
-import { reconcileBlitzBest, reconcileSuddenBest } from '../../src/engine/blitzBest.js'
+import {
+  betterBlitzBest,
+  reconcileBlitzBest,
+  reconcileSuddenBest,
+} from '../../src/engine/blitzBest.js'
 import { mulberry32 } from '../helpers/rng.js'
 
-// The oracle's holder: the id of the FIRST round whose value equals the max, or null when the max is
-// 0 (nothing has ever been set — a 0 is never "a best").
-const holder = (values, ids) => {
+// The oracle's holder: the index of the FIRST round whose value equals the max, or -1 when the max
+// is 0 (nothing has ever been set — a 0 is never "a best").
+const holderAt = (values) => {
   const max = Math.max(0, ...values)
-  return max === 0 ? null : ids[values.indexOf(max)]
+  return max === 0 ? -1 : values.indexOf(max)
+}
+const holder = (values, ids) => {
+  const i = holderAt(values)
+  return i < 0 ? null : ids[i]
 }
 // A record as the oracle says it must read — undefined when nothing has ever scored.
 const oracleRecord = (goods, hws, ids) => {
   const score = Math.max(0, ...goods)
   const streak = Math.max(0, ...hws)
   if (score === 0 && streak === 0) return undefined
+  const s = holderAt(goods)
+  const t = holderAt(hws)
   return {
     score,
-    streak,
+    scoreStreak: s < 0 ? null : hws[s],
     scoreRoundId: holder(goods, ids),
+    streak,
+    streakScore: t < 0 ? null : goods[t],
     streakRoundId: holder(hws, ids),
   }
 }
+// A record written field by field: [value, companion, holder].
+const rec = ([score, scoreStreak, scoreRoundId], [streak, streakScore, streakRoundId]) => ({
+  score,
+  scoreStreak,
+  scoreRoundId,
+  streak,
+  streakScore,
+  streakRoundId,
+})
 
 describe('blitzBest — reconcile unit cases', () => {
-  it('records a new high tagged with the round id', () => {
-    expect(reconcileBlitzBest(undefined, 3, 2, 11)).toEqual({
-      score: 3,
-      streak: 2,
-      scoreRoundId: 11,
-      streakRoundId: 11,
-    })
+  it('records a new high tagged with the round id — each field with the round’s other number', () => {
+    expect(reconcileBlitzBest(undefined, 3, 2, 11)).toEqual(rec([3, 2, 11], [2, 3, 11]))
   })
   it('a round that scores nothing leaves NO record behind (not a record of 0)', () => {
     expect(reconcileBlitzBest(undefined, 0, 0, 11)).toBeUndefined()
@@ -58,36 +78,44 @@ describe('blitzBest — reconcile unit cases', () => {
     expect(reconcileBlitzBest(undefined, 0, 0, 11)).toBeUndefined()
   })
   it('rolls back NO further than the record that stood before the round (the cross-round rollback fix)', () => {
-    const pre = { score: 2, streak: 2, scoreRoundId: 10, streakRoundId: 10 }
+    const pre = rec([2, 2, 10], [2, 2, 10])
     expect(reconcileBlitzBest(pre, 3, 3, 11)).toMatchObject({ score: 3, scoreRoundId: 11 })
     expect(reconcileBlitzBest(pre, 0, 0, 11)).toEqual(pre)
   })
   it('★ a rollback hands the record BACK to the round that set it (the round-id bug)', () => {
     // Round 10 set 5/5. Round 11 reached 6/6, then an Override pulled it to 4/4. The old fold left
     // { score: 5, scoreRoundId: 11 } — round 10's score credited to round 11.
-    const pre = { score: 5, streak: 5, scoreRoundId: 10, streakRoundId: 10 }
+    const pre = rec([5, 5, 10], [5, 5, 10])
     reconcileBlitzBest(pre, 6, 6, 11)
     expect(reconcileBlitzBest(pre, 4, 4, 11)).toEqual(pre)
     const sudden = { score: 5, roundId: 10 }
     expect(reconcileSuddenBest(sudden, 4, 11)).toEqual(sudden)
   })
-  it('the two fields fall back independently — each keeps its OWN holder', () => {
-    const pre = { score: 5, streak: 2, scoreRoundId: 10, streakRoundId: 9 }
+  it('the two fields fall back independently — each keeps its OWN holder and companion', () => {
+    const pre = rec([5, 2, 10], [2, 4, 9])
     // Round 11: score 4 (below), streak 3 (above).
-    expect(reconcileBlitzBest(pre, 4, 3, 11)).toEqual({
-      score: 5,
-      scoreRoundId: 10,
-      streak: 3,
-      streakRoundId: 11,
-    })
+    expect(reconcileBlitzBest(pre, 4, 3, 11)).toEqual(rec([5, 2, 10], [3, 4, 11]))
   })
-  it('a tie does not take the record (the first round to reach a value keeps it)', () => {
-    const pre = { score: 5, streak: 5, scoreRoundId: 10, streakRoundId: 10 }
+  it('a tie does not take the record (the first round to reach a value keeps it, companion too)', () => {
+    const pre = rec([5, 5, 10], [5, 5, 10])
     expect(reconcileBlitzBest(pre, 5, 5, 11)).toEqual(pre)
     expect(reconcileSuddenBest({ score: 5, roundId: 10 }, 5, 11)).toEqual({ score: 5, roundId: 10 })
   })
+  it('the companion follows the round as it FINALLY stands: an Override that moves only its other number', () => {
+    // Round 11 holds Best Streak (6) beside an earlier round's better score; flipping a miss between
+    // two short chains raises its score and leaves its streak — so only the companion moves.
+    const pre = rec([12, 3, 10], [4, 12, 10])
+    expect(reconcileBlitzBest(pre, 9, 6, 11)).toEqual(rec([12, 3, 10], [6, 9, 11]))
+    expect(reconcileBlitzBest(pre, 10, 6, 11)).toEqual(rec([12, 3, 10], [6, 10, 11]))
+  })
+  it('a record from before Round 26 (no companions saved): its fields keep "not recorded"', () => {
+    const older = { score: 5, scoreRoundId: 10, streak: 4, streakRoundId: 10 }
+    expect(reconcileBlitzBest(older, 3, 2, 11)).toEqual(rec([5, null, 10], [4, null, 10]))
+    // …until a round beats a field, which then records its own.
+    expect(reconcileBlitzBest(older, 6, 2, 11)).toEqual(rec([6, 2, 11], [4, null, 10]))
+  })
   it('never mutates the pre-round record it is handed', () => {
-    const pre = Object.freeze({ score: 1, streak: 1, scoreRoundId: 10, streakRoundId: 10 })
+    const pre = Object.freeze(rec([1, 1, 10], [1, 1, 10]))
     expect(() => reconcileBlitzBest(pre, 4, 4, 11)).not.toThrow()
     expect(pre.score).toBe(1)
   })
@@ -354,5 +382,71 @@ describe('blitzBest — per-Q + Allow Mistakes fuzz: two independent oracles', (
     for (let seed = 1; seed <= 200; seed++)
       sawResume = runPerQAmResumeSession(seed, 10) || sawResume
     expect(sawResume).toBe(true)
+  })
+})
+
+// ── THE TIE CLAUSE (Round 26, review finding F5): two copies of one record that tie on a field AND
+// name the same holder are the same round seen at two moments — and `b`, the later sighting, has
+// that round's companion as it stands now. store/amnesic merges a stale copy another tab saved
+// (`a`) with this page's own (`b`) through exactly this comparison.
+describe('betterBlitzBest — the same round seen twice keeps the LATER companion', () => {
+  it('a stale copy does not put an older companion back (the F5 case: Best Streak 8, score 10 → 11)', () => {
+    const stale = rec([12, 3, 7], [8, 10, 21])
+    const now = rec([12, 3, 7], [8, 11, 21])
+    expect(betterBlitzBest(stale, now)).toEqual(now)
+    expect(betterBlitzBest(stale, rec([12, 5, 7], [8, 10, 21]))).toEqual(
+      rec([12, 5, 7], [8, 10, 21]),
+    )
+  })
+  it('a tie between two DIFFERENT rounds keeps the first round’s companion, with its holder', () => {
+    const first = rec([12, 3, 7], [8, 10, 21])
+    expect(betterBlitzBest(first, rec([12, 9, 30], [8, 14, 30]))).toEqual(first)
+  })
+  it('no holder is no round: a tie between two holder-less fields is not the same round', () => {
+    const a = rec([5, 2, null], [3, 4, null])
+    expect(betterBlitzBest(a, rec([5, 9, null], [3, 9, null]))).toEqual(a)
+  })
+  it('a strict win takes value, companion, and holder; a record with no companion saved gives "not recorded"', () => {
+    expect(betterBlitzBest(rec([5, 2, 1], [3, 4, 1]), rec([6, 1, 2], [3, 6, 2]))).toEqual(
+      rec([6, 1, 2], [3, 4, 1]),
+    )
+    const older = { score: 6, scoreRoundId: 2, streak: 3, streakRoundId: 2 }
+    expect(betterBlitzBest(rec([5, 2, 1], [3, 4, 1]), older)).toEqual(rec([6, null, 2], [3, 4, 1]))
+  })
+  it('fuzz: merging any EARLIER copy of a session’s record with the current one keeps the current companions on every same-round tie', () => {
+    const rnd = mulberry32(326)
+    for (let session = 0; session < 200; session++) {
+      const seen = []
+      let best
+      for (let round = 1; round <= 8; round++) {
+        const pre = best
+        const id = 4000 + round
+        let good = Math.floor(rnd() * 9)
+        let hw = Math.floor(rnd() * (good + 1))
+        for (let edit = 0; edit < 4; edit++) {
+          best = reconcileBlitzBest(pre, good, hw, id)
+          if (best) seen.push(best)
+          // A post-round Override moves the score by one, and the streak only sometimes.
+          good = Math.max(0, good + (rnd() < 0.5 ? -1 : 1))
+          hw = Math.min(good, Math.max(0, hw + (rnd() < 0.3 ? (rnd() < 0.5 ? -1 : 1) : 0)))
+        }
+      }
+      if (!best) continue
+      for (const stale of seen) {
+        const merged = betterBlitzBest(stale, best)
+        if (
+          stale.score === best.score &&
+          stale.scoreRoundId === best.scoreRoundId &&
+          best.scoreRoundId != null
+        )
+          expect(merged.scoreStreak).toBe(best.scoreStreak)
+        if (
+          stale.streak === best.streak &&
+          stale.streakRoundId === best.streakRoundId &&
+          best.streakRoundId != null
+        )
+          expect(merged.streakScore).toBe(best.streakScore)
+      }
+    }
   })
 })

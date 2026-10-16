@@ -726,7 +726,14 @@ describe('a restored ended round keeps a better Best that another tab saved', ()
     const key = Object.keys(useProgress.getState().blitzBest)[0]
     const best = () => useProgress.getState().blitzBest[key]
     expect(best().score).toBe(2)
-    const theirs = { score: 9, scoreRoundId: THEIR_ROUND, streak: 9, streakRoundId: THEIR_ROUND }
+    const theirs = {
+      score: 9,
+      scoreStreak: 9,
+      scoreRoundId: THEIR_ROUND,
+      streak: 9,
+      streakScore: 9,
+      streakRoundId: THEIR_ROUND,
+    }
     reload(() => useProgress.getState().setBlitzBest((map) => ({ ...map, [key]: theirs })))
     expect(ctrl('Reset')).toBeInTheDocument() // the ended round is back on screen…
     expect(statValue('Score')).toBe('2/3')
@@ -770,5 +777,37 @@ describe('a restored ended round keeps a better Best that another tab saved', ()
     press('o') // …and Undo: the run completes again
     expect(statValue('Score')).toBe('2/2')
     expect(best()).toEqual(theirs)
+  })
+})
+
+// ── A Blitz round is parked under this build's record shape (Round 26, Q10) ───────────────────────
+// Since Round 26 a Blitz Best carries companions, and a parked round carries the records it is
+// rebuilt from. An older build that restored such a round could leave a WRONG companion behind
+// (tests/blitzBest.olderBuilds, run on the real builds), so the configuration a round is parked
+// under names the shape — 'companions|' in front, which no older build computes. An older build
+// therefore declines this build's rounds, and this build declines an older build's the same way.
+describe('a Blitz round is parked under this build’s record shape', () => {
+  beforeEach(() => resetAppState())
+  afterEach(() => {
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  it('the park names the shape; a round an older build parked is not restored, and is dropped', () => {
+    mountApp()
+    pinReadable()
+    switchToBlitz()
+    finishBlitzRound(1)
+    const raw = JSON.parse(sessionStorage.getItem('cg-round-v2'))
+    expect(raw['1:saved:blitz'].config).toMatch(/^companions\|r\|/)
+    // The same round as an older build parks it: its configuration without the shape.
+    raw['1:saved:blitz'].config = raw['1:saved:blitz'].config.replace(/^companions\|/, '')
+    sessionStorage.setItem('cg-round-v2', JSON.stringify(raw))
+    const p2 = createPreset()
+    openPreset(p2.id)
+    openPreset(1) // the screen remounts and reads the park
+    switchToBlitz()
+    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(statValue('Score')).toBe('0/0')
+    expect(readSessionRound('1:saved', 'blitz')).toBeNull()
   })
 })

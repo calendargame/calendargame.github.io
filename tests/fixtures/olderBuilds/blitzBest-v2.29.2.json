@@ -1,0 +1,91 @@
+{
+  "key": "m60|numeric-ymd|random|random|random|1583-10000|true",
+  "classicAnswer": {
+    "played": 1,
+    "record": {
+      "score": 5,
+      "scoreStreak": 3,
+      "scoreRoundId": 111,
+      "streak": 4,
+      "streakScore": 2,
+      "streakRoundId": 222
+    }
+  },
+  "roundBelow": {
+    "score": "1/2",
+    "record": {
+      "score": 5,
+      "scoreStreak": 3,
+      "scoreRoundId": 111,
+      "streak": 4,
+      "streakScore": 2,
+      "streakRoundId": 222
+    }
+  },
+  "takesScore": {
+    "score": "6/8",
+    "record": {
+      "score": 6,
+      "scoreRoundId": 1835133414354632,
+      "streak": 4,
+      "streakRoundId": 222
+    }
+  },
+  "handsBack": {
+    "score": "5/8",
+    "record": {
+      "score": 5,
+      "scoreRoundId": 111,
+      "streak": 4,
+      "streakRoundId": 222
+    }
+  },
+  "asParkedUnstamped": {
+    "before": {
+      "restored": true,
+      "record": {
+        "score": 12,
+        "scoreRoundId": 111,
+        "streak": 4,
+        "streakRoundId": 1835133416118905,
+        "scoreStreak": 3,
+        "streakScore": 5
+      }
+    },
+    "begin": false,
+    "score": "6/8",
+    "record": {
+      "score": 12,
+      "scoreRoundId": 111,
+      "streak": 4,
+      "streakRoundId": 1835133416118905,
+      "scoreStreak": 3,
+      "streakScore": 5
+    },
+    "parkLeft": true
+  },
+  "asParkedStamped": {
+    "before": {
+      "restored": false,
+      "record": {
+        "score": 12,
+        "scoreRoundId": 111,
+        "streak": 4,
+        "streakRoundId": 1835133418379433,
+        "scoreStreak": 3,
+        "streakScore": 5
+      }
+    },
+    "begin": true,
+    "score": null,
+    "record": {
+      "score": 12,
+      "scoreRoundId": 111,
+      "streak": 4,
+      "streakRoundId": 1835133418379433,
+      "scoreStreak": 3,
+      "streakScore": 5
+    },
+    "parkLeft": false
+  }
+}

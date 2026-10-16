@@ -13,6 +13,7 @@ import {
   fmtBlitzT,
   fmtAccuracyPct,
   SLIDER_READOUT_WIDEST,
+  EM_DASH,
 } from '../lib/modeFormat.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
@@ -21,7 +22,7 @@ import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import BlitzBestRow from '../components/BlitzBestRow.jsx'
-import { BestColumn, BestLine } from '../components/BestReadout.jsx'
+import { BestColumn, BestLine, BestSubLine } from '../components/BestReadout.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
@@ -210,7 +211,17 @@ function BlitzMode({
   // range's dates into a round filed under the old one, raising that Best with dates it does not
   // cover. A round that no longer matches is simply not restored: the screen comes up idle, exactly
   // as a settings change resets a round that is on screen, and the Bests it set stay as saved.
-  const roundConfig = `${perQ ? 'q' : 'r'}|${allowMistakes ? 'm' : 'n'}|${perQ ? suddenBk : blitzBk}`
+  // ★ …AND THE SHAPE OF THE BEST RECORDS THE ROUND CARRIES (Round 26, Q10 — the leading
+  // `companions|`). A parked round carries the records it is rebuilt from (prevRoundBest), and since
+  // Round 26 a record carries each field's companion (engine/blitzBest). An OLDER build sharing this
+  // origin (a tab that moves between the test site and the live one keeps its session) would
+  // restore such a round and reconcile it with records of its own four fields — and an Override
+  // there that moves only a companion (the holder round's other number; its four fields standing
+  // still) is a record its fileBest sees as unchanged, so the companion this build parked would stay:
+  // WRONG, not missing. Proven on the real older builds (tests/blitzBest.olderBuilds). No older
+  // build computes this configuration, so an older build declines the round — its screen comes up
+  // idle and the Bests stay as saved — and this build declines an older build's round the same way.
+  const roundConfig = `companions|${perQ ? 'q' : 'r'}|${allowMistakes ? 'm' : 'n'}|${perQ ? suddenBk : blitzBk}`
   // The ended round this (bests copy, mode) parked before its last unmount, read EXACTLY ONCE at
   // mount. On a preset switch or an Amnesic change the always-mounted screens remount (src/main.tsx
   // remountScreens) and the INCOMING copy is ALREADY the one named by the time this runs —
@@ -1096,8 +1107,13 @@ function BlitzMode({
           ) : (
             <BestLine>
               <BestColumn>
-                Best Score: {sScore?.score ?? '—'}
-                {isNewBest(sScore?.roundId, roundId) && <NewBestStar />}
+                <div>
+                  Best Score: {sScore?.score ?? EM_DASH}
+                  {isNewBest(sScore?.roundId, roundId) && <NewBestStar />}
+                </div>
+                {/* One number, so no small line — but the line's height, so the row stays put
+                    when Allow Mistakes is turned on and off beneath it. */}
+                <BestSubLine spacer />
               </BestColumn>
             </BestLine>
           )

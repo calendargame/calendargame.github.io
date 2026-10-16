@@ -1,0 +1,228 @@
+// @vitest-environment jsdom
+// Drives an OLDER build's real app (this file is copied into that build's tests/ folder, as
+// blitzBestDrive.dom.test.jsx) over Blitz Best records as Round 26 saves them — each field with its
+// COMPANION, the holder round's other number (engine/blitzBest) — and writes down what the older
+// build left of them (run with OLDER_BUILD=<tag> BLITZ_OUT=<file>). The record is
+// tests/fixtures/olderBuilds/blitzBest-<build>.json; tests/blitzBest.olderBuilds.test.js holds this
+// build to it.
+//
+// The older builds know a Blitz record as four fields — score, streak, and the id of the round that
+// set each — and every write they make builds a fresh record of exactly those four. What is at
+// stake is whether a companion they leave behind can be WRONG (a number that is not the holder
+// round's) rather than merely missing.
+import { describe, it, afterEach } from 'vitest'
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { writeFileSync } from 'node:fs'
+import { App } from '../src/main.jsx'
+import { usePresets } from '../src/store/presets.js'
+import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
+import { useModePrefs } from '../src/store/modePrefs.js'
+import { useProgress } from '../src/store/progress.js'
+import { useUserDefaults } from '../src/store/userDefaults.js'
+import { wday } from '../src/lib/calendar.js'
+import { DAY } from '../src/lib/format.js'
+import { statValue } from './helpers/modeScreen.jsx'
+
+const BUILD = process.env.OLDER_BUILD
+// Settings the questions can be read and answered under (numeric-ymd, Gregorian only).
+const READABLE = {
+  ...SETTINGS_DEFAULTS,
+  randomFormat: false,
+  dateFormat: 'numeric-ymd',
+  minY: 1583,
+  maxY: 10000,
+}
+const PROGRESS = 'cg-progress-v1'
+const SETTINGS = 'cg-settings-v1'
+const ROUNDS = 'cg-round-v2'
+const PARK_SLOT = '1:saved:blitz'
+// The Per Round, Allow Mistakes record key these settings file a round under — the older build's
+// own formula (modes/BlitzMode's blitzBk), from its own defaults.
+const S = READABLE
+const KEY = `m60|numeric-ymd|${S.leapChance}|${S.janFebChance}|${S.julianChance}|1583-10000|${S.useJulian}`
+
+function mountApp() {
+  const root = document.createElement('div')
+  root.id = 'root'
+  document.body.appendChild(root)
+  return render(<App />)
+}
+function unmountApp() {
+  cleanup()
+  document.getElementById('root')?.remove()
+}
+const isHidden = (el) => {
+  for (let n = el; n; n = n.parentElement) if (n.style && n.style.display === 'none') return true
+  return false
+}
+// The live question on the screen that is SHOWING (every mode's screen stays mounted, each with a
+// date of its own).
+function readDate() {
+  const els = [...document.querySelectorAll('div')].filter(
+    (e) => e.children.length === 0 && /^-?\d+-\d+-\d+$/.test(e.textContent.trim()) && !isHidden(e),
+  )
+  if (els.length !== 1) throw new Error(`expected one visible date, found ${els.length}`)
+  const [y, m, d] = els[0].textContent.trim().split('-').map(Number)
+  return { y, m, d }
+}
+const correctDayName = ({ y, m, d }) => DAY[wday(y, m, d)]
+const visibleButton = (name) => screen.getAllByRole('button', { name }).find((b) => !isHidden(b))
+const has = (name) => screen.queryAllByRole('button', { name }).some((b) => !isHidden(b))
+const tap = (el) =>
+  act(() => {
+    fireEvent.pointerDown(el)
+    fireEvent.click(el, { detail: 1 })
+  })
+const right = () => tap(visibleButton(correctDayName(readDate())))
+const wrong = () => {
+  const { y, m, d } = readDate()
+  tap(visibleButton(DAY[(wday(y, m, d) + 1) % 7]))
+}
+const press = (name) => tap(visibleButton(name))
+const toBlitz = () => act(() => void fireEvent.keyDown(window, { key: 'B' }))
+// A page load of the older build: every store reads storage again, then the app mounts.
+function load() {
+  act(() => {
+    usePresets.persist.rehydrate()
+    useSettings.persist.rehydrate()
+    useModePrefs.persist.rehydrate()
+    useProgress.persist.rehydrate()
+    useUserDefaults.persist.rehydrate()
+  })
+  mountApp()
+}
+const put = (key, state, version) => localStorage.setItem(key, JSON.stringify({ state, version }))
+const stored = (key, area = localStorage) => JSON.parse(area.getItem(key) ?? 'null')
+const record = () => stored(PROGRESS)?.state?.blitzBest?.[KEY] ?? null
+const blank = () => ({ played: 0, good: 0, streak: 0, best: 0, times: [] })
+// A device this build has been used on: readable settings, and one Blitz record in this build's shape.
+function seedDevice(rec) {
+  localStorage.clear()
+  sessionStorage.clear()
+  put(SETTINGS, READABLE, 4)
+  put(
+    PROGRESS,
+    {
+      stats: {
+        classic: blank(),
+        flash: blank(),
+        dedDay: blank(),
+        dedMonth: blank(),
+        dedYear: blank(),
+      },
+      blitzBest: { [KEY]: rec },
+      suddenBest: {},
+      suddenAmBest: {},
+      aoxBest: {},
+    },
+    5,
+  )
+}
+// Best Score 5 (round 111, whose best streak was 3), Best Streak 4 (round 222, whose score was 2).
+const R26 = {
+  score: 5,
+  scoreStreak: 3,
+  scoreRoundId: 111,
+  streak: 4,
+  streakScore: 2,
+  streakRoundId: 222,
+}
+
+const out = { key: KEY }
+afterEach(unmountApp)
+
+describe(`blitzBest drive — ${BUILD}`, () => {
+  it('(i) a Classic answer: the record is saved back as it was found', () => {
+    seedDevice(R26)
+    load()
+    press('New')
+    right()
+    out.classicAnswer = { played: stored(PROGRESS).state.stats.classic.played, record: record() }
+  })
+
+  it('(i) a Blitz round that beats neither field', () => {
+    seedDevice(R26)
+    load()
+    toBlitz()
+    press('Begin')
+    right()
+    press('Reveal') // ends 1/2
+    out.roundBelow = { score: statValue('Score'), record: record() }
+  })
+
+  it('(ii) a round that takes the Best Score only — (iii) and an Override that hands it back', () => {
+    seedDevice(R26)
+    load()
+    toBlitz()
+    press('Begin')
+    for (let i = 0; i < 3; i++) right()
+    wrong() // Allow Mistakes on: the streak breaks, the date stays
+    right() // the burned date: answered, no credit
+    for (let i = 0; i < 3; i++) right()
+    press('Reveal') // 6 right, a streak of 3 at most
+    out.takesScore = { score: statValue('Score'), record: record() }
+    press('<') // the last credited card
+    press('Override') // its credit taken back: 5, a tie — the field goes back to round 111
+    out.handsBack = { score: statValue('Score'), record: record() }
+  })
+
+  // (iv) A ROUND THIS BUILD PARKED, restored by the older build in the same tab (a tab that moves
+  // between the test site and the live one keeps its session). The older build plays and parks the
+  // round itself; the park and the record are then given exactly what this build would have saved
+  // for that round — the companions — and the app is reloaded over them. Then an Override on a card
+  // BEHIND the live one moves the holder round's score while every one of the four older fields
+  // stands still.
+  //   • `asParkedUnstamped`: the round's configuration as the older build computes it — what this
+  //     build would park had it not stamped the configuration.
+  //   • `asParkedStamped`: the configuration as Round 26 parks it ('companions|' in front).
+  for (const stamped of [false, true])
+    it(`(iv) a round this build parked${stamped ? ', stamped' : ', unstamped'}, restored and Overridden`, () => {
+      // Best Score 12 (round 111, streak 3), Best Streak 2 (round 222, score 9).
+      seedDevice({ ...R26, score: 12, scoreStreak: 3, streak: 2, streakScore: 9 })
+      load()
+      toBlitz()
+      press('Begin')
+      for (let i = 0; i < 4; i++) right() // a streak of 4: Best Streak, this round's
+      wrong() // card 5 burned
+      right() // …answered, no credit
+      wrong() // card 6 burned
+      right() // …answered, no credit
+      right() // card 7: credited, a streak of 1
+      press('Reveal') // card 8: the round ends on 5 right, a streak of 4
+      const roundRecord = record()
+      const park = stored(ROUNDS, sessionStorage)
+      const round = park[PARK_SLOT]
+      // What this build would have saved: the record with its companions, and the same in the park.
+      const progress = stored(PROGRESS)
+      progress.state.blitzBest[KEY] = {
+        ...roundRecord,
+        scoreStreak: 3,
+        streakScore: 5, // the round's score as it ended
+      }
+      localStorage.setItem(PROGRESS, JSON.stringify(progress))
+      round.prevRoundBest.blitz = { ...round.prevRoundBest.blitz, scoreStreak: 3, streakScore: 9 }
+      if (stamped) round.config = `companions|${round.config}`
+      sessionStorage.setItem(ROUNDS, JSON.stringify(park))
+      unmountApp()
+      load()
+      toBlitz()
+      const restored = has('Reset')
+      const before = { restored, record: record() }
+      if (restored) {
+        press('<') // card 7
+        press('<') // card 6, burned
+        press('Override') // credited: the score 5 → 6, the streak still 4 at most
+      }
+      out[stamped ? 'asParkedStamped' : 'asParkedUnstamped'] = {
+        before,
+        begin: has('Begin'),
+        score: restored ? statValue('Score') : null,
+        record: record(),
+        parkLeft: stored(ROUNDS, sessionStorage)?.[PARK_SLOT] != null,
+      }
+    })
+
+  it('writes the record', () => {
+    writeFileSync(process.env.BLITZ_OUT, JSON.stringify(out, null, 2) + '\n')
+  })
+})

@@ -21,7 +21,12 @@
 // floor, mid-done key move).
 import { describe, it, expect } from 'vitest'
 import { isDeepStrictEqual } from 'node:util'
-import { reconcileAoxBest, reconcileAoxStanding, emptyAoxBest } from '../../src/engine/aoxBest.js'
+import {
+  betterAoxBest,
+  reconcileAoxBest,
+  reconcileAoxStanding,
+  emptyAoxBest,
+} from '../../src/engine/aoxBest.js'
 import { calcAvg, calcMed } from '../../src/engine/stats.js'
 import { roundCentis } from '../../src/lib/modeFormat.js'
 import { mulberry32 } from '../helpers/rng.js'
@@ -284,5 +289,37 @@ describe('aoxBest — fuzz vs the independent min-standing-run oracle', () => {
     expect(coverage.floorRestore).toBe(true) // …and the write restored a NON-EMPTY earlier floor
     expect(coverage.recordRemoved).toBe(true) // …or, with no earlier record, removed the run's own
     expect(coverage.postEndImproveChance).toBe(true) // a standing run's stats moved post-end
+  })
+})
+
+// ── THE TIE CLAUSE (Round 26, found with Blitz's companions — review finding F5): a run that holds
+// only one metric can have its OTHER stat moved by an Override after it completed. Two copies of the
+// record that tie on that metric AND name the same run are that run seen twice, and `b` — the later
+// sighting, this page's own record in store/amnesic's merge — has its companion as it stands now.
+describe('betterAoxBest — the same run seen twice keeps the LATER companion', () => {
+  const run = (avg, avgMed, avgRoundId, med, medAvg, medRoundId) => ({
+    avg,
+    avgMed,
+    avgRoundId,
+    med,
+    medAvg,
+    medRoundId,
+  })
+  it('a stale copy does not put an older companion back', () => {
+    const stale = run(2.5, 2.4, 7, 2.2, 2.6, 7)
+    const now = run(2.5, 2.3, 7, 2.2, 2.55, 7) // the mean held, the median moved — and vice versa
+    expect(betterAoxBest(stale, now)).toEqual(now)
+  })
+  it('a tie between two DIFFERENT runs keeps the first run’s companion, with its holder', () => {
+    const first = run(2.5, 2.4, 7, 2.2, 2.6, 7)
+    expect(betterAoxBest(first, run(2.5, 2.1, 9, 2.2, 2.9, 9))).toEqual(first)
+  })
+  it('a tie at display precision is a tie: 2.504 and 2.496 are both 2.50', () => {
+    const stale = run(2.504, 2.4, 7, null, null, null)
+    expect(betterAoxBest(stale, run(2.496, 2.3, 7, null, null, null)).avgMed).toBe(2.3)
+  })
+  it('no holder is no run, and no time is no tie', () => {
+    const a = run(2.5, 2.4, null, null, null, null)
+    expect(betterAoxBest(a, run(2.5, 2.1, null, null, 1, null))).toEqual(a)
   })
 })

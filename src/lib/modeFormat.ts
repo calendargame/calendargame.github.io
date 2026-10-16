@@ -68,7 +68,8 @@ export const SLIDER_READOUT_WIDEST = fmtBlitzT(175) /* "2m 55s" */
 // their value in a nowrap span. A non-breaking space inside the string was considered and rejected:
 // it would make these strings silently unequal to fmtBlitzT's visually identical output, and every
 // test and text-extraction path would have to know which of the two it was looking at.
-const EM_DASH = '—'
+// The dash a readout shows for "nothing here" — also the Best rows' (components/BlitzBestRow).
+export const EM_DASH = '—'
 // Whole hundredths of a second → the largest unit the value needs and every smaller one.
 // Integer in, so `c % 6000` and `c % 100` cannot disagree with the printed decimals.
 const fmtCentis = (c: number) => {

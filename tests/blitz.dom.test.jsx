@@ -1995,3 +1995,94 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
     expect(barScale()).toBe('scaleX(1)')
   })
 })
+
+// ★ Q10 (Round 26): THE SMALL LINES UNDER EACH BEST, like MoX's — under Best Score that round's best
+// streak, under Best Streak that round's score — so whether one round set both can be read on a
+// screen too narrow for the Same Round / Different Rounds tag. A Best from before this release has
+// no companion saved, and shows the dash ("not recorded" to a screen reader) until it is beaten.
+describe('Blitz — the small lines under each Best (Q10)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs()
+    useProgress.getState().resetProgress()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  // The small line under a Best: the line after the Best's own.
+  const under = (best) => screen.getByText(best).nextElementSibling.textContent
+  const right = () => click(correctName(readDate()))
+
+  it('each Best names its round’s other number — and two rounds show it', () => {
+    mountApp()
+    switchToBlitz()
+    begin() // round A: 3 right, a streak of 2 at most
+    right()
+    right()
+    click(wrongName(readDate())) // Allow Mistakes on: the streak breaks, the round goes on
+    right() // the burned date, answered: no credit
+    right()
+    expect(statValue('Score')).toBe('3/4')
+    clickText('Reveal')
+    expect(under(/Best Score: 3\b/)).toBe('Streak: 2')
+    expect(under(/Best Streak: 2\b/)).toBe('Score: 3')
+    clickText('Reset')
+    begin() // round B: 3 straight — ties the score (A keeps it), beats the streak
+    right()
+    right()
+    right()
+    clickText('Reveal')
+    expect(under(/Best Score: 3\b/)).toBe('Streak: 2') // still round A's, with A's streak
+    expect(under(/Best Streak: 3\b/)).toBe('Score: 3') // round B's, with B's score
+    expect(visibleText('Different Rounds')).toBeInTheDocument()
+  })
+
+  it('a Best saved before the small lines existed shows the dash, read as "not recorded"', () => {
+    mountApp()
+    switchToBlitz()
+    begin()
+    right()
+    clickText('Reveal')
+    act(() =>
+      useProgress.getState().setBlitzBest((map) =>
+        Object.fromEntries(
+          Object.entries(map).map(([k, { score, scoreRoundId, streak, streakRoundId }]) => [
+            k,
+            { score, scoreRoundId, streak, streakRoundId }, // what an older build saved
+          ]),
+        ),
+      ),
+    )
+    const line = screen.getByText(/Best Score: 1\b/).nextElementSibling
+    expect(line.textContent).toBe('Streak: —not recorded')
+    expect(within(line).getByText('—').getAttribute('aria-hidden')).toBe('true')
+    expect(within(line).getByText('not recorded').className).toBe('sr-only')
+  })
+
+  it('with no record yet the lines are there, with the dash, so the row is one height', () => {
+    mountApp()
+    switchToBlitz()
+    expect(under(/Best Score:/)).toBe('Streak: —')
+    expect(under(/Best Streak:/)).toBe('Score: —')
+  })
+
+  it('sudden death has one number, so no small line — only its height, hidden from screen readers', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Per Round') // → Per Question
+    clickText('Allow Mistakes') // off: sudden death
+    const line = screen.getByText(/Best Score:/).nextElementSibling
+    expect(line.getAttribute('aria-hidden')).toBe('true')
+    expect(line.textContent.trim()).toBe('')
+    expect(screen.queryByText(/^Streak:/)).toBeNull()
+  })
+})

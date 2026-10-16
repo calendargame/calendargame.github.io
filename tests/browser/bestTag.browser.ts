@@ -54,7 +54,14 @@ const blitz = (name: string, score: number): Case => ({
   shows: `Best Score: ${score}`,
   wordings: ['Same Round', 'Different Rounds'],
   progress: (same) =>
-    blitzBest({ score, streak: score, scoreRoundId: 1, streakRoundId: same ? 1 : 2 }),
+    blitzBest({
+      score,
+      scoreStreak: score,
+      scoreRoundId: 1,
+      streak: score,
+      streakScore: score,
+      streakRoundId: same ? 1 : 2,
+    }),
 })
 
 const CASES: Case[] = [

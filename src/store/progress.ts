@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Stats } from '../engine/gameReducer.js'
+import type { AoxBest } from '../engine/aoxBest.js'
+import type { BlitzBest, SuddenBest } from '../engine/blitzBest.js'
 import { captureError } from '../observability/sentry.js'
 import { checkStatsInvariants } from '../engine/invariants.js'
 import { PRESET_STORE_KEYS, mergeOverDefaults } from './presets.js'
@@ -51,26 +53,11 @@ import { isRecord } from './json.js'
 // long history small: the store holds every time in one array, the device holds the older ones in
 // sealed chunks.
 
-// All-time best shapes (config-keyed). Moved here from main.tsx so the persisted store
-// is the single owner; the mode components import these back.
-export interface AoxBest {
-  avg: number | null
-  avgMed: number | null
-  avgRoundId: number | null
-  med: number | null
-  medAvg: number | null
-  medRoundId: number | null
-}
-export interface BlitzBest {
-  score: number
-  streak: number
-  scoreRoundId: number | null
-  streakRoundId: number | null
-}
-export interface SuddenBest {
-  score: number
-  roundId: number | null
-}
+// All-time best shapes (config-keyed): the engine files that BUILD every record own them
+// (engine/blitzBest, engine/aoxBest), and they are re-exported here for everything that reads the
+// store — so a field added to a record (Round 26's Blitz companions) cannot be missing from a second
+// declaration of it.
+export type { AoxBest, BlitzBest, SuddenBest }
 
 // The five lifetime-stats silos: the continuous modes plus Deduction's three sub-modes.
 export type StatsKey = 'classic' | 'flash' | 'dedDay' | 'dedMonth' | 'dedYear'

@@ -25,44 +25,58 @@ const R = 500 // this round
 const P = 100 // the round that held the record before it
 const Q = 900 // another tab's round, saved while this one was parked
 
+// A Blitz record: each field with its holder and its companion — the holder round's other number
+// (Round 26, Q10; engine/blitzBest's header).
+const blitz = ([score, scoreStreak, scoreRoundId], [streak, streakScore, streakRoundId]) => ({
+  score,
+  scoreStreak,
+  scoreRoundId,
+  streak,
+  streakScore,
+  streakRoundId,
+})
+
 describe('blitzBestWithoutRound', () => {
-  const pre = { score: 5, scoreRoundId: P, streak: 3, streakRoundId: P }
+  const pre = blitz([5, 2, P], [3, 5, P])
 
   it('a record this round has not touched is the floor, exactly', () => {
     expect(blitzBestWithoutRound(pre, pre, R)).toEqual(pre)
   })
-  it('a field this round holds goes back to what it was — value and holder', () => {
-    const cur = { score: 7, scoreRoundId: R, streak: 3, streakRoundId: P }
+  it('a field this round holds goes back to what it was — value, companion, and holder', () => {
+    const cur = blitz([7, 2, R], [3, 5, P])
     expect(blitzBestWithoutRound(pre, cur, R)).toEqual(pre)
-    const both = { score: 7, scoreRoundId: R, streak: 6, streakRoundId: R }
+    const both = blitz([7, 6, R], [6, 7, R])
     expect(blitzBestWithoutRound(pre, both, R)).toEqual(pre)
   })
   it('no record before the round, and nothing in it but this round’s: no floor', () => {
-    const cur = { score: 7, scoreRoundId: R, streak: 6, streakRoundId: R }
+    const cur = blitz([7, 6, R], [6, 7, R])
     expect(blitzBestWithoutRound(undefined, cur, R)).toBeUndefined()
     expect(blitzBestWithoutRound(undefined, undefined, R)).toBeUndefined()
   })
   it('★ another round’s record stands — the floor is what the store holds now', () => {
-    const other = { score: 9, scoreRoundId: Q, streak: 8, streakRoundId: Q }
+    const other = blitz([9, 8, Q], [8, 9, Q])
     expect(blitzBestWithoutRound(pre, other, R)).toEqual(other)
     // …field by field: the other tab took the score, this round still holds the streak.
-    const mixed = { score: 9, scoreRoundId: Q, streak: 6, streakRoundId: R }
-    expect(blitzBestWithoutRound(pre, mixed, R)).toEqual({
-      score: 9,
-      scoreRoundId: Q,
-      streak: 3,
-      streakRoundId: P,
-    })
+    const mixed = blitz([9, 4, Q], [6, 6, R])
+    expect(blitzBestWithoutRound(pre, mixed, R)).toEqual(blitz([9, 4, Q], [3, 5, P]))
   })
   it('a record somebody else removed is gone — the snapshot does not bring it back', () => {
     expect(blitzBestWithoutRound(pre, undefined, R)).toBeUndefined()
   })
   it('a round with no id holds nothing (an old record’s null holder is not "this round")', () => {
-    const legacy = { score: 5, scoreRoundId: null, streak: 3, streakRoundId: null }
+    const legacy = blitz([5, null, null], [3, null, null])
     expect(blitzBestWithoutRound(undefined, legacy, null)).toEqual(legacy)
   })
+  it('a record from before Round 26 (no companions saved): kept as "not recorded", never guessed', () => {
+    const older = { score: 5, scoreRoundId: P, streak: 3, streakRoundId: P } // no companion keys
+    expect(blitzBestWithoutRound(older, older, R)).toEqual(blitz([5, null, P], [3, null, P]))
+    // …and a field this round held goes back to the older record's — with no companion either.
+    expect(blitzBestWithoutRound(older, blitz([7, 4, R], [3, null, P]), R)).toEqual(
+      blitz([5, null, P], [3, null, P]),
+    )
+  })
   it('never mutates what it is handed', () => {
-    const cur = Object.freeze({ score: 7, scoreRoundId: R, streak: 3, streakRoundId: P })
+    const cur = Object.freeze(blitz([7, 2, R], [3, 5, P]))
     blitzBestWithoutRound(Object.freeze({ ...pre }), cur, R)
   })
 })
@@ -165,7 +179,7 @@ describe('with one writer, rebuilding from the store is rebuilding from the snap
 // has taken a field from it (the one saved record cannot hold both).
 describe('a round restored after another tab saved a better Best does not write over it', () => {
   it('Blitz: the restored round’s mount reconcile, then Overrides on it', () => {
-    let snap = { score: 5, scoreRoundId: P, streak: 3, streakRoundId: P } // parked with the round
+    let snap = blitz([5, 2, P], [3, 5, P]) // parked with the round
     let saved
     const reconcile = (good, streak) => {
       snap = blitzBestWithoutRound(snap, saved, R)
@@ -177,9 +191,9 @@ describe('a round restored after another tab saved a better Best does not write 
     expect(saved.score).toBe(7)
     // The other tab then saved 9 — and this tab reloads onto that record, the round still parked
     // with the snapshot it began with.
-    const theirs = { score: 9, scoreRoundId: Q, streak: 8, streakRoundId: Q }
+    const theirs = blitz([9, 8, Q], [8, 9, Q])
     saved = theirs
-    snap = { score: 5, scoreRoundId: P, streak: 3, streakRoundId: P }
+    snap = blitz([5, 2, P], [3, 5, P])
     // What the restored round used to write at mount: its own result, from that snapshot.
     expect(reconcileBlitzBest(snap, 7, 4, R).score).toBe(7) // 9 → 7: the defect
     // What it writes now: nothing — the other round's record stands.
@@ -190,7 +204,7 @@ describe('a round restored after another tab saved a better Best does not write 
     expect(saved).toEqual(theirs)
     // …one that takes it past the other tab's record wins that field, as any round would…
     reconcile(11, 4)
-    expect(saved).toEqual({ score: 11, scoreRoundId: R, streak: 8, streakRoundId: Q })
+    expect(saved).toEqual(blitz([11, 4, R], [8, 9, Q]))
     // …and its Undo hands the score back to the OTHER tab's round — not to the old snapshot's 5.
     reconcile(7, 4)
     expect(saved).toEqual(theirs)
