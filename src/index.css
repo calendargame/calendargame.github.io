@@ -477,9 +477,22 @@ input,textarea{user-select:text;-webkit-user-select:text}
        with no header docked the bar's shadow and that fade are what the scroll position makes
        them and the header's shadow is 0. lib/guideDock is that rule, and proves the two shadows
        are never on together. A closed header never has content under it and rests at 0.
+     • A DOCKED HEADER DRAWS ITS SECTION'S TOP BORDER ITSELF (the [data-docked] rule below). That
+       border is the wrapper's, so once the section has scrolled up under the bar it is behind the
+       bar too, and a docked header used to meet the bar with no edge of its own (the owner's
+       report). From the pixel of scroll in which the border goes behind the bar, the header draws
+       a 1px line along its own top in the border's colour — square-cornered, the wrapper's side
+       borders running on down beside it — so the edge stays flush against the bar. It is the same
+       colour on the same ground (--panel-bd over the panel's fill over the page), so it reads as
+       the border itself. Only then: a header any lower still has the real border showing above
+       it, and a second line would double it. GuidePage switches it, on its section's place and
+       never its shadow (lib/guideDock's THE DOCKED HEADER'S OWN TOP LINE): a section just opened
+       is docked with nothing under it yet and wears the line with no shadow.
    The wrapper's rounded corners still clip it, via overflow:clip there — hidden would make the
    wrapper a scroll container of its own, and a sticky box sticks to its NEAREST scroll container. */
 .guide-head{position:sticky;top:0;z-index:1;background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1);--shade:0}
+/* The docked header's top line: the panel border's own width (.panel) and colour. */
+.guide-head[data-docked]::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:var(--panel-bd);pointer-events:none}
 /* The keyboard's focus ring on a header (THE KEYBOARD FOCUS RING, below) sits 5px in: the header is a
    square-cornered button inside a wrapper that clips to rounded corners, and a ring any nearer the
    edge has its own corners cut off by them. */

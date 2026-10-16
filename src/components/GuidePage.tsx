@@ -30,6 +30,7 @@ import {
   arrivingShades,
   NO_DOCK,
   DOCK_LINE_BAND_PX,
+  edgeBehindBar,
   type Arrival,
   type DockShades,
   type HeaderDockGeometry,
@@ -168,6 +169,17 @@ function anyPanelFolding(): boolean {
 function headerPinDepth(id: string): number {
   const g = headerDockGeometry(id, NaN)
   return g ? Math.max(0, g.headerTop - g.naturalTop) : 0
+}
+
+// writeDocked — the docked header's own top line (lib/guideDock's THE DOCKED HEADER'S OWN TOP LINE;
+// index.css's .guide-head[data-docked] draws it), on exactly while `g` says its section's own top
+// border is behind the bar. Two writers, one at a time per header: the dock tracker for the OPEN
+// header, and a header's release while it lets go of its dock — so the line stays where the
+// border is hidden for the length of the fold, under the page's top fade as that comes back, and
+// goes when the release is over (by then the fade is drawn over it in full). Everything that puts
+// a header at rest puts it out.
+const writeDocked = (header: HTMLElement, g: HeaderDockGeometry | null): void => {
+  header.toggleAttribute('data-docked', g !== null && edgeBehindBar(g))
 }
 
 // foldClock — HOW FAR THROUGH ITS MOTION THIS TAP'S FOLD IS, 0…1, asked once a frame by everything
@@ -698,6 +710,7 @@ export default function GuidePage({
     for (const [header, release] of releasesRef.current) {
       release.cancel()
       writeShade(header, NO_DOCK.header)
+      writeDocked(header, null)
     }
     releasesRef.current.clear()
     paintBarShare()
@@ -858,6 +871,8 @@ export default function GuidePage({
       const shades = arriving && geometry ? arrivingShades(arriving.arrival, place) : place
       openShadesRef.current = shades
       writeShade(header, shades.header)
+      // The line answers to where the header IS, never to where it will rest.
+      writeDocked(header, geometry)
       share.tracked = shades.barYield
       paintBarShare()
     }
@@ -888,7 +903,10 @@ export default function GuidePage({
       stopExtent()
       trackerRef.current = null
       openShadesRef.current = NO_DOCK
-      if (!releases.has(header)) writeShade(header, NO_DOCK.header)
+      if (!releases.has(header)) {
+        writeShade(header, NO_DOCK.header)
+        writeDocked(header, null)
+      }
       share.tracked = NO_DOCK.barYield
       paintBarShare()
     }
@@ -1034,14 +1052,24 @@ export default function GuidePage({
         releases.delete(tappedHeader)
       }
       const closingHeader = open ? document.getElementById(headerDomId(open)) : null
-      if (closingHeader) {
+      if (closingHeader && open) {
         const from = { header: openShadesRef.current.header, barYield: sharedBefore }
         // In the map BEFORE it starts: its first word is written as it starts, and (with no time to
         // take) so is its last.
         const release = { strength: from.header, share: from.barYield, cancel: () => {} }
         releases.set(closingHeader, release)
+        const closingId = open
         release.cancel = startShadeRelease(from, clock, (shades, done) => {
           writeShade(closingHeader, shades.header)
+          writeDocked(
+            closingHeader,
+            done || !scroller
+              ? null
+              : headerDockGeometry(
+                  closingId,
+                  scroller.getBoundingClientRect().top + readBarHeight(getComputedStyle(scroller)),
+                ),
+          )
           release.strength = shades.header
           release.share = shades.barYield
           if (done) releases.delete(closingHeader)
@@ -1445,13 +1473,15 @@ export default function GuidePage({
           <li>
             While you read down a long section, its title stays docked right under the bar at the
             top — the same spot a section you open comes to rest in — so you can always see which
-            section you&apos;re in and tap it closed from anywhere in it. The title picks up a soft
-            shadow only once the text starts scrolling underneath it, and loses it again when you
-            scroll back up; while a title is docked, the bar&apos;s own shadow steps aside for it,
-            so the shadow is always under whichever edge the text is sliding beneath. The soft fade
-            at the top of this page steps aside with it — a docked title is never faded — and
-            returns as the title leaves. Closing a section from its docked title leaves the title
-            right where it is while the section folds away below it.
+            section you&apos;re in and tap it closed from anywhere in it. A docked title keeps its
+            section&apos;s top edge along its top, flush against the bar, as though that edge had
+            stayed with it. The title picks up a soft shadow only once the text starts scrolling
+            underneath it, and loses it again when you scroll back up; while a title is docked, the
+            bar&apos;s own shadow steps aside for it, so the shadow is always under whichever edge
+            the text is sliding beneath. The soft fade at the top of this page steps aside with it —
+            a docked title is never faded — and returns as the title leaves. Closing a section from
+            its docked title leaves the title right where it is while the section folds away below
+            it.
           </li>
           <li>
             The guide holds its place while you're in the app: switch to a mode, play, and come back

@@ -201,3 +201,132 @@ test('Shift+Tab onto a header already below the line moves nothing', async ({ pa
   await atRest(page)
   expect(await scrollTop(page)).toBe(before)
 })
+
+// THE DOCKED HEADER'S OWN TOP LINE (the owner's report: a docked header showed no top border — the
+// border is its section's, and had gone behind the bar). From the pixel of scroll in which that
+// border goes behind the bar, the header draws a 1px line of its own in the border's place; never
+// before, so the border is never doubled.
+interface TopLine {
+  /** Whether the header draws its own top line. */
+  on: boolean
+  /** The line's box, against the header's. */
+  top: number
+  height: number
+  width: number
+  headerWidth: number
+  colour: string
+  /** The wrapper's own top border colour, and where that border's lower edge is against the line. */
+  borderColour: string
+  borderBelowLine: number
+  fade: number
+  offLine: number
+  headerShade: number
+}
+const topLine = (page: Page, i: number): Promise<TopLine> =>
+  head(page, i).evaluate((h) => {
+    const sc = document.getElementById('appScroll')!
+    const line =
+      sc.getBoundingClientRect().top + parseFloat(getComputedStyle(sc).getPropertyValue('--bar-h'))
+    const before = getComputedStyle(h, '::before')
+    const wrapper = h.parentElement!
+    return {
+      on: before.content !== 'none' && before.content !== 'normal',
+      top: parseFloat(before.top),
+      height: parseFloat(before.height),
+      width: parseFloat(before.width),
+      headerWidth: h.getBoundingClientRect().width,
+      colour: before.backgroundColor,
+      borderColour: getComputedStyle(wrapper).borderTopColor,
+      borderBelowLine: wrapper.getBoundingClientRect().top + wrapper.clientTop - line,
+      fade: Number(getComputedStyle(document.querySelector('.doc-fade-top')!).opacity),
+      offLine: h.getBoundingClientRect().top - line,
+      headerShade: Number((h as HTMLElement).style.getPropertyValue('--shade')),
+    }
+  })
+
+for (const theme of ['dusk', 'parchment'] as const) {
+  test(`${theme}: a docked header draws its section's top border flush against the bar, and only while docked`, async ({
+    page,
+  }) => {
+    await openApp(page, { theme })
+    await switchMode(page, 'guide')
+
+    // Opened a little under the line: it opens where it stands, its own border showing — no line.
+    await place(page, 5, 120)
+    await head(page, 5).click()
+    await atRest(page)
+    const undocked = await topLine(page, 5)
+    expect(undocked.borderBelowLine, 'its section’s border is in view').toBeGreaterThan(100)
+    expect(undocked.on, 'an undocked header draws no line of its own').toBe(false)
+
+    // Docked, with text under it.
+    await place(page, 5, 0)
+    await page.locator('#appScroll').evaluate((sc) => (sc.scrollTop += 200))
+    await atRest(page)
+    const docked = await topLine(page, 5)
+    expect(Math.abs(docked.offLine), 'the header is held on the line').toBeLessThanOrEqual(0.5)
+    expect(docked.on, 'a docked header draws its top line').toBe(true)
+    expect(docked.top, 'at the header’s top').toBe(0)
+    expect(docked.height, 'one pixel tall').toBe(1)
+    expect(Math.abs(docked.width - docked.headerWidth), 'the header’s whole width').toBeLessThan(
+      SAME_PX,
+    )
+    expect(docked.colour, 'in the border’s own colour').toBe(docked.borderColour)
+    expect(docked.fade, 'with the top fade off').toBe(0)
+    expect(docked.headerShade, 'and the header’s shadow on').toBe(1)
+
+    // The pixel of scroll in which the border goes behind the bar: for every position around it, the
+    // line is on exactly when the border is no longer below the line — never both, never neither.
+    const transition = await head(page, 5).evaluate((h) => {
+      const sc = document.getElementById('appScroll')!
+      const line =
+        sc.getBoundingClientRect().top +
+        parseFloat(getComputedStyle(sc).getPropertyValue('--bar-h'))
+      const w = h.parentElement!
+      return sc.scrollTop + (w.getBoundingClientRect().top + w.clientTop - line)
+    })
+    for (const at of [-2, -1, 0, 1, 2].map((d) => Math.round(transition) + d)) {
+      await page.locator('#appScroll').evaluate((sc, at) => (sc.scrollTop = at), at)
+      await atRest(page)
+      const here = await topLine(page, 5)
+      expect(here.on, `scrolled to ${at}: the line is on exactly when the border has gone`).toBe(
+        here.borderBelowLine <= 1 / 64,
+      )
+    }
+  })
+}
+
+test('a section opened from above the line comes to rest docked, wearing its line with no shadow', async ({
+  page,
+}) => {
+  await openApp(page)
+  await switchMode(page, 'guide')
+  await place(page, 5, -30)
+  await head(page, 5).evaluate((h) => (h as HTMLElement).click())
+  await atRest(page)
+  const opened = await topLine(page, 5)
+  expect(Math.abs(opened.offLine)).toBeLessThanOrEqual(0.5)
+  expect(opened.on).toBe(true)
+  expect(opened.headerShade, 'nothing is under it yet').toBe(0)
+})
+
+test('closed from its docked header, the header is left on the line without a line of its own, under the fade', async ({
+  page,
+}) => {
+  await openApp(page)
+  await switchMode(page, 'guide')
+  await place(page, 5, 120)
+  await head(page, 5).click()
+  await atRest(page)
+  await place(page, 5, 0)
+  await page.locator('#appScroll').evaluate((sc) => (sc.scrollTop += 200))
+  await atRest(page)
+  expect((await topLine(page, 5)).on).toBe(true)
+  await head(page, 5).click()
+  await expect(head(page, 5)).toHaveAttribute('aria-expanded', 'false')
+  await atRest(page)
+  const closed = await topLine(page, 5)
+  expect(Math.abs(closed.offLine), 'left on the line').toBeLessThan(1)
+  expect(closed.on, 'a closed header is page content: no line of its own').toBe(false)
+  expect(closed.fade, 'and the fade is drawn over it').toBe(1)
+})

@@ -129,6 +129,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Fixed: on an iPhone, a flick that started on a button in the ⚙ menu could press that button as your finger lifted, such as opening the Open in list. A flick now only scrolls, wherever it starts.',
       'Fixed: in How to Play, tapping section titles quickly one after another could leave the last one resting a little below the top bar, or with the start of its section hidden under it. It now comes to rest exactly where it would if you had waited between taps.',
       'Fixed: in How to Play, stepping back with Shift+Tab onto a section title hidden under the top bar jumped the page away from it, near the start of the guide all the way to the top. The title now comes to rest right under the bar.',
+      "Fixed: in How to Play, a section title docked under the top bar had no top edge, because its section's border had scrolled away behind the bar. The border now runs along the title's top, flush against the bar.",
     ],
   },
   {
