@@ -4,7 +4,15 @@
 // session under way, and how a Best's configuration key is put together. This file makes the real
 // app write each of them and compares — so the day the app changes one, this fails, by name,
 // instead of every other test in the lane quietly measuring a screen its seed never reached.
-import { test, expect, openApp, openSettings, openPresetManager, switchMode } from './support/app'
+import {
+  test,
+  expect,
+  openApp,
+  openSettings,
+  openPresetManager,
+  switchMode,
+  answerRight,
+} from './support/app'
 import { PRESET_REGISTRY_KEY, PRESET_STORE_KEYS } from '../../src/store/presets'
 import {
   SAVED_VERSION,
@@ -13,8 +21,6 @@ import {
   moxBestKey,
   type AppSeed,
 } from './support/seeds'
-import { isJulianDate, wday, wdayJulian } from '../../src/lib/calendar'
-import { DAY, MONTH } from '../../src/lib/format'
 import type { Page } from '@playwright/test'
 
 const saved = (page: Page, key: string) =>
@@ -24,17 +30,6 @@ const saved = (page: Page, key: string) =>
       ? null
       : (JSON.parse(raw) as { state: Record<string, unknown>; version: number })
   }, key)
-
-// Answer the date on screen correctly, by the app's own calendar: the date as the default format
-// writes it ("April 7, 9322"), Julian before the 1582 changeover as the default settings have it.
-async function answerRight(page: Page) {
-  const shown = await page.locator('.date-line:visible').textContent()
-  const [, monthName, day, year] = /^(\w+) (\d+), (\d+)$/.exec(shown ?? '') ?? []
-  expect(monthName, `a date in the default format, not "${shown}"`).toBeDefined()
-  const [y, m, d] = [+year, MONTH.indexOf(monthName) + 1, +day]
-  const weekday = DAY[isJulianDate(y, m, d) ? wdayJulian(y, m, d) : wday(y, m, d)]
-  await page.locator('[data-answer-grid]:visible').getByRole('button', { name: weekday }).click()
-}
 
 test('every save the lane seeds carries the version the app writes today', async ({ page }) => {
   await openApp(page)

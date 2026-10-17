@@ -41,6 +41,8 @@ import {
   type Page,
 } from '@playwright/test'
 import { PAGES, type PageId } from '../../../src/lib/modes'
+import { isJulianDate, wday, wdayJulian } from '../../../src/lib/calendar'
+import { DAY, MONTH } from '../../../src/lib/format'
 import { storageFor, type AppSeed, type SeededStorage, type Theme } from './seeds'
 
 export { expect }
@@ -238,6 +240,19 @@ export async function openPresetManager(page: Page): Promise<Locator> {
   await expect(dialog).toBeVisible()
   await settled(page)
   return dialog
+}
+
+/**
+ * Answer the date on screen correctly, by the app's own calendar: the date as the default format writes
+ * it ("April 7, 9322"), Julian before the 1582 changeover as the default settings have it.
+ */
+export async function answerRight(page: Page) {
+  const shown = await page.locator('.date-line:visible').textContent()
+  const [, monthName, day, year] = /^(\w+) (\d+), (\d+)$/.exec(shown ?? '') ?? []
+  expect(monthName, `a date in the default format, not "${shown}"`).toBeDefined()
+  const [y, m, d] = [+year, MONTH.indexOf(monthName) + 1, +day]
+  const weekday = DAY[isJulianDate(y, m, d) ? wdayJulian(y, m, d) : wday(y, m, d)]
+  await page.locator('[data-answer-grid]:visible').getByRole('button', { name: weekday }).click()
 }
 
 /**

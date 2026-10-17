@@ -2,7 +2,7 @@
 // 6.2): what one window saves reaches the other through the browser's own `storage` event and the
 // windows-in-sync door, with no reload — the part jsdom cannot show, since there the events are
 // delivered by hand.
-import { test, expect, openApp, openSecondWindow, openSettings } from './support/app'
+import { test, expect, openApp, openSecondWindow, openSettings, answerRight } from './support/app'
 
 test('a theme chosen in one window is worn by the other at once, both ways', async ({
   page,
@@ -21,6 +21,35 @@ test('a theme chosen in one window is worn by the other at once, both ways', asy
   await first.getByRole('radio', { name: 'Dusk', exact: true }).click()
   await page.keyboard.press('Escape')
   await expect(second.locator('html')).toHaveAttribute('data-theme', 'dusk')
+})
+
+// ★ EVERY ANSWER COUNTS ONCE, WHICHEVER WINDOW MADE IT (design-q1-q2.md v4, G1): the two windows answer
+// Classic in turn, and each shows the other's answers at once - the score in both reads every answer.
+// (A window's question is drawn again when the other's answers come in, and for 300 ms after that a
+// press answers nothing - the cue test below - so a press is repeated until it counts: once it has, the
+// question is answered, and a press on it does nothing.)
+test('an answer in either window is counted in both, at once — and none is lost', async ({
+  page,
+  context,
+}) => {
+  await openApp(page)
+  const second = await openSecondWindow(context)
+  const score = (p: typeof page) => p.locator('.panel:visible [data-statval]').first()
+  const answerUntil = async (p: typeof page, shown: string) =>
+    expect(async () => {
+      await answerRight(p)
+      await expect(score(p)).toHaveText(shown, { timeout: 500 })
+    }).toPass()
+  const next = (p: typeof page) =>
+    p.getByRole('button', { name: 'New', exact: true }).and(p.locator(':visible')).click()
+  await answerUntil(page, '1/1')
+  await expect(score(second)).toHaveText('1/1')
+  await next(second)
+  await answerUntil(second, '2/2')
+  await expect(score(page)).toHaveText('2/2')
+  await next(page)
+  await answerUntil(page, '3/3')
+  await expect(score(second)).toHaveText('3/3')
 })
 
 // ★ THE CUE FOR A PRESS THAT DID NOT COUNT (design-q1-q2.md v4, 6.4; lib/unaskedSwap): another window's
