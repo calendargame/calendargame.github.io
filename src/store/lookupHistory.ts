@@ -16,7 +16,7 @@ import { dimEither } from '../lib/calendar.js'
 // (lib/buildStamp) or the changelog's seen-signature (src/changelog) — it describes something the
 // DEVICE remembers, not something any one preset owns — except unlike those two flags it is
 // reactive UI state a component renders, so it needs zustand rather than a plain synchronous read.
-// It therefore persists to ONE un-namespaced key — never presetDoc or presetStatsStorage,
+// It therefore persists to ONE un-namespaced key — never presetDoc or the progress door's preset copies,
 // which would namespace or session-park it per preset, the one thing this list must never do.
 // ★ THROUGH THE WINDOWS-IN-SYNC DOOR (Round 26, Q2: store/syncedDoc's list door, store/syncList's
 // merge). Two windows of the app show the same history, and a lookup in one appears in the other at

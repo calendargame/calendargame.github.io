@@ -29,18 +29,10 @@ import { NewBestStar } from '../components/primitives.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { calcAvg, calcLast, calcMed } from '../engine/stats.js'
 import { buildRunBreakdown } from '../engine/runBreakdown.js'
-import {
-  reconcileBlitzBest,
-  reconcileSuddenBest,
-  blitzBestWithoutRound,
-  suddenBestWithoutRound,
-} from '../engine/blitzBest.js'
-import { fileBest } from '../engine/bestMap.js'
 import { shownBlitzBest, shownSuddenBest } from '../engine/bestPool.js'
 import { newRoundId, isNewBest } from '../engine/roundId.js'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
-import type { BlitzBest, SuddenBest } from '../store/progress.js'
 import { useUserDefaults, effectivePrefDefaults } from '../store/userDefaults.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import {
@@ -52,67 +44,32 @@ import {
 } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound } from '../store/sessionRound.js'
-import { fileRoundBest, roundBests, parkRound, unparkRound } from '../store/screenPool.js'
+import { fileRoundResult, parkRound, unparkRound } from '../store/screenPool.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/parkedEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
 
-// The Best records that stood BEFORE the current round (snapshotted at Begin) — the reconcile
-// floor and the Override-resume revert target. Named so the ref below and the round snapshot
-// (round 21) share one shape.
-interface PrevRoundBest {
-  blitzBk: string
-  suddenBk: string
-  blitz?: BlitzBest
-  sudden?: SuddenBest
-  suddenAm?: BlitzBest
+// ★ THE RECORD A ROUND'S RESULT IS FILED ON: the Best map of the sub-mode it was played in, and its set-up
+// key there — both fixed at Begin, the round's own and never the live settings (the ⚙ panel can move
+// those while the round sits ended; it is reset when the panel closes).
+const BLITZ_MAPS = ['blitzBest', 'suddenBest', 'suddenAmBest'] as const
+interface RoundRecord {
+  map: (typeof BLITZ_MAPS)[number]
+  setup: string
 }
-
-// ★ THE PRE-ROUND RECORDS, BROUGHT UP TO DATE — what every write to a Best starts from. The
-// snapshot taken at Begin is right only while this round is the record's one writer, and it is not
-// always: the same preset can be played in another tab while this round sits ended, and a reload
-// then loads that tab's record under a round still holding its old snapshot. So the active
-// sub-mode's pre-round record is re-read as THE SAVED RECORD LESS THIS ROUND (engine/blitzBest's
-// …WithoutRound argues the rule): a field this round holds is what it was before the round, and
-// every other field is whoever holds it now. With one writer that is the snapshot, unchanged.
-// ★ AND THE CALLER REPLACES ITS SNAPSHOT WITH THE RESULT, so what was learned is kept: if this round
-// then takes a field from that other round and an Undo gives it back, it goes back to THAT round's
-// record — the one saved record cannot hold both, so the snapshot is the only place the other one
-// survives. (BlitzMode's park effect is declared after its Best effect and re-parks on every change
-// the Best effect reacts to, so the parked snapshot is always the current one.)
-function roundFloor(
-  snap: PrevRoundBest,
-  saved: {
-    blitzBest: Record<string, BlitzBest>
-    suddenAmBest: Record<string, BlitzBest>
-    suddenBest: Record<string, SuddenBest>
-  },
-  perQ: boolean,
-  allowMistakes: boolean,
-  roundId: number | null,
-): PrevRoundBest {
-  if (!perQ)
-    return {
-      ...snap,
-      blitz: blitzBestWithoutRound(snap.blitz, saved.blitzBest[snap.blitzBk], roundId),
-    }
-  if (allowMistakes)
-    return {
-      ...snap,
-      suddenAm: blitzBestWithoutRound(snap.suddenAm, saved.suddenAmBest[snap.suddenBk], roundId),
-    }
-  return {
-    ...snap,
-    sudden: suddenBestWithoutRound(snap.sudden, saved.suddenBest[snap.suddenBk], roundId),
-  }
-}
+// Read off an untrusted blob (the slot may hold anything a build on this origin wrote).
+const isRoundRecord = (v: unknown): v is RoundRecord =>
+  typeof v === 'object' &&
+  v !== null &&
+  BLITZ_MAPS.includes((v as RoundRecord).map) &&
+  typeof (v as RoundRecord).setup === 'string'
 
 // Round 21 — the shape BlitzMode parks in store/sessionRound for an ENDED round. It round-trips
 // its own engine state plus the component fields the completed view (and a post-round Override)
-// need; store/sessionRound never looks inside it. `currentRoundId` + `prevRoundBest` are what keep
-// the Best-reconcile / Override-rollback correct on a restored round — without them a later Override
-// that drops the round's score could leave a fabricated Best standing, or wipe a legitimate one —
-// and `currentRoundId` is also what keeps the restored round's ★ lit (it is read off the ids).
+// need; store/sessionRound never looks inside it. `currentRoundId`, `record` and `filed` are what keep
+// a restored round's result filed right — an Override on it after a reload changes the same round's
+// result on the same record, and a press that hands it back takes back exactly that — and
+// `currentRoundId` is also what keeps the restored round's ★ lit (it is read off the ids).
 // `remain` is the round's clock as it stopped — what an Override that rescues the restored round
 // resumes from (Per Round) and what its readout shows.
 // WHY A ROUND ENDED — the one fact that decides whether it can come back, and what its clock does
@@ -136,7 +93,9 @@ interface BlitzRoundSnapshot {
   showTimerDate: boolean
   active: boolean
   currentRoundId: number | null
-  prevRoundBest: PrevRoundBest
+  // The record its result is filed on, and the result as last filed there (JSON; null: never filed).
+  record: RoundRecord
+  filed: string | null
   // The configuration the round was played under (`roundConfig` in the component, which argues it).
   config: string
   remain: number
@@ -158,10 +117,11 @@ interface BlitzRoundSnapshot {
 // = the engine + a countdown (Per Round `blitzSec` / Per Question `qSec`) + Best Score/
 // Streak tracking. Begin = engine.resetStats() (fresh round) + start timer; answering uses
 // the engine; a round ends on the clock or on a wrong with Allow Mistakes off (either
-// timing sub-mode — the two toggles are fully independent). Best is reconciled in an
-// effect while a round is over — rebuilt from the pre-round record each time, so a field the round
-// beats is tagged with its id and an Override that drops the round hands the field back to the
-// round that held it before (engine/blitzBest).
+// timing sub-mode — the two toggles are fully independent). A round's RESULT is filed on its Best
+// record while the round is over — at its end and after every Override that moves it — as the round's
+// own figures (store/screenPool's fileRoundResult): the record keeps every round's figures beside it,
+// so a field the round beats is held by its id, and an Override that drops the round hands the field
+// to the next best round, whichever window played it.
 // ============================================================
 function BlitzMode({
   visible,
@@ -208,7 +168,7 @@ function BlitzMode({
   const suddenBk = `${qSec}|${dateConfig}`
   // ★ THE CONFIGURATION A ROUND IS PLAYED UNDER — the timing sub-mode, Allow Mistakes, and the Best
   // key of the sub-mode in play (its timer length and every date setting): everything that decides
-  // which record the round's result is filed in, which reconcile it gets, what its clock runs to and
+  // which record the round's result is filed on, what its clock runs to and
   // which dates a resumed round would draw. A round carries the one it was BEGUN under
   // (roundConfigRef), a PARKED round carries it into the snapshot, and it comes back only if it is
   // still exactly the live one.
@@ -221,15 +181,15 @@ function BlitzMode({
   // cover. A round that no longer matches is simply not restored: the screen comes up idle, exactly
   // as a settings change resets a round that is on screen, and the Bests it set stay as saved.
   // ★ …AND THE SHAPE OF THE BEST RECORDS THE ROUND CARRIES (Round 26, Q10 — the leading
-  // `companions|`). A parked round carries the records it is rebuilt from (prevRoundBest), and since
-  // Round 26 a record carries each field's companion (engine/blitzBest). An OLDER build sharing this
-  // origin (a tab that moves between the test site and the live one keeps its session) would
-  // restore such a round and reconcile it with records of its own four fields — and an Override
-  // there that moves only a companion (the holder round's other number; its four fields standing
-  // still) is a record its fileBest sees as unchanged, so the companion this build parked would stay:
-  // WRONG, not missing. Proven on the real older builds (tests/blitzBest.olderBuilds). No older
-  // build computes this configuration, so an older build declines the round — its screen comes up
-  // idle and the Bests stay as saved — and this build declines an older build's round the same way.
+  // `companions|`). Since Round 26 a record carries each field's companion (engine/blitzBest), and an
+  // OLDER build sharing this origin (a tab that moves between the test site and the live one keeps its
+  // session) would restore such a round and reconcile it with records of its own four fields — an
+  // Override there that moves only a companion (the holder round's other number; its four fields
+  // standing still) is a record its fileBest sees as unchanged, so the companion would stay: WRONG,
+  // not missing. Proven on the real older builds (tests/blitzBest.olderBuilds). No older build
+  // computes this configuration, so an older build declines the round — its screen comes up idle and
+  // the Bests stay as saved — and this build declines an older build's round the same way (its blob
+  // also lacks the `record` this build files on).
   const roundConfig = `companions|${perQ ? 'q' : 'r'}|${allowMistakes ? 'm' : 'n'}|${perQ ? suddenBk : blitzBk}`
   // The ended round this (bests copy, mode) parked before its last unmount, read EXACTLY ONCE at
   // mount. On a preset switch or an Amnesic change the always-mounted screens remount (src/main.tsx
@@ -247,7 +207,14 @@ function BlitzMode({
   // (…and a blob that does not say whether its ending was recorded is not one this build parked.)
   const [parkedRound] = useState<BlitzRoundSnapshot | null>(() => {
     const snap = readSessionRound<ParkedSnapshot<BlitzRoundSnapshot>>(bestsId, 'blitz')
-    if (!snap || snap.config !== roundConfig || typeof snap.recorded !== 'boolean') return null
+    if (
+      !snap ||
+      snap.config !== roundConfig ||
+      typeof snap.recorded !== 'boolean' ||
+      !isRoundRecord(snap.record) ||
+      !(snap.filed === null || typeof snap.filed === 'string')
+    )
+      return null
     const engine = restoreParkedEngine(snap.engine, useJulian, 'blitz')
     return engine ? { ...snap, engine } : null
   })
@@ -293,41 +260,30 @@ function BlitzMode({
   const suddenBest = useProgress((s) => s.suddenBest)
   const suddenAmBest = useProgress((s) => s.suddenAmBest)
   // ★ THE ROUND ON SCREEN — its id, from Begin until Reset (null while there is none). Every Best field
-  // this round sets is tagged with it (the reconcile below), and a Best marked with it IS "a best the
+  // this round sets is held by it (the filing below), and a Best marked with it IS "a best the
   // round on screen set", which is the whole of the ★ rule (engine/roundId's isNewBest; round 23
   // standardized Blitz on MoX's meaning). State, not a ref, because the ★ renders from it.
   // ⚠ NEVER-REPEATING (engine/roundId's newRoundId), because the id is SAVED inside the Best records:
   // the counter that restarted at 1 on every screen load made today's round 1 and last week's round 1
   // the same round to the Same Round tag and to the rollback that used to compare ids.
   // Restored from the parked round (round 21), so a round that comes back after a preset switch
-  // or a reload is still the round its records name — its ★ comes back with it, and the reconcile
-  // keeps tagging its edits correctly.
+  // or a reload is still the round its records name — its ★ comes back with it, and its filings keep
+  // naming it.
   const [roundId, setRoundId] = useState<number | null>(parkedRound?.currentRoundId ?? null)
-  // The FULL Best records that stood BEFORE the current round, and the keys it is filed under
-  // (snapshotted at Begin), serving two jobs from one snapshot: (a) the reconcile's BASE — every
-  // reconcile rebuilds the round's record from these (engine/blitzBest), so an Override that drops
-  // THIS round's score can never pull a Best below the earlier round it overwrote, and hands the
-  // field back to that round (the cross-round Best rollback; round 23 — its holder too);
-  // (b) the resume-REVERT — when an Override credits a misclick and RESUMES the round, the Best the
-  // interrupted round provisionally saved is rolled back wholesale to these records (it re-saves
-  // only when the round genuinely ends).
-  // ★ THE KEYS ARE THE ROUND'S, NOT THE SCREEN'S (round 23). The round is filed under the config
-  // it was PLAYED under — `blitzBk`/`suddenBk` below are the live settings, and they move the moment
-  // a setting is changed in the ⚙ panel, while the round waits for the panel to close before it
-  // resets. Reading the live keys there filed the ended round's result under a config it was never
-  // played on.
-  // Restored from the parked round (round 21): a resume via Override reverts the interrupted
-  // round's provisional Best to THESE records, so after a remount they have to be the real pre-round
-  // records and not the `{blitzBk:'',…}` fresh-mount stub — otherwise resumeRound would `delete`
-  // the wrong (empty) key and leave a legitimate Best in place, or drop one that should stand.
-  const prevRoundBestRef = useRef<PrevRoundBest>(
-    parkedRound?.prevRoundBest ?? { blitzBk: '', suddenBk: '' },
+  // ★ WHERE THE ROUND ON SCREEN FILES ITS RESULT, AND WHAT IT LAST FILED THERE. The record is the round's
+  // own (RoundRecord, fixed at Begin). `filedRef` is its result as last filed (JSON) — null until the
+  // round's first filing: a filing that would say the same again is skipped, and every later one is an
+  // Override of the round's result (store/screenPool's `filedBefore`). Both are restored with a parked
+  // round, so after a reload an Override on it changes the same round's result on the same record.
+  const roundRecordRef = useRef<RoundRecord>(
+    parkedRound?.record ?? { map: 'blitzBest', setup: blitzBk },
   )
+  const filedRef = useRef<string | null>(parkedRound?.filed ?? null)
   // ★ DOES THE ROUND ON SCREEN COUNT TOWARD THE BESTS? Decided ONCE, by the Save Stats setting as the
   // round FIRST ends, and it is the round's for the rest of its life: null from Begin until that first
   // ending, then true or false until Reset or the next Begin — through every Override and Undo, a
   // resume and the ending after it, a guest's interlude and a reload (it is parked with the round).
-  // The reconcile effect below takes the verdict; Begin and Reset clear it.
+  // The filing effect below takes the verdict; Begin and Reset clear it.
   // WHY IT IS REMEMBERED RATHER THAN READ LIVE. The reconcile used to gate on the live setting, so a
   // practice round sitting ended on screen was recorded the moment Save Stats was turned back on —
   // a Best for a round played while nothing counted — and, since the setting is shared by a preset's
@@ -341,6 +297,16 @@ function BlitzMode({
   // practice round became a recorded Best; turn it off, press twice, and a recorded round lost its.
   // A round is practice or it is not, from its first ending on.
   const recordedRef = useRef<boolean | null>(parkedRound?.recorded ?? null)
+  // File the round's result (or, null, take it back whole) — only a round that COUNTS (recordedRef)
+  // ever files anything, in either direction.
+  const fileResult = (values: { score: number; streak?: number } | null) => {
+    if (roundId === null || !recordedRef.current) return
+    const text = JSON.stringify(values)
+    if (filedRef.current === text || (values === null && filedRef.current === null)) return
+    const { map, setup } = roundRecordRef.current
+    if (fileRoundResult(dataId, map, setup, roundId, values, filedRef.current !== null))
+      filedRef.current = text
+  }
   // saveStats:true ALWAYS (like AoX): the round tracks internally regardless of the global Save
   // Stats toggle, which now gates only the DISPLAY (a dimmed strip of "—"), whether a Best is recorded,
   // and whether Override shows while off. Always-tracking keeps the misclick-rescue credit
@@ -579,15 +545,12 @@ function BlitzMode({
   const begin = () => {
     eng.resetStats() // fresh round (S→0, history clear, new date)
     setRoundId(newRoundId())
-    // Snapshot the FULL Best records standing before this round, and the config keys it is played
-    // under — the reconcile base + the resume-revert target.
-    prevRoundBestRef.current = {
-      blitzBk,
-      suddenBk,
-      blitz: blitzBest[blitzBk],
-      sudden: suddenBest[suddenBk],
-      suddenAm: suddenAmBest[suddenBk],
-    }
+    // The record this round files its result on (the sub-mode and set-up it is played under), and
+    // nothing filed yet.
+    roundRecordRef.current = perQ
+      ? { map: allowMistakes ? 'suddenAmBest' : 'suddenBest', setup: suddenBk }
+      : { map: 'blitzBest', setup: blitzBk }
+    filedRef.current = null
     roundConfigRef.current = roundConfig
     recordedRef.current = null // a fresh round: whether it counts is settled when it first ends
     setActive(true)
@@ -618,37 +581,19 @@ function BlitzMode({
   }
   // Put an ENDED round back on the clock with `remain` seconds left — the ONE door back, used by the
   // Override ⇄ Undo press below for both kinds of end it can undo (see EndKind and `onOverride`).
-  // Two halves: (1) revert the active sub-mode's Best to the pre-round record (the round's provisional
-  // save is gone; it re-saves only when the round genuinely ends — and its ★, derived from the
-  // record's id, goes out with it) — safe to branch on the live prefs, the toggles are idle-locked; (2) re-arm the clock with whatever the caller says is
-  // left. An 'answer' end passes Per Round its frozen stamp (the countdown continues WHERE IT
+  // Two halves: (1) take the round's result back off its record (the round's provisional filing is
+  // gone; it files again only when the round genuinely ends — and its ★, derived from the record's
+  // ids, goes out with it); (2) re-arm the clock with whatever the caller says is left. An 'answer' end passes Per Round its frozen stamp (the countdown continues WHERE IT
   // STOPPED) and Per Question a fresh qSec on the already-advanced next date (restoring the
   // pre-rewrite behaviour the Blitz mode-untangle dropped — original 7176a50 did exactly this);
   // a 'toggle' end passes the stamp CHARGED for the gap, in both sub-modes, because its live
   // card never left the screen and no fresh date was drawn.
   const resumeRound = (remain: number) => {
-    // Only a round that COUNTS (recordedRef) ever saved anything to take back: a practice round
-    // writes no Best, in either direction. What is taken back is THIS round's part of the record,
-    // and nothing anyone else has put there since (roundFloor).
-    // (Through store/screenPool: a press on a screen drawn for a copy that is no longer live takes
-    // nothing back from the one that is — that screen is about to be remounted anyway.)
-    const saved = recordedRef.current ? roundBests(dataId) : null
-    if (saved) {
-      const snap = (prevRoundBestRef.current = roundFloor(
-        prevRoundBestRef.current,
-        saved,
-        perQ,
-        allowMistakes,
-        roundId,
-      ))
-      if (!perQ)
-        fileRoundBest(dataId, 'blitzBest', (prev) => fileBest(prev, snap.blitzBk, snap.blitz))
-      else if (allowMistakes)
-        fileRoundBest(dataId, 'suddenAmBest', (prev) =>
-          fileBest(prev, snap.suddenBk, snap.suddenAm),
-        )
-      else fileRoundBest(dataId, 'suddenBest', (prev) => fileBest(prev, snap.suddenBk, snap.sudden))
-    }
+    // What is taken back is THIS round's result, and only it: the record falls to the best of every
+    // other round, whoever played it since. (Through store/screenPool: a press on a screen drawn for a
+    // copy that is no longer live takes nothing back from the one that is — that screen is about to be
+    // remounted anyway.)
+    fileResult(null)
     setActive(true)
     setTimerDone(false)
     setShowTimerDate(false)
@@ -680,9 +625,9 @@ function BlitzMode({
   //     it cannot be resumed into.
   // Nothing is remembered between presses: both halves are derived, every time, from the state and the
   // plan — which is what makes any number of presses on any cards land where the last one says. The
-  // Best records and their ★ need nothing here either: prevRoundBestRef is written only by Begin, the
-  // reconcile effect rebuilds every change from it, resumeRound reverts to it, and the ★ is read off
-  // the records' round ids — a restored round included, since it keeps its id.
+  // Best records and their ★ need nothing here either: the filing effect files the round's result as
+  // it now stands, resumeRound takes it back, and the ★ is read off the records' round ids — a
+  // restored round included, since it keeps its id.
   const onOverride = () => {
     const plan = eng.overridePlan
     if (!plan) return
@@ -816,24 +761,17 @@ function BlitzMode({
     },
   )
 
-  // Reconcile Best while a round is over — when it ends AND on every post-round Override that moves
-  // its stats. Each run REBUILDS the round's record from the pre-round one (engine/blitzBest): a
-  // field this round beats is tagged with this round; every other field is the pre-round value with
-  // its own holder — so an Override that raises a Best and its Undo that lowers it again land exactly
-  // where the record stood, ★ included (the ★ is read off the ids; nothing else to restore).
-  // ★ "THE PRE-ROUND RECORD" IS THE RECORD AS IT STANDS IN THE STORE, LESS THIS ROUND (roundFloor) —
-  // never the snapshot taken at Begin alone. A round restored after a reload used to rebuild from
-  // the snapshot it was parked with, and so wrote its own result over a better Best another tab had
-  // saved in between; read through the store, somebody else's record stands. Three-way
-  // by sub-mode (safe on live prefs — the toggles are idle-locked): per-round → blitzBest; per-Q +
-  // Allow Mistakes → suddenAmBest, the SAME BlitzBest shape + reconcile; per-Q sudden death →
-  // suddenBest (score only).
-  // ★ FILED UNDER THE ROUND'S OWN KEYS (prevRoundBestRef.blitzBk / suddenBk), never the live
-  // `blitzBk`/`suddenBk` — see prevRoundBestRef for why the two can differ while a round is ended. The
-  // live keys are therefore NOT deps: a setting changed mid-panel no longer re-files anything.
-  // ★ ONLY A ROUND THAT COUNTS WRITES (recordedRef): a round that first ended in practice mode (Save
+  // FILE THE ROUND'S RESULT while it is over — when it ends AND after every post-round Override that moves
+  // its stats: the round's own score and best streak (sudden death: its score), on the record of the
+  // sub-mode and set-up it was played under (roundRecordRef — never the live keys, which the ⚙ panel can
+  // move while the round sits ended). The record keeps every round's figures beside it
+  // (store/syncRecords), so an Override that raises the round's score takes a field only by beating
+  // every other round, and the one that lowers it again hands the field to the next best round —
+  // whoever played it, in whichever window, since — with nothing to remember here (the ★ is read off
+  // the records' ids).
+  // ★ ONLY A ROUND THAT COUNTS FILES (recordedRef): a round that first ended in practice mode (Save
   // Stats off) plays and tracks internally but records NO Best, whatever the setting or an Override
-  // does afterwards — and a recorded one keeps being reconciled whatever the setting does afterwards.
+  // does afterwards — and a recorded one keeps being filed whatever the setting does afterwards.
   // The verdict is taken here, ONCE, in the commit the round first ends in, from the Save Stats value
   // that commit rendered with; a round put back in play and ended again keeps the one it has.
   // ★ A LAYOUT EFFECT, AND THE PARK BELOW IS ONE TOO (Round 26, F1): both run INSIDE the commit the
@@ -841,34 +779,18 @@ function BlitzMode({
   // parked — and so no tap (an Amnesic change, a preset switch, Full Reset) can land between the two.
   // As passive effects they ran in a later task when the round ended on its clock (a frame callback,
   // not a tap), and a tap in that gap had already swapped the copy under them: a guest's score was
-  // filed as a permanent Best (tests/screenPool.gap.dom). Every write also names this screen's copy
+  // filed as a permanent Best (tests/screenPool.gap.dom). Every filing also names this screen's copy
   // to store/screenPool, which refuses it once that copy is not the live one — whatever the timing.
   useLayoutEffect(() => {
     if (!timerDone) return
     if (recordedRef.current === null) recordedRef.current = saveStats
-    if (!recordedRef.current) return
-    const saved = roundBests(dataId)
-    if (!saved) return
-    const pre = (prevRoundBestRef.current = roundFloor(
-      prevRoundBestRef.current,
-      saved,
-      perQ,
-      allowMistakes,
-      roundId,
-    ))
-    if (!perQ)
-      fileRoundBest(dataId, 'blitzBest', (prev) =>
-        fileBest(prev, pre.blitzBk, reconcileBlitzBest(pre.blitz, S.good, S.best, roundId)),
-      )
-    else if (allowMistakes)
-      fileRoundBest(dataId, 'suddenAmBest', (prev) =>
-        fileBest(prev, pre.suddenBk, reconcileBlitzBest(pre.suddenAm, S.good, S.best, roundId)),
-      )
-    else
-      fileRoundBest(dataId, 'suddenBest', (prev) =>
-        fileBest(prev, pre.suddenBk, reconcileSuddenBest(pre.sudden, S.good, roundId)),
-      )
-  }, [timerDone, saveStats, S.good, S.best, perQ, allowMistakes, roundId, dataId])
+    fileResult(
+      roundRecordRef.current.map === 'suddenBest'
+        ? { score: S.good }
+        : { score: S.good, streak: S.best },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerDone, saveStats, S.good, S.best, roundId, dataId])
 
   // Round 21 — mirror an ENDED round to sessionStorage, keyed by the bests copy this screen was
   // mounted on (`bestsId`), exactly as the effect above mirrors the round's Best to store/progress. On
@@ -879,10 +801,11 @@ function BlitzMode({
   //   • idle after a manual Reset / Begin / an Override that resumed the round → discard, the park
   //     is no longer the truth.
   // `state` is a dep so a post-round Override (which edits the ended round's engine state and
-  // re-runs the Best-reconcile effect above) re-parks the updated snapshot. `roundId` is a
-  // dep only because it is state read here; it and prevRoundBestRef are written only by begin() /
-  // resetRound(), which also flip active/timerDone, so they are already stable whenever timerDone is
-  // true (the ref needs no dep of its own). clockRemainRef needs none
+  // re-runs the filing effect above) re-parks the updated snapshot — and with it what that effect
+  // filed (filedRef, written in the same commit, before this runs). `roundId` is a dep only because it
+  // is state read here; it and roundRecordRef are written only by begin(), which also flips
+  // active/timerDone, so they are already stable whenever timerDone is true (the refs need no dep of
+  // their own). clockRemainRef needs none
   // either: every writer that can leave a round ended — endRound's stamp, the drain loop's final zero,
   // and Show Codes freezing a 'toggle' gap — writes it in the same commit that changes timerDone or
   // endKind, before this runs.
@@ -892,7 +815,7 @@ function BlitzMode({
   // rotation charged the restored round for every second the overlay was up. The release runs as that
   // effect's CLEANUP, and React runs every cleanup of a commit before any effect body, so this body —
   // re-run because `clockPaused` changed in the same commit — always parks the moved stamp. That holds
-  // only while the two share a PHASE: both are layout effects (the reconcile above says why this one
+  // only while the two share a PHASE: both are layout effects (the filing above says why this one
   // is), so the pause's cleanup still runs before this body.
   useLayoutEffect(() => {
     // (`endKind` is set by the same call that sets `timerDone` — settleEnded — so the two tests are
@@ -904,14 +827,15 @@ function BlitzMode({
         showTimerDate,
         active,
         currentRoundId: roundId,
-        prevRoundBest: prevRoundBestRef.current,
+        record: roundRecordRef.current,
+        filed: filedRef.current,
         config: roundConfigRef.current,
         remain: clockRemainRef.current,
         // WHY this round ended, and — for a 'toggle' end — the wall-clock instant it did, so the
         // charge for the gap keeps running across the switch instead of resetting to free.
         endKind,
         endedAt: endedAtRef.current,
-        // The round's verdict, taken by the reconcile effect above — which is declared first, so it
+        // The round's verdict, taken by the filing effect above — which is declared first, so it
         // has already run in the commit that first ended the round.
         recorded: recordedRef.current === true,
       } satisfies BlitzRoundSnapshot)
@@ -1009,7 +933,7 @@ function BlitzMode({
   // opening it leaves the round running, and closing it after changing a setting the round depends on
   // RESETS the round to idle rather than ending it — the useSettingsCloseEffect above.) So there is
   // no per-sub-mode branch to write here: one flag already means "this round is over" everywhere.
-  // It is also the flag the Best-reconcile effect gates on — a Blitz round that ends on a wrong in
+  // It is also the flag the result-filing effect gates on — a Blitz round that ends on a wrong in
   // sudden death still RECORDS its result, so it is a finished round, not an abandoned one. AoX
   // makes the same call from the other direction: its failed run records no Best, and since round
   // 22 its strip is STILL a result readout (its `isLocked` is done OR failed), because what an ended

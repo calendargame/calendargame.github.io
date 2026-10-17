@@ -16,7 +16,7 @@ import { App } from '../src/main.jsx'
 import { useSettings } from '../src/store/settings.js'
 import { useJulianRange } from '../src/store/julianRange.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
-import { useProgress } from '../src/store/progress.js'
+import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { useStorageHealth } from '../src/store/storageHealth.js'
 import { storageKeyFor } from './helpers/persistence.js'
 import { readDate, correctDayName, statValue } from './helpers/modeScreen.jsx'
@@ -147,15 +147,21 @@ describe('storage full — play goes on, and the player is told', () => {
     expect(useStorageHealth.getState().unsaved).toBe(false)
   })
 
-  // Two tabs. This one holds a save the device refused; the other tab then saves to the same place.
-  // The browser tells this page with a `storage` event, and the held save — an older one by now —
-  // is dropped instead of being written over the newer data at the next retry.
-  it("a save another tab made to the same place is not overwritten by this page's older, refused one", () => {
+  // Two tabs. This one holds a save the device refused; the other tab (an older build: no envelope)
+  // then saves to the same place. The held save is THIS PAGE'S ANSWER, not a text: it is neither
+  // dropped nor written blindly over theirs, but merged with what the device holds when there is room
+  // (store/syncedDoc, store/progressDoor) — so both tabs' answers are there.
+  it("a save another tab made to the same place is merged with this page's held one, never written over", () => {
     mountApp()
     fillStorageFor(progressKey)
     answerCorrect() // progress refused, and held
     expect(useStorageHealth.getState().unsaved).toBe(true)
-    const theirs = JSON.stringify({ state: { from: 'the other tab' }, version: 0 })
+    const defaults = makeProgressDefaults()
+    const flash = { played: 4, good: 4, streak: 4, best: 4, times: [1, 2, 3, 4] }
+    const theirs = JSON.stringify({
+      state: { ...defaults, stats: { ...defaults.stats, flash } },
+      version: 5,
+    })
     realSetItem.call(localStorage, progressKey, theirs) // the other tab's save lands on the device
     act(() => {
       window.dispatchEvent(
@@ -166,9 +172,12 @@ describe('storage full — play goes on, and the player is told', () => {
         }),
       )
     })
-    expect(useStorageHealth.getState().unsaved).toBe(false)
+    expect(useStorageHealth.getState().unsaved).toBe(true) // (still this page's to save)
     makeRoom()
-    act(() => useSettings.getState().setMinY(1600)) // a save that fits: every held value is retried
-    expect(localStorage.getItem(progressKey)).toBe(theirs)
+    act(() => useSettings.getState().setMinY(1600)) // a save that fits: every held save is retried
+    const saved = JSON.parse(localStorage.getItem(progressKey)).state.stats
+    expect(saved.classic.good).toBe(1) // this page's answer…
+    expect(saved.flash.good).toBe(4) // …and theirs
+    expect(useStorageHealth.getState().unsaved).toBe(false)
   })
 })

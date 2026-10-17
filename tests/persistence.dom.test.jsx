@@ -67,7 +67,16 @@ const { settings, modePrefs, progress, userDefaults } = LIVE_STORES
 const PLAYED = { played: 5, good: 3, streak: 2, best: 2, times: [1200, 900, 1500] }
 // An AoX record, and a Blitz one, under the key shapes the modes compose today.
 const AOX_KEY = '10|false|numeric-ymd|random|random|random|1583-10000|true'
-const AOX_REC = { avg: 1.5, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: 1.5, medRoundId: 1 }
+// (held by a run as this build numbers one: engine/roundId's clock)
+const RUN_ID = 1_800_000_000_000 * 1024
+const AOX_REC = {
+  avg: 1.5,
+  avgMed: 1.4,
+  avgRoundId: RUN_ID,
+  med: 1.4,
+  medAvg: 1.5,
+  medRoundId: RUN_ID,
+}
 
 // Seed a device that has been PLAYED ON — through the stores' own setters, because a payload the
 // app never wrote is not evidence about what the app saves. Lookup history is deliberately not
@@ -206,17 +215,23 @@ describe('an older save still opens', () => {
     // The 7-segment key an older release wrote (no Julian Chance dimension), and the live setting
     // the upgrade has to read to complete it.
     settings.getState().setJulianChance('always')
+    // (that release numbered its runs 1, 2, 3… on every screen load: this build reads such a number as
+    // that load's run, store/bestRecords - the record is the same, under a run id of its own)
+    const OLD_REC = { ...AOX_REC, avgRoundId: 1, medRoundId: 1 }
     seedSaved(
       progress,
       {
         ...progress.getState(),
-        aoxBest: { '10|false|numeric-ymd|random|random|1583-10000|true': AOX_REC },
+        aoxBest: { '10|false|numeric-ymd|random|random|1583-10000|true': OLD_REC },
       },
       1,
     )
     const fresh = await reopenApp()
     const best = fresh.progress.getState().aoxBest
-    expect(Object.values(best)).toEqual([AOX_REC]) // the record survived, exactly once
+    const [found] = Object.values(best)
+    expect(Object.values(best)).toHaveLength(1) // the record survived, exactly once
+    expect({ ...found, avgRoundId: 1, medRoundId: 1 }).toEqual(OLD_REC)
+    expect(found.avgRoundId).toBe(found.medRoundId) // one run holds both, as it did
     expect(Object.keys(best)[0]).toContain('always') // …completed with the live setting
   })
 

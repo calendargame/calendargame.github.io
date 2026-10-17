@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 //
 // progress.dom.test.js — the saved-progress store against REAL (jsdom) localStorage, end to end.
-// The VERSION-GATED migration (`migrate`) runs once per upgrade and only where a read cannot
-// reconstruct the information — today just the v1 → v2 aoxBest key rewrite. (The lookup-history
+// The VERSION-GATED migration (store/progress' migrateProgress) runs as a doc an older build saved is
+// read (until the next save writes it in today's shape), and only where a read cannot reconstruct the
+// information — the v1 → v2 aoxBest key rewrite and the v5 drop of empty Bests. (The lookup-history
 // screen this file used to also prove — an UNCONDITIONAL `merge` step, since every load reads the
 // same untrusted localStorage a stale one does — left with the field itself in round 20; it is
 // tests/lookupHistory.dom's claim now, against store/lookupHistory's own key.)
@@ -13,6 +14,27 @@ import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { useSettings } from '../src/store/settings.js'
 
 const rec = { avg: 1.5, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: 1.5, medRoundId: 1 }
+// ★ A BEST RECORD AS THE STORE SHOWS IT (store/bestRecords' toRec): a holder below the round clock's range
+// (a v2.26.0 counter) or none at all (a record saved before rounds had ids) is read as a SCOPED id - the
+// same in every window, never a live round's. `asShown` writes each such id as 'scoped'.
+const SCOPED_ROUND_ID = 2 ** 52
+const asShown = (v) =>
+  JSON.parse(JSON.stringify(v), (_, x) =>
+    typeof x === 'number' && x >= SCOPED_ROUND_ID ? 'scoped' : x,
+  )
+const recRead = { ...rec, avgRoundId: 'scoped', medRoundId: 'scoped' }
+// a round id as a new build draws it (engine/roundId: the clock's milliseconds x 1024)
+const CLOCK_ID = 1_800_000_000_000 * 1024
+const recNew = { ...rec, avgRoundId: CLOCK_ID, medRoundId: CLOCK_ID + 1 }
+// a map as the door wrote it, without the tags that name each record's values
+const untagged = (map) =>
+  Object.fromEntries(
+    Object.entries(map).map(([k, r]) => {
+      const { w, ...rest } = r
+      expect(typeof w, `${k} is tagged`).toBe('string')
+      return [k, rest]
+    }),
+  )
 
 describe('progress store — v1 envelope rehydrates through the migration', () => {
   beforeEach(() => {
@@ -47,9 +69,10 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     useSettings.getState().setJulianChance('always') // the live setting the migration must read
     await useProgress.persist.rehydrate()
     const s = useProgress.getState()
-    // The AoX record moved to the 8-segment key, with the live julianChance inserted.
-    expect(s.aoxBest).toEqual({
-      '10|false|numeric-ymd|random|random|always|1583-10000|true': rec,
+    // The AoX record moved to the 8-segment key, with the live julianChance inserted (its counter
+    // holders read as scoped ids).
+    expect(asShown(s.aoxBest)).toEqual({
+      '10|false|numeric-ymd|random|random|always|1583-10000|true': recRead,
     })
     // Everything else passed through untouched.
     expect(s.blitzBest['n60|numeric-ymd|random|random|random|1583-10000|true']?.score).toBe(4)
@@ -59,13 +82,13 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
   it('a current-version (v3) payload rehydrates unchanged — no migration re-fires', async () => {
     const newKey = '10|false|numeric-ymd|random|random|random|1583-10000|true'
     const v3 = {
-      state: { ...makeProgressDefaults(), aoxBest: { [newKey]: rec } },
+      state: { ...makeProgressDefaults(), aoxBest: { [newKey]: recNew } },
       version: 3,
     }
     localStorage.setItem('cg-progress-v1', JSON.stringify(v3))
     await useProgress.persist.rehydrate()
     const s = useProgress.getState()
-    expect(s.aoxBest).toEqual({ [newKey]: rec })
+    expect(s.aoxBest).toEqual({ [newKey]: recNew })
   })
 
   // ── lookupHistory LEFT THE SHAPE (round 20 — v3 → v4) ────────────────────────────────────
@@ -83,7 +106,7 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     const stale = {
       state: {
         ...makeProgressDefaults(),
-        aoxBest: { '10|false|numeric-ymd|random|random|random|1583-10000|true': rec },
+        aoxBest: { '10|false|numeric-ymd|random|random|random|1583-10000|true': recNew },
         // The pre-move shape, rendered fields and all — exactly what a device that last saved
         // before round 20 still has sitting in its 'cg-progress-v1' payload.
         lookupHistory: [
@@ -97,8 +120,9 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     const s = useProgress.getState()
     // Everything this store still owns is intact and unaffected by the stray field…
     expect(s.aoxBest).toEqual({
-      '10|false|numeric-ymd|random|random|random|1583-10000|true': rec,
+      '10|false|numeric-ymd|random|random|random|1583-10000|true': recNew,
     })
+    expect(s).not.toHaveProperty('lookupHistory')
     // …and the field itself is not part of the TYPED contract any more: ProgressState no longer
     // declares it, so no app code can read it back through useProgress — the only thing left to
     // assert is that reading it did not crash, which the resolves.not.toThrow() above already did.
@@ -107,6 +131,9 @@ describe('progress store — v1 envelope rehydrates through the migration', () =
     s.setAoxBest({})
     const saved = useProgress.persist.getOptions().partialize(useProgress.getState())
     expect(saved).not.toHaveProperty('lookupHistory')
+    expect(JSON.parse(localStorage.getItem('cg-progress-v1')).state).not.toHaveProperty(
+      'lookupHistory',
+    )
   })
 
   // The no-migration pin: suddenAmBest was ADDED as a fresh key space (v2 stayed v2). A payload
@@ -188,6 +215,21 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
     const times = Array.from({ length: Math.min(good, Math.floor(rnd() * 40)) }, () => rnd() * 9)
     return { played, good, streak, best, times }
   }
+  // A Best record as this build saves one: every value it holds has its round's id (a clock's) and its
+  // companion; a field that holds nothing has neither.
+  const randId = (rnd) => CLOCK_ID + Math.floor(rnd() * 2 ** 30)
+  const randScoreStreak = (rnd) => {
+    const score = 1 + Math.floor(rnd() * 50)
+    const streak = rnd() < 0.2 ? 0 : 1 + Math.floor(rnd() * 50)
+    return {
+      score,
+      scoreStreak: Math.floor(rnd() * 50),
+      scoreRoundId: randId(rnd),
+      streak,
+      streakScore: streak ? Math.floor(rnd() * 50) : null,
+      streakRoundId: streak ? randId(rnd) : null,
+    }
+  }
   const randKey = (rnd) =>
     `${2 + Math.floor(rnd() * 99)}|${rnd() < 0.5}|numeric-ymd|random|random|random|${1500 + Math.floor(rnd() * 100)}-${3000 + Math.floor(rnd() * 100)}|${rnd() < 0.5}`
 
@@ -205,29 +247,19 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
         blitzBest: Object.fromEntries(
           Array.from({ length: Math.floor(rnd() * 4) }, (_, i) => [
             randKey(rnd) + i,
-            {
-              score: Math.floor(rnd() * 50),
-              streak: Math.floor(rnd() * 50),
-              scoreRoundId: rnd() < 0.3 ? null : Math.floor(rnd() * 9),
-              streakRoundId: rnd() < 0.3 ? null : Math.floor(rnd() * 9),
-            },
+            randScoreStreak(rnd),
           ]),
         ),
         suddenBest: Object.fromEntries(
           Array.from({ length: Math.floor(rnd() * 3) }, (_, i) => [
             randKey(rnd) + i,
-            { score: Math.floor(rnd() * 50), roundId: rnd() < 0.3 ? null : Math.floor(rnd() * 9) },
+            { score: 1 + Math.floor(rnd() * 50), roundId: randId(rnd) },
           ]),
         ),
         suddenAmBest: Object.fromEntries(
           Array.from({ length: Math.floor(rnd() * 3) }, (_, i) => [
             randKey(rnd) + i,
-            {
-              score: Math.floor(rnd() * 50),
-              streak: Math.floor(rnd() * 50),
-              scoreRoundId: rnd() < 0.3 ? null : Math.floor(rnd() * 9),
-              streakRoundId: rnd() < 0.3 ? null : Math.floor(rnd() * 9),
-            },
+            randScoreStreak(rnd),
           ]),
         ),
         aoxBest: Object.fromEntries(
@@ -236,10 +268,10 @@ describe('progress store — save/rehydrate round-trip fuzz + corruption toleran
             {
               avg: rnd() * 9,
               avgMed: rnd() * 9,
-              avgRoundId: 1 + Math.floor(rnd() * 9),
+              avgRoundId: randId(rnd),
               med: rnd() * 9,
               medAvg: rnd() * 9,
-              medRoundId: 1 + Math.floor(rnd() * 9),
+              medRoundId: randId(rnd),
             },
           ]),
         ),
@@ -324,13 +356,18 @@ describe('progress store — v4 → v5 legacy baseline for saves the 1,000-cap t
       JSON.stringify({ state: { ...makeProgressDefaults(), stats }, version: 4 }),
     )
 
-  it('a trimmed silo (1,000 times, good > 1,000) gains timesLost = good − 1,000, and is re-saved at v5', async () => {
+  it('a trimmed silo (1,000 times, good > 1,000) gains timesLost = good − 1,000, and the next save is at v5', async () => {
     const trimmed = { played: 1600, good: 1500, streak: 3, best: 40, times: t1000 }
     seedV4({ ...makeProgressDefaults().stats, flash: trimmed })
+    const before = localStorage.getItem('cg-progress-v1')
     await useProgress.persist.rehydrate()
     const s = useProgress.getState()
     expect(s.stats.flash).toEqual({ ...trimmed, timesLost: 500 })
     expect(s.stats.classic).toEqual(makeProgressDefaults().stats.classic) // untouched silo
+    // (a load writes nothing - the windows-in-sync door's G7: the doc is saved in today's shape with
+    // the next change)
+    expect(localStorage.getItem('cg-progress-v1')).toBe(before)
+    s.setModeStats('classic', { played: 1, good: 1, streak: 1, best: 1, times: [1] })
     const saved = JSON.parse(localStorage.getItem('cg-progress-v1'))
     expect(saved.version).toBe(5)
     expect(saved.state.stats.flash.timesLost).toBe(500)
@@ -412,7 +449,7 @@ describe('progress store — v4 → v5 drops the empty Best records an older bui
       JSON.stringify({ state: { ...makeProgressDefaults(), ...bests }, version }),
     )
 
-  it('an all-null MoX record and zero Blitz records are gone after the load, and from the re-save', async () => {
+  it('an all-null MoX record and zero Blitz records are gone after the load, and from the next save', async () => {
     seed(
       {
         aoxBest: { emptied: emptyMox, kept: rec },
@@ -430,15 +467,24 @@ describe('progress store — v4 → v5 drops the empty Best records an older bui
       suddenBest: s.suddenBest,
     })
     const expected = {
-      aoxBest: { kept: rec },
-      blitzBest: { kept: realBlitz },
+      aoxBest: { kept: recRead },
+      blitzBest: {
+        kept: { ...realBlitz, scoreRoundId: 'scoped', scoreStreak: null, streakScore: null },
+      },
       suddenAmBest: {},
-      suddenBest: { kept: { score: 1, roundId: 2 } },
+      suddenBest: { kept: { score: 1, roundId: 'scoped' } },
     }
-    expect(bestsOf(useProgress.getState())).toEqual(expected)
+    const shown = bestsOf(useProgress.getState())
+    expect(asShown(shown)).toEqual(expected)
+    useProgress
+      .getState()
+      .setModeStats('classic', { played: 1, good: 1, streak: 1, best: 1, times: [1] })
     const saved = JSON.parse(localStorage.getItem('cg-progress-v1'))
     expect(saved.version).toBe(5)
-    expect(bestsOf(saved.state)).toEqual(expected)
+    // (saved as shown - the same scoped ids - each with the tag that names its values)
+    const savedBests = bestsOf(saved.state)
+    for (const map of Object.keys(savedBests)) savedBests[map] = untagged(savedBests[map])
+    expect(savedBests).toEqual(shown)
   })
 
   it('a save holding nothing else comes back equal to a brand-new one', async () => {
@@ -448,10 +494,17 @@ describe('progress store — v4 → v5 drops the empty Best records an older bui
     expect({ stats, blitzBest, suddenBest, suddenAmBest, aoxBest }).toEqual(makeProgressDefaults())
   })
 
-  it('a record with one metric, and anything this build cannot name, is left exactly as found', async () => {
+  it('a record with one metric is kept as found; an entry that is not a record is not shown, and goes with the next save', async () => {
     const half = { ...emptyMox, med: 2.5, medAvg: 2.6, medRoundId: 9 }
     seed({ aoxBest: { half, odd: 'not a record', none: null } }, 4)
     await useProgress.persist.rehydrate()
-    expect(useProgress.getState().aoxBest).toEqual({ half, odd: 'not a record', none: null })
+    expect(asShown(useProgress.getState().aoxBest)).toEqual({
+      half: { ...half, medRoundId: 'scoped' },
+    })
+    useProgress
+      .getState()
+      .setModeStats('classic', { played: 1, good: 1, streak: 1, best: 1, times: [1] })
+    const saved = JSON.parse(localStorage.getItem('cg-progress-v1'))
+    expect(untagged(saved.state.aoxBest)).toEqual(useProgress.getState().aoxBest)
   })
 })

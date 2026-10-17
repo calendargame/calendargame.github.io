@@ -3,8 +3,9 @@
 // The door refuses a write named with a copy of the data that is no longer live, which is what keeps
 // a screen drawn for one copy from writing into another (store/screenPool says why; tests/
 // screenPool.gap.dom is the race). It only works if nothing goes round it, so: the raw Best and stats
-// setters of store/progress, and store/sessionRound's write and discard of one round, are named in
-// code by these files and no others —
+// setters of store/progress, the windows-in-sync door a round's result is filed through
+// (PROGRESS_DOOR), and store/sessionRound's write and discard of one round, are named in code by these
+// files and no others —
 //   • store/progress (where the setters live), store/sessionRound (where the round slots live), and
 //     store/screenPool (the door);
 //   • src/main.tsx's crash forgetter, forgetCrashedRound: it acts for the app, not for a screen — a
@@ -22,12 +23,13 @@ const files = (dir) =>
     return statSync(p).isDirectory() ? files(p) : /\.(ts|tsx)$/.test(n) ? [p] : []
   })
 const RAW =
-  /\b(setModeStats|setBlitzBest|setSuddenBest|setSuddenAmBest|setAoxBest|writeSessionRound|discardSessionRound)\b/
+  /\b(setModeStats|setBlitzBest|setSuddenBest|setSuddenAmBest|setAoxBest|PROGRESS_DOOR|writeSessionRound|discardSessionRound)\b/
 const code = (line) => !/^\s*(\/\/|\*|\{\/\*)/.test(line)
 
 const ALLOWED = {
   'main.tsx': ['discardSessionRound'],
   'store/progress.ts': [
+    'PROGRESS_DOOR',
     'setAoxBest',
     'setBlitzBest',
     'setModeStats',
@@ -35,12 +37,9 @@ const ALLOWED = {
     'setSuddenBest',
   ],
   'store/screenPool.ts': [
+    'PROGRESS_DOOR',
     'discardSessionRound',
-    'setAoxBest',
-    'setBlitzBest',
     'setModeStats',
-    'setSuddenAmBest',
-    'setSuddenBest',
     'writeSessionRound',
   ],
   'store/sessionRound.ts': ['discardSessionRound', 'writeSessionRound'],

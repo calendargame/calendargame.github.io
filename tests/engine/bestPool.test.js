@@ -10,11 +10,9 @@ import {
   shownBlitzBest,
   shownSuddenBest,
 } from '../../src/engine/bestPool.js'
-import { reconcileBlitzBest, reconcileSuddenBest } from '../../src/engine/blitzBest.js'
-import { reconcileAoxBest } from '../../src/engine/aoxBest.js'
-import { fileBest } from '../../src/engine/bestMap.js'
-import { isNewBest } from '../../src/engine/roundId.js'
+import { isNewBest, SCOPED_ROUND_ID } from '../../src/engine/roundId.js'
 import { mulberry32 } from '../helpers/rng.js'
+import { roundMap, ROUND_ID } from '../helpers/roundScreen.js'
 
 // One pool: the in-effect key K (Julian off, every chance Random) and three keys the builds before
 // Round 26 filed the same set-up's rounds under (a Julian Chance that did nothing with Julian off).
@@ -48,7 +46,7 @@ describe('bestOfBlitz against the oracle', () => {
     const rnd = mulberry32(7)
     for (let trial = 0; trial < 300; trial++) {
       const keys = [K, ...SAME, FAULT, OTHER[0]]
-      let map = {}
+      const filed = roundMap('blitzBest')
       const rounds = []
       let id = 1000
       const n = 1 + Math.floor(rnd() * 25)
@@ -57,11 +55,11 @@ describe('bestOfBlitz against the oracle', () => {
         const good = Math.floor(rnd() * 6)
         const best = Math.min(good, Math.floor(rnd() * 6))
         id += 1 + Math.floor(rnd() * 3)
-        rounds.push({ key, id, good, best })
-        map = fileBest(map, key, reconcileBlitzBest(map[key], good, best, id))
+        rounds.push({ key, id: ROUND_ID(id), good, best })
+        filed.file(key, ROUND_ID(id), { score: good, streak: best })
       }
       const pool = rounds.filter((r) => r.key === K || SAME.includes(r.key))
-      const shown = shownBlitzBest(map, K)
+      const shown = shownBlitzBest(filed.map(), K)
       const scored = pool.filter((r) => r.good > 0 || r.best > 0)
       if (scored.length === 0) {
         expect(shown).toBe(undefined)
@@ -80,7 +78,22 @@ describe('bestOfBlitz against the oracle', () => {
       if (streakHolder) expect(shown.streakScore).toBe(streakHolder.good)
     }
   })
-  it('a tie goes to the lower holder id, null lowest — whichever record it is in', () => {
+  it('a tie goes to the earlier round: a lower clock id; an id that is not a clock’s before any; none first', () => {
+    const scoped = {
+      score: 9,
+      scoreStreak: 1,
+      scoreRoundId: SCOPED_ROUND_ID + 5,
+      streak: 2,
+      streakScore: 9,
+      streakRoundId: SCOPED_ROUND_ID + 5,
+    }
+    const clock = { ...scoped, scoreStreak: 2, scoreRoundId: 30, streakRoundId: 30 }
+    for (const order of [
+      [scoped, clock],
+      [clock, scoped],
+    ])
+      expect(bestOfBlitz(order)).toEqual(scoped)
+
     const a = {
       score: 9,
       scoreStreak: 4,
@@ -130,7 +143,7 @@ describe('bestOfAox against the oracle', () => {
     const kK = head(K)
     const keys = [K, ...SAME, FAULT].map(head)
     for (let trial = 0; trial < 300; trial++) {
-      let map = {}
+      const filed = roundMap('aoxBest')
       const runs = []
       let id = 5000
       const n = 1 + Math.floor(rnd() * 20)
@@ -139,27 +152,11 @@ describe('bestOfAox against the oracle', () => {
         const avg = (150 + Math.floor(rnd() * 20)) / 100
         const med = (150 + Math.floor(rnd() * 20)) / 100
         id += 1 + Math.floor(rnd() * 3)
-        runs.push({ key, id, avg, med })
-        map = fileBest(
-          map,
-          key,
-          reconcileAoxBest(
-            map[key] ?? {
-              avg: null,
-              avgMed: null,
-              avgRoundId: null,
-              med: null,
-              medAvg: null,
-              medRoundId: null,
-            },
-            avg,
-            med,
-            id,
-          ),
-        )
+        runs.push({ key, id: ROUND_ID(id), avg, med })
+        filed.file(key, ROUND_ID(id), { avg, med })
       }
       const pool = runs.filter((r) => r.key !== head(FAULT))
-      const shown = shownAoxBest(map, kK)
+      const shown = shownAoxBest(filed.map(), kK)
       if (pool.length === 0) {
         expect(shown).toBe(undefined)
         continue
@@ -202,15 +199,15 @@ describe('bestOfAox against the oracle', () => {
 
 describe('bestOfSudden', () => {
   it('the highest score, the earliest round on a tie', () => {
-    let map = {}
+    const filed = roundMap('suddenBest')
     for (const [key, good, id] of [
       [K, 4, 30],
       [SAME[0], 6, 31],
       [SAME[1], 6, 12],
       [FAULT, 9, 40],
     ])
-      map = fileBest(map, key, reconcileSuddenBest(map[key], good, id))
-    expect(shownSuddenBest(map, K)).toEqual({ score: 6, roundId: 12 })
+      filed.file(key, ROUND_ID(id), { score: good })
+    expect(shownSuddenBest(filed.map(), K)).toEqual({ score: 6, roundId: ROUND_ID(12) })
     expect(bestOfSudden([])).toBe(undefined)
   })
 })
@@ -225,16 +222,17 @@ describe('the door', () => {
       streakScore: 10,
       streakRoundId: 7,
     }
-    let map = { [SAME[1]]: legacy }
+    const filed = roundMap('blitzBest')
+    const mapNow = () => ({ [SAME[1]]: legacy, ...filed.map() })
     // A new round beats K's own (absent) record, but not the legacy one.
-    map = fileBest(map, K, reconcileBlitzBest(map[K], 8, 3, 900))
-    const shown = shownBlitzBest(map, K)
-    expect(map[K].score).toBe(8)
+    filed.file(K, ROUND_ID(900), { score: 8, streak: 3 })
+    const shown = shownBlitzBest(mapNow(), K)
+    expect(mapNow()[K].score).toBe(8)
     expect(shown.score).toBe(10)
-    expect(isNewBest(shown.scoreRoundId, 900)).toBe(false) // no ★: not the pool's Best
+    expect(isNewBest(shown.scoreRoundId, ROUND_ID(900))).toBe(false) // no ★: not the pool's Best
     // Only a round that beats the whole pool lights it.
-    map = fileBest(map, K, reconcileBlitzBest(map[K], 11, 2, 901))
-    expect(isNewBest(shownBlitzBest(map, K).scoreRoundId, 901)).toBe(true)
+    filed.file(K, ROUND_ID(901), { score: 11, streak: 2 })
+    expect(isNewBest(shownBlitzBest(mapNow(), K).scoreRoundId, ROUND_ID(901))).toBe(true)
   })
   it('the same map and key give the same answer object; a new map is read afresh', () => {
     const map = {

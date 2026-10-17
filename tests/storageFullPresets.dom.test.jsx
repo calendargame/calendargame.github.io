@@ -93,7 +93,7 @@ describe('a full device (one shared allowance)', () => {
     })
   })
 
-  // Preset 2 is the player's main preset (500 cards); preset 1 a small one (3), holding one more
+  // Preset 2 is the player's main preset (500 cards); preset 1 a small one (4), holding one more
   // answer the full device refused.
   function fillWithAnUnsavedAnswer() {
     const main = createPreset('Main practice')
@@ -101,10 +101,14 @@ describe('a full device (one shared allowance)', () => {
     switchPreset(main.id)
     useProgress.getState().setModeStats('classic', stats(500))
     switchPreset(1)
-    cap = used() // exactly full
+    // (an answer saved first: a save can be SMALLER than the one before it - the doc's envelope names
+    // only the modes that moved since the sync key it builds on, design-q1-q2.md 2.2, where a doc's
+    // first save names all five - and the refused one must need room)
     useProgress.getState().setModeStats('classic', stats(4))
+    cap = used() // exactly full
+    useProgress.getState().setModeStats('classic', stats(5))
     expect(useStorageHealth.getState().unsaved).toBe(true)
-    expect(savedClassic(1).played).toBe(3)
+    expect(savedClassic(1).played).toBe(4)
     return main
   }
 
@@ -114,7 +118,7 @@ describe('a full device (one shared allowance)', () => {
     expect(savedClassic(main.id).played).toBe(500)
     expect(liveClassic().played).toBe(500)
     switchPreset(1)
-    expect(liveClassic().played).toBe(4) // the refused answer is still there
+    expect(liveClassic().played).toBe(5) // the refused answer is still there
     expect(useStorageHealth.getState().unsaved).toBe(true)
   })
 
@@ -130,8 +134,8 @@ describe('a full device (one shared allowance)', () => {
   it('deleting ANOTHER preset makes room, and the unsaved answer is saved — to its own preset', () => {
     const main = fillWithAnUnsavedAnswer()
     deletePreset(main.id)
-    expect(savedClassic(1).played).toBe(4)
-    expect(liveClassic().played).toBe(4)
+    expect(savedClassic(1).played).toBe(5)
+    expect(liveClassic().played).toBe(5)
     expect(useStorageHealth.getState().unsaved).toBe(false)
   })
 

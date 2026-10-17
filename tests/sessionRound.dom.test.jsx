@@ -126,8 +126,9 @@ describe('a finished Blitz round survives a preset round-trip', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     act(() => fireEvent.keyDown(document, { key: 'Escape' }))
 
-    // The ended round was Reveal-ended, so Override is still on offer — it reads prevRoundBestRef,
-    // which must have come back with the snapshot. Resuming it must put the round live again, not throw.
+    // The ended round was Reveal-ended, so Override is still on offer — it takes the round's result back
+    // off the record it names, which must have come back with the snapshot. Resuming it must put the
+    // round live again, not throw.
     expect(isOffered(ctrl('Override'))).toBe(true)
     tap(ctrl('Override'))
     expect(ctrl('Reset')).toBeInTheDocument() // round live again
@@ -718,7 +719,7 @@ describe('a restored ended round keeps a better Best that another tab saved', ()
     act(loadTheirRecord)
     mountApp()
   }
-  const THEIR_ROUND = 987654321
+  const THEIR_ROUND = 1_700_000_000_000 * 1024 // (a round another tab of this build played, earlier)
 
   it('Blitz: the mount keeps it, an Override that resumes the round keeps it, and ending again keeps it', () => {
     mountApp()
@@ -741,7 +742,7 @@ describe('a restored ended round keeps a better Best that another tab saved', ()
     expect(statValue('Score')).toBe('2/3')
     expect(best()).toEqual(theirs) // …and it did not write its 2 over their 9
     tap(ctrl('Override')) // credits the revealed date and puts the round back in play
-    expect(best()).toEqual(theirs) // the revert takes back this round's part: none of it is here
+    expect(best()).toEqual(theirs) // the take-back takes this round's result: none of it is here
     tap(ctrl('Reveal')) // the round ends again, on 3/4
     expect(statValue('Score')).toBe('3/4')
     expect(best()).toEqual(theirs)

@@ -49,6 +49,7 @@ import { useModePrefs } from '../src/store/modePrefs.js'
 import { useSettings } from '../src/store/settings.js'
 import { useJulianRange } from '../src/store/julianRange.js'
 import { useLookupHistory } from '../src/store/lookupHistory.js'
+import { door } from '../src/store/syncedDoc.js'
 import {
   createPreset,
   renamePreset,
@@ -1901,7 +1902,11 @@ describe('the breakdown names what is saved at every size', () => {
   // app's own saves happen to be this round: on Chromium's limit a device holding only the app's own
   // keys sat 9 characters under 0.1% — the newest changelog entry's signature (cg-changelog-seen) is
   // most of it and grows with every entry — and Round 26's Julian-on Year Range key took it over.
+  // And on a device that has never been PLAYED on: not even the factory copy a Full Reset writes (the
+  // reset this file's cases start from — store/progressDoor's, with the bounds every window adopts).
   it('"<0.1%" is said "under 0.1%" on the ⚙ line, in the title, and in every row that shows it', () => {
+    localStorage.clear()
+    door.forget()
     freshPage(MAX_STORAGE_LIMIT)
     useLookupHistory.getState().setHistory([{ id: 'a', y: 2001, m: 1, d: 1 }])
     mountApp()

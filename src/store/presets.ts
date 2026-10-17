@@ -702,12 +702,13 @@ export type PresetDocSpec = Omit<CountsSpec, 'key' | 'gate'> & { base: string }
 export const presetDocSpec = (spec: PresetDocSpec): CountsSpec => ({
   ...spec,
   key: () => presetKey(spec.base, usePresets.getState().activeId),
-  gate: (key) => {
-    const id = presetIdOfSuffix(key.slice(spec.base.length))
-    const order = REGISTRY_DOOR.mergeNow()?.order
-    return id !== null && Array.isArray(order) && order.includes(id)
-  },
+  gate: (key) => presetListed(presetIdOfSuffix(key.slice(spec.base.length))),
 })
+/** Is preset `id` in the preset list, as this window merges it with the device first (8.2's gate)? */
+export const presetListed = (id: number | null): boolean => {
+  const order = REGISTRY_DOOR.mergeNow()?.order
+  return id !== null && Array.isArray(order) && order.includes(id)
+}
 export const presetDoc = <S>(spec: PresetDocSpec): CountsStorage<S> =>
   door.countsStorage<S>(presetDocSpec(spec))
 

@@ -4,10 +4,9 @@
 // record under its in-effect key, plus every record filed for the same dates under stored values
 // before Round 26. So a set-up's own record, `map[key]`, can be LOWER than its Best — and any code that
 // reads it as "the Best" is wrong (it would show, sync, withdraw, or compare the wrong number). The
-// display reads go through engine/bestPool's door; the only direct reads allowed are the FLOORS — the
-// record a round or run rebuilds its own record from when it writes — which must be the key's own
-// record, never the pool's (a legacy record is never written, so it can never be a floor).
-// A new direct read fails here until it is added below with the reason it is not a display.
+// display reads go through engine/bestPool's door, and nothing else in src/ reads a record by its key: a
+// round's result is filed as the round's own figures, never rebuilt from a record. A new direct read
+// fails here until it is added below with the reason it is not a display.
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -22,25 +21,10 @@ const MAPS = '(?:bests|aoxBest|blitzBest|suddenBest|suddenAmBest)'
 const INDEXED = new RegExp(`\\b${MAPS}\\[`)
 const SUBSCRIBED = new RegExp(`useProgress\\(\\(s\\) => s\\.${MAPS}\\)`)
 
-// file → the trimmed source lines allowed to index a Best map, each a floor (a write path).
-const FLOORS = {
-  'modes/AoxMode.tsx': [
-    // the reconcile's floor: the run's own key's record as it stands, less this run
-    'const floor = aoxBestWithoutRun(preRunBestRef.current, saved.aoxBest[run.bestKey], runId)',
-    // Begin's snapshot of the record the run will rebuild from
-    'preRunBestRef.current = bests[bestKey] // the floor its Best is rebuilt from',
-  ],
-  'modes/BlitzMode.tsx': [
-    // roundFloor: the round's own keys' records as they stand, less this round
-    'blitz: blitzBestWithoutRound(snap.blitz, saved.blitzBest[snap.blitzBk], roundId),',
-    'suddenAm: blitzBestWithoutRound(snap.suddenAm, saved.suddenAmBest[snap.suddenBk], roundId),',
-    'sudden: suddenBestWithoutRound(snap.sudden, saved.suddenBest[snap.suddenBk], roundId),',
-    // Begin's snapshot of the records the round will rebuild from
-    'blitz: blitzBest[blitzBk],',
-    'sudden: suddenBest[suddenBk],',
-    'suddenAm: suddenAmBest[suddenBk],',
-  ],
-}
+// file → the trimmed source lines allowed to index a Best map. NONE now: a round or run files its own
+// figures on its record (store/screenPool's fileRoundResult) and reads no record to do it - the floors
+// these lines once named are gone with the reconciles that rebuilt a record from them.
+const FLOORS = {}
 
 const sources = files(SRC).map((p) => ({
   file: relative(SRC, p).replace(/\\/g, '/'),

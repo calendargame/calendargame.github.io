@@ -46,12 +46,12 @@ import {
   bestsIdOf,
   keepsLookups,
   discardSessionStats,
-  discardParkedStats,
 } from '../src/store/amnesic.js'
 import { amnesicModeOf, commitSessionAmnesic } from '../src/store/sessionAmnesic.js'
 import { openBrowsingSession } from '../src/store/browsingSession.js'
 import { AMNESIC_MODES } from '../src/store/amnesicMode.js'
 import { seedSealed } from './helpers/progressWorld.js'
+import { otherWindow } from './helpers/otherWindow.js'
 import { loadPage, closeApp } from './helpers/pageLoad.js'
 import {
   createPreset,
@@ -103,11 +103,20 @@ const keptCopies = (presetId = 1) =>
     ]),
   )
 const BESTS = ['blitzBest', 'suddenBest', 'suddenAmBest', 'aoxBest']
-// The permanent copy WITH ITS BESTS TAKEN OUT, as text — what Stats Only may never change. And, as
-// the stronger form of the same claim, the stats exactly as they are spelled inside the stored text.
+// The Bests' own key beside the doc (store/progressDoc: the records' key of the windows-in-sync door) -
+// part of the Bests, so Stats Only may write it.
+const recordsKey = (presetId = 1) => `cg-sync-v1|${statsKey(presetId)}|rec`
+// The permanent copy WITH ITS BESTS TAKEN OUT, as text — what Stats Only may never change: its four
+// Best maps and the records' part of its envelope set aside. And, as the stronger form of the same
+// claim, the stats exactly as they are spelled inside the stored text.
 const parkedMinusBests = (presetId = 1) => {
   const envelope = JSON.parse(parked(presetId))
   for (const key of BESTS) delete envelope.state[key]
+  if (envelope.sync) {
+    delete envelope.sync.rec
+    // (an envelope that held only the records' part was the Bests' own)
+    if (!Object.keys(envelope.sync).length) delete envelope.sync
+  }
   return JSON.stringify(envelope)
 }
 const parkedStatsText = (presetId = 1) => {
@@ -116,8 +125,24 @@ const parkedStatsText = (presetId = 1) => {
   expect(text).toContain(stats) // the stored text spells its stats exactly this way
   return stats
 }
+// A stored state as the app's values: each record without the tag that names its values (`w`), each
+// mode's stats without the door's tag and write mark (`w`, `wl`) - store/progressDoc.
+const valuesOf = (state) => {
+  const out = { ...state }
+  if (state.stats)
+    out.stats = Object.fromEntries(
+      Object.entries(state.stats).map(([k, { w: _w, wl: _wl, ...v }]) => [k, v]),
+    )
+  for (const key of BESTS)
+    if (state[key])
+      out[key] = Object.fromEntries(
+        Object.entries(state[key]).map(([k, { w: _w, ...rec }]) => [k, rec]),
+      )
+  return out
+}
+const parkedState = (presetId = 1) => valuesOf(JSON.parse(parked(presetId)).state)
 const parkedBests = (presetId = 1) => {
-  const { state } = JSON.parse(parked(presetId))
+  const state = parkedState(presetId)
   return Object.fromEntries(BESTS.map((key) => [key, state[key]]))
 }
 // Everything on the device, every key — for "not one permanent byte moved".
@@ -136,20 +161,29 @@ const statsOf = (n) => ({
   classic: { played: n, good: n, streak: n, best: n, times: [900, 1100] },
   flash: { played: 2, good: 1, streak: 0, best: 1, times: [1500] },
 })
+// (a round id as this build draws one: engine/roundId's clock - the round that set each record)
+const ROUND = 1_800_000_000_000 * 1024
 const BLITZ_REC = (n) => ({
   score: n,
   scoreStreak: n,
-  scoreRoundId: 1,
+  scoreRoundId: ROUND + n,
   streak: n,
   streakScore: n,
-  streakRoundId: 1,
+  streakRoundId: ROUND + n,
 })
 const bestsOf = (n) => ({
   blitzBest: { '60|false': BLITZ_REC(n) },
-  suddenBest: { '10|false': { score: n, roundId: 1 } },
+  suddenBest: { '10|false': { score: n, roundId: ROUND + n } },
   suddenAmBest: { '10|true': BLITZ_REC(n) },
   aoxBest: {
-    [AOX_KEY]: { avg: n, avgMed: 1.4, avgRoundId: 1, med: 1.4, medAvg: n, medRoundId: 1 },
+    [AOX_KEY]: {
+      avg: n,
+      avgMed: 1.4,
+      avgRoundId: ROUND + n,
+      med: 1.4,
+      medAvg: n,
+      medRoundId: ROUND + n,
+    },
   },
 })
 function recordStats(n) {
@@ -227,10 +261,12 @@ describe('Full: an amnesic preset never writes its saved progress down', () => {
     expect(parked()).not.toBeNull() // else the comparison below would be vacuous
 
     setAmnesic('full')
-    // Everything the app can do to saved progress, in one go: play, set a new best, and the most
-    // destructive write there is.
+    // Everything a session can do to saved progress, in one go: play, set a new best, wipe it all in
+    // the session, and play again. (Full Reset is the one deliberate exception - it writes the
+    // factory copy whatever the value; its own cases are below.)
     recordEverything(99)
-    useProgress.getState().resetProgress()
+    useProgress.getState().setModeStats('classic', ZERO.stats.classic)
+    for (const key of BESTS) useProgress.setState({ [key]: {} })
     recordEverything(1234)
     relaunch()
 
@@ -495,7 +531,7 @@ describe('Stats Only: the stats are the session’s, the Bests are the permanent
     const others = () =>
       JSON.stringify(
         Object.entries({ ...localStorage })
-          .filter(([k]) => k !== statsKey(1))
+          .filter(([k]) => k !== statsKey(1) && k !== recordsKey(1))
           .sort(),
       )
     const [otherKeys, minusBests, statsText] = [others(), parkedMinusBests(), parkedStatsText()]
@@ -618,11 +654,11 @@ describe('Stats Only: the stats are the session’s, the Bests are the permanent
     relaunch()
     expect(liveBests()).toEqual(bestsOf(7)) // not blanked by the failed load…
     expect(useProgress.getState().stats).toEqual(ZERO.stats)
-    useProgress.getState().setSuddenBest({ '10|false': { score: 8, roundId: 2 } })
+    useProgress.getState().setSuddenBest({ '10|false': { score: 8, roundId: ROUND + 8 } })
     // …so the next Best is added to the records, never written over them.
     expect(parkedBests()).toEqual({
       ...bestsOf(7),
-      suddenBest: { '10|false': { score: 8, roundId: 2 } },
+      suddenBest: { '10|false': { score: 8, roundId: ROUND + 8 } },
     })
   })
 
@@ -677,201 +713,236 @@ describe('Stats Only: the stats are the session’s, the Bests are the permanent
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// THE SIX CHANGES. One rule covers them all — the session's copy is discarded, then everything is
-// read again — and this is that rule checked pair by pair, on what is on screen (the store) and on
-// what is on the device.
-// ★ THE PERMANENT COPY HAS OTHER WRITERS. Another tab on Off (the live site beside the staging
-// one: two tabs of one origin) saves the WHOLE copy on every answer, from the Best maps it loaded.
-// What this page does about a record of its own that the copy no longer agrees with:
-//   • the copy holds a DIFFERENT record for that set-up → the better of the two is kept, by the
-//     mode's own ordering, whoever saved last;
-//   • the copy holds NO record there → it was reset (there, by a Full Reset there, by the preset
-//     being deleted there), and it is not brought back.
-describe('Stats Only: this page’s Bests and another tab’s saves of the permanent copy', () => {
+// ★ THE PERMANENT COPY HAS OTHER WRITERS. An OLDER build's tab on Off (the live site beside the staging
+// one: two tabs of one origin) saves the WHOLE copy on every answer, from the Best maps it loaded, with
+// no envelope. The Bests go through the windows-in-sync door's records merge (store/syncRecords;
+// design-q1-q2.md v4, 4.1), which reads such a save's records as LITERALS, and the newest version of
+// each record rides in the records' key beside the doc - so what every new window shows (this one, and
+// any opened after) is the merged record:
+//   • the copy holds an OLDER COPY of a record (a stale save) → the newer version stands;
+//   • it holds a DIFFERENT round's record → the better, field by field, by the mode's own ordering;
+//   • it holds NO record there → the older tab took ITS OWN round back (an Override there: the only
+//     way an older build removes one record, engine/bestMap's fileBest in v2.27.0-v2.29.x), and it is
+//     not brought back; a record a NEW window's round holds is not the older tab's to take back, and
+//     stays (design 4.1: an absent record is a literal with every field empty). An older build's
+//     Full Reset - the one way it removes every record - is a change every window adopts.
+// And a Stats Only page never writes the stats of that copy: they are the older tab's, byte for byte.
+describe('Stats Only: this page’s Bests and an older tab’s saves of the permanent copy', () => {
   const KEY = 'cg-progress-v1'
   const REC = (score) => ({
     score,
     scoreStreak: score,
-    scoreRoundId: score,
+    scoreRoundId: ROUND + score,
     streak: score,
     streakScore: score,
-    streakRoundId: score,
+    streakRoundId: ROUND + score,
   })
-  const onDevice = (key = KEY) => JSON.parse(localStorage.getItem(key)).state
+  const shown = (map = 'blitzBest') => useProgress.getState()[map]
   const answer = (n) =>
     useProgress.getState().setModeStats('classic', { ...ZERO.stats.classic, played: n, good: n })
-  // What another tab's save looks like from here: the text is on the device, and the browser says so.
-  const otherTab = (key, text) => {
-    if (text === null) localStorage.removeItem(key)
-    else localStorage.setItem(key, text)
-    window.dispatchEvent(
-      new StorageEvent('storage', { key, newValue: text, storageArea: localStorage }),
-    )
+  let older
+  // The older tab saves the copy AS IT LOADED IT (`from`), with one more answer of its own and whatever
+  // it did to the Bests - and this window hears of it. Returns the stats it saved.
+  const olderTabSaves = (from, edit = (state) => state) => {
+    let stats
+    older.olderSave(KEY, () => {
+      const state = JSON.parse(from).state
+      state.stats.classic.played += 1
+      stats = edit(state).stats
+      return state
+    })
+    older.deliver()
+    return stats
   }
-  // The other tab saves: the copy AS IT LOADED IT (`loaded`), with one more answer of its own and
-  // whatever it did to the Bests.
-  const otherTabSaves = (loaded, bests = {}) => {
-    const copy = JSON.parse(loaded)
-    copy.state.stats.classic.played += 1
-    copy.state.blitzBest = { ...copy.state.blitzBest, ...bests }
-    otherTab(KEY, JSON.stringify(copy))
-    return copy.state.stats
+  const withBlitz = (bests) => (state) => {
+    state.blitzBest = { ...state.blitzBest, ...bests }
+    return state
+  }
+  // What a window opened now reads: the store read afresh from the device.
+  const aNewWindowShows = (map = 'blitzBest') => {
+    relaunch()
+    return shown(map)
   }
   let loaded
   beforeEach(() => {
     resetAppState()
+    vi.useFakeTimers()
+    older = otherWindow()
     recordEverything(7)
     useProgress.getState().setBlitzBest({ old: REC(4) })
     loaded = parked() // …what both tabs loaded
     setAmnesic('stats')
     // This page's Bests: one for a set-up that had none, and a better one where a record stood.
     useProgress.getState().setBlitzBest((b) => ({ ...b, mine: REC(9), old: REC(8) }))
-    expect(onDevice().blitzBest).toEqual({ old: REC(8), mine: REC(9) })
+    expect(parkedBests().blitzBest).toEqual({ old: REC(8), mine: REC(9) })
   })
+  afterEach(() => vi.useRealTimers())
 
-  it('a save that never knew of a better record puts the older one back — and this page’s next answer keeps the better', () => {
-    const theirStats = otherTabSaves(loaded)
-    expect(onDevice().blitzBest.old).toEqual(REC(4)) // put back…
-    answer(1) // …until this page next saves anything at all
-    expect(onDevice().blitzBest.old).toEqual(REC(8))
-    expect(onDevice().stats).toEqual(theirStats) // the other tab's answer is untouched
+  it('a save that never knew of the better record does not take it back — and the older tab’s stats are untouched', () => {
+    const theirStats = olderTabSaves(loaded)
+    expect(shown().old).toEqual(REC(8))
+    answer(1)
+    expect(aNewWindowShows().old).toEqual(REC(8))
+    expect(JSON.parse(parked()).state.stats).toEqual(theirStats)
   })
 
   it('the other tab’s own new Best is kept beside it', () => {
-    otherTabSaves(loaded, { theirs: REC(6) })
-    answer(1)
-    expect(onDevice().blitzBest).toMatchObject({ old: REC(8), theirs: REC(6) })
+    olderTabSaves(loaded, withBlitz({ theirs: REC(6) }))
+    expect(shown()).toEqual({ old: REC(8), mine: REC(9), theirs: REC(6) })
+    expect(aNewWindowShows()).toEqual({ old: REC(8), mine: REC(9), theirs: REC(6) })
   })
 
-  // "Theirs stands" used to be the rule whenever the copy held anything but what this page loaded:
-  // a worse record saved later replaced this page's better one for good at its next reload.
   it('a WORSE record the other tab saved later does not replace this page’s — the better is kept', () => {
-    otherTabSaves(loaded, { old: REC(6) })
-    answer(1)
-    expect(onDevice().blitzBest.old).toEqual(REC(8))
+    olderTabSaves(loaded, withBlitz({ old: REC(6) }))
+    expect(shown().old).toEqual(REC(8))
+    expect(aNewWindowShows().old).toEqual(REC(8))
   })
 
   it('…field by field: each of the two records keeps what it is better at', () => {
-    // The other tab's record is an OLDER BUILD's — no companions — so the field it wins has none.
-    otherTabSaves(loaded, { old: { score: 12, streak: 5, scoreRoundId: 77, streakRoundId: 77 } })
-    answer(1)
-    expect(onDevice().blitzBest.old).toEqual({
+    // The other tab's record is an OLDER BUILD's round — no companions — so the field it wins has none.
+    olderTabSaves(
+      loaded,
+      withBlitz({
+        old: { score: 12, streak: 5, scoreRoundId: ROUND + 77, streakRoundId: ROUND + 77 },
+      }),
+    )
+    const both = {
       score: 12,
       scoreStreak: null,
-      scoreRoundId: 77,
+      scoreRoundId: ROUND + 77,
       streak: 8,
       streakScore: 8,
-      streakRoundId: 8,
-    })
+      streakRoundId: ROUND + 8,
+    }
+    expect(shown().old).toEqual(both)
+    expect(aNewWindowShows().old).toEqual(both)
   })
 
   // ★ ROUND 26 (Q10, review finding F5): A COMPANION MOVED BY AN OVERRIDE, AND A STALE SAVE IN
   // BETWEEN. This page's record for a round changes only its companion (an Override after the round
-  // ended raised that round's score; its Best Streak did not move), then another tab saves the copy
+  // ended raised that round's score; its Best Streak did not move), then the older tab saves the copy
   // it loaded BEFORE that — the old companion is back on the device, under the same holder and the
-  // same streak. This page's next save must put its own back: the two records are the same round
-  // seen twice, and this page's is the later sighting.
+  // same streak. The two records are the same round seen twice, and this page's is the later sighting.
   it('★ a companion this page moved is not lost to a stale save of the same round', () => {
-    const before = localStorage.getItem(KEY) // a copy holding old: REC(8), as a second tab loads it
+    const before = parked() // a copy holding old: REC(8), as the older tab loads it
     useProgress.getState().setBlitzBest((b) => ({ ...b, old: { ...REC(8), streakScore: 9 } }))
-    expect(onDevice().blitzBest.old.streakScore).toBe(9)
-    otherTab(KEY, before) // the other tab saves what it loaded
-    expect(onDevice().blitzBest.old.streakScore).toBe(8)
-    answer(1)
-    expect(onDevice().blitzBest.old).toEqual({ ...REC(8), streakScore: 9 })
+    expect(parkedBests().blitzBest.old.streakScore).toBe(9)
+    olderTabSaves(before)
+    expect(shown().old).toEqual({ ...REC(8), streakScore: 9 })
+    expect(aNewWindowShows().old).toEqual({ ...REC(8), streakScore: 9 })
   })
   it('★ …and the same for MoX: a run’s companion stat this page moved survives a stale save', () => {
     // Run 5 holds Best Mean; run 6 holds Best Median. An Override moves run 5's median, not its mean.
-    const RUN = { avg: 3.5, avgMed: 3.4, avgRoundId: 5, med: 3, medAvg: 3.6, medRoundId: 6 }
+    const RUN = {
+      avg: 3.5,
+      avgMed: 3.4,
+      avgRoundId: ROUND + 5,
+      med: 3,
+      medAvg: 3.6,
+      medRoundId: ROUND + 6,
+    }
     useProgress.getState().setAoxBest({ k: RUN })
-    const before = localStorage.getItem(KEY)
+    const before = parked()
     useProgress.getState().setAoxBest({ k: { ...RUN, avgMed: 3.3 } })
-    otherTab(KEY, before)
-    answer(1)
-    expect(onDevice().aoxBest.k).toEqual({ ...RUN, avgMed: 3.3 })
+    olderTabSaves(before)
+    expect(shown('aoxBest').k).toEqual({ ...RUN, avgMed: 3.3 })
+    expect(aNewWindowShows('aoxBest').k).toEqual({ ...RUN, avgMed: 3.3 })
   })
 
   it('a BETTER record the other tab saved stands — until this page beats it again', () => {
-    otherTabSaves(loaded, { old: REC(11) })
-    answer(1)
-    expect(onDevice().blitzBest.old).toEqual(REC(11))
+    olderTabSaves(loaded, withBlitz({ old: REC(11) }))
+    expect(shown().old).toEqual(REC(11))
     useProgress.getState().setBlitzBest((b) => ({ ...b, old: REC(12) }))
-    expect(onDevice().blitzBest.old).toEqual(REC(12)) // and now this page's is
+    expect(parkedBests().blitzBest.old).toEqual(REC(12)) // and now this page's is, on the device
+    expect(aNewWindowShows().old).toEqual(REC(12))
   })
 
   it('each Best map by its own ordering: a MoX record is better when it is FASTER', () => {
     const RUN = (t, id) => ({
       avg: t,
       avgMed: t,
-      avgRoundId: id,
+      avgRoundId: ROUND + id,
       med: t,
       medAvg: t,
-      medRoundId: id,
+      medRoundId: ROUND + id,
     })
     useProgress.getState().setAoxBest({ k: RUN(3.5, 1) })
-    const mine = localStorage.getItem(KEY)
-    const slower = JSON.parse(mine)
-    slower.state.aoxBest.k = RUN(4.25, 2)
-    otherTab(KEY, JSON.stringify(slower))
+    const mine = parked()
+    olderTabSaves(mine, (state) => {
+      state.aoxBest.k = RUN(4.25, 2)
+      return state
+    })
+    expect(shown('aoxBest').k).toEqual(RUN(3.5, 1))
+    olderTabSaves(mine, (state) => {
+      state.aoxBest.k = RUN(2.75, 3)
+      return state
+    })
+    expect(shown('aoxBest').k).toEqual(RUN(2.75, 3))
+    expect(aNewWindowShows('aoxBest').k).toEqual(RUN(2.75, 3))
+  })
+
+  // ── A record that is GONE was taken back: it is not brought back ────────────────────────────
+  it('the older tab’s take-back of its own round is not brought back by this page’s next answer', () => {
+    olderTabSaves(loaded, withBlitz({ theirs: REC(6) })) // its round set a first record there…
+    expect(shown().theirs).toEqual(REC(6))
+    olderTabSaves(loaded) // …and an Override there took that round back
+    expect(Object.keys(shown()).sort()).toEqual(['mine', 'old'])
     answer(1)
-    expect(onDevice().aoxBest.k).toEqual(RUN(3.5, 1))
-    const quicker = JSON.parse(mine)
-    quicker.state.aoxBest.k = RUN(2.75, 3)
-    otherTab(KEY, JSON.stringify(quicker))
+    expect(Object.keys(aNewWindowShows()).sort()).toEqual(['mine', 'old'])
+  })
+
+  it('…until a round sets a new one there, which is saved like any other', () => {
+    olderTabSaves(loaded, withBlitz({ theirs: REC(6) }))
+    olderTabSaves(loaded)
+    useProgress.getState().setBlitzBest((b) => ({ ...b, theirs: REC(10) }))
+    expect(parkedBests().blitzBest.theirs).toEqual(REC(10))
+    expect(aNewWindowShows().theirs).toEqual(REC(10))
+  })
+
+  it('a record a new window’s round holds is not taken back by an older save that lacks it', () => {
+    olderTabSaves(parked(), (state) => {
+      delete state.blitzBest.mine // a round the older tab never played: it cannot take it back
+      return state
+    })
+    expect(shown().mine).toEqual(REC(9))
+    expect(aNewWindowShows().mine).toEqual(REC(9))
+  })
+
+  // An older build's Full Reset in a preset on Stats Only or Full (v2.28.0-v2.29.x) removes the
+  // permanent copy. It is a change like a Full Reset here: every Best is gone - here, in any window
+  // opened after, and on the device - and nothing of the copy comes back.
+  it('a Full Reset in the older tab is not undone: nothing of the copy comes back', () => {
+    older.write(KEY, null)
+    older.deliver()
+    expect(liveBests()).toEqual(NO_BESTS)
+    answer(1)
     answer(2)
-    expect(onDevice().aoxBest.k).toEqual(RUN(2.75, 3))
-  })
-
-  it('a record the copy cannot be read as is left exactly as it is', () => {
-    otherTabSaves(loaded, { old: 'not a record' })
-    answer(1)
-    expect(onDevice().blitzBest.old).toBe('not a record')
-  })
-
-  // ── A record that is GONE was reset: it is not brought back ─────────────────────────────────
-  it('a Best another tab RESET is not brought back by this page’s next answer', () => {
-    const theirs = JSON.parse(localStorage.getItem(KEY)) // it loaded the copy with this page's Bests
-    delete theirs.state.blitzBest.mine
-    otherTab(KEY, JSON.stringify(theirs)) // …and the player reset that one there
-    answer(1)
-    expect(Object.keys(onDevice().blitzBest)).toEqual(['old'])
-    // …nor does it come back over a lower record earned there afterwards.
-    theirs.state.blitzBest.mine = REC(2)
-    otherTab(KEY, JSON.stringify(theirs))
-    answer(2)
-    expect(onDevice().blitzBest.mine).toEqual(REC(2))
-  })
-
-  it('…until this page sets a new one, which is saved like any other', () => {
-    const theirs = JSON.parse(localStorage.getItem(KEY))
-    delete theirs.state.blitzBest.mine
-    otherTab(KEY, JSON.stringify(theirs))
-    answer(1)
-    useProgress.getState().setBlitzBest((b) => ({ ...b, mine: REC(10) }))
-    expect(onDevice().blitzBest.mine).toEqual(REC(10))
-  })
-
-  it('a Full Reset in another tab is not undone: the main key is not created again', () => {
-    otherTab(KEY, null)
-    answer(1)
-    answer(2)
-    expect(localStorage.getItem(KEY)).toBeNull()
+    expect(aNewWindowShows()).toEqual({})
+    expect(liveBests()).toEqual(NO_BESTS)
+    // (a Stats Only window writes the Bests' half of that change - the copy it writes holds no stats:
+    // read by any build, they are the factory's)
+    expect(JSON.parse(localStorage.getItem(KEY)).state.stats).toBeUndefined()
+    expect(parkedBests()).toEqual(NO_BESTS)
+    // …and back on Off, the stats are the factory's too: the reset is not undone there either.
+    setAmnesic('off')
+    expect(liveProgress()).toEqual(ZERO)
   })
 
   it('a preset another tab DELETED gets no key back — not even for a Best set this minute', () => {
     setAmnesic('off')
     const two = createPreset('two')
-    switchPreset(two.id)
+    act(() => switchPreset(two.id))
     const KEY2 = `${KEY}~p${two.id}`
     setAmnesic('stats')
     useProgress.getState().setBlitzBest({ mine: REC(9) })
-    expect(onDevice(KEY2).blitzBest).toEqual({ mine: REC(9) })
+    expect(parkedBests(two.id).blitzBest).toEqual({ mine: REC(9) })
     // The other tab deletes the preset: its keys go, and the registry no longer lists it.
     const registry = JSON.parse(localStorage.getItem('cg-presets-v1'))
     registry.state.presets = registry.state.presets.filter((preset) => preset.id !== two.id)
     registry.state.activeId = 1
-    otherTab(KEY2, null)
-    otherTab('cg-presets-v1', JSON.stringify(registry))
+    older.write(KEY2, null)
+    older.write('cg-presets-v1', JSON.stringify(registry))
+    older.deliver()
     answer(1)
     expect(localStorage.getItem(KEY2)).toBeNull()
     useProgress.getState().setBlitzBest((b) => ({ ...b, mine: REC(10), fresh: REC(3) }))
@@ -880,24 +951,27 @@ describe('Stats Only: this page’s Bests and another tab’s saves of the perma
 
   it('a Best this page took back stays taken back', () => {
     useProgress.getState().setBlitzBest(({ mine: _gone, ...rest }) => rest) // an Override undid it
-    expect(Object.keys(onDevice().blitzBest)).toEqual(['old'])
-    otherTabSaves(loaded)
+    expect(Object.keys(parkedBests().blitzBest)).toEqual(['old'])
+    olderTabSaves(loaded)
+    expect(Object.keys(shown())).toEqual(['old'])
     answer(1)
-    expect(Object.keys(onDevice().blitzBest)).toEqual(['old'])
+    expect(Object.keys(aNewWindowShows())).toEqual(['old'])
   })
 
   it('with nobody else writing, an answer still costs the permanent copy nothing', () => {
     const writes = vi.spyOn(Storage.prototype, 'setItem')
     answer(1)
     answer(2)
-    const permanent = writes.mock.calls.filter(
-      ([key], i) => key === KEY && writes.mock.contexts[i] === localStorage,
-    )
+    const permanent = writes.mock.calls.filter((_, i) => writes.mock.contexts[i] === localStorage)
     expect(permanent).toHaveLength(0)
     writes.mockRestore()
   })
 })
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// THE SIX CHANGES. One rule covers them all — the session's copy is discarded, then everything is
+// read again — and this is that rule checked pair by pair, on what is on screen (the store) and on
+// what is on the device.
 describe('changing the value mid-session: all six ordered pairs', () => {
   beforeEach(() => resetAppState())
 
@@ -920,7 +994,7 @@ describe('changing the value mid-session: all six ordered pairs', () => {
         stats: { ...ZERO.stats, ...statsOf(from === 'off' ? 99 : 7) },
         ...bestsOf(from === 'full' ? 7 : 50),
       }
-      expect(JSON.parse(parked()).state).toEqual(permanent)
+      expect(parkedState()).toEqual(permanent)
       const before = device()
       const statsBefore = parkedStatsText()
 
@@ -1079,7 +1153,7 @@ describe('changing the Amnesic value with the app running', () => {
   // more?" It does. Leaving the parked stats alone made the wipe RESURRECTABLE — Full Reset, then
   // go back to Off, and the destroyed stats came back. The invariant is about CONTAMINATION (a
   // session's numbers overwriting the real ones); an erase cannot contaminate, so a deliberate
-  // destructive command sits outside it. See store/amnesic's discardParkedStats.
+  // destructive command sits outside it. See store/progressDoor's fullReset.
   for (const mode of ['stats', 'full'])
     it(`★ Full Reset inside a preset on ${mode} clears the PARKED copy too — no resurrection`, () => {
       mountApp()
@@ -1105,13 +1179,14 @@ describe('changing the Amnesic value with the app running', () => {
       setAmnesic('off')
       expect(statValue('Score')).toBe('0/0')
       expect(liveBests()).toEqual(NO_BESTS)
-      expect(JSON.parse(parked()).state).toEqual(ZERO)
+      expect(parkedState()).toEqual(ZERO)
     })
 
   // …and in a preset SAVED as amnesic, Full Reset leaves it amnesic — so the permanent copy is the
-  // one BEHIND the session, and it has to go too (discardParkedStats).
+  // one BEHIND the session, and it is reset too: the factory copy, written as a change every other
+  // window adopts (store/progressDoor's fullReset; design-q1-q2.md v4, 8.7).
   for (const mode of ['stats', 'full'])
-    it(`★ Full Reset in a preset whose saved default is ${mode} removes the permanent copy behind the session`, () => {
+    it(`★ Full Reset in a preset whose saved default is ${mode} resets the permanent copy behind the session`, () => {
       mountApp()
       pinReadableQuestions()
       pressNew()
@@ -1133,7 +1208,7 @@ describe('changing the Amnesic value with the app running', () => {
       expect(amnesicModeOf(1)).toBe(mode) // still its saved default
       expect(statValue('Score')).toBe('0/0')
       expect(liveBests()).toEqual(NO_BESTS)
-      expect(parked()).toBeNull() // nothing left to come back
+      expect(parkedState()).toEqual(ZERO) // nothing left to come back
       setAmnesic('off')
       expect(statValue('Score')).toBe('0/0')
       expect(liveBests()).toEqual(NO_BESTS)
@@ -1383,7 +1458,7 @@ describe('an amnesic preset cannot reach its permanent solve-time chunks', () =>
     expect('sealed' in useProgress.getState().stats.classic).toBe(false)
   })
 
-  it('★ Full: no read, no listing, no delete of a permanent chunk — and not a byte moves', () => {
+  it('★ Full: no read, no listing, no write, no delete of a permanent chunk — and not a byte moves', () => {
     seedPermanent()
     const untouched = permanentBytes()
     const seen = watchPermanent()
@@ -1395,7 +1470,6 @@ describe('an amnesic preset cannot reach its permanent solve-time chunks', () =>
     relaunch() // a reload: the session copy is read back
     expect(useProgress.getState().stats.classic.times).toHaveLength(1501)
     useProgress.getState().setModeStats('classic', makeProgressDefaults().stats.classic) // Reset Stats
-    useProgress.getState().resetProgress()
     recordEverything(5)
     relaunch()
 
@@ -1410,7 +1484,9 @@ describe('an amnesic preset cannot reach its permanent solve-time chunks', () =>
 
   // Under Stats Only a Best IS written into the permanent main key — beside the sealed layout, not
   // through it: the stats in that text, with their sealed-chunk record, go back exactly as they came.
-  it('★ Stats Only: a Best is saved without one chunk being read, listed, written, or deleted', () => {
+  // (The door READS the permanent doc whole, chunks and all, to merge its Bests with what other windows
+  // wrote: a read moves nothing. What it never does is write or delete one.)
+  it('★ Stats Only: a Best is saved without one chunk being written or deleted', () => {
     seedPermanent()
     const [chunks, minusBests, statsText] = [chunkBytes(), parkedMinusBests(), parkedStatsText()]
     expect(JSON.parse(parked()).state.stats.classic.sealed).toBeDefined() // it IS a sealed save
@@ -1423,7 +1499,7 @@ describe('an amnesic preset cannot reach its permanent solve-time chunks', () =>
     relaunch()
     recordBests(60)
 
-    expect(seen).toEqual([])
+    expect(seen.filter((call) => /^(setItem|removeItem) /.test(call))).toEqual([])
     expect(chunkBytes()).toBe(chunks)
     expect(parkedMinusBests()).toBe(minusBests)
     expect(parkedStatsText()).toBe(statsText)
@@ -1439,8 +1515,8 @@ describe('an amnesic preset cannot reach its permanent solve-time chunks', () =>
   it('Full Reset’s wipe of the parked copy takes its chunks with it — the one deliberate exception', () => {
     seedPermanent()
     setAmnesic('full')
-    discardParkedStats(1)
+    useProgress.getState().resetProgress()
     expect(Object.keys(localStorage).filter((k) => k.startsWith(FAMILY))).toEqual([])
-    expect(parked()).toBeNull()
+    expect(parkedState()).toEqual(ZERO)
   })
 })

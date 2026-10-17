@@ -15,8 +15,10 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { companion, reconcileBlitzBest } from '../src/engine/blitzBest.js'
-import { useProgress } from '../src/store/progress.js'
+import { companion } from '../src/engine/blitzBest.js'
+import { useProgress, makeProgressDefaults, PROGRESS_DOOR } from '../src/store/progress.js'
+import { roundOp } from '../src/store/bestRecords.js'
+import { ROUND_ID } from './helpers/roundScreen.js'
 
 const recorded = (build) =>
   JSON.parse(
@@ -33,6 +35,7 @@ const SEEDED = {
   streakRoundId: 222,
 }
 const hasCompanions = (rec) => 'scoreStreak' in rec || 'streakScore' in rec
+const blitz = (score, streak) => ({ score, streak })
 
 describe.each(['v2.28.0', 'v2.29.0', 'v2.29.2'])('%s, as the real build behaved', (build) => {
   const seen = recorded(build)
@@ -44,7 +47,7 @@ describe.each(['v2.28.0', 'v2.29.0', 'v2.29.2'])('%s, as the real build behaved'
     expect(seen.roundBelow.record).toEqual(SEEDED) // …left it as it was
   })
 
-  it('(ii) a round that takes a field writes four fields: BOTH companions go missing, never wrong', () => {
+  it('(ii) a round that takes a field writes four fields: BOTH companions go missing, never wrong', async () => {
     const { score, record } = seen.takesScore
     expect(score).toBe('6/8')
     expect(record).toMatchObject({ score: 6, streak: 4, streakRoundId: 222 })
@@ -52,8 +55,23 @@ describe.each(['v2.28.0', 'v2.29.0', 'v2.29.2'])('%s, as the real build behaved'
     expect(hasCompanions(record)).toBe(false)
     // …which this build reads as "not recorded", and a round here records them again.
     expect([companion(record.scoreStreak), companion(record.streakScore)]).toEqual([null, null])
-    const next = reconcileBlitzBest(record, 7, 2, 900)
-    expect(next).toMatchObject({ score: 7, scoreStreak: 2, scoreRoundId: 900, streakScore: null })
+    localStorage.clear()
+    localStorage.setItem(
+      'cg-progress-v1',
+      JSON.stringify({
+        state: { ...makeProgressDefaults(), blitzBest: { k: record } },
+        version: 4,
+      }),
+    )
+    await useProgress.persist.rehydrate()
+    PROGRESS_DOOR.round('blitzBest', 'k', roundOp('blitzBest', ROUND_ID(900), blitz(7, 2), false))
+    expect(useProgress.getState().blitzBest.k).toMatchObject({
+      score: 7,
+      scoreStreak: 2,
+      scoreRoundId: ROUND_ID(900),
+      streakScore: null,
+    })
+    localStorage.clear()
   })
 
   it('(iii) an Override that hands the field back: four fields again — missing, never wrong', () => {

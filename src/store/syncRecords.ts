@@ -31,6 +31,7 @@
 // here reads anything a hook supplies.
 
 import { type Stamp, type Clock, cmpStamp, mint, see, cyrb53, canonicalJson } from './syncStamp.js'
+import { COUNTER_ROUND_ID, SCOPED_ROUND_ID, clockRoundId } from '../engine/roundId.js'
 
 // ── Shapes ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -141,23 +142,16 @@ export interface RoundClock {
 /** The number of runner-ups kept per field. */
 export const ALT = 3
 
-// ── ROUND IDS THAT ARE NOT THE CLOCK'S (part2-issues #5) ──
-// v2.27.3 onward number a round from the wall clock (ms x 1024 plus ten random bits); a new build from its
-// hybrid clock (engine/roundId). v2.26.0 numbered them with a COUNTER from 1 per mount of the screen - below
-// every Reset's bound, and the same in every load. Such an id means nothing outside the load it came from,
-// so a record's reader SCOPES it to that load: what every window holds, writes and kills is
-// scopedRoundId(load, counter), at or above SCOPED_ROUND_ID, which no clock reaches for a century (2^52 ms
-// x 1024 is the year 2109). A scoped id is never compared with a Reset's bound - only `deadIds`, the rounds
-// the resetting window knew, kill it - and it never moves a window's round clock.
-/** An id below this is a v2.26.0 counter. */
-export const COUNTER_ROUND_ID = 2 ** 40
-/** A scoped id (a counter, with the load it came from) is at or above this. */
-export const SCOPED_ROUND_ID = 2 ** 52
+// ── ROUND IDS THAT ARE NOT THE CLOCK'S (part2-issues #5; the ranges are engine/roundId's) ──
+// v2.26.0 numbered rounds with a COUNTER from 1 per mount of the screen - below every Reset's bound, and
+// the same in every load. Such an id means nothing outside the load it came from, so a record's reader
+// SCOPES it to that load: what every window holds, writes and kills is scopedRoundId(load, counter). A
+// scoped id is never compared with a Reset's bound - only `deadIds`, the rounds the resetting window knew,
+// kill it - and it never moves a window's round clock.
+export { COUNTER_ROUND_ID, SCOPED_ROUND_ID, clockRoundId }
 /** A v2.26.0 counter `n`, scoped to the load `load` (loadKeyOf) it came from. */
 export const scopedRoundId = (load: string, n: number): number =>
   SCOPED_ROUND_ID + (parseInt(cyrb53(`${load}#${n}`), 36) % 2 ** 50)
-/** Is `id` a round id a Reset's bound and the round clock speak for (a clock's, not a scoped counter)? */
-export const clockRoundId = (id: number): boolean => id < SCOPED_ROUND_ID
 /** Which load a doc's stats come from: a new build's write mark, the bytes of before the first new save,
  *  or a doc rebuilt from defaults. */
 export const loadKeyOf = (stTag: Stamp | null, stBoot: boolean): string =>
@@ -230,12 +224,16 @@ export class RecordsBook {
     io: RecordsIO
     tag: string
     clock: RoundClock
+    /** The window's stamp clock for this doc, when the doc's other books share it (store/syncedDoc: the four
+     *  Best maps of one progress doc - so every stamp of one window's writes to the doc is ordered). */
+    hlc?: Clock
     hooks?: RecordsHooks
   }) {
     this.spec = o.spec
     this.io = o.io
     this.tag = o.tag
     this.clock = o.clock
+    if (o.hlc) this.hlc = o.hlc
     this.hooks = o.hooks ?? {}
   }
 
@@ -870,7 +868,8 @@ export class RecordsBook {
   }
   /** A landing refused: the stamp it minted is forgotten (an un-landed version is no version). */
   refused(): void {
-    if (this.preHlc) this.hlc = this.preHlc
+    // (put back in place: the clock may be shared)
+    if (this.preHlc) Object.assign(this.hlc, this.preHlc)
     this.preHlc = null
   }
 
@@ -878,10 +877,12 @@ export class RecordsBook {
   /** A round of this window's ended (or an Override changed it: `ov`). */
   op(k: string, op: RecOp): void {
     const r = this.rec(k)
-    if (!op.ov) {
-      r.ownRounds.add(op.id)
-      this.lastRound = op.id
-    }
+    // (the round on this window's results screen - its own, and the one it names `open` - whether it ended
+    // now or was filed before: a round restored with its screen after a reload is this window's too, and
+    // its runner-ups must stay while it can still be taken back. The model's windows Override only the
+    // round they filed in the same load, so there the two are always one.)
+    r.ownRounds.add(op.id)
+    this.lastRound = op.id
     r.dirty.push(op)
     r.mem = this.applyOp(r.mem, op)
   }

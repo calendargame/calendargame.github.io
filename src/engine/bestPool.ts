@@ -15,16 +15,16 @@
 // samePool and is never shown, and never mixed into anything.
 //
 // ★ READ-ONLY, AND NOTHING ELSE CHANGES. No record is rewritten, moved, copied, or merged; writes are
-// exactly as before — a round or run rebuilds and files ITS key's own record (engine/blitzBest,
-// engine/aoxBest, engine/bestMap). A legacy record is never a floor and never written, so nothing can
-// roll into or out of it, and an Override or Undo just recomputes what is shown. The one consequence to
+// exactly as before — a round or run files its result on ITS key's own record (store/screenPool's
+// fileRoundResult). A legacy record is never written, so nothing can roll into or out of it, and an
+// Override or Undo just recomputes what is shown. The one consequence to
 // know: K's own stored record can be LOWER than what is shown (the shown Best may live under a legacy
 // key). Nothing may read `map[key]` as "the Best" — tests/bestPoolGuard holds every read of a Best map
 // in src/ to a named list, and the display reads come through here.
 //
-// ★ THE MERGE (bestOf*): per field, the best value; on a tie the record whose holder id is LOWER (null
-// lowest) — the earlier round, because round ids are wall-clock ordered (engine/roundId) and the ids
-// saved before that scheme are small integers. The winning field brings its holder and its companion
+// ★ THE MERGE (bestOf*): per field, the best value; on a tie the record whose holder is the EARLIER
+// round (`earlier`, below: a clock's ids are wall-clock ordered — engine/roundId — and an id that is
+// not a clock's names a round from before them). The winning field brings its holder and its companion
 // with it, so "Streak: 9" under Best Score is still that round's streak, the Same Round / Different
 // Rounds tag still compares two holder ids, and the ★ (engine/roundId's isNewBest on the shown holder)
 // lights only for a round that holds the POOL's Best: a round that beats K's own record but not a
@@ -35,6 +35,7 @@ import { inEffectBestKey } from '../lib/dateConfig.js'
 import { companion, type BlitzBest, type SuddenBest } from './blitzBest.js'
 import type { AoxBest } from './aoxBest.js'
 import { roundCentis } from '../lib/modeFormat.js'
+import { clockRoundId } from './roundId.js'
 
 // The stored keys whose records belong to in-effect key K's pool.
 export function poolKeys(map: Readonly<Record<string, unknown>>, K: string): string[] {
@@ -45,9 +46,14 @@ export function poolKeys(map: Readonly<Record<string, unknown>>, K: string): str
   })
 }
 
-// Is holder `x` earlier than holder `y`? (null is the earliest: a record from before round ids.)
+// Is holder `x` earlier than holder `y`? A clock's ids are in the order their rounds began; a SCOPED id
+// (engine/roundId: a v2.26.0 counter, or a value saved before rounds had ids) is a round played before
+// any clock's, and none, earliest of all. (Two scoped ids say nothing about each other: neither is
+// earlier, and the record first in the pool keeps the tie.)
+const order = (id: number | null | undefined): number =>
+  id == null ? -2 : clockRoundId(id) ? id : -1
 const earlier = (x: number | null | undefined, y: number | null | undefined): boolean =>
-  (x ?? -Infinity) < (y ?? -Infinity)
+  order(x) < order(y)
 
 // ── The three record shapes ─────────────────────────────────────────────────────────────────────
 export function bestOfAox(records: readonly AoxBest[]): AoxBest | undefined {

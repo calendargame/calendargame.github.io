@@ -5,8 +5,18 @@ import type { AoxBest } from '../engine/aoxBest.js'
 import type { BlitzBest, SuddenBest } from '../engine/blitzBest.js'
 import { captureError } from '../observability/sentry.js'
 import { checkStatsInvariants } from '../engine/invariants.js'
-import { PRESET_STORE_KEYS, mergeOverDefaults } from './presets.js'
-import { presetStatsStorage } from './amnesic.js'
+import {
+  PRESET_STORE_KEYS,
+  mergeOverDefaults,
+  usePresets,
+  presetListed,
+  presetIdOfSuffix,
+} from './presets.js'
+import { sessionProgress } from './amnesic.js'
+import { amnesicModeOf } from './sessionAmnesic.js'
+import { door } from './syncedDoc.js'
+import { makeProgressStorage } from './progressDoor.js'
+import { mainKeyOf } from './progressStorage.js'
 import { useSettings } from './settings.js'
 import { isRecord } from './json.js'
 
@@ -89,15 +99,15 @@ const blankStats = (): Stats => ({ played: 0, good: 0, streak: 0, best: 0, times
 
 // ── v4 → v5: A BEST RECORD THAT SAYS NOTHING IS NOT A RECORD ─────────────────
 //
-// Every Best map holds a key ONLY for a configuration that has a record (engine/bestMap). Builds up
+// Every Best map holds a key ONLY for a configuration that has a record (store/bestRecords' fromRec). Builds up
 // to v2.26.0 broke that in one corner: a round or run that set a config's FIRST record and was then
 // overridden back below it left the key behind, holding a record of nothing — a MoX record with no
 // mean and no median, a Blitz record with a score and streak of 0. On screen it reads as "no record"
 // (MoX) or as a Best of 0 nobody earned (Blitz); underneath, it is a key — so Full Reset stayed lit
 // with nothing left to reset, and deleting the preset asked about data that was not there.
 // Those records are dropped here, where the save crosses into this build's shape, and from then on
-// neither door lets one in: no write files one (fileBest takes the key away instead), and no load
-// keeps one.
+// nothing lets one in: a record that holds nothing is no key, as the store holds it and as it is
+// written (store/bestRecords' fromRec).
 // ⚠ IN THE VERSION-GATED STEP, NOT ON EVERY LOAD, and the shared origin is why that is enough: an
 // older build stamps everything it writes with ITS version (it even re-stamps a newer save the
 // moment it loads one), so a record like this can only ever arrive inside a pre-v5 payload — which
@@ -105,7 +115,8 @@ const blankStats = (): Stats => ({ played: 0, good: 0, streak: 0, best: 0, times
 // store/presetControl's isPresetFactory judges a preset you are not on through, so a preset whose
 // only "data" is one of these reads as untouched without being opened.
 // ⚠ ONLY THE EXACT EMPTY SHAPES. Anything else under a Best key — a real record, or something this
-// build cannot name — is left exactly as it was found.
+// build cannot name — is left as it was found (what cannot be read as a record is not shown, and the
+// next save writes the map without it: store/bestRecords' toRec).
 // The older build that may still be open on this origin is not harmed: to it a missing key and one
 // of these records read the same (it falls back to the same empty record for both).
 // Exported for tests.
@@ -175,6 +186,51 @@ export function migrateAoxBestKeys(
   return out
 }
 
+// Saved-shape migrations — the version-gated REWRITES, applied as a doc saved at an older version is READ
+// (the windows-in-sync door reads every doc in today's shape): aoxBest's keys gained a dimension (v2), and
+// the Best records of nothing an older build left behind are dropped (v5, dropEmptyBests). Both are
+// idempotent on a doc already in today's shape. A load writes nothing for them: the doc is saved in
+// today's shape with the next change.
+export function migrateProgress(
+  persisted: Record<string, unknown>,
+  version: number,
+): Record<string, unknown> {
+  let state = persisted as Partial<ProgressValues>
+  if (version < 2 && state?.aoxBest && typeof state.aoxBest === 'object') {
+    state = {
+      ...state,
+      aoxBest: migrateAoxBestKeys(state.aoxBest, useSettings.getState().julianChance),
+    }
+  }
+  if (version < 5 && state && typeof state === 'object') state = dropEmptyBests(state)
+  return state as Record<string, unknown>
+}
+
+// A mode's stats came in from another window: its engine is rebuilt on them (store/screenPool says how -
+// it registers here, being the module that knows the screens' data epochs).
+let rebaseHook: ((silo: string) => void) | null = null
+export const onProgressRebase = (fn: (silo: string) => void): void => {
+  rebaseHook = fn
+}
+
+// ★ THROUGH THE WINDOWS-IN-SYNC DOOR (store/progressDoor; design-q1-q2.md v4): the stats and the Bests are
+// merged with what other windows wrote, the doc is landed whole with its sync keys, and a round's result
+// is an op on its Best record (`PROGRESS_DOOR.round`, through store/screenPool). The active preset's
+// Amnesic value says which copy the store is on (store/amnesic: Stats Only's stats and Full's everything
+// are this window's session copy).
+const PROGRESS_SESSION = sessionProgress()
+export const PROGRESS_DOOR = makeProgressStorage<Partial<ProgressState>>(door.progressKit, {
+  presetId: () => usePresets.getState().activeId,
+  key: () => mainKeyOf(usePresets.getState().activeId),
+  mode: () => amnesicModeOf(usePresets.getState().activeId),
+  version: 5,
+  migrate: migrateProgress,
+  defaults: () => makeProgressDefaults() as never,
+  session: PROGRESS_SESSION as never,
+  gate: (key) => presetListed(presetIdOfSuffix(key.slice(PRESET_STORE_KEYS.progress.length))),
+  rebase: (silo) => rebaseHook?.(silo),
+})
+
 export const useProgress = create<ProgressState>()(
   persist(
     (set) => ({
@@ -186,9 +242,10 @@ export const useProgress = create<ProgressState>()(
       setSuddenBest: (v) => set((s) => ({ suddenBest: resolve(v, s.suddenBest) })),
       setSuddenAmBest: (v) => set((s) => ({ suddenAmBest: resolve(v, s.suddenAmBest) })),
       setAoxBest: (v) => set((s) => ({ aoxBest: resolve(v, s.aoxBest) })),
-      // Wipe all saved progress back to launch defaults. Because the store is persisted, this
-      // also overwrites the saved copy — so Full Reset's call here makes the wipe permanent.
-      resetProgress: () => set(() => makeProgressDefaults()),
+      // Wipe all saved progress back to launch defaults: FULL RESET (store/progressDoor's fullReset) -
+      // the factory doc written as a change every other window adopts, the stats and the Bests alike,
+      // whatever the Amnesic value, and this window's session copy emptied.
+      resetProgress: () => PROGRESS_DOOR.fullReset(),
     }),
     {
       // The localStorage key (fixed — the `version` field below gates migrations). It lives in
@@ -199,16 +256,15 @@ export const useProgress = create<ProgressState>()(
       // matters here more than anywhere, because live and staging share one browser origin.
       name: PRESET_STORE_KEYS.progress,
       // Presets 2, 3, 4… read and write a namespaced key instead. The `name` above never moves; the
-      // adapter resolves the active preset per read/write — and, uniquely among the four stores,
-      // decides WHICH STORAGE AREA that copy lives in, and lays it out there through
-      // store/progressStorage (this store's values in, this store's values out). ★ THIS IS THE ONE STORE AMNESIC
-      // TOUCHES, and that is the whole of the CLEARS/KEEPS split: the settings, the per-mode setup
-      // and the saved personal defaults keep store/presets' permanent adapter, so an amnesic preset
-      // cannot forget any of them however this file changes. See store/amnesic.
-      storage: presetStatsStorage<Partial<ProgressState>>(),
+      // door resolves the active preset per read/write — and, uniquely among the per-preset stores,
+      // which COPY it is on (PROGRESS_DOOR, above). ★ THIS IS THE ONE STORE AMNESIC TOUCHES, and that
+      // is the whole of the CLEARS/KEEPS split: the settings, the per-mode setup and the saved personal
+      // defaults are always the preset's own, so an amnesic preset cannot forget any of them however
+      // this file changes. See store/amnesic.
+      storage: PROGRESS_DOOR,
       // v5 = every solve time is kept; a save the old 1,000 cap trimmed gains its `timesLost`
       // baseline as it is read (store/progressStorage, which sees the stored array) — and no Best
-      // map holds a record of nothing (dropEmptyBests, in `migrate` below). The TIMES THEMSELVES ARE NOT REWRITTEN —
+      // map holds a record of nothing (dropEmptyBests, in migrateProgress above). The TIMES THEMSELVES ARE NOT REWRITTEN —
       // a legacy time's long float spelling round-trips exactly through JSON, and snapping it onto
       // the new 0.1 ms grid could move a displayed hundredth that sat on a boundary (a Last or a
       // Median, measured at ~0.15%). At most 1,000 such times per silo, ~10 KB, once.
@@ -217,32 +273,15 @@ export const useProgress = create<ProgressState>()(
       // newer version through untouched. What an older build does WRITE is the trim, which
       // store/progressStorage re-derives on every save stamped older than this.
       // v4 = lookupHistory LEFT the shape (round 20 — see store/lookupHistory). The bump
-      // still records that change even though nothing here has to REWRITE anything for it: an old
-      // payload's `lookupHistory` field is not in PERSISTED_KEYS above any more, so partialize
-      // simply stops re-writing it, and `mergeOverDefaults` below spreads the raw persisted object
-      // in as its last step regardless — a stray field along for that ride lands on the live state
-      // as an inert property nothing in this app reads any more (every consumer moved to the new
-      // store), and it is gone from disk the moment anything next calls a setter here. No `migrate`
-      // step earns its keep deleting a field that already has zero effect on any behavior; the
-      // version bump exists only so a FUTURE migration can tell, from the stored number alone,
-      // whether a payload predates the move. tests/progress.dom pins the "loads without throwing,
-      // and the stray field does nothing" half of this claim.
+      // still records that change even though nothing here has to REWRITE anything for it: the door
+      // reads a doc as its five values and nothing else, so an old payload's `lookupHistory` field
+      // never reaches the store, and the door writes the doc as those five values, so it is gone from
+      // disk with the next save. No `migrate` step earns its keep deleting a field that already has
+      // zero effect on any behavior; the version bump exists only so a FUTURE migration can tell,
+      // from the stored number alone, whether a payload predates the move. tests/progress.dom pins
+      // the "loads without throwing, and the stray field does nothing" half of this claim.
+      // (its migrations are migrateProgress, above: the door hands every doc over at this version)
       version: 5,
-      // Saved-shape migrations — the version-gated REWRITES, run once at hydrate when the stored
-      // version is older: aoxBest's keys gained a dimension (v2), and the Best records of nothing an
-      // older build left behind are dropped (v5, dropEmptyBests). Zustand re-saves the result at
-      // the current version.
-      migrate: (persisted, version) => {
-        let state = persisted as Partial<ProgressValues>
-        if (version < 2 && state?.aoxBest && typeof state.aoxBest === 'object') {
-          state = {
-            ...state,
-            aoxBest: migrateAoxBestKeys(state.aoxBest, useSettings.getState().julianChance),
-          }
-        }
-        if (version < 5 && state && typeof state === 'object') state = dropEmptyBests(state)
-        return state
-      },
       // Persist only the data values, never the setter functions.
       partialize: (state) =>
         Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as Partial<ProgressState>,
@@ -252,13 +291,8 @@ export const useProgress = create<ProgressState>()(
       // because the default would let a preset with no saved copy of a silo inherit the last
       // preset's stats and bests — and the first answered question would make that inheritance
       // permanent. Argued in full in store/presets.
-      // ⚠ ITS LAST STEP SPREADS THE RAW PERSISTED OBJECT IN, unscreened — which is exactly what
-      // lets an old payload's stray `lookupHistory` field pass through harmlessly rather than
-      // erroring (see the version-bump comment above): there is no per-field allowlist here to
-      // reject an unknown key, only ProgressValues' own fields ever being READ back out of the
-      // result. A store that still owned a validated-on-every-load field (lookupHistory itself,
-      // when this store had it) would compose its own screen on top of this, same as before; this
-      // store no longer has one.
+      // (What it spreads in is the door's read - the five values, each in the merge's form - never the
+      // raw stored object: nothing unknown reaches the store.)
       merge: mergeOverDefaults<ProgressValues, ProgressState>(makeProgressDefaults),
       // Tripwire: after the saved copy loads, verify it. Corrupt saved progress (good>played from an
       // old bug, or storage truncation/tampering on a real device) is a silent integrity problem —
@@ -287,3 +321,4 @@ export const useProgress = create<ProgressState>()(
     },
   ),
 )
+PROGRESS_DOOR.attach(useProgress)

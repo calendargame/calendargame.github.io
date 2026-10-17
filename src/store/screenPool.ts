@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { activeDataId } from './amnesic.js'
-import { useProgress, type ProgressValues, type StatsKey } from './progress.js'
+import { useProgress, onProgressRebase, PROGRESS_DOOR, type StatsKey } from './progress.js'
+import { roundOp, type BestMap } from './bestRecords.js'
 import { writeSessionRound, discardSessionRound } from './sessionRound.js'
 import { discardSessionHistory } from './sessionHistory.js'
 import type { Stats } from '../engine/gameReducer.js'
@@ -30,8 +31,8 @@ import { captureError } from '../observability/sentry.js'
 //      in — no tap can land between. That is what keeps the round's own legitimate Best (layer 1
 //      alone would refuse it) and what closes the swap that keeps the copy (Full Reset).
 //
-// ⚠ EVERY SCREEN WRITER GOES THROUGH HERE — the three casual stat mirrors, the Blitz and MoX Best
-// reconciles and take-backs, and their parks. The raw setters and store/sessionRound's write and
+// ⚠ EVERY SCREEN WRITER GOES THROUGH HERE — the three casual stat mirrors, the Blitz and MoX round
+// results (and their take-backs), and their parks. The raw setters and store/sessionRound's write and
 // discard are referenced only by store/progress, this file, and the reset and crash paths that act
 // for the app rather than for a screen (tests/screenPoolGuard).
 // ★ THE SECOND CONDITION, FOR WINDOWS THAT STAY IN SYNC (design-q1-q2.md v4, 6.1 and Q6's R5): a
@@ -52,39 +53,29 @@ import { captureError } from '../observability/sentry.js'
 /** Is `dataId` the pool the app is reading right now? */
 const live = (dataId: string): boolean => dataId === activeDataId()
 
-/** The four Best maps, by name. */
-export type RoundBestMap = 'blitzBest' | 'suddenBest' | 'suddenAmBest' | 'aoxBest'
-export type RoundBests = Pick<ProgressValues, RoundBestMap>
-
-// Each map's own setter, by map name.
-type Update<M extends RoundBestMap> = (prev: RoundBests[M]) => RoundBests[M]
-const SETTER: { [M in RoundBestMap]: (next: Update<M>) => void } = {
-  blitzBest: (next) => useProgress.getState().setBlitzBest(next),
-  suddenBest: (next) => useProgress.getState().setSuddenBest(next),
-  suddenAmBest: (next) => useProgress.getState().setSuddenAmBest(next),
-  aoxBest: (next) => useProgress.getState().setAoxBest(next),
-}
-
 /**
- * File a round's result into one Best map of the pool `dataId` — `next` builds the map from the one
- * the store holds, as the raw setter's updater does. A no-op unless `dataId` is live.
+ * File a round's RESULT on its Best record: the round's own values for every field of `map`'s record (a
+ * Blitz round's score and its best streak; a MoX run's mean and median - whether or not either beats the
+ * record), or null for a round that holds nothing now (taken back whole: put back in play, or no longer
+ * standing). It goes to the windows-in-sync door as an op on the record `setup` (store/progressDoor's
+ * round; design-q1-q2.md v4, 4.1), which keeps every round's figures beside the record - so a take-back
+ * of the round that holds a field lands on the true next value, whoever played it and in whichever
+ * window. `filedBefore`: this round's result was filed before (an Override of an ended round, a resume,
+ * an ending after a resume). Returns whether it was filed: not when `dataId` is not live (the screen is
+ * about to be remounted on the copy that is), nor for a round a Reset has since removed - there is
+ * nothing left of it to change.
  */
-export function fileRoundBest<M extends RoundBestMap>(
+export function fileRoundResult(
   dataId: string,
-  map: M,
-  next: Update<M>,
-): void {
-  if (live(dataId)) SETTER[map](next)
-}
-
-/**
- * The four Best maps as the pool `dataId` holds them — what a round rebuilds its record from — or
- * null when `dataId` is not live: no floor is ever read from a copy the screen was not drawn for.
- */
-export function roundBests(dataId: string): RoundBests | null {
-  if (!live(dataId)) return null
-  const { blitzBest, suddenBest, suddenAmBest, aoxBest } = useProgress.getState()
-  return { blitzBest, suddenBest, suddenAmBest, aoxBest }
+  map: BestMap,
+  setup: string,
+  roundId: number,
+  values: { score: number; streak?: number } | { avg: number; med: number } | null,
+  filedBefore: boolean,
+): boolean {
+  if (!live(dataId) || PROGRESS_DOOR.roundGone(map, roundId)) return false
+  PROGRESS_DOOR.round(map, setup, roundOp(map, roundId, values, filedBefore))
+  return true
 }
 
 /**
@@ -125,6 +116,9 @@ export function rebaseEngine(dataId: string, key: StatsKey): void {
   useScreenEpoch.setState((s) => ({ ...s, [key]: s[key] + 1 }))
   noteUnaskedSwap()
 }
+
+// (another window's stats for a mode, merged in: that engine is rebuilt - store/progress asks here)
+onProgressRebase((silo) => rebaseEngine(activeDataId(), silo as StatsKey))
 
 const staleReported = new Set<StatsKey>()
 /**

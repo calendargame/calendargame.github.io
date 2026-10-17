@@ -33,6 +33,10 @@ import {
   type SyncKey,
 } from './syncCounts.js'
 import { sameJson } from './json.js'
+// (types only: store/progressDoor builds the progress binding ON this door's kit - store/progress calls it
+// with `progressKit` - so this file never loads it, and the module cycle through the presets door it would
+// close does not exist)
+import type { DoorKit } from './progressDoor.js'
 import { type Stamp, ZERO, packSync, unpackSync, randomId } from './syncStamp.js'
 import {
   holdForDoor,
@@ -199,6 +203,18 @@ export function createDoor(env: DoorEnv) {
         }
       }
     }
+  // A HELD SAVE'S RETRY (store/storageHealth's holdForDoor) runs only OUTSIDE the door's calls. A write this
+  // window makes inside one through store/storageHealth (the session copy, a chunk's removal) can free room,
+  // and storageHealth retries what it holds at once - but a retry landing there would act on a store in the
+  // middle of a change (a setter's new value not yet in its book: the retry's adopt would put the old one
+  // back). Inside a call it is put off to the moment the outermost one returns, as a landing's is.
+  const heldRetry = (fn: () => boolean) => (): boolean => {
+    if (depth > 0) {
+      freed = true
+      return false
+    }
+    return outer(fn)()
+  }
   let flushQueued = false
   const queueFlush = () => {
     if (flushQueued) return
@@ -322,7 +338,8 @@ export function createDoor(env: DoorEnv) {
     const settle = () => {
       const s = area()
       if (!s || !book) return
-      if (book.owes) holdForDoor(s, docKey, shape.write(book.mem, book.st ?? ZERO), outer(retry))
+      if (book.owes)
+        holdForDoor(s, docKey, shape.write(book.mem, book.st ?? ZERO), heldRetry(retry))
       else releaseDoorHold(s, docKey)
     }
     const retry = (): boolean => {
@@ -561,7 +578,7 @@ export function createDoor(env: DoorEnv) {
           s,
           e.key,
           text,
-          outer(() => {
+          heldRetry(() => {
             settle(e, true)
             adopt(e)
             return !e.book.owes
@@ -720,10 +737,28 @@ export function createDoor(env: DoorEnv) {
     }
   }
 
+  // ── THE SAVED PROGRESS (store/progressDoor): its own binding, on this door's machinery (the kit) ──
+  const progressKit: DoorKit = {
+    tag,
+    area: () => env.storage(),
+    later,
+    queueFlush,
+    outer,
+    heldRetry,
+    hidden: () => hidden,
+    owe: (fn) => adoptOwed.add(fn),
+    bumpRemote,
+    register: (b) => {
+      bindings.push(b)
+    },
+    landAll: (s, writes) => landAll(s, writes, landed),
+    syncKeyOf,
+  }
   return {
     tag,
     listStorage,
     countsStorage,
+    progressKit,
     /** A `storage` event: the key another window changed, what it held before, and what it holds now. */
     notice: outer((key: string | null, oldValue: string | null, newValue: string | null = null) => {
       if (key === null) {
@@ -757,42 +792,59 @@ export function createDoor(env: DoorEnv) {
   }
 }
 
-// THE LANDING (2.2): the doc, then its key — both, or neither. If the key is refused, the doc is put
-// back ONLY if the device still holds exactly what this window wrote (otherwise another window's write
-// is there, newer, and stays); if even the put-back is refused, the doc stays with its envelope naming
-// a version the key lacks — readers take the envelope's newer version — and the save is held.
-function landBoth(
+// THE LANDING (2.2): the doc, then its key (and, for the progress doc, the records' key after it) — all,
+// or none. A write already on the device is not made again. If a later write is refused, each earlier one
+// is put back ONLY if the device still holds exactly what this window wrote (otherwise another window's
+// write is there, newer, and stays); if even the put-back is refused, the doc stays with its envelope
+// naming a version the keys lack — readers take the envelope's newer version — and the save is held.
+function landAll(s: Storage, writes: { key: string; text: string }[], landed: () => void): boolean {
+  const before = writes.map((w) => s.getItem(w.key))
+  let wrote = false
+  for (let i = 0; i < writes.length; i++) {
+    const w = writes[i]
+    if (before[i] === w.text) continue
+    if (tryWriteItem(s, w.key, w.text)) {
+      wrote = true
+      continue
+    }
+    for (let j = i - 1; j >= 0; j--) {
+      const p = writes[j]
+      if (before[j] === p.text || s.getItem(p.key) !== p.text) continue
+      try {
+        if (before[j] === null) removeItem(s, p.key)
+        else if (!tryWriteItem(s, p.key, before[j]!))
+          captureError(
+            new Error('Saved data: a write could not be put back after a later one was refused'),
+            {
+              tripwire: 'syncPutBack',
+            },
+          )
+      } catch {
+        /* the put-back itself refused: the envelope names the newer version (2.2) */
+      }
+    }
+    return false
+  }
+  // (a write just fit: what is held is retried once the door's outermost call returns)
+  if (wrote) landed()
+  return true
+}
+const landBoth = (
   s: Storage,
   docKey: string,
   docText: string,
   syncKey: string,
   keyText: string,
   landed: () => void,
-): boolean {
-  const before = s.getItem(docKey)
-  if (before !== docText && !tryWriteItem(s, docKey, docText)) return false
-  const keySame = s.getItem(syncKey) === keyText
-  if (keySame || tryWriteItem(s, syncKey, keyText)) {
-    // (a write just fit: what is held is retried once the door's outermost call returns)
-    if (before !== docText || !keySame) landed()
-    return true
-  }
-  if (s.getItem(docKey) === docText && before !== docText) {
-    try {
-      if (before === null) removeItem(s, docKey)
-      else if (!tryWriteItem(s, docKey, before))
-        captureError(
-          new Error('Saved data: a doc could not be put back after its sync key was refused'),
-          {
-            tripwire: 'syncPutBack',
-          },
-        )
-    } catch {
-      /* the put-back itself refused: the envelope names the newer version (2.2) */
-    }
-  }
-  return false
-}
+): boolean =>
+  landAll(
+    s,
+    [
+      { key: docKey, text: docText },
+      { key: syncKey, text: keyText },
+    ],
+    landed,
+  )
 
 const openLocal = (): Storage | null => {
   try {

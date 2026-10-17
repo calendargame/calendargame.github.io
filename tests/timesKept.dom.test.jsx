@@ -157,7 +157,7 @@ describe('every solve time is kept — the popup and the numbers a player sees',
 
   // Every preset owns its own saved stats, so each one's trimmed save is repaired when THAT preset
   // is first read — here preset 2's, on the switch that hydrates it.
-  it("another preset's trimmed save is repaired when that preset is opened", () => {
+  it("another preset's trimmed save is repaired when that preset is opened — and saved so with its next change", () => {
     const p2 = createPreset('Second')
     const key = storageKeyFor(useProgress).replace(/~p\d+$/, '') + `~p${p2.id}`
     const stats = { played: 1400, good: 1300, streak: 1, best: 9, times: times(1000) }
@@ -173,7 +173,14 @@ describe('every solve time is kept — the popup and the numbers a player sees',
     )
     switchPreset(p2.id)
     expect(useProgress.getState().stats.dedDay).toEqual({ ...stats, timesLost: 300 })
-    expect(JSON.parse(localStorage.getItem(key)).version).toBe(5)
+    // (opening it writes nothing - the windows-in-sync door's G7; the next save is in today's shape)
+    expect(JSON.parse(localStorage.getItem(key)).version).toBe(4)
+    useProgress
+      .getState()
+      .setModeStats('classic', { ...makeProgressDefaults().stats.classic, played: 1 })
+    const saved = JSON.parse(localStorage.getItem(key))
+    expect(saved.version).toBe(5)
+    expect(saved.state.stats.dedDay.timesLost).toBe(300)
   })
 
   // ── A SEALED save (store/progressStorage): the older times live in chunk keys ──

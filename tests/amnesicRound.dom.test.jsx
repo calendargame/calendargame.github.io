@@ -700,10 +700,12 @@ describe('Stats Only: a round’s Best is saved for good, and its other numbers 
   beforeEach(() => resetAppState())
   afterEach(unmount)
   const BESTS = ['blitzBest', 'suddenBest', 'suddenAmBest', 'aoxBest']
-  // The permanent copy with its Bests set aside — what a Stats Only session may never change.
+  // The permanent copy with its Bests set aside — its four Best maps and the records' part of its
+  // envelope (store/progressDoc) — what a Stats Only session may never change.
   const permanentMinusBests = () => {
     const envelope = JSON.parse(localStorage.getItem(statsKey()))
     for (const key of BESTS) delete envelope.state[key]
+    if (envelope.sync) delete envelope.sync.rec
     return JSON.stringify(envelope)
   }
   const blitzBest = () => Object.values(permanent().blitzBest)[0]

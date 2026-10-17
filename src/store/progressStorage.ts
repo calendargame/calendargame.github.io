@@ -186,16 +186,27 @@ export function baselineTrimmedTimes(stats: Record<string, unknown>): Record<str
 
 // A chunk's 250 times, or null when the key is missing or does not hold what its name says (the id
 // is the hash of the text, so a truncated or altered chunk cannot pass for the real one).
+// ★ READ ONCE A TEXT: a chunk's name says what it holds (its id is the hash of its text), so the times
+// read from one text are kept beside it and handed back while the key still holds exactly that text -
+// a window that reads the device on every notice (store/syncedDoc) does not parse 400 chunks each time.
+const chunkCache = new WeakMap<Storage, Map<string, { text: string; times: number[] }>>()
 function readChunk(area: Storage, key: string, id: string): number[] | null {
   const text = area.getItem(key)
-  if (text === null || hash(text) !== id.split('.')[0]) return null
+  if (text === null) return null
+  let cache = chunkCache.get(area)
+  if (!cache) chunkCache.set(area, (cache = new Map()))
+  const known = cache.get(key)
+  if (known && known.text === text) return known.times
+  if (hash(text) !== id.split('.')[0]) return null
   try {
     const times: unknown = JSON.parse(text)
     const ok =
       Array.isArray(times) &&
       times.length === CHUNK_TIMES &&
       times.every((t) => typeof t === 'number' && Number.isFinite(t) && t >= 0)
-    return ok ? (times as number[]) : null
+    if (!ok) return null
+    cache.set(key, { text, times: times as number[] })
+    return times as number[]
   } catch {
     return null
   }
@@ -255,6 +266,96 @@ const openBook = (copy: ProgressCopy): Book => ({
 })
 
 /**
+ * A saved progress envelope (parsed) as the store holds it - every silo's times whole, read out of its
+ * chunks in `area` - or the envelope as it is when it holds no stats. Writes nothing. `onSilo` hears
+ * what each silo turned out to be: a silo this file cannot read (`other`), a plain one, a sealed one,
+ * or one whose `sealed` is not one this file wrote (`malformed` - its tail is its times), with the
+ * times it holds now and the chunks they came from.
+ */
+function decodeProgress(
+  area: Storage,
+  family: string,
+  envelope: unknown,
+  onSilo?: (
+    name: string,
+    kind: 'other' | 'plain' | 'sealed' | 'malformed',
+    known?: SiloBook,
+  ) => void,
+): unknown {
+  const state = isRecord(envelope) ? envelope.state : undefined
+  const stored = isRecord(state) && isRecord(state.stats) ? state.stats : null
+  if (!isRecord(envelope) || !isRecord(state) || !stored) return envelope
+  const trimmedOnce =
+    typeof envelope.version === 'number' && envelope.version < TIMES_KEPT_VERSION
+      ? baselineTrimmedTimes(stored)
+      : stored
+  const stats: Record<string, unknown> = {}
+  for (const [name, silo] of Object.entries(trimmedOnce)) {
+    stats[name] = silo
+    if (!isRecord(silo) || !Array.isArray(silo.times)) {
+      onSilo?.(name, 'other')
+      continue
+    }
+    const tail = silo.times as number[]
+    if (!('sealed' in silo)) {
+      onSilo?.(name, 'plain', { ref: tail, ids: [], keys: new Set() })
+      continue
+    }
+    const { sealed: _sealed, timesLost, ...rest } = silo
+    const ids = validSealed(silo)
+    if (!ids) {
+      // Not a `sealed` this file wrote. The stored `timesLost` stands (it already counts whatever
+      // was sealed), the tail is the times, and the chunks are left alone.
+      captureError(new Error(`Saved progress: ${name} has a malformed sealed record`), {
+        tripwire: 'progressSealed',
+      })
+      stats[name] = timesLost === undefined ? rest : { ...rest, timesLost }
+      onSilo?.(name, 'malformed', { ref: tail, ids: [], keys: new Set() })
+      continue
+    }
+    const keys = ids.map((id, j) => `${family}${name}:${j}.${id}`)
+    const parts: number[][] = []
+    // The ids that still name the chunk at their position: every one up to the first unreadable
+    // chunk (the times after a gap sit 250 earlier than their old chunk index says).
+    let intact = ids.length
+    keys.forEach((key, j) => {
+      const chunk = readChunk(area, key, ids[j])
+      if (chunk) parts.push(chunk)
+      else intact = Math.min(intact, j)
+    })
+    const recovered = parts.length * CHUNK_TIMES
+    if (parts.length < ids.length)
+      captureError(
+        new Error(`Saved progress: ${ids.length - parts.length} chunk(s) of ${name} unreadable`),
+        { tripwire: 'progressChunks' },
+      )
+    const times = ([] as number[]).concat(...parts, tail)
+    // The times that could not be read stay counted as lost; a gap of zero is ABSENT in memory
+    // (engine/parkedHistory compares it with `!==`).
+    const lost = (timesLost as number) - recovered
+    stats[name] = lost > 0 ? { ...rest, times, timesLost: lost } : { ...rest, times }
+    onSilo?.(name, 'sealed', { ref: times, ids: ids.slice(0, intact), keys: new Set(keys) })
+  }
+  return { ...envelope, state: { ...state, stats } }
+}
+
+/**
+ * One preset's saved progress TEXT as the store would hold it - every silo's times whole, read from
+ * its chunks in `area` - or null for no text, or text that will not parse. Writes nothing, and keeps
+ * nothing (the windows-in-sync door reads every version of the doc it is told of through this).
+ */
+export function expandProgress(area: Storage, presetId: number, text: string | null): unknown {
+  if (text === null) return null
+  let envelope: unknown
+  try {
+    envelope = JSON.parse(text)
+  } catch {
+    return null
+  }
+  return decodeProgress(area, familyOf(presetId), envelope)
+}
+
+/**
  * The reader and writer of the saved progress for one page. `load` and `save` are what zustand's
  * persist calls (through store/amnesic's router, which decides which copy); both are synchronous.
  */
@@ -281,70 +382,21 @@ export function createProgressCodec<S>() {
       bySilo.delete(silo)
     }
     const envelope: unknown = b.text === null ? null : JSON.parse(b.text)
-    const state = isRecord(envelope) ? envelope.state : undefined
-    const stored = isRecord(state) && isRecord(state.stats) ? state.stats : null
-    if (!isRecord(envelope) || !isRecord(state) || !stored) {
-      // No save here (or one with no stats to speak for any chunk): every chunk key is left behind.
-      for (const silo of [...bySilo.keys()]) leftBehind(silo)
-      return envelope as StorageValue<S> | null
-    }
-    const trimmedOnce =
-      typeof envelope.version === 'number' && envelope.version < TIMES_KEPT_VERSION
-        ? baselineTrimmedTimes(stored)
-        : stored
-    const stats: Record<string, unknown> = {}
-    for (const [name, silo] of Object.entries(trimmedOnce)) {
-      stats[name] = silo
-      if (!isRecord(silo) || !Array.isArray(silo.times)) {
+    const out = decodeProgress(b.area, b.family, envelope, (name, kind, known) => {
+      if (kind === 'other') {
         bySilo.delete(name) // not a silo this file can read: its chunk keys are not ours to judge
-        continue
+        return
       }
-      const tail = silo.times as number[]
-      if (!('sealed' in silo)) {
-        b.silos.set(name, { ref: tail, ids: [], keys: new Set() })
-        leftBehind(name)
-        continue
-      }
-      // Sealed, or claiming to be: either way its chunk keys stay (rule b is for a PLAIN silo).
-      bySilo.delete(name)
-      const { sealed: _sealed, timesLost, ...rest } = silo
-      const ids = validSealed(silo)
-      if (!ids) {
-        // Not a `sealed` this file wrote. The stored `timesLost` stands (it already counts whatever
-        // was sealed), the tail is the times, and the chunks are left alone.
-        captureError(new Error(`Saved progress: ${name} has a malformed sealed record`), {
-          tripwire: 'progressSealed',
-        })
-        stats[name] = timesLost === undefined ? rest : { ...rest, timesLost }
-        b.silos.set(name, { ref: tail, ids: [], keys: new Set() })
-        continue
-      }
-      const keys = ids.map((id, j) => `${b.family}${name}:${j}.${id}`)
-      const parts: number[][] = []
-      // The ids that still name the chunk at their position: every one up to the first unreadable
-      // chunk (the times after a gap sit 250 earlier than their old chunk index says).
-      let intact = ids.length
-      keys.forEach((key, j) => {
-        const chunk = readChunk(b.area, key, ids[j])
-        if (chunk) parts.push(chunk)
-        else intact = Math.min(intact, j)
-      })
-      const recovered = parts.length * CHUNK_TIMES
-      if (parts.length < ids.length)
-        captureError(
-          new Error(`Saved progress: ${ids.length - parts.length} chunk(s) of ${name} unreadable`),
-          { tripwire: 'progressChunks' },
-        )
-      const times = ([] as number[]).concat(...parts, tail)
-      // The times that could not be read stay counted as lost; a gap of zero is ABSENT in memory
-      // (engine/parkedHistory compares it with `!==`).
-      const lost = (timesLost as number) - recovered
-      stats[name] = lost > 0 ? { ...rest, times, timesLost: lost } : { ...rest, times }
-      b.silos.set(name, { ref: times, ids: ids.slice(0, intact), keys: new Set(keys) })
-    }
-    // Chunk keys of a silo the save does not have at all are left behind too.
+      b.silos.set(name, known!)
+      // Plain: its chunk keys are left behind (rule b). Sealed, or claiming to be: either way its
+      // chunk keys stay (rule b is for a PLAIN silo).
+      if (kind === 'plain') leftBehind(name)
+      else bySilo.delete(name)
+    })
+    // Chunk keys of a silo the save does not have at all are left behind too - and every one, when
+    // there is no save here (or one with no stats to speak for any chunk).
     for (const silo of [...bySilo.keys()]) leftBehind(silo)
-    return { ...envelope, state: { ...state, stats } } as StorageValue<S>
+    return out as StorageValue<S> | null
   }
 
   // The id of chunk `j` of `silo` holding `text`, on the device — found there already, or written
@@ -373,8 +425,39 @@ export function createProgressCodec<S>() {
     )
   }
 
+  /**
+   * Know one copy as the device holds it now, before a save made on it is sealed (store/progressDoor:
+   * the windows-in-sync door's reads keep nothing here): the book is read again - its silos, their
+   * chunks, and the chunk keys left behind - unless it already is the device's text. Rules a and b
+   * judge a save's chunks against this book; a book that knew nothing would see no reset and leave
+   * every chunk behind.
+   */
+  function follow(copy: ProgressCopy): void {
+    const mainKey = mainKeyOf(copy.presetId)
+    if (
+      book &&
+      book.area === copy.area &&
+      book.mainKey === mainKey &&
+      readItem(copy.area, mainKey) === book.text
+    )
+      return
+    load(copy)
+  }
+
   /** Save `value` as one copy's progress. */
   function save(copy: ProgressCopy, value: StorageValue<S>): void {
+    const sealed = seal(copy, value)
+    sealed.finish(writeItem(sealed.area, mainKeyOf(copy.presetId), sealed.text))
+  }
+  /**
+   * Seal `value` for one copy: its chunks written (every chunk it names is on the device after this),
+   * and the main key's TEXT - which the caller writes, and then tells `finish` whether it landed (the
+   * windows-in-sync door lands it with its sync keys, store/syncedDoc). Nothing is deleted before then.
+   */
+  function seal(
+    copy: ProgressCopy,
+    value: StorageValue<S>,
+  ): { area: Storage; text: string; finish(landed: boolean): void } {
     const mainKey = mainKeyOf(copy.presetId)
     const samePlace = !!book && book.area === copy.area && book.mainKey === mainKey
     const b = samePlace ? book! : (book = openBook(copy))
@@ -443,19 +526,25 @@ export function createProgressCodec<S>() {
       onDisk[name] = { ...silo, times: times.slice(n), timesLost: gap + n, sealed: { n, ids } }
     }
     // ⚠ A save with nothing sealed is the value itself, spelled exactly as it always was.
-    b.text = JSON.stringify(
+    const text = JSON.stringify(
       anySealed ? { ...value, state: { ...(state as object), stats: onDisk } } : value,
     )
-    b.landed = writeItem(b.area, mainKey, b.text)
-    b.heard = changesElsewhere(b.area)
-    if (!b.landed || b.doomed.size === 0) return
-    for (const [key, silo] of b.doomed)
-      if (!stillSpells(b, key, saved.get(silo) ?? [])) removeItem(b.area, key)
-    b.doomed.clear()
-    storageSpaceFreed()
+    return {
+      area: b.area,
+      text,
+      finish(landed) {
+        b.text = text
+        b.landed = landed
+        b.heard = changesElsewhere(b.area)
+        if (!b.landed || b.doomed.size === 0) return
+        for (const [key, silo] of b.doomed)
+          if (!stillSpells(b, key, saved.get(silo) ?? [])) removeItem(b.area, key)
+        b.doomed.clear()
+        storageSpaceFreed()
+      },
+    }
   }
-
-  return { load, save }
+  return { load, save, seal, follow }
 }
 
 /**

@@ -19,13 +19,13 @@ import { useProgress } from '../src/store/progress.js'
 import { activeDataId, activeBestsId } from '../src/store/amnesic.js'
 import { readSessionRound, writeSessionRound } from '../src/store/sessionRound.js'
 import {
-  fileRoundBest,
-  roundBests,
+  fileRoundResult,
   parkRound,
   unparkRound,
   saveModeStats,
   useScreenEpoch,
 } from '../src/store/screenPool.js'
+import { ROUND_ID } from './helpers/roundScreen.js'
 import { readSessionHistory, writeSessionHistory } from '../src/store/sessionHistory.js'
 import { useSwapEpoch } from '../src/lib/unaskedSwap.js'
 import { captureError } from '../src/observability/sentry.js'
@@ -33,7 +33,16 @@ import { resetAppState } from './helpers/settingsPanel.jsx'
 
 vi.mock('../src/observability/sentry.js', () => ({ captureError: vi.fn() }))
 
-const REC = { score: 7, streak: 7, scoreStreak: 7, streakScore: 7, scoreRound: 1, streakRound: 1 }
+// A round's result, and the record it makes on its own
+const ROUND = { score: 7, streak: 7 }
+const REC = {
+  score: 7,
+  scoreStreak: 7,
+  scoreRoundId: ROUND_ID(1),
+  streak: 7,
+  streakScore: 7,
+  streakRoundId: ROUND_ID(1),
+}
 const STATS = { played: 3, good: 2, streak: 1, best: 2, times: [1.5, 2.25] }
 const store = () => {
   const { stats, blitzBest, suddenBest, suddenAmBest, aoxBest } = useProgress.getState()
@@ -65,17 +74,18 @@ describe('store/screenPool — a screen writes only to the copy it was drawn for
       writeSessionRound(newBests, 'aox', { b: 2 })
       const parkedBefore = sessionStorage.getItem('cg-round-v2')
 
-      expect(roundBests(oldData), 'no floor is read from a copy that is not live').toBe(null)
-      for (const map of ['blitzBest', 'suddenBest', 'suddenAmBest', 'aoxBest'])
-        fileRoundBest(oldData, map, (prev) => ({ ...prev, k: REC }))
+      for (const map of ['blitzBest', 'suddenBest', 'suddenAmBest'])
+        expect(fileRoundResult(oldData, map, 'k', ROUND_ID(1), ROUND, false)).toBe(false)
+      expect(fileRoundResult(oldData, 'aoxBest', 'k', ROUND_ID(1), { avg: 1, med: 1 }, false)).toBe(
+        false,
+      )
       saveModeStats(oldData, 'classic', useProgress.getState().stats.classic, STATS)
       parkRound(oldData, newBests, 'blitz', { c: 3 })
       unparkRound(oldData, newBests, 'aox')
       expect(store(), 'nothing in the store moved').toBe(before)
       expect(sessionStorage.getItem('cg-round-v2'), 'nothing parked or unparked').toBe(parkedBefore)
 
-      expect(roundBests(newData), 'the live copy is read').not.toBe(null)
-      fileRoundBest(newData, 'blitzBest', (prev) => ({ ...prev, k: REC }))
+      expect(fileRoundResult(newData, 'blitzBest', 'k', ROUND_ID(1), ROUND, false)).toBe(true)
       expect(useProgress.getState().blitzBest.k).toEqual(REC)
       saveModeStats(newData, 'classic', useProgress.getState().stats.classic, STATS)
       expect(useProgress.getState().stats.classic).toEqual(STATS)
@@ -86,11 +96,17 @@ describe('store/screenPool — a screen writes only to the copy it was drawn for
     })
   }
 
-  it('roundBests hands back the four Best maps of the live copy, as the store holds them', () => {
+  it('a round a Reset has since removed files nothing: there is nothing left of it to change', () => {
     const id = activeDataId()
-    fileRoundBest(id, 'aoxBest', () => ({ x: { avg: 1, med: 1, avgRound: 2, medRound: 2 } }))
-    const { blitzBest, suddenBest, suddenAmBest, aoxBest } = useProgress.getState()
-    expect(roundBests(id)).toEqual({ blitzBest, suddenBest, suddenAmBest, aoxBest })
+    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), ROUND, false)).toBe(true)
+    useProgress.getState().resetProgress() // (Full Reset)
+    const before = store()
+    // an Override of that round on the screen still showing it, and a take-back of it
+    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), { score: 9, streak: 9 }, true)).toBe(
+      false,
+    )
+    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), null, true)).toBe(false)
+    expect(store()).toBe(before)
   })
 })
 

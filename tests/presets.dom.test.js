@@ -45,6 +45,7 @@ import { writeSessionRound } from '../src/store/sessionRound.js'
 import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
+import { progressStateUnmarked } from '../src/store/progressDoc.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 
 const PLAYED = { played: 5, good: 3, streak: 2, best: 2, times: [1200, 900] }
@@ -128,7 +129,8 @@ describe('preset 1 is the data that was already there', () => {
     expect(localStorage.getItem('cg-progress-v1')).not.toBeNull()
     expect(localStorage.getItem('cg-userdefaults-v1')).not.toBeNull()
     // …and nothing else but each one's SYNC KEY (store/syncedDoc: what lets windows open side by side
-    // merge it - no older build reads or writes one). In particular no per-preset copy and no registry
+    // merge it - no older build reads or writes one), and the progress doc's RECORDS' KEY beside its own
+    // (its Best records' newest versions: store/progressDoc). In particular no per-preset copy and no registry
     // entry: to an older build, a device on preset 1 that has never created a second one is a device
     // that has never heard of presets.
     expect(Object.keys(localStorage).sort()).toEqual([
@@ -136,6 +138,8 @@ describe('preset 1 is the data that was already there', () => {
       'cg-progress-v1',
       'cg-settings-v1',
       'cg-sync-v1|cg-modeprefs-v1',
+      'cg-sync-v1|cg-progress-v1',
+      'cg-sync-v1|cg-progress-v1|rec',
       'cg-sync-v1|cg-settings-v1',
       'cg-sync-v1|cg-userdefaults-v1',
       'cg-userdefaults-v1',
@@ -853,7 +857,8 @@ describe('switching presets', () => {
     })
     // Preset 1's saved copy was not read, written, moved or cleared.
     expect(
-      JSON.parse(localStorage.getItem(PRESET_STORE_KEYS.progress)).state.stats.classic,
+      progressStateUnmarked(JSON.parse(localStorage.getItem(PRESET_STORE_KEYS.progress)).state)
+        .stats.classic,
     ).toEqual(PLAYED)
     expect(before.manualTheme).toBe('nebula') // the theme is per-preset too — the owner was explicit
   })

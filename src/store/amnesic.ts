@@ -1,14 +1,11 @@
-import type { PersistStorage, StorageValue } from 'zustand/middleware'
-import { usePresets, readStoredRegistry, FIRST_PRESET_ID } from './presets.js'
+import type { StorageValue } from 'zustand/middleware'
+import { usePresets } from './presets.js'
 import { useSessionAmnesic, amnesicModeOf } from './sessionAmnesic.js'
-import { readItem, writeItem } from './storageHealth.js'
+import { readItem } from './storageHealth.js'
 import { createProgressCodec, removeProgressCopy, mainKeyOf } from './progressStorage.js'
 import { captureError } from '../observability/sentry.js'
-import { isRecord, sameJson } from './json.js'
 import type { AmnesicMode } from './amnesicMode.js'
 import type { ProgressValues } from './progress.js'
-import { betterBlitzBest, betterSuddenBest } from '../engine/blitzBest.js'
-import { betterAoxBest } from '../engine/aoxBest.js'
 
 // store/amnesic.ts — AMNESIC PRESETS: a preset whose stats (and, on Full, whose bests) are never
 // written down.
@@ -105,38 +102,10 @@ const KIND: Record<ProgressKey, 'stat' | 'best'> = {
 }
 const ALL_KEYS = Object.keys(KIND) as ProgressKey[]
 
-// ★ THE BETTER OF TWO RECORDS OF ONE BEST MAP, for the one place that can be holding two (writeKept,
-// below: this page's record and the one another tab has saved since). Each map's own ordering, which
-// is its MODE's — the comparison that decides a new best on its screen (engine/blitzBest,
-// engine/aoxBest), not a second one written here. `theirs` is what is on the device and keeps
-// whatever `mine` does not strictly beat; and it stands as it is when either of the two is not a
-// record of that map's shape — saved data is untrusted, and nothing is compared that cannot be read.
-const num = (v: unknown): v is number => typeof v === 'number'
-const time = (v: unknown): v is number | null => v === null || num(v)
-const comparing =
-  <T>(shaped: (rec: Record<string, unknown>) => boolean, better: (a: T, b: T) => T) =>
-  (theirs: unknown, mine: unknown): unknown =>
-    isRecord(theirs) && isRecord(mine) && shaped(theirs) && shaped(mine)
-      ? better(theirs as T, mine as T)
-      : theirs
-const scoreAndStreak = comparing((r) => num(r.score) && num(r.streak), betterBlitzBest)
-const BETTER: Record<Exclude<ProgressKey, 'stats'>, (theirs: unknown, mine: unknown) => unknown> = {
-  blitzBest: scoreAndStreak,
-  suddenAmBest: scoreAndStreak,
-  suddenBest: comparing((r) => num(r.score), betterSuddenBest),
-  aoxBest: comparing((r) => time(r.avg) && time(r.med), betterAoxBest),
-}
 export const AMNESIC_CLEARS: Record<Exclude<AmnesicMode, 'off'>, readonly ProgressKey[]> = {
   stats: ALL_KEYS.filter((key) => KIND[key] === 'stat'),
   full: ALL_KEYS,
 }
-// What stays in the permanent copy while a preset is on that value — every key the list above does
-// not name. Nothing under Full; the four Best maps under Stats Only.
-const keptKeys = (mode: Exclude<AmnesicMode, 'off'>): readonly Exclude<ProgressKey, 'stats'>[] =>
-  ALL_KEYS.filter(
-    (key): key is Exclude<ProgressKey, 'stats'> =>
-      key !== 'stats' && !AMNESIC_CLEARS[mode].includes(key),
-  )
 
 // ── Reading the value ─────────────────────────────────────────────────────────────────────────
 
@@ -278,284 +247,63 @@ export function readSessionStats(presetId: number): string | null {
   }
 }
 
-/**
- * Throw away one preset's PARKED (permanent) copy of its saved progress. The counterpart to
- * discardSessionStats above, and it exists for exactly one caller: Full Reset.
- *
- * ⚠⚠ WHY THIS DOES NOT BREAK THE INVARIANT — read this before deleting it, because it looks like a
- * hole and is not. The invariant is "while a preset is amnesic, nothing writes its permanent
- * stats", and its PURPOSE is to make cross-contamination impossible: the failure it exists to
- * prevent is a SESSION'S NUMBERS being written over the real ones (the proven 500-to-4 loss). An
- * ERASE cannot contaminate anything — there is no wrong data to leak, only removal. So the honest
- * statement of the rule is "no GAMEPLAY writes the permanent stats", and a deliberate destructive
- * command sits outside it.
- *
- * ★ THE ALTERNATIVE WAS SHIPPED FIRST AND THE OWNER CAUGHT IT. Leaving the parked copy alone made
- * Full Reset resurrectable: wipe everything, turn amnesic off later, and the old stats come back —
- * data the player explicitly destroyed, returning. His words: "doesn't full reset reset everything
- * that amnesic does and more?" It does, and it must, or Full Reset stops being the one control that
- * means everything is gone. It runs under Stats Only for the same reason: the permanent STATS sit
- * untouched behind that session too.
- *
- * ⚠ It is deliberately NOT filtered by AMNESIC_CLEARS. Amnesic forgets a subset; Full Reset is not
- * a bigger amnesic, it is the whole store — the same payload resetProgress() clears on a normal
- * preset.
- */
-export function discardParkedStats(presetId: number): void {
-  try {
-    removeProgressCopy({ area: window.localStorage, presetId })
-  } catch {
-    /* storage refused — there is no parked copy to remove */
-  }
-}
-
-// ── Where an amnesic preset's saved progress actually reads and writes ────────────────────────
+// ── An amnesic preset's SESSION copy ─────────────────────────────────────────────────────────────
 //
-// ★★ THE INVARIANT, IN ONE SENTENCE: WHILE A PRESET IS AMNESIC, NOTHING WRITES ITS PERMANENT STATS,
-// AND THE ONLY THING WRITTEN TO ITS PERMANENT COPY AT ALL IS A BEST MAP IT KEEPS. It is true because
-// the storage below has exactly two places that name `ls` for a write — the whole-copy save, which
-// cannot run while the value is anything but Off, and writeKept, which builds what it writes from the
-// permanent text as it stands plus the kept maps and nothing else: it is never handed the stats.
-// tests/amnesic.dom asserts it as a byte comparison rather than as a behaviour, because a behaviour
-// test would only prove the paths somebody thought to drive.
+// ★★ THE INVARIANT, IN ONE SENTENCE: WHILE A PRESET IS AMNESIC, NOTHING WRITES ITS PERMANENT STATS, AND THE
+// ONLY THING WRITTEN TO ITS PERMANENT COPY AT ALL IS A BEST RECORD IT KEEPS. The saved progress goes through
+// the windows-in-sync door (store/progressDoor), which keeps it: under Stats Only it reads and writes only the
+// device doc's Best records - its stats pass through byte for byte - and the stats are THIS copy's; under
+// Full nothing permanent is read or written at all. (A Full Reset is the one exception, and not gameplay:
+// it writes the factory doc, everything gone, whatever the value - 8.7 of design-q1-q2.md v4.)
+// tests/amnesic.dom asserts it as a byte comparison rather than as a behaviour, because a behaviour test
+// would only prove the paths somebody thought to drive.
 //
-// ⚠⚠ MERGING A SESSION BACK INTO THE PERMANENT STATS IS BANNED, and it is banned by there being
-// nowhere to write it FROM: the session copy is discarded on every change of the value before the
-// store rehydrates, so by the time anything permanent is read again the session's numbers no longer
-// exist. A merge is exactly the 500-cards-becomes-4 shape — two sets of stats, one of them stale, one
-// write picking the wrong one — and the owner ruled it out. Changing the value discards; it never
-// reconciles.
-//
-// This is store/presets' presetDoc (the active preset's key, at each read and each write) with ONE
-// extra question asked per call — WHICH COPY, per key — and it stays a SECOND named adapter rather
-// than an option on the first: the first is the rule for the stores that are always permanent, and
-// an adapter that could be either would put a condition in front of the sentence above.
-// ★ IT ONLY CHOOSES THE COPY. How a copy is laid out on the device — the main key, and the sealed
-// chunks a long history of solve times is kept in — is store/progressStorage's, which is handed
-// exactly one (area, preset) per call and can therefore reach no other: while a preset is amnesic
-// nothing there reads, lists or deletes a single chunk of its permanent copy. The kept Best maps are
-// read from and written into the permanent MAIN key's text directly, beside that layout rather than
-// through it — everything else in that text, the stats and whatever chunk record they carry, is
-// passed over untouched.
+// ⚠⚠ MERGING A SESSION BACK INTO THE PERMANENT STATS IS BANNED, and it is banned by there being nowhere to
+// write it FROM: the session copy is discarded on every change of the value before the store rehydrates, so
+// by the time anything permanent is read again the session's numbers no longer exist. A merge is exactly the
+// 500-cards-becomes-4 shape — two sets of stats, one of them stale, one write picking the wrong one — and the
+// owner ruled it out. Changing the value discards; it never reconciles. (The session copy is this WINDOW's:
+// sessionStorage is per window, and the door never merges it.)
+// ★ WHAT IT HOLDS is exactly AMNESIC_CLEARS of the value: Stats Only's stats; Full's everything.
+// How a copy is laid out (its main key, and the sealed chunks of a long history of solve times) is
+// store/progressStorage's, handed exactly one (area, preset) per call: nothing here can reach the
+// permanent copy.
 
-type Envelope = { state: Record<string, unknown>; version?: number }
-
-// A saved copy's text as an envelope — or null for one that is absent, will not parse, or is not the
-// shape persist writes. An unreadable permanent copy gives the session NOTHING: a truncated or
-// tampered envelope cannot be trusted to say which numbers are whose.
-const readEnvelope = (text: string | null): Envelope | null => {
-  if (text === null) return null
-  try {
-    const envelope: unknown = JSON.parse(text)
-    if (!envelope || typeof envelope !== 'object') return null
-    const state = (envelope as { state?: unknown }).state
-    return state && typeof state === 'object' && !Array.isArray(state)
-      ? (envelope as Envelope)
-      : null
-  } catch {
-    return null
+/** The active preset's session copy: read, written, and thrown away (store/progressDoor's `session`). */
+export function sessionProgress(): {
+  load(): StorageValue<ProgressValues> | null
+  save(value: StorageValue<ProgressValues>): void
+  discard(): void
+} {
+  const codec = createProgressCodec<ProgressValues>()
+  const copy = () => {
+    const ss = openSessionStorage()
+    return ss ? { area: ss, presetId: usePresets.getState().activeId } : null
   }
-}
-
-export const presetStatsStorage = <S>(): PersistStorage<S> | undefined => {
-  // ⚠ EAGER, for the reason the windows-in-sync door opens its storage in a try: a browser that
-  // throws on the localStorage property access must be found out HERE, so the store lands on persist's
-  // in-memory-only path (no storage at all), rather than inside every getItem/setItem — i.e. inside
-  // hydration and inside every setState. sessionStorage is opened after it, guarded, because it is
-  // allowed to be missing on its own.
-  let ls: Storage
-  try {
-    ls = window.localStorage
-  } catch {
-    return undefined
-  }
-  const ss = openSessionStorage()
-  const codec = createProgressCodec<S>()
-  // Resolved per call, never captured: the active preset and its value both change under a live
-  // store, and the whole point of an adapter (rather than a swapped persist `name`) is that there is
-  // no window in which it is pointed at one preset while holding another's.
-  const target = () => {
-    const presetId = usePresets.getState().activeId
-    return { presetId, mode: amnesicModeOf(presetId) }
-  }
-
-  // ★ WHAT THE STORE WAS HANDED FROM A PERMANENT COPY'S KEPT KEYS, AND WHAT IT HAS DONE TO THEM SINCE
-  // — the guard on writeKept, and its memory. The kept maps in memory may be written back only when
-  // they are known to have STARTED as that permanent copy's: `presetId` says whose, and `readable`
-  // that the copy could be read (or was absent). The rest is what lets a save tell its own changes
-  // from everybody else's:
-  //   `base`  each kept map as the permanent copy held it when this page loaded it;
-  //   `maps`  the store's map objects as they stood at the last save, so a save that did not touch
-  //           them is recognised by identity;
-  //   `mine`  per map, the records THIS PAGE has changed since it loaded, each with the value it
-  //           last saved for it (`undefined`: it took the record away);
-  //   `text`  the permanent copy's text as this page last read or wrote it.
-  type Maps = Partial<Record<ProgressKey, unknown>>
-  let handed: {
-    presetId: number
-    readable: boolean
-    base: Maps
-    maps: Maps
-    mine: Partial<Record<ProgressKey, Map<string, unknown>>>
-    text: string | null
-  } | null = null
-  const records = (map: unknown): Record<string, unknown> => (isRecord(map) ? map : {})
-
-  // Save the kept maps into one preset's permanent main key — and nothing else into it.
-  // ★ READ, LAY THIS PAGE'S OWN CHANGES OVER IT, WRITE BACK. The text is read as it stands NOW (a
-  // save the device refused included, store/storageHealth), so whatever the permanent copy holds
-  // besides the kept maps — its stats, with every solve time and any sealed-chunk record, and its
-  // version stamp — goes back exactly as it came, whoever wrote it last. Nothing from the session
-  // can be in what is written: this function is never given the session's stats.
-  // ★ RECORD BY RECORD, NOT MAP BY MAP — because the permanent copy has other writers: another tab
-  // on Off saves the WHOLE copy, from the Best maps it loaded, on every answer. For each record:
-  //   • one this page has JUST changed (it differs from what the page held at its last save) is
-  //     written — the newest save wins, as it does everywhere;
-  //   • one this page set EARLIER, where the copy now holds a different record for the same set-up,
-  //     is the BETTER of the two (BETTER, above) — whoever wrote the other and whenever. So a save
-  //     that never knew of this page's Best and put the older record back does not cost it, and
-  //     neither does a worse record another tab earned afterwards; a better one of theirs stands;
-  //   • one this page set earlier that the copy NO LONGER HOLDS AT ALL is not put back, and this
-  //     page stops claiming it. A record that is gone was reset — in another tab, by a Full Reset
-  //     there, by the preset being deleted there — and bringing it back would undo something the
-  //     player did on purpose. ⚠ The cost, accepted: a save that never knew of a set-up's FIRST Best
-  //     (there was no record before it) also leaves no record, and cannot be told from a reset by
-  //     anything the copy holds — so that Best is kept only until this page is closed, unless it is
-  //     beaten again here;
-  //   • one this page TOOK AWAY earlier is taken away again if the copy has gone back to exactly
-  //     what it held when this page loaded — a save that never knew of the removal;
-  //   • every other record is the copy's own, passed through.
-  // ⚠ FOUR WAYS IT WRITES NOTHING:
-  //   • the store's kept maps did not start as this copy's (`handed`) — a new best must never replace
-  //     records this page has not read;
-  //   • the permanent copy cannot be read — it is left exactly as it is, as the load left it, and the
-  //     bests of this session last only as long as the page (reported, not hidden);
-  //   • the copy already says what the rules above come to. Most saves are a stat moving with the
-  //     copy untouched since this page last looked, and those cost one comparison of its text;
-  //   • the preset is no longer in the registry on the device: another tab deleted it, and a write
-  //     — even of a Best set this minute — would bring its key back with nothing to own it.
-  const writeKept = (
-    presetId: number,
-    keys: readonly Exclude<ProgressKey, 'stats'>[],
-    state: Record<string, unknown>,
-    version: number | undefined,
-  ) => {
-    if (!handed || handed.presetId !== presetId || !handed.readable) return
-    const text = readItem(ls, mainKeyOf(presetId))
-    if (text === handed.text && keys.every((key) => state[key] === handed!.maps[key])) return
-    const parked = readEnvelope(text)
-    if (text !== null && !parked) {
-      handed.readable = false
-      captureError(new Error('Saved progress: the permanent copy became unreadable'), {
-        tripwire: 'progressKept',
-      })
-      return
-    }
-    handed.text = text
-    const kept: Record<string, unknown> = {}
-    let changed = false
-    for (const key of keys) {
-      const now = records(state[key])
-      const was = records(handed.maps[key])
-      const base = records(handed.base[key])
-      const theirs = records(parked?.state[key])
-      const mine = (handed.mine[key] ??= new Map())
-      for (const id of new Set([...Object.keys(now), ...Object.keys(was)]))
-        if (!sameJson(now[id], was[id])) mine.set(id, now[id]) // changed by this page, just now
-      handed.maps[key] = state[key]
-      const out = { ...theirs }
-      for (const [id, value] of mine) {
-        let next = value
-        if (sameJson(value, was[id])) {
-          // Changed earlier, not in this very save.
-          if (theirs[id] === undefined) {
-            mine.delete(id) // gone from the copy: reset there, and no longer this page's to assert
-            continue
-          }
-          if (value !== undefined) next = BETTER[key](theirs[id], value)
-          else if (!sameJson(theirs[id], base[id])) continue // a record set since the removal
-        }
-        if (sameJson(theirs[id], next)) continue
-        if (next === undefined) delete out[id]
-        else out[id] = next
-        changed = true
-      }
-      kept[key] = out
-    }
-    if (!changed) return
-    const listed = readStoredRegistry()?.presets.some((preset) => preset.id === presetId)
-    if (!(listed ?? presetId === FIRST_PRESET_ID)) return
-    handed.text = JSON.stringify(
-      parked ? { ...parked, state: { ...parked.state, ...kept } } : { state: kept, version },
-    )
-    writeItem(ls, mainKeyOf(presetId), handed.text)
-  }
-
   return {
-    // Every access goes through store/storageHealth, in BOTH areas: sessionStorage has an allowance
-    // of its own, and a refusal there is the same promise broken — the guest's session stops being
-    // kept. A refused save is held for the exact (area, key) it was for, so the two copies stay
-    // apart even while neither can be written: the permanent copy's held value can only ever be
-    // read back as, and retried to, the permanent copy.
-    getItem: () => {
-      const { presetId, mode } = target()
-      handed = null
-      if (mode === 'off') return codec.load({ area: ls, presetId })
-      // ★ THE STORE'S VALUE IS COMPOSED, KEY BY KEY: what this value CLEARS comes from the session
-      // copy — or is simply absent until the session has saved something, and an absent key is what
-      // store/presets' mergeOverDefaults turns into the factory value: "the session starts at ZERO",
-      // expressed as data rather than as a wipe — and what it KEEPS comes from the permanent copy.
-      // ⚠ IT IS A PURE DERIVATION AND WRITES NOTHING. The permanent main key is read and never
-      // written here; an amnesic preset can SEE its permanent payload (that is how the kept keys get
-      // their values) and this function cannot alter it.
-      // A session copy that will not load is a session that starts again — and it must not take the
-      // kept maps down with it: a failed load here would leave the store on its factory values, and
-      // the next best would then be written over the permanent records as if there had been none.
-      let session: Envelope | null = null
+    load() {
+      const c = copy()
+      if (!c) return null
+      // A session copy that will not load is a session that starts again.
       try {
-        session = ss && (codec.load({ area: ss, presetId }) as Envelope | null)
+        return codec.load(c)
       } catch (e) {
         captureError(e instanceof Error ? e : new Error(String(e)), { tripwire: 'progressSession' })
+        return null
       }
-      const keep = keptKeys(mode)
-      const text = keep.length ? readItem(ls, mainKeyOf(presetId)) : null
-      const parked = readEnvelope(text)
-      handed = {
-        presetId,
-        readable: text === null || parked !== null,
-        base: {},
-        maps: {},
-        mine: {},
-        text,
-      }
-      const state: Record<string, unknown> = {}
-      for (const key of AMNESIC_CLEARS[mode])
-        if (session && key in session.state) state[key] = session.state[key]
-      for (const key of keep)
-        if (parked && key in parked.state)
-          handed.base[key] = handed.maps[key] = state[key] = parked.state[key]
-      if (Object.keys(state).length === 0) return null
-      // The version stamp is the copy's whose shape a migration could still have to rewrite — the
-      // permanent one when it supplied the Best maps (store/progress' `migrate` rewrites nothing
-      // else), the session's otherwise.
-      const version = keep.some((key) => key in state) ? parked!.version : session?.version
-      return { state, version } as StorageValue<S>
     },
-    setItem: (_name, value) => {
-      const { presetId, mode } = target()
-      if (mode === 'off') return codec.save({ area: ls, presetId }, value)
-      const state = value.state as Record<string, unknown>
-      const cleared = Object.fromEntries(
+    save(value) {
+      const c = copy()
+      const mode = amnesicModeOf(usePresets.getState().activeId)
+      if (!c || mode === 'off') return
+      const state = value.state as unknown as Record<string, unknown>
+      const kept = Object.fromEntries(
         AMNESIC_CLEARS[mode].filter((key) => key in state).map((key) => [key, state[key]]),
       )
-      if (ss) codec.save({ area: ss, presetId }, { ...value, state: cleared } as StorageValue<S>)
-      const keep = keptKeys(mode)
-      if (keep.length) writeKept(presetId, keep, state, value.version)
+      codec.save(c, { ...value, state: kept } as StorageValue<ProgressValues>)
     },
-    removeItem: () => {
-      const { presetId, mode } = target()
-      if (mode === 'off') removeProgressCopy({ area: ls, presetId })
-      else if (ss) removeProgressCopy({ area: ss, presetId })
+    discard() {
+      discardSessionStats(usePresets.getState().activeId)
     },
   }
 }

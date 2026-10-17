@@ -35,7 +35,8 @@ import {
 } from './sessionHistory.js'
 import { useSettings, SETTINGS_DEFAULTS, SETTINGS_DOC } from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
-import { useProgress, makeProgressDefaults } from './progress.js'
+import { useProgress, makeProgressDefaults, migrateProgress } from './progress.js'
+import { progressStateUnmarked } from './progressDoc.js'
 import { useUserDefaults, makeUserDefaultsDefaults, USER_DEFAULTS_DOC } from './userDefaults.js'
 import { useJulianRange, JULIAN_RANGE_DEFAULTS } from './julianRange.js'
 import { sameJson } from './json.js'
@@ -161,6 +162,9 @@ const presetStore = <T extends object>(
   // The store's migration where it is not persist's own: a store saved through the windows-in-sync
   // door has its doc read in today's shape by the door (its doc spec's `migrate`).
   docMigrate?: (state: Record<string, unknown>, version: number) => Record<string, unknown>,
+  // …and what the door writes INSIDE the values beside them, taken off (the progress doc's tags and
+  // write marks - store/progressDoc): what a saved copy holds is its values, not the door's marks.
+  unmarked: (state: Record<string, unknown>) => Record<string, unknown> = (state) => state,
 ) => ({
   key: PRESET_STORE_KEYS[name],
   // What Duplicate Preset does with this store (DUPLICATE_RULES, above).
@@ -196,7 +200,7 @@ const presetStore = <T extends object>(
     const upgraded =
       version < current && migrate ? migrate(state as Record<string, unknown>, version) : state
     if (!upgraded || typeof upgraded !== 'object' || upgraded instanceof Promise) return null
-    return upgraded as Record<string, unknown>
+    return unmarked(upgraded as Record<string, unknown>)
   },
 })
 
@@ -208,7 +212,13 @@ const presetStore = <T extends object>(
 // and lost it the first time someone reordered the record.
 // Named on its own because its saved copy can sit in TWO storage areas (an Amnesic preset's session
 // stats are a second payload of this same store — isPresetFactory reads both).
-const PROGRESS_STORE = presetStore('progress', useProgress, makeProgressDefaults)
+const PROGRESS_STORE = presetStore(
+  'progress',
+  useProgress,
+  makeProgressDefaults,
+  migrateProgress,
+  progressStateUnmarked,
+)
 // ★ …AND THE JULIAN-ON YEAR RANGE COMES STRAIGHT AFTER THE SETTINGS, for the same kind of reason: a
 // preset that has no pair yet derives one from the Julian-off pair the settings store has just
 // loaded (store/julianRange). Its factory value is the pair a factory preset derives, 1-11582 — which
@@ -896,7 +906,7 @@ export function switchPreset(id: number): boolean {
  * when there is nothing to do (unknown id, or the value is already what was asked for).
  *
  * ★★ IT IS THE SAME OPERATION AS switchPreset, WITH A DIFFERENT REASON. Changing the value repoints
- * the progress store (store/amnesic's presetStatsStorage) — at the other storage area, or at a
+ * the progress store (store/progressDoor: the device's copy, or this window's session one) — at the other storage area, or at a
  * different split between the two — which is structurally identical to repointing it at another
  * preset's keys; and the five always-mounted mode screens hydrate their stats ONCE, at mount, and
  * mirror them back on every change. Leave them mounted across the change and the next answered

@@ -48,7 +48,7 @@ import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogSignature, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
 import { usePresets } from './store/presets.js'
-import { activeDataId, activeBestsId, activeAmnesicMode, useActiveAmnesicMode, keepsLookups, discardParkedStats } from './store/amnesic.js'
+import { activeDataId, activeBestsId, activeAmnesicMode, useActiveAmnesicMode, keepsLookups } from './store/amnesic.js'
 import { useSessionAmnesic, commitSessionAmnesic } from './store/sessionAmnesic.js'
 import { setPresetAmnesic, commitSessionPreset, sweepDeletedPresetLeftovers } from './store/presetControl.js'
 import { openBrowsingSession } from './store/browsingSession.js'
@@ -2092,9 +2092,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // Reset restores the saved Amnesic value too — not just the ⚙ panel's own Reset Settings button.
         // That reading is deliberate, not incidental: it keeps this function's "total, unconditional
         // contract" intact rather than special-casing Amnesic out of Full Reset's path, and it cannot
-        // resurrect anything either way — fullReset's own discardParkedStats call below reads the
-        // Amnesic value AFTER this line runs, so it already accounts for whichever one this leaves
-        // the preset on.
+        // resurrect anything either way — fullReset's progress wipe below empties the permanent copy
+        // and the session copy alike, whichever value this leaves the preset on.
         setPresetAmnesic(usePresets.getState().activeId,effectiveAmnesicDefault(savedDefaults));
       };
       // ★ THE FOOTER BUTTON'S HANDLER, and the round-14 dimmed-button guard lives HERE rather than
@@ -2152,9 +2151,12 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // panel button (pressResetSettings) and not in here, or a Full Reset stops restoring the
         // very values "modified" is blind to. See the note above pressResetSettings.
         resetSettings();
-        // Saved gameplay progress → wiped (Stage D1): clears lifetime stats + all-time bests in the
-        // persisted store, making Full Reset permanent. Runs BEFORE the remount-key bumps below, so
-        // the continuous modes re-hydrate from the now-empty store (blank stats).
+        // Saved gameplay progress → wiped (Stage D1): clears lifetime stats + all-time bests, making
+        // Full Reset permanent — the factory doc written through the windows-in-sync door, a change
+        // every other window adopts, the PERMANENT stats and Bests alike whatever the Amnesic value
+        // (so going back to Off afterwards can never resurrect what the player just destroyed), and
+        // this window's session copy emptied with it (store/progressDoor's fullReset). Runs BEFORE
+        // the remount-key bumps below, so the continuous modes re-hydrate from the now-empty store.
         resetProgress();
         // ⚠ LOOKUP HISTORY LEFT THE PROGRESS STORE (round 20) BUT NOT FULL RESET'S REACH — the
         // owner's explicit call, and it is the ONE thing in this function that is not scoped to the
@@ -2167,16 +2169,6 @@ import BlitzMode from './modes/BlitzMode.jsx'
         // rewritten. Runs here rather than folding into clearLookupHistory's own definition, because
         // this IS Full Reset choosing to reach for it, not a property of the function itself.
         clearLookupHistory();
-        // ⚠ AND, IN AN AMNESIC PRESET (Stats Only or Full), THE PARKED COPY TOO. resetProgress()
-        // writes through the progress store, whose stats are the SESSION's while a preset is amnesic
-        // — so on its own it would leave the permanent stats sitting untouched behind the session,
-        // and going back to Off afterwards would RESURRECT stats the player had just destroyed.
-        // (Under Stats Only that same resetProgress() has already emptied the permanent Bests, which
-        // is what Full Reset means for them; this removes the copy they sat in, stats and all.) Full Reset is the one
-        // control that means "everything, gone"; an erase cannot contaminate anything, so it is
-        // outside the "nothing writes the permanent stats of an amnesic preset" rule rather than an
-        // exception to it. The argument in full is at store/amnesic's discardParkedStats.
-        if (activeAmnesicMode() !== 'off') discardParkedStats(usePresets.getState().activeId);
         // Per-mode setup (Flash speed, AoX/Blitz config, Deduction sub-type, the stat-visibility
         // toggles) → launch defaults. Runs BEFORE the remount-key bumps so the modes re-read the
         // now-default prefs. The store holds no "last mode" and never has — WHICH mode you were on
