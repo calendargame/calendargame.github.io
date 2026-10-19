@@ -12,7 +12,7 @@ import {
 } from './storageHealth.js'
 import type { StorageWatcher } from './storageHealth.js'
 import { LOOKUP_HISTORY_KEY } from './lookupHistory.js'
-import { SYNC_KEY_PREFIX } from './syncedDoc.js'
+import { docKeyOfSyncKey } from './syncedDoc.js'
 import { isRecord } from './json.js'
 import { isPlayerBusy, isRoundLive, onPlayerFree } from '../lib/playerBusy.js'
 import { captureError } from '../observability/sentry.js'
@@ -221,8 +221,8 @@ export function readStorageUsage(area: Storage): UsageReading {
     const text = area.getItem(key) ?? ''
     const chars = key.length + text.length
     used += chars
-    // A sync key is counted with its doc (the doc's own key, past the prefix).
-    const ofDoc = key.startsWith(SYNC_KEY_PREFIX) ? key.slice(SYNC_KEY_PREFIX.length) : null
+    // A sync key - and the progress doc's records' key - is counted with its doc.
+    const ofDoc = docKeyOfSyncKey(key)
     if (ofDoc === LOOKUP_HISTORY_KEY) {
       lookup.chars += chars
       continue

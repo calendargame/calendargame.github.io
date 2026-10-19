@@ -53,6 +53,17 @@ import { captureError } from '../observability/sentry.js'
 export const SYNC_KEY_PREFIX = 'cg-sync-v1|'
 export const syncKeyOf = (docKey: string): string => `${SYNC_KEY_PREFIX}${docKey}`
 export const isSyncKey = (key: string): boolean => key.startsWith(SYNC_KEY_PREFIX)
+// …and the progress doc's second one, its Best records' key (store/progressDoc), beside the first.
+const RECORDS_KEY_SUFFIX = '|rec'
+export const recordsKeyOf = (docKey: string): string => `${syncKeyOf(docKey)}${RECORDS_KEY_SUFFIX}`
+/** The doc a sync key (or a records' key) belongs to - null for a key that is neither. */
+export const docKeyOfSyncKey = (key: string): string | null => {
+  if (!isSyncKey(key)) return null
+  const rest = key.slice(SYNC_KEY_PREFIX.length)
+  return rest.endsWith(RECORDS_KEY_SUFFIX) ? rest.slice(0, -RECORDS_KEY_SUFFIX.length) : rest
+}
+/** Every key the door keeps beside a doc: its sync key, and its records' key (a doc may have none). */
+export const syncKeysOf = (docKey: string): string[] => [syncKeyOf(docKey), recordsKeyOf(docKey)]
 
 // ── remoteEpoch: "this doc changed because ANOTHER window changed it" (6.2, B V3) ─────────────────
 // One number per doc kind, bumped in the same turn as the store patch it explains. A screen that has
@@ -766,6 +777,7 @@ export function createDoor(env: DoorEnv) {
     },
     landAll: (s, writes) => landAll(s, writes, landed),
     syncKeyOf,
+    recordsKeyOf,
   }
   return {
     tag,

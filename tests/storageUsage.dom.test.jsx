@@ -274,7 +274,7 @@ describe('what is filling the device', () => {
     expect(reading.used).toBe(everything())
   })
 
-  // ★ A SYNC KEY (store/syncedDoc) is counted with its doc: a preset's with that preset, Lookup
+  // ★ A SYNC KEY (store/syncedDoc) - and the progress doc's records' key - is counted with its doc: a preset's with that preset, Lookup
   // history's with Lookup history — and the preset list's as "everything else", less the copy of each
   // name it keeps (store/syncCounts' KEY_VALUE_MAX: a name too long to copy has only its fingerprint
   // there), which is counted, and could be given back, with the names.
@@ -296,6 +296,8 @@ describe('what is filling the device', () => {
     })
     localStorage.setItem('cg-sync-v1|cg-presets-v1', listKey)
     localStorage.setItem('cg-sync-v1|cg-settings-v1~p2', '{"g":"g2","at":{}}')
+    // (and the progress doc's records' key, beside its sync key: its Bests' newest versions)
+    localStorage.setItem('cg-sync-v1|cg-progress-v1~p2|rec', '{"g":"g2","maps":{}}')
     localStorage.setItem('cg-sync-v1|cg-lookup-v1', '{"st":"§1.ab","tomb":[]}')
     localStorage.setItem('cg-sync-v1|cg-nothing-v1', '{}')
     const reading = readStorageUsage(localStorage)
@@ -304,7 +306,11 @@ describe('what is filling the device', () => {
     expect(row('preset')).toEqual({
       kind: 'preset',
       presetId: 2,
-      chars: 'cg-sync-v1|cg-settings-v1~p2'.length + '{"g":"g2","at":{}}'.length,
+      chars:
+        'cg-sync-v1|cg-settings-v1~p2'.length +
+        '{"g":"g2","at":{}}'.length +
+        'cg-sync-v1|cg-progress-v1~p2|rec'.length +
+        '{"g":"g2","maps":{}}'.length,
     })
     expect(row('lookup').chars).toBe(
       'cg-sync-v1|cg-lookup-v1'.length + '{"st":"§1.ab","tomb":[]}'.length,

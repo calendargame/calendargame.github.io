@@ -95,6 +95,7 @@ export type DoorKit = {
   }): void
   landAll(s: Storage, writes: { key: string; text: string }[]): boolean
   syncKeyOf(docKey: string): string
+  recordsKeyOf(docKey: string): string
 }
 
 export type ProgressStorage<S> = PersistStorage<S> & {
@@ -214,7 +215,7 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
   const make = (key: string): Entry => {
     const presetId = spec.presetId()
     const syncKey = kit.syncKeyOf(key)
-    const recKey = `${syncKey}|rec`
+    const recKey = kit.recordsKeyOf(key)
     const cache: { text: string | null | undefined; p: ReturnType<typeof parseProgress> | null } = {
       text: undefined,
       p: null,

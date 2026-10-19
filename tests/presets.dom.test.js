@@ -36,9 +36,16 @@ import {
   setPresetAmnesic,
   activePreset,
   isPresetFactory,
+  sweepDeletedPresetLeftovers,
 } from '../src/store/presetControl.js'
 import { openBrowsingSession, forgetBrowsingSession } from '../src/store/browsingSession.js'
-import { door, createDoor } from '../src/store/syncedDoc.js'
+import {
+  door,
+  createDoor,
+  syncKeyOf,
+  recordsKeyOf,
+  docKeyOfSyncKey,
+} from '../src/store/syncedDoc.js'
 import { sessionPresetId, forgetSessionPreset } from '../src/store/sessionPreset.js'
 import { writeSessionMode } from '../src/store/sessionMode.js'
 import { writeSessionRound } from '../src/store/sessionRound.js'
@@ -46,6 +53,9 @@ import { useSettings, SETTINGS_DEFAULTS } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { progressStateUnmarked } from '../src/store/progressDoc.js'
+import { fileRoundResult } from '../src/store/screenPool.js'
+import { activeDataId } from '../src/store/amnesic.js'
+import { newRoundId } from '../src/engine/roundId.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 
 const PLAYED = { played: 5, good: 3, streak: 2, best: 2, times: [1200, 900] }
@@ -1011,6 +1021,57 @@ describe('deleting a preset', () => {
     unsub()
     expect(moved).not.toHaveBeenCalled() // nothing to remount — you are still on the preset you were
     expect(snapshotLive().minY).toBe(1583)
+  })
+
+  // ★ THE WINDOWS-IN-SYNC KEYS GO WITH IT (design-q1-q2.md v4, 8.4): every doc's sync key, and the
+  // progress doc's records' key beside it.
+  it('deleting a preset removes its windows-in-sync keys with its docs — and nothing of anyone else’s', () => {
+    const p2 = createPreset()
+    switchPreset(p2.id)
+    playOnThisPreset()
+    fileRoundResult(activeDataId(), 'blitzBest', 'k', newRoundId(), { score: 5, streak: 5 }, false)
+    switchPreset(1)
+    playOnThisPreset()
+    const ofPreset = (id) =>
+      Object.keys(localStorage).filter((k) => {
+        const doc = docKeyOfSyncKey(k) ?? k
+        return Object.values(PRESET_STORE_KEYS).some((b) => doc === presetKey(b, id))
+      })
+    expect(ofPreset(p2.id)).toEqual(
+      expect.arrayContaining([
+        syncKeyOf(presetKey(PRESET_STORE_KEYS.settings, p2.id)),
+        recordsKeyOf(presetKey(PRESET_STORE_KEYS.progress, p2.id)),
+      ]),
+    )
+    const mine = ofPreset(1).sort()
+    expect(deletePreset(p2.id)).toBe(true)
+    expect(ofPreset(p2.id)).toEqual([])
+    expect(ofPreset(1).sort()).toEqual(mine)
+  })
+
+  it('the sync keys an older build’s delete leaves behind are swept at a cold open — only for a preset no list names, whose doc is gone', () => {
+    const p2 = createPreset()
+    switchPreset(p2.id)
+    playOnThisPreset()
+    switchPreset(1)
+    // An older build deletes preset 3's four docs (it knows nothing of the sync keys), and preset 2
+    // stays listed.
+    const gone = presetKey(PRESET_STORE_KEYS.settings, 77)
+    localStorage.setItem(syncKeyOf(gone), '{}')
+    localStorage.setItem(recordsKeyOf(presetKey(PRESET_STORE_KEYS.progress, 77)), '{}')
+    // (a doc still on the device keeps its sync key, whatever the lists say)
+    localStorage.setItem(presetKey(PRESET_STORE_KEYS.modePrefs, 78), '{"state":{},"version":1}')
+    localStorage.setItem(syncKeyOf(presetKey(PRESET_STORE_KEYS.modePrefs, 78)), '{}')
+    const listed = Object.keys(localStorage).filter((k) =>
+      docKeyOfSyncKey(k)?.endsWith(`~p${p2.id}`),
+    )
+    sweepDeletedPresetLeftovers()
+    expect(localStorage.getItem(syncKeyOf(gone))).toBeNull()
+    expect(localStorage.getItem(recordsKeyOf(presetKey(PRESET_STORE_KEYS.progress, 77)))).toBeNull()
+    expect(
+      localStorage.getItem(syncKeyOf(presetKey(PRESET_STORE_KEYS.modePrefs, 78))),
+    ).not.toBeNull()
+    for (const k of listed) expect(localStorage.getItem(k), k).not.toBeNull()
   })
 
   it('refuses the last preset, and an id that does not exist', () => {

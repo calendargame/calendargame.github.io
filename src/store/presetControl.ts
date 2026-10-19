@@ -25,6 +25,7 @@ import {
   tryWriteItem,
 } from './storageHealth.js'
 import { removeProgressCopy, hasTimesKeys, sweepAbandonedTimes } from './progressStorage.js'
+import { syncKeysOf, docKeyOfSyncKey } from './syncedDoc.js'
 import { recordSessionPreset } from './sessionPreset.js'
 import { discardSessionMode } from './sessionMode.js'
 import { discardSessionDedType } from './sessionDedType.js'
@@ -280,7 +281,8 @@ const reloadPresetStores = () => {
   for (const { reload } of PER_PRESET_STORES) reload()
 }
 
-// Remove one preset's saved copy — its five keys and nothing else. Derived from the key record
+// Remove one preset's saved copy — its five keys, the windows-in-sync keys beside each (design-q1-q2.md
+// v4, 8.4: a doc's sync key, and the progress doc's records' key), and nothing else. Derived from the key record
 // rather than by scanning localStorage for a pattern, so it cannot sweep up a neighbour, and so a
 // fifth per-preset store becomes deletable by the act of being listed there. (The progress key goes
 // through store/progressStorage's removeProgressCopy instead of the loop: its sealed chunks of solve
@@ -290,9 +292,11 @@ const reloadPresetStores = () => {
 // forgotten with the key — a deleted preset must not be written back out when room appears.
 const clearPresetStorage = (presetId: number) => {
   try {
-    for (const baseKey of Object.values(PRESET_STORE_KEYS))
-      if (baseKey !== PRESET_STORE_KEYS.progress)
-        removeItem(window.localStorage, presetKey(baseKey, presetId))
+    for (const baseKey of Object.values(PRESET_STORE_KEYS)) {
+      const docKey = presetKey(baseKey, presetId)
+      if (baseKey !== PRESET_STORE_KEYS.progress) removeItem(window.localStorage, docKey)
+      for (const key of syncKeysOf(docKey)) removeItem(window.localStorage, key)
+    }
     removeProgressCopy({ area: window.localStorage, presetId })
   } catch {
     /* storage refused — nothing was ever written, so nothing is left behind */
@@ -780,10 +784,27 @@ export function sweepDeletedPresetLeftovers(): void {
     if (isHolding(area)) return
     const base = PRESET_STORE_KEYS.julianRange
     const orphans: string[] = []
+    // (which preset a per-preset doc key is - null for any other key)
+    const presetOf = (docKey: string): number | null => {
+      for (const b of Object.values(PRESET_STORE_KEYS))
+        if (docKey.startsWith(b)) {
+          const id = presetIdOfSuffix(docKey.slice(b.length))
+          if (id !== null) return id
+        }
+      return null
+    }
     for (let i = 0; i < area.length; i++) {
       const key = area.key(i)
-      const id = key?.startsWith(base) ? presetIdOfSuffix(key.slice(base.length)) : null
-      if (key && id !== null && !known.has(id)) orphans.push(key)
+      if (!key) continue
+      const id = key.startsWith(base) ? presetIdOfSuffix(key.slice(base.length)) : null
+      if (id !== null && !known.has(id)) orphans.push(key)
+      // ★ …AND THE SYNC KEYS AN OLDER BUILD'S DELETE LEAVES BEHIND (design 8.4): it removes the four doc
+      // keys it knows and nothing of this build's. Such a key goes when its preset is in neither registry
+      // AND its doc is gone from the device (a doc still there is a preset's, whatever a list says).
+      const docKey = docKeyOfSyncKey(key)
+      const owner = docKey === null ? null : presetOf(docKey)
+      if (docKey !== null && owner !== null && !known.has(owner) && area.getItem(docKey) === null)
+        orphans.push(key)
     }
     for (const key of orphans) removeItem(area, key)
   } catch {
