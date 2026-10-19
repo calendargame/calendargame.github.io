@@ -43,12 +43,12 @@ import {
   GEAR_DOT_KEY,
   CHANGELOG_DOT_KEY,
   CHANGELOG_SEEN_KEY,
-  changelogSignature,
   changelogChanged,
   readUpdateDot,
   markUpdateDot,
   clearUpdateDot,
 } from '../src/changelog.js'
+import { changelogSignature } from '../src/lib/changelogSignature.js'
 
 const OLD_STAMP = '2020-01-01T00:00:00.000Z' // any build that is not the running one
 
@@ -127,10 +127,17 @@ describe('changelogSignature / changelogChanged — "is there something new to R
 
   it('is the NEWEST entry only — its date and its lines', () => {
     const sig = changelogSignature([entry('2026-08-10', 'a', 'b'), entry('2026-08-09', 'c')])
-    expect(sig).toContain('2026-08-10')
-    expect(sig).toContain('a')
-    expect(sig).toContain('b')
-    expect(sig).not.toContain('c')
+    expect(sig.startsWith('2026-08-10:')).toBe(true)
+    expect(sig).toBe(changelogSignature([entry('2026-08-10', 'a', 'b')]))
+    expect(sig).not.toBe(changelogSignature([entry('2026-08-10', 'a', 'b', 'c')]))
+  })
+
+  it('★ is a short signature however long the entry — not the entry itself (Round 26: ~8 KB stored)', () => {
+    const long = [entry('2026-10-19', ...Array.from({ length: 40 }, (_, i) => 'x'.repeat(200) + i))]
+    const sig = changelogSignature(long)
+    expect(sig.length).toBeLessThan(30)
+    expect(changelogSignature(CHANGELOG).length).toBeLessThan(30)
+    expect(sig).not.toBe(changelogSignature([entry('2026-10-19', ...long[0].items.slice(1))]))
   })
 
   it('★ does NOT change when an OLD entry rolls off into the archive', () => {

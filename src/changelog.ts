@@ -425,17 +425,9 @@ export const clearUpdateDot = (key: string): void => {
 // dot, which is the same tie-break the migration rule takes below, and a walk of 47 real changelog
 // transitions in this repo found the pure-delete-with-nothing-added case has happened zero times.
 //
-// Stored whole rather than hashed: a few hundred bytes of localStorage costs nothing, and it means
-// there is no hash function to be subtly wrong and no collision to reason about. JSON.stringify
-// of the array, so the separator question never arises: two entries cannot collide however their
-// lines are punctuated, and the stored value stays plain ASCII and legible in devtools.
+// What is stored is a SIGNATURE of the newest entry — its date and a hash — not the entry itself
+// (lib/changelogSignature says why, and what an older build sharing the key makes of it).
 export const CHANGELOG_SEEN_KEY = 'cg-changelog-seen'
-
-/** The newest entry as one comparable string. Pure — the whole point is that it is testable. */
-export const changelogSignature = (entries: readonly ChangelogEntry[]): string => {
-  const newest = entries[0]
-  return newest ? JSON.stringify([newest.date, ...newest.items]) : ''
-}
 
 export const readChangelogSeen = (): string | null => {
   try {
