@@ -27,12 +27,13 @@ import { useProgress } from '../../src/store/progress.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
 import { discardAllSessionModes } from '../../src/store/sessionMode.js'
+import { discardAllSessionDedTypes } from '../../src/store/sessionDedType.js'
 import { discardAllSessionRounds } from '../../src/store/sessionRound.js'
 import { discardAllSessionHistories } from '../../src/store/sessionHistory.js'
 import { discardGuidePlace } from '../../src/store/sessionGuide.js'
 import { discardLookupScreen } from '../../src/store/sessionLookup.js'
 import { forgetBrowsingSession } from '../../src/store/browsingSession.js'
-import { forgetSessionAmnesic } from '../../src/store/sessionAmnesic.js'
+import { useSettings } from '../../src/store/settings.js'
 import { forgetSessionPreset } from '../../src/store/sessionPreset.js'
 import { forgetStorageHealth } from '../../src/store/storageHealth.js'
 import { door } from '../../src/store/syncedDoc.js'
@@ -131,12 +132,10 @@ beforeEach(() => {
   // It is the same ordering tests/helpers/settingsPanel's resetAppState states for the same reason;
   // this is the global net saying it for every file, including the ones with a reset of their own.
   usePresets.setState(makePresetRegistryDefaults())
-  // …and with it each preset's AMNESIC VALUE (store/sessionAmnesic), which is the other half of
-  // "where does a reset land": while a preset is on Stats Only or Full the progress reset below would
-  // go to its session copy. It is session-held, so the harness — which has no close — forgets it
-  // here; every preset then reads Off until a test sets one, or models a page load
-  // (tests/helpers/pageLoad.js) to have the saved defaults read.
-  forgetSessionAmnesic()
+  // …and with it the active preset's AMNESIC VALUE (store/settings - a field of its settings, which the
+  // factory reset of the 16 does not touch, by design), the other half of "where does a reset land":
+  // while a preset is on Stats Only or Full the progress reset below would go to its session copy.
+  useSettings.setState({ amnesic: 'off' })
   // …and the session's record of WHICH PRESET it is on (store/sessionPreset), for the same reason
   // and by the same route: it is what a reload lands in, so one left by an earlier test would put a
   // later test's "reload" on a preset that test never opened.
@@ -158,6 +157,8 @@ beforeEach(() => {
   // mountApp() would restore instead of opening on the launch Classic. Same class of leak as the
   // singletons above; cleared the same way, before every test.
   discardAllSessionModes()
+  // …and the Deduction sub-type each window is on (store/sessionDedType), the same kind of place.
+  discardAllSessionDedTypes()
   // The per-(preset, mode) PARKED ROUND (store/sessionRound, round 21) is the same shape of leak:
   // a sessionStorage-backed singleton keyed by preset id, so a test that finishes a Blitz round or a
   // MoX run leaves a parked snapshot a later test's cold mountApp() would restore onto the timed

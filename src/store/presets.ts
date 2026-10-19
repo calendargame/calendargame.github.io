@@ -113,11 +113,11 @@ export type Preset = {
   // ★ AN OLDER BUILD'S FIELD, CARRIED AND NOT USED. Builds up to v2.27.3 kept a preset's Amnesic
   // switch here, as a boolean, and live and staging share this registry — so such a build may be
   // reading and writing this field in another tab right now. This build keeps each preset's Amnesic
-  // setting with the browsing session instead (store/sessionAmnesic) and NEVER CHANGES this field:
-  // the windows-in-sync door carries each preset's value as its own slice, so an older tab's change
-  // to it is taken as that tab made it and nothing this build does can switch its guest session off,
-  // or on. It is read in exactly one place — store/sessionAmnesic's hand-over from an older build —
-  // and a new preset is given `false`, which is what an older build's own new preset has.
+  // value in the preset's settings instead (store/settings) and NEVER CHANGES this field, nor reads it
+  // (design-q1-q2.md v4, 9.4): the windows-in-sync door carries each preset's value as its own slice,
+  // so an older tab's change to it is taken as that tab made it and nothing this build does can switch
+  // its guest session off, or on. A new preset is given `false`, which is what an older build's own new
+  // preset has.
   amnesic: boolean
 }
 
@@ -723,23 +723,32 @@ const defined = (o: Record<string, unknown>) =>
 //   handed over; a value it drops is not patched in, and a load reads the factory value in its place.
 // `retired`: fields an older shape had and this one's migration rewrites. The store owns them as it
 //   owns its own, so a save removes one that a doc still holds.
+// `perPreset`: fields whose value, where the doc has none, is the preset's own rather than a factory
+//   constant - read when asked (the ⚙ settings' Amnesic: the preset's saved default, design 9.1).
 export const presetFieldsSpec = (spec: {
   kind: CountsSpec['kind']
   base: string
   version: number
   defaults: Record<string, unknown>
+  perPreset?: Record<string, () => unknown>
   retired?: readonly string[]
   migrate?: (docState: Record<string, unknown>, version: number) => Record<string, unknown>
   screen?: (state: Record<string, unknown>) => Record<string, unknown>
 }): PresetDocSpec => {
-  const known = Object.keys(spec.defaults)
+  const perPreset = spec.perPreset ?? {}
+  const known = [...Object.keys(spec.defaults), ...Object.keys(perPreset)]
   const owned = [...known, ...(spec.retired ?? [])]
   const screen = spec.screen ?? ((state: Record<string, unknown>) => state)
   return {
     kind: spec.kind,
     base: spec.base,
     version: spec.version,
-    defaultOf: (x) => (Object.hasOwn(spec.defaults, x) ? spec.defaults[x] : undefined),
+    defaultOf: (x) =>
+      Object.hasOwn(perPreset, x)
+        ? perPreset[x]()
+        : Object.hasOwn(spec.defaults, x)
+          ? spec.defaults[x]
+          : undefined,
     regs: (seen) => [...new Set([...known, ...seen.filter((x) => FIELD_NAME.test(x))])],
     owned: (x) => owned.includes(x),
     ...(spec.migrate ? { migrate: spec.migrate } : {}),

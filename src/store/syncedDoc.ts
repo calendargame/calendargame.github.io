@@ -152,6 +152,8 @@ export type CountsStorage<S> = PersistStorage<S> & {
   attach(store: StoreApi<S>): void
   /** Save `value` only if the device takes it now; false - nothing changed anywhere (2.6's trySave). */
   trySave(value: StorageValue<S>): boolean
+  /** Change some slices of the doc at `key` (another preset's), as a local change of that doc. */
+  saveFor(key: string, patch: Record<string, unknown>): void
   /** Merge the active doc with the device now (the registry before an allocation, 8.5). */
   syncNow(): void
   /** Merge the active doc with the device now and return its slices; the store is patched after the
@@ -690,6 +692,17 @@ export function createDoor(env: DoorEnv) {
       removeItem() {
         // (a store's own doc is removed with its preset - store/presetControl, through removeDoc)
       },
+      // A change of some slices of the doc at `key` - another preset's doc, written as a local change of
+      // it (merged with the device first; held if the device refuses it) without that preset being
+      // opened: a value one preset's pill sets for another (store/settings' writePresetAmnesic).
+      saveFor: outer((key: string, patch: Record<string, unknown>) => {
+        const e = entries.get(key) ?? open(key)
+        settle(e, false)
+        e.refresh()
+        for (const [x, v] of Object.entries(spec.toSlices(patch))) e.book.setReg(x, v)
+        settle(e, true)
+        if (e === activeEntry()) later(() => adopt(e))
+      }),
       trySave: outer((value: StorageValue<S>): boolean => {
         const key = spec.key()
         if (key === null) return true

@@ -68,7 +68,6 @@ test('a session under way is recorded under the keys the lane seeds', async ({ p
   await openApp(page)
   const session = await page.evaluate(() => ({ ...window.sessionStorage }))
   expect(session[SESSION_KEYS.browsingSession]).toBe('1')
-  expect(JSON.parse(session[SESSION_KEYS.amnesic])).toEqual({ 1: 'off' })
 })
 
 test('a seeded Amnesic value is the one the app opens on', async ({ page }) => {

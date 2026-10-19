@@ -24,7 +24,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { screen, cleanup, act, fireEvent, within } from '@testing-library/react'
 import { setPresetAmnesic, createPreset, switchPreset } from '../src/store/presetControl.js'
-import { amnesicModeOf } from '../src/store/sessionAmnesic.js'
+import { amnesicModeOf } from '../src/store/amnesic.js'
 import { loadPage, closeApp } from './helpers/pageLoad.js'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
 import { useSettings } from '../src/store/settings.js'
@@ -576,7 +576,7 @@ describe('a reload is the same session; only a real close starts fresh', () => {
     expect(Object.values(useProgress.getState().blitzBest)[0].score).toBe(2)
   })
 
-  it('a real close puts Amnesic back on the saved default and the guest session is gone', () => {
+  it('a real close ends the guest session — the preset stays Amnesic, a setting like any other', () => {
     mountApp()
     pinReadable()
     const permBefore = localStorage.getItem(statsKey())
@@ -584,10 +584,10 @@ describe('a reload is the same session; only a real close starts fresh', () => {
     press('B')
     finishBlitz(2)
     closeAndReopen()
-    expect(amnesicNow()).toBe(false) // no saved default → guest mode reverts
+    expect(amnesicNow()).toBe(true) // (design-q1-q2.md v4, 9.6: it stays until somebody turns it off)
     expect(localStorage.getItem(statsKey())).toBe(permBefore)
     press('B')
-    expect(ctrl('Begin')).toBeInTheDocument()
+    expect(ctrl('Begin')).toBeInTheDocument() // the guest's round went with the guest's session
     expect(useProgress.getState().blitzBest).toEqual({})
   })
 })
@@ -760,8 +760,11 @@ describe('Stats Only: a round’s Best is saved for good, and its other numbers 
     expect(statValue('Score')).toBe('2/2')
 
     closeAndReopen()
-    expect(amnesicNow()).toBe(false) // no saved default: back on Off
+    expect(amnesicNow()).toBe(true) // still Stats Only: a setting stays
     expect(blitzBest().score).toBe(5) // kept for good
+    press('K')
+    expect(statValue('Score')).toBe('0/0') // a new session's
+    setAmnesic('off')
     press('K')
     expect(statValue('Score')).toBe('3/3') // your own, exactly as they were
     press('B')

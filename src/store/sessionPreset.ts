@@ -16,8 +16,6 @@ import { readItem, writeItem, removeItem } from './storageHealth.js'
 // (store/presets' resolveActiveId; index.html's boot script beside it). The registry's `activeId`
 // goes on being written by every change of preset, and means what it always meant to a fresh open
 // with no pin: the preset that was active last. A fresh open WRITES NOTHING PERMANENT.
-// (store/sessionAmnesic is the same move, made for the same two reasons, for each preset's Amnesic
-// value.)
 //
 // ⚠ AN OLDER BUILD ON THIS ORIGIN KNOWS NOTHING OF THIS RECORD — it reloads to the registry's
 // `activeId`, as it always has. Two consequences, both accepted and both only while such a build can
@@ -25,8 +23,8 @@ import { readItem, writeItem, removeItem } from './storageHealth.js'
 //   • a session an older build STARTED has no record; the reload that brings this build in falls
 //     back to the registry's `activeId`, which that build kept current — the right preset;
 //   • an older build loaded in THIS tab after a pinned fresh open here lands on the registry's
-//     preset (the last visit's), not the pinned one. Nothing moves between presets; it is the same
-//     hand-over the Amnesic value has (store/sessionAmnesic), and it ends when the tab is closed.
+//     preset (the last visit's), not the pinned one. Nothing moves between presets, and it ends when
+//     the tab is closed.
 //
 // ONE SMALL VALUE under one key — the preset's id. `cg-session-preset-v1` is new, so no older build
 // reads it. Every access is guarded: a browser that refuses sessionStorage keeps nothing, and its

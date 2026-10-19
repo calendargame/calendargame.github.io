@@ -42,6 +42,8 @@ import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
+import { usePresets } from '../store/presets.js'
+import { readSessionDedType, writeSessionDedType } from '../store/sessionDedType.js'
 import { useProgress } from '../store/progress.js'
 import { useScreenEpoch } from '../store/screenPool.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
@@ -106,8 +108,23 @@ function DeductionMode({
   settingsOpen,
   onFreshChange,
 }: DedScreenProps) {
-  const dedType = useModePrefs((s) => s.dedType),
-    setDedType = useModePrefs((s) => s.setDedType) // persisted (mode-prefs store)
+  // ★ THE SUB-TYPE IN FORCE IS THIS WINDOW'S (store/sessionDedType; design-q1-q2.md v4, 6.7): where the
+  // player is, kept with the page for the browsing session, per preset - so another window's choice
+  // (the shared `dedType`, which the windows-in-sync door brings in) moves nothing on screen here. A
+  // window that holds none for the preset starts from the shared choice and holds it from then on; a
+  // choice made here writes both. The screen remounts on a preset switch, so the preset is the mounted
+  // one's.
+  const [presetId] = useState(() => usePresets.getState().activeId)
+  const [dedType, setDedTypeHere] = useState(
+    () => readSessionDedType(presetId) ?? useModePrefs.getState().dedType,
+  )
+  const setDedType = (t: string) => {
+    setDedTypeHere(t)
+    writeSessionDedType(presetId, t)
+    useModePrefs.getState().setDedType(t)
+  }
+  // (the sub-type it started on is this window's from now: written down, so a reload keeps it)
+  useEffect(() => writeSessionDedType(presetId, dedType), [presetId, dedType])
   // Each silo's HISTORY is kept for the browsing session (store/sessionHistory): parked per silo
   // (useParkedHistory below), read back once here, keyed by the stats copy this screen is mounted on.
   // Read FIRST, because the parks also carry this screen's three puzzle filters, and the filters
@@ -334,10 +351,14 @@ function DeductionMode({
     eng.override()
   }
 
-  // Auto-switch out of Year when a range/Julian change makes it unbuildable (mirrors App).
+  // Auto-switch out of Year when a range/Julian change makes it unbuildable (mirrors App). An effect,
+  // not a render-time adjustment, because the switch writes the shared choice too (store/modePrefs,
+  // which other components read) - a store write during this render would update them mid-render.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (dedType === 'year' && !yearSubPossible) setDedType('day')
-  }, [dedType, yearSubPossible, setDedType]) // setDedType is a stable store setter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dedType, yearSubPossible]) // (setDedType writes this window's sub-type and the shared one)
   // Auto-clear toggles when their prerequisites break (mirrors App's popover effect).
   //
   // ⚠ Both effects below disable set-state-in-effect, and both disables are NEW at extraction

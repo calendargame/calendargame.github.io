@@ -5,9 +5,12 @@ import {
   presetKey,
   presetFieldsSpec,
   presetDoc,
+  presetListed,
   mergeOverDefaults,
+  usePresets,
 } from './presets.js'
-import { readItem } from './storageHealth.js'
+import { readItem, removeItem } from './storageHealth.js'
+import { isAmnesicMode, readAmnesicMode, type AmnesicMode } from './amnesicMode.js'
 import type { FormatId } from '../lib/format.js'
 import { YEAR_MAX_GREGORIAN } from '../lib/calendar.js'
 import { isDotRotation, type DotRotation } from '../lib/dotLayout.js'
@@ -84,6 +87,12 @@ export type SettingsValues = {
 }
 type Updater<T> = T | ((prev: T) => T)
 export type SettingsState = SettingsValues & {
+  /** The preset's AMNESIC value (Off / Stats Only / Full - store/amnesicMode; design-q1-q2.md v4, 9). A
+   *  field of the settings doc like any other, but NOT one of the 16: it decides which copy of the
+   *  saved progress the screens are on, so it is changed only with the work a change implies -
+   *  store/presetControl's setPresetAmnesic here, applyAmnesicChange for another window's change - and
+   *  no factory reset or snapshot apply below touches it. */
+  amnesic: AmnesicMode
   setRandomFormat: (v: Updater<boolean>) => void
   setDateFormat: (v: Updater<FormatId>) => void
   setInputStyle: (v: Updater<InputStyle>) => void
@@ -152,7 +161,11 @@ const resolve = <T>(next: Updater<T>, prev: T): T =>
 // that has been TYPED but not committed counts as "modified" while there is nothing to save for it.
 // (Round 22 closed the gap the other way — amnesic was in the snapshot and NOT in the
 // comparison, which left Save Defaults unreachable for an amnesic-only change.)
-const PERSISTED_KEYS = Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]
+// (…and the preset's Amnesic value: in the same doc, outside the 16 - at SettingsState.)
+const PERSISTED_KEYS = [
+  ...(Object.keys(SETTINGS_DEFAULTS) as (keyof SettingsValues)[]),
+  'amnesic',
+] as const
 
 // The two shapes the Rotate Dots setting was saved in before today's `dotRotation` (its history is
 // at SettingsValues above). Typed `unknown` because they are read off saved data, never trusted.
@@ -200,21 +213,52 @@ export function migrateDotRotation(
 // header). A load writes nothing for it: the doc is saved in this shape with the next change. And it
 // is the SCREEN of every value on its way to the store too, so a rotation this build cannot draw that
 // reaches it by another road (another window putting the newest value back) is never shown.
-export const SETTINGS_DOC = presetFieldsSpec({
-  kind: 'settings',
-  base: PRESET_STORE_KEYS.settings,
-  version: 4,
-  defaults: SETTINGS_DEFAULTS,
-  retired: ['dotOrientation', 'rotateDots'],
-  migrate: (docState) => migrateDotRotation(docState as Partial<SettingsValues> & LegacyDotFields),
-  screen: (state) => migrateDotRotation(state as Partial<SettingsValues> & LegacyDotFields),
-})
+// ★ THE AMNESIC VALUE IS A FIELD OF THIS DOC (design 9.1): the last value chosen stays across a real close
+// and reopen, and another window's change reaches this one like any setting's (9.2). While the doc has
+// no value for it - a preset this build has not saved settings for yet - it is the preset's SAVED
+// DEFAULT (store/userDefaults), and a load writes nothing for it. Older builds never write the field
+// and every one drops it on its own save (9.2): to the merge an absent field is that build's stale
+// copy, and the newest value stands (store/syncCounts).
+// A value this build does not know reads as Full: every doubt resolves toward not recording
+// (store/amnesicMode).
+const screenSettings = (state: Record<string, unknown>) => {
+  const out = migrateDotRotation(state as Partial<SettingsValues> & LegacyDotFields) as Record<
+    string,
+    unknown
+  >
+  if ('amnesic' in out && !isAmnesicMode(out.amnesic)) out.amnesic = 'full'
+  return out
+}
+export const SETTINGS_DOC = {
+  ...presetFieldsSpec({
+    kind: 'settings',
+    base: PRESET_STORE_KEYS.settings,
+    version: 4,
+    defaults: SETTINGS_DEFAULTS,
+    perPreset: { amnesic: () => storedAmnesicDefault(usePresets.getState().activeId) },
+    retired: ['dotOrientation', 'rotateDots'],
+    migrate: (docState) =>
+      migrateDotRotation(docState as Partial<SettingsValues> & LegacyDotFields),
+    screen: screenSettings,
+  }),
+  // ★ ANOTHER WINDOW'S CHANGE OF THE AMNESIC VALUE DOES HERE WHAT THE PILL DOES (design 9.2): the value,
+  // and then the reaction - store/presetControl's applyAmnesicChange (the session copy discarded, the
+  // stores read again, the screens remounted on the copy now in use), registered below by that file,
+  // which imports this one. Every other setting is patched in as it is.
+  apply(patch: Record<string, unknown>) {
+    const from = useSettings.getState().amnesic
+    useSettings.setState(patch as Partial<SettingsState>)
+    const to = useSettings.getState().amnesic
+    if (to !== from) amnesicReaction?.(from, to)
+  },
+}
 const SETTINGS_DOOR = presetDoc<Partial<SettingsState>>(SETTINGS_DOC)
 
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       ...SETTINGS_DEFAULTS,
+      amnesic: 'off',
       setRandomFormat: (v) => set((s) => ({ randomFormat: resolve(v, s.randomFormat) })),
       setDateFormat: (v) => set((s) => ({ dateFormat: resolve(v, s.dateFormat) })),
       setInputStyle: (v) => set((s) => ({ inputStyle: resolve(v, s.inputStyle) })),
@@ -302,15 +346,170 @@ export const useSettings = create<SettingsState>()(
       // SETTINGS_DEFAULTS); the difference shows on a preset switch, where the default would let a
       // preset that has never saved a given setting inherit the last preset's value — including the
       // theme, which would be visible on screen. Argued in full at mergeOverDefaults.
-      merge: mergeOverDefaults(() => SETTINGS_DEFAULTS),
+      // (the Amnesic value with them: a preset with no saved settings is on its own saved default, never
+      // on the value of the preset just left)
+      merge: mergeOverDefaults(() => ({
+        ...SETTINGS_DEFAULTS,
+        amnesic: storedAmnesicDefault(usePresets.getState().activeId),
+      })),
     },
   ),
 )
 SETTINGS_DOOR.attach(useSettings)
 
+// ── THE AMNESIC VALUE OF ANY PRESET ──────────────────────────────────────────────────────────────
+
+let amnesicReaction: ((from: AmnesicMode, to: AmnesicMode) => void) | null = null
+/** What another window's change of the active preset's Amnesic value sets off here (presetControl). */
+export const onAmnesicAdopt = (fn: (from: AmnesicMode, to: AmnesicMode) => void): void => {
+  amnesicReaction = fn
+}
+
+/**
+ * ★ THE SAVED AMNESIC DEFAULT OF ANY PRESET, read straight off ITS namespaced userDefaults key rather
+ * than through the live store (which is only ever the active preset's): what a preset's Amnesic value
+ * is while its settings doc holds none (design 9.1). An absent, unreadable or malformed payload is
+ * "nothing saved": Off. (store/userDefaults' effectiveAmnesicDefault is the same reading of the live
+ * snapshot; both go through store/amnesicMode's readAmnesicMode, the one reader of a stored value.)
+ * ⚠ A FUNCTION DECLARATION, hoisted: the store above reads it while it is being created (its hydration's
+ * merge, and the doc's default for a preset with no value of its own), before this line is reached.
+ */
+export function storedAmnesicDefault(presetId: number): AmnesicMode {
+  try {
+    const raw = readItem(window.localStorage, presetKey(PRESET_STORE_KEYS.userDefaults, presetId))
+    if (raw === null) return 'off'
+    const envelope: unknown = JSON.parse(raw)
+    const state =
+      envelope && typeof envelope === 'object' ? (envelope as { state?: unknown }).state : null
+    return readAmnesicMode(
+      state && typeof state === 'object' ? ((state as { saved?: unknown }).saved ?? null) : null,
+    )
+  } catch {
+    return 'off'
+  }
+}
+
+/**
+ * One preset's Amnesic value: the active preset's is the store's; any other's is read off its own
+ * settings doc (storedAmnesicOf).
+ */
+export const amnesicOf = (presetId: number): AmnesicMode =>
+  presetId === usePresets.getState().activeId
+    ? useSettings.getState().amnesic
+    : storedAmnesicOf(presetId)
+
+/** A preset's Amnesic value as its own settings doc holds it (through store/storageHealth, so a save the
+ *  device refused still counts) - its saved default while that doc holds none. */
+export const storedAmnesicOf = (presetId: number): AmnesicMode => {
+  try {
+    const raw = readItem(window.localStorage, presetKey(PRESET_STORE_KEYS.settings, presetId))
+    const envelope: unknown = raw === null ? null : JSON.parse(raw)
+    const state =
+      envelope && typeof envelope === 'object' ? (envelope as { state?: unknown }).state : null
+    const v =
+      state && typeof state === 'object' ? (state as { amnesic?: unknown }).amnesic : undefined
+    if (v === undefined) return storedAmnesicDefault(presetId)
+    return isAmnesicMode(v) ? v : 'full'
+  } catch {
+    return storedAmnesicDefault(presetId)
+  }
+}
+
+/**
+ * Write one preset's Amnesic value - the active preset's through the store, any other's into its own
+ * settings doc (the door's saveFor: a local change of that doc, synced).
+ * ⚠⚠ NOT FOR APP CODE. The value decides which copy of a preset's saved progress is read, so changing
+ * it under mounted screens is the 500-cards-becomes-4 bug. Its callers are store/presetControl's
+ * setPresetAmnesic, which pairs it with the work the change implies, and the hand-over below.
+ */
+export function writePresetAmnesic(presetId: number, mode: AmnesicMode): void {
+  if (presetId === usePresets.getState().activeId) useSettings.setState({ amnesic: mode })
+  else {
+    SETTINGS_DOOR.saveFor(presetKey(PRESET_STORE_KEYS.settings, presetId), { amnesic: mode })
+    refreshPresetAmnesics()
+  }
+}
+
+/**
+ * Write the active preset's Amnesic value into its settings doc where the doc holds none. A value the
+ * doc does not hold IS the preset's saved default (above), so before Save Defaults or Clear Saved
+ * Defaults moves that default (store/userDefaults), the value in force is written down: changing a
+ * default never changes the value a preset is on, here or in another window of it.
+ */
+export function pinAmnesic(): void {
+  const presetId = usePresets.getState().activeId
+  const key = presetKey(PRESET_STORE_KEYS.settings, presetId)
+  try {
+    const raw = readItem(window.localStorage, key)
+    const envelope: unknown = raw === null ? null : JSON.parse(raw)
+    const state =
+      envelope && typeof envelope === 'object' ? (envelope as { state?: unknown }).state : null
+    if (state && typeof state === 'object' && 'amnesic' in state) return
+  } catch {
+    /* unreadable: written down below, as for a doc that holds none */
+  }
+  SETTINGS_DOOR.saveFor(key, { amnesic: useSettings.getState().amnesic })
+}
+
+// ★ EVERY LISTED PRESET'S VALUE AS ITS OWN DOC SAYS, held where a list of presets can subscribe to it
+// (store/amnesic's useAmnesicModeOf; the active preset's value is the store's). Read again whenever one
+// may have moved: a value written here for a preset this page is not on, the preset list or the active
+// preset changing, and another window's save of a preset's settings or saved defaults (store/amnesic
+// hears the browser's notice - the windows-in-sync door handles the active preset's docs alone).
+const readPresetAmnesics = (): Readonly<Record<number, AmnesicMode>> =>
+  Object.fromEntries(usePresets.getState().presets.map((p) => [p.id, storedAmnesicOf(p.id)]))
+export const usePresetAmnesics = create<{ modes: Readonly<Record<number, AmnesicMode>> }>()(() => ({
+  modes: readPresetAmnesics(),
+}))
+export const refreshPresetAmnesics = (): void => {
+  const modes = readPresetAmnesics()
+  const now = usePresetAmnesics.getState().modes
+  const ids = new Set([...Object.keys(now), ...Object.keys(modes)])
+  if ([...ids].some((id) => now[+id] !== modes[+id])) usePresetAmnesics.setState({ modes })
+}
+usePresets.subscribe(refreshPresetAmnesics)
+
+// ★ THE ONE HAND-OVER (design 9.5). v2.28.0 to v2.29.x held each preset's Amnesic value for the browsing
+// session, in sessionStorage (`cg-amnesic-v1`: preset id -> value). A guest playing in such a tab when it
+// updates itself reloads into this build in the same session, that record still there: at this FIRST
+// load only, a value in it that differs from the preset's own is written as that preset's setting - a
+// local change, synced - and the record is removed, so the guest stays a guest. Run as this module loads,
+// before any store reads the saved progress (they read the value this writes). Besides the Julian-on
+// range's pin (store/julianRange), the only write a load makes.
+// (A value the record holds that this build does not know reads as Full: store/amnesicMode.)
+const HANDED_OVER_KEY = 'cg-amnesic-v1'
+export function handOverSessionAmnesic(): void {
+  let raw: string | null
+  try {
+    raw = window.sessionStorage.getItem(HANDED_OVER_KEY)
+  } catch {
+    return // (no session storage: no older tab's session to hand over)
+  }
+  if (raw === null) return
+  let record: unknown = null
+  try {
+    record = JSON.parse(raw)
+  } catch {
+    /* not a record: nothing to hand over */
+  }
+  if (record && typeof record === 'object' && !Array.isArray(record))
+    for (const [id, value] of Object.entries(record)) {
+      const presetId = Number(id)
+      if (!Number.isInteger(presetId) || !presetListed(presetId)) continue
+      const mode: AmnesicMode = isAmnesicMode(value) ? value : 'full'
+      if (mode !== amnesicOf(presetId)) writePresetAmnesic(presetId, mode)
+    }
+  try {
+    removeItem(window.sessionStorage, HANDED_OVER_KEY)
+  } catch {
+    /* refused: it is read again at the next load, and finds nothing different */
+  }
+}
+handOverSessionAmnesic()
+
 // ★ THE defaultMode OF ANY PRESET, read straight off ITS namespaced settings key rather than
 // through the live store (which is only ever the ACTIVE preset's — persist scopes it via
-// store/presets' presetDoc). The mirror of store/userDefaults' storedAmnesicDefault, and
+// store/presets' presetDoc). The mirror of storedAmnesicDefault below, and
 // it exists for the same reason: on a mid-session preset switch, store/presetControl's switchPreset
 // writes the registry (firing main.tsx's remount subscription) BEFORE it rehydrates the four
 // per-preset stores, so at the instant the subscription reads the incoming preset's opening page
@@ -319,7 +518,7 @@ SETTINGS_DOOR.attach(useSettings)
 // main.tsx's cold-open effect uses it too, for one code path.
 //
 // Reads the persist envelope directly — the same `{ state: {...} }` shape store/presets'
-// readStoredRegistry and store/userDefaults' storedAmnesicDefault parse. Only `state.defaultMode`
+// readStoredRegistry and storedAmnesicDefault below parse. Only `state.defaultMode`
 // is consulted, which no migration step touches, so none is reproduced here. An absent, unreadable,
 // malformed or out-of-range value is treated as the factory 'classic' — the behaviour before `defaultMode` existed, and
 // the correct landing for a payload that cannot be trusted to say where it wanted to open.

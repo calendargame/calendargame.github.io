@@ -1,11 +1,12 @@
-// sessionAmnesic.olderBuilds — WHAT THE OLDER BUILDS ON THIS ORIGIN MAKE OF THE AMNESIC SETTING AS THIS
-// BUILD SAVES IT, AND WHAT THIS BUILD MAKES OF WHAT THEY LEAVE.
+// amnesic.olderBuilds — WHAT THE OLDER BUILDS ON THIS ORIGIN MAKE OF THE AMNESIC SETTING AS THIS BUILD
+// SAVES IT, AND WHAT THIS BUILD MAKES OF WHAT THEY LEAVE.
 //
 // Live and staging share one browser origin, so v2.27.3 and v2.26.0 read and write the same saved
 // defaults and the same preset registry this build does. To them Amnesic is a boolean: a switch kept
 // on each preset in the registry, put back to `saved.amnesic` at a fresh open. This build made the
-// setting three-way and moved the value in force into the browsing session — and every claim it
-// makes about staying safe beside those builds rests on what THEY do.
+// setting three-way and keeps the value in force in each preset's settings (store/settings; design
+// 9) — a field those builds never read, and drop on their own save — and every claim it makes about
+// staying safe beside those builds rests on what THEY do.
 // ★ THAT WAS RUN, NOT READ. tests/fixtures/olderBuilds/amnesic-v2.27.3.json and amnesic-v2.26.0.json
 // are what the real app at each tag (fcdcf56, ff506f8) did when amnesicDrive.dom.test.jsx.txt drove
 // it over storage in this build's shapes: where one answered question went, what its registry and
@@ -71,16 +72,15 @@ describe.each(['v2.27.3', 'v2.26.0'])('%s, as the real build behaved', (build) =
   })
 
   describe('the registry flag', () => {
-    // THE HAND-OVER: a guest is playing in the older build when the app updates itself. Its flag is
-    // the truth about that session, and this build's first load — a reload — reads it as Full.
-    it('a guest session in the older build: its flag is true, and this build reads that as Full', () => {
+    // A guest is playing in the older build: its flag is true, and its session copy sits under the key
+    // this build's Full reads. ⚠ THIS BUILD CARRIES THE FLAG AND NEVER READS IT (design 9.4): the one
+    // hand-over is v2.28-v2.29's session record (9.5, tests/amnesicSetting.dom) - a v2.27.3 or v2.26.0
+    // guest session that updates straight into this build lands on the preset's own value.
+    it('a guest session in the older build: its flag is true, and its session copy is where this build’s Full reads', () => {
       const s = seen.guestSession
       expect([s.permanentPlayed, s.sessionPlayed]).toEqual([SAVED, 1])
       const preset = s.registry.presets.find((p) => p.id === s.registry.activeId)
       expect(preset.amnesic).toBe(true)
-      expect(readAmnesicMode(preset)).toBe('full')
-      // Its session copy sits under the key this build's Full reads (tests/sessionAmnesic.dom
-      // carries the guest across with it).
       expect(s.sessionKeys).toContain('cg-progress-v1')
     })
 
@@ -99,11 +99,10 @@ describe.each(['v2.27.3', 'v2.26.0'])('%s, as the real build behaved', (build) =
   })
 
   // ⚠⚠ THE ONE SEQUENCE LEFT OPEN, pinned so it is never mistaken for covered: a preset is put on
-  // Full (or Stats Only) in THIS build — the value is the session's, the registry flag untouched —
-  // and the OLDER build is then loaded in the same tab without closing it. The older build knows
-  // nothing of the session's value and records. (Every tab has its own value now, so the older
-  // build in ANOTHER tab not knowing is the design; this is the same blindness in the same tab.)
-  it('⚠ this build’s session value is invisible to the older build loaded in the same tab', () => {
+  // Full (or Stats Only) in THIS build — a field of its settings, the registry flag untouched — and the
+  // OLDER build is then loaded in the same tab. The older build knows nothing of this build's value,
+  // in this tab or any other, and records.
+  it('⚠ this build’s value is invisible to the older build loaded in the same tab', () => {
     const s = seen.sameTabAfterThisBuild
     expect(s.flag).toBe(false)
     expect(s.permanentPlayed).toBe(SAVED + 1) // recorded — the unsafe direction, and known

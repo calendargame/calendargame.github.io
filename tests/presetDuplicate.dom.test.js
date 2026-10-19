@@ -26,9 +26,10 @@ import {
   setPresetAmnesic,
   DUPLICATE_RULES,
 } from '../src/store/presetControl.js'
-import { useSessionAmnesic, amnesicModeOf } from '../src/store/sessionAmnesic.js'
+import { amnesicModeOf } from '../src/store/amnesic.js'
 import { openBrowsingSession, forgetBrowsingSession } from '../src/store/browsingSession.js'
 import { writeSessionMode } from '../src/store/sessionMode.js'
+import { writeSessionDedType } from '../src/store/sessionDedType.js'
 import { writeSessionRound } from '../src/store/sessionRound.js'
 import { writeSessionHistory } from '../src/store/sessionHistory.js'
 import { parseTimesKey } from '../src/store/progressStorage.js'
@@ -47,7 +48,7 @@ function resetAll() {
   useModePrefs.getState().resetModePrefs()
   useProgress.getState().resetProgress()
   useUserDefaults.getState().clearDefaults()
-  useSessionAmnesic.setState({ modes: {} })
+  useSettings.setState({ amnesic: 'off' })
   localStorage.clear()
   sessionStorage.clear()
 }
@@ -258,9 +259,10 @@ describe('THE GUARD: every per-preset key has an answer in DUPLICATE_RULES', () 
       switchPreset(p)
       // Every part of preset `p`, filled through the app's own doors.
       setUpThisPreset() // settings, modePrefs, progress, userDefaults
-      setPresetAmnesic(p, 'stats') // the session's Amnesic value…
+      setPresetAmnesic(p, 'stats') // the Amnesic value (a setting)…
       useProgress.getState().setModeStats('flash', PLAYED) // …and its session stats
       writeSessionMode(p, 'flash')
+      writeSessionDedType(p, 'month')
       writeSessionRound(`${p}:saved`, 'blitz', { engine: {} })
       writeSessionHistory(`${p}:stats`, 'classic', '{"h":[]}')
 
@@ -277,8 +279,8 @@ describe('THE GUARD: every per-preset key has an answer in DUPLICATE_RULES', () 
         }
         if (key === presetKey(PRESET_STORE_KEYS.progress, p)) return 'sessionStats'
         if (parseTimesKey(key)?.presetId === p) return 'sessionStats'
-        if (key === 'cg-amnesic-v1') return 'amnesic'
         if (key === 'cg-session-mode-v1') return 'sessionPage'
+        if (key === 'cg-session-dedtype-v1') return 'sessionDedType'
         if (key === 'cg-round-v2') return 'sessionRounds'
         if (key.startsWith(`cg-history-v1:${p}:`)) return 'sessionHistories'
         return null

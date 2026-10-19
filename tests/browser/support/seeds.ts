@@ -18,7 +18,7 @@
 //     tests/browser/seeds.browser.ts, by OBSERVATION: it makes the app save, and compares.
 // And every test confirms its seed on screen before measuring (support/app's rule), so a seed the
 // app ignored can never pass as a result.
-import { PRESET_REGISTRY_KEY, PRESET_STORE_KEYS } from '../../../src/store/presets'
+import { PRESET_REGISTRY_KEY, PRESET_STORE_KEYS, presetKey } from '../../../src/store/presets'
 import type { PresetRegistryValues } from '../../../src/store/presets'
 import { SETTINGS_DEFAULTS, type SettingsValues } from '../../../src/store/settings'
 import { MODE_PREFS_DEFAULTS, type ModePrefsValues } from '../../../src/store/modePrefs'
@@ -42,12 +42,10 @@ export const SAVED_VERSION = {
   presets: 1,
 } as const
 
-// The two sessionStorage keys that say "this browsing session is under way, and these are the
-// Amnesic values it is running on" (src/store/browsingSession, src/store/sessionAmnesic — private
-// there, so spelled again here, and held to the app by seeds.browser.ts).
+// The sessionStorage key that says "this browsing session is under way" (src/store/browsingSession —
+// private there, so spelled again here, and held to the app by seeds.browser.ts).
 export const SESSION_KEYS = {
   browsingSession: 'cg-browsing-session-v1',
-  amnesic: 'cg-amnesic-v1',
 } as const
 
 export interface AppSeed {
@@ -64,9 +62,9 @@ export interface AppSeed {
   /** The list of presets. Left out, there is the one preset every device starts with. */
   presets?: PresetRegistryValues
   /**
-   * The Amnesic value each preset is on, as a browsing session already under way holds it — which
-   * is how the app comes to open on Stats Only or Full without a test clicking through the pill's
-   * confirmation every time.
+   * The Amnesic value each preset is on — a field of each preset's settings (src/store/settings) —
+   * which is how the app comes to open on Stats Only or Full without a test clicking through the pill
+   * every time.
    */
   amnesic?: Record<number, AmnesicMode>
 }
@@ -91,9 +89,11 @@ export function storageFor(seed: AppSeed): SeededStorage {
   if (seed.progress)
     local[PRESET_STORE_KEYS.progress] = envelope(seed.progress, SAVED_VERSION.progress)
   if (seed.presets) local[PRESET_REGISTRY_KEY] = envelope(seed.presets, SAVED_VERSION.presets)
-  if (seed.amnesic) {
-    session[SESSION_KEYS.browsingSession] = '1'
-    session[SESSION_KEYS.amnesic] = JSON.stringify(seed.amnesic)
+  // (into each preset's settings, beside whatever else is seeded there)
+  for (const [id, mode] of Object.entries(seed.amnesic ?? {})) {
+    const key = presetKey(PRESET_STORE_KEYS.settings, +id)
+    const state = local[key] ? (JSON.parse(local[key]) as { state: object }).state : {}
+    local[key] = envelope({ ...state, amnesic: mode }, SAVED_VERSION.settings)
   }
   return { local, session }
 }

@@ -100,7 +100,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    date: '2026-10-16',
+    date: '2026-10-19',
     items: [
       "In Blitz, the time slider and the countdown are now one. Press Begin and the slider becomes the round's countdown in the same place, with the time left where the slider's value was; Reset brings the slider back. The Blitz page is a little shorter for it.",
       "In Blitz, a small line under each best now gives that round's other number: its streak under Best Score, and its score under Best Streak — so even a narrow phone can tell whether one round set both. A best from before this update shows a dash there until you beat it.",

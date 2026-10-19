@@ -401,12 +401,12 @@ export function SettingsPanel({
   // OWN three values are one fact — how much lasts — which is why it is a picker and Save Stats
   // stays a switch; and Save Stats has no matching middle value, by the owner's ruling.)
   //
-  // ⚠ NOT A ⚙ SETTING, despite living in the ⚙ panel. The value is held per preset for the browsing
-  // session (store/sessionAmnesic), so it is read from there and written through
-  // store/presetControl — which pairs the write with the storage work it implies. The reasons are
-  // argued in full at the top of store/amnesic; the one that matters here is that a settings value
-  // can be overwritten wholesale by Reset Settings, with no rehydration and no screen remount, and
-  // this value decides WHICH STORAGE the stats and bests are read from.
+  // ⚠ A FIELD OF THE PRESET'S SETTINGS, BUT NOT ONE OF THE 16 (store/settings; design-q1-q2.md v4, 9):
+  // it stays across a real close and every window of the preset follows it, like any setting — and
+  // it is written only through store/presetControl, which pairs the write with the storage work it
+  // implies. The reasons are argued at the top of store/amnesic; the one that matters here is that the
+  // 16 can be overwritten wholesale by Reset Settings, with no rehydration and no screen remount, and
+  // this value decides WHICH COPY the stats and bests are read from.
   // ⚠⚠ WHERE IT LIVES IS NOT WHETHER IT COUNTS, AND THIS COMMENT USED TO CONFLATE THE TWO. It said
   // two things followed from the value not being a settings value: that it is not in the Save
   // Defaults snapshot, and that it never lights the gear's "modified" bar. BOTH WERE WRONG, in two
@@ -415,8 +415,8 @@ export function SettingsPanel({
   // bar (main.tsx's settingsAtDefaults) — because leaving it out of ONE shared expression that also
   // dims Save Defaults meant an amnesic-only change could never be saved as a default at all. So
   // the honest statement is the plain one: Amnesic is captured and restored exactly like a setting,
-  // and it is judged exactly like one; only its STORAGE is different, and that difference is what
-  // the paragraph above is about.
+  // and it is judged exactly like one; only the way it is WRITTEN is different, and that difference
+  // is what the paragraph above is about.
   const activePresetId = usePresets((s) => s.activeId)
   const amnesic = useActiveAmnesicMode()
   // The active preset's NAME, for the Presets section's one line of prose at the head of the panel.

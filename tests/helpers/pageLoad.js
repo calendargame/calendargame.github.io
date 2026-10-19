@@ -8,9 +8,9 @@
 // truest model, but the stores it returns are not the ones a mounted <App/> holds.)
 //
 //   loadPage() — every store reads storage again, in the order a real load evaluates them: the
-//                registry (which preset), each preset's Amnesic value for the session
-//                (store/sessionAmnesic — the session's own record on a reload, the saved defaults on
-//                a fresh open), then the four per-preset stores and the two Lookup lists. And
+//                registry (which preset), an older build's session Amnesic record handed over
+//                (store/settings' handOverSessionAmnesic - a load's first act after the settings
+//                exist), then the four per-preset stores and the two Lookup lists. And
 //                everything a page holds only in memory is gone: the saves a full device refused
 //                (store/storageHealth), and its count of how full the device is (store/storageUsage
 //                — the device taken as measured already, as the harness takes it for every test).
@@ -25,8 +25,7 @@
 // act(() => { loadPage() }) itself (tests/amnesic.dom's note on its own relaunch says what the
 // unbraced form costs).
 import { usePresets } from '../../src/store/presets.js'
-import { reopenSessionAmnesic } from '../../src/store/sessionAmnesic.js'
-import { useSettings } from '../../src/store/settings.js'
+import { useSettings, handOverSessionAmnesic } from '../../src/store/settings.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useProgress } from '../../src/store/progress.js'
 import { useUserDefaults } from '../../src/store/userDefaults.js'
@@ -38,9 +37,9 @@ export function loadPage() {
   forgetStorageHealth()
   forgetStorageUsage()
   usePresets.persist.rehydrate()
-  reopenSessionAmnesic()
-  for (const store of [useSettings, useModePrefs, useProgress, useUserDefaults])
-    store.persist.rehydrate()
+  useSettings.persist.rehydrate()
+  handOverSessionAmnesic()
+  for (const store of [useModePrefs, useProgress, useUserDefaults]) store.persist.rehydrate()
   useLookupHistory.persist.rehydrate()
   useLookupSession.persist.rehydrate()
 }

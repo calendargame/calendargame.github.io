@@ -3,17 +3,16 @@
 // ★ THE OWNER'S RULE, which this file is the whole mechanism for: "only truly closing the app starts
 // fresh." A reload — the browser's own reload, the app's own auto-update reload, the Reload button on
 // the error card — is the SAME browsing session, everywhere on the site: the page you were on stays,
-// a finished round stays, and a guest's Amnesic preset stays Amnesic with its session stats.
+// a finished round stays, and a guest's Amnesic preset keeps its session stats.
 //
 // WHY A MARKER IS NEEDED AT ALL. Almost everything session-lived in this app is already right about
 // reloads for free, because it lives in sessionStorage (store/sessionMode, store/sessionRound,
 // store/sessionHistory, store/sessionGuide, an amnesic preset's session copy, the session Lookup
 // overflow): a reload keeps sessionStorage and a real close clears it, and nothing has to notice
-// either. The two things that have to know which it was are each preset's Amnesic value
-// (store/sessionAmnesic — the session's own value on a reload, the preset's saved default on a fresh
-// open, so guest mode ends with the guest) and the "Open in" pin (store/presets — a fresh open lands
-// in the pinned preset, a reload stays where the player was), and neither can tell a reload from a
-// cold open by itself: both boot the page from scratch.
+// either. The one thing that has to know which it was is the "Open in" pin (store/presets — a fresh
+// open lands in the pinned preset, a reload stays where the player was), and it cannot tell a reload
+// from a cold open by itself: both boot the page from scratch. (Each preset's Amnesic value used to be
+// the other; it is a field of the preset's settings now, read as every setting is - store/settings.)
 // Round 21 treated every mount as a fresh open and called a reload "a reopen"; the owner reversed
 // that.
 // So the question is asked of sessionStorage itself: the marker below is written on the first boot of
@@ -34,11 +33,9 @@ const MARKER = 'cg-browsing-session-v1'
 
 /**
  * Is this browsing session ALREADY open — i.e. is this page load a reload inside it rather than a
- * fresh open? A pure read, for the two things that have to know BEFORE the app has booted: the
- * "Open in" pin (store/presets' hydrate `merge`, and index.html's boot script beside it), which
- * decides the preset a FRESH OPEN lands in and must leave a reload on the preset the player was on;
- * and each preset's Amnesic value (store/sessionAmnesic), which a fresh open takes from the saved
- * defaults and a reload from the session's own record.
+ * fresh open? A pure read, for what has to know BEFORE the app has booted: the "Open in" pin
+ * (store/presets' hydrate `merge`, and index.html's boot script beside it), which decides the preset
+ * a FRESH OPEN lands in and must leave a reload on the preset the player was on.
  * False in a browser that refuses sessionStorage, for the reason given in the header.
  */
 export function browsingSessionOpen(): boolean {

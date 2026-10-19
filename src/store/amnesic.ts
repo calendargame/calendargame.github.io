@@ -1,6 +1,6 @@
 import type { StorageValue } from 'zustand/middleware'
-import { usePresets } from './presets.js'
-import { useSessionAmnesic, amnesicModeOf } from './sessionAmnesic.js'
+import { usePresets, PRESET_STORE_KEYS } from './presets.js'
+import { useSettings, amnesicOf, usePresetAmnesics, refreshPresetAmnesics } from './settings.js'
 import { readItem } from './storageHealth.js'
 import { createProgressCodec, removeProgressCopy, mainKeyOf } from './progressStorage.js'
 import { captureError } from '../observability/sentry.js'
@@ -31,29 +31,28 @@ import type { ProgressValues } from './progress.js'
 //                mess around and not worry about my score but I can still store a new best."
 //   Full       — stats and bests are both the session's. The guest mode above.
 //
-// ── WHERE THE VALUE LIVES, AND WHY IT IS NOT A ⚙ SETTING ───────────────────────────────────────
+// ── WHERE THE VALUE LIVES ──────────────────────────────────────────────────────────────────────
 //
-// The pill is drawn in the ⚙ panel directly under Save Stats, but the VALUE is not one of the ⚙
-// settings: it is held per preset for the browsing session (store/sessionAmnesic), and what a preset
-// starts a fresh open on is the value in its saved defaults. Two reasons it cannot be a settings
-// value, and the first is the one that would have caused a data-loss bug:
-//   ★★ A ⚙ SETTING CAN BE WRITTEN BY applySettings. Reset Settings and Full Reset both push a whole
-//      16-value snapshot through it in one `set`. If the Amnesic value were one of those, either
-//      button could change it with no rehydration and no screen remount — the five always-mounted
-//      mode screens would keep holding the session's numbers while the store was repointed at the
-//      parked permanent ones, and the next answered question would write the session's stats over
-//      the player's real ones. That is the exact shape of the 500-cards-becomes-4 failure
-//      store/presetControl was built to make unwritable. Every change to the value goes through
-//      store/presetControl's setPresetAmnesic instead, which pairs it with the discard, the reload
-//      and the remount (src/main.tsx subscribes to activeDataId below).
-//   • A preset list has to say which presets are amnesic for presets you are NOT currently on (the
-//     spoken ", amnesic" in components/PresetSwitcher). A per-preset settings payload can only answer
-//     for the ACTIVE one without hand-parsing other presets' localStorage.
-//
-// ⚠ An older build on this origin knows nothing of the session's value. It reads its own flag on the
-// preset registry and the permanent stats — which are exactly the parked ones, untouched. Nothing it
-// can show is wrong; it just cannot see the session. (What it reads where, and the one sequence that
-// is left open, is argued in store/sessionAmnesic and store/amnesicMode.)
+// ★ IT IS A FIELD OF THE PRESET'S SETTINGS DOC (store/settings' `amnesic`; design-q1-q2.md v4, 9 - the
+// owner's decision: "settings behave the same with presets"). The last value chosen stays across a real
+// close and reopen; saved defaults carry it, so Reset Settings and a new preset set it as they set the
+// other settings; another window's change of it reaches this one like any setting's. Each window keeps
+// its own SESSION copy (sessionStorage): a guest's Full in one window is Full in every window of that
+// preset, and each window plays its own session.
+// ★★ BUT IT IS NOT ONE OF THE 16 that applySettings and the factory reset write, and that is the one
+// that would have caused a data-loss bug: Reset Settings and Full Reset push a whole 16-value snapshot
+// through applySettings in one `set`. Were the Amnesic value one of those, either could change it with no
+// rehydration and no screen remount — the five always-mounted mode screens would keep holding the
+// session's numbers while the store was repointed at the permanent ones, and the next answered question
+// would write the session's stats over the player's real ones: the 500-cards-becomes-4 failure
+// store/presetControl was built to make unwritable. So every change of the value goes through
+// store/presetControl - setPresetAmnesic for a tap here, applyAmnesicChange for another window's change -
+// which pairs it with the discard, the reload and the remount (src/main.tsx subscribes to activeDataId
+// below).
+// ⚠ An older build on this origin knows nothing of this value (it never reads the settings field, and
+// drops it on its own save - the merge reads that as its stale copy). It reads its own flag on the
+// preset registry, which this build carries and never reads (store/presets), and the permanent stats.
+// Nothing it shows is wrong; it just cannot see the session.
 
 // ── WHAT AN AMNESIC PRESET FORGETS, AS ONE DECLARATIVE LIST ───────────────────────────────────
 //
@@ -109,14 +108,38 @@ export const AMNESIC_CLEARS: Record<Exclude<AmnesicMode, 'off'>, readonly Progre
 
 // ── Reading the value ─────────────────────────────────────────────────────────────────────────
 
+/** One preset's Amnesic value (store/settings' amnesicOf: the active one's store, any other's doc). */
+export const amnesicModeOf = (presetId: number): AmnesicMode => amnesicOf(presetId)
+
 /** The Amnesic value of the preset the app is CURRENTLY reading and writing. */
-export const activeAmnesicMode = (): AmnesicMode => amnesicModeOf(usePresets.getState().activeId)
+export const activeAmnesicMode = (): AmnesicMode => useSettings.getState().amnesic
 
 /** …as a subscription — what the ⚙ pill and the dashed outline on the screens render from. */
-export const useActiveAmnesicMode = (): AmnesicMode => {
+export const useActiveAmnesicMode = (): AmnesicMode => useSettings((s) => s.amnesic)
+
+/**
+ * …and for ANY preset, as a subscription - what a list of presets says after each name
+ * (components/PresetSwitcher, components/PresetManager): the active preset's from the store, any other's
+ * as store/settings holds every listed preset's own (usePresetAmnesics).
+ */
+export const useAmnesicModeOf = (presetId: number): AmnesicMode => {
   const activeId = usePresets((s) => s.activeId)
-  return useSessionAmnesic((s) => s.modes[activeId] ?? 'off')
+  const active = useSettings((s) => s.amnesic)
+  const stored = usePresetAmnesics((s) => s.modes[presetId])
+  return presetId === activeId ? active : (stored ?? 'off')
 }
+// (another window's save of a preset's settings or saved defaults: the browser's own notice, which the
+// windows-in-sync door handles for the active preset's docs alone)
+if (typeof window !== 'undefined')
+  window.addEventListener('storage', (e) => {
+    if (
+      e.key !== null &&
+      !e.key.startsWith(PRESET_STORE_KEYS.settings) &&
+      !e.key.startsWith(PRESET_STORE_KEYS.userDefaults)
+    )
+      return
+    refreshPresetAmnesics()
+  })
 
 /**
  * Is a lookup made under this value added to the saved, shared Lookup history? Under Off and Stats
@@ -294,7 +317,7 @@ export function sessionProgress(): {
     },
     save(value) {
       const c = copy()
-      const mode = amnesicModeOf(usePresets.getState().activeId)
+      const mode = activeAmnesicMode()
       if (!c || mode === 'off') return
       const state = value.state as unknown as Record<string, unknown>
       const kept = Object.fromEntries(

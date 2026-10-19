@@ -8,7 +8,7 @@
 //             modes' BESTS are the permanent ones — shown, beatable, and saved for good.
 //   'full'  — the whole of a preset's saved progress belongs to the session: stats AND bests.
 // What each one keeps where is store/amnesic's (AMNESIC_CLEARS); which value a preset has right now is
-// store/sessionAmnesic's. This file is only the value and its spellings, and imports nothing, so
+// its settings' (store/settings). This file is only the value and its spellings, and imports nothing, so
 // every store can read it.
 
 export type AmnesicMode = 'off' | 'stats' | 'full'
@@ -57,10 +57,9 @@ export const storedAmnesic = (mode: AmnesicMode): Required<StoredAmnesic> => ({
 })
 
 /**
- * ★ THE ONE READER — every stored copy of the setting comes through here: a saved-defaults snapshot
- * (the active preset's in store/userDefaults, any other preset's read straight off its key), the
- * `amnesic` flag an older build keeps on the preset registry, and a value in the session's own record
- * (store/sessionAmnesic). Pure, total, and keyed on the SHAPE it finds rather than on a version
+ * ★ THE ONE READER OF A SAVED-DEFAULTS SNAPSHOT'S VALUE — the active preset's in store/userDefaults, any
+ * other preset's read straight off its key (store/settings' storedAmnesicDefault). (The settings field
+ * itself is one of the three values, screened by store/settings.) Pure, total, and keyed on the SHAPE it finds rather than on a version
  * number, because an older build can rewrite any of these at any time:
  *   • no `amnesicMode` — an older build's copy, where the boolean is all there is: true → 'full',
  *     false or absent → 'off' (a snapshot from before the setting existed has neither field, and

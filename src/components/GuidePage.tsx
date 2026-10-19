@@ -3436,11 +3436,12 @@ export default function GuidePage({
             they were. (Full Reset is the one that clears those too.)
           </li>
           <li>
-            The Amnesic value itself, for as long as the app stays open — a reload included. When
-            the app is closed and opened again, each preset goes back to the value in its saved
-            defaults (Off, if you have not saved any), so guest mode ends with the guest. The value
-            belongs to the window the app is open in: if you have the app open twice, changing it in
-            one does not change it in the other.
+            The Amnesic value itself. It is one of this preset&apos;s settings: it is still what you
+            left it on after the app is closed and opened again, until you change it. A preset you
+            have never changed it on is on the value in its saved defaults (Off, if you have not
+            saved any). With the app open in more than one window, changing it in one changes it in
+            the others too — and each window keeps a session of its own, so a guest&apos;s numbers
+            in one window are never in another&apos;s.
           </li>
         </UL>
         <p>
@@ -3510,13 +3511,15 @@ export default function GuidePage({
             the way to keep Bests without keeping stats.
           </li>
           <li>
-            <b>It is not a menu setting.</b> It is held for the visit rather than saved with the
-            menu — but it is saved and restored through your defaults exactly like a menu setting,
-            so it counts like one too. Save Defaults captures it, silently, alongside the snapshot;
-            both Reset Settings and Full Reset restore it along with everything else they cover; and
-            moving it away from what your defaults hold lights the ⚙ button&apos;s small violet
-            &quot;modified&quot; line, just as changing a menu setting does. See{' '}
-            <b>Save Defaults, Reset Settings, and Full Reset</b> below.
+            <b>It is not a setting for one visit.</b> It is saved with this preset&apos;s other ⚙
+            settings and counts like one: Save Defaults captures it, silently, alongside the
+            snapshot; both Reset Settings and Full Reset restore it along with everything else they
+            cover; and moving it away from what your defaults hold lights the ⚙ button&apos;s small
+            violet &quot;modified&quot; line, just as changing a menu setting does. See{' '}
+            <b>Save Defaults, Reset Settings, and Full Reset</b> below. The one difference is what a
+            change does: every mode screen starts again on the other copy of your numbers (see{' '}
+            <b>Changing it</b>). That is why it moves only when it is picked — here, or in another
+            window.
           </li>
         </UL>
         <Subhead>What &quot;closed&quot; honestly means</Subhead>
@@ -3524,7 +3527,9 @@ export default function GuidePage({
           A session&apos;s numbers last for the browsing session, and it is the browser that decides
           when one ends. A refresh or a reload does not end it — come straight back and the session
           is still going, with the preset still on Stats Only or Full, any finished round still on
-          screen, and the dates you played still there to browse back through. Closing the app does.
+          screen, and the dates you played still there to browse back through. Closing the app does:
+          the preset is still on Stats Only or Full when it is opened again — that is a setting —
+          and a new session starts from zero.
         </p>
         <p>
           On a phone there is no way to tell that apart from the inside. An app the system shuts

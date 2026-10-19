@@ -248,8 +248,8 @@ describe('Save Defaults + gear indicator', () => {
   // ── Amnesic is part of the Save Defaults / Reset Settings / Full Reset contract ─────────────
   // Owner's explicit, confirmed decision (flagged as a real tradeoff, reaffirmed anyway): Save
   // Defaults captures the active preset's Amnesic value at the moment of saving — whichever of the
-  // three it is — and Reset Settings and Full Reset both restore it. The saved value is also what
-  // the preset starts every fresh app open on (tests/sessionAmnesic.dom).
+  // three it is — and Reset Settings and Full Reset both restore it. The saved value is also what a
+  // preset is on while its settings hold no value of their own (tests/amnesicSetting.dom).
   // ⚠ Amnesic lights the gear's "modified" bar by itself (main.tsx's settingsAtDefaults compares
   // it), so the capture is reachable from the pill alone; the first case below says so, and the
   // rest keep makeSaveable only where the case is about something else.

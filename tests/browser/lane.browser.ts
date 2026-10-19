@@ -82,13 +82,17 @@ test('a second window shares the first one’s saved data and has its own sessio
   expect(
     await second.evaluate((key) => window.localStorage.getItem(key), PRESET_STORE_KEYS.settings),
   ).toBe(await page.evaluate((key) => window.localStorage.getItem(key), PRESET_STORE_KEYS.settings))
-  // Its own session: the first window's is under way on Amnesic Full, the second opens fresh.
+  // The Amnesic value is one of the preset's settings, so the second window is on Full too
+  // (design-q1-q2.md v4, 9) - and its session is its own: nothing of the first window's is in it.
   const amnesic = async (p: Page) => {
     const panel = await openSettings(p)
     return panel.getByRole('radiogroup', { name: 'Amnesic' }).getByRole('radio', { checked: true })
   }
   await expect(await amnesic(page)).toHaveText('Full')
-  await expect(await amnesic(second)).toHaveText('Off')
+  await expect(await amnesic(second)).toHaveText('Full')
+  const sessionKeys = (p: Page) =>
+    p.evaluate(() => Object.keys(window.sessionStorage).filter((k) => k.startsWith('cg-progress')))
+  expect(await sessionKeys(second)).toEqual([])
 })
 
 test('a reload finds what the app saved, not the seed again', async ({ page }) => {

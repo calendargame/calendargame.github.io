@@ -12,8 +12,7 @@ import {
   presetListed,
   presetIdOfSuffix,
 } from './presets.js'
-import { sessionProgress } from './amnesic.js'
-import { amnesicModeOf } from './sessionAmnesic.js'
+import { sessionProgress, activeAmnesicMode } from './amnesic.js'
 import { door } from './syncedDoc.js'
 import { makeProgressStorage } from './progressDoor.js'
 import { mainKeyOf } from './progressStorage.js'
@@ -222,7 +221,7 @@ const PROGRESS_SESSION = sessionProgress()
 export const PROGRESS_DOOR = makeProgressStorage<Partial<ProgressState>>(door.progressKit, {
   presetId: () => usePresets.getState().activeId,
   key: () => mainKeyOf(usePresets.getState().activeId),
-  mode: () => amnesicModeOf(usePresets.getState().activeId),
+  mode: () => activeAmnesicMode(),
   version: 5,
   migrate: migrateProgress,
   defaults: () => makeProgressDefaults() as never,

@@ -10,8 +10,8 @@ import {
 
 // amnesicMode — the three values of the Amnesic setting and the ONE reader of every stored spelling
 // of it. Pure, so it is pinned here as a table; where each stored copy actually reaches the reader
-// (a saved-defaults snapshot, another preset's, the older builds' registry flag, the session's own
-// record) is tests/sessionAmnesic.dom's.
+// (a saved-defaults snapshot, another preset's, the settings field, an older build's session record)
+// is tests/amnesicSetting.dom's.
 
 describe('the three values', () => {
   it('are Off, Stats Only, and Full, least amnesic first', () => {

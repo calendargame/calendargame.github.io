@@ -34,7 +34,7 @@
 //
 // What a parked ROUND does across a change is tests/amnesicRound.dom's; where each preset's value
 // comes from when a page loads (a reload, a real close, an older build, another tab, a full device)
-// is tests/sessionAmnesic.dom's.
+// is tests/amnesicSetting.dom's.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, cleanup, act, within } from '@testing-library/react'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
@@ -46,8 +46,8 @@ import {
   bestsIdOf,
   keepsLookups,
   discardSessionStats,
+  amnesicModeOf,
 } from '../src/store/amnesic.js'
-import { amnesicModeOf, commitSessionAmnesic } from '../src/store/sessionAmnesic.js'
 import { openBrowsingSession } from '../src/store/browsingSession.js'
 import { AMNESIC_MODES } from '../src/store/amnesicMode.js'
 import { seedSealed } from './helpers/progressWorld.js'
@@ -93,14 +93,20 @@ const statsKey = (presetId) => presetKey(PRESET_STORE_KEYS.progress, presetId)
 const parked = (presetId = 1) => localStorage.getItem(statsKey(presetId))
 // The session copy, which the browser throws away when the app closes.
 const session = (presetId = 1) => sessionStorage.getItem(statsKey(presetId))
-// The other three stores' saved copies, as raw strings — the KEEPS half of the split, which must be
-// untouched by all of this because store/amnesic only ever repoints progress.
+// The other three stores' saved copies — the KEEPS half of the split, which must be untouched by all
+// of this because store/amnesic only ever repoints progress. (The settings with their Amnesic value set
+// aside: the value itself is a field of them - store/settings - and changing it is what these cases do.)
+const settingsWithoutAmnesic = (text) => {
+  if (text === null) return null
+  const { amnesic: _amnesic, ...state } = JSON.parse(text).state
+  return JSON.stringify(state)
+}
 const keptCopies = (presetId = 1) =>
   Object.fromEntries(
-    ['settings', 'modePrefs', 'userDefaults'].map((id) => [
-      id,
-      localStorage.getItem(presetKey(PRESET_STORE_KEYS[id], presetId)),
-    ]),
+    ['settings', 'modePrefs', 'userDefaults'].map((id) => {
+      const text = localStorage.getItem(presetKey(PRESET_STORE_KEYS[id], presetId))
+      return [id, id === 'settings' ? settingsWithoutAmnesic(text) : text]
+    }),
   )
 const BESTS = ['blitzBest', 'suddenBest', 'suddenAmBest', 'aoxBest']
 // The Bests' own key beside the doc (store/progressDoc: the records' key of the windows-in-sync door) -
@@ -145,8 +151,15 @@ const parkedBests = (presetId = 1) => {
   const state = parkedState(presetId)
   return Object.fromEntries(BESTS.map((key) => [key, state[key]]))
 }
-// Everything on the device, every key — for "not one permanent byte moved".
-const device = () => JSON.stringify(Object.entries({ ...localStorage }).sort())
+// Everything on the device, every key — for "not one permanent byte moved" — but the settings docs and
+// their sync keys, where the Amnesic value itself is kept (store/settings: changing it, or playing on
+// the value a case set, is what these cases do; the settings' other values are keptCopies' to watch).
+const device = () =>
+  JSON.stringify(
+    Object.entries({ ...localStorage })
+      .filter(([k]) => !k.includes(PRESET_STORE_KEYS.settings))
+      .sort(),
+  )
 
 // Set a preset's Amnesic value the way the ⚙ pill does: one call. act() because src/main.tsx's
 // subscription runs synchronously inside it and, with the app mounted, remounts the mode screens;
@@ -218,13 +231,11 @@ const relaunch = () => {
   })
 }
 // A RELOAD and A REAL CLOSE of the whole page (tests/helpers/pageLoad), braced for the same reason.
-// ⚠ A store-level case has no <App/>, so it runs the app's boot effect itself — `boot`, the two
-// calls src/main.tsx makes on every load: the browsing session is marked open (which is what makes
-// the next load a RELOAD rather than a fresh open), and the values this page opened with are put on
-// the session's record. A case that mounts the app gets both from the mount.
+// ⚠ A store-level case has no <App/>, so it runs the app's boot effect itself — `boot`: the browsing
+// session is marked open (which is what makes the next load a RELOAD rather than a fresh open). A case
+// that mounts the app gets it from the mount.
 const boot = () => {
   openBrowsingSession()
-  commitSessionAmnesic()
 }
 const reloadPage = () => {
   act(() => {
@@ -348,15 +359,17 @@ describe('Full: an amnesic preset never writes its saved progress down', () => {
 
       // A setting changed DURING an amnesic session is still permanent: amnesia is about stats.
       useSettings.getState().setManualTheme('midnight')
-      expect(JSON.parse(keptCopies().settings).state.manualTheme).toBe('midnight')
-      // The value itself is the session's, and stays until somebody changes it or the app is closed.
+      expect(JSON.parse(keptCopies().settings).manualTheme).toBe('midnight')
+      // The value itself is a setting of the preset, and stays until somebody changes it.
       expect(amnesicModeOf(1)).toBe(mode)
     })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════
   // CLOSING THE APP. Nothing in the app detects a close; the browser ends the session and the copy
   // goes with it. This is that, in the only shape jsdom can state it honestly — the session area is
-  // emptied, which is exactly what the browser does — and what matters is what is left behind.
+  // emptied, which is exactly what the browser does — and what matters is what is left behind. The
+  // VALUE is a setting of the preset (design-q1-q2.md v4, 9.6): the next open is on Full still, with a
+  // session of its own, and the saved copy is exactly as it was.
   it('closing the app takes the session with it and leaves the parked copy untouched', () => {
     recordEverything(7)
     const before = device()
@@ -366,10 +379,11 @@ describe('Full: an amnesic preset never writes its saved progress down', () => {
 
     closeAndReopen()
 
-    // The preset has no saved default, so the next open finds it on Off — with what was saved.
-    expect(amnesicModeOf(1)).toBe('off')
-    expect(useProgress.getState().stats.classic.played).toBe(7)
+    expect(amnesicModeOf(1)).toBe('full')
+    expect(liveProgress()).toEqual(ZERO) // a new session: the last one's numbers are gone
     expect(device()).toBe(before)
+    setAmnesic('off')
+    expect(useProgress.getState().stats.classic.played).toBe(7) // what was saved, untouched
   })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════
@@ -410,7 +424,8 @@ describe('Full: an amnesic preset never writes its saved progress down', () => {
 
   // ══════════════════════════════════════════════════════════════════════════════════════════
   // Deleting a preset removes exactly its keys — which means BOTH areas, or a deleted preset
-  // leaves a session copy behind under a namespace nothing owns. Its Amnesic value goes too.
+  // leaves a session copy behind under a namespace nothing owns. Its Amnesic value goes too, with its
+  // settings.
   it('deleting a preset takes its session copy and its Amnesic value with it', () => {
     const p2 = createPreset()
     setAmnesic('full', p2.id)
@@ -421,8 +436,7 @@ describe('Full: an amnesic preset never writes its saved progress down', () => {
     act(() => switchPreset(1))
     act(() => deletePreset(p2.id))
     expect(session(p2.id)).toBeNull()
-    expect(amnesicModeOf(p2.id)).toBe('off')
-    expect(sessionStorage.getItem('cg-amnesic-v1')).not.toContain(`"${p2.id}"`)
+    expect(localStorage.getItem(presetKey(PRESET_STORE_KEYS.settings, p2.id))).toBeNull()
   })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════
@@ -523,15 +537,19 @@ describe('Stats Only: the stats are the session’s, the Bests are the permanent
     expect(device()).toBe(untouched) // reading them moved nothing
   })
 
-  // ★★ THE INVARIANT, as a byte comparison: every permanent key but the progress key is identical,
-  // and the progress key is identical once its four Best maps are set aside — including how its
-  // stats are SPELLED in the stored text.
+  // ★★ THE INVARIANT, as a byte comparison: every permanent key but the progress key (and the settings,
+  // where the Amnesic value itself is set - keptCopies watches the rest of them) is identical, and the
+  // progress key is identical once its four Best maps are set aside — including how its stats are
+  // SPELLED in the stored text.
   it('THE INVARIANT: a whole session of play and new bests changes the permanent Bests and NOTHING else', () => {
     recordEverything(7)
     const others = () =>
       JSON.stringify(
         Object.entries({ ...localStorage })
-          .filter(([k]) => k !== statsKey(1) && k !== recordsKey(1))
+          .filter(
+            ([k]) =>
+              k !== statsKey(1) && k !== recordsKey(1) && !k.includes(PRESET_STORE_KEYS.settings),
+          )
           .sort(),
       )
     const [otherKeys, minusBests, statsText] = [others(), parkedMinusBests(), parkedStatsText()]
@@ -590,11 +608,12 @@ describe('Stats Only: the stats are the session’s, the Bests are the permanent
     recordStats(20)
     recordBests(50)
     closeAndReopen()
-    expect(amnesicModeOf(1)).toBe('off') // no saved default: back to Off
+    expect(amnesicModeOf(1)).toBe('stats') // (the value is a setting: it stays)
     expect(liveBests()).toEqual(bestsOf(50)) // kept for good
-    expect(useProgress.getState().stats.classic.played).toBe(7) // your own, exactly as they were
+    expect(useProgress.getState().stats).toEqual(ZERO.stats) // a new session
     expect(parkedStatsText()).toBe(stats)
-    expect(session()).toBeNull()
+    setAmnesic('off')
+    expect(useProgress.getState().stats.classic.played).toBe(7) // your own, exactly as they were
   })
 
   it('a Best set in the session survives a preset switch and back', () => {
@@ -1115,6 +1134,10 @@ describe('changing the Amnesic value with the app running', () => {
     unmount()
     closeAndReopen()
     mountApp()
+    pressNew()
+    // (still on Stats Only - it is a setting - in a session of its own)
+    expect([statValue('Score'), statValue('Streak')]).toEqual(['0/0', '0/0'])
+    setAmnesic('off')
     pressNew()
     expect(statValue('Score')).toBe('3/3')
     expect(statValue('Streak')).toBe('3/3') // the saved best streak, never the session's 5

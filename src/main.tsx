@@ -49,7 +49,6 @@ import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogSignature, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
 import { usePresets } from './store/presets.js'
 import { activeDataId, activeBestsId, activeAmnesicMode, useActiveAmnesicMode, keepsLookups } from './store/amnesic.js'
-import { useSessionAmnesic, commitSessionAmnesic } from './store/sessionAmnesic.js'
 import { setPresetAmnesic, commitSessionPreset, sweepDeletedPresetLeftovers } from './store/presetControl.js'
 import { openBrowsingSession } from './store/browsingSession.js'
 import { useSettings, readStoredDefaultMode } from './store/settings.js'
@@ -547,10 +546,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // freshness checks. Survives Full Reset by design (see store/userDefaults).
       const savedDefaults=useUserDefaults(s=>s.saved);
       // ★ THE ACTIVE PRESET'S AMNESIC VALUE, BOUND HERE FOR settingsAtDefaults BELOW (round 22).
-      // It is NOT a ⚙ setting — it is held per preset for the browsing session (store/sessionAmnesic),
-      // for the reasons store/amnesic argues at length — but Save Defaults CAPTURES it and Reset
-      // Settings / Full Reset RESTORE it, so it is one of the values "back to my defaults" is talking
-      // about and therefore one of the values the gear's modified bar has to watch. A SUBSCRIPTION
+      // A field of the preset's settings but not one of the 16 (store/settings: it is written only with
+      // the work a change implies, for the reasons store/amnesic argues) — and Save Defaults CAPTURES it
+      // and Reset Settings / Full Reset RESTORE it, so it is one of the values "back to my defaults" is
+      // talking about and therefore one of the values the gear's modified bar has to watch. A SUBSCRIPTION
       // rather than the getState() reads elsewhere in this file: it re-renders App only when the
       // value actually changes, and this one has to move the four offers the instant the pill is
       // tapped.
@@ -1898,7 +1897,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // remounted screens then read whatever is parked for the INCOMING copy: its own history, as it
       // was left earlier this session.
       // ⚠ TWO STORES ARE WATCHED, BECAUSE THE FACT LIVES IN TWO: which preset is the registry's, and
-      // each preset's Amnesic value is the session's (store/sessionAmnesic). Either one changing can
+      // the active preset's Amnesic value is its settings' (store/settings). Either one changing can
       // move activeDataId, so both report here, and `seen` is what the last report left — a change
       // that does not move activeDataId (a rename, another preset's value, a deleted preset's value
       // being forgotten) returns at the first line.
@@ -1915,7 +1914,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
           remountScreens();
           if(presetMoved&&modeRef.current!=='guide'&&appScrollRef.current)scrollBoxTo(appScrollRef.current,0);
         };
-        const offPresets=usePresets.subscribe(onChange),offAmnesic=useSessionAmnesic.subscribe(onChange);
+        const offPresets=usePresets.subscribe(onChange),offAmnesic=useSettings.subscribe(onChange);
         return()=>{offPresets();offAmnesic();};
       },[remountScreens,switchMode]);
       // …and the same park when the PAGE is going away or to the background — a reload, the app's
@@ -1927,14 +1926,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // survives a reload and not a close. ("Only truly closing the app starts fresh": a browser
       // reload and the auto-update reload keep a guest's amnesic preset amnesic, with its session
       // stats and its finished round, exactly like every other session-lived thing in the app.)
-      // ★ ON EVERY LOAD, each preset's Amnesic value is put on the session's record
-      // (commitSessionAmnesic). The values themselves were worked out when the page loaded
-      // (store/sessionAmnesic: the session's own record on a reload, each preset's saved default on a
-      // fresh open) — NOTHING IS RESET HERE and nothing permanent is written, which is the point: the
-      // write a full device used to refuse at this moment no longer exists. Recording them is what
-      // makes the reload that may follow read this session's values rather than the saved defaults
-      // as they stand by then.
-      // ★ …AND SO IS THE PRESET THIS LOAD LANDED IN (commitSessionPreset: the "Open in" pin is applied
+      // (Each preset's Amnesic value is a field of its settings, read as every setting is: nothing is put
+      // back on a fresh open, and nothing is recorded for the session - store/settings.)
+      // ★ THE PRESET THIS LOAD LANDED IN IS PUT ON THE SESSION'S RECORD (commitSessionPreset: the "Open in" pin is applied
       // at hydrate, in memory only, and the reload that may follow reads the session's record of the
       // preset it is on). Session storage again — a fresh open writes nothing permanent at all.
       // ★ ON A COLD OPEN ONLY, the solve-time chunks and Julian-on Year Ranges of presets that no
@@ -1942,7 +1936,6 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // leaves behind).
       useEffect(()=>{
         const cold=openBrowsingSession();
-        commitSessionAmnesic();
         commitSessionPreset();
         if(cold)sweepDeletedPresetLeftovers();
       },[]);

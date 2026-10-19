@@ -48,7 +48,6 @@ import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistor
 import { door } from '../../src/store/syncedDoc.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
 import { discardSessionStats } from '../../src/store/amnesic.js'
-import { forgetSessionAmnesic } from '../../src/store/sessionAmnesic.js'
 // Re-exported so the panel helper's API is complete at one import, while the definition lives in
 // the file that owns the question — mode-screen tests ask "is this offered" about game controls
 // that have nothing to do with settings, and should not be importing from a settings helper.
@@ -96,10 +95,9 @@ export { isOffered, isDimmed, isOutlined }
 // the state every case in this suite is entitled to assume.
 export function resetAppState() {
   // ★ AN AMNESIC PRESET'S SESSION IS THE ONE PIECE OF APP STATE localStorage.clear() CANNOT REACH —
-  // its session copy lives in sessionStorage (store/amnesic), and so does each preset's Amnesic
-  // value (store/sessionAmnesic) — so a case that puts a preset on Stats Only or Full would
-  // otherwise leave both standing for every later case in its file, and the symptom would be
-  // "stats I never wrote" rather than anything naming amnesia. Discarded through the app's own
+  // its session copy lives in sessionStorage (store/amnesic) — so a case that puts a preset on Stats
+  // Only or Full would otherwise leave it standing for every later case in its file, and the symptom
+  // would be "stats I never wrote" rather than anything naming amnesia. Discarded through the app's own
   // calls, so this file still never spells a storage key, and BEFORE the registry goes back to its
   // defaults, because the registry is what says which presets have a copy to discard.
   // ⚠ NOT sessionStorage.clear(). The other two things that live there are not app state — the
@@ -107,7 +105,6 @@ export function resetAppState() {
   // files that care about them keep their own explicit clear, where it reads as the setup for the
   // thing they are testing instead of as a line nobody can account for.
   for (const preset of usePresets.getState().presets) discardSessionStats(preset.id)
-  forgetSessionAmnesic()
   // The device is emptied FIRST and the windows-in-sync door forgets what it knew (store/syncedDoc):
   // a registry put back to one preset over a device still listing several would be merged with them
   // (design 8.1). The registry's reset writes, so the device is emptied again after it, and the door
@@ -118,6 +115,8 @@ export function resetAppState() {
   localStorage.clear()
   door.forget()
   useSettings.getState().resetToFactory()
+  // (…and the Amnesic value, a field of the settings outside the 16 that the factory reset writes)
+  useSettings.setState({ amnesic: 'off' })
   // The Julian-on Year Range back to a factory preset's — and SAVED, as on any device this build has
   // opened: the first open of a preset pins its pair (store/julianRange), so a device with no such key
   // is one this build has never loaded, which no mounted app is.

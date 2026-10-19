@@ -3,7 +3,7 @@ import CustomSelect from './CustomSelect.jsx'
 import { usePresets, shortStockName, stockNumber, defaultPresetName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { switchPreset } from '../store/presetControl.js'
-import { useSessionAmnesic } from '../store/sessionAmnesic.js'
+import { useAmnesicModeOf } from '../store/amnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 import { stockNameForm, useNameRooms, watchNameCell } from '../lib/presetNameWidth.js'
 import { nameAsDrawn } from '../lib/presetNameText.js'
@@ -147,8 +147,8 @@ import { nameAsDrawn } from '../lib/presetNameText.js'
 //     Full        "Weekend, amnesic"
 //     Stats Only  "Weekend, amnesic, stats only"
 // ", amnesic" is kept as it has always been said, and the two kinds are told apart by the words
-// that follow it. Each preset's value is the session's (store/sessionAmnesic), and one subscription
-// there answers for EVERY preset at once, including the ones you are not on.
+// that follow it. Each preset's value is a field of its settings (store/settings), and store/amnesic's
+// useAmnesicModeOf answers for EVERY preset, including the ones you are not on.
 // ⚠ IT IS SPOKEN AS ONE WHOLE PHRASE — "Weekend, amnesic", name included, in an `sr-only` element,
 // with the visible name hidden from a screen reader beside it (the same element a stock name drawn
 // short is spoken from: "Preset 1", or "Preset 1, amnesic") — rather than a ", amnesic" tail for
@@ -190,7 +190,7 @@ export function ShortStockNameRoom() {
 // measures every cell that wears it, so "Open in" and its list are places a name can be cut by
 // drawing their names with this component, with nothing else to wire.
 export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
-  const amnesic = AMNESIC_SPOKEN[useSessionAmnesic((s) => s.modes[p.id] ?? 'off')]
+  const amnesic = AMNESIC_SPOKEN[useAmnesicModeOf(p.id)]
   // The app-wide answer (the ★★ "drawn short" block above): every cell asks the same question in
   // the same render, and stockNameForm answers it once.
   const form = stockNameForm(

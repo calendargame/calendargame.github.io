@@ -22,7 +22,7 @@ import { PresetOptionLabel } from './PresetSwitcher.jsx'
 import { usePresets, normalizePresetName } from '../store/presets.js'
 import { useRemoteEpoch } from '../store/syncedDoc.js'
 import type { Preset } from '../store/presets.js'
-import { useSessionAmnesic } from '../store/sessionAmnesic.js'
+import { useAmnesicModeOf } from '../store/amnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 import {
   createPreset,
@@ -427,6 +427,14 @@ const HELD_INK_CLASS = 'held-ink'
 // first: leave a name box that still has the keyboard, attempting the rename as every way of
 // leaving does, and say whether the device refused it (the ★ "Back is a way of leaving the box
 // too" note above). This card fills it in; the caller only calls it.
+// What a row says after its name for a preset that forgets — spoken, not drawn (components/PresetSwitcher
+// argues both halves). Its own component, so each row subscribes to its own preset's value
+// (store/amnesic's useAmnesicModeOf).
+function AmnesicSpoken({ presetId }: { presetId: number }) {
+  const spoken = AMNESIC_SPOKEN[useAmnesicModeOf(presetId)]
+  return spoken ? <span className="sr-only">{spoken}</span> : null
+}
+
 export default function PresetManager({
   pendingDeleteId,
   setPendingDeleteId,
@@ -453,7 +461,6 @@ export default function PresetManager({
   const [drag, setDrag] = useState<DragState | null>(null)
   const presets = drag?.rows ?? livePresets
   const remoteRegistry = useRemoteEpoch((s) => s.registry)
-  const amnesicModes = useSessionAmnesic((s) => s.modes)
   const activeId = usePresets((s) => s.activeId)
 
   // ── The rename in flight ────────────────────────────────────────────────────────────────────
@@ -1241,9 +1248,7 @@ export default function PresetManager({
                 what to delete; read-only here — Amnesic is set in ⚙ → Stats, and only for the
                 preset you are on. sr-only is positioned out of flow, so it is not a grid cell and
                 takes no track. */}
-                  {AMNESIC_SPOKEN[amnesicModes[p.id] ?? 'off'] && (
-                    <span className="sr-only">{AMNESIC_SPOKEN[amnesicModes[p.id] ?? 'off']}</span>
-                  )}
+                  <AmnesicSpoken presetId={p.id} />
                   {/* THE REORDER GRIP — one control that is both a pointer/touch drag (pointerdown →
                 pointermove → pointerup/cancel, wired to lib/presetReorder's pure arithmetic above)
                 AND a keyboard reorder action (ArrowUp/ArrowDown). No disabled visual at either end

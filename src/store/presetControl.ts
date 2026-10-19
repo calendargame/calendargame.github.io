@@ -15,7 +15,7 @@ import {
 } from './presets.js'
 import type { Preset, PresetRegistryValues } from './presets.js'
 import { discardSessionStats, readSessionStats, dataIdOf, bestsIdOf } from './amnesic.js'
-import { amnesicModeOf, setSessionAmnesic, forgetSessionAmnesicOf } from './sessionAmnesic.js'
+import { amnesicModeOf } from './amnesic.js'
 import type { AmnesicMode } from './amnesicMode.js'
 import {
   isHolding,
@@ -27,13 +27,20 @@ import {
 import { removeProgressCopy, hasTimesKeys, sweepAbandonedTimes } from './progressStorage.js'
 import { recordSessionPreset } from './sessionPreset.js'
 import { discardSessionMode } from './sessionMode.js'
+import { discardSessionDedType } from './sessionDedType.js'
 import { discardSessionRounds, discardSessionRoundsOf, hasSessionRound } from './sessionRound.js'
 import {
   discardSessionHistories,
   discardSessionHistoriesOf,
   hasSessionHistory,
 } from './sessionHistory.js'
-import { useSettings, SETTINGS_DEFAULTS, SETTINGS_DOC } from './settings.js'
+import {
+  useSettings,
+  SETTINGS_DEFAULTS,
+  SETTINGS_DOC,
+  writePresetAmnesic,
+  onAmnesicAdopt,
+} from './settings.js'
 import { useModePrefs, MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { useProgress, makeProgressDefaults, migrateProgress } from './progress.js'
 import { progressStateUnmarked } from './progressDoc.js'
@@ -113,7 +120,12 @@ type DuplicateRule = { copied: true } | { copied: false; because: string }
 const COPIED: DuplicateRule = { copied: true }
 const leftBehind = (because: string): DuplicateRule => ({ copied: false, because })
 // The browsing session's per-preset parts (sessionStorage), beside the stores' four.
-type SessionPart = 'amnesic' | 'sessionStats' | 'sessionPage' | 'sessionRounds' | 'sessionHistories'
+type SessionPart =
+  | 'sessionStats'
+  | 'sessionPage'
+  | 'sessionDedType'
+  | 'sessionRounds'
+  | 'sessionHistories'
 export const DUPLICATE_RULES = {
   // ── the per-preset stores (store/presets' PRESET_STORE_KEYS) ──
   // Every ⚙ setting of the Per-preset half, Default Mode and the theme among them.
@@ -129,15 +141,17 @@ export const DUPLICATE_RULES = {
   // The Year Range used while the Julian Calendar setting is on (store/julianRange) — a ⚙ setting,
   // in a key of its own only so that no older build can drop it.
   julianRange: COPIED,
+  // (The Amnesic value is a field of the settings - copied with them; the copy is on the same value,
+  // with nothing in its session yet, as any change of the value starts.)
   // ── the browsing session's per-preset parts ──
-  // The Amnesic value the preset is on THIS session (store/sessionAmnesic): Off, Stats Only, or
-  // Full. The copy is on the same one — with nothing in it yet, as any change of the value starts.
-  amnesic: COPIED,
   // An amnesic preset's session stats (store/amnesic's session copy of the progress store).
   sessionStats: leftBehind('stats: the session copy of what `progress` is'),
   // The page the preset was last showing this session (store/sessionMode): a place the player was,
   // not a choice — the copy opens on its Default Mode, which is copied.
   sessionPage: leftBehind('where the original was this session, not a setting'),
+  // The Deduction sub-type this window is on for it (store/sessionDedType): also a place, not a choice -
+  // the copy starts from the original's shared sub-type, which is copied with the per-mode setup.
+  sessionDedType: leftBehind('the sub-type the original is on in this window, not a setting'),
   // An ended Blitz round or MoX run waiting on screen (store/sessionRound).
   sessionRounds: leftBehind('a result, which belongs to the run that set it'),
   // Parked casual play — a history, an answered question (store/sessionHistory).
@@ -162,8 +176,9 @@ const presetStore = <T extends object>(
   // The store's migration where it is not persist's own: a store saved through the windows-in-sync
   // door has its doc read in today's shape by the door (its doc spec's `migrate`).
   docMigrate?: (state: Record<string, unknown>, version: number) => Record<string, unknown>,
-  // …and what the door writes INSIDE the values beside them, taken off (the progress doc's tags and
-  // write marks - store/progressDoc): what a saved copy holds is its values, not the door's marks.
+  // …and what a saved copy holds that is not one of its values, taken off: the door's tags and write
+  // marks inside the progress doc (store/progressDoc), and the settings' Amnesic value - a statement
+  // about where stats WOULD go, which isPresetFactory does not consult (the owner's call, there).
   unmarked: (state: Record<string, unknown>) => Record<string, unknown> = (state) => state,
 ) => ({
   key: PRESET_STORE_KEYS[name],
@@ -224,7 +239,13 @@ const PROGRESS_STORE = presetStore(
 // loaded (store/julianRange). Its factory value is the pair a factory preset derives, 1-11582 — which
 // is also what the no-storage branch below sets, since there every preset's settings are factory.
 const PER_PRESET_STORES = [
-  presetStore('settings', useSettings, () => ({ ...SETTINGS_DEFAULTS }), SETTINGS_DOC.migrate),
+  presetStore(
+    'settings',
+    useSettings,
+    () => ({ ...SETTINGS_DEFAULTS }),
+    SETTINGS_DOC.migrate,
+    ({ amnesic: _amnesic, ...values }) => values,
+  ),
   presetStore('julianRange', useJulianRange, () => ({ ...JULIAN_RANGE_DEFAULTS })),
   presetStore('modePrefs', useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
   PROGRESS_STORE,
@@ -290,13 +311,14 @@ const clearPresetStorage = (presetId: number) => {
 function forgetPresetSession(presetId: number): void {
   // An amnesic preset's session copy lives in sessionStorage under the same key, and "remove exactly
   // its keys and nothing else" has to mean both areas or a deleted preset leaves a session copy
-  // behind. Unconditional rather than gated on its Amnesic value — which goes with it, on the next line.
+  // behind. Unconditional rather than gated on its Amnesic value (which went with its settings doc).
   discardSessionStats(presetId)
-  forgetSessionAmnesicOf(presetId)
   // …and the THIRD place a preset can have written this session: its current-page entry
   // (round 21), in sessionStorage keyed by this id. Ids are never reused so a leftover entry is
   // harmless, but "remove exactly its keys" is the house rule.
   discardSessionMode(presetId)
+  // …and its Deduction sub-type in this window (store/sessionDedType), by the same rule.
+  discardSessionDedType(presetId)
   // …and the FOURTH: its parked ended round/run (store/sessionRound), one sessionStorage entry per (bests
   // copy, mode) for this id. discardSessionRounds clears both copies' modes in one call — same house
   // rule, same "harmless leftover but remove it anyway" reasoning as the page entry above.
@@ -487,8 +509,8 @@ const liveIsFactory = (entry: (typeof PER_PRESET_STORES)[number]): boolean => {
  * ⚠ AMNESIC ITSELF IS NOT CONSULTED, and that is the owner's decided call, not an omission: a
  * preset that is otherwise untouched but is on Stats Only or Full still counts as factory, because
  * nothing is lost by deleting it — the value is a statement about where stats WOULD go, and there
- * are none. (It is the session's anyway — store/sessionAmnesic — so it is outside everything this
- * function reads by construction.)
+ * are none. (It is a field of the settings doc, taken off before the settings are compared: the
+ * settings entry's `unmarked`, above.)
  *
  * ⚠ NEITHER IS THE PRESET'S NAME, OR ITS POSITION IN THE LIST, and the owner's own yardstick is
  * what settles it: "as if you pressed clear saved defaults then full reset". Neither of those
@@ -575,18 +597,17 @@ export function createPreset(name?: string): Preset {
   // and the removal (allocatePresetId, below, which duplicatePreset shares).
   const id = allocatePresetId()
   const reg = usePresets.getState() // (after the merge: another window's new presets are in it)
-  // A new preset is PERMANENT until somebody says otherwise — its Amnesic value starts on Off
-  // (setSessionAmnesic, below). Inheriting the current preset's value was rejected on sight: creating
-  // a preset is not a decision about where its stats are kept, and the one direction of that mistake
-  // — a preset that silently forgets — is the one the player would only discover after losing
-  // something. (`amnesic: false` here is the older builds' field, store/presets' Preset: the way
-  // such a build spells its own new preset.)
+  // A new preset is PERMANENT until somebody says otherwise — its Amnesic value is its own saved
+  // default, and it has none: Off (store/settings - a preset with no settings doc yet). Inheriting the
+  // current preset's value was rejected on sight: creating a preset is not a decision about where its
+  // stats are kept, and the one direction of that mistake — a preset that silently forgets — is the one
+  // the player would only discover after losing something. (`amnesic: false` here is the older builds'
+  // field, store/presets' Preset: the way such a build spells its own new preset.)
   const preset: Preset = {
     id,
     name: normalizePresetName(name ?? defaultPresetName(id), id),
     amnesic: false,
   }
-  setSessionAmnesic(id, 'off')
   usePresets.getState().applyRegistry({
     presets: [...reg.presets, preset],
     activeId: reg.activeId,
@@ -678,7 +699,6 @@ export function duplicatePreset(sourceId: number): Preset | 'unknown' | 'no-room
     undo()
     return 'no-room'
   }
-  if (DUPLICATE_RULES.amnesic.copied) setSessionAmnesic(id, amnesicModeOf(sourceId))
   return preset
 }
 
@@ -902,8 +922,10 @@ export function switchPreset(id: number): boolean {
 }
 
 /**
- * Set a preset's Amnesic value — Off, Stats Only or Full — for this browsing session. Returns false
- * when there is nothing to do (unknown id, or the value is already what was asked for).
+ * Set a preset's Amnesic value — Off, Stats Only or Full: a field of its settings (store/settings,
+ * design-q1-q2.md v4, 9), written as any setting is, and then the change's reaction
+ * (applyAmnesicChange, below). Returns false when there is nothing to do (unknown id, or the value is
+ * already what was asked for).
  *
  * ★★ IT IS THE SAME OPERATION AS switchPreset, WITH A DIFFERENT REASON. Changing the value repoints
  * the progress store (store/progressDoor: the device's copy, or this window's session one) — at the other storage area, or at a
@@ -950,16 +972,31 @@ export function switchPreset(id: number): boolean {
  *
  * ⚠ SWITCHING AWAY AND BACK IS NOT A CHANGE and deliberately keeps the session going: the session
  * copy and the value are both keyed per preset and nothing here runs on a switch, so an amnesic
- * preset you left and returned to still has its session. You never closed the app; that is the only
- * event that ends one.
- * ⚠ NOTHING PERMANENT IS WRITTEN BY THE CHANGE ITSELF. The value is the session's
- * (store/sessionAmnesic); what a preset starts the next fresh open on is its saved default, which
- * only Save Defaults moves.
+ * preset you left and returned to still has its session. Only closing the app ends a session's numbers
+ * (the value itself stays, as every setting does).
+ * ⚠ THE ONE THING WRITTEN IS THE VALUE ITSELF, in the preset's settings: it stays across a real close
+ * and reopen, and every other window of the preset follows it (store/settings' apply runs
+ * applyAmnesicChange there - each window then plays its own session).
  */
 export function setPresetAmnesic(id: number, mode: AmnesicMode): boolean {
-  const { presets, activeId } = usePresets.getState()
-  if (!presets.some((p) => p.id === id) || amnesicModeOf(id) === mode) return false
-  setSessionAmnesic(id, mode)
+  const { presets } = usePresets.getState()
+  const from = amnesicModeOf(id)
+  if (!presets.some((p) => p.id === id) || from === mode) return false
+  writePresetAmnesic(id, mode)
+  applyAmnesicChange(id, from, mode)
+  return true
+}
+
+/**
+ * ★ WHAT A CHANGE OF A PRESET'S AMNESIC VALUE DOES, wherever the change was made (design 9.2): a tap
+ * here (setPresetAmnesic, above, after it writes the value) and another window's change of the same
+ * preset (store/settings' apply, after the door patched the value in) run this and nothing else. Its
+ * rule is setPresetAmnesic's, argued there: THIS WINDOW'S SESSION COPY IS DISCARDED, THEN EVERYTHING IS
+ * READ AGAIN - and the screens remount on the copy now in use (src/main.tsx's subscription, which the
+ * value's own change already moved). `from` and `to` are the two values, for the reaction's rules.
+ */
+export function applyAmnesicChange(id: number, _from: AmnesicMode, _to: AmnesicMode): void {
+  const { activeId } = usePresets.getState()
   discardSessionStats(id)
   // …and the rounds parked against the session's bests, which share that copy's lifetime: a guest
   // round must not outlive the guest bests it was scored against, and a fresh guest start must not
@@ -978,8 +1015,10 @@ export function setPresetAmnesic(id: number, mode: AmnesicMode): boolean {
   // will be read from the next time it is opened, which is exactly what deletePreset's `wasActive`
   // guard says about the same situation.
   if (id === activeId) reloadPresetStores()
-  return true
 }
+// (another window's change of the active preset's value - the only preset whose settings doc the door
+// patches here)
+onAmnesicAdopt((from, to) => applyAmnesicChange(usePresets.getState().activeId, from, to))
 
 /**
  * Delete a preset and its saved copy. Returns false when there is nothing to do (unknown id) or

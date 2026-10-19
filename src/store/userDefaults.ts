@@ -1,10 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { PRESET_STORE_KEYS, presetKey, presetDoc, mergeOverDefaults } from './presets.js'
+import { PRESET_STORE_KEYS, presetDoc, mergeOverDefaults } from './presets.js'
 import type { PresetDocSpec } from './presets.js'
 import { cyrb53, canonicalJson } from './syncStamp.js'
-import { readItem } from './storageHealth.js'
-import { SETTINGS_DEFAULTS, migrateDotRotation } from './settings.js'
+import { SETTINGS_DEFAULTS, migrateDotRotation, pinAmnesic } from './settings.js'
 import type { SettingsValues, LegacyDotFields } from './settings.js'
 import { MODE_PREFS_DEFAULTS } from './modePrefs.js'
 import { readAmnesicMode, storedAmnesic } from './amnesicMode.js'
@@ -33,9 +32,10 @@ import type { JulianRangeValues } from './julianRange.js'
 // Amnesic was the only thing a player had changed — making "Amnesic: on" impossible to capture into
 // the very snapshot this file says captures it. It is compared there now, against
 // effectiveAmnesicDefault below, and every offer that lights as a result genuinely acts on it.
-// ★ THE SAVED AMNESIC SETTING IS ALSO WHAT A FRESH APP OPEN STARTS EACH PRESET ON
-// (store/sessionAmnesic): the setting itself is held for the browsing session only, and this
-// snapshot is the one permanent thing that says what it should be the next time the app is opened.
+// ★ THE SAVED AMNESIC SETTING IS ALSO WHAT A PRESET IS ON WHILE ITS SETTINGS HOLD NO VALUE OF THEIR OWN
+// (store/settings' storedAmnesicDefault - a preset this build has not saved settings for yet). So before
+// a save or a clear moves it, the value in force is written into the settings (store/settings'
+// pinAmnesic): changing a default never changes the value a preset is on.
 //
 // A THIRD store (not a settings-store v2) because the capture spans two stores — it belongs to
 // neither — and because surviving Full Reset must be an explicit property: Full Reset deliberately
@@ -126,40 +126,6 @@ export const effectivePrefDefaults = (saved: SavedDefaults | null): PrefDefaults
 // this one about what "nothing saved" restores to.
 export const effectiveAmnesicDefault = (saved: SavedDefaults | null): AmnesicMode =>
   readAmnesicMode(saved)
-
-// ★ THE AMNESIC DEFAULT FOR ANY PRESET, read straight off ITS namespaced userDefaults key rather
-// than through the live store (which is only ever the ACTIVE preset's — persist scopes it via
-// store/presets' presetDoc). store/sessionAmnesic is the one caller: this is what every
-// preset's Amnesic setting starts a fresh app open on, because the setting is a SESSION value —
-// guest mode is temporary by construction, so a preset left on Stats Only or Full is back to its
-// saved default the next time the app is opened.
-//
-// Reads the persist envelope directly — the same `{ state: {...} }` shape store/presets'
-// readStoredRegistry parses, and for the same reason: a store pointed at one preset cannot answer
-// for another. Only the snapshot's Amnesic fields are consulted, which the Rotate Dots migration
-// (the only rewrite this store has) never touches, so no migration step is reproduced here. An
-// absent, unreadable or malformed payload is treated as "nothing saved" →
-// effectiveAmnesicDefault(null) → Off, which is the intended fallback: a preset manually set
-// amnesic with NO saved defaults reverts to Off on every reopen (owner-confirmed — guest mode is
-// temporary by default).
-// ⚠ The ACTIVE preset's key is the un-namespaced base key (presetKey's identity), so this one path
-// covers it too — no special case, and no divergence from effectiveAmnesicDefault(saved) for it.
-export const storedAmnesicDefault = (presetId: number): AmnesicMode => {
-  try {
-    const raw = readItem(window.localStorage, presetKey(PRESET_STORE_KEYS.userDefaults, presetId))
-    if (raw === null) return effectiveAmnesicDefault(null)
-    const envelope: unknown = JSON.parse(raw)
-    const state =
-      envelope && typeof envelope === 'object' ? (envelope as { state?: unknown }).state : null
-    const saved =
-      state && typeof state === 'object'
-        ? ((state as { saved?: SavedDefaults | null }).saved ?? null)
-        : null
-    return effectiveAmnesicDefault(saved)
-  } catch {
-    return effectiveAmnesicDefault(null)
-  }
-}
 
 // The AoX run-length clamp — the rule's ONE home: the AoX run-length box's blur/Enter/Escape
 // commits (modes/AoxMode), the Save Defaults and manage-defaults N fields (components/SettingsPanel)
@@ -259,15 +225,22 @@ export const useUserDefaults = create<UserDefaultsState>()(
       saved: null,
       // Shallow-copy the snapshot so no live object is shared into the persisted store. The Amnesic
       // value is saved in its two-field spelling (store/amnesicMode's storedAmnesic).
-      saveDefaults: (snapshot) =>
+      // (the preset's own Amnesic value is pinned first where its settings hold none: an absent value IS
+      // its saved default - store/settings - and must not move with it)
+      saveDefaults: (snapshot) => {
+        pinAmnesic()
         set({
           saved: {
             settings: { ...snapshot.settings },
             prefs: { ...snapshot.prefs },
             ...storedAmnesic(snapshot.amnesic),
           },
-        }),
-      clearDefaults: () => set({ saved: null }),
+        })
+      },
+      clearDefaults: () => {
+        pinAmnesic()
+        set({ saved: null })
+      },
     }),
     {
       // The localStorage key, unchanged — preset 1 IS the existing saved defaults. Enumerated in
