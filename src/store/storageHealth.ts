@@ -28,14 +28,16 @@ import { reportWritesTo } from '../changelog.js'
 //     every held value, each to its own place and nowhere else;
 //   • REMOVING a place forgets what was held for it: a deleted preset's keys, a guest session being
 //     thrown away. A held value can never bring back something the player deleted;
-//   • ANOTHER TAB changing a place forgets what was held for it too (placeChangedElsewhere): the
+//   • ANOTHER TAB changing a place forgets a plain value held for it (placeChangedElsewhere): the
 //     held value stands in for what that place would hold if the save had fit, and a save that had
-//     fit would have been replaced by the other tab's later one;
+//     fit would have been replaced by the other tab's later one. A place the windows-in-sync door
+//     holds — every saved doc of the app — is NOT forgotten: the door merges with the other tab's
+//     change and keeps only its own un-landed actions on top of it (holdForDoor, below);
 //   • the first refusal of an episode opens components/StorageFullNotice, which tells the player
 //     what happened and how to make room; it does not reopen on every answer while the device stays
 //     full.
 // ⚠ WHAT IS STILL LOST, and the notice has to say so: held values live in this page's memory, so
-// CLOSING OR RELOADING the app while the device is still full loses them. The app holds its own
+// CLOSING OR RELOADING this window while the device is still full loses them. The app holds its own
 // reload for exactly that reason (src/main.tsx's applyUpdate); it cannot hold the player's.
 //
 // ★ WHY THE HELD VALUE IS KEYED BY ITS DESTINATION, AND NOT RE-MADE FROM THE STORE. The first design
@@ -321,16 +323,16 @@ export function removeItem(storage: Storage, key: string): void {
 }
 
 /**
- * ★ ANOTHER TAB JUST CHANGED (storage, key) — or cleared the whole area (`key` null). Whatever this
- * page was holding for that place is forgotten.
+ * ★ ANOTHER TAB JUST CHANGED (storage, key) — or cleared the whole area (`key` null). A plain value
+ * this page was holding for that place is forgotten.
  * WHY. A held value is this page's save, DELAYED: it goes out at the next retry, which can be long
  * after it was made. If another tab (or the other site on this origin — live and staging share
  * these keys) has saved to the same place in the meantime, the retry would put an OLDER save over a
  * newer one; if the other tab DELETED the place — a preset removed there — the retry would bring it
  * back. Neither can happen to a save that fit: it would simply have been replaced, or removed, by
  * what came after it. Dropping the held value makes a refused save behave exactly like that.
- * It does not make two open tabs agree with each other — each still plays on from what it loaded,
- * and its NEXT save is its own; that is the same last-save-wins as on a device with room.
+ * (That is the rule for a PLAIN value — a key with no merge, for which a later save simply wins. The
+ * windows-in-sync door's places are not forgotten here: see the note under this function.)
  */
 export function placeChangedElsewhere(storage: Storage, key: string | null): void {
   elsewhere.set(storage, changesElsewhere(storage) + 1)

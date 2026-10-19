@@ -3659,6 +3659,30 @@ export default function GuidePage({
           above for why, and <b>Stats &mdash; Amnesic</b> for the one thing that changes what it
           does while a preset is on Full.
         </p>
+        <Subhead>With the app open in more than one window</Subhead>
+        <p>
+          Everything in the list above is shared by every window of the app on this device, and so
+          are the preset list and your Lookup history: a change made in one window shows up in the
+          others at once, without a reload. An answer in one window is added to your saved stats in
+          every window, and a best set in one is the best in all of them. If another window changes
+          the mode you are looking at — answers in it, say — only that mode&apos;s question in this
+          window is replaced, and a press you were making at that moment is not counted: the button
+          shows a brief ring instead. If another window changes a setting, this window does exactly
+          what it would have done had you changed the setting here. If another window deletes the
+          preset this one is on, this one moves to the preset next to it. A window you come back to
+          after a while catches up with all of it at once.
+        </p>
+        <p>
+          Some things belong to each window instead: which preset it is on, which Deduction puzzle
+          type it shows, a timed run or round that has ended, the dates you can browse back through,
+          what is on its Lookup page, and its place in this guide.
+        </p>
+        <p>
+          A window still on an <i>older</i> version of the app catches up only once it updates.
+          Until then, playing in it no longer wipes out what you did in the newer windows, and a
+          Lookup history you cleared in a newer window stays cleared; but a setting you change in
+          the older window can put back one you changed in a newer window.
+        </p>
         <Subhead>Kept for the visit only (cleared when you fully close the app)</Subhead>
         <p>
           A reload — reloading the page, or the app updating itself — is not a close: each

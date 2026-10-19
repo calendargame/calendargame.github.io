@@ -1463,8 +1463,9 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // ★ IT IS NOT DEAD ANY MORE, AND THE READ ABOVE IS WHAT CHANGED THAT. gearDot is now
       // useSyncExternalStore over readGearDot, which re-reads localStorage on every render — and
       // localStorage is shared across TABS. A second tab of the app detecting the same build change
-      // writes the flag; this tab picks it up on its next render for any reason, with no
-      // notification needed. So a dot CAN now light with the panel open, and with the retirement
+      // writes the flag, and this tab hears of it at once (store/windowSync hands the storage event
+      // to the changelog's noticeUpdateDots, which re-renders the dots). So a dot CAN now light with
+      // the panel open, and with the retirement
       // living only in toggleSettings it then stays lit until the panel is closed and reopened.
       // ACCEPTED AS A COSMETIC GAP, deliberately: closing it means an effect watching
       // [settingsOpen,gearDot] that writes storage, i.e. reinstating the cascading render this round
