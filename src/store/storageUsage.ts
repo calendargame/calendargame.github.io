@@ -327,6 +327,27 @@ export function shorterNamesWouldEndWarning(
   return spare > 0 && (held - spare) * 100 < STORAGE_WARN_PERCENT * limit
 }
 
+/**
+ * ★ THE ONE RULE FOR SUGGESTING SHORTER PRESET NAMES (Q13) — asked by the breakdown popup
+ * (components/StorageUsagePopup) and the storage-full notice (components/StorageFullNotice) alike, so
+ * the two can never disagree: the warning is on, and shortening the names alone would end it. `rows`
+ * is the device as read for the screen asking (the popup reads it when it opens; so does the notice).
+ */
+export const suggestShorterNames = (
+  warning: boolean,
+  rows: readonly UsageRow[],
+  limit: number | null,
+): boolean => warning && shorterNamesWouldEndWarning(rows, limit)
+
+/** What the device holds, by owner, as it is right now — [] where localStorage refuses to be read. */
+export function readUsageRowsNow(): UsageRow[] {
+  try {
+    return readStorageUsage(window.localStorage).rows
+  } catch {
+    return []
+  }
+}
+
 // The one figure that is not a number read as it stands — as it is written, and as it is said.
 const UNDER_A_TENTH = { written: '<0.1%', spoken: 'under 0.1%' }
 /**

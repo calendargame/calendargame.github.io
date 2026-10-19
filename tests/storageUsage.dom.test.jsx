@@ -28,6 +28,7 @@ import {
   percentText,
   percentSpoken,
   shorterNamesWouldEndWarning,
+  suggestShorterNames,
   DOCUMENTED_LIMITS,
   MAX_STORAGE_LIMIT,
   STORAGE_WARN_PERCENT,
@@ -1601,6 +1602,54 @@ describe('on the mounted app', () => {
       expect(everything() - names.spare).toBe(line80 - 1)
       expect(usage().warning).toBe(true)
       expect(popup().textContent).toMatch(ADVICE)
+    })
+
+    // ★ Q13: THE STORAGE-FULL NOTICE SUGGESTS IT UNDER THE SAME RULE (store/storageUsage's
+    // suggestShorterNames, which the popup asks too) — over the device as it is when the notice opens.
+    describe('…and the storage-full notice, by the same rule', () => {
+      const NOTICE_ADVICE = /Shortening your preset names would be enough on its own to make room/
+      const openNotice = () => {
+        mountApp()
+        openSettings() // (the count settled, as the breakdown has it)
+        act(() => useStorageHealth.setState({ unsaved: true, noticeOpen: true }))
+        return screen.getByRole('dialog', { name: /^Your progress isn.t being saved$/ })
+      }
+      const ruleNow = () =>
+        suggestShorterNames(usage().warning, readStorageUsage(localStorage).rows, usage().limit)
+
+      it('suggests it — first, before the other ways — exactly when that alone would end the warning', () => {
+        nameOf(4_300_000)
+        const notice = openNotice()
+        expect(ruleNow()).toBe(true)
+        expect(notice.textContent).toMatch(NOTICE_ADVICE)
+        expect(notice.textContent).toMatch(/make room \(⚙ → Global → Manage Presets\)/)
+        expect(notice.textContent.indexOf('Shortening')).toBeLessThan(
+          notice.textContent.indexOf('delete a preset'),
+        )
+      })
+
+      it('says nothing about names when the warning is on but shortening them could not end it', () => {
+        nameOf(500_000)
+        fill(4_300_000)
+        const notice = openNotice()
+        expect(usage().warning).toBe(true)
+        expect(ruleNow()).toBe(false)
+        expect(notice.textContent).not.toMatch(/preset names/)
+      })
+
+      it('says nothing about names with no warning, however long they are', () => {
+        nameOf(3_000_000)
+        const notice = openNotice()
+        expect(usage().warning).toBe(false)
+        expect(notice.textContent).not.toMatch(/preset names/)
+      })
+
+      it('the notice and the breakdown agree, side by side', () => {
+        nameOf(4_300_000)
+        const notice = openNotice()
+        act(() => usage().openPopup())
+        expect(NOTICE_ADVICE.test(notice.textContent)).toBe(ADVICE.test(popup().textContent))
+      })
     })
   })
 

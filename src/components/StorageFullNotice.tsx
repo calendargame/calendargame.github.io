@@ -1,6 +1,8 @@
 import Popup from './Popup.js'
 import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
+import { useState } from 'react'
 import { useStorageHealth } from '../store/storageHealth.js'
+import { readUsageRowsNow, suggestShorterNames, useStorageUsage } from '../store/storageUsage.js'
 import { resetStatsFreesRoom, useActiveAmnesicMode } from '../store/amnesic.js'
 import { amnesicLabel } from './settingsOptions.js'
 
@@ -27,13 +29,22 @@ import { amnesicLabel } from './settingsOptions.js'
 //
 // ⚠ THE COPY PROMISES ONLY WHAT storageHealth DOES, and each clause is one of its facts:
 //   • "you can keep playing" — a refused save never throws; the screen is untouched by it.
-//   • "only kept until you close or reload the app" — what could not be saved is held in memory,
-//     each piece for the exact place it belongs (that preset, that stats copy), so it survives
-//     switching presets and back and changing Amnesic and back. It is lost only when the page goes
-//     away: closing the app, or RELOADING it (a browser reload, the error card's Reload). Check for
-//     updates declines to reload while anything is unsaved.
-//   • "saved by itself" — every held piece is written to its own place as soon as a save fits, or
-//     the moment a deleted preset frees room.
+//   • "being kept here until there's room" — what could not be saved is held in this window's
+//     memory, each piece for the exact place it belongs (that preset, that stats copy), so it
+//     survives switching presets and back and changing Amnesic and back. It is lost only when the
+//     page goes away: closing the window, or RELOADING it (a browser reload, the error card's
+//     Reload). Check for updates declines to reload while anything is unsaved.
+//   • "saved by itself — added to whatever another window saved meanwhile" — a held save is retried
+//     as soon as a save fits, or the moment a deleted preset frees room, and a retry is the
+//     windows-in-sync door's merge with the device as it is NOW (store/syncedDoc): a held answer is
+//     added onto another window's, never written over it.
+//   • "a Reset or Clear made here … is cancelled if another window has played since; a setting
+//     changed here yields to one changed in another window since" — the door's rules for a held
+//     Reset, Clear History, and setting (design-q1-q2.md v4, sections 5 and 16).
+//   • SHORTENING PRESET NAMES — suggested exactly when the breakdown popup suggests it, by the same
+//     rule (store/storageUsage's suggestShorterNames), over the device as it was when the notice
+//     opened: only when that alone would be enough. On a device filled by solve times it would be
+//     advice that cannot help, so it is not given.
 //   • WHAT MAKES ROOM — only what is true for the preset the player is on (store/amnesic's
 //     resetStatsFreesRoom, the rule components/StorageUsagePopup follows too). Deleting a preset
 //     always does. Reset Stats does only while Amnesic is Off: on Stats Only or Full it clears the
@@ -44,9 +55,16 @@ import { amnesicLabel } from './settingsOptions.js'
 // ─────────────────────────────────────────────────────────────────────────
 export default function StorageFullNotice() {
   const open = useStorageHealth((s) => s.noticeOpen)
+  // (mounted only while open, so the device is read once for each time the notice opens)
+  return open ? <StorageFullCard /> : null
+}
+
+function StorageFullCard() {
   const dismiss = useStorageHealth((s) => s.dismissStorageNotice)
   const amnesic = useActiveAmnesicMode()
-  if (!open) return null
+  const warning = useStorageUsage((s) => s.warning)
+  const limit = useStorageUsage((s) => s.limit)
+  const [rows] = useState(readUsageRowsNow)
   return (
     <Popup id="storage-full" onDismiss={dismiss} appWide>
       <div
@@ -62,14 +80,23 @@ export default function StorageFullNotice() {
         <div className="text-xs text-(--tx-200-80) space-y-2">
           <p>
             This device is out of room for Calendar Game&apos;s saved data. Everything saved before
-            now is safe, and you can keep playing — but your newest answers and changes are only
-            kept until you close or reload the app.
+            now is safe, and you can keep playing. What you&apos;ve done in this window since is
+            being kept here until there&apos;s room. As soon as there is, it&apos;s saved by itself
+            — added to whatever another window saved meanwhile. A Reset or Clear made here while the
+            device was full is cancelled if another window has played since, and a setting changed
+            here yields to one changed in another window since. Closing or reloading this window
+            before then loses it.
           </p>
+          {suggestShorterNames(warning, rows, limit) && (
+            <p>
+              <b>Shortening your preset names</b> would be enough on its own to make room (⚙ →
+              Global → Manage Presets).
+            </p>
+          )}
           {resetStatsFreesRoom(amnesic) ? (
             <p>
               To make room, delete a preset you no longer use (⚙ → Global → Manage Presets), or use
-              Reset Stats in a mode whose history you don&apos;t need. As soon as there&apos;s room,
-              everything that couldn&apos;t be saved is saved by itself.
+              Reset Stats in a mode whose history you don&apos;t need.
             </p>
           ) : (
             <p>
@@ -77,8 +104,7 @@ export default function StorageFullNotice() {
               empty the Lookup history (Clear History, on the Lookup page). Reset Stats won&apos;t
               make room while this preset&apos;s Amnesic is on {amnesicLabel(amnesic)} — it clears
               only this session&apos;s numbers; set Amnesic to Off first (⚙ → Stats) and it clears
-              the saved ones. As soon as there&apos;s room, everything that couldn&apos;t be saved
-              is saved by itself.
+              the saved ones.
             </p>
           )}
         </div>

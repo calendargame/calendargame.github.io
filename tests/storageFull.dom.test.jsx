@@ -76,12 +76,16 @@ describe('storage full — play goes on, and the player is told', () => {
     expect(notice()).not.toBeNull()
     expect(notice().textContent).toMatch(/Manage Presets/)
     expect(notice().textContent).toMatch(/Reset Stats/)
-    // The copy promises only what store/storageHealth does. What could not be saved is held in
-    // memory, so it is lost when the page goes away — a RELOAD as much as a close — and the way to
-    // Manage Presets is through the ⚙ menu's Global section.
-    expect(notice().textContent).toMatch(/only kept until you close or reload the app/)
+    // The copy promises only what store/storageHealth and the windows-in-sync door do. What could not
+    // be saved is held in this window's memory, so it is lost when the page goes away — a RELOAD as
+    // much as a close; a retry merges with what another window saved; and the way to Manage Presets
+    // is through the ⚙ menu's Global section.
+    expect(notice().textContent).toMatch(/being kept here until there.s room/)
+    expect(notice().textContent).toMatch(/Closing or reloading this window before then loses it/)
+    expect(notice().textContent).toMatch(
+      /saved by itself — added to whatever another window saved meanwhile/,
+    )
     expect(notice().textContent).toMatch(/⚙ → Global → Manage Presets/)
-    expect(notice().textContent).toMatch(/everything that couldn.t be saved is saved by itself/)
     // Dismissed the way every info popup here is: a tap on the scrim.
     act(() => {
       fireEvent.pointerDown(notice().closest('[data-settings-modal]'))

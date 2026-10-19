@@ -3,7 +3,7 @@ import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
 import {
   percentSpoken,
   percentText,
-  shorterNamesWouldEndWarning,
+  suggestShorterNames,
   useStorageUsage,
 } from '../store/storageUsage.js'
 import type { UsageRow } from '../store/storageUsage.js'
@@ -169,7 +169,8 @@ export default function StorageUsagePopup() {
           <p className="font-semibold text-(--tx-100-90)">To make room</p>
           {/* ★ SHORTENING PRESET NAMES IS SUGGESTED ONLY WHEN IT WOULD WORK ON ITS OWN — the warning
               is on, and the names hold enough that shortening them alone would end it
-              (store/storageUsage's shorterNamesWouldEndWarning). A name is normally a few
+              (store/storageUsage's suggestShorterNames — the one rule the storage-full notice asks
+              too). A name is normally a few
               characters, and "shorten your names" on a device filled by solve times would be
               advice that cannot help; so it is first in the list when it is the answer, and not
               in it at all otherwise.
@@ -187,7 +188,7 @@ export default function StorageUsagePopup() {
               other two work under every value: Clear History empties the saved Lookup list
               whatever the value, and deleting a preset removes everything it holds. */}
           <ul className="space-y-1 list-disc ps-4">
-            {warning && shorterNamesWouldEndWarning(rows, limit) && (
+            {suggestShorterNames(warning, rows, limit) && (
               <li>
                 <b>Shortening your preset names</b> would be enough on its own to end this warning
                 (⚙ → Global → Manage Presets).

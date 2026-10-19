@@ -3638,12 +3638,17 @@ export default function GuidePage({
           If this device ever runs out of room for the app&apos;s saved data, a popup tells you so.
           You can keep playing — nothing already saved is lost, and your newest answers and changes
           are held exactly where they belong, so switching presets and back, or changing Amnesic and
-          changing it back, still shows them. But they are only held until you close or reload the
-          app. Deleting a preset you no longer use makes room, and so does Reset Stats in a mode
-          whose history you don&apos;t need — while that preset&apos;s Amnesic is Off; on Stats Only
-          or Full the popup names <b>Clear History</b> instead, for the reason above. Everything
-          that couldn&apos;t be saved is then saved by itself. While anything is waiting like that,{' '}
-          <b>Check for updates</b> won&apos;t reload the app, because a reload would lose it.
+          changing it back, still shows them. But they are held in that window only until you close
+          or reload it. Deleting a preset you no longer use makes room, and so does Reset Stats in a
+          mode whose history you don&apos;t need — while that preset&apos;s Amnesic is Off; on Stats
+          Only or Full the popup names <b>Clear History</b> instead, for the reason above. When
+          shortening your preset names alone would be enough, the popup says that first — the same
+          rule as the breakdown above. Everything that couldn&apos;t be saved is then saved by
+          itself, added to whatever another window of the app saved meanwhile; a Reset or a Clear
+          History made while the device was full is cancelled if another window has played since,
+          and a setting changed meanwhile gives way to one changed in another window since. While
+          anything is waiting like that, <b>Check for updates</b> won&apos;t reload the app, because
+          a reload would lose it.
         </p>
         <p>
           <b>Lookup history</b> — the dates you&apos;ve looked up — is saved on this device too, the
