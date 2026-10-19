@@ -88,10 +88,17 @@ describe('restore: only the state the saved stats support', () => {
     ).toBe(null)
     expect(captureError).not.toHaveBeenCalled()
   })
-  it('a saved pool the cards do not name, second for second → null, and reported', () => {
+  it('saved times that moved on with every count the same (another window reset and replayed) → null, silently', () => {
     const s = play(6)
     const other = { ...s.stats, times: s.stats.times.map((t) => t + 1) }
     expect(restoreParkedText(parkedText(s, SCREEN), other, false, 'classic')).toBe(null)
+    expect(captureError).not.toHaveBeenCalled()
+  })
+  it('a park from before the times’ hash was kept, over a pool the cards do not name → null, and reported', () => {
+    const s = play(6)
+    const other = { ...s.stats, times: s.stats.times.map((t) => t + 1) }
+    const { timesHash: _, ...older } = JSON.parse(parkedText(s, SCREEN))
+    expect(restoreParkedText(JSON.stringify(older), other, false, 'classic')).toBe(null)
     expect(captureError).toHaveBeenCalledTimes(1)
     expect(vi.mocked(captureError).mock.calls[0][1]).toMatchObject({
       where: 'restore-parked-engine',

@@ -10,23 +10,31 @@
 // tens of thousands of numbers for a long-time player — and the pool is exactly the saved pool, so
 // the parked text leaves `stats.times` out and the restore puts the saved one back.
 // The times ledger then checks, second by second, that the cards name the pool's tail in play order.
+// What IS parked beside it is the pool's rolling hash (engine/timesPool's timesHash, which an append
+// keeps for nothing): the one way to tell, before the door, a pool that has moved on from the one the
+// history was played over.
 //
 // ★ WHAT COMES BACK — NOTHING THAT CANNOT BE CHECKED. A parked history is a claim about the stats
 // underneath it, and those stats live somewhere else (store/progress, localStorage — or the session
 // copy for an Amnesic preset). So restoreParked accepts a history ONLY if it is exactly the state
 // those stats support:
-//   • its counts — played, good, streak, best, timesLost — equal the saved ones, and
+//   • its counts — played, good, streak, best, timesLost — equal the saved ones, and so does the
+//     hash of the saved times (a park from before the hash was kept has none, and goes on to the
+//     door's own times ledger), and
 //   • it comes through the ONE engine restore door (engine/parkedEngine's restoreParkedEngine) with
 //     the saved TIMES in place: the shape check, and every engine invariant (engine/invariants — the
 //     card ledger, the times ledger in play order, every per-card Override record).
 // Anything else comes up fresh from the saved stats, exactly as a mount with nothing parked does. The
-// counts can disagree for honest reasons — live and staging were both open in this tab, another tab
-// moved a shared preset on — so that is checked FIRST and is not reported; an unreadable blob or an
-// invariant break is, because no honest path makes one.
+// counts can disagree for honest reasons — live and staging were both open in this tab, another
+// window moved a shared preset on — so that is checked FIRST and is not reported. So can the TIMES
+// with every count the same (Round 26: another window resets the mode and plays it back to the same
+// counts, its times its own) — hence the hash, checked with the counts. An unreadable blob or an
+// invariant break past both is reported, because no honest path makes one.
 // ─────────────────────────────────────────────────────────────────────────
 import { forgetOldestCards } from './gameReducer.js'
 import type { GameState, Stats } from './gameReducer.js'
 import { isObj, restoreParkedEngine } from './parkedEngine.js'
+import { timesHash } from './timesPool.js'
 import { captureError } from '../observability/sentry.js'
 
 /**
@@ -44,12 +52,16 @@ export interface ParkedScreen {
 }
 
 /**
- * The parked text of one engine and its screen: the state with its `stats.times` left out (see the
- * header), the screen's fields beside it.
+ * The parked text of one engine and its screen: the state with its `stats.times` left out and their
+ * hash beside it (see the header), the screen's fields beside that.
  */
 export function parkedText(engine: GameState, screen: ParkedScreen): string {
   const { times, ...counts } = engine.stats
-  return JSON.stringify({ engine: { ...engine, stats: counts }, ...screen })
+  return JSON.stringify({
+    engine: { ...engine, stats: counts },
+    timesHash: timesHash(times),
+    ...screen,
+  })
 }
 
 /**
@@ -108,15 +120,17 @@ export function restoreParked(
     restoreParkedEngine(blob, useJulian, silo) // not a parked engine at all: the door says why
     return null
   }
-  // The counts first, straight off the blob (a bare comparison is safe on anything): saved stats that
-  // have moved on are an honest disagreement, and must not reach the door to be reported as a break.
+  // The counts and the times' hash first, straight off the blob (a bare comparison is safe on
+  // anything): saved stats that have moved on are an honest disagreement, and must not reach the door
+  // to be reported as a break.
   const s = blob.stats
   if (
     s.played !== stats.played ||
     s.good !== stats.good ||
     s.streak !== stats.streak ||
     s.best !== stats.best ||
-    s.timesLost !== stats.timesLost
+    s.timesLost !== stats.timesLost ||
+    (typeof parked.timesHash === 'string' && parked.timesHash !== timesHash(stats.times))
   )
     return null
   // The saved pool goes back in before the door, which holds the times ledger to it.
