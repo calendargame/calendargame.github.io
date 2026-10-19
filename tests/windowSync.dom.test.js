@@ -4,6 +4,12 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { installWindowSync, onReturn } from '../src/store/windowSync.js'
 import { SCRATCH_KEY } from '../src/store/storageHealth.js'
+import {
+  GEAR_DOT_KEY,
+  CHANGELOG_DOT_KEY,
+  CHANGELOG_SEEN_KEY,
+  subscribeUpdateDot,
+} from '../src/changelog.js'
 
 const fakeDoor = () => {
   const log = []
@@ -59,5 +65,28 @@ describe('windowSync', () => {
     await tick()
     expect(d.log).toEqual([['hidden', true], ['settle'], ['syncAll'], ['hidden', false]])
     off()
+  })
+
+  // The update dots are single flags (design 4.3's small keys): another window's change of one - the
+  // changelog opened there - wakes every reader here, which re-reads it; and so does a return.
+  it('another window’s change of an update dot, or of the changelog seen there, wakes the dots here', async () => {
+    const d = fakeDoor()
+    uninstall = installWindowSync(d)
+    let woken = 0
+    const stop = subscribeUpdateDot(() => woken++)
+    try {
+      for (const key of [GEAR_DOT_KEY, CHANGELOG_DOT_KEY, CHANGELOG_SEEN_KEY])
+        window.dispatchEvent(new StorageEvent('storage', { key, storageArea: localStorage }))
+      expect(woken).toBe(3)
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: 'cg-settings-v1', storageArea: localStorage }),
+      )
+      expect(woken).toBe(3)
+      window.dispatchEvent(new Event('focus'))
+      await tick()
+      expect(woken).toBe(4)
+    } finally {
+      stop()
+    }
   })
 })

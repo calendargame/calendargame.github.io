@@ -124,8 +124,9 @@ export type CountsSpec = {
   /** The store's persist version, written into the doc as every build writes it. */
   version: number
   /** What the store holds for a slice where the doc has no value (its factory value) - and what a
-   *  doc this window writes says for it, so a doc is always whole. */
-  defaultOf(x: string): unknown
+   *  doc this window writes says for it, so a doc is always whole. `key`: the doc's (a per-preset
+   *  doc's default can be that preset's own - store/presets' presetFieldsSpec `perPreset`). */
+  defaultOf(x: string, key?: string): unknown
   /** The doc's slices, given every slice name seen (this window's, the device doc's, the key's). */
   regs: (seen: readonly string[]) => readonly string[]
   /** The store's persisted state as slice values, and back (what getItem hands the store). */
@@ -165,6 +166,9 @@ export type CountsStorage<S> = PersistStorage<S> & {
   trySave(value: StorageValue<S>): boolean
   /** Change some slices of the doc at `key` (another preset's), as a local change of that doc. */
   saveFor(key: string, patch: Record<string, unknown>): void
+  /** Write the doc at `key` for a preset not listed yet (a copy being made) only if the device takes
+   *  it now; false - nothing written, nothing held. */
+  trySaveNew(key: string, values: Record<string, unknown>): boolean
   /** Merge the active doc with the device now (the registry before an allocation, 8.5). */
   syncNow(): void
   /** Merge the active doc with the device now and return its slices; the store is patched after the
@@ -433,9 +437,10 @@ export function createDoor(env: DoorEnv) {
 
     const area = () => env.storage()
     // what the store holds for a slice whose value the book has - its default where the doc has none
-    const asStored = (x: string, v: unknown) => (v === undefined ? spec.defaultOf(x) : v)
+    const asStored = (x: string, v: unknown, key: string) =>
+      v === undefined ? spec.defaultOf(x, key) : v
     const valuesOf = (e: CountsEntry): Record<string, unknown> =>
-      Object.fromEntries(e.book.SL.map((x) => [x, asStored(x, e.book.mem[x].v)]))
+      Object.fromEntries(e.book.SL.map((x) => [x, asStored(x, e.book.mem[x].v, e.key)]))
     const make = (key: string): CountsEntry => {
       const syncKey = syncKeyOf(key)
       const e = {
@@ -451,7 +456,7 @@ export function createDoor(env: DoorEnv) {
         get regs() {
           return regs
         },
-        absentOf: (x) => spec.defaultOf(x),
+        absentOf: (x) => spec.defaultOf(x, key),
         ...(spec.tagged ? { tagged: spec.tagged } : {}),
         parse(text) {
           if (text == null) return null
@@ -476,7 +481,7 @@ export function createDoor(env: DoorEnv) {
         write: (state, sync) =>
           JSON.stringify({
             state: spec.docState(
-              Object.fromEntries(Object.entries(state).map(([x, v]) => [x, asStored(x, v)])),
+              Object.fromEntries(Object.entries(state).map(([x, v]) => [x, asStored(x, v, key)])),
             ),
             version: spec.version,
             sync: JSON.parse(packSync(sync)),
@@ -564,7 +569,7 @@ export function createDoor(env: DoorEnv) {
       )
       if (fix)
         for (const [x, v] of Object.entries(fix))
-          if (!sameJson(asStored(x, e.book.mem[x]?.v), v)) {
+          if (!sameJson(asStored(x, e.book.mem[x]?.v, e.key), v)) {
             e.book.setReg(x, v)
             kept = true
           }
@@ -713,6 +718,26 @@ export function createDoor(env: DoorEnv) {
         for (const [x, v] of Object.entries(spec.toSlices(patch))) e.book.setReg(x, v)
         settle(e, true)
         if (e === activeEntry()) later(() => adopt(e))
+      }),
+      // ★ A DOC FOR A PRESET NOT LISTED YET (design 8.6: a duplicate's stores, written as VALUES through
+      // the door - fresh versions, fresh stamps, the doc's own generation - never bytes). 8.2's gate is
+      // for a preset the list has dropped; this one is about to be listed (store/presetControl lists it
+      // the moment every store of it is on the device, and takes them back off if the list will not fit).
+      // Tried like trySave: refused, nothing is written and nothing held.
+      trySaveNew: outer((key: string, values: Record<string, unknown>): boolean => {
+        const e = entries.get(key) ?? open(key)
+        settle(e, false)
+        e.refresh()
+        const memBefore = { ...e.book.mem }
+        const dirtyBefore = { ...e.book.dirty }
+        for (const [x, v] of Object.entries(spec.toSlices(values))) e.book.setReg(x, v)
+        const ok = e.book.land()
+        if (!ok) {
+          e.book.mem = memBefore
+          e.book.dirty = dirtyBefore
+        }
+        if (e !== activeEntry()) entries.delete(e.key)
+        return ok
       }),
       trySave: outer((value: StorageValue<S>): boolean => {
         const key = spec.key()

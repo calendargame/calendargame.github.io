@@ -341,6 +341,22 @@ const notifyUpdateDots = (): void => {
   for (const listener of updateDotListeners) listener()
 }
 
+/**
+ * ★ ANOTHER WINDOW CHANGED ONE OF THESE FLAGS (design-q1-q2.md v4, 4.3's small keys: no merge, just a
+ * re-read): the browser's notice of `key` - null for "anything may have changed" (the whole area
+ * cleared, or a return from a frozen or restored page) - wakes every reader, so a dot another window
+ * cleared by opening the changelog goes out here too. store/windowSync calls it.
+ */
+export const noticeUpdateDots = (key: string | null): void => {
+  if (
+    key === null ||
+    key === GEAR_DOT_KEY ||
+    key === CHANGELOG_DOT_KEY ||
+    key === CHANGELOG_SEEN_KEY
+  )
+    notifyUpdateDots()
+}
+
 // The `subscribe` half of useSyncExternalStore's contract. Stable across renders by construction
 // (a module-scope function), so React never needlessly re-subscribes.
 export const subscribeUpdateDot = (listener: () => void): (() => void) => {

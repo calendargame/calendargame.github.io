@@ -235,7 +235,7 @@ export const SETTINGS_DOC = {
     base: PRESET_STORE_KEYS.settings,
     version: 4,
     defaults: SETTINGS_DEFAULTS,
-    perPreset: { amnesic: () => storedAmnesicDefault(usePresets.getState().activeId) },
+    perPreset: { amnesic: (presetId) => storedAmnesicDefault(presetId) },
     retired: ['dotOrientation', 'rotateDots'],
     migrate: (docState) =>
       migrateDotRotation(docState as Partial<SettingsValues> & LegacyDotFields),

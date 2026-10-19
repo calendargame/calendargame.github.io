@@ -17,15 +17,9 @@ import type { Preset, PresetRegistryValues } from './presets.js'
 import { discardSessionStats, readSessionStats, dataIdOf, bestsIdOf } from './amnesic.js'
 import { amnesicModeOf } from './amnesic.js'
 import type { AmnesicMode } from './amnesicMode.js'
-import {
-  isHolding,
-  readItem,
-  removeItem,
-  storageSpaceFreed,
-  tryWriteItem,
-} from './storageHealth.js'
+import { isHolding, readItem, removeItem, storageSpaceFreed } from './storageHealth.js'
 import { removeProgressCopy, hasTimesKeys, sweepAbandonedTimes } from './progressStorage.js'
-import { syncKeysOf, docKeyOfSyncKey } from './syncedDoc.js'
+import { syncKeysOf, docKeyOfSyncKey, type CountsStorage } from './syncedDoc.js'
 import { recordSessionPreset } from './sessionPreset.js'
 import { discardSessionMode } from './sessionMode.js'
 import { discardSessionDedType } from './sessionDedType.js'
@@ -97,6 +91,8 @@ type PresetStore<T> = {
       version?: number
       migrate?: (state: unknown, version: number) => unknown
       partialize?: (state: T) => unknown
+      // (its storage: the windows-in-sync door it persists through - a copy is written through it)
+      storage?: unknown
     }
   }
   getState: () => T
@@ -181,6 +177,11 @@ const presetStore = <T extends object>(
   // marks inside the progress doc (store/progressDoc), and the settings' Amnesic value - a statement
   // about where stats WOULD go, which isPresetFactory does not consult (the owner's call, there).
   unmarked: (state: Record<string, unknown>) => Record<string, unknown> = (state) => state,
+  // …and a copy's values with what its original is on but does not hold itself (the settings' Amnesic
+  // value, which a doc without one reads from the ORIGINAL's saved defaults - the copy's own are not
+  // written yet when its settings are).
+  asCopied: (values: Record<string, unknown>, _sourceId: number) => Record<string, unknown> = (v) =>
+    v,
 ) => ({
   key: PRESET_STORE_KEYS[name],
   // What Duplicate Preset does with this store (DUPLICATE_RULES, above).
@@ -191,13 +192,31 @@ const presetStore = <T extends object>(
   },
   makeDefaults: () => makeDefaults() as Record<string, unknown>,
   readLive: () => store.getState() as Record<string, unknown>,
-  // ★ WHAT THIS STORE WOULD SAVE RIGHT NOW, as the text it saves it in — its own `partialize`, under
-  // its own version stamp: the copy duplicatePreset writes for the preset you are ON, which is
-  // what is on its screens rather than what was last saved. null where the store has no storage.
-  savedText: (): string | null => {
+  // ★ A COPY OF THIS STORE FOR PRESET `id`, made from preset `sourceId` (duplicatePreset): its values
+  // written through the store's own windows-in-sync door, as a new doc (design 8.6) — the preset you
+  // are ON as it is on screen (the store's own `partialize`), any other as it is saved, read in today's
+  // shape (`upgradeSaved`, below). True when there was nothing to copy (a store with nothing saved is
+  // not written: the copy has its factory values there, as the original does) or the device took it;
+  // false when the device refused it, and then nothing was written.
+  copyTo(sourceId: number, id: number): boolean {
     const options = store.persist?.getOptions()
-    if (!options?.partialize) return null
-    return JSON.stringify({ state: options.partialize(store.getState()), version: options.version })
+    const door = options?.storage as Partial<CountsStorage<unknown>> | undefined
+    if (!options?.partialize || !door?.trySaveNew) return true
+    let values: Record<string, unknown> | null
+    if (sourceId === usePresets.getState().activeId)
+      values = options.partialize(store.getState()) as Record<string, unknown>
+    else {
+      const raw = readPresetPayload(PRESET_STORE_KEYS[name], sourceId)
+      if (raw === null) return true
+      try {
+        const saved = JSON.parse(raw) as { state?: unknown; version?: unknown }
+        values = this.upgradeSaved(saved.state, saved.version)
+      } catch {
+        values = null
+      }
+      if (values === null) return true // (nothing this build can read: as if nothing were saved)
+    }
+    return door.trySaveNew(presetKey(PRESET_STORE_KEYS[name], id), asCopied(values, sourceId))
   },
   // ★ A SAVED COPY, IN TODAY'S SHAPE — what this preset would actually open holding. A store's
   // migration runs on a saved copy whose version differs, and only for the preset being OPENED;
@@ -246,6 +265,7 @@ const PER_PRESET_STORES = [
     () => ({ ...SETTINGS_DEFAULTS }),
     SETTINGS_DOC.migrate,
     ({ amnesic: _amnesic, ...values }) => values,
+    (values, sourceId) => ({ ...values, amnesic: amnesicModeOf(sourceId) }),
   ),
   presetStore('julianRange', useJulianRange, () => ({ ...JULIAN_RANGE_DEFAULTS })),
   presetStore('modePrefs', useModePrefs, () => ({ ...MODE_PREFS_DEFAULTS })),
@@ -642,16 +662,17 @@ function allocatePresetId(): number {
  * ★ WHAT IS COPIED IS DUPLICATE_RULES' ANSWER, and nothing here decides it: each store marked
  * copied, and the session's Amnesic value. The copy's own stats, Bests, and times start empty.
  * ★ THE PRESET YOU ARE ON IS COPIED AS IT IS ON SCREEN — each store's live values, as it would save
- * them now (`savedText`) — and any other preset as it is saved, through store/storageHealth's door,
- * so a save the device refused and is holding counts as saved. A saved copy goes across in the
- * shape it was saved in, version stamp and all, so the copy opens holding exactly what its original
- * would: the store's own migration runs on both alike. A store with nothing saved is not written at
+ * them now — and any other preset as it is saved, through store/storageHealth's door (a save the
+ * device refused and is holding counts as saved), read in today's shape by the store's own migration.
+ * ★ VALUES, NEVER BYTES (design-q1-q2.md v4, 8.6): each store's copy is written through its own
+ * windows-in-sync door as a NEW doc (`copyTo`) - fresh versions, fresh stamps, its own generation - so
+ * nothing of the original's sync record rides across. A store with nothing saved is not written at
  * all, and the copy has its factory values there, as the original does.
  * ★ DOES NOT SWITCH TO IT, like createPreset: making a preset is not a decision to go there.
- * ★ NOTHING HALF-MADE. The copy's stores are written first, each TRIED (tryWriteItem: nothing held,
- * no notice) — they belong to an id no list names yet, so nothing can read them — and the list last,
- * through applyRegistryIfRoom. If any write is refused, every store written for the copy is removed
- * again and the list is untouched: no copy, and the device as it was.
+ * ★ NOTHING HALF-MADE. The copy's stores are written first, each TRIED (the door's trySaveNew: nothing
+ * held, no notice) — they belong to an id no list names yet, so nothing can read them — and the list
+ * last, through applyRegistryIfRoom. If any write is refused, every store written for the copy is
+ * removed again with the keys beside it, and the list is untouched: no copy, and the device as it was.
  * ⚠ A BROWSER THAT GIVES THE APP NO STORAGE has nothing to copy from or to: the copy is listed, in
  * memory, and opens on the factory values — which is also what that browser's every other preset
  * opens on (reloadPresetStores' no-storage branch).
@@ -667,22 +688,20 @@ export function duplicatePreset(sourceId: number): Preset | 'unknown' | 'no-room
   } catch {
     /* no storage at all */
   }
-  const written: string[] = []
+  // (taking a copy's docs back off: each doc and the keys the door keeps beside it)
   const undo = () => {
-    for (const key of written) removeItem(device!, key)
+    for (const entry of PER_PRESET_STORES) {
+      const key = presetKey(entry.key, id)
+      for (const k of [key, ...syncKeysOf(key)]) removeItem(device!, k)
+    }
   }
   if (device)
     for (const entry of PER_PRESET_STORES) {
       if (!entry.duplicate.copied) continue
-      const text =
-        sourceId === reg.activeId ? entry.savedText() : savedCopyText(entry.key, sourceId)
-      if (text === null) continue
-      const key = presetKey(entry.key, id)
-      if (!tryWriteItem(device, key, text)) {
+      if (!entry.copyTo(sourceId, id)) {
         undo()
         return 'no-room'
       }
-      written.push(key)
     }
   const taken = new Set(reg.presets.map((p) => p.name))
   const preset: Preset = {
@@ -704,22 +723,6 @@ export function duplicatePreset(sourceId: number): Preset | 'unknown' | 'no-room
     return 'no-room'
   }
   return preset
-}
-
-// A preset's SAVED copy of one store, re-written as the plain `{ state, version }` that store saves
-// — its values, never its bytes, so nothing else that happens to ride in a saved text goes across —
-// or null when it has nothing saved there or what is there cannot be read.
-function savedCopyText(baseKey: string, presetId: number): string | null {
-  const raw = readPresetPayload(baseKey, presetId)
-  if (raw === null) return null
-  try {
-    const saved: unknown = JSON.parse(raw)
-    if (!saved || typeof saved !== 'object' || !('state' in saved)) return null
-    const { state, version } = saved as { state: unknown; version?: unknown }
-    return JSON.stringify({ state, version })
-  } catch {
-    return null
-  }
 }
 
 /**

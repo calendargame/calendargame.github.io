@@ -146,10 +146,10 @@ describe('Duplicate Preset', () => {
   it('the saved Amnesic default goes across with the saved defaults', () => {
     setUpThisPreset()
     const copy = duplicatePreset(1)
-    // (As saved: the live snapshot is the settings store's whole state, its setters included.)
-    expect(saved(PRESET_STORE_KEYS.userDefaults, copy.id).state.saved).toEqual(
-      JSON.parse(JSON.stringify(useUserDefaults.getState().saved)),
-    )
+    // (As saved: the live snapshot is the settings store's whole state, its setters included - with
+    // the tag that names its values, store/userDefaults.)
+    const { w: _tag, ...copied } = saved(PRESET_STORE_KEYS.userDefaults, copy.id).state.saved
+    expect(copied).toEqual(JSON.parse(JSON.stringify(useUserDefaults.getState().saved)))
     expect(saved(PRESET_STORE_KEYS.userDefaults, copy.id).state.saved.amnesicMode).toBe('stats')
   })
 
@@ -164,18 +164,29 @@ describe('Duplicate Preset', () => {
     )
   })
 
-  it('a preset you are NOT on is copied as it is saved — in the shape it was saved in', () => {
+  // ★ VALUES, NEVER BYTES (design-q1-q2.md v4, 8.6): each store's copy is a NEW doc written through its
+  // door, in today's shape - fresh versions under its own generation, nothing of the original's sync
+  // record - so an older build's save is read (migrated) as the original would open it, and the copy
+  // holds what that opens holding.
+  it('a preset you are NOT on is copied as it is saved — read in today’s shape, written as a doc of its own', () => {
     const other = createPreset('Other')
     switchPreset(other.id)
     setUpThisPreset()
     switchPreset(1)
-    // An older build saved its settings at an older version: the copy keeps that, so the store's
-    // own migration runs on it when it is opened, exactly as it would on the original.
+    // An older build saved its settings at an older version: the copy is that read in today's shape.
     const old = { state: { ...SETTINGS_DEFAULTS, rotateDots: true, minY: 1650 }, version: 2 }
     delete old.state.dotRotation
     localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, other.id), JSON.stringify(old))
     const copy = duplicatePreset(other.id)
-    expect(saved(PRESET_STORE_KEYS.settings, copy.id)).toEqual(old)
+    const copied = saved(PRESET_STORE_KEYS.settings, copy.id)
+    expect(copied.version).toBe(useSettings.persist.getOptions().version)
+    expect(copied.state).toEqual({
+      ...SETTINGS_DEFAULTS,
+      dotRotation: 'ccw90',
+      minY: 1650,
+      amnesic: amnesicModeOf(other.id),
+    })
+    expect(copied.sync.g).not.toBe(saved(PRESET_STORE_KEYS.modePrefs, other.id).sync?.g)
     expect(saved(PRESET_STORE_KEYS.modePrefs, copy.id).state).toEqual({
       ...MODE_PREFS_DEFAULTS,
       dedType: 'year',

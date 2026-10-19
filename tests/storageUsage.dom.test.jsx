@@ -32,6 +32,7 @@ import {
   MAX_STORAGE_LIMIT,
   STORAGE_WARN_PERCENT,
 } from '../src/store/storageUsage.js'
+import { installWindowSync } from '../src/store/windowSync.js'
 import {
   useStorageHealth,
   writeItem,
@@ -435,6 +436,22 @@ describe('the count is kept by the storage door, and is right the moment a chang
       const { figure, warning } = at(chars)
       expect(parseFloat(figure) >= STORAGE_WARN_PERCENT).toBe(warning)
       expect(warning).toBe(chars >= line80)
+    }
+  })
+
+  // A page frozen or restored from the back/forward cache never hears what other windows saved in the
+  // meantime: a return counts the device again (design-q1-q2.md v4, 13.4).
+  it('a return from a hidden page counts the device again', async () => {
+    watch()
+    const uninstall = installWindowSync()
+    try {
+      Storage.prototype.setItem.call(localStorage, 'cg-another-window', 'x'.repeat(500))
+      expect(storageUsed()).not.toBe(everything()) // (no notice: a frozen page's)
+      window.dispatchEvent(new Event('pageshow'))
+      await act(() => new Promise((r) => queueMicrotask(r)))
+      expect(storageUsed()).toBe(everything())
+    } finally {
+      uninstall()
     }
   })
 

@@ -537,6 +537,15 @@ export function refreshStorageUsage(): void {
   }
 }
 
+/**
+ * A RETURN from a hidden, frozen or restored page (store/windowSync; design-q1-q2.md v4, 13.4): the
+ * notices of what other windows saved meanwhile may never have come (queued for a frozen page, missed by
+ * a restored one), so the device is counted again - while this page keeps the count at all.
+ */
+export function recountStorageUsage(): void {
+  if (watching) refreshStorageUsage()
+}
+
 // The door's reports (store/storageHealth).
 const door: StorageWatcher = {
   // (storage, key) now holds `value` — null: it is gone.

@@ -724,13 +724,14 @@ const defined = (o: Record<string, unknown>) =>
 // `retired`: fields an older shape had and this one's migration rewrites. The store owns them as it
 //   owns its own, so a save removes one that a doc still holds.
 // `perPreset`: fields whose value, where the doc has none, is the preset's own rather than a factory
-//   constant - read when asked (the ⚙ settings' Amnesic: the preset's saved default, design 9.1).
+//   constant - read when asked, for the preset whose doc it is (the ⚙ settings' Amnesic: the preset's
+//   saved default, design 9.1).
 export const presetFieldsSpec = (spec: {
   kind: CountsSpec['kind']
   base: string
   version: number
   defaults: Record<string, unknown>
-  perPreset?: Record<string, () => unknown>
+  perPreset?: Record<string, (presetId: number) => unknown>
   retired?: readonly string[]
   migrate?: (docState: Record<string, unknown>, version: number) => Record<string, unknown>
   screen?: (state: Record<string, unknown>) => Record<string, unknown>
@@ -743,9 +744,12 @@ export const presetFieldsSpec = (spec: {
     kind: spec.kind,
     base: spec.base,
     version: spec.version,
-    defaultOf: (x) =>
+    defaultOf: (x, key) =>
       Object.hasOwn(perPreset, x)
-        ? perPreset[x]()
+        ? perPreset[x](
+            (key !== undefined ? presetIdOfSuffix(key.slice(spec.base.length)) : null) ??
+              usePresets.getState().activeId,
+          )
         : Object.hasOwn(spec.defaults, x)
           ? spec.defaults[x]
           : undefined,

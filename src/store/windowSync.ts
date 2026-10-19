@@ -16,6 +16,8 @@
 // resets it, exactly as it does behind an open ⚙ panel.
 import { door as defaultDoor, type Door } from './syncedDoc.js'
 import { SCRATCH_KEY } from './storageHealth.js'
+import { noticeUpdateDots } from '../changelog.js'
+import { recountStorageUsage } from './storageUsage.js'
 
 const settlers = new Set<() => void>()
 /**
@@ -41,6 +43,8 @@ export function installWindowSync(d: Door = defaultDoor): () => void {
   const onStorage = (e: StorageEvent) => {
     if (e.storageArea !== area || e.key === SCRATCH_KEY) return
     d.notice(e.key, e.oldValue, e.newValue)
+    // (the update dots: single flags, re-read - src/changelog)
+    noticeUpdateDots(e.key)
   }
   let returning = false
   const onBack = () => {
@@ -50,6 +54,8 @@ export function installWindowSync(d: Door = defaultDoor): () => void {
       returning = false
       for (const settle of [...settlers]) settle()
       d.syncAll()
+      noticeUpdateDots(null)
+      recountStorageUsage()
       d.setHidden(false)
     })
   }
