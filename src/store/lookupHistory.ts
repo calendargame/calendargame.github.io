@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { guardedStorage } from './storageHealth.js'
 import { door } from './syncedDoc.js'
 import { dimEither } from '../lib/calendar.js'
+import { reportedHydration } from './hydrationReport.js'
 
 // store/lookupHistory.ts — Lookup's saved history, SHARED across every preset (round 20).
 //
@@ -209,6 +210,7 @@ export const useLookupHistory: UseBoundStore<StoreApi<LookupHistoryState>> =
             (persisted as Partial<LookupHistoryState> | null)?.history,
           ),
         }),
+        onRehydrateStorage: reportedHydration('lookupHistoryRehydrate'),
       },
     ),
   )
@@ -246,6 +248,7 @@ export const useLookupSession = create<LookupSessionState>()(
           (persisted as Partial<LookupSessionState> | null)?.sessionEntries,
         ),
       }),
+      onRehydrateStorage: reportedHydration('lookupSessionRehydrate'),
     },
   ),
 )

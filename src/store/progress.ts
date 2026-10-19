@@ -18,6 +18,7 @@ import { makeProgressStorage } from './progressDoor.js'
 import { mainKeyOf } from './progressStorage.js'
 import { useSettings } from './settings.js'
 import { isRecord } from './json.js'
+import { reportedHydration } from './hydrationReport.js'
 
 // store/progress.ts — saved gameplay progress (Stage D1).
 //
@@ -297,14 +298,9 @@ export const useProgress = create<ProgressState>()(
       // old bug, or storage truncation/tampering on a real device) is a silent integrity problem —
       // report it to Sentry (prod only, via captureError). Report-only: behavior is unchanged (the
       // engine still hydrates whatever loaded, and its own tripwire fires too; this just pinpoints
-      // that the bad data came from STORAGE rather than live play).
-      onRehydrateStorage: () => (state, error) => {
-        if (error) {
-          captureError(error instanceof Error ? error : new Error(String(error)), {
-            tripwire: 'progressRehydrate',
-          })
-          return
-        }
+      // that the bad data came from STORAGE rather than live play). (A load that THREW is reported
+      // by store/hydrationReport, under the same tripwire, and this check is not run after it.)
+      onRehydrateStorage: reportedHydration<ProgressState>('progressRehydrate', (state) => {
         if (!state) return
         const violations: string[] = []
         for (const key of Object.keys(state.stats ?? {}) as StatsKey[]) {
@@ -316,7 +312,7 @@ export const useProgress = create<ProgressState>()(
             violations,
           })
         }
-      },
+      }),
     },
   ),
 )

@@ -5,6 +5,7 @@ import { door, type CountsSpec, type CountsStorage } from './syncedDoc.js'
 import { browsingSessionOpen } from './browsingSession.js'
 import { sessionPresetId, recordSessionPreset } from './sessionPreset.js'
 import { nameHasInk } from '../lib/presetNameInk.js'
+import { reportedHydration } from './hydrationReport.js'
 
 // store/presets.ts — THE PRESET REGISTRY, and the storage layer every per-preset store sits on.
 //
@@ -618,6 +619,7 @@ export const usePresets = create<PresetRegistryState>()(
           activeId: resolveActiveId(norm, !browsingSessionOpen(), sessionPresetId()),
         }
       },
+      onRehydrateStorage: reportedHydration('presetsRehydrate'),
     },
   ),
 )

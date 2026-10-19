@@ -10,6 +10,7 @@ import { readAmnesicMode, storedAmnesic } from './amnesicMode.js'
 import type { AmnesicMode, StoredAmnesic } from './amnesicMode.js'
 import { deriveJulianRange, readJulianRange } from './julianRange.js'
 import type { JulianRangeValues } from './julianRange.js'
+import { reportedHydration } from './hydrationReport.js'
 
 // userDefaults.ts — the user's saved PERSONAL DEFAULTS (Session 11, "Save Defaults").
 //
@@ -260,6 +261,7 @@ export const useUserDefaults = create<UserDefaultsState>()(
       // preset's snapshot standing, and a Full Reset inside the new preset would restore another
       // preset's settings. See mergeOverDefaults.
       merge: mergeOverDefaults(makeUserDefaultsDefaults),
+      onRehydrateStorage: reportedHydration('userDefaultsRehydrate'),
     },
   ),
 )

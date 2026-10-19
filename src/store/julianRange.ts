@@ -4,6 +4,7 @@ import { PRESET_STORE_KEYS, presetDoc } from './presets.js'
 import type { PresetDocSpec } from './presets.js'
 import { useSettings } from './settings.js'
 import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from '../lib/calendar.js'
+import { reportedHydration } from './hydrationReport.js'
 
 // store/julianRange.ts — THE YEAR RANGE USED WHILE THE JULIAN CALENDAR SETTING IS ON (Round 26, Q7).
 //
@@ -120,7 +121,7 @@ export const useJulianRange = create<JulianRangeState>()(
         return { ...current, ...(saved ?? deriveJulianRange(useSettings.getState())) }
       },
       // …and the pin, for a pair that was derived.
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: reportedHydration<JulianRangeState>('julianRangeRehydrate', (state) => {
         if (!needsPin || !state) return
         needsPin = false
         // (refused: nothing is kept, so the pair is derived again next time)
@@ -128,7 +129,7 @@ export const useJulianRange = create<JulianRangeState>()(
           state: { julianMinY: state.julianMinY, julianMaxY: state.julianMaxY },
           version: VERSION,
         })
-      },
+      }),
     },
   ),
 )

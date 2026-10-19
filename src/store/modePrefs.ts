@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { PRESET_STORE_KEYS, presetFieldsSpec, presetDoc, mergeOverDefaults } from './presets.js'
+import { reportedHydration } from './hydrationReport.js'
 
 // modePrefs.ts — the per-mode SETUP store (Stage D follow-up, 2026-06-05).
 //
@@ -169,6 +170,7 @@ export const useModePrefs = create<ModePrefsState>()(
       // identical to zustand's default, on a preset switch the difference between a new preset
       // opening on the factory Blitz timer and it inheriting the last preset's. See mergeOverDefaults.
       merge: mergeOverDefaults(() => MODE_PREFS_DEFAULTS),
+      onRehydrateStorage: reportedHydration('modePrefsRehydrate'),
     },
   ),
 )

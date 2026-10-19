@@ -15,6 +15,7 @@ import type { FormatId } from '../lib/format.js'
 import { YEAR_MAX_GREGORIAN } from '../lib/calendar.js'
 import { isDotRotation, type DotRotation } from '../lib/dotLayout.js'
 import { isPageId, type PageId } from '../lib/modes.js'
+import { reportedHydration } from './hydrationReport.js'
 
 // settings.js — the ⚙ Settings store (Stage C, Steps 5a + 5b).
 //
@@ -352,6 +353,7 @@ export const useSettings = create<SettingsState>()(
         ...SETTINGS_DEFAULTS,
         amnesic: storedAmnesicDefault(usePresets.getState().activeId),
       })),
+      onRehydrateStorage: reportedHydration('settingsRehydrate'),
     },
   ),
 )
