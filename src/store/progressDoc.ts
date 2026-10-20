@@ -24,9 +24,11 @@ import {
   encodeStamp,
   decodeStamp,
   cmpStamp,
+  canonicalJson,
   type Stamp,
 } from './syncStamp.js'
 import { expandProgress } from './progressStorage.js'
+import { timesHash } from '../engine/timesPool.js'
 import { isRecord } from './json.js'
 
 // store/progressDoc.ts — THE SAVED PROGRESS AS THE WINDOWS-IN-SYNC DOOR READS AND WRITES IT
@@ -129,7 +131,7 @@ function marksOf(env: Record<string, unknown> | null): {
  */
 export function progressShape(o: {
   parsed: (text: string | null) => Parsed
-  compose: (silos: Record<string, unknown>, sync: Envelope, full: Envelope) => string
+  compose: (silos: Record<string, unknown>, sync: Envelope, full: Envelope) => unknown
 }): CountsShape {
   return {
     silos: PROGRESS_SILOS,
@@ -147,6 +149,12 @@ export function progressShape(o: {
     },
     silo(disk) {
       return { v: siloOfStats(disk), tag: isRecord(disk) ? decodeTag(disk.w) : null }
+    },
+    // (a mode's stored stats compared without spelling out its solve times: their count and hash)
+    diskFp(disk) {
+      if (!isRecord(disk)) return JSON.stringify(disk) ?? 'undefined'
+      const { times, ...rest } = disk
+      return `${canonicalJson(rest)}#${Array.isArray(times) ? `${times.length}:${timesHash(times as number[])}` : JSON.stringify(times)}`
     },
     diskSilo(v: Silo, tag: Tag) {
       return { ...statsOfSilo(v), w: encodeTag(tag) }

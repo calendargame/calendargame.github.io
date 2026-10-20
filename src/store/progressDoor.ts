@@ -1,6 +1,14 @@
 import type { PersistStorage, StorageValue } from 'zustand/middleware'
 import type { DocKind, StoreApi } from './syncedDoc.js'
-import { CountsBook, siloFp, type Envelope, type Op, type Silo } from './syncCounts.js'
+import {
+  CountsBook,
+  siloFp,
+  siloFpOf,
+  withTimes,
+  type Envelope,
+  type Op,
+  type Silo,
+} from './syncCounts.js'
 import { RecordsBook, type RecOp, type Rec, type RecordsDev } from './syncRecords.js'
 import { type Clock, type Stamp, newClock, mint, packSync, randomId } from './syncStamp.js'
 import { createProgressCodec, type ProgressCopy } from './progressStorage.js'
@@ -19,7 +27,7 @@ import {
 import { BEST_MAPS, recordSpec, toRec, fromRec, type BestMap } from './bestRecords.js'
 import { holdForDoor, releaseDoorHold } from './storageHealth.js'
 import { roundClock } from '../engine/roundId.js'
-import { appended } from '../engine/timesPool.js'
+import { timesHash, timesHashAppended } from '../engine/timesPool.js'
 import { sameJson, isRecord } from './json.js'
 
 // store/progressDoor.ts — THE SAVED PROGRESS THROUGH THE WINDOWS-IN-SYNC DOOR (design-q1-q2.md v4: 2, 4, 6.1,
@@ -151,26 +159,26 @@ const isDefaults = (s: ProgressState, spec: ProgressSpec) =>
 // What a mode's stats did, from what the store held to what it holds now: one answer (right, with its time
 // or untimed, or wrong), a Reset, or anything else - an Override at any depth, or two answers in one save -
 // as one whole-slice change (store/syncCounts' `rep`, which lands only on exactly what it was made on).
+// ★ READ OFF FINGERPRINTS, NOTHING MADE: each candidate answer's silo is its counts and the hash its
+// times would have (engine/timesPool's timesHashAppended) - never a pool built to be compared, which
+// cost a sort of every time on each answer (the review lane's HIGH). The pool the store already made
+// goes with the answer to the book (store/syncCounts' withTimes).
 function opsOf(prev: Silo, next: Silo): { reset: true } | { ops: Op[] } | null {
-  if (siloFp(prev) === siloFp(next)) return null
+  const nextFp = siloFp(next)
+  if (siloFp(prev) === nextFp) return null
   if (next.pl === 0 && next.gd === 0 && next.t.length === 0 && prev.pl > 0) return { reset: true }
-  const cand: Op[] = [
-    { kind: 'a', r: false, tm: null },
-    { kind: 'a', r: true, tm: null },
-    ...(next.t.length === prev.t.length + 1
-      ? [{ kind: 'a' as const, r: true, tm: next.t[next.t.length - 1] }]
-      : []),
-  ]
-  for (const op of cand) {
-    const v: Silo = { ...prev }
-    v.pl++
-    if (op.kind === 'a' && op.r) {
-      v.gd++
-      v.sk++
-      if (v.sk > v.bs) v.bs = v.sk
-      if (op.tm !== null) v.t = appended(prev.t, op.tm)
-    } else v.sk = 0
-    if (siloFp(v) === siloFp(next)) return { ops: [op] }
+  const wrong = { ...prev, pl: prev.pl + 1, sk: 0 }
+  const sk = prev.sk + 1
+  const right = { ...prev, pl: prev.pl + 1, gd: prev.gd + 1, sk, bs: Math.max(prev.bs, sk) }
+  const n = prev.t.length
+  if (siloFpOf(wrong, n, timesHash(prev.t)) === nextFp)
+    return { ops: [{ kind: 'a', r: false, tm: null }] }
+  if (siloFpOf(right, n, timesHash(prev.t)) === nextFp)
+    return { ops: [{ kind: 'a', r: true, tm: null }] }
+  if (next.t.length === n + 1) {
+    const tm = next.t[n]
+    if (siloFpOf(right, n + 1, timesHashAppended(prev.t, tm)) === nextFp)
+      return { ops: [withTimes({ kind: 'a', r: true, tm }, next.t)] }
   }
   return { ops: [{ kind: 'rep', from: prev, to: next }] }
 }
@@ -204,6 +212,7 @@ function recordOps(map: BestMap, before: Rec | null, after: Rec | null): RecOp[]
   return [...ops.values()]
 }
 
+const PARSED_KEPT = 4
 export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): ProgressStorage<S> {
   const entries = new Map<string, Entry>()
   let store: StoreApi<S> | null = null
@@ -216,10 +225,10 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     const presetId = spec.presetId()
     const syncKey = kit.syncKeyOf(key)
     const recKey = kit.recordsKeyOf(key)
-    const cache: { text: string | null | undefined; p: ReturnType<typeof parseProgress> | null } = {
-      text: undefined,
-      p: null,
-    }
+    // (the last few texts read, parsed: a notice reads the device's text, the one it replaced, and the one
+    // this window last saw - three texts, each read again by every map's records - and a parse expands
+    // every mode's solve times from their chunks)
+    const cache = new Map<string | null, ReturnType<typeof parseProgress>>()
     const e = {
       key,
       syncKey,
@@ -238,13 +247,19 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
       landing: null,
     } as unknown as Entry
     e.parsed = (text) => {
-      if (text === cache.text && cache.p) return cache.p
+      const known = cache.get(text)
+      if (known) {
+        cache.delete(text)
+        cache.set(text, known) // (the most recent last)
+        return known
+      }
       const s = area()
-      cache.text = text
-      cache.p = s
+      const p = s
         ? parseProgress(s, presetId, text, spec.migrate, spec.version)
         : { env: null, version: null }
-      return cache.p
+      cache.set(text, p)
+      if (cache.size > PARSED_KEPT) cache.delete(cache.keys().next().value!)
+      return p
     }
     const shape = progressShape({
       parsed: (t) => e.parsed(t),
@@ -264,7 +279,7 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
           }
         },
         deviceKey: () => area()?.getItem(syncKey) ?? null,
-        save: (docText, keyText) => save(e, docText, keyText),
+        save: (doc, keyText) => save(e, doc as StorageValue<ProgressState>, keyText),
       },
     })
     e.counts.open()
@@ -304,12 +319,13 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
   // ── writing ──
   // The doc as a landing writes it (Off): the silos the CountsBook hands over - each it writes as a version
   // with this landing's write mark - and every Best map as the landing's records say.
+  // (the object, never a text: save seals it - its solve times into chunks - and spells the text itself)
   function compose(
     e: Entry,
     silos: Record<string, unknown>,
     sync: Envelope,
     full: Envelope,
-  ): string {
+  ): StorageValue<ProgressState> {
     const L = e.landing!
     const s = area()
     const device = e.parsed(s?.getItem(e.key) ?? null).env
@@ -321,14 +337,14 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
       stats[x] = L.wl && isRecord(v) && entry && !entry.unres ? { ...v, wl: markText(L.wl) } : v
     }
     L.recKeyText = recKeyText(e, L, e.counts.g)
-    return JSON.stringify({
-      state: { stats, ...maps },
+    return {
+      state: { stats, ...maps } as unknown as ProgressState,
       version: spec.version,
       sync: {
         ...(JSON.parse(packSync(sync)) as object),
         ...(Object.keys(rec).length ? { rec } : {}),
       },
-    })
+    } as StorageValue<ProgressState>
   }
   // The records' key a landing writes - or null when it is what the device has.
   const recKeyText = (e: Entry, L: Landing, g: string | null): string | null => {
@@ -347,13 +363,13 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     return packSync({ g: gen, maps })
   }
   // The landing's writes, in order: the doc (sealed - its chunks first), the silos' key, the records' key.
-  function save(e: Entry, docText: string, keyText: string): boolean {
+  function save(e: Entry, doc: StorageValue<ProgressState>, keyText: string): boolean {
     const s = area()
     const copy = e.copy()
     if (!s || !copy) return true
     // (the copy as the device has it, so the chunks a reset or an older build's plain save left are judged)
     e.codec.follow(copy)
-    const sealed = e.codec.seal(copy, JSON.parse(docText) as StorageValue<ProgressState>)
+    const sealed = e.codec.seal(copy, doc)
     const before = s.getItem(e.key)
     const writes = [
       { key: e.key, text: sealed.text },

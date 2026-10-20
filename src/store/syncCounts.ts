@@ -50,7 +50,7 @@ import {
   decodeStamp,
   cyrb53,
 } from './syncStamp.js'
-import { timesHash, prefixHash, appended } from '../engine/timesPool.js'
+import { timesHash, timesHashAppended, prefixHash, appended } from '../engine/timesPool.js'
 
 // ── Shapes ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -149,11 +149,18 @@ export interface CountsShape {
   parse(text: string | null): { state: Record<string, unknown>; sync: Envelope | null } | null
   /** A stored silo as counts (blank when absent), and the tag inside it (null when none). */
   silo(disk: unknown): { v: Silo; tag: Tag | null }
+  /** A stored silo as a text that is equal exactly when two stored silos are (default: its JSON) - for
+   *  a shape whose silos hold long pools, a fingerprint that does not spell them out. */
+  diskFp?(disk: unknown): string
   /** The stored form of a silo this window writes as a version, its tag inside. */
   diskSilo(v: Silo, tag: Tag): unknown
-  /** The doc's text: `state` per slice (stored form), `sync` the envelope (compact). `full` is the whole
-   *  envelope it stands for, for a shape that wants it (only the fuzz's parity check ever does). */
-  write(state: Record<string, unknown>, sync: Envelope, full: Envelope): string
+  /** The doc as written: `state` per slice (stored form), `sync` the envelope (compact). `full` is the
+   *  whole envelope it stands for, for a shape that wants it (only the fuzz's parity check ever does).
+   *  Its text, for a shape whose io.save writes that text; whatever its io.save takes, for one that does
+   *  more on the way (the saved progress seals its solve times into chunks first, from the object -
+   *  never from a text spelled out only to be read back). The book hands it to io.save and to nothing
+   *  else. */
+  write(state: Record<string, unknown>, sync: Envelope, full: Envelope): unknown
   /** Read the sync key's text (null: none, or unreadable). */
   readKey(text: string | null): SyncKey | null
   writeKey(key: SyncKey): string
@@ -204,7 +211,7 @@ export interface CountsIO {
   view(): { doc: string | null; side: string | null; prevDoc: string | null | undefined }
   /** Land the doc, then the key — both, or neither (false: refused, nothing changed). `full` is the
    *  whole envelope this write stands for (the compact one in the doc leaves out what the key says). */
-  save(docText: string, keyText: string, full: Envelope): boolean
+  save(doc: unknown, keyText: string, full: Envelope): boolean
   /** The key as the DEVICE holds it right now (land builds on it, as the model's land reads W.dev). */
   deviceKey(): string | null
 }
@@ -252,8 +259,31 @@ const startsWith = (a: readonly number[], prefix: readonly number[]): boolean =>
 export const blankSilo = (): Silo => ({ pl: 0, gd: 0, sk: 0, bs: 0, t: [], tl: 0 })
 
 /** A silo's fingerprint: its counts, its legacy gap, and the hash of its times. */
-export const siloFp = (s: Silo): string =>
-  `L${s.pl}|${s.gd}|${s.sk}|${s.bs}|${s.tl}|${s.t.length}|${timesHash(s.t)}`
+export const siloFp = (s: Silo): string => siloFpOf(s, s.t.length, timesHash(s.t))
+/** A silo's fingerprint from its counts, the number of its times and their hash - for a silo that has
+ *  not been made (store/progressDoor reads an answer off two saves without building the third). */
+export const siloFpOf = (c: Omit<Silo, 't' | 'x'>, n: number, h: string): string =>
+  `L${c.pl}|${c.gd}|${c.sk}|${c.bs}|${c.tl}|${n}|${h}`
+
+// ★ AN ANSWER'S POOL, MADE ONCE. An answer op names its time; the pool it makes is the store's, already
+// made by the engine (engine/timesPool's appended, its Summary and sorted buffer with it). A caller that
+// has that pool hands it over with the op (withTimes), and the book takes it instead of appending the
+// time to its own copy - a second append from the same pool would have to sort it afresh (a sorted
+// buffer is handed on once). It is taken only when it is exactly that append (its count and its hash);
+// an op without one (a held op re-applied on another pool) appends as before.
+const OP_TIMES = new WeakMap<Op, readonly number[]>()
+export function withTimes<O extends Op>(op: O, times: readonly number[]): O {
+  OP_TIMES.set(op, times)
+  return op
+}
+const timesOfOp = (op: Op & { kind: 'a' }, prev: readonly number[]): number[] => {
+  const made = OP_TIMES.get(op)
+  return made &&
+    made.length === prev.length + 1 &&
+    timesHash(made) === timesHashAppended(prev, op.tm!)
+    ? (made as number[])
+    : appended(prev, op.tm!)
+}
 /** A setting's fingerprint: its value, spelled one way - and, past a few characters, the hash of that
  *  (a preset's name has no length limit, and a fingerprint is written in the envelope and the key). */
 export const regFp = (v: unknown): string => {
@@ -356,6 +386,9 @@ export class CountsBook {
     return sl
   }
   isSilo = (x: string): boolean => this.shape.silos.includes(x)
+  // One stored silo as a comparable text: the shape's own (a long pool by its hash) or its JSON.
+  diskFp = (d: unknown): string =>
+    this.shape.diskFp ? this.shape.diskFp(d) : (JSON.stringify(d) ?? 'undefined')
   absent = (x: string): unknown =>
     this.shape.absentOf ? this.shape.absentOf(x) : this.shape.regAbsent
   fpOf = (x: string, v: unknown): string => (this.isSilo(x) ? siloFp(v as Silo) : regFp(v))
@@ -385,7 +418,7 @@ export class CountsBook {
         n.gd++
         n.sk++
         if (n.sk > n.bs) n.bs = n.sk
-        if (a.tm !== null) n.t = appended(o.t, a.tm)
+        if (a.tm !== null) n.t = timesOfOp(a, o.t)
       } else n.sk = 0
       o = n
     }
@@ -1402,8 +1435,9 @@ export class CountsBook {
     if (same && !pending) return false
     this.heldOld = clone(this.oldApplied)
     // (2.5.8) a notice carries the old value: per mode, contiguous when it shows the mode exactly as this
-    // window last saw it
-    {
+    // window last saw it (asked only when there is a device change to merge: a save of this window's own
+    // with the device as it last read it has nothing to place)
+    if (!same) {
       const prevS =
         view.prevDoc === undefined
           ? null
@@ -1411,7 +1445,7 @@ export class CountsBook {
       const seenS = this.shape.parse(this.seen.doc)?.state ?? blankState(this)
       this.contig = new Set(
         prevS
-          ? this.shape.silos.filter((x) => JSON.stringify(prevS[x]) === JSON.stringify(seenS[x]))
+          ? this.shape.silos.filter((x) => this.diskFp(prevS[x]) === this.diskFp(seenS[x]))
           : [],
       )
       if (this.blind && !same) {

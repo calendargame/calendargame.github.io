@@ -123,8 +123,29 @@ function fold(times: readonly number[]): {
   return { sum, valid, sortable, h1: h.h1, h2: h.h2 }
 }
 
-/** The rolling hash of a pool's times, in order — from its Summary (an append costs one step). */
-export const timesHash = (times: readonly number[]): string => lanesText(summaryOf(times))
+/** The rolling hash of a pool's times, in order — from its Summary (an append costs one step), or for a
+ *  pool with none (one read back from storage, say) folded once, the hash alone, and kept: nothing of a
+ *  Summary's median or sorted buffer is worked out for a pool that is only being compared. */
+/** The rolling hash of a pool's times, in order — from its Summary (an append costs one step), or, for a
+ *  pool with none (one just read back from storage), folded once and kept: the hash alone, nothing of a
+ *  Summary's median or sorted buffer worked out for a pool that is only being compared (Round 26: the
+ *  windows-in-sync door fingerprints every pool it reads). */
+export const timesHash = (times: readonly number[]): string => lanesText(lanesOf(times))
+const HASHES = new WeakMap<readonly number[], Lanes>()
+function lanesOf(times: readonly number[]): Lanes {
+  const s = SUMMARIES.get(times)
+  if (s) return s
+  let l = HASHES.get(times)
+  if (!l) {
+    l = { h1: HASH_SEED1, h2: HASH_SEED2 }
+    for (let i = 0; i < times.length; i++) l = mixTime(l, times[i])
+    HASHES.set(times, l)
+  }
+  return l
+}
+/** The hash of `times` with `t` added at its end — without making that pool (an append, as it would read). */
+export const timesHashAppended = (times: readonly number[], t: number): string =>
+  lanesText(mixTime(lanesOf(times), t))
 /** The rolling hash of the first `n` times of a pool (a fresh fold, linear in `n`). */
 export function prefixHash(times: readonly number[], n: number): string {
   if (n >= times.length) return timesHash(times)

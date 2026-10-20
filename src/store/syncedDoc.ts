@@ -532,7 +532,8 @@ export function createDoor(env: DoorEnv) {
           }
         },
         deviceKey: () => area()?.getItem(syncKey) ?? null,
-        save(docText, keyText) {
+        save(doc, keyText) {
+          const docText = doc as string // (this shape's write spells the doc's text)
           const s = area()
           if (!s) return true
           const before = s.getItem(key)
