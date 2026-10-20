@@ -23,7 +23,7 @@ import {
 import { fmt, numericFormatOf } from '../lib/format.js'
 import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from '../lib/calendar.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
-import { sharedFitScale } from '../lib/statFit.js'
+import { largestFit } from '../lib/textFit.js'
 import { UPDATE_CHECK_LABEL } from '../lib/updateCheck.js'
 import type { UpdateCheckState } from '../lib/updateCheck.js'
 import { GroupLabel, SectionLabel } from './primitives.jsx'
@@ -180,6 +180,11 @@ export type SettingsPanelProps = {
 // the outlined look is what a sighted player is shown. A setting that is not in effect is still
 // changeable, and changing it changes nothing until it is in effect again (lib/dateConfig: the
 // generator, the resets, and the Best keys all read only the settings in effect).
+// The least the Save Defaults / Reset Settings / Full Reset captions shrink to on one line, as a share
+// of the panel's text tier — 11px beside 12px, the floor they have always had — before they take two
+// lines instead (fitTrioCaptions).
+const TRIO_FLOOR = 11 / 12
+
 const NOT_IN_EFFECT = {
   randomFormat: 'Practice dates ignore this while Random Format is on.',
   deduction: 'Not in use in Deduction.',
@@ -556,65 +561,83 @@ export function SettingsPanel({
   const changelogScrollRef = useRef<HTMLDivElement | null>(null)
   const { scrolledFromTop: changelogScrolledFromTop, atBottom: changelogAtBottom } =
     useScrollEdgeState(changelogScrollRef, changelogOpen)
-  // The trio's caption auto-fit (Round-2, when the trio was the panel's pinned footer; it heads the
-  // Per-preset section since Round 26) — the StatPanel value-fit pattern applied to the
-  // Save Defaults / Reset Settings / Full Reset trio: on a narrow phone the three flex-1 buttons
-  // can get too tight for their captions, so ONE shared font-size (never per-button — unequal
-  // caption sizes across a matched row read as a glitch) shrinks all three together. The math is
-  // lib/statFit's sharedFitScale (min ratio, capped at 1) off the trio's resting text-xs — the
-  // popover's control tier (Round-3 font normalization), so the fit CEILINGS there and shrinks
-  // below 12px only when a narrow screen forces it; an 11px floor keeps the captions legible over
-  // cosmetic fit, and overflow-hidden on the buttons (below) contains the extreme remainder. In
-  // jsdom every width is 0 → scale 1 → no-op (the statFit convention).
-  //
-  // ★ MEASURED OFF THE LIVE CAPTIONS DIRECTLY (round 21). Until every reset button's caption was
-  // frozen, this measured hidden STATIC twins of the widest caption set — because the Full Reset →
-  // "Confirm?" swap would otherwise shrink the measurement mid-arm and jiggle the whole row. Round 21
-  // replaced the two-tap arm with a ConfirmModal, so all three captions are now static text and
-  // there is nothing to swap. The twins are gone; instead this resets each caption's inline
-  // fontSize to '' BEFORE reading its scrollWidth — the exact feedback-loop guard StatPanel's
-  // fitAll uses, so a re-run of this dep-less effect reads the true natural width every time
-  // instead of compounding the previous pass's shrink (12·s, 12·s², … → pinned at the floor).
+  // The trio's caption fit (Round-2, when the trio was the panel's pinned footer; it heads the
+  // Per-preset section since Round 26): Save Defaults / Reset Settings / Full Reset are three equal
+  // flex-1 buttons, and on a narrow phone, or in a wide font, a caption can be wider than its button.
+  // ★ A CAPTION IS NEVER CUT (the Round 26 review: in Verdana "Reset Settings" was cut by 1.8px at
+  // 390 wide and 9.3px at 280; in the stock font by a pixel at 280). What happens instead, in order:
+  //   1. ONE SHARED SIZE, smaller: all three captions shrink together (never per button — unequal
+  //      captions across a matched row read as a glitch), to the largest size at which the widest
+  //      fits its button — but not below TRIO_FLOOR of the panel's text tier (text-xs), the size the
+  //      captions have always been allowed to give (11px beside 12px).
+  //   2. TWO LINES where that floor is not enough: every caption breaks at its space ("Reset /
+  //      Settings"), all three together, so the row stays matched — the buttons grow a line taller
+  //      rather than shrink past legibility — at the largest size, up to the full tier, at which
+  //      each caption's longest word fits.
+  //   (A font so wide that even a word does not fit at the floor shrinks further than it: whole
+  //   words, never cut.)
+  // ★ MEASURED AS LAID-OUT TEXT (a Range over the caption), at each size tried (lib/textFit's
+  // largestFit: a font is not trusted to scale evenly). The fit used to read each caption span's
+  // scrollWidth — which an inline span does not have (it is 0), so the fit never once shrank
+  // anything and the clip went unseen. Applied to the BUTTON, not the caption: the caption
+  // inherits it, so the button's line-box strut shrinks WITH the text and the label stays
+  // vertically centred (sizing the span alone left it ~0.6px low on-device, the owner's 2026-07-13
+  // catch). In jsdom nothing is laid out (every width is 0) and nothing changes.
   const trioRef = useRef<HTMLDivElement | null>(null)
   const fitTrioCaptions = () => {
     const row = trioRef.current
     if (!row) return
     const labels = Array.from(row.querySelectorAll<HTMLElement>('[data-fitlabel]'))
+    const buttons = labels.map((l) => l.parentElement!)
     if (labels.length === 0) return
-    // Reset every button to the base size before measuring — see the feedback-loop note above.
-    labels.forEach((l) => {
-      const b = l.parentElement
-      if (b) b.style.fontSize = ''
-    })
-    // ⚠ These two stay integer-valued measures on purpose — round 10's sub-pixel sweep (--bar-h,
-    // GuidePage's panel heights) deliberately skipped them. scrollWidth is the only platform read
-    // of a clamped span's NATURAL width; a rect would report the clamped width, a different number
-    // rather than a sharper one. clientWidth EXCLUDES border and scrollbar where rect.width
-    // includes both, so swapping it would change which box is being fitted — a semantic change,
-    // not a precision one. Both feed a font-size ratio, where a rounded pixel is imperceptible
-    // anyway.
-    const naturals = labels.map((l) => l.scrollWidth)
-    const avails = labels.map((l) => {
-      const btn = l.parentElement
-      if (!btn) return 0
-      const cs = getComputedStyle(btn)
-      return (
-        btn.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0)
+    // Back to the resting size and one line before anything is measured, so a re-run measures the
+    // captions as they are, not as the last fit left them (StatPanel's feedback-loop rule).
+    buttons.forEach((b) => (b.style.fontSize = ''))
+    labels.forEach((l) => (l.style.whiteSpace = ''))
+    // The room inside the narrowest button (they are equal, but nothing here depends on that).
+    const room = Math.min(
+      ...buttons.map((b) => {
+        const cs = getComputedStyle(b)
+        const sides = [
+          'paddingLeft',
+          'paddingRight',
+          'borderLeftWidth',
+          'borderRightWidth',
+        ] as const
+        return (
+          b.getBoundingClientRect().width - sides.reduce((sum, k) => sum + parseFloat(cs[k]), 0)
+        )
+      }),
+    )
+    if (!(room > 0)) return
+    const base = parseFloat(getComputedStyle(buttons[0]).fontSize)
+    const sizeAt = (scale: number) =>
+      buttons.forEach((b) => (b.style.fontSize = scale < 1 ? `${base * scale}px` : ''))
+    // The widest caption — or, `byWord`, the widest single word of any — at `scale` of the tier.
+    const widestAt = (byWord: boolean) => (scale: number) => {
+      sizeAt(scale)
+      return Math.max(
+        ...labels.map((l) => {
+          const text = l.firstChild
+          if (!(text instanceof Text)) return 0
+          const pieces = byWord ? text.data.split(' ') : [text.data]
+          let at = 0
+          return Math.max(
+            ...pieces.map((piece) => {
+              const range = document.createRange()
+              range.setStart(text, at)
+              range.setEnd(text, at + piece.length)
+              at += piece.length + 1
+              return range.getBoundingClientRect().width
+            }),
+          )
+        }),
       )
-    })
-    const scale = sharedFitScale(naturals, avails)
-    // Base font off a caption that has just been reset to '' above, so getComputedStyle reads the
-    // resting text-xs and not a stale inline size.
-    const base = parseFloat(getComputedStyle(labels[0]).fontSize) || 0
-    const px = scale < 1 && base > 0 ? Math.max(11, base * scale) + 'px' : ''
-    // Apply the fitted size to the BUTTON, not the caption span: the caption inherits it, so the
-    // button's line-box strut shrinks WITH the text and the label stays vertically centered.
-    // (Sizing the inline span alone left it baseline-aligned inside the button's un-shrunk
-    // resting-size strut — measured ~0.6px low on-device, the owner's 2026-07-13 catch.)
-    labels.forEach((l) => {
-      const b = l.parentElement
-      if (b) b.style.fontSize = px
-    })
+    }
+    const oneLine = largestFit(room, widestAt(false))
+    if (oneLine >= TRIO_FLOOR) return sizeAt(oneLine)
+    labels.forEach((l) => (l.style.whiteSpace = 'normal'))
+    sizeAt(largestFit(room, widestAt(true)))
   }
   // Dep-less like StatPanel's: cheap (3 spans), and this component only exists while the panel is
   // open, so there is no closed state to bail out of. It re-reads on EVERY render pass on purpose —
@@ -1264,9 +1287,10 @@ export function SettingsPanel({
                     Save Defaults is constructive → btn-solid purple (the Begin-button language),
                     keeping rose exclusively for the two destructive neighbors. It dims when live
                     state already equals the saved defaults (factory when none saved) — nothing new
-                    to save. Each caption sits in a data-fitlabel span (whitespace-nowrap so it
-                    MEASURES at full width instead of wrapping; overflow-hidden on the button
-                    contains the pre-fit paint). */}
+                    to save. Each caption sits in a data-fitlabel span: one line
+                    (whitespace-nowrap) unless fitTrioCaptions gives all three two, and never cut —
+                    the fit runs before the first frame is drawn, so the button's overflow-hidden
+                    clips nothing a player ever sees. */}
                 <button
                   type="button"
                   onClick={openSaveDefaults}

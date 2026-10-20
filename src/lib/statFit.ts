@@ -11,10 +11,3 @@
 // per-digit jitter.
 export const fitScale = (natural: number, avail: number): number =>
   natural > 0 && avail > 0 ? Math.min(1, avail / natural) : 1
-
-// The GROUP version (Round-2, the ⚙ trio-button fit): one scale for a set of labels that must all
-// shrink together — the tightest label's ratio governs, capped at 1, and any invalid pair
-// (0/negative width — e.g. jsdom) contributes 1 exactly like fitScale, so a partial measure never
-// shrinks the group. Pairs are positional: naturals[i] fits into avails[i].
-export const sharedFitScale = (naturals: number[], avails: number[]): number =>
-  naturals.reduce((scale, natural, i) => Math.min(scale, fitScale(natural, avails[i] ?? 0)), 1)

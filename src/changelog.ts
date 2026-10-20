@@ -131,6 +131,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Fixed: in Lookup, scrolled all the way down, the last history row's bottom edge is no longer cut off.",
       'Fixed: at the foot of the ⚙ menu, Changelog now lines up with Check for updates below it. Its new-update dot sits just past the word.',
       'Fixed: on a very narrow screen, the Mode button no longer covers the end of the Preset button, and the ⚙ no longer runs off the edge. The Preset button keeps room for its arrows and a number, and the Mode button gives way instead, its name cut short where it does not fit.',
+      'Fixed: in the ⚙ menu, the words on the three buttons Save Defaults, Reset Settings, and Full Reset are no longer cut off. Where a narrow phone or a wide font leaves them too little room, they get a little smaller, and where that is not enough they take two lines.',
       'Fixed: a screen reader read out every closed section of How to Play, and the Show Codes box’s codes while the box was closed, and the keyboard could step into a closed section. What is folded away is now out of reach until you open it.',
       "Fixed: in Manage Presets, pressing your device's Back while typing a preset name no longer throws the name away. It keeps it, as tapping away does, and closes the popup. Escape still throws a name away.",
       'Fixed: on an iPhone, a flick that started on a button in the ⚙ menu could press that button as your finger lifted, such as opening the Open in list. A flick now only scrolls, wherever it starts.',

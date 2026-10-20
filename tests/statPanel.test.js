@@ -3,7 +3,7 @@
 // are 0 there (fitScale then returns 1, a no-op, so the stat values still render at the base size, which
 // the per-mode DOM tests already exercise via statValue()).
 import { describe, it, expect } from 'vitest'
-import { fitScale, sharedFitScale } from '../src/lib/statFit.js'
+import { fitScale } from '../src/lib/statFit.js'
 
 describe('StatPanel.fitScale — value auto-fit', () => {
   it('returns 1 (no shrink) when the value already fits', () => {
@@ -25,25 +25,5 @@ describe('StatPanel.fitScale — value auto-fit', () => {
     expect(fitScale(60, 0)).toBe(1)
     expect(fitScale(0, 0)).toBe(1)
     expect(fitScale(-5, 60)).toBe(1)
-  })
-})
-
-// The GROUP version (Round-2): one shared scale for the ⚙ panel's button trio — the tightest
-// caption governs so all three shrink together (the DOM wiring is pinned in
-// tests/trioFit.dom.test.jsx).
-describe('sharedFitScale — the ⚙ trio’s group auto-fit (Round-2)', () => {
-  it('returns the tightest pair ratio, capped at 1', () => {
-    expect(sharedFitScale([120, 80, 40], [60, 60, 60])).toBe(0.5) // 120→60 governs
-    expect(sharedFitScale([40, 50, 60], [60, 60, 60])).toBe(1) // everything already fits
-  })
-
-  it('invalid pairs contribute 1 exactly like fitScale — a partial measure never shrinks the group', () => {
-    expect(sharedFitScale([0, 0, 0], [0, 0, 0])).toBe(1) // jsdom: every width 0 → no-op
-    expect(sharedFitScale([120, 0, 40], [60, 0, 60])).toBe(0.5) // the dead pair is ignored
-    expect(sharedFitScale([120], [])).toBe(1) // a missing avail reads as invalid, not as 0-wide
-  })
-
-  it('an empty set scales by 1', () => {
-    expect(sharedFitScale([], [])).toBe(1)
   })
 })
