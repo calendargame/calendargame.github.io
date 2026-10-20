@@ -29,7 +29,7 @@ import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { FLASH_MS, useButtonFlash, useMountedBestsId, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { NUM_INPUT_CLASS, RESET_BTN_CLASS, DATE_CARD_CLASS } from '../components/controlClasses.js'
-import { dateLineFormats } from '../lib/dateLineFit.js'
+import { dateLineShapes } from '../lib/dateLineFit.js'
 import DateLine from '../components/DateLine.jsx'
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
 import { randomDate } from '../lib/dateGen.js'
@@ -934,10 +934,12 @@ function AoxMode({
           <CardNumber state={state} show={inBack || (isLocked && liveCardScored)} />
           <DateLine
             numberDigits={String(topCardNumber(state)).length}
-            formats={dateLineFormats(
+            shapes={dateLineShapes(
               [state.date, ...state.stack, ...state.forwardStack],
               dateFormat,
               randomFormat,
+              minY,
+              maxY,
             )}
           >
             {dateVisible ? fmtDate(date.y, date.m, date.d, date._fmt) : '—'}

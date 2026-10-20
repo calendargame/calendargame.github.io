@@ -7,7 +7,7 @@ import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
 import { useButtonFlash, useMountedBestsId, useMountedDataId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS, DATE_CARD_CLASS } from '../components/controlClasses.js'
-import { dateLineFormats } from '../lib/dateLineFit.js'
+import { dateLineShapes } from '../lib/dateLineFit.js'
 import DateLine from '../components/DateLine.jsx'
 import {
   fmtTime,
@@ -1164,10 +1164,12 @@ function BlitzMode({
           <CardNumber state={state} show={state.backDepth > 0} />
           <DateLine
             numberDigits={String(topCardNumber(state)).length}
-            formats={dateLineFormats(
+            shapes={dateLineShapes(
               [state.date, ...state.stack, ...state.forwardStack],
               dateFormat,
               randomFormat,
+              minY,
+              maxY,
             )}
           >
             {dateText}

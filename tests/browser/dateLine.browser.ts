@@ -20,8 +20,9 @@
 //     the card that takes the count from 99 to 100;
 //   • the date stays CENTRED on the card: its room stops short of the card's two sides by the same
 //     inset;
-//   • and the size is chosen for the formats the card can show: all five while Random Format is
-//     on, the one Date Format sets when it is off.
+//   • and the size is chosen for the dates the card can show: the formats — all five while Random
+//     Format is on, the one Date Format sets when it is off — and the years of the Year Range in
+//     effect (a range of four-digit years is sized for four digits, not five).
 // The widest strings are put into the card's own date element: what is measured is how the app's
 // own rule sets that text, which no seed can draw on demand (the date shown is random).
 import type { Locator, Page } from '@playwright/test'
@@ -84,10 +85,15 @@ async function answerRight(page: Page) {
 }
 
 // The widest real dates of each format, in the date line's own font as it is now: every year the
-// card can draw (1 to 11582), every day each month has (29 in February, for the Julian leap years),
-// and every month, measured — then the three widest of each format, for the real line to be held to.
-async function widestDates(date: Locator, formats: readonly FormatId[]) {
-  const years = Array.from({ length: YEAR_MAX_JULIAN }, (_, i) => String(i + 1))
+// card can draw (`years`: 1 to 11582 by default), every day each month has (29 in February, for the
+// Julian leap years), and every month, measured — then the three widest of each format, for the real
+// line to be held to.
+async function widestDates(
+  date: Locator,
+  formats: readonly FormatId[],
+  [lo, hi]: readonly [number, number] = [1, YEAR_MAX_JULIAN],
+) {
+  const years = Array.from({ length: hi - lo + 1 }, (_, i) => String(lo + i))
   const days = Array.from({ length: 31 }, (_, i) => String(i + 1))
   const measure = (texts: string[]) =>
     date.evaluate((el, texts) => {
@@ -117,10 +123,23 @@ async function widestDates(date: Locator, formats: readonly FormatId[]) {
   return out
 }
 
-const CONFIGS: { name: string; randomFormat: boolean; dateFormat: FormatId }[] = [
+const CONFIGS: {
+  name: string
+  randomFormat: boolean
+  dateFormat: FormatId
+  /** A Year Range with the Julian Calendar setting off; left out, the default (on, 1 to 11582). */
+  years?: [number, number]
+}[] = [
   { name: 'Random Format on', randomFormat: true, dateFormat: 'written-mdy' },
   { name: 'Date Format numeric-ymd', randomFormat: false, dateFormat: 'numeric-ymd' },
   { name: 'Date Format written-dmy', randomFormat: false, dateFormat: 'written-dmy' },
+  // Four-digit years only (the Round 26 review: the card was sized for five whatever the range).
+  {
+    name: 'Julian off, 1900 to 2100',
+    randomFormat: false,
+    dateFormat: 'written-mdy',
+    years: [1900, 2100],
+  },
 ]
 
 for (const font of FONTS)
@@ -131,7 +150,15 @@ for (const font of FONTS)
       test.setTimeout(240_000)
       await openApp(page, {
         seed: {
-          settings: { randomFormat: config.randomFormat, dateFormat: config.dateFormat },
+          settings: {
+            randomFormat: config.randomFormat,
+            dateFormat: config.dateFormat,
+            ...(config.years && {
+              useJulian: false,
+              minY: config.years[0],
+              maxY: config.years[1],
+            }),
+          },
         },
       })
       await useFont(page, font)
@@ -166,8 +193,8 @@ for (const font of FONTS)
           `${at}: the date's room is centred on the card`,
         ).toBeLessThanOrEqual(SAME_PX)
         expect(size, `${at}: never above the full size`).toBeLessThanOrEqual(full + SAME_PX)
-        const texts = Object.entries(await widestDates(date, formats)).flatMap(([format, t]) =>
-          t.map((text) => ({ format, text })),
+        const texts = Object.entries(await widestDates(date, formats, config.years)).flatMap(
+          ([format, t]) => t.map((text) => ({ format, text })),
         )
         // Every text measured where the app sets it, in one pass (a change of text changes no size,
         // so nothing has to settle between them): its line, its letters, its size, the card; and
@@ -226,12 +253,12 @@ for (const font of FONTS)
           ).toBeLessThanOrEqual(SAME_PX)
           expect(r.touching, `${what}: clear of the card number`).toEqual([])
         }
-        // The largest size the rule allows: the full size, or the widest date fills its room.
-        // (The rule sizes for the widest SHAPE — each digit the font's widest — so a font with
-        // figures of different widths leaves the widest real date a little short of the room.)
+        // The largest size the rule allows: the full size, or the widest date the card can draw
+        // fills its room — to within the fit's own steps (lib/textFit's largestFit shrinks by at
+        // least a thousandth a round), never sized for a wider date than the settings can draw.
         if (size < full - SAME_PX)
           expect(widestInk, `${at}: the widest date fills its room`).toBeGreaterThanOrEqual(
-            room.width * 0.97,
+            room.width * 0.99,
           )
         await expectPageNotWiderThanWindow(page)
       }

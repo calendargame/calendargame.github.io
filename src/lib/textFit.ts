@@ -37,7 +37,7 @@
 
 const rooms = new Map<Element, (room: number) => void>()
 const widths = new Map<Element, number>()
-const digitCache = new Map<string, string>()
+const digitCache = new Map<string, readonly number[]>()
 let sentinel: HTMLElement | null = null
 
 /** A hidden ruler wearing `className`: one row per text, each laid out at its natural width. */
@@ -70,10 +70,11 @@ export const widestRow = (ruler: HTMLElement): number =>
 
 const DIGITS = '0123456789'
 /**
- * The widest digit in the font a ruler is set in (a font's digits need not be one width). Read once
- * per font and type — the ruler's classes and weight — and read again after any font change.
+ * How wide each digit, 0 to 9, is in the font a ruler is set in, at the ruler's own type (a font's
+ * digits need not be one width). Read once per font and type — the ruler's classes and weight — and
+ * read again after any font change.
  */
-export function widestDigit(ruler: HTMLElement): string {
+export function digitWidths(ruler: HTMLElement): readonly number[] {
   const key = `${ruler.className}|${getComputedStyle(ruler).fontWeight}`
   const known = digitCache.get(key)
   if (known) return known
@@ -82,11 +83,53 @@ export function widestDigit(ruler: HTMLElement): string {
   ruler.style.fontSize = ''
   setRows(ruler, [...DIGITS])
   const each = [...ruler.children].map((row) => row.getBoundingClientRect().width)
-  const digit = DIGITS[each.indexOf(Math.max(...each))]
   ruler.replaceChildren(...keep)
   ruler.style.fontSize = size
-  digitCache.set(key, digit)
-  return digit
+  digitCache.set(key, each)
+  return each
+}
+/** The widest digit in the font a ruler is set in (digitWidths). */
+export function widestDigit(ruler: HTMLElement): string {
+  const each = digitWidths(ruler)
+  return DIGITS[each.indexOf(Math.max(...each))]
+}
+
+/**
+ * The widest number from `lo` to `hi` (whole numbers, 1 ≤ lo ≤ hi) as written in a font whose digit
+ * d is `widths[d]` wide (digitWidths): for each count of digits the span covers, the widest number of
+ * that many digits inside it — worked out digit by digit, so a span such as 10000 to 11582 is read as
+ * what it holds ("11488" where an 8 is the widest digit), never as five of the widest digit — and the
+ * widest of those. A word's width is its letters' added together; digits are not kerned against one
+ * another in the fonts this meets, and where one is, by a hair, the fit's own measuring of the whole
+ * date is what answers.
+ */
+export function widestNumberIn(lo: number, hi: number, widths: readonly number[]): number {
+  let best = lo
+  let bestWidth = -1
+  for (let digits = String(lo).length; digits <= String(hi).length; digits++) {
+    const from = String(Math.max(lo, 10 ** (digits - 1)))
+    const to = String(Math.min(hi, 10 ** digits - 1))
+    // memo[pos][held by `from`][held by `to`]: the widest tail from `pos` on, and its width.
+    const memo = new Map<string, [number, string]>()
+    const tail = (pos: number, atFrom: boolean, atTo: boolean): [number, string] => {
+      if (pos === digits) return [0, '']
+      const key = `${pos}${+atFrom}${+atTo}`
+      const known = memo.get(key)
+      if (known) return known
+      const low = atFrom ? +from[pos] : 0
+      const high = atTo ? +to[pos] : 9
+      let most: [number, string] = [-1, '']
+      for (let d = low; d <= high; d++) {
+        const [w, rest] = tail(pos + 1, atFrom && d === low, atTo && d === high)
+        if (widths[d] + w > most[0]) most = [widths[d] + w, `${d}${rest}`]
+      }
+      memo.set(key, most)
+      return most
+    }
+    const [width, text] = tail(0, true, true)
+    if (width > bestWidth) [bestWidth, best] = [width, +text]
+  }
+  return best
 }
 
 /**

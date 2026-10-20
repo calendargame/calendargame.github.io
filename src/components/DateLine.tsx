@@ -14,41 +14,42 @@
 // centred, either way); they make it smaller only where it would otherwise meet the number.
 //
 // ★ ONE SIZE PER CARD, FROM THE WIDEST DATE THE CARD CAN SHOW (lib/dateLineFit). Which dates those
-// are is `formats` — every format a date on this card can carry: the one Date Format sets (all five
-// while Random Format is on), and the format of every date the mode is holding (one browsed back
-// to keeps the format it was drawn in, so a format change cannot leave a wider one without room).
-// `partial` adds Deduction's dates with a piece missing. Nothing about the date being SHOWN is read,
-// so the size never changes from one question to the next.
+// are is `shapes` (lib/dateLineFit's dateLineShapes): every format a date on this card can carry —
+// the one Date Format sets (all five while Random Format is on), and the format of every date the
+// mode is holding (one browsed back to keeps the format it was drawn in, so a format change cannot
+// leave a wider one without room) — and every year it can draw: the Year Range in effect, and the
+// year of any date it holds from before the range changed. `partial` adds Deduction's dates with a
+// piece missing. Nothing about the date being SHOWN is read, so the size never changes from one
+// question to the next — only when the settings, or what the mode holds, do.
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import type { FormatId } from '../lib/format.js'
 import { fitDateLine, refitDateLine } from '../lib/dateLineFit.js'
 import { DATE_LINE_CLASS } from './controlClasses.js'
 import { CardNumberSizer } from './CardNumber.jsx'
 
 export default function DateLine({
-  formats,
+  shapes,
   partial = false,
   numberDigits,
   children,
 }: {
-  formats: readonly FormatId[]
+  shapes: string
   partial?: boolean
   numberDigits: number
   children: ReactNode
 }) {
   const line = useRef<HTMLDivElement>(null)
-  const shapes = `${formats.join(' ')}${partial ? ' partial' : ''}`
+  const spelled = `${shapes}${partial ? ' partial' : ''}`
   // Watched for as long as it is mounted…
   useLayoutEffect(() => fitDateLine(line.current), [])
   // …and a change of what the card can show, or of the corner it keeps, is a change of size, decided
   // before the frame is drawn.
   useLayoutEffect(() => {
     if (line.current) refitDateLine(line.current)
-  }, [shapes, numberDigits])
+  }, [spelled, numberDigits])
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-1">
       <CardNumberSizer digits={numberDigits} />
-      <div ref={line} data-date-shapes={shapes} className={DATE_LINE_CLASS}>
+      <div ref={line} data-date-shapes={spelled} className={DATE_LINE_CLASS}>
         {children}
       </div>
       <CardNumberSizer digits={numberDigits} />
