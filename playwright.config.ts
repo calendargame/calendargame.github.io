@@ -83,11 +83,14 @@ export default defineConfig({
     },
   ],
   // The finished site, served as it will be served. Never a server that was already running: the
-  // lane starts its own and stops it, so what it measured is what `dist` held.
+  // lane starts its own and stops it, so what it measured is what `dist` held. Beside it, the older
+  // build the lane keeps (support/oldSite) — built before the server starts the first time a machine
+  // runs the lane, which takes a few minutes, hence the long wait for the server; once it is built the
+  // server is up in seconds.
   webServer: {
     command: 'node tests/browser/support/serveBuild.js',
     url: `http://${HOST}:${PORT}${builtBase()}`,
     reuseExistingServer: false,
-    timeout: 60_000,
+    timeout: 900_000,
   },
 })

@@ -7,7 +7,8 @@
 //   2. Open the app with `openApp(page, { viewport, theme, seed })`, get to the screen with
 //      `switchMode` / `openSettings`, then measure with `rectOf` and assert with `expect` or the
 //      `expectNo…` helpers below. A second window on the same saved data is `openSecondWindow`;
-//      a second DEVICE, with a save of its own, is the `newDevice` fixture.
+//      a second DEVICE, with a save of its own, is the `newDevice` fixture; a window of the OLDER
+//      version, on the same device, is `openOlderWindow` (support/oldSite says which, and how).
 //   3. `npm run build`, then `npm run test:browser`. It must pass in every project, three runs in a
 //      row, before it is committed.
 //
@@ -44,6 +45,7 @@ import { PAGES, type PageId } from '../../../src/lib/modes'
 import { isJulianDate, wday, wdayJulian } from '../../../src/lib/calendar'
 import { DAY, MONTH } from '../../../src/lib/format'
 import { storageFor, type AppSeed, type SeededStorage, type Theme } from './seeds'
+import { OLD_PATH } from './oldSite.js'
 
 export { expect }
 export type { AppSeed, Theme }
@@ -248,11 +250,37 @@ export async function openPresetManager(page: Page): Promise<Locator> {
  */
 export async function answerRight(page: Page) {
   const shown = await page.locator('.date-line:visible').textContent()
+  await page
+    .locator('[data-answer-grid]:visible')
+    .getByRole('button', { name: weekdayOf(shown) })
+    .click()
+}
+
+/** The weekday of a date as the default format writes it ("April 7, 9322"), by the app's calendar. */
+export function weekdayOf(shown: string | null): string {
   const [, monthName, day, year] = /^(\w+) (\d+), (\d+)$/.exec(shown ?? '') ?? []
   expect(monthName, `a date in the default format, not "${shown}"`).toBeDefined()
   const [y, m, d] = [+year, MONTH.indexOf(monthName) + 1, +day]
-  const weekday = DAY[isJulianDate(y, m, d) ? wdayJulian(y, m, d) : wday(y, m, d)]
-  await page.locator('[data-answer-grid]:visible').getByRole('button', { name: weekday }).click()
+  return DAY[isJulianDate(y, m, d) ? wdayJulian(y, m, d) : wday(y, m, d)]
+}
+
+// ── A window of the older build (support/oldSite) ─────────────────────────────────────────────
+
+/** A window of the older build the lane keeps, on the device `context` is (its `old/` address). */
+export async function openOlderWindow(context: BrowserContext): Promise<Page> {
+  const old = await context.newPage()
+  await old.goto(`./${OLD_PATH}`)
+  await appReady(old)
+  return old
+}
+
+/** answerRight, in a window of the older build: it draws the date in its own element. */
+export async function answerRightOld(old: Page) {
+  const shown = await old.locator('.panel:visible .text-3xl.font-bold').first().textContent()
+  await old
+    .locator('[data-answer-grid]:visible')
+    .getByRole('button', { name: weekdayOf(shown) })
+    .click()
 }
 
 /**

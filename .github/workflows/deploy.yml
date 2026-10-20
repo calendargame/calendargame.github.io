@@ -195,8 +195,21 @@ jobs:
         run: npx playwright install chromium webkit
       - name: Install the system packages the test browsers need
         run: npx playwright install-deps chromium webkit
+      # The older build the lane keeps beside the one under test (tests/browser/support/oldSite: a
+      # window of the version live while this one was made, on the same origin). Built from its own
+      # commit the first time - a git worktree of it (which is one more reason fetch-depth must stay
+      # 0), its own `npm ci`, its own Vite, a minute or two - and restored from this cache after that.
+      # Keyed on that commit, on how it is built, and on this repository, whose base it is built for.
+      - name: Read which older build the lane keeps
+        id: oldsite
+        run: node --input-type=module -e "const m = await import('./tests/browser/support/oldSite.js'); console.log('commit=' + m.OLD_SITE.commit)" >> "$GITHUB_OUTPUT"
+      - name: Restore the older build from the cache
+        uses: actions/cache@v4
+        with:
+          path: .lane-cache
+          key: lane-old-site-${{ steps.oldsite.outputs.commit }}-${{ github.repository }}-${{ hashFiles('tests/browser/support/oldSite.js', 'tests/browser/support/buildOldSite.mjs') }}
       - name: Run the browser tests
-        timeout-minutes: 15
+        timeout-minutes: 20  # (15 for the tests, and room for the older build's first build)
         run: npm run test:browser
       # Runs whether the tests passed or failed (never when the run was cancelled): a test that
       # passed only on its retry is named in a warning on the run, so it cannot go by unseen.

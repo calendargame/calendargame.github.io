@@ -44,3 +44,6 @@ PROJECT.md
 /_*.js
 /*.docx
 /skill-observations/
+
+# The browser lane's older build of the app (tests/browser/support/oldSite), built once per machine.
+/.lane-cache/

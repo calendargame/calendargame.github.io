@@ -4,6 +4,9 @@ dist
 # The browser lane's output (traces, a run's report)
 test-results
 
+# The browser lane's older build of the app (tests/browser/support/oldSite)
+.lane-cache
+
 # Dependencies
 node_modules
 
