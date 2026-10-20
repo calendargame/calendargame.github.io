@@ -665,7 +665,7 @@ export const PICKER_NAMES = [
   'Julian Chance',
   'Amnesic',
 ]
-// ★ SINCE ROUND 26 NO PICKER LOCKS: seven go out of effect instead (the owner: "dimmed means not in
+// ★ SINCE ROUND 26 NO PICKER LOCKS: six go out of effect instead (the owner: "dimmed means not in
 // effect right now, not locked"). A picker NOT IN EFFECT is outlined, still changeable, and says why to
 // a screen reader (components/PillGroup's `dormant`). The theme groups never go out of effect.
 export const NOT_IN_EFFECT_PICKERS = [
@@ -675,7 +675,6 @@ export const NOT_IN_EFFECT_PICKERS = [
   'Leap Year Chance',
   'Jan/Feb Chance on Leap Years',
   'Julian Chance',
-  'Amnesic',
 ]
 
 // A PICKER NOT IN EFFECT, asserted as one claim — every facet a user meets:

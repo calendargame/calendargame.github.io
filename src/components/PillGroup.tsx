@@ -19,8 +19,8 @@ import { PillGroupDormant } from './pillGroupDormant.js'
 //     <button>, so the browser already turns both into the click the tray listens for.
 //   • NO PICKER LOCKS (Round 26, the owner: "dimmed means not in effect right now, not locked"). A
 //     setting that has no say right now is NOT IN EFFECT (`dormant`, below): striped, and still an
-//     ordinary live group. Amnesic while Save Stats is off was the last locked one; it went out of
-//     effect once a change to it no longer touched the screen (store/amnesic).
+//     ordinary live group. Amnesic while Save Stats is off was the last locked one; it is simply in
+//     effect now, since a change to it no longer touches the screen (store/amnesic).
 //
 // WHY THE GROUP OWNS THIS AND NOT THE TRAY: a group is a CHOICE, not a row (THE PICKER RULE,
 // stated at the Display section — which lives in components/SettingsPanel since round 14, not
@@ -58,8 +58,7 @@ const ARROW_STEP: Record<string, number> = {
 }
 // ★ TWO LOOKS, TWO MEANINGS (Round 26): FILLED = in effect; STRIPED (a hatched housing, its choice
 // ringed — index.css's .tray-dormant) = kept but NOT IN EFFECT right now, and still changeable
-// (`dormant` — a chance setting the year range cannot use, Rotate Dots while Input is Buttons, Amnesic
-// while Save Stats is off). A dormant group is an ordinary live group in every way but its look and
+// (`dormant` — a chance setting the year range cannot use, Rotate Dots while Input is Buttons). A dormant group is an ordinary live group in every way but its look and
 // one sentence: its keys, its tab stop, and a press all work; it carries no aria-disabled (the control
 // works, and lib/pointerGestures skips aria-disabled targets); and each of its radios is described by
 // the reason — on the RADIO, not the group, because VoiceOver's touch navigation lands on a radio and

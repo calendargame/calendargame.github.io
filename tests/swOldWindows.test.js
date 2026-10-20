@@ -128,6 +128,21 @@ describe('the windows of the version before', () => {
     expect(listIn(idb)).toEqual([])
   })
 
+  // ★ NO LOOP - which matters for the one crossing the scopes allow: a test-site page the live worker
+  // controls is reloaded at a live update, once. A window reloaded is off the list, and the list is
+  // written only at a takeover, so however many asks follow, nothing is reloaded twice.
+  it('each window is reloaded at most once per takeover, however many asks follow', async () => {
+    const idb = fakeIndexedDB()
+    const windows = [windowOf('away', 'hidden'), windowOf('later')]
+    const worker = startWorker({ windows, idb })
+    await worker.takeOver()
+    await worker.activated()
+    windows[1].visibilityState = 'hidden'
+    for (let i = 0; i < 5; i++) await worker.ask()
+    expect(windows.map((w) => w.navigated)).toEqual([1, 1])
+    expect(listIn(idb)).toEqual([])
+  })
+
   it('the list outlives the worker: a later start reloads what the first one left', async () => {
     const idb = fakeIndexedDB()
     const windows = [windowOf('kept', 'visible', true)]

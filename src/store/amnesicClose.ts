@@ -2,7 +2,6 @@ import { usePresets, presetListed } from './presets.js'
 import { amnesicOf, amnesicOnOf } from './settings.js'
 import { PROGRESS_DOOR } from './progress.js'
 import { door } from './syncedDoc.js'
-import { browsingSessionOpen } from './browsingSession.js'
 import { discardAllSessionHistories } from './sessionHistory.js'
 import { discardAllSessionRounds } from './sessionRound.js'
 import {
@@ -22,12 +21,11 @@ import { captureError } from '../observability/sentry.js'
 // when the document is destroyed - a closed tab, an app swiped away, a crash, iOS evicting it - with no
 // event to deliver, and a suspended app still holds it. So at boot a window asks for the lock EXCLUSIVELY,
 // "if available":
-//   • granted - no other window of the app is alive. A reload (this tab's browsing-session marker is set,
-//     store/browsingSession) is not a close: nothing is forgotten. Anything else is a COLD OPEN AFTER A
-//     CLOSE: the forget runs (`closeSession`) and, when it forgot anything, the session counter moves on -
-//     then, still inside the
-//     exclusive lock, the window queues its own shared request and lets go (the lock manager grants a
-//     queued request in the same step as the release, so no other window can find the app empty between).
+//   • granted - no other window of the app is alive. A RELOAD is not a close: nothing is forgotten
+//     (`reloaded` below). Anything else is a COLD OPEN AFTER A CLOSE: the forget runs (`closeSession`)
+//     and, when it forgot anything, the session counter moves on - then, still inside the exclusive lock,
+//     the window queues its own shared request and lets go (the lock manager grants a queued request in
+//     the same step as the release, so no other window can find the app empty between).
 //   • not granted - other windows are alive: it asks for the shared lock (granted at once - or, while an
 //     opener holds the exclusive one for its forget, as soon as that is done) and joins the running session.
 // Measured reliable in real Chromium and WebKit (design 2: thousands of boots, storms of simultaneous
@@ -45,9 +43,26 @@ import { captureError } from '../observability/sentry.js'
 // (`pending`) so every window that opens runs it again until it lands - it is idempotent: a slice put back
 // carries no anchor of that window.
 // ★ A WINDOW THAT COMES BACK TO A SESSION THAT HAS ENDED - from the browser's back-forward cache, or a
-// discarded tab reloading after every window had closed and the app opened again elsewhere - drops what it
-// kept for that session (its parked histories and ended rounds: they may name what was forgotten) and
-// starts again in the session now running.
+// tab the browser discarded or restored, which keeps its sessionStorage - drops what it kept for that
+// session (its parked histories and ended rounds: they may name what was forgotten) and starts again in
+// the session now running.
+
+/**
+ * ★ IS THIS LOAD A RELOAD? Only the browser's own word counts: the page's navigation entry says `reload`
+ * (the reload button, the app's own update reload, the error card's Reload), and the document was not
+ * one the browser DISCARDED in the background and is now bringing back (`document.wasDiscarded`, where
+ * the browser has it). Not this tab's browsing-session marker (store/browsingSession): a discarded tab
+ * revived and a tab the browser restores ("reopen closed tab") both keep their sessionStorage, marker and
+ * all, and both can come back after every window of the app had closed - a close the marker would hide.
+ * A tab restored, a link followed, or the app opened from the home screen is a navigation, not a reload.
+ */
+export function reloaded(): boolean {
+  if (typeof document !== 'undefined' && (document as { wasDiscarded?: boolean }).wasDiscarded)
+    return false
+  if (typeof performance === 'undefined' || !performance.getEntriesByType) return false
+  const [nav] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[]
+  return nav?.type === 'reload'
+}
 
 const LOCK = 'cg-app'
 // (the session this TAB last joined, kept across its reloads)
@@ -68,7 +83,7 @@ export async function joinSession(): Promise<void> {
     await locks.request(LOCK, { mode: 'exclusive', ifAvailable: true }, (lock) => {
       if (!lock) return
       // no other window of the app is alive: a reload, or a cold open after a close
-      if (!browsingSessionOpen()) closeSession()
+      if (!reloaded()) closeSession()
       shared = holdShared(locks)
     })
     await (shared ?? holdShared(locks))
@@ -116,12 +131,12 @@ function enter(): void {
  * THE CLOSE: the forget of the session that just ended, for every preset whose Amnesic value is Stats Only
  * or Full now (the value at the close - no window has run since), and the next session counted. Runs
  * inside the exclusive lock, before any window can join.
- * ★ A CLOSE THAT OWES NO FORGET WRITES NOTHING. Every preset on Off (and nothing held from an earlier
- * close): nothing played can be anchored in a window still open - a window opens only at a switch-on, and
- * that switch-on is the preset's counter moving - so the session need not move either, and a device that
- * never uses Amnesic is never written at a load (design-q1-q2.md v4's G7, tests/browser/writeCounts).
- * The session moves exactly when a close forgets: then the window that ended is never reused, even for
- * a mode whose anchor the forget had to leave (R17).
+ * ★ A CLOSE THAT FINDS NOTHING TO FORGET WRITES NOTHING. Every preset on Off, or nothing played in the
+ * window that ended (and nothing held from an earlier close): no slice is anchored in that window, so the
+ * session need not move either, and a load writes nothing (design-q1-q2.md v4's G7,
+ * tests/browser/writeCounts). The session moves exactly when a close finds something anchored in the
+ * window: then that window is never reused, even for a mode whose anchor the forget had to leave (R17),
+ * and every tab that kept something for the session that ended sees that it has.
  */
 export function closeSession(): void {
   const c = readSessionCounter()
@@ -131,21 +146,34 @@ export function closeSession(): void {
     if (value === 'off') continue
     owed.push({ presetId: p.id, e: `${c.n}:${amnesicOnOf(p.id)}`, full: value === 'full' })
   }
-  if (!owed.length) return
-  writeSessionCounter({ n: c.n + 1, pending: forgetEach(owed) })
+  const { left, touched } = forgetEach(owed)
+  // (a forget held from an earlier close that has landed since is struck off; that close counted its
+  // own session)
+  if (!touched && left.length === c.pending.length) return
+  writeSessionCounter({ n: touched ? c.n + 1 : c.n, pending: left })
 }
 
 // A forget a full device held at a close, run again by every window as it joins (idempotent).
 function runPending(): void {
   const c = readSessionCounter()
   if (!c.pending.length) return
-  const left = forgetEach(c.pending)
+  const { left } = forgetEach(c.pending)
   if (left.length !== c.pending.length) writeSessionCounter({ n: c.n, pending: left })
 }
 
-// Run each forget; what is left owed (the device refused it - a preset since deleted owes nothing).
-const forgetEach = (owed: readonly PendingForget[]): PendingForget[] =>
-  owed.filter((f) => presetListed(f.presetId) && !PROGRESS_DOOR.forget(f.presetId, f.e, f.full))
+// Run each forget: what is left owed (the device refused it - a preset since deleted owes nothing), and
+// whether any found something anchored in its window.
+function forgetEach(owed: readonly PendingForget[]): { left: PendingForget[]; touched: boolean } {
+  const left: PendingForget[] = []
+  let touched = false
+  for (const f of owed) {
+    if (!presetListed(f.presetId)) continue
+    const r = PROGRESS_DOOR.forget(f.presetId, f.e, f.full)
+    touched ||= r.touched
+    if (!r.done) left.push(f)
+  }
+  return { left, touched }
+}
 
 // The session this tab last joined (null: none - its first boot), and the note of it.
 const keptFor = (): number | null => {

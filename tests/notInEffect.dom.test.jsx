@@ -7,7 +7,8 @@
 // the mounted app: a tap, an arrow key, and a press-drag release each change the stored value; the
 // change lights the ⚙ button's bar like any other; and it restarts nothing: the waiting question is
 // the same one, a MoX run and a Blitz round under way survive the menu closing, and the Best key does
-// not move. The faded lock (Amnesic while Save Stats is off) is the other state, held separately.
+// not move. (Amnesic is never out of effect: while Save Stats is off it still decides what the close
+// forgets - held separately below.)
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { screen, cleanup, act, fireEvent, within } from '@testing-library/react'
 import {
@@ -238,8 +239,8 @@ describe('Input and Rotate Dots in Deduction', () => {
   })
 })
 
-describe('Amnesic while Save Stats is off: not in effect, like the rest', () => {
-  it('striped and still changeable, with a MoX run under way — the run goes on', () => {
+describe('Amnesic while Save Stats is off: in effect, as normal', () => {
+  it('neither striped nor locked, and changeable, with a MoX run under way — the run goes on', () => {
     useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     mountApp()
     mode('A')
@@ -247,7 +248,7 @@ describe('Amnesic while Save Stats is off: not in effect, like the rest', () => 
     answerRight()
     openSettings()
     toggleSwitch('Save Stats')
-    expectNotInEffect('Amnesic', 'Not in use while Save Stats is off.')
+    expectNotInEffect('Amnesic', null)
     pickPill('Amnesic', 'Full')
     expect(pickerChosen('Amnesic')).toEqual(['Full'])
     closeSettings()

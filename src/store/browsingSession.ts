@@ -4,15 +4,14 @@
 // fresh." A reload — the browser's own reload, the app's own auto-update reload, the Reload button on
 // the error card — is the SAME browsing session, everywhere on the site: the page you were on stays,
 // a finished round stays, and nothing an Amnesic preset played is forgotten (only a close forgets it -
-// store/amnesicClose, which asks this marker whether a boot with no other window alive is a reload).
+// store/amnesicClose, which asks the browser's own navigation entry, not this marker: see its `reloaded`).
 //
 // WHY A MARKER IS NEEDED AT ALL. Almost everything session-lived in this app is already right about
 // reloads for free, because it lives in sessionStorage (store/sessionMode, store/sessionRound,
 // store/sessionHistory, store/sessionGuide): a reload keeps sessionStorage and a real close clears it,
-// and nothing has to notice either. The two things that have to know which it was are the "Open in" pin
-// (store/presets — a fresh open lands in the pinned preset, a reload stays where the player was) and
-// Amnesic's close (store/amnesicClose), and neither can tell a reload from a cold open by itself: both
-// boot the page from scratch.
+// and nothing has to notice either. The one thing that has to know which it was is the "Open in" pin
+// (store/presets — a fresh open lands in the pinned preset, a reload stays where the player was), and it
+// cannot tell a reload from a cold open by itself: both boot the page from scratch.
 // Round 21 treated every mount as a fresh open and called a reload "a reopen"; the owner reversed
 // that.
 // So the question is asked of sessionStorage itself: the marker below is written on the first boot of

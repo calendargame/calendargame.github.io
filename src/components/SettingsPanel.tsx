@@ -194,7 +194,6 @@ const NOT_IN_EFFECT = {
   julianOff: 'Not in use while Julian Calendar is off.',
   julianOn: 'Not in use while Julian Calendar is on.',
   no1582: 'Not in use: your year range does not include 1582.',
-  saveStatsOff: 'Not in use while Save Stats is off.',
 } as const
 // The pages whose dates Date Format does not set while Random Format is on: the four weekday
 // practice modes. NOT Deduction — its codes panel lays its codes out in Date Format's reading order
@@ -1777,11 +1776,13 @@ export function SettingsPanel({
                 above (three values, exactly one of them): caption above, one tray, the group named
                 by the caption VERBATIM. See changeAmnesic for why this one row's value is written
                 apart from the 16, and store/amnesic for what each value forgets at the close.
-                ⚠ NOT IN EFFECT WHILE SAVE STATS IS OFF: nothing new is being counted, so it is
-                striped (PillGroup's `dormant`) and still changeable — a change touches nothing on
+                ⚠ IN EFFECT WHATEVER SAVE STATS SAYS, so drawn and used as normal: with Save Stats off
+                nothing new is counted, but the value still decides what the close forgets of what
+                was played since the switch-on - its stats, and on Full the Bests it set, which the
+                dashed outline still marks (components/StatPanel). And a change touches nothing on
                 screen (store/amnesic), so there is nothing to lock it against. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Amnesic</div>
-            <PillGroup label="Amnesic" dormant={saveStats ? undefined : NOT_IN_EFFECT.saveStatsOff}>
+            <PillGroup label="Amnesic">
               <PillTray value={amnesic} onChange={changeAmnesic} options={AMNESIC_OPTIONS} />
             </PillGroup>
           </div>

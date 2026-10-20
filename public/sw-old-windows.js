@@ -20,8 +20,14 @@
 // ★ THE LIST IS KEPT IN IndexedDB, not in memory: the browser stops an idle worker whenever it likes, and
 // the windows still on the list must be found by whichever start of the worker hears the next ask.
 // ⚠ IT REACHES ONLY THIS WORKER'S OWN WINDOWS. The live site and the test site share one origin (one
-// IndexedDB) but not one scope, so the test site's worker never reaches a live window, or the other way
-// round: each looks only at the windows it controls, and keeps its list under its own scope.
+// IndexedDB) but not one scope: each looks only at the windows it controls, and keeps its list under its
+// own scope. One crossing, harmless: the live site's scope (`/`) holds the test site's address too, so a
+// test-site page loaded before its own worker was active is controlled by the live worker - and a live
+// update reloads it, once. There is no loop: the list is written only at a takeover, and a window
+// reloaded is a new window, off it (the test site's own worker controls it from then on).
+// ⚠ WHAT A RELOAD CANNOT KEEP: changes a full device refused, which that window was holding in memory to
+// save when there is room (store/storageHealth). The worker cannot see them, and a window of the version
+// before cannot be asked; the text that promises the reload (How to Play, the changelog) says so.
 // ★ TESTED where it can be: tests/swOldWindows.test.js runs this file against a fake worker scope (every
 // rule above), and the browser lane (tests/browser/oldWindows.browser.ts) deploys a build, opens windows,
 // deploys another, and watches them land on it. Headless browsers report every window visible and

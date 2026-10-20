@@ -1267,12 +1267,13 @@ export default function GuidePage({
           from another app never triggers it; the update waits for the next load. Once a window has
           updated, any other window of the app still open on the version before follows it: one in
           the background at once, one on screen the next time you leave it. Each reloads onto the
-          new version and keeps your saved progress. To ask right now instead, the Settings (⚙)
-          panel has a <b>Check for updates</b> link. It really does check: the link reads{' '}
-          <b>Checking…</b> while it looks, then answers in the same spot — <b>Up to date</b> if you
-          already have the newest version the site is handing out, or <b>No connection</b> if it
-          could not reach the internet. The answer stays for a few seconds and the link goes back to
-          normal. Only when there genuinely is something new does it install it there and then,
+          new version and keeps everything that was saved; only changes a full device was still
+          holding unsaved in that window are lost with the reload. To ask right now instead, the
+          Settings (⚙) panel has a <b>Check for updates</b> link. It really does check: the link
+          reads <b>Checking…</b> while it looks, then answers in the same spot — <b>Up to date</b>{' '}
+          if you already have the newest version the site is handing out, or <b>No connection</b> if
+          it could not reach the internet. The answer stays for a few seconds and the link goes back
+          to normal. Only when there genuinely is something new does it install it there and then,
           behind the same updating screen (your saved progress is kept either way) — unless
           something is still waiting to be saved, when it holds off instead and says why (see{' '}
           <b>Saved Progress</b>). A brand-new version can take up to about ten minutes to reach
@@ -2900,8 +2901,8 @@ export default function GuidePage({
           Random Format is on, in Classic, Flash, MoX, and Blitz; Input and Rotate Dots in
           Deduction, and Rotate Dots while Input is Buttons; Leap Year Chance and Jan/Feb Chance on
           Leap Years when your year range cannot use them; Julian Chance while Julian Calendar is
-          off, when your range does not include 1582, and in Deduction; the Year Range pair that is
-          not in use; and Amnesic while Save Stats is off.
+          off, when your range does not include 1582, and in Deduction; and the Year Range pair that
+          is not in use.
         </p>
         <p className="text-(--tx-300-70) text-[calc(12rem/16.458)]">
           Settings changes apply when you <b>close</b> the ⚙ menu, not on each adjustment — so
@@ -3442,9 +3443,10 @@ export default function GuidePage({
         <p>
           With Save Stats off the strip is dimmed instead, with no outline: nothing is being counted
           at all then, so there are no numbers on it to mark. (On Full the outline is then drawn
-          round the Best readouts alone.) The outline changes nothing else: every box stays exactly
-          where it is and works exactly as it did. Nothing is drawn beside a preset&apos;s name in
-          the preset lists; see <b>Accessibility</b> for what a screen reader says there instead.
+          round the Best readouts alone: a Best set since you turned Amnesic on still goes when you
+          close the app.) The outline changes nothing else: every box stays exactly where it is and
+          works exactly as it did. Nothing is drawn beside a preset&apos;s name in the preset lists;
+          see <b>Accessibility</b> for what a screen reader says there instead.
         </p>
         <Subhead>What it never touches</Subhead>
         <UL>
@@ -3477,9 +3479,10 @@ export default function GuidePage({
           <li>
             <b>It is not Save Stats.</b> The switch above decides whether a question counts at all;
             this one decides whether what was counted is still there after you close. They are
-            independent. With Save Stats off this row is striped — nothing new is being counted —
-            and you can still change it. Save Stats has no middle value of its own: Stats Only is
-            the way to keep Bests without keeping stats.
+            independent. With Save Stats off nothing new is counted, but this row still decides what
+            the close forgets of what you played before, so it stays as it is and you can change it
+            as usual. Save Stats has no middle value of its own: Stats Only is the way to keep Bests
+            without keeping stats.
           </li>
           <li>
             <b>It is not a setting for one visit.</b> It is saved with this preset&apos;s other ⚙
@@ -3495,9 +3498,9 @@ export default function GuidePage({
           The app counts a close when every window of it is gone. A refresh or a reload is not one,
           and nor is opening the app in a second window beside the first, or switching to another
           app and back: the count goes on, any finished round is still on screen, and the dates you
-          played are still there to browse back through. A tab your browser brings back with its
-          history (&quot;reopen closed tab&quot;) counts as a reload, so that close is seen at the
-          next real one instead — nothing is lost by it.
+          played are still there to browse back through. When no other window of the app is open, a
+          tab your browser brings back — one you reopen after closing it, or one it had put to sleep
+          in the background — counts as opening the app again, like any other.
         </p>
         <p>
           On a phone there is no way to tell from the inside an app you closed yourself from one the

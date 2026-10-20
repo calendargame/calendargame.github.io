@@ -432,12 +432,15 @@ describe('at the close, by the value at the close', () => {
     expect(useLookupHistory.getState().history).toHaveLength(1)
   })
 
-  // The session moves at a close that forgets, and only then: a close with every preset on Off owes
-  // nothing and writes nothing (store/amnesicClose).
-  it('moves the session at a close that forgets, and writes nothing at one that owes nothing', () => {
+  // The session moves at a close that forgets, and only then: a close with every preset on Off, or with
+  // nothing played since the switch-on, finds nothing to forget and writes nothing (store/amnesicClose).
+  it('moves the session at a close that forgets, and writes nothing at one that finds nothing', () => {
     closeAndReopen()
     expect(localStorage.getItem('cg-session-v1')).toBeNull()
     setAmnesic('stats')
+    closeAndReopen() // nothing played
+    expect(localStorage.getItem('cg-session-v1')).toBeNull()
+    play(1)
     closeAndReopen()
     reloadPage()
     expect(readSessionCounter()).toEqual({ n: 1, pending: [] })
@@ -471,7 +474,7 @@ describe('at the close, by the value at the close', () => {
     expect(savedProgress().stats.classic.played).toBe(11)
     full = false
     closeAndReopen() // the next open runs the owed forget again
-    expect(readSessionCounter()).toEqual({ n: 2, pending: [] })
+    expect(readSessionCounter()).toEqual({ n: 1, pending: [] }) // (nothing played in session 1)
     expect(savedProgress()).toEqual(before)
     expect(liveProgress()).toEqual(before)
   })
@@ -724,14 +727,14 @@ describe('the Amnesic pill in the ⚙ panel', () => {
     expect([switchState('Save Stats'), pickerChosen('Amnesic')]).toEqual(['On', ['Stats Only']])
   })
 
-  // The owner's rule, "dimmed means not in effect, not locked": with Save Stats off nothing new is
-  // counted, so the picker is NOT IN EFFECT - striped, its reason on every radio - and still changes the
-  // value (which changes nothing on screen).
-  it('is not in effect while Save Stats is off, and still changes the value', () => {
+  // IN EFFECT WHATEVER SAVE STATS SAYS: with it off nothing new is counted, but the value still decides
+  // what the close forgets of what was played since the switch-on (the Bests on Full keep their outline).
+  // So it is drawn and used as normal - not striped, not locked, no reason read out.
+  it('is in effect while Save Stats is off: drawn and used as normal', () => {
     openPanel()
     pickPill('Amnesic', 'Full')
     toggleSwitch('Save Stats')
-    expectNotInEffect('Amnesic', 'Not in use while Save Stats is off.')
+    expectNotInEffect('Amnesic', null)
     pickPill('Amnesic', 'Off')
     expect(pickerChosen('Amnesic')).toEqual(['Off'])
     expect(amnesicModeOf(1)).toBe('off')

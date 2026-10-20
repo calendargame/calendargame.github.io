@@ -73,6 +73,7 @@ import {
   tabStopLabel,
   otherPillName,
   drawnUnavailable,
+  panelButton,
   pickPill,
   arrowPicker,
   NOT_IN_EFFECT_PICKERS,
@@ -297,7 +298,6 @@ describe('⚙ Settings → the pickers not in effect, and their exact conditions
   // can sit in): each is outlined AND a press on another pill chooses it, as on any live picker.
   it('every picker not in effect still takes a press, and says why it is outlined', () => {
     standUp()
-    toggleSwitch('Save Stats')
     toggleSwitch('Random Format')
     commitRange(1900, 1900)
     goMode('deduction')
@@ -344,7 +344,7 @@ describe('⚙ Settings → the pickers not in effect, and their exact conditions
     expect(arrowPicker('Input', 'ArrowRight').prevented).toBe(true)
     expect(pickerChosen('Input')).toEqual(['Dots'])
     expect(puzzle()).toBe(live)
-    // …and Amnesic, out of effect with Save Stats off, the same: the arrow chooses.
+    // …and Amnesic, in effect with Save Stats off as on: the arrow chooses.
     pickPill('Amnesic', 'Off')
     expect(arrowPicker('Amnesic', 'ArrowRight').prevented).toBe(true)
     expect(pickerChosen('Amnesic')).toEqual(['Stats Only'])
@@ -397,12 +397,6 @@ describe('⚙ Settings → the pickers not in effect, and their exact conditions
       pick: '75%',
       out: () => toggleSwitch(JULIAN_SWITCH),
       back: () => toggleSwitch(JULIAN_SWITCH),
-    },
-    {
-      name: 'Amnesic',
-      pick: 'Stats Only',
-      out: () => toggleSwitch('Save Stats'),
-      back: () => toggleSwitch('Save Stats'),
     },
   ]
   STATE_CASES.forEach(({ name, pick, arrange, out, back }) => {
@@ -462,11 +456,12 @@ describe('⚙ Settings → the theme block changes SHAPE, never availability', (
 
   // G3.2 — THE CASE THIS GROUP EXISTS FOR. Neither theme row is ever drawn as unavailable, in
   // either state — the row that does not hold the pick is not a locked control, it is a row whose
-  // options simply are not the current answer. The Amnesic lock alongside is the control: it
-  // proves the question being asked can return true, so the four falses below are real answers and
-  // not a predicate that never fires.
+  // options simply are not the current answer. Save Defaults, not offered at the launch state, is the
+  // control: it proves the question being asked can return true, so the four falses below are real
+  // answers and not a predicate that never fires.
   it('neither theme row is ever drawn as unavailable, in either Use-System state', () => {
     standUp()
+    expect(drawnUnavailable(panelButton('Save Defaults'))).toBe(true)
     for (const state of ['On', 'Off']) {
       expect(switchState(USE_SYSTEM)).toBe(state)
       expect(drawnUnavailable(caption('Dark'))).toBe(false)

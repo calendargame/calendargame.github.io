@@ -64,3 +64,20 @@ test('Off at the close keeps everything, whatever was on before', async ({ page,
   const after = await openAfterClose(context)
   await expect(score(after)).toHaveText('1/1')
 })
+
+// A RELOAD OF THE ONLY WINDOW is no close: the browser's own navigation entry says `reload`
+// (store/amnesicClose's `reloaded`), whatever the tab kept. And the same tab going to the app's address
+// again - a navigation, not a reload, with every window of the app gone - is a cold open.
+test('Full: reloading the only window forgets nothing; opening the address again in it does', async ({
+  page,
+}) => {
+  await openApp(page)
+  await answerUntil(page, '1/1')
+  await setAmnesic(page, 'Full')
+  await answerUntil(page, '2/2')
+  await page.reload()
+  await expect(score(page)).toHaveText('2/2')
+  await page.goto('about:blank') // (the app's only document gone: every window of it closed)
+  await page.goBack() // (back to the app's address: the page loads again, with its sessionStorage)
+  await expect(score(page)).toHaveText('1/1')
+})

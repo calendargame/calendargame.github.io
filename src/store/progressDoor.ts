@@ -110,10 +110,11 @@ export type ProgressStorage<S> = PersistStorage<S> & {
   /**
    * AMNESIC'S FORGET of preset `presetId`'s window `e` (design-amnesic-close.md 1; store/amnesicClose runs
    * it at a cold open): every mode anchored in it back to its anchor, and under Full (`full`) every Best
-   * record too - written as one version, like any save. True when there is nothing more to do (it landed,
-   * or there was nothing to forget); false when the device refused it (held, and retried like any save).
+   * record too - written as one version, like any save. `touched`: something was anchored in the window
+   * (put back, or a mode the forget had to leave - R17); `done`: nothing more to do (it landed, or there
+   * was nothing to write) - false when the device refused it (held, and retried like any save).
    */
-  forget(presetId: number, e: string, full: boolean): boolean
+  forget(presetId: number, e: string, full: boolean): { touched: boolean; done: boolean }
   /**
    * Run `write` - a screen's save of mode `x`'s stats - with `at`: the stats as they stood after an
    * earlier card, with every Override since applied (engine/gameReducer's statsAtCard). An Override in it
@@ -659,25 +660,26 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
       const e = activeEntry()
       return !!e && e.recs[map].roundDead(id)
     },
-    forget: kit.outer((presetId: number, win: string, full: boolean): boolean => {
+    forget: kit.outer((presetId: number, win: string, full: boolean) => {
       const key = spec.keyOf(presetId)
       const e = entries.get(key) ?? open(key, presetId)
       settle(e, false) // (the device as it is now: an older tab's cards since included)
-      const silos = e.counts.forgetWindow(win).restored
+      const { restored: silos, skipped } = e.counts.forgetWindow(win)
       for (const x of silos) e.cut.add(x)
       const recs = full ? BEST_MAPS.flatMap((map) => e.recs[map].forgetWindow(win)) : []
+      const touched = silos.length + skipped.length + recs.length > 0
       if (!silos.length && !recs.length) {
-        hold(e) // (nothing to forget: an entry for another preset goes with it)
-        return true
+        hold(e) // (nothing to write: an entry for another preset goes with it)
+        return { touched, done: true }
       }
       if (!spec.gate(e.key)) {
         entries.delete(e.key)
-        return true
+        return { touched, done: true }
       }
       e.counts.owes = !land(e)
       hold(e)
       adopt(e)
-      return !e.counts.owes
+      return { touched, done: !e.counts.owes }
     }),
     correcting(x, at, write) {
       correction = { x, at }

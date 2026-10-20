@@ -12,8 +12,8 @@
 //     every switch is not, and no role="radio" exists anywhere outside a tray.
 //   • The pickers that go out of effect keep their exact conditions through the conversion — Input
 //     in Deduction, Julian Chance unless the range straddles 1582, Leap Year Chance unless a leap
-//     year is reachable, Amnesic while Save Stats is off — striped, still changeable, and the
-//     selected value kept. (Round 26 left no picker locked.)
+//     year is reachable — striped, still changeable, and the selected value kept. (Round 26 left no
+//     picker locked; Amnesic, the last, is in effect whatever Save Stats says.)
 //
 //   • PillTray (components/PillTray) renders every group as role="radio" segments, and ONE value —
 //     the enclosing PillGroup's `dormant` reason — is the whole not-in-effect state: the striped
@@ -1014,7 +1014,7 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expectUnmovedPixels()
     clickToggle('Random Format') // a group not in effect is outlined by its housing and chosen pill
     expectUnmovedPixels()
-    clickToggle('Save Stats') // Amnesic not in effect: outlined like the rest, by its trays
+    clickToggle('Save Stats') // the strip dims; no picker moves
     expectUnmovedPixels()
   })
 
@@ -1035,7 +1035,7 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expect(cls('Date Format')).toBe('flex gap-2')
     act(() => setRangeInUse({ min: 1900 })) // all-Gregorian: the Julian row is not in effect, no own class
     expect(cls('Julian Chance')).toBe('')
-    clickToggle('Save Stats') // Amnesic not in effect: the trays inside go hollow, the housing is unmoved
+    clickToggle('Save Stats') // Amnesic stays in effect: its housing is unmoved
     expect(cls('Amnesic')).toBe('')
   })
 
