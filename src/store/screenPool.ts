@@ -5,7 +5,7 @@ import { roundOp, type BestMap } from './bestRecords.js'
 import { writeSessionRound, discardSessionRound } from './sessionRound.js'
 import { discardSessionHistory } from './sessionHistory.js'
 import type { Stats } from '../engine/gameReducer.js'
-import { noteUnaskedSwap } from '../lib/unaskedSwap.js'
+import { noteUnaskedSwap, swapScreenOf } from '../lib/unaskedSwap.js'
 import { captureError } from '../observability/sentry.js'
 
 // store/screenPool.ts — THE ONE DOOR THROUGH WHICH A MODE SCREEN WRITES SAVED PROGRESS OR A PARKED
@@ -45,10 +45,12 @@ import { captureError } from '../observability/sentry.js'
 // the same turn as the slice, it should never be seen. The pool check stays the first condition of
 // every write.
 // ★ THE REBUILD UNIT IS THE ENGINE, THE DATA UNIT THE SILO (6.1, B V5): `useScreenEpoch` holds one
-// number per casual engine. Classic's and Flash's screens are keyed on theirs (src/main.tsx), so a
-// move remounts the screen on the saved stats; Deduction's three engines live in one screen, and a
-// move rebuilds only that sub-type's engine in place (engine/useGameEngine's `epoch`, gameReducer's
-// HYDRATE) — the other two keep their puzzles and clocks.
+// number per casual engine, and a move rebuilds that engine IN PLACE on the saved stats
+// (engine/useGameEngine's `epoch`, gameReducer's HYDRATE) — Deduction's other two sub-types keep
+// their puzzles and clocks — and the screen drops what belonged to the question that went
+// (modes/modeHooks' useRebuiltEffect). NEVER A REMOUNT: a remount took with it everything else the
+// screen held — a "Reset Stats?" question the player had open, the keyboard's place — for a change
+// to nothing but the engine (design 14.4 (12); the browser lane's windowSyncPins pins it).
 
 /** Is `dataId` the pool the app is reading right now? */
 const live = (dataId: string): boolean => dataId === activeDataId()
@@ -114,7 +116,7 @@ export const useScreenEpoch = create<Record<StatsKey, number>>()(() => ({
 export function rebaseEngine(dataId: string, key: StatsKey): void {
   discardSessionHistory(dataId, key)
   useScreenEpoch.setState((s) => ({ ...s, [key]: s[key] + 1 }))
-  noteUnaskedSwap()
+  noteUnaskedSwap(swapScreenOf(key))
 }
 
 // (another window's stats for a mode, merged in: that engine is rebuilt - store/progress asks here)

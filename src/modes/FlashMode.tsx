@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ModeProps, GenDate, FmtDate } from './modeTypes.js'
 import {
   useButtonFlash,
+  useRebuiltEffect,
   useStatsHideToggles,
   useStatsMirror,
   engineFresh,
@@ -35,6 +36,7 @@ import SliderValueEditor from '../components/SliderValueEditor.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
+import { useScreenEpoch } from '../store/screenPool.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import {
   creditsLiveCard,
@@ -108,8 +110,10 @@ function FlashMode({
   const scoringOff = useModePrefs((s) => s.flashScoringOff),
     setScoringOff = useModePrefs((s) => s.setFlashScoringOff) // persisted; scoring shown by default
   // Lifetime stats persist across reloads (Stage D1): hydrate on mount, mirror changes to the store.
+  const epoch = useScreenEpoch((s) => s.flash) // (store/screenPool: rebuilt in place)
   const eng = useGameEngine({
     label: 'flash',
+    epoch,
     genDate,
     minY,
     maxY,
@@ -155,7 +159,7 @@ function FlashMode({
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   useStatsMirror(dataId, 'flash', state.stats)
-  const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
+  const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
 
   const resetFlashBar = () => {
     if (flashBarRef.current) {
@@ -203,6 +207,11 @@ function FlashMode({
     setShowTimerDate(false)
     stopFlash()
   }
+  // …and the engine rebuilt in place on another window's Flash answers is one of those doors.
+  useRebuiltEffect(epoch, () => {
+    setFlash(null)
+    clearFlash()
+  })
   // Keep the idle countdown label + bar in step with a store-driven flashMs change that BYPASSES
   // the slider's onChange sync — Reset Settings restoring the saved/factory Flash speed while Flash
   // sits idle (round 6). flashRemainMs is a local mirror seeded from flashMs; a live flash owns it via
@@ -593,6 +602,7 @@ function FlashMode({
           </div>
           <WeekdayAnswer
             key={state.gridEpoch}
+            screen="flash"
             inputStyle={inputStyle}
             dotRotation={dotRotation}
             persistBtns={state.persistBtns}

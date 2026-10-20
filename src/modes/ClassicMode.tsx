@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import type { ModeProps, GenDate, FmtDate } from './modeTypes.js'
 import {
   useButtonFlash,
+  useRebuiltEffect,
   useStatsHideToggles,
   useStatsMirror,
   engineFresh,
@@ -28,6 +29,7 @@ import OverrideButton from '../components/OverrideButton.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
 import { useProgress } from '../store/progress.js'
+import { useScreenEpoch } from '../store/screenPool.js'
 import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard, topCardNumber } from '../engine/gameReducer.js'
 import { useBackButton } from '../components/overlayStack.js'
@@ -76,8 +78,10 @@ function ClassicMode({
   const dateSettings = [dateDraw]
   const dateConfig = dateDraw
   const [parked] = useState(() => readParkedHistory(dataId, 'classic', useJulian))
+  const epoch = useScreenEpoch((s) => s.classic) // (store/screenPool: rebuilt in place)
   const eng = useGameEngine({
     label: 'classic',
+    epoch,
     genDate,
     minY,
     maxY,
@@ -101,7 +105,8 @@ function ClassicMode({
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
   useStatsMirror(dataId, 'classic', state.stats)
-  const { flash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
+  const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
+  useRebuiltEffect(epoch, () => setFlash(null))
   // Hideable stats chrome (show/hide toggles + the "Enable and Reset Stats?" desync confirm + the
   // 6-box stats strip), shared with Deduction/Flash via useStatsHideToggles.
   const { statsArr, enableResetOpen, confirmEnableReset, closeEnableReset } = useStatsHideToggles({
@@ -211,6 +216,7 @@ function ClassicMode({
           </div>
           <WeekdayAnswer
             key={state.gridEpoch}
+            screen="classic"
             inputStyle={inputStyle}
             dotRotation={dotRotation}
             persistBtns={state.persistBtns}

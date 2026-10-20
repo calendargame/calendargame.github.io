@@ -34,7 +34,7 @@ import { deepFreeze } from './freeze.js'
 import { checkGameInvariants } from './invariants.js'
 import { solveTimeFromMs } from './stats.js'
 import { usePlayerBusy } from '../lib/playerBusy.js'
-import { inUnasked, noteUnaskedSwap } from '../lib/unaskedSwap.js'
+import { inUnasked, noteUnaskedSwap, swapScreenOf } from '../lib/unaskedSwap.js'
 import { captureError } from '../observability/sentry.js'
 
 // genDate produces the next question for the active year range (the parent bakes in the
@@ -52,9 +52,10 @@ export interface UseGameEngineOptions {
   //   'question'  a casual question is on the page being shown (Classic, Deduction);
   //   'idle'      neither: another page is the one shown, or nothing has been begun.
   play: 'live' | 'question' | 'idle'
-  // A short mode label ('classic', 'flash', …) attached to any tripwire report so it says WHICH mode
-  // hit an impossible state. Optional — the stats/history context is reported either way.
-  label?: string
+  // The engine's silo ('classic', 'flash', 'dedDay', …, 'aox', 'blitz'): attached to any tripwire report
+  // so it says WHICH mode hit an impossible state, and the screen an unasked swap of its question is
+  // noted for (lib/unaskedSwap's swapScreenOf).
+  label: string
   // Hydrate lifetime stats from saved progress on mount (Stage D1). A GETTER — read ONCE inside the
   // lazy reducer init (where genDate is already read), so the store access stays out of render and
   // the engine never re-hydrates mid-session. Omitted ⇒ blank stats (timed modes; post-Full-Reset remount).
@@ -73,8 +74,8 @@ export interface UseGameEngineOptions {
   getInitialState?: () => GameState | null
   // THE ENGINE'S DATA EPOCH (store/screenPool's useScreenEpoch): when it moves, the engine is
   // rebuilt in place on getInitialStats — the saved stats as they now are (gameReducer's HYDRATE) —
-  // because another window's answers to its silo came in. Omitted: the engine is rebuilt only by a
-  // remount (a screen with one engine is keyed on its epoch instead).
+  // because another window's answers to its silo came in. Every casual engine passes its own; the
+  // round engines (MoX, Blitz) have none, their stats being the round's.
   epoch?: number
 }
 
@@ -229,7 +230,7 @@ export function useGameEngine({
   // lib/unaskedSwap's `unasked`) is an UNASKED SWAP — said here, by the actions that replace one, so
   // the grids remount and the answers are guarded (lib/unaskedSwap).
   const swapped = () => {
-    if (inUnasked()) noteUnaskedSwap()
+    if (inUnasked()) noteUnaskedSwap(swapScreenOf(label))
   }
   // `opts.complete` (AoX): credit this correct answer but don't advance — the run's last solve
   // stays on screen, locked + reversible. Other modes call answer(idx) → complete undefined.

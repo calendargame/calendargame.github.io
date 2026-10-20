@@ -21,6 +21,13 @@ import { create } from 'zustand'
 // `unasked()` (components/useSettingsCloseEffect's third case, modes/modeHooks' timing switch), and the
 // engine notes a swap made inside it (engine/useGameEngine); a screen rebuilt on another window's
 // stats notes its own (store/syncedDoc's adopt).
+// ★ ONE SCREEN'S SWAP GUARDS ONE SCREEN'S ANSWERS. Every mode screen stays mounted, the others hidden,
+// and a change from another window can replace questions on hidden screens too (another window's
+// Classic answers rebuild this window's Classic while it is on MoX). A swap is noted for the screen
+// whose question it replaced (`SwapScreen`, below), and only that screen's grid remounts and only its
+// answers are guarded: a press on a screen whose question did not change is the player's, and counts.
+// (It once guarded every grid: a press on MoX within 300 ms of a hidden Classic's rebuild was voided,
+// with the cue, on a question nothing had touched - the browser lane's windowSyncPins found it.)
 // ⚠ SWAP_GUARD_MS IS A NUMBER CHOSEN, NOT MEASURED (the design's weakest point 9): long enough to
 // cover a press begun as the old question was read, short enough that a player answering the new one
 // at once is not held up.
@@ -30,11 +37,22 @@ export const VOID_MS = 350
 // (the ring's fade after it: index.css's .press-void-fade, which Reduce Motion makes none)
 const FADE_MS = 150
 
-/** The count of unasked swaps (part of every answer grid's key), and when the last one was. */
-export const useSwapEpoch = create<{ epoch: number; at: number }>()(() => ({
-  epoch: 0,
-  at: -Infinity,
-}))
+/** A mode screen with answer grids - each guarded on its own. */
+export type SwapScreen = 'classic' | 'flash' | 'deduction' | 'aox' | 'blitz'
+/** The screen an engine's label or a stats silo belongs to (Deduction's three sub-types are one). */
+export const swapScreenOf = (silo: string): SwapScreen =>
+  silo.startsWith('ded') ? 'deduction' : (silo as SwapScreen)
+type Swaps = { epoch: number; at: number }
+const NO_SWAP: Swaps = { epoch: 0, at: -Infinity }
+export const NO_SWAPS: Record<SwapScreen, Swaps> = {
+  classic: NO_SWAP,
+  flash: NO_SWAP,
+  deduction: NO_SWAP,
+  aox: NO_SWAP,
+  blitz: NO_SWAP,
+}
+/** Each screen's count of unasked swaps (part of its answer grids' key), and when its last one was. */
+export const useSwapEpoch = create<Record<SwapScreen, Swaps>>()(() => NO_SWAPS)
 
 let depth = 0
 /** Run `fn` as a reaction this window did not ask for: a question it replaces is an unasked swap. */
@@ -49,14 +67,16 @@ export function unasked<T>(fn: () => T): T {
 /** Is the code running now a reaction this window did not ask for? */
 export const inUnasked = (): boolean => depth > 0
 
-/** A question was replaced without this window's input: remount the grids, and guard the answers. */
-export function noteUnaskedSwap(): void {
-  useSwapEpoch.setState((s) => ({ epoch: s.epoch + 1, at: performance.now() }))
+/** `screen`'s question was replaced without this window's input: remount its grids, guard its answers. */
+export function noteUnaskedSwap(screen: SwapScreen): void {
+  useSwapEpoch.setState((s) => ({
+    [screen]: { epoch: s[screen].epoch + 1, at: performance.now() },
+  }))
 }
 
-/** Is an answer pressed now one the guard takes (the question changed under it a moment ago)? */
-export const answersGuarded = (): boolean =>
-  performance.now() - useSwapEpoch.getState().at < SWAP_GUARD_MS
+/** Is an answer pressed now on `screen` one the guard takes (its question changed a moment ago)? */
+export const answersGuarded = (screen: SwapScreen): boolean =>
+  performance.now() - useSwapEpoch.getState()[screen].at < SWAP_GUARD_MS
 
 const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>()
 /** The cue for a press that did not count: the ring on `button`, for VOID_MS, then its fade. */
@@ -89,9 +109,12 @@ export const answerButtonOf = (el: Element | null): HTMLElement | null => {
  */
 export function installAnswerGuard(): () => void {
   const onClick = (e: MouseEvent) => {
-    if (!answersGuarded()) return
     const button = answerButtonOf(e.target as Element | null)
-    if (!button) return
+    // (every grid says whose it is: `data-swap-screen`)
+    const screen = button
+      ?.closest('[data-answer-grid="true"]')
+      ?.getAttribute('data-swap-screen') as SwapScreen | null | undefined
+    if (!button || !screen || !answersGuarded(screen)) return
     e.preventDefault()
     e.stopImmediatePropagation()
     voidPress(button)

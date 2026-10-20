@@ -9,6 +9,7 @@ import { answerGridHitPad, colSpanClass } from '../lib/answerGrid.js'
 import { isTouch } from '../lib/modeFormat.js'
 import { buttonStateClass, BASE_BTN, ANSWER_GRID_GAP } from './controlClasses.js'
 import { useSwapEpoch } from '../lib/unaskedSwap.js'
+import type { SwapScreen } from '../lib/unaskedSwap.js'
 
 // The labelled grid's shape, as NUMBERS — two columns, one span per day, and the last (Saturday)
 // spanning both so the odd seventh option is a full-width row. Both the col-span class each button
@@ -38,9 +39,10 @@ const WEEKDAY_HIT_PAD = answerGridHitPad(WEEKDAY_COLS, WEEKDAY_SPANS)
 // — .surface-button's hover transition would otherwise fade the green away (remounted elements
 // never transition from a predecessor's styles; reorder/useLayoutEffect alone proven insufficient).
 // Deduction keys its own puzzle-grid wrapper the same way.
-// ★ …AND THE GRID REMOUNTS ITSELF ON AN UNASKED SWAP (lib/unaskedSwap: a question replaced by another
-// window's change): its root is keyed on the swap count, so a press latched on the question that
-// went meets a grid that is gone, and is never credited to the one that came.
+// ★ …AND THE GRID REMOUNTS ITSELF ON AN UNASKED SWAP OF ITS OWN SCREEN'S QUESTION (lib/unaskedSwap: a
+// question replaced by another window's change): its root is keyed on `screen`'s swap count, so a
+// press latched on the question that went meets a grid that is gone, and is never credited to the
+// one that came; and the grid says whose it is (`data-swap-screen`), for the answer guard.
 //
 // HIT AREAS ARE BIGGER THAN THE SHAPES (sub-group 1B), and the two layouts reach that differently
 // because their spacing is different. The labelled buttons carry data-hit-pad, whose value names the
@@ -59,6 +61,7 @@ function WeekdayAnswer({
   flash,
   optionsDisabled,
   onPick,
+  screen,
 }: {
   inputStyle: InputStyle
   dotRotation: DotRotation
@@ -66,8 +69,10 @@ function WeekdayAnswer({
   flash: FlashState | null
   optionsDisabled: boolean
   onPick: (i: number) => void
+  /** The mode screen the grid is on. */
+  screen: SwapScreen
 }) {
-  const swapEpoch = useSwapEpoch((s) => s.epoch)
+  const swapEpoch = useSwapEpoch((s) => s[screen].epoch)
   const opt = (i: number) => {
     const ps = persistBtns[i]
     const isFlashing = !!(flash && flash.idx === i)
@@ -89,7 +94,12 @@ function WeekdayAnswer({
     const cells = DOT_CELLS[dotRotation]
     return (
       <div key={swapEpoch} className="mt-4 dot-box">
-        <div className="dot-cluster" data-answer-grid="true" data-dot-rotation={dotRotation}>
+        <div
+          className="dot-cluster"
+          data-answer-grid="true"
+          data-swap-screen={screen}
+          data-dot-rotation={dotRotation}
+        >
           {DAY.map((nm, i) => {
             const o = opt(i)
             return (
@@ -112,6 +122,7 @@ function WeekdayAnswer({
       key={swapEpoch}
       className={`mt-4 grid grid-cols-2 ${ANSWER_GRID_GAP}`}
       data-answer-grid="true"
+      data-swap-screen={screen}
     >
       {DAY.map((nm, i) => {
         const o = opt(i)

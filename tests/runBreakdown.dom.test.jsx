@@ -334,14 +334,25 @@ describe('the run breakdown — MoX', () => {
     expect(screen.queryByRole('dialog', { name: 'Round Breakdown' })).toBeNull()
   })
 
-  it('turning Save Stats off and on again does not bring a closed breakdown back', () => {
+  // ★ SAVE STATS GATES OPENING IT, NOT KEEPING IT OPEN (design-q1-q2.md v4, B V7). While it is up,
+  // its popup covers the ⚙ button, so only another window can change Save Stats - and that leaves the
+  // breakdown open, as the same change could not have closed it here. Closed, it is not offered with
+  // Save Stats off (the dimmed strip reads '—'), and turning Save Stats on again does not bring it
+  // back by itself.
+  it('a Save Stats change while it is up leaves it open; closed, it is offered only with Save Stats on, and never comes back by itself', () => {
     finishedMo2()
     tapStat('Score')
     expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).not.toBeNull()
-    act(() => useSettings.getState().setSaveStats(false)) // the strip dims: no breakdown to show
+    act(() => useSettings.getState().setSaveStats(false)) // (another window's change)
+    expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).not.toBeNull()
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' })
+    })
     expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
+    expect(opener('Show mean breakdown')).toBeNull() // not offered: the strip is dimmed
     act(() => useSettings.getState().setSaveStats(true))
     expect(screen.queryByRole('dialog', { name: 'Mean Breakdown' })).toBeNull()
+    expect(opener('Show mean breakdown')).not.toBeNull()
   })
 
   it('Reset takes it away with the run', () => {

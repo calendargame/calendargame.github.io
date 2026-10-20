@@ -32,6 +32,22 @@ export const FLASH_MS = 550 // green/red button flash duration (ms)
 // state. Every mode component owns one; this hook is the single copy. Latest-timeout pattern
 // so rapid answers each get the full FLASH_MS before clearing. `setFlash` is exposed for the
 // few sites that clear it directly (e.g. Deduction's sub-type switch).
+/**
+ * Run `fn` in the commit `epoch` moves in — never at mount: a casual screen's own part of its engine
+ * being rebuilt in place on another window's stats (store/screenPool's rebaseEngine; the engine's
+ * HYDRATE runs first, in the same commit). `fn` drops what of the screen belonged to the question
+ * that went: the answer pulse, and Flash's flash.
+ */
+export function useRebuiltEffect(epoch: number, fn: () => void) {
+  const seen = useRef(epoch)
+  useLayoutEffect(() => {
+    if (epoch === seen.current) return
+    seen.current = epoch
+    fn()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [epoch])
+}
+
 export function useButtonFlash() {
   const [flash, setFlash] = useState<FlashState | null>(null)
   const flashClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)

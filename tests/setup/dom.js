@@ -37,7 +37,7 @@ import { useSettings } from '../../src/store/settings.js'
 import { forgetSessionPreset } from '../../src/store/sessionPreset.js'
 import { forgetStorageHealth } from '../../src/store/storageHealth.js'
 import { door } from '../../src/store/syncedDoc.js'
-import { useSwapEpoch } from '../../src/lib/unaskedSwap.js'
+import { useSwapEpoch, NO_SWAPS } from '../../src/lib/unaskedSwap.js'
 import { forgetStorageUsage } from '../../src/store/storageUsage.js'
 import { useUserDefaults } from '../../src/store/userDefaults.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
@@ -120,7 +120,7 @@ beforeEach(() => {
   door.forget()
   // …and the unasked-swap guard (lib/unaskedSwap): page state a close drops, and the next case's
   // clock (fake timers start it afresh) may sit before a swap the last case noted.
-  useSwapEpoch.setState({ epoch: 0, at: -Infinity })
+  useSwapEpoch.setState(NO_SWAPS)
   // ⚠⚠ THE REGISTRY GOES BACK FIRST, AND THE ORDER IS THE WHOLE POINT — it decides WHERE every reset
   // below lands. The per-preset stores persist through a preset-SCOPED storage (store/presets'
   // presetDoc), so while the registry still says "preset 2" a reset writes preset 2's

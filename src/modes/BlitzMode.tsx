@@ -973,9 +973,10 @@ function BlitzMode({
   // `visible` unmounts it with the screen it belongs to, which also pops its overlay registration.
   const breakdownAvail = timerDone && saveStats && visible
   // The open flag never outlives what justified it — put down, not masked, the moment the breakdown
-  // stops being available (modes/AoxMode argues it at the twin of this line: leaving the screen with
-  // the popup up and coming back used to reopen it).
-  if (breakdownOpen && !breakdownAvail) setBreakdownOpen(false)
+  // has nothing to show (modes/AoxMode argues it at the twin of this line: leaving the screen with
+  // the popup up and coming back used to reopen it) — but not by a Save Stats change, which only
+  // another window can make while it is up (modes/AoxMode, B V7).
+  if (breakdownOpen && !(timerDone && visible)) setBreakdownOpen(false)
   const statsArr = [
     { label: 'Score', value: `${S.good}/${S.played}`, fn: null },
     { label: 'Accuracy', value: fmtAccuracyPct(S.good, S.played), fn: null },
@@ -1165,6 +1166,7 @@ function BlitzMode({
         </div>
         <WeekdayAnswer
           key={state.gridEpoch}
+          screen="blitz"
           inputStyle={inputStyle}
           dotRotation={dotRotation}
           persistBtns={state.persistBtns}

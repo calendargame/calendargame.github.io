@@ -8,9 +8,10 @@
 //   • for 300 ms after the swap a tap or a key 0-9 answers nothing, and wears the cue the same way;
 //   • after that, answers are taken as ever.
 // And the rebuild on another window's stats (store/screenPool's rebaseEngine) is one engine's only:
-// Deduction's other two sub-types keep their puzzles.
+// Deduction's other two sub-types keep their puzzles, and a hidden screen's rebuild guards nothing on
+// the screen on display.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { screen, cleanup, act, fireEvent } from '@testing-library/react'
+import { screen, cleanup, act, fireEvent, within } from '@testing-library/react'
 import { resetAppState, mountApp, tap } from './helpers/settingsPanel.jsx'
 import { questionShape, statValue } from './helpers/modeScreen.jsx'
 import { otherWindow } from './helpers/otherWindow.js'
@@ -95,6 +96,44 @@ describe('a question replaced by another window’s change, under a press', () =
 })
 
 describe('a rebuild on another window’s stats is one engine’s', () => {
+  // ★ …AND ITS GUARD IS THAT SCREEN'S: every mode screen stays mounted, and a hidden one rebuilt (its
+  // stats came in from another window) must not void a press on the one on display.
+  it('a hidden screen rebuilt: the screen on display takes its answers at once, with no cue', () => {
+    mountApp() // on Classic
+    act(() => rebaseEngine(activeDataId(), 'flash'))
+    tap(day('Tuesday'))
+    expect(statValue('Score')).not.toBe('0/0')
+    expect(day('Tuesday').classList.contains('press-void')).toBe(false)
+  })
+
+  // ★ THE REBUILD IS THE ENGINE'S, NOT THE SCREEN'S (store/screenPool): the screen is not remounted,
+  // so what it holds that is not the engine stays — here a "Reset Stats?" question the player has
+  // open, which then resets the stats as they now are, the other window's answer with them.
+  it('a "Reset Stats?" question open over the screen stays open through the rebuild, and resets what is there now', () => {
+    mountApp()
+    tap(day('Tuesday'))
+    act(() => vi.advanceTimersByTime(1000))
+    expect(statValue('Score')).toMatch(/\/1$/)
+    tap(screen.getByRole('button', { name: 'Reset Stats' }))
+    const question = () => screen.queryByRole('dialog', { name: 'Reset Stats?' })
+    expect(question()).not.toBeNull()
+    const W = otherWindow()
+    W.progress().answer('classic', true, 2)
+    W.deliver()
+    expect(statValue('Score')).toMatch(/\/2$/) // rebuilt on both windows' answers…
+    expect(question()).not.toBeNull() // …with the question still open
+    tap(within(question()).getByRole('button', { name: 'Reset Stats' }))
+    expect(statValue('Score')).toBe('0/0')
+  })
+
+  it('the screen on display rebuilt: its answers are guarded for a moment, with the cue', () => {
+    mountApp()
+    act(() => rebaseEngine(activeDataId(), 'classic'))
+    tap(day('Tuesday'))
+    expect(statValue('Score')).toBe('0/0')
+    expect(day('Tuesday').classList.contains('press-void')).toBe(true)
+  })
+
   it('Deduction: the sub-type whose stats came in is rebuilt; the other two keep their puzzles', () => {
     mountApp()
     act(() => fireEvent.keyDown(window, { key: 'D' }))

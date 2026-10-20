@@ -135,12 +135,13 @@ describe('store/screenPool — a stale mirror is refused, and its engine rebuilt
     useProgress.getState().setModeStats('flash', elsewhere) // (another window's, merged in the gap)
     writeSessionHistory(id, 'flash', '{"parked":1}', true)
     const epochs = useScreenEpoch.getState()
-    const swaps = useSwapEpoch.getState().epoch
+    const swaps = useSwapEpoch.getState()
     vi.mocked(captureError).mockClear()
     expect(saveModeStats(id, 'flash', base, STATS)).toBe(false)
     expect(useProgress.getState().stats.flash).toBe(elsewhere)
     expect(useScreenEpoch.getState()).toEqual({ ...epochs, flash: epochs.flash + 1 }) // that engine's alone
-    expect(useSwapEpoch.getState().epoch).toBe(swaps + 1)
+    expect(useSwapEpoch.getState().flash.epoch).toBe(swaps.flash.epoch + 1) // (Flash's own)
+    expect(useSwapEpoch.getState().classic).toBe(swaps.classic)
     expect(readSessionHistory(id, 'flash')).toBe(null)
     expect(saveModeStats(id, 'flash', base, STATS)).toBe(false)
     expect(vi.mocked(captureError).mock.calls.map(([, ctx]) => ctx.tripwire)).toEqual([

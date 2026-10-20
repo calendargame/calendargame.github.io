@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import type { DedScreenProps } from './modeTypes.js'
 import {
   useButtonFlash,
+  useRebuiltEffect,
   useStatsHideToggles,
   useStatsMirror,
   useChangeEffect,
@@ -261,7 +262,7 @@ function DeductionMode({
   useParkedHistory(dataId, 'dedYear', yearEng.state, showing('year'), parkedScreen, panelOpen)
   const eng = dedType === 'month' ? monthEng : dedType === 'year' ? yearEng : dayEng
   const { state, correct, overrideAvail, overridden } = eng
-  const swapEpoch = useSwapEpoch((s) => s.epoch)
+  const swapEpoch = useSwapEpoch((s) => s.deduction.epoch)
   // Android Back closes the Show-Codes panel of the ACTIVE mode. Gated on `visible` so only
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
@@ -272,6 +273,12 @@ function DeductionMode({
   // One flash for the active grid (only one sub-mode visible at a time). setFlash is cleared
   // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
   const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
+  // (the sub-type on screen rebuilt in place on another window's answers: its pulse goes with the
+  // question it lit — the epoch read is the sub-type on screen's, and a switch clears it anyway)
+  useRebuiltEffect(
+    dedType === 'month' ? epochs.dedMonth : dedType === 'year' ? epochs.dedYear : epochs.dedDay,
+    () => setFlash(null),
+  )
   // Hideable stats chrome shared with Classic/Flash. The strip shows the ACTIVE sub-mode's stats;
   // the timing switch is ONE switch over all three silos, so turning it back on settles all three
   // (modeHooks argues it): each waiting puzzle is regenerated, and a silo whose stats moved while
@@ -642,6 +649,7 @@ function DeductionMode({
                   <div
                     className={`grid ${ANSWER_GRID_GAP} ${gridCls}${reserve ? ' col-start-1 row-start-1 self-center' : ''}`}
                     data-answer-grid="true"
+                    data-swap-screen="deduction"
                   >
                     {date.options.map((y, idx) => {
                       const ps = state.persistBtns[idx]
@@ -691,7 +699,11 @@ function DeductionMode({
                 )
               })()}
             {date && date.type === 'month' && (
-              <div className={`grid grid-cols-2 ${ANSWER_GRID_GAP}`} data-answer-grid="true">
+              <div
+                className={`grid grid-cols-2 ${ANSWER_GRID_GAP}`}
+                data-answer-grid="true"
+                data-swap-screen="deduction"
+              >
                 {date.options.map((mv, idx) => {
                   const last = colSpanClass(optionSpans[idx])
                   const ps = state.persistBtns[idx]
@@ -718,7 +730,11 @@ function DeductionMode({
               </div>
             )}
             {date && date.type === 'day' && (
-              <div className={`grid grid-cols-3 ${ANSWER_GRID_GAP}`} data-answer-grid="true">
+              <div
+                className={`grid grid-cols-3 ${ANSWER_GRID_GAP}`}
+                data-answer-grid="true"
+                data-swap-screen="deduction"
+              >
                 {date.options.map((dv, idx) => {
                   const ps = state.persistBtns[idx]
                   const isFlashing = !!(gridFlash && gridFlash.idx === idx)

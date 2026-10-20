@@ -37,7 +37,6 @@ import { useStorageUsage, watchStorageUsage, announceStorageWarning, measureStor
 import { SCROLLER_CORE_CLASS, scrollFadeClass, scrollEdgeGaps, isAtBottom, isScrolledFromTop, edgeShade, readShadeRampPx, writeShade, watchScrollEdges, BOTTOM_EDGE_BAND_PX } from './components/scrollRegion.js'
 import { installPointerGestures } from './lib/pointerGestures.js'
 import { installAnswerGuard } from './lib/unaskedSwap.js'
-import { useScreenEpoch } from './store/screenPool.js'
 import { installSelectAllOnEntry } from './lib/textEntry.js'
 import { installKeyboardFocus, shortcutActed } from './lib/keyboardFocus.js'
 import { installWindowSync } from './store/windowSync.js'
@@ -1796,10 +1795,6 @@ import BlitzMode from './modes/BlitzMode.jsx'
       const [flashResetKey,setFlashResetKey]=useState(0); // ditto for FlashMode
       const [blitzResetKey,setBlitzResetKey]=useState(0); // ditto for BlitzMode
       const [deductionResetKey,setDeductionResetKey]=useState(0); // ditto for DeductionMode
-      // …and a casual screen with one engine is REBUILT on the saved stats when its engine's data epoch
-      // moves (store/screenPool: another window's answers came in) — part of its key, so the store
-      // change and the rebuild land in one commit. Deduction rebuilds a sub-type's engine in place.
-      const screenEpoch=useScreenEpoch();
       // ditto for GuidePage, whose one piece of state is the open panel (round 9 — it joined
       // the always-mounted screens so that panel, and the reading position, survive a detour into
       // a game mode; Full Reset is the one thing that must still close it).
@@ -2684,10 +2679,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
           <ModeErrorBoundary key={"aox-"+aoxResetKey} mode="MoX" active={mode==="aox"} onCrash={forgetMoxRun}>
             <AoxMode minY={dateIn.minY} maxY={dateIn.maxY} visible={mode==="aox"} fmtDate={fmtDate} useJulian={useJulian} genDate={genDate} dateDraw={dateDraw} inputStyle={inputStyle} dotRotation={dotRotation} dateFormat={dateFormat} randomFormat={randomFormat} saveStats={saveStats} settingsOpen={settingsOpen} onFreshChange={setAoxIsFresh}/>
           </ModeErrorBoundary>
-          <ModeErrorBoundary key={"classic-"+classicResetKey+"."+screenEpoch.classic} mode="Classic" active={mode==="classic"} onCrash={forgetClassicHistory}>
+          <ModeErrorBoundary key={"classic-"+classicResetKey} mode="Classic" active={mode==="classic"} onCrash={forgetClassicHistory}>
             <ClassicMode visible={mode==="classic"} genDate={genDate} minY={dateIn.minY} maxY={dateIn.maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} dateDraw={dateDraw} inputStyle={inputStyle} dotRotation={dotRotation} fmtDate={fmtDate} settingsOpen={settingsOpen} onFreshChange={setClassicIsFresh}/>
           </ModeErrorBoundary>
-          <ModeErrorBoundary key={"flash-"+flashResetKey+"."+screenEpoch.flash} mode="Flash" active={mode==="flash"} onCrash={forgetFlashHistory}>
+          <ModeErrorBoundary key={"flash-"+flashResetKey} mode="Flash" active={mode==="flash"} onCrash={forgetFlashHistory}>
             <FlashMode visible={mode==="flash"} genDate={genDate} minY={dateIn.minY} maxY={dateIn.maxY} useJulian={useJulian} saveStats={saveStats} dateFormat={dateFormat} randomFormat={randomFormat} dateDraw={dateDraw} inputStyle={inputStyle} dotRotation={dotRotation} fmtDate={fmtDate} settingsOpen={settingsOpen} clockPaused={landscapeBlocked} onFreshChange={setFlashIsFresh}/>
           </ModeErrorBoundary>
           <ModeErrorBoundary key={"blitz-"+blitzResetKey} mode="Blitz" active={mode==="blitz"} onCrash={forgetBlitzRound}>

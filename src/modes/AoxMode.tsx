@@ -517,15 +517,20 @@ function AoxMode({
   // the panel is up) would leave this card floating over a different mode. Gating availability on
   // `visible` unmounts it with the screen it belongs to, which also pops its overlay registration.
   const breakdownAvail = isLocked && saveStats && visible
-  // ★ THE OPEN FLAG NEVER OUTLIVES WHAT JUSTIFIED IT. The moment the breakdown stops being
-  // available — the screen left with a mode key, the run reset, resumed by an Override, Save Stats
-  // turned off — the flag is put down, not merely masked. Masked, it survived: leave MoX with the
+  // ★ THE OPEN FLAG NEVER OUTLIVES WHAT JUSTIFIED IT. The moment the breakdown has nothing to show —
+  // the screen left with a mode key, the run reset, resumed by an Override — the flag is put down,
+  // not merely masked.
+  // ⚠ SAVE STATS IS NOT IN THAT LIST (design-q1-q2.md v4, B V7). It gates OPENING the breakdown
+  // (above), and nothing here can change it while the breakdown is up - its popup covers the ⚙
+  // button - except another window. A change there does here what the same change would do here
+  // (6.2), and here it could not close a popup the player is reading: so it does not. The run it
+  // shows is the same run, and the strip behind it dims as it would. Masked, it survived: leave MoX with the
   // popup up, come back, and the breakdown sprang open again with nobody having asked for it.
   // React's "adjust state when a prop changes" — compare-and-set during render, as
   // modeHooks' confirm popups do, so the popup is gone in the same commit and no later one can
   // find the flag still set. It converges: once false the guard is false. This is the ONE place the
   // flag is cleared without the player closing the popup, so no handler has to remember to.
-  if (breakdownOpen && !breakdownAvail) setBreakdownOpen(false)
+  if (breakdownOpen && !(isLocked && visible)) setBreakdownOpen(false)
 
   // Handlers.
   const begin = () => {
@@ -914,8 +919,8 @@ function AoxMode({
           header), so the walk over the run's history costs nothing on any other render. `data` is
           rebuilt on each render while it IS up, which is what keeps it live: an Override on an
           ended run moves the mean, and the rows move with it because they ARE the mean's parts.
-          The flag is put down the moment the breakdown stops being available (the guard beside
-          `breakdownAvail`), so the panel cannot outlive the state that justified it. */}
+          The flag is put down the moment the breakdown has nothing to show (the guard beside
+          `breakdownAvail`), so the panel cannot outlive the run it shows. */}
       {breakdownOpen && (
         <RunBreakdown
           onClose={() => setBreakdownOpen(false)}
@@ -940,6 +945,7 @@ function AoxMode({
         </div>
         <WeekdayAnswer
           key={state.gridEpoch}
+          screen="aox"
           inputStyle={inputStyle}
           dotRotation={dotRotation}
           persistBtns={state.persistBtns}
