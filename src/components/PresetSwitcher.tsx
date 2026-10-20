@@ -190,6 +190,27 @@ export function ShortStockNameRoom() {
 // ⚠ `data-preset-name-cell` COMES ALONG TO "Open in" TOO, AND COUNTS THERE: lib/presetNameWidth
 // measures every cell that wears it, so "Open in" and its list are places a name can be cut by
 // drawing their names with this component, with nothing else to wire.
+// ★ A COPY'S NAME IS CUT BEFORE ITS NUMBER, NEVER THROUGH IT (Round 26): "A rather long preset na…
+// (2)", so a copy of a long name can still be told from its original. Drawn here for every preset
+// list and the top bar (PresetOptionLabel, below) and for Manage Presets' rename box while it is not
+// being typed in. Two pieces in one line: the name, which gives way and is cut with "…" exactly as
+// any name is, and the number, which keeps its size — `whitespace-pre` keeps the space before its
+// bracket, which a flex item would otherwise drop from the start of its line. On a box too narrow
+// for the number and an ellipsis together, the number is cut too, after leaving the name an em —
+// about an ellipsis' width — so a cut there still shows "…". `min-w-0`: the pair shrinks with its
+// box instead of holding it open. Drawn only — aria-hidden: whoever draws it says the whole name.
+// `name` is the whole name as drawn, `number` its copy number (lib/presetNameText's copyNumberOf).
+export function NameCutBeforeNumber({ name, number }: { name: string; number: string }) {
+  return (
+    <span className="flex min-w-0" aria-hidden="true">
+      <span className="truncate">{name.slice(0, name.length - number.length)}</span>
+      <span className="shrink-0 overflow-hidden text-ellipsis whitespace-pre max-w-[calc(100%-1em)]">
+        {number}
+      </span>
+    </span>
+  )
+}
+
 export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
   const amnesic = AMNESIC_SPOKEN[useAmnesicModeOf(p.id)]
   // The app-wide answer (the ★★ "drawn short" block above): every cell asks the same question in
@@ -232,20 +253,7 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
           {drawn}
         </span>
       ) : (
-        // ★ A COPY'S NAME IS CUT BEFORE ITS NUMBER, NEVER THROUGH IT (Round 26): "A rather long
-        // preset na… (2)", so a copy of a long name can still be told from its original. Two
-        // pieces in one line: the name, which gives way and is cut with "…" exactly as any name
-        // is, and the number, which keeps its size — `whitespace-pre` keeps the space before its
-        // bracket, which a flex item would otherwise drop from the start of its line. On a cell
-        // too narrow for the number and an ellipsis together, the number is cut too, after
-        // leaving the name an em — about an ellipsis' width — so a cut there still shows "…".
-        // `min-w-0`: the pair shrinks with the cell instead of holding it open.
-        <span className="flex min-w-0" aria-hidden="true">
-          <span className="truncate">{drawn.slice(0, drawn.length - number.length)}</span>
-          <span className="shrink-0 overflow-hidden text-ellipsis whitespace-pre max-w-[calc(100%-1em)]">
-            {number}
-          </span>
-        </span>
+        <NameCutBeforeNumber name={drawn} number={number} />
       )}
       {spoken !== null && <span className="sr-only">{spoken}</span>}
     </span>

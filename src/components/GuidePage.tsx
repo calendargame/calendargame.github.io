@@ -1919,28 +1919,29 @@ export default function GuidePage({
             screen, so the same name can be whole on one device and cut short on another, and the
             note follows if you turn the phone while the box is open. A ready-made name only gets
             the note where even its number (&quot;1&quot;) would be cut. A very long name — a pasted
-            page, say — is kept whole in its box and shown by its beginning everywhere else: where a
-            sentence names a preset it quotes the first 80 characters, and a letter piled high with
-            accents is trimmed there to the line it is on. Two presets can have the same name. A
-            name with nothing in it to see goes back to &quot;Preset 2&quot;, &quot;Preset 3&quot;,
-            and so on: that is one left blank, or one made up only of spaces and other characters
-            that show nothing on screen. Whether a name shows anything is judged on the device you
-            are using, by drawing it: a character your device draws as nothing counts as nothing,
-            and one it has no picture for, which it shows as an empty box, counts as something to
-            see — so the same name can be kept on one device and shown as &quot;Preset 2&quot; on
-            another. Some browsers&apos; privacy settings change what the app reads back from a
-            drawing; where it does not read back what it drew, nothing is judged by drawing, and
-            only a name of spaces and characters that never show anything counts as blank. Only what
-            is shown changes; the name as it was saved is not touched until you next change the
-            list. (While you type, the note under the box treats such a name as the
-            &quot;Preset&quot; name it is about to become.) If the device has no room left to save a
-            name, it is not changed: the box goes back to the name it had, and a note under it says
-            &quot;This device has no room to save that name, so it was not changed.&quot; That is so
-            however you left the box — Enter, Tab, a tap on another row, Back, the app going to the
-            background. The note stays under its row until you next type in a name box. If what you
-            tapped was the dimmed area outside the popup, that tap shows you the note instead of
-            closing the popup; tap there again to close it. Back is the same: it shows you the note,
-            and the next Back closes the popup.
+            page, say — is kept whole in its box (while you are not typing in it, a copy&apos;s box
+            shows its name cut before its &quot;(2)&quot;, as the lists do) and shown by its
+            beginning everywhere else: where a sentence names a preset it quotes the first 80
+            characters, and a letter piled high with accents is trimmed there to the line it is on.
+            Two presets can have the same name. A name with nothing in it to see goes back to
+            &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on: that is one left blank, or one
+            made up only of spaces and other characters that show nothing on screen. Whether a name
+            shows anything is judged on the device you are using, by drawing it: a character your
+            device draws as nothing counts as nothing, and one it has no picture for, which it shows
+            as an empty box, counts as something to see — so the same name can be kept on one device
+            and shown as &quot;Preset 2&quot; on another. Some browsers&apos; privacy settings
+            change what the app reads back from a drawing; where it does not read back what it drew,
+            nothing is judged by drawing, and only a name of spaces and characters that never show
+            anything counts as blank. Only what is shown changes; the name as it was saved is not
+            touched until you next change the list. (While you type, the note under the box treats
+            such a name as the &quot;Preset&quot; name it is about to become.) If the device has no
+            room left to save a name, it is not changed: the box goes back to the name it had, and a
+            note under it says &quot;This device has no room to save that name, so it was not
+            changed.&quot; That is so however you left the box — Enter, Tab, a tap on another row,
+            Back, the app going to the background. The note stays under its row until you next type
+            in a name box. If what you tapped was the dimmed area outside the popup, that tap shows
+            you the note instead of closing the popup; tap there again to close it. Back is the
+            same: it shows you the note, and the next Back closes the popup.
           </li>
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to

@@ -18,7 +18,7 @@ import { MODAL_CARD_CLASS } from './modalContract.js'
 import { NOT_OFFERED_BTN_CLASS, RESET_BTN_CLASS } from './controlClasses.js'
 import QuotedName from './QuotedName.jsx'
 import CustomSelect from './CustomSelect.jsx'
-import { PresetOptionLabel } from './PresetSwitcher.jsx'
+import { NameCutBeforeNumber, PresetOptionLabel } from './PresetSwitcher.jsx'
 import { usePresets, normalizePresetName } from '../store/presets.js'
 import { useRemoteEpoch } from '../store/syncedDoc.js'
 import type { Preset } from '../store/presets.js'
@@ -33,7 +33,7 @@ import {
   renamePreset,
 } from '../store/presetControl.js'
 import { isCutSomewhere, useNameRooms } from '../lib/presetNameWidth.js'
-import { nameAsDrawn } from '../lib/presetNameText.js'
+import { copyNumberOf, nameAsDrawn } from '../lib/presetNameText.js'
 import {
   targetIndexForCenter,
   stepsToReorder,
@@ -1131,6 +1131,10 @@ export default function PresetManager({
             // This row is the one in the hand (HELD_PIECE_CLASS, above the component, says what
             // that changes about how it is drawn).
             const held = drag?.id === p.id
+            // A copy's number, kept whole where its name is drawn cut (the ★ at the name box) — drawn
+            // so only while the box is not being typed in.
+            const copyNumber = copyNumberOf(p.name)
+            const drawnCut = copyNumber !== '' && editing?.id !== p.id
             return (
               <div
                 key={p.id}
@@ -1186,7 +1190,17 @@ export default function PresetManager({
                 and this does not.
                 ⚠ SELECT-ALL ON ENTRY COMES FOR FREE and must not be added here: lib/textEntry
                 installs it once, at the document, precisely so that the seventh box in the app —
-                this one — gets the rule without a call site remembering it. */}
+                this one — gets the rule without a call site remembering it.
+                ★ A COPY'S NAME, WHILE THE BOX IS NOT BEING TYPED IN, IS DRAWN CUT BEFORE ITS NUMBER
+                (Round 26 review): a box shows its text from the start and clips the rest, so a long
+                name and its "(2)" copy read the same, letter for letter, to the box's edge. Over a
+                box that is not being typed in, holding a copy's name, the name is DRAWN as every
+                preset list draws it (PresetSwitcher's NameCutBeforeNumber) and the box's own text
+                is clear (text-transparent) — the box itself is untouched: its value is the whole
+                name, which is what a screen reader reads and what the caret meets the moment the
+                box takes the keyboard, when the drawing goes. The drawing shares the box's grid cell
+                and has its padding and border width, so its letters stand where the box's own
+                would; it comes after the box in the row, so the row's cells keep their order. */}
                   <input
                     type="text"
                     aria-label="Preset name"
@@ -1225,8 +1239,15 @@ export default function PresetManager({
                         discardRename(e.currentTarget)
                       }
                     }}
-                    className={`${ROW_COL.name} min-w-0 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs ${held ? HELD_PIECE_CLASS : ''}`}
+                    className={`${ROW_COL.name} min-w-0 appearance-none rounded-xl border surface-tray px-2 py-1.5 text-xs ${drawnCut ? 'text-transparent' : ''} ${held ? HELD_PIECE_CLASS : ''}`}
                   />
+                  {drawnCut && (
+                    <span
+                      className={`${ROW_COL.name} self-stretch pointer-events-none flex min-w-0 items-center border border-transparent px-2 py-1.5 text-xs`}
+                    >
+                      <NameCutBeforeNumber name={nameAsDrawn(p.name)} number={copyNumber} />
+                    </span>
+                  )}
                   {/* THE CURRENT-PRESET MARK, after the name, in a reserved fixed-width slot so every
                 name box ends at the same x whether the row is marked or not — the same reason
                 CustomSelect gives its ✓ column a width of its own. aria-hidden + an sr-only word,

@@ -207,3 +207,49 @@ for (const [width, height] of [
       await drawn(topBar(page).preset.locator('[data-preset-name-cell]:visible').first()),
     )
   })
+
+// ★ …AND IN MANAGE PRESETS' NAME BOXES, WHILE THEY ARE NOT BEING TYPED IN (Round 26 review): a box
+// shows its text from the start and clips the rest, so a long name and its copy read alike to the
+// box's edge. Not typed in, a copy's box draws its name cut before its "(2)", inside the box; the box
+// still holds the whole name; typed in, it is the box's own text again, whole and selectable.
+test('a copy’s name box, not typed in, shows its "(2)"; typed in, the whole name', async ({
+  page,
+}) => {
+  const long = 'A rather long preset name for practising the hardest dates of all'
+  const copy = `${long} (2)`
+  const dialog = await (async () => {
+    await openApp(page, { seed: { presets: presetsNamed(long, copy) } })
+    return openPresetManager(page)
+  })()
+  const box = dialog.getByRole('textbox', { name: 'Preset name' }).nth(1)
+  await expect(box).toHaveValue(copy)
+  const drawn = () =>
+    box.evaluate((input) => {
+      const art = input.nextElementSibling
+      if (!art || !art.matches('[class*="pointer-events-none"]')) return null
+      const walker = document.createTreeWalker(art, NodeFilter.SHOW_TEXT)
+      const texts: Text[] = []
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push(n as Text)
+      const last = texts.at(-1)!
+      const end = document.createRange()
+      end.setStart(last, last.length - 3)
+      end.setEnd(last, last.length)
+      const r = end.getBoundingClientRect()
+      const b = input.getBoundingClientRect()
+      return {
+        text: texts.map((t) => t.data).join(''),
+        numberInside: r.width > 1 && r.left > b.left && r.right <= b.right,
+        boxText: getComputedStyle(input).color,
+      }
+    })
+  const unfocused = await drawn()
+  expect(unfocused, 'the drawn name over the box').not.toBeNull()
+  expect(unfocused!.text).toBe(copy)
+  expect(unfocused!.numberInside, '"(2)" drawn inside the box').toBe(true)
+  expect(unfocused!.boxText, "the box's own text is clear under the drawing").toMatch(
+    /rgba\(0, 0, 0, 0\)|transparent/,
+  )
+  await box.focus()
+  await expect.poll(drawn).toBeNull()
+  await expect(box).toHaveValue(copy)
+})
