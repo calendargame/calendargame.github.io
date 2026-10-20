@@ -304,7 +304,9 @@ describe('what is filling the device', () => {
     localStorage.setItem('cg-sync-v1|cg-nothing-v1', '{}')
     const reading = readStorageUsage(localStorage)
     const row = (kind) => reading.rows.find((r) => r.kind === kind)
-    expect(row('names')).toEqual({ kind: 'names', chars: 14, spare: 12 })
+    // (the name twice, 7 + 7, of which a one-letter name keeps 1 + 1; and its fingerprint in the key,
+    // R"Weekend" written R\"Weekend\" - 12, of which R\"W\" keeps 6)
+    expect(row('names')).toEqual({ kind: 'names', chars: 14 + 12, spare: 12 + 6 })
     expect(row('preset')).toEqual({
       kind: 'preset',
       presetId: 2,
@@ -324,7 +326,7 @@ describe('what is filling the device', () => {
         listKey.length +
         'cg-sync-v1|cg-nothing-v1'.length +
         2 -
-        14,
+        (14 + 12), // (the names, and the fingerprint beside the key's copy: the names row's)
     )
     expect(reading.rows.reduce((sum, r) => sum + r.chars, 0)).toBe(everything())
   })
@@ -1501,8 +1503,10 @@ describe('on the mounted app', () => {
       openBreakdown()
       const { rows } = readStorageUsage(localStorage)
       const names = rows.find((r) => r.kind === 'names')
-      // (the short name twice: in the list, and copied into its sync key — the long one is not copied)
-      expect(names.chars).toBe(600_000 + 2 * 'Weekend'.length)
+      // (the short name twice: in the list, and copied into its sync key — the long one is not copied;
+      // and the names' fingerprints beside them, a few characters each)
+      expect(names.chars).toBeGreaterThanOrEqual(600_000 + 2 * 'Weekend'.length)
+      expect(names.chars).toBeLessThan(600_000 + 200)
       expect(rowTexts()[0]).toBe(`Preset names${percentText(names.chars, CHROMIUM)}`) // the largest
       expect(percentText(names.chars, CHROMIUM)).toBe('11.4%')
       // The rows still come to the headline or a little under it, never more ("<0.1%" is under a

@@ -167,23 +167,50 @@ function namesIn(registryText: string): { chars: number; spare: number } {
     const presets = isRecord(saved) && isRecord(saved.state) ? saved.state.presets : null
     for (const preset of Array.isArray(presets) ? presets : [])
       if (isRecord(preset)) addName(size, preset.name)
+    // (and the fingerprint of each name the envelope carries: a short name spelled out once more)
+    const at =
+      isRecord(saved) && isRecord(saved.sync) && isRecord(saved.sync.at) ? saved.sync.at : {}
+    for (const [slice, entry] of Object.entries(at))
+      if (slice.startsWith('name:') && isRecord(entry)) addFp(size, entry.fp)
   } catch {
     /* unreadable: all of it counts as "everything else" */
   }
   return size
 }
-// …and in the preset list's sync key: the copy of each name it holds (a slice `name:<id>`'s value).
+// …and in the preset list's sync key: the copy of each name it holds (a slice `name:<id>`'s value), and
+// the fingerprints beside it - its own and the one before it - which spell a short name out again.
 function namesInSyncKey(keyText: string): { chars: number; spare: number } {
   const size = { chars: 0, spare: 0 }
   try {
     const saved: unknown = JSON.parse(keyText)
     const at = isRecord(saved) && isRecord(saved.at) ? saved.at : {}
     for (const [slice, entry] of Object.entries(at))
-      if (slice.startsWith('name:') && isRecord(entry)) addName(size, entry.v)
+      if (slice.startsWith('name:') && isRecord(entry)) {
+        addName(size, entry.v)
+        addFp(size, entry.fp)
+        if (isRecord(entry.prev)) addFp(size, entry.prev.fp)
+      }
   } catch {
     /* unreadable: all of it counts as "everything else" */
   }
   return size
+}
+// A setting's fingerprint (store/syncCounts' regFp): `R` and the name as JSON for a short one - which a
+// shorter name shortens - or `H` and a hash for a long one, the same length whatever the name.
+function addFp(size: { chars: number; spare: number }, fp: unknown): void {
+  if (typeof fp !== 'string') return
+  const written = JSON.stringify(fp).length - 2
+  size.chars += written
+  if (!fp.startsWith('R"')) return
+  let name: unknown
+  try {
+    name = JSON.parse(fp.slice(1))
+  } catch {
+    return // (not a name's spelling: nothing to shorten)
+  }
+  if (typeof name !== 'string') return
+  const first = Array.from(name)[0] ?? ''
+  size.spare += written - (JSON.stringify(`R${JSON.stringify(first)}`).length - 2)
 }
 function addName(size: { chars: number; spare: number }, name: unknown): void {
   if (typeof name !== 'string') return
