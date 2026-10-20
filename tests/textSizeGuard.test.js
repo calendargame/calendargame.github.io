@@ -134,7 +134,7 @@ describe('text size guard — a pixel text size cannot follow the fluid root', (
   it('the Best sub-lines (MoX and Blitz) are sized from the line above them', () => {
     const read = (file) => readFileSync(join(root, file), 'utf8')
     const readout = read('src/components/BestReadout.tsx')
-    expect(readout.match(/className="text-\[0\.917em\] opacity-70"/g)).toHaveLength(1)
+    expect(readout.match(/className="text-\[0\.917em\] text-\(--tx-note\)"/g)).toHaveLength(1)
     expect(readout.match(/className="text-\[0\.917em\] invisible"/g)).toHaveLength(1) // the spacer
     expect(read('src/modes/AoxMode.tsx').match(/<BestSubLine>/g)).toHaveLength(2)
     expect(read('src/components/BlitzBestRow.tsx').match(/<BestSubLine>/g)).toHaveLength(2)

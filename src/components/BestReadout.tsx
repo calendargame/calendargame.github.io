@@ -75,7 +75,9 @@ export function BestColumn({ children }: { children: ReactNode }) {
 
 // ── BestSubLine — THE SMALL LINE UNDER A READOUT: the holder's OTHER number (MoX's "Median:" under
 // Best Mean and "Mean:" under Best Median; Blitz's "Streak:" under Best Score and "Score:" under Best
-// Streak, since Round 26). One component so the two modes' notes are one size and one tone.
+// Streak, since Round 26). One component so the two modes' notes are one size and one tone: --tx-note,
+// a step below the Best line's --tx-best and still 4.5:1 or better in every theme (index.css says
+// the numbers; it was 70% of the Best line's faint tone, 2.1:1 in light and parchment).
 // ⚠ SIZED IN em, FROM THE LINE ABOVE IT (eleven twelfths of it — what 11px was beside text-xs at a
 // 16px root). Written in px it did not follow the fluid root: on a 320px phone, where text-xs is
 // 9px, the note drew LARGER than the Best it annotates (tests/textSizeGuard).
@@ -93,7 +95,7 @@ export function BestSubLine({
       &nbsp;
     </div>
   ) : (
-    <div className="text-[0.917em] opacity-70">{children}</div>
+    <div className="text-[0.917em] text-(--tx-note)">{children}</div>
   )
 }
 
@@ -165,7 +167,7 @@ export default function BestReadout({
 }) {
   return (
     <div
-      className={`mt-1.5 px-3 py-1.5 rounded-2xl text-xs text-(--tx-300-60) ${framed ? 'session-only' : ''}`}
+      className={`mt-1.5 px-3 py-1.5 rounded-2xl text-xs text-(--tx-best) ${framed ? 'session-only' : ''}`}
     >
       {/* `sr-only` is positioned out of flow, so the word costs no layout. First, so it is heard
           before the readouts it qualifies. */}
