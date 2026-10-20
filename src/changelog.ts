@@ -439,8 +439,11 @@ export const readChangelogSeen = (): string | null => {
   }
 }
 
+// (Nothing is written when it already holds this signature: a page load writes nothing it does not
+// change, design-q1-q2.md v4 G7.)
 export const writeChangelogSeen = (stamp: string): void => {
   try {
+    if (localStorage.getItem(CHANGELOG_SEEN_KEY) === stamp) return
     localStorage.setItem(CHANGELOG_SEEN_KEY, stamp)
     wrote?.(CHANGELOG_SEEN_KEY)
   } catch {

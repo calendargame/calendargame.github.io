@@ -28,8 +28,11 @@ export const readBuildStamp = (): string | null => {
   }
 }
 
+// (Nothing is written when the stamp already names this build — every load of an unchanged build, and
+// every second window: a page load writes nothing it does not change, design-q1-q2.md v4 G7.)
 export const writeBuildStamp = (build: string): void => {
   try {
+    if (localStorage.getItem(BUILD_STAMP_KEY) === build) return
     tryWriteItem(localStorage, BUILD_STAMP_KEY, build)
   } catch {
     /* best-effort */
