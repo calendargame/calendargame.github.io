@@ -13,6 +13,8 @@ import {
   SAME_PX,
 } from './support/app'
 import { presetsNamed } from './support/seeds'
+import { expectStockNameShown } from './support/presetNameCells'
+import type { Locator } from '@playwright/test'
 
 test('a copy lands right under its original, and a long list scrolls to show it', async ({
   page,
@@ -169,3 +171,39 @@ test('a long name is cut before its copy number, never through it', async ({ pag
     await page.keyboard.press('Escape')
   }
 })
+
+// ★ THE DUPLICATE LIST IS ONE OF THE PLACES A NAME IS SHOWN, and takes the app's one answer for a
+// ready-made name ("Preset 1", "P1", or "1" — components/PresetSwitcher's ★★ "drawn short"): where
+// the top bar's list cannot show "Preset 1", this list shows "P1" too, though it has room for more;
+// with room everywhere, it shows "Preset 1". (The Round 26 review saw "P1" here at 288 wide and asked
+// whether the rule was misapplied: it is the rule.)
+for (const [width, height] of [
+  [288, 640],
+  [390, 844],
+])
+  test(`at ${width}×${height}: the Duplicate list shows a ready-made name in the form the whole app does`, async ({
+    page,
+  }) => {
+    await openApp(page, {
+      viewport: { width, height },
+      seed: { presets: presetsNamed('Preset 1', 'Preset 2') },
+    })
+    const dialog = await openPresetManager(page)
+    await dialog.getByRole('button', { name: 'Duplicate' }).click()
+    const menu = page.getByRole('listbox', { name: 'Preset to duplicate' })
+    await expect(menu).toBeVisible()
+    await settled(page)
+    const stockNames = ['Preset 1', 'Preset 2']
+    for (const [i, name] of stockNames.entries())
+      await expectStockNameShown(
+        page,
+        menu.getByRole('option').nth(i).locator('[data-preset-name-cell]'),
+        name,
+        { stockNames, what: `the Duplicate list's "${name}"` },
+      )
+    // …and in the very form the top bar's button shows.
+    const drawn = (cell: Locator) => cell.evaluate((c) => c.firstElementChild?.textContent)
+    expect(await drawn(menu.getByRole('option').first().locator('[data-preset-name-cell]'))).toBe(
+      await drawn(topBar(page).preset.locator('[data-preset-name-cell]:visible').first()),
+    )
+  })

@@ -19,8 +19,8 @@ import { shortStockName, stockNumber } from '../store/presets.js'
 // ── THE ROOMS ─────────────────────────────────────────────────────────────────────────────────
 //
 // A ROOM is the width a name has in one place it is drawn, with that place's own font. The places
-// are the preset control in the top bar, a row of the list it opens, and the ⚙ menu's "Open in"
-// control and a row of its list. The rename field itself is not one of them: it shows the whole
+// are the preset control in the top bar, a row of the list it opens, the ⚙ menu's "Open in"
+// control and a row of its list, and a row of the list Manage Presets' Duplicate opens. The rename field itself is not one of them: it shows the whole
 // stored name, scrolling sideways.
 //   ★ ONE HOOK, SO THE PLACES AGREE BY CONSTRUCTION. Nothing here lists the places. Every one of
 //   them draws a name with components/PresetSwitcher's PresetOptionLabel, whose cell wears

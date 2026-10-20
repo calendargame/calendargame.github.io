@@ -96,7 +96,8 @@ import { copyNumberOf, nameAsDrawn } from '../lib/presetNameText.js'
 // a player may call a preset (store/presets' normalizePresetName), so every place a name is shown
 // has to cope with one that is too long for it: one line, cut with "…", never wrapping and never
 // widening anything. PresetOptionLabel below is that, for every such place — this control's button,
-// a row of its list, and the ⚙ menu's "Open in" and its list.
+// a row of its list, the ⚙ menu's "Open in" and its list, and the list Manage Presets' Duplicate
+// opens.
 //   ★ AND THE APP KNOWS WHEN A NAME IS CUT, BY MEASURING THOSE SAME CELLS. Each cell
 //   PresetOptionLabel draws wears `data-preset-name-cell` and hands itself to lib/presetNameWidth
 //   (watchNameCell), which keeps the room a name has in each place current — the hidden copy of a

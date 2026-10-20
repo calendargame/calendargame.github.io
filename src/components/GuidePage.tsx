@@ -1862,15 +1862,16 @@ export default function GuidePage({
             typed that reads exactly like one — is shown in a short form, &quot;P1&quot;,
             &quot;P2&quot;, where it would otherwise be cut, and where even that would be cut, as
             just its number, &quot;1&quot;, &quot;2&quot;. It is all or none: if any one of those
-            names would be cut in any of these four places — the control, its list, <b>Open in</b>,
-            and its list — every one of them is shown short in all four, and if any one&apos;s
-            &quot;P&quot; form would be cut as well, every one is shown as its number; so the
-            control and its list always match and a list never reads &quot;Preset 1&quot; above
-            &quot;P10&quot;. On a very narrow phone that is how a new app starts. Where even a
-            number does not fit, it is cut short with an … like any other name. Give it more room —
-            a wider window, the phone turned — and the longer names come back by themselves. Only
-            what is shown changes: the name is still &quot;Preset 1&quot; in its box in Manage
-            Presets, in every sentence that names it, and to a screen reader.
+            names would be cut in any of the places a name is shown — the control, its list,{' '}
+            <b>Open in</b>, the list it opens, and the list <b>Duplicate</b> opens in Manage Presets
+            — every one of them is shown short in all of them, even where it would have fitted, and
+            if any one&apos;s &quot;P&quot; form would be cut as well, every one is shown as its
+            number; so the control and its list always match and a list never reads &quot;Preset
+            1&quot; above &quot;P10&quot;. On a very narrow phone that is how a new app starts.
+            Where even a number does not fit, it is cut short with an … like any other name. Give it
+            more room — a wider window, the phone turned — and the longer names come back by
+            themselves. Only what is shown changes: the name is still &quot;Preset 1&quot; in its
+            box in Manage Presets, in every sentence that names it, and to a screen reader.
           </li>
         </UL>
         <Subhead>Making and managing them</Subhead>
