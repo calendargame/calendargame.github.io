@@ -28,6 +28,16 @@ import type { CSSProperties, ReactNode } from 'react'
 // The CSS fallback therefore governs nothing in practice, but it must stay: without the var
 // the calc() is invalid at computed-value time and the transition would silently become 0s.
 //
+// ★ A CLOSED PANEL IS INERT (Round 26 review): its content stays mounted (and its height is what the
+// slide animates to), so without this a closed panel was still THERE for a keyboard and a screen
+// reader — Tab and Shift+Tab walked into links nobody could see (the Contact link in the closed
+// Settings Overview), a screen reader read every closed How to Play section in full, and it read the
+// Show Codes box's codes with the box closed, which gives the method away. `inert` takes the closed
+// content out of the tab order and out of the accessibility tree in one attribute, and touches
+// neither layout nor paint, so the slide is exactly as it was: the attribute goes on the moment a
+// panel starts to close (nothing in a closing panel is for pressing) and comes off the moment one
+// starts to open, so what is opening can be reached at once.
+//
 // Extracted from main.jsx in Stage C, Step 4a; rewritten from the max-height technique to the
 // grid idiom in round 6 (2026-07-18).
 export default function Expander({
@@ -53,7 +63,7 @@ export default function Expander({
           : ({ '--expander-ms': `${durationMs}ms` } as CSSProperties)
       }
     >
-      <div>{children}</div>
+      <div inert={!open}>{children}</div>
     </div>
   )
 }

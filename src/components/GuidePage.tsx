@@ -2659,6 +2659,13 @@ export default function GuidePage({
         <Subhead>Panels and popups</Subhead>
         <UL>
           <li>
+            Whatever is folded away is out of reach until it is opened: a closed section of this
+            guide, and the <b>Show Codes</b> box while it is closed. <Kbd>Tab</Kbd> and{' '}
+            <Kbd>Shift</Kbd>+<Kbd>Tab</Kbd> pass over them, and a screen reader does not read them,
+            so the codes for the date on screen are never read out until you show them. Each
+            section&apos;s title, and the <b>Show Codes</b> button, says whether it is open.
+          </li>
+          <li>
             The ⚙ menu opens eight popups — Save Defaults, the saved-defaults list, the three
             confirmations (Reset Settings, Full Reset, and clearing your saved defaults), the
             Changelog, Manage Presets, and the Storage used breakdown — and every one, like every

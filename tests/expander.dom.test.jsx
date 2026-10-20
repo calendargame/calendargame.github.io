@@ -106,6 +106,32 @@ describe('Expander structure (grid wrapper + row)', () => {
     expect(container.firstElementChild.className).toBe('expander')
     expect(row.firstElementChild).toBe(content)
   })
+
+  // Round 26 review: closed content stayed reachable — Tab walked into it and a screen reader read
+  // it (the Show Codes box's codes, every closed guide section). The row div is `inert` exactly
+  // while the panel is closed; the browser lane (closedPanels) checks what that does in Chromium
+  // and WebKit.
+  it('a closed panel is inert, an open one is not — from the moment either starts to move', () => {
+    const { container, rerender } = render(
+      <Expander open={false}>
+        <a href="#x">a link</a>
+      </Expander>,
+    )
+    const row = container.firstElementChild.firstElementChild
+    expect(row.hasAttribute('inert')).toBe(true)
+    rerender(
+      <Expander open>
+        <a href="#x">a link</a>
+      </Expander>,
+    )
+    expect(row.hasAttribute('inert')).toBe(false)
+    rerender(
+      <Expander open={false}>
+        <a href="#x">a link</a>
+      </Expander>,
+    )
+    expect(row.hasAttribute('inert')).toBe(true)
+  })
 })
 
 describe('Expander durationMs prop (the per-toggle --expander-ms clock)', () => {
