@@ -63,6 +63,7 @@ export default defineConfig({
     // own (an update applied on open) and that answers requests from a cache instead of from the
     // files under test; neither belongs in a layout measurement. src/sw.ts's registration is told
     // "no" by the browser and the app carries on, exactly as it does where workers are unsupported.
+    // (The one test about the worker, oldWindows.browser.ts, opens a context of its own that allows it.)
     serviceWorkers: 'block',
   },
   projects: [

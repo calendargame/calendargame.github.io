@@ -1264,17 +1264,20 @@ export default function GuidePage({
           in the background and takes effect the next time the app loads — when you open it again,
           or reload it. A short <b>updating screen</b> marks the change — it appears once for each
           new version, even when the switch already finished quietly between visits. Switching back
-          from another app never triggers it; the update waits for the next load. To ask right now
-          instead, the Settings (⚙) panel has a <b>Check for updates</b> link. It really does check:
-          the link reads <b>Checking…</b> while it looks, then answers in the same spot —{' '}
-          <b>Up to date</b> if you already have the newest version the site is handing out, or{' '}
-          <b>No connection</b> if it could not reach the internet. The answer stays for a few
-          seconds and the link goes back to normal. Only when there genuinely is something new does
-          it install it there and then, behind the same updating screen (your saved progress is kept
-          either way) — unless something is still waiting to be saved, when it holds off instead and
-          says why (see <b>Saved Progress</b>). A brand-new version can take up to about ten minutes
-          to reach everywhere, so a check in that window can still answer <b>Up to date</b> — asking
-          again a little later finds it.
+          from another app never triggers it; the update waits for the next load. Once a window has
+          updated, any other window of the app still open on the version before follows it: one in
+          the background at once, one on screen the next time you leave it. Each reloads onto the
+          new version and keeps your saved progress. To ask right now instead, the Settings (⚙)
+          panel has a <b>Check for updates</b> link. It really does check: the link reads{' '}
+          <b>Checking…</b> while it looks, then answers in the same spot — <b>Up to date</b> if you
+          already have the newest version the site is handing out, or <b>No connection</b> if it
+          could not reach the internet. The answer stays for a few seconds and the link goes back to
+          normal. Only when there genuinely is something new does it install it there and then,
+          behind the same updating screen (your saved progress is kept either way) — unless
+          something is still waiting to be saved, when it holds off instead and says why (see{' '}
+          <b>Saved Progress</b>). A brand-new version can take up to about ten minutes to reach
+          everywhere, so a check in that window can still answer <b>Up to date</b> — asking again a
+          little later finds it.
         </p>
         <p>
           To see what an update actually changed, the <b>Changelog</b> link — at the right-hand end

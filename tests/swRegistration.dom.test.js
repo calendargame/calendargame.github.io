@@ -31,11 +31,11 @@ let register
 // copy of sw.ts — the module registers at import time, so each case needs its own copy
 // (vi.resetModules, the observabilityGate.dom pattern). Awaiting the import is not enough: the
 // reporting happens in a .then/.catch off the register() promise, so let the microtasks drain too.
-const loadSwWith = async (impl) => {
+const loadSwWith = async (impl, controller = null) => {
   register = vi.fn(impl)
   Object.defineProperty(navigator, 'serviceWorker', {
     configurable: true,
-    value: { register },
+    value: { register, controller },
   })
   vi.resetModules()
   await import('../src/sw.js')
@@ -138,5 +138,27 @@ describe('service-worker registration (src/sw.ts)', () => {
     expect(reports()).toHaveLength(1)
     expect(reports()[0][1]).toEqual({ where: 'sw-register' })
     expect(String(reports()[0][0])).toContain('resolved null')
+  })
+})
+
+// Round 26: a window of the new version asks the worker to reload the windows of the version before
+// (public/sw-old-windows.js) whenever one may have been left - and only asks: nothing here reloads.
+describe('the asks to reload the windows of the version before', () => {
+  it('asks the controlling worker on visibility, focus, page-show, and another window’s save', async () => {
+    const controller = { postMessage: vi.fn() }
+    await loadSwWith(async () => ({ update: vi.fn().mockResolvedValue(undefined) }), controller)
+    document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))
+    for (const type of ['pageshow', 'focus', 'blur']) window.dispatchEvent(new Event(type))
+    window.dispatchEvent(new StorageEvent('storage', { key: 'cg-elsewhere' }))
+    expect(controller.postMessage).toHaveBeenCalledTimes(5)
+    for (const [message] of controller.postMessage.mock.calls)
+      expect(message).toEqual({ type: 'SWEEP_OLD_WINDOWS' })
+    expect(reports()).toEqual([])
+  })
+
+  it('asks nothing of a window no worker controls yet - and does not throw', async () => {
+    await loadSwWith(async () => ({ update: vi.fn().mockResolvedValue(undefined) }))
+    window.dispatchEvent(new Event('focus'))
+    expect(reports()).toEqual([])
   })
 })

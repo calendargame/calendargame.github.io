@@ -51,6 +51,13 @@ import { captureError } from './observability/sentry'
 //     becomes the waiting worker, ready to apply on the next launch.
 //   • NO visibility/focus re-check — cold-open only (the owner's call), so it never reloads on a
 //     mere app resume.
+//   • EVERY OTHER WINDOW OF THE VERSION BEFORE (Round 26, owner-approved). The worker that takes over
+//     writes down the windows open at that moment and reloads each onto the new version - one in the
+//     background at once, one on screen at its next hide or blur (public/sw-old-windows.js says how and
+//     why). The worker cannot see a window being left, so a window of the new version tells it when
+//     something may have changed: its own visibility or focus changing, or another window's save
+//     arriving (askToReloadOldWindows below). Those asks never reload or update THIS window - it is
+//     the new version already; the bullet above still holds for it.
 // The Settings → "Check for updates" button CHECKS first and applies a real update through this same
 // registration (round 11); forceReloadLatest is its fallback when there is nothing to hand off to.
 //
@@ -109,3 +116,11 @@ navigator.serviceWorker
   .catch((error) => {
     captureError(error, { where: 'sw-register' })
   })
+
+// The asks (see the bullet above). Sent to the worker controlling this window - the new version's, once
+// it has taken over; before then, a worker without the handler drops the message. Nothing comes back.
+const container = navigator.serviceWorker
+const askToReloadOldWindows = () => container.controller?.postMessage({ type: 'SWEEP_OLD_WINDOWS' })
+document.addEventListener('visibilitychange', askToReloadOldWindows)
+for (const event of ['pageshow', 'focus', 'blur', 'storage'])
+  window.addEventListener(event, askToReloadOldWindows)

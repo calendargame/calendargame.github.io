@@ -517,7 +517,13 @@ export default defineConfig(({ command, mode }) => ({
       // default globPatterns (**/*.{js,wasm,css,html}) doesn't match PNGs today; this pins the
       // exclusion explicitly so no future globPatterns widening can ever precache them. (User
       // globIgnores REPLACES the default, so the stock node_modules ignore is restated.)
-      workbox: { globIgnores: ['**/node_modules/**/*', '**/apple-splash-*.png'] },
+      workbox: {
+        // (sw-old-windows.js is the worker's own script, below: no page loads it, so it is not precached)
+        globIgnores: ['**/node_modules/**/*', '**/apple-splash-*.png', 'sw-old-windows.js'],
+        // Round 26: every window of the version before comes onto the new one (public/sw-old-windows.js
+        // says how) - a script of the worker's own, loaded with it.
+        importScripts: ['sw-old-windows.js'],
+      },
       manifest: webManifest,
       // The SW never runs in dev (keeps HMR clean) — offline is verified against a production
       // build via `vite preview`.
