@@ -247,7 +247,7 @@ export function composeRecords(
       if (d.keep) {
         if (devMap[k] !== undefined) m[k] = devMap[k]
       } else {
-        const stored = fromRec(map, d.rec, d.tagged)
+        const stored = fromRec(map, d.rec, d.tagged, true)
         if (stored)
           m[k] = d.tagged
             ? stored

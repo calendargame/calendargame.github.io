@@ -46,7 +46,14 @@ describe('the records book in model5’s world', () => {
     // runner-up lists dropped once nothing can take their holder back; Resets left waiting on a full device by
     // versions that added no play; the round-id leftover and the second-older-page class met; Full Resets
     // nobody saw (R10)
-    for (const k of ['runnerUpsDropped', 'resetKept', 'idOrder', 'unseenFullReset'])
+    // (v5) …and companions read as unknown, beside a holder a spreading page put there
+    for (const k of [
+      'runnerUpsDropped',
+      'resetKept',
+      'idOrder',
+      'unseenFullReset',
+      'companionUnknown',
+    ])
       expect(totals[k], k).toBeGreaterThan(0)
   })
 })

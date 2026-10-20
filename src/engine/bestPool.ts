@@ -32,7 +32,7 @@
 // Pure, apart from a cache keyed on the map's identity (the stores replace a map on every write).
 // ─────────────────────────────────────────────────────────────────────────
 import { inEffectBestKey } from '../lib/dateConfig.js'
-import { companion, type BlitzBest, type SuddenBest } from './blitzBest.js'
+import { companionOf, type BlitzBest, type SuddenBest } from './blitzBest.js'
 import type { AoxBest } from './aoxBest.js'
 import { roundCentis } from '../lib/modeFormat.js'
 import { clockRoundId } from './roundId.js'
@@ -78,10 +78,10 @@ export function bestOfAox(records: readonly AoxBest[]): AoxBest | undefined {
   if (!avg && !med) return undefined
   return {
     avg: avg?.avg ?? null,
-    avgMed: avg?.avgMed ?? null,
+    avgMed: avg ? companionOf(avg, 'avgMed', 'avgRoundId') : null,
     avgRoundId: avg?.avgRoundId ?? null,
     med: med?.med ?? null,
-    medAvg: med?.medAvg ?? null,
+    medAvg: med ? companionOf(med, 'medAvg', 'medRoundId') : null,
     medRoundId: med?.medRoundId ?? null,
   }
 }
@@ -105,10 +105,10 @@ export function bestOfBlitz(records: readonly BlitzBest[]): BlitzBest | undefine
   if (!score || !streak) return undefined
   return {
     score: score.score,
-    scoreStreak: companion(score.scoreStreak),
+    scoreStreak: companionOf(score, 'scoreStreak', 'scoreRoundId'),
     scoreRoundId: score.scoreRoundId ?? null,
     streak: streak.streak,
-    streakScore: companion(streak.streakScore),
+    streakScore: companionOf(streak, 'streakScore', 'streakRoundId'),
     streakRoundId: streak.streakRoundId ?? null,
   }
 }

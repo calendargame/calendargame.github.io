@@ -26,12 +26,24 @@ const recRead = { ...rec, avgRoundId: 'scoped', medRoundId: 'scoped' }
 // a round id as a new build draws it (engine/roundId: the clock's milliseconds x 1024)
 const CLOCK_ID = 1_800_000_000_000 * 1024
 const recNew = { ...rec, avgRoundId: CLOCK_ID, medRoundId: CLOCK_ID + 1 }
-// a map as the door wrote it, without the tags that name each record's values
+// a map as the door wrote it, without the tags that name each record's values - and without the holder
+// id written beside each companion (store/bestRecords, design v5), each checked to name its field's holder
+const COMPANION_OF = {
+  scoreStreakOf: 'scoreRoundId',
+  streakScoreOf: 'streakRoundId',
+  avgMedOf: 'avgRoundId',
+  medAvgOf: 'medRoundId',
+}
 const untagged = (map) =>
   Object.fromEntries(
     Object.entries(map).map(([k, r]) => {
       const { w, ...rest } = r
       expect(typeof w, `${k} is tagged`).toBe('string')
+      for (const [of, holder] of Object.entries(COMPANION_OF))
+        if (of in rest) {
+          expect(rest[of], `${k}.${of}`).toBe(rest[holder])
+          delete rest[of]
+        }
       return [k, rest]
     }),
   )

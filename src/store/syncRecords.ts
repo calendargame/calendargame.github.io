@@ -257,10 +257,11 @@ export class RecordsBook {
     const prev = [fld, ...alts].find((q) => q.id !== null && q.id === e.id)
     const ent: FV = prev?.n || e.n ? { ...e, n: true } : e
     // (v4, V3-F3) a tie stays with the round that got there FIRST - the one already in the list: never
-    // decided by round ids, which follow the clocks. A round whose value did not change keeps its place; a
-    // round whose value changed reaches its new value now, after the others.
+    // decided by round ids, which follow the clocks. A round whose value did not change keeps its place -
+    // (v5) whatever its companion now says, which it carries in place; a round whose value changed reaches
+    // its new value now, after the others.
     const all =
-      prev && this.sameFV(prev, e)
+      prev && this.spec.same(prev.v, e.v)
         ? [fld, ...alts].filter((q) => q.id !== null).map((q) => (q.id === e.id ? ent : q))
         : [...[fld, ...alts].filter((q) => q.id !== null && q.id !== e.id), ent]
     all.sort(this.order) // (stable)
@@ -289,12 +290,20 @@ export class RecordsBook {
       const val = op.v[f] ?? { v: this.spec.empty }
       r.x[f] ??= []
       // an Override of a round already counted moves it (up or down); a value no record keeps removes it;
-      // the same value again (an op re-applied) leaves it where it stands
+      // the same value again (an op re-applied) leaves it where it stands - and (v5) so does the same value
+      // with another companion (an Override that moved the round's OTHER figure): its place among ties is
+      // the one it reached the value at, and only its companion follows the round, in place
       const same = [r.f[f], ...r.x[f]].find((q) => q.id === op.id)
-      const cur =
-        same && this.sameFV(same, val)
-          ? { fld: r.f[f], alts: r.x[f] }
-          : this.removeRound(r.f[f], r.x[f], op.id)
+      const sameValue = !!same && this.spec.same(same.v, val.v)
+      const cur = sameValue
+        ? { fld: r.f[f], alts: r.x[f] }
+        : this.removeRound(r.f[f], r.x[f], op.id)
+      if (sameValue)
+        for (const q of [cur.fld, ...cur.alts])
+          if (q.id === op.id) {
+            if (val.c !== undefined) q.c = val.c
+            else delete q.c
+          }
       const ent: FV = {
         v: val.v,
         ...(val.c !== undefined ? { c: val.c } : {}),
@@ -593,7 +602,22 @@ export class RecordsBook {
         if (newerPlay || lit) cancel = true
       }
       if (cancel) this.cancelReset(d)
-      else this.hooks.counter?.('resetKept')
+      else {
+        this.hooks.counter?.('resetKept')
+        // (v5, 4.1) THE RESET WAITS - but a newer Reset another window wrote meanwhile has its own bound:
+        // every round begun before THAT press is dead too, this window's rounds held since its own press
+        // included (a full device kept them off the device; design-q2-model, Best config 8, run 783).
+        if ((d.S?.dead ?? 0) > this.dead) {
+          this.dead = d.S!.dead
+          this.deadSt = d.S!.deadSt ?? null
+        }
+        this.addDead(d.S?.deadIds)
+        for (const r of Object.values(this.recs)) {
+          const before = r.dirty.length
+          r.dirty = r.dirty.filter((op) => op.id >= this.dead && !this.isDead(op.id))
+          if (r.dirty.length !== before) r.mem = this.rebuildMem(r, clone(r.held))
+        }
+      }
     }
     let changed = false
     let goneDone = false

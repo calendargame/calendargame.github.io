@@ -67,6 +67,16 @@ describe('a lower-is-better record with companions', () => {
     expect(JSON.stringify(b.recs.k.mem)).toBe(before)
   })
 
+  // (v5) an Override that moves only a round's OTHER figure leaves the round where it stands among ties:
+  // its place is the one it reached its value at; only its companion follows it
+  it('a tie holder whose companion changes keeps the field, the new companion beside it', () => {
+    const b = book()
+    b.op('k', run(1, 2.5, 2.4))
+    b.op('k', run(2, 2.5, 2.7)) // a tie: run 1 holds the mean
+    b.op('k', { ...run(1, 2.5, 2.2), ov: true }) // run 1's median moves; its mean does not
+    expect(b.recs.k.mem.f.avg).toMatchObject({ v: 2.5, c: 2.2, id: 1 })
+  })
+
   it('an Override taking a round back lands on the true next value, not on nothing', () => {
     const b = book()
     b.op('k', run(1, 3.0, 3.1))

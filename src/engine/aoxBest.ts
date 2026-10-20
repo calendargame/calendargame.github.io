@@ -26,9 +26,11 @@ import { roundCentis } from '../lib/modeFormat.js'
 export interface AoxBest {
   avg: number | null
   avgMed: number | null
+  avgMedOf?: number | null // the run that median is of (engine/blitzBest's companionOf)
   avgRoundId: number | null
   med: number | null
   medAvg: number | null
+  medAvgOf?: number | null // the run that mean is of (engine/blitzBest's companionOf)
   medRoundId: number | null
 }
 

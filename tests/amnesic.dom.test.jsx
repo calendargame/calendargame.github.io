@@ -131,8 +131,17 @@ const parkedStatsText = (presetId = 1) => {
   expect(text).toContain(stats) // the stored text spells its stats exactly this way
   return stats
 }
-// A stored state as the app's values: each record without the tag that names its values (`w`), each
+// A stored state as the app's values: each record without the tag that names its values (`w`) and the
+// holder ids written beside its companions (`…Of`, store/bestRecords: the doc's, for its reader), each
 // mode's stats without the door's tag and write mark (`w`, `wl`) - store/progressDoc.
+const recordValues = ({
+  w: _w,
+  scoreStreakOf: _s,
+  streakScoreOf: _k,
+  avgMedOf: _a,
+  medAvgOf: _m,
+  ...rec
+}) => rec
 const valuesOf = (state) => {
   const out = { ...state }
   if (state.stats)
@@ -142,7 +151,7 @@ const valuesOf = (state) => {
   for (const key of BESTS)
     if (state[key])
       out[key] = Object.fromEntries(
-        Object.entries(state[key]).map(([k, { w: _w, ...rec }]) => [k, rec]),
+        Object.entries(state[key]).map(([k, rec]) => [k, recordValues(rec)]),
       )
   return out
 }
@@ -950,15 +959,17 @@ describe('Stats Only: this page’s Bests and an older tab’s saves of the perm
   it('a preset another tab DELETED gets no key back — not even for a Best set this minute', () => {
     setAmnesic('off')
     const two = createPreset('two')
+    createPreset('three') // (made after it: the older tab's list naming it proves it knew 'two' - 8.1)
     act(() => switchPreset(two.id))
     const KEY2 = `${KEY}~p${two.id}`
     setAmnesic('stats')
     useProgress.getState().setBlitzBest({ mine: REC(9) })
     expect(parkedBests(two.id).blitzBest).toEqual({ mine: REC(9) })
-    // The other tab deletes the preset: its keys go, and the registry no longer lists it.
+    // The other tab deletes the preset: its keys go, and its whole registry no longer lists it.
     const registry = JSON.parse(localStorage.getItem('cg-presets-v1'))
     registry.state.presets = registry.state.presets.filter((preset) => preset.id !== two.id)
     registry.state.activeId = 1
+    delete registry.sync
     older.write(KEY2, null)
     older.write('cg-presets-v1', JSON.stringify(registry))
     older.deliver()

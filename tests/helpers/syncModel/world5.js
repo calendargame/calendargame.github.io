@@ -17,6 +17,11 @@
 //     with no new write between them alias (a named residual: `counterIdReuse`).
 // Every OTHER round id is a clock's: the model's numbers, offset into the app's clock range (2^40 and up),
 // so a counter can be told from them as the app tells it.
+// (v5, the review lane's (c)) COMPANIONS: each field carries its holder round's value of the OTHER field
+// (`c`, as Blitz's Best Score carries that round's streak). A new window writes the holder's id beside it
+// (`cid`, store/bestRecords' `…Of`); a reader believes a companion only when that id is the holder's. A
+// spreading page (v2.26.0) keeps the old holder's companion - and its id - beside a new holder; the other
+// older builds write no companion at all. `cid: false` writes none (the v4 form: the judge must catch it).
 //
 // The model's own header:
 //
@@ -43,6 +48,7 @@ import {
 } from '../../../src/store/syncRecords.js'
 
 export const FIELDS = ['s', 'k']
+export const OTHER = { s: 'k', k: 's' }
 export const SPEC = {
   fields: FIELDS,
   empty: 0,
@@ -60,7 +66,7 @@ const valuesOf = (rec) => ({ f: rec.f })
 const R = 'r' // the one record
 
 export function makeWorld(opt = {}) {
-  const O = { spreadOld: false, selfTag: false, counterIds: false, ...opt }
+  const O = { spreadOld: false, selfTag: false, counterIds: false, cid: true, ...opt }
   const W = {
     dev: new Map(),
     hist: [{ doc: null, side: null }],
@@ -78,6 +84,7 @@ export function makeWorld(opt = {}) {
   // (oracle) a round's value changes (its arrival on the device is noted when the device shows it - reachOf)
   const setVal = (Rr, v) => {
     Rr.v = { ...v }
+    ;(Rr.vals ??= []).push({ ...v }) // (oracle: every value it ever had - G13)
   }
   function reachOf(rec, whole = false, by = null) {
     // (a new window's version names every round that still stands, runner-ups included: one it no longer
@@ -192,6 +199,27 @@ export function makeWorld(opt = {}) {
     return out
   }
 
+  // (v5) a new window writes each companion's holder id beside it; a reader believes it only for that holder
+  const withCid = (f) => {
+    const out = clone(f)
+    if (O.cid !== false)
+      for (const fl of FIELDS)
+        if (out[fl].id !== null && out[fl].c !== undefined) out[fl].cid = out[fl].id
+    return out
+  }
+  function believed(rec) {
+    if (!rec) return rec
+    const out = clone(rec)
+    for (const fl of FIELDS) {
+      const e = out.f[fl]
+      if (e.cid !== undefined) {
+        if (e.cid !== e.id) e.c = null
+        delete e.cid
+      }
+    }
+    return out
+  }
+
   // ═════════ NEW windows: THE REAL BOOK ═════════
   // The doc: { b: record | null, st: { w: { st } } | { ln }, sync?: { st, fp } }; the records' key: the book's.
   // A record a new window wrote carries `w`: 1 (the model's bare mark), or - `selfTag` - the hash of its values.
@@ -201,8 +229,9 @@ export function makeWorld(opt = {}) {
     const doc = view.doc ? JSON.parse(view.doc) : null
     const side = view.side ? JSON.parse(view.side) : null
     const raw = doc?.b ?? null
-    // (the tag is checked on the record as written; its ids are then read as the app's reader reads them)
-    const b = scopeRec(raw, doc)
+    // (the tag is checked on the record as written; its ids are then read as the app's reader reads them -
+    // and each companion believed only beside its holder's id)
+    const b = scopeRec(believed(raw), doc)
     return {
       docPresent: !!doc,
       env: !!doc?.sync,
@@ -221,7 +250,7 @@ export function makeWorld(opt = {}) {
   }
   const asOp = (id, v, ov) => ({
     id,
-    v: { s: { v: v.s }, k: { v: v.k } },
+    v: { s: { v: v.s, c: v.k }, k: { v: v.k, c: v.s } },
     ...(ov ? { ov: true } : {}),
   })
   const valOf = (op) => ({ s: op.v.s.v, k: op.v.k.v })
@@ -237,7 +266,7 @@ export function makeWorld(opt = {}) {
     if (!out.st) {
       // a pass-through with my rounds on top: an untagged literal naming them as a new window's, no envelope,
       // the records' key untouched (this is not a version)
-      const lit = o.rec ? { f: clone(o.rec.f), nr: o.nr, ops: clone(o.ops) } : null
+      const lit = o.rec ? { f: withCid(o.rec.f), nr: o.nr, ops: clone(o.ops) } : null
       if (!commit(w, 'doc', JSON.stringify({ b: lit, st: cur.st ?? {} }), why)) {
         w.book.refused()
         return false
@@ -246,7 +275,7 @@ export function makeWorld(opt = {}) {
       w.seen = devState()
       return true
     }
-    const rec = o.rec ? { f: clone(o.rec.f) } : null
+    const rec = o.rec ? { f: withCid(o.rec.f) } : null
     if (rec) rec.w = tagOf(rec)
     const env = out.env[R]
     const doc = { b: rec, st: { w: { st: out.st } }, sync: { st: env.st, fp: env.fp } }
@@ -371,12 +400,18 @@ export function makeWorld(opt = {}) {
     }
     const cur = w.rec ?? p
     const f = {}
+    // (v2.26.0 knows no companion: a field it takes is the record's field spread, the old holder's companion
+    // - and its holder id - left beside the new holder)
+    const kept = (q) => ({
+      ...(q.c !== undefined ? { c: q.c } : {}),
+      ...(q.cid !== undefined ? { cid: q.cid } : {}),
+    })
     for (const fl of FIELDS)
       f[fl] =
         v[fl] > p.f[fl].v
-          ? { v: v[fl], id }
+          ? { ...kept(cur.f[fl]), v: v[fl], id }
           : cur.f[fl].id === id
-            ? { v: Math.max(p.f[fl].v, v[fl]), id }
+            ? { ...kept(cur.f[fl]), v: Math.max(p.f[fl].v, v[fl]), id }
             : p.f[fl]
     if (FIELDS.every((fl) => f[fl].id === null || f[fl].v === 0)) return null
     return w.rec ? { ...clone(w.rec), f } : { f }
@@ -547,7 +582,7 @@ export function makeWorld(opt = {}) {
     },
     final: () => {
       const doc = W.dev.get('doc') ? JSON.parse(W.dev.get('doc')) : null
-      return doc ? scopeRec(doc.b, doc) : null
+      return doc ? scopeRec(believed(doc.b), doc) : null
     },
     fpRec,
   }

@@ -2,6 +2,7 @@ import type { RecordSpec, Rec, FV, RecOp } from './syncRecords.js'
 import { scopedRoundId, COUNTER_ROUND_ID, recordTag } from './syncRecords.js'
 import { isRecord } from './json.js'
 import { roundCentis } from '../lib/modeFormat.js'
+import { companionOf, companionHolderKey } from '../engine/blitzBest.js'
 
 // store/bestRecords.ts — THE FOUR BEST MAPS AS THE RECORDS' MERGE SEES THEM (store/syncRecords): what a
 // field of each map's record is, which of two values is better, and how a record on disk turns into
@@ -23,11 +24,19 @@ import { roundCentis } from '../lib/modeFormat.js'
 //     that: a scoped id of its own, the same in every window, so the merge can keep it, compare it,
 //     and take it back like any round.
 // ★ WRITING ONE (`fromRec`): the app's own shape, plus the tag `w` that names its values (recordTag).
+// ★ A COMPANION IS TIED TO ITS HOLDER (v5, 4.1; the review lane's (c)). A new build writes the holder's id
+// beside each companion (`scoreStreakOf` beside `scoreStreak`, and so on); a reader believes a companion
+// only when that id is the field's holder id. v2.26.0 SPREADS a record when a round beats a field
+// ({ ...cur, score, scoreRoundId }), keeping the old holder's companion and its id beside the new holder:
+// the ids differ, and the companion is unknown (the screen shows a dash) rather than another round's. A
+// record with no such id (an older build's fresh literal) is believed as written.
+// (engine/blitzBest's companionOf: the one rule, read here and by the screen's reader, engine/bestPool.)
 
 export type BestMap = 'blitzBest' | 'suddenBest' | 'suddenAmBest' | 'aoxBest'
 export const BEST_MAPS: readonly BestMap[] = ['blitzBest', 'suddenBest', 'suddenAmBest', 'aoxBest']
 
 type FieldOf = { key: string; comp: string | null; holder: string }
+
 const higher: RecordSpec['better'] = (a, b) => (b ?? 0) > (a ?? 0)
 const HIGHER = (fields: readonly string[]): RecordSpec => ({
   fields,
@@ -90,7 +99,7 @@ export function toRec(map: BestMap, disk: unknown, load: string, slot: string): 
         : raw < COUNTER_ROUND_ID
           ? scopedRoundId(load, raw)
           : raw
-    f[fd.key] = { v, ...(fd.comp ? { c: num(disk[fd.comp]) } : {}), id }
+    f[fd.key] = { v, ...(fd.comp ? { c: companionOf(disk, fd.comp, fd.holder) } : {}), id }
   }
   // (a pass-through literal a new window wrote carries its own rounds as ops: applied exactly)
   const ops = Array.isArray(disk.ops) ? (disk.ops as RecOp[]) : undefined
@@ -98,11 +107,13 @@ export function toRec(map: BestMap, disk: unknown, load: string, slot: string): 
 }
 
 /** A record in field form as the app stores it (tagged: with the tag naming its values), or undefined
- *  for one that holds nothing. */
+ *  for one that holds nothing. `inDoc`: as the DOC holds it - each companion beside its holder's id, for
+ *  a reader to believe it by (the store's own copy is what the doc's reader made of it: believed already). */
 export function fromRec(
   map: BestMap,
   rec: Rec | null,
   tagged: boolean,
+  inDoc = false,
 ): Record<string, unknown> | undefined {
   if (!rec) return undefined
   const { spec, fields } = MAPS[map]
@@ -113,6 +124,8 @@ export function fromRec(
     out[fd.key] = spec.present(q.v) ? q.v : spec.empty
     if (fd.comp) out[fd.comp] = spec.present(q.v) ? (q.c ?? null) : null
     out[fd.holder] = spec.present(q.v) ? q.id : null
+    // (the companion's holder, beside it: a reader believes it only for that round)
+    if (fd.comp && inDoc) out[companionHolderKey(fd.comp)] = out[fd.holder]
   }
   if (tagged) out.w = recordTag(out)
   return out

@@ -6,7 +6,7 @@
 // The model's header: node fuzz5.mjs [seeds] [steps] [configs] - random search over model5.mjs (one Best
 // record, two fields), judged against the rounds themselves: the record must be the best of the live rounds
 // the device ever showed, held by the first round to reach it.
-import { makeWorld, FIELDS } from './world5.js'
+import { makeWorld, FIELDS, OTHER } from './world5.js'
 function rng(seed) {
   let a = seed >>> 0
   return () => {
@@ -142,7 +142,24 @@ export function judge5(w) {
   }
   for (const y of w.W.wins)
     if (y.kind === 'N' && !y.closed && w.fpRec(y.mem()) !== w.fpRec(f)) r.diverged++
-  r.bad = r.wrongValue + r.wrongHolder + r.deadHolder + r.diverged
+  // (v5) G13: a field's COMPANION is its holder's - one of the values that round's other field ever had -
+  // or unknown (null); never another round's
+  if (f)
+    for (const fl of FIELDS) {
+      const e = f.f[fl]
+      if (e.id === null || e.c === undefined || e.c === null) {
+        if (e.id !== null && e.c === null) r.companionUnknown = (r.companionUnknown ?? 0) + 1
+        continue
+      }
+      const Rr = rounds.get(e.id)
+      const ok =
+        !!Rr && [...(Rr.vals ?? []), Rr.v, Rr.saved ?? Rr.v].some((v) => v && v[OTHER[fl]] === e.c)
+      if (!ok) {
+        r.wrongCompanion = (r.wrongCompanion ?? 0) + 1
+        if (process.env.WHY) console.log('BAD companion', fl, JSON.stringify(e))
+      }
+    }
+  r.bad = r.wrongValue + r.wrongHolder + r.deadHolder + r.diverged + (r.wrongCompanion ?? 0)
   return r
 }
 export function run(seed, cfg, steps = 300) {
@@ -257,5 +274,17 @@ export const ablations = [
   [
     '1 old page that SPREADS a changed record, the model’s BARE tag (part2-issues #1)',
     { ...base, olds: 1, resets: true, fullReset: true, opt: { spreadOld: true } },
+  ],
+  // (v5, the review lane's (c)) a spreading page keeps the old holder's companion beside a new holder: with
+  // no holder id written beside each companion (the v4 form), a reader shows another round's number
+  [
+    '1 old page that SPREADS a changed record, WITHOUT the holder id beside each companion (the v4 form)',
+    {
+      ...base,
+      olds: 1,
+      resets: true,
+      fullReset: true,
+      opt: { spreadOld: true, selfTag: true, cid: false },
+    },
   ],
 ]

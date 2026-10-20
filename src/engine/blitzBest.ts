@@ -35,14 +35,33 @@
 export interface BlitzBest {
   score: number
   scoreStreak: number | null // the Best Score round's best streak (null = not recorded)
+  scoreStreakOf?: number | null // the round that streak is of (companionOf)
   scoreRoundId: number | null
   streak: number
   streakScore: number | null // the Best Streak round's score (null = not recorded)
+  streakScoreOf?: number | null // the round that score is of (companionOf)
   streakRoundId: number | null
 }
 // A companion as a saved record holds it: a number, or — for a record from before Round 26, or one an
 // older build rewrote — nothing, which is "not recorded".
 export const companion = (v: unknown): number | null => (typeof v === 'number' ? v : null)
+// ★ A COMPANION IS ITS HOLDER'S, OR UNKNOWN (design v5, 4.1 - the review lane's (c)). This build writes,
+// beside each companion, the id of the round it belongs to (`scoreStreakOf` beside `scoreStreak`, …). A
+// companion is believed only when that id is the field's holder: v2.26.0 SPREADS a record when one of
+// its rounds beats a field ({ ...cur, score, scoreRoundId }), and so keeps the OLD holder's companion -
+// and its id - beside the new holder. Read as written, that is another round's number under this one's
+// Best; read through here, it is unknown, and the screen shows a dash. A record with no such id (an
+// older build's own fresh record) is believed as written.
+/** The stored field naming whose companion `comp` is. */
+export const companionHolderKey = (comp: string): string => `${comp}Of`
+/** A stored record's companion `comp` of the field its `holder` holds - null when it is not recorded, or
+ *  the id written beside it names another round. */
+export function companionOf(rec: object, comp: string, holder: string): number | null {
+  const r = rec as Readonly<Record<string, unknown>>
+  const c = companion(r[comp])
+  const of = r[companionHolderKey(comp)]
+  return c === null || of === undefined || of === null || of === r[holder] ? c : null
+}
 export interface SuddenBest {
   score: number
   roundId: number | null
