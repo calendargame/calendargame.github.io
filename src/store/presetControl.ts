@@ -12,6 +12,7 @@ import {
   PRESET_STORE_KEYS,
   FIRST_PRESET_ID,
   presetIdOfSuffix,
+  goneIds,
 } from './presets.js'
 import type { Preset, PresetRegistryValues } from './presets.js'
 import { discardSessionStats, readSessionStats, dataIdOf, bestsIdOf } from './amnesic.js'
@@ -310,14 +311,18 @@ const reloadPresetStores = () => {
 // Swallows a refusing localStorage: there is nothing to delete in a browser that has stored nothing.
 // Through store/storageHealth's removeItem, so a save the device REFUSED for one of these keys is
 // forgotten with the key — a deleted preset must not be written back out when room appears.
+// (the keys themselves, in one area: the five docs, the keys the door keeps beside each, the chunks)
+function removePresetKeys(area: Storage, presetId: number): void {
+  for (const baseKey of Object.values(PRESET_STORE_KEYS)) {
+    const docKey = presetKey(baseKey, presetId)
+    if (baseKey !== PRESET_STORE_KEYS.progress) removeItem(area, docKey)
+    for (const key of syncKeysOf(docKey)) removeItem(area, key)
+  }
+  removeProgressCopy({ area, presetId })
+}
 const clearPresetStorage = (presetId: number) => {
   try {
-    for (const baseKey of Object.values(PRESET_STORE_KEYS)) {
-      const docKey = presetKey(baseKey, presetId)
-      if (baseKey !== PRESET_STORE_KEYS.progress) removeItem(window.localStorage, docKey)
-      for (const key of syncKeysOf(docKey)) removeItem(window.localStorage, key)
-    }
-    removeProgressCopy({ area: window.localStorage, presetId })
+    removePresetKeys(window.localStorage, presetId)
   } catch {
     /* storage refused — nothing was ever written, so nothing is left behind */
   }
@@ -778,15 +783,26 @@ export const commitSessionPreset = (): void => recordSessionPreset(usePresets.ge
  * held back on a full device is a list the device does not show, which may name the preset.
  */
 export function sweepDeletedPresetLeftovers(): void {
+  const stored = readStoredRegistry()
   const known = new Set(
-    [...usePresets.getState().presets, ...(readStoredRegistry()?.presets ?? [])].map((p) => p.id),
+    [...usePresets.getState().presets, ...(stored?.presets ?? [])].map((p) => p.id),
   )
+  // ★ ONLY AN ID ALREADY HANDED OUT ON THE DEVICE (Round 26's review lane). One at or above the stored
+  // next id may be another window's new preset whose list save that device is holding (a full device):
+  // its Year Range pin can land while its list cannot, and a sweep here took it.
+  const next = Math.max(stored?.nextId ?? 0, usePresets.getState().nextId)
+  const handedOut = (id: number) => id < next
   try {
     const area = window.localStorage
     sweepAbandonedTimes(area, (id) => known.has(id))
     if (isHolding(area)) return
+    // ★ A PRESET A NEW WINDOW DELETED (its `gone` record, design 8.1) that an older tab still on it has
+    // written again: its keys go, every one - the id is never used again, so nothing can be another's.
+    for (const id of goneIds())
+      if (!known.has(id) && presetStorageInUse(id)) removePresetKeys(area, id)
     const base = PRESET_STORE_KEYS.julianRange
     const orphans: string[] = []
+    const syncOrphans: [string, string][] = []
     // (which preset a per-preset doc key is - null for any other key)
     const presetOf = (docKey: string): number | null => {
       for (const b of Object.values(PRESET_STORE_KEYS))
@@ -800,15 +816,19 @@ export function sweepDeletedPresetLeftovers(): void {
       const key = area.key(i)
       if (!key) continue
       const id = key.startsWith(base) ? presetIdOfSuffix(key.slice(base.length)) : null
-      if (id !== null && !known.has(id)) orphans.push(key)
+      if (id !== null && !known.has(id) && handedOut(id)) orphans.push(key)
       // ★ …AND THE SYNC KEYS AN OLDER BUILD'S DELETE LEAVES BEHIND (design 8.4): it removes the four doc
       // keys it knows and nothing of this build's. Such a key goes when its preset is in neither registry
       // AND its doc is gone from the device (a doc still there is a preset's, whatever a list says).
       const docKey = docKeyOfSyncKey(key)
       const owner = docKey === null ? null : presetOf(docKey)
-      if (docKey !== null && owner !== null && !known.has(owner) && area.getItem(docKey) === null)
-        orphans.push(key)
+      if (docKey !== null && owner !== null && !known.has(owner) && handedOut(owner))
+        syncOrphans.push([key, docKey])
     }
+    // (…its doc gone - or going in this very sweep: a Year Range doc swept above takes its sync key with
+    // it now, not at the next cold open)
+    for (const [key, docKey] of syncOrphans)
+      if (area.getItem(docKey) === null || orphans.includes(docKey)) orphans.push(key)
     for (const key of orphans) removeItem(area, key)
   } catch {
     /* storage refused — there is nothing to sweep */

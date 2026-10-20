@@ -1068,6 +1068,7 @@ describe('deleting a preset', () => {
     const listed = Object.keys(localStorage).filter((k) =>
       docKeyOfSyncKey(k)?.endsWith(`~p${p2.id}`),
     )
+    usePresets.setState({ nextId: 100 }) // (77 and 78: ids the device has handed out)
     sweepDeletedPresetLeftovers()
     expect(localStorage.getItem(syncKeyOf(gone))).toBeNull()
     expect(localStorage.getItem(recordsKeyOf(presetKey(PRESET_STORE_KEYS.progress, 77)))).toBeNull()
@@ -1075,6 +1076,36 @@ describe('deleting a preset', () => {
       localStorage.getItem(syncKeyOf(presetKey(PRESET_STORE_KEYS.modePrefs, 78))),
     ).not.toBeNull()
     for (const k of listed) expect(localStorage.getItem(k), k).not.toBeNull()
+  })
+
+  // (the review lane's LOWs) a Year Range left by an older build's delete takes its sync key with it in
+  // the same sweep, not at the next cold open; and an older tab still on a preset a new window deleted,
+  // writing its docs again, has them swept - its `gone` record says it is deleted for good.
+  it('one sweep takes a deleted preset’s Year Range and its sync key; a deleted preset’s docs an older tab wrote again go too', () => {
+    const p2 = createPreset()
+    const p3 = createPreset()
+    switchPreset(p3.id)
+    playOnThisPreset()
+    switchPreset(1)
+    deletePreset(p3.id) // (a new window's delete: its `gone` record)
+    // an older tab still on preset 3 writes its settings again; an older build's delete of preset 2 left
+    // its Year Range and that doc's sync key
+    localStorage.setItem(presetKey(PRESET_STORE_KEYS.settings, p3.id), '{"state":{},"version":4}')
+    const range2 = presetKey(PRESET_STORE_KEYS.julianRange, p2.id)
+    localStorage.setItem(range2, '{"state":{"julianMinY":1,"julianMaxY":11582},"version":1}')
+    localStorage.setItem(syncKeyOf(range2), '{}')
+    usePresets.setState({ presets: usePresets.getState().presets.filter((q) => q.id !== p2.id) })
+    localStorage.setItem(
+      'cg-presets-v1',
+      JSON.stringify({
+        state: { ...usePresets.getState(), presets: usePresets.getState().presets },
+        version: 1,
+      }),
+    )
+    sweepDeletedPresetLeftovers()
+    expect(localStorage.getItem(range2)).toBeNull()
+    expect(localStorage.getItem(syncKeyOf(range2))).toBeNull()
+    expect(localStorage.getItem(presetKey(PRESET_STORE_KEYS.settings, p3.id))).toBeNull()
   })
 
   it('refuses the last preset, and an id that does not exist', () => {

@@ -79,6 +79,27 @@ describe('the preset list in two windows (the real door)', () => {
     expect(a.ids()).toEqual([1, p3])
   })
 
+  // (the review lane's LOW) a deleted preset's name and older-build flag leave the doc and the key with it -
+  // they were kept, and stamped afresh by every window that wrote the list again
+  it('a deleted preset’s name and flag go with it; only its records of who made and who deleted it stay', () => {
+    vi.useFakeTimers()
+    const W = world()
+    const a = W.open('a')
+    const p2 = a.create('Gone')
+    W.deliver()
+    a.remove(p2)
+    W.deliver()
+    a.rename(1, 'Kept')
+    W.deliver()
+    const key = W.storage.getItem('cg-sync-v1|' + KEY)
+    const doc = W.storage.getItem(KEY)
+    for (const text of [key, doc]) {
+      expect(text).not.toContain(`"name:${p2}"`)
+      expect(text).not.toContain(`"amn:${p2}"`)
+    }
+    expect(key).toContain(`"gone:${p2}"`)
+  })
+
   // R16-registry (design 2.8): a delete nothing proves - the newest preset, with none made after it by a
   // new window - may be a tab that never loaded it, so it does not stick.
   it('an OLDER tab’s delete of the newest preset, which nothing proves it knew, does not stick (R16-registry)', () => {

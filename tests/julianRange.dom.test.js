@@ -185,13 +185,23 @@ describe('one of the preset’s keys', () => {
     const p = createPreset()
     switchPreset(p.id)
     switchPreset(1)
+    const gone = createPreset() // (an id handed out, then deleted - its pair left behind, as an older build leaves it)
+    deletePreset(gone.id)
     localStorage.setItem(
-      presetKey(KEY, 99),
+      presetKey(KEY, gone.id),
+      JSON.stringify({ state: JULIAN_RANGE_DEFAULTS, version: 1 }),
+    )
+    // (and one for an id the device has not handed out yet: another window's new preset, whose list
+    // save the device may be holding - Round 26's review lane)
+    const next = usePresets.getState().nextId
+    localStorage.setItem(
+      presetKey(KEY, next),
       JSON.stringify({ state: JULIAN_RANGE_DEFAULTS, version: 1 }),
     )
     sweepDeletedPresetLeftovers()
-    expect(saved(99)).toBe(null)
+    expect(saved(gone.id)).toBe(null)
     expect(saved(p.id)).not.toBe(null) // a listed preset's stays
+    expect(saved(next)).not.toBe(null) // …and so does a pair for an id not handed out
   })
 })
 

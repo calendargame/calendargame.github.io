@@ -689,6 +689,14 @@ export function applyRegistryIfRoom(next: PresetRegistryValues): boolean {
   return true
 }
 
+/** The presets a new window deleted (their `gone` records, design 8.1) - ids never used again. */
+export function goneIds(): number[] {
+  const sl = REGISTRY_DOOR.slices() ?? {}
+  return Object.keys(sl)
+    .filter((x) => /^gone:\d+$/.test(x) && sl[x] === true)
+    .map(idOfSlice)
+}
+
 /** Merge the registry with the device NOW — before a preset id is allocated (design 8.5). */
 export const syncRegistry = (): void => REGISTRY_DOOR.syncNow()
 
