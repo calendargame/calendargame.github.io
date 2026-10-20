@@ -49,8 +49,10 @@ import { cyrb53 } from './syncStamp.js'
 // ★ WHAT MAY DELETE A CHUNK — four cases, each by exact key name, and each bound to the storage AREA
 // being written (an Amnesic preset's session copy lives in sessionStorage under the same names, and
 // nothing here may reach across to the permanent one):
-//   a. A RESET SEEN BY THIS PAGE: a silo this page last saved with times is now saved empty. The
-//      chunk keys this page knew for it go, once that main save is on the device.
+//   a. A RESET SEEN BY THIS PAGE: a silo this page last saved with times is now saved empty. EVERY
+//      chunk key of that silo on the device goes, once that main save is on the device - the ones this
+//      page knew, and the ones a deep Override re-sealed away or another tab left (Round 26's review
+//      lane: only the known ones went, and the rest stayed for ever).
 //   b. LEFT BEHIND, SEEN AT LOAD: a silo loads with no `sealed`, yet chunk keys exist for it (an
 //      older build reset it, or saved a complete copy over a sealed one). The exact names found are
 //      remembered, and at the next main save that lands each is deleted — UNLESS it still spells the
@@ -190,9 +192,20 @@ export function baselineTrimmedTimes(stats: Record<string, unknown>): Record<str
 // read from one text are kept beside it and handed back while the key still holds exactly that text -
 // a window that reads the device on every notice (store/syncedDoc) does not parse 400 chunks each time.
 const chunkCache = new WeakMap<Storage, Map<string, { text: string; times: number[] }>>()
+// A chunk key removed: through the storage door, and out of the read cache with it (the cache keeps
+// only what is on the device - Round 26's review lane: it kept every chunk ever read).
+const removeChunk = (area: Storage, key: string): void => {
+  removeItem(area, key)
+  chunkCache.get(area)?.delete(key)
+}
+/** How many chunks' times the read cache holds for `area` (exported for tests). */
+export const chunksCachedIn = (area: Storage): number => chunkCache.get(area)?.size ?? 0
 function readChunk(area: Storage, key: string, id: string): number[] | null {
   const text = area.getItem(key)
-  if (text === null) return null
+  if (text === null) {
+    chunkCache.get(area)?.delete(key) // (gone: nothing of it kept)
+    return null
+  }
   let cache = chunkCache.get(area)
   if (!cache) chunkCache.set(area, (cache = new Map()))
   const known = cache.get(key)
@@ -497,9 +510,10 @@ export function createProgressCodec<S>() {
       saved.set(name, times)
       const was = b.silos.get(name)
       const keys = was?.keys ?? new Set<string>()
-      // A RESET SEEN HERE (rule a): its chunks go once this save is on the device.
+      // A RESET SEEN HERE (rule a): its chunks go once this save is on the device - every one of them.
       if (was && was.ref.length > 0 && times.length === 0) {
         for (const key of keys) b.doomed.set(key, name)
+        for (const key of keysUnder(b.area, `${b.family}${name}:`)) b.doomed.set(key, name)
         keys.clear()
       }
       const target = sealedChunks(times.length)
@@ -538,7 +552,7 @@ export function createProgressCodec<S>() {
         b.heard = changesElsewhere(b.area)
         if (!b.landed || b.doomed.size === 0) return
         for (const [key, silo] of b.doomed)
-          if (!stillSpells(b, key, saved.get(silo) ?? [])) removeItem(b.area, key)
+          if (!stillSpells(b, key, saved.get(silo) ?? [])) removeChunk(b.area, key)
         b.doomed.clear()
         storageSpaceFreed()
       },
@@ -554,7 +568,7 @@ export function createProgressCodec<S>() {
  */
 export function removeProgressCopy(copy: ProgressCopy): void {
   removeItem(copy.area, mainKeyOf(copy.presetId))
-  for (const key of keysUnder(copy.area, familyOf(copy.presetId))) removeItem(copy.area, key)
+  for (const key of keysUnder(copy.area, familyOf(copy.presetId))) removeChunk(copy.area, key)
 }
 
 /** Does this preset have chunk keys in this area? (store/presetControl, allocating a preset id.) */
@@ -575,7 +589,7 @@ export function sweepAbandonedTimes(area: Storage, exists: (presetId: number) =>
     if (!abandoned.has(presetId))
       abandoned.set(presetId, !exists(presetId) && readItem(area, mainKeyOf(presetId)) === null)
     if (!abandoned.get(presetId)) continue
-    removeItem(area, key)
+    removeChunk(area, key)
     freed = true
   }
   if (freed) storageSpaceFreed()

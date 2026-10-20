@@ -99,6 +99,7 @@ function world(seed, { seals, older, deletes, stale = false }) {
   const staleSaved = new Set() // …and was made on a stale read, naming chunks that had just gone
   let removals = 0 // chunk keys deleted so far
   let strands = 0
+  let backs = 0
   const pages = []
   const trace = [] // what each step did, for a failure's message
 
@@ -337,6 +338,17 @@ function world(seed, { seals, older, deletes, stale = false }) {
         wholeChunksLost(expected.get(key), means.state)
         expected.set(key, means.state)
       }
+      // BACK, after the save landed: chunks its text names that were gone when it landed (a strand) are
+      // there again - another page sealed the same times under the same names (a chunk's name is the
+      // hash of its text at its position, so what comes back is what the save named). Whole chunks,
+      // every count untouched, `timesLost` down by exactly them; never a chunk GONE (that needs a main
+      // write, judged where it lands). Reached since a Reset takes every chunk key of its mode
+      // (store/progressStorage's rule a), not only the ones its page knew.
+      if (!isDeepStrictEqual(means.state, expected.get(key))) {
+        expect(wholeChunksLost(expected.get(key), means.state)).toBe(false)
+        backs++
+        expected.set(key, means.state)
+      }
       expect(means.state).toEqual(expected.get(key))
       for (const make of [createReaderCodec, createProgressCodec]) {
         const loaded = make().load({
@@ -388,7 +400,12 @@ function world(seed, { seals, older, deletes, stale = false }) {
         e.message += `\nlast steps (of ${trace.length}):\n  ${trace.slice(-14).join('\n  ')}`
         throw e
       }
-      return { strands, removals, chunks: local.chunkKeys(1).length + local.chunkKeys(12).length }
+      return {
+        strands,
+        backs,
+        removals,
+        chunks: local.chunkKeys(1).length + local.chunkKeys(12).length,
+      }
     },
   }
 }
