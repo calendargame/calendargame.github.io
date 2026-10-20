@@ -20,6 +20,7 @@
 import { execFileSync, execSync } from 'node:child_process'
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { ROOT, builtBase } from './builtSite.js'
 
 export const OLD_SITE = { version: 'v2.29.0', commit: 'a54b9f18ec040631eaa2682d8d382eb4e22d8cef' }
@@ -34,17 +35,20 @@ export const oldSiteDir = () => join(CACHE, `${OLD_SITE.version}${builtBase().re
 export function ensureOldSite() {
   const out = oldSiteDir()
   if (existsSync(join(out, 'index.html'))) return out
-  const tree = join(CACHE, 'tree')
+  // ★ THE WORKTREE IS MADE IN THE SYSTEM'S TEMP FOLDER, AND REMOVED BY NODE, NOT BY GIT (Round 26
+  // review). Under the project folder its node_modules ran past Windows' path limit, and `git
+  // worktree remove` — Git for Windows without long paths switched on — failed on the first run with
+  // "Filename too long", leaving the copy behind. A short fixed name in the temp folder keeps the
+  // paths short, and Node's own removal (which handles long paths on Windows) takes the copy away
+  // whatever its depth; `git worktree prune` then forgets it. The same name every time, so a copy a
+  // stopped build left behind is found and removed by the next one.
+  const tree = join(tmpdir(), 'calendar-game-lane-old')
   const git = (...args) => execFileSync('git', args, { cwd: ROOT, stdio: 'inherit' })
-  // (a worktree a stopped build left behind)
-  if (existsSync(tree)) {
-    try {
-      git('worktree', 'remove', '--force', tree)
-    } catch {
-      rmSync(tree, { recursive: true, force: true })
-    }
+  const removeTree = () => {
+    rmSync(tree, { recursive: true, force: true, maxRetries: 5 })
+    git('worktree', 'prune')
   }
-  git('worktree', 'prune')
+  removeTree()
   console.log(`browser lane: building ${OLD_SITE.version} for ${builtBase()}${OLD_PATH} (once)`)
   git('worktree', 'add', '--detach', tree, OLD_SITE.commit)
   try {
@@ -61,7 +65,7 @@ export function ensureOldSite() {
       { cwd: tree, stdio: 'inherit' },
     )
   } finally {
-    git('worktree', 'remove', '--force', tree)
+    removeTree()
   }
   if (!existsSync(join(out, 'index.html')))
     throw new Error(`browser lane: the ${OLD_SITE.version} build left no index.html in ${out}`)
