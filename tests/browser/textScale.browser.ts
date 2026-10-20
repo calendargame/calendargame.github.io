@@ -1,5 +1,5 @@
 // TEXT THAT USED TO BE FIXED PIXELS, NOW ON THE ROOT'S SCALE (Round 26, Q9): How to Play's body,
-// small print, ▼, and <kbd> chips, and the ⚙ menu's two heading tiers. Each is written as N rem ÷
+// small print, ▼, and <kbd> chips, the ⚙ menu's two heading tiers, and the card's number. Each is written as N rem ÷
 // 16.458 — N px exactly at the 16.458px root of a 390×844 phone, where it was tuned, and the same
 // share of the root everywhere else.
 //   • At 390×844 each is the size it was, to the pixel; at a phone on its side (a 12px root) each is
@@ -57,6 +57,13 @@ test('each converted size is its old pixel size on a standard phone, and the sam
     ],
     ['How to Play ▼', () => guide.locator('.guide-head > span:last-child').first(), 7],
     ['a <kbd> chip', () => guide.locator('kbd').first(), 11],
+    // The card's number ("Q12"), read off the room its corner keeps — set in the number's own type
+    // (components/CardNumber's sizer), and there whether or not the number is showing.
+    [
+      'the card number',
+      () => page.locator('.date-line').first().locator('xpath=preceding-sibling::span[1]'),
+      11,
+    ],
   ]
   const card = page.locator('#settings-popover')
   const panelSites: typeof sites = [

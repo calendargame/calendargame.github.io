@@ -53,12 +53,7 @@ const STILL_IN_PIXELS = [
   {
     file: 'src/components/primitives.tsx',
     sizes: { 'text-[8px]': 1 },
-    why: 'the ★ beside a new Best: never larger than its text at any root. (The <kbd> chip and the ⚙ menu`s two heading tiers left this list in Round 26, onto the root`s scale pinned to a standard phone — as did How to Play`s body, small print, and ▼.)',
-  },
-  {
-    file: 'src/components/CardNumber.tsx',
-    sizes: { 'text-[11px]': 1 },
-    why: 'the card`s number, alone in its corner: there is no line beside it for it to outgrow',
+    why: 'the ★ beside a new Best: never larger than its text at any root. (The <kbd> chip and the ⚙ menu`s two heading tiers left this list in Round 26, onto the root`s scale pinned to a standard phone — as did How to Play`s body, small print, and ▼, and the card`s number.)',
   },
 ]
 

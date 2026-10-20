@@ -14,8 +14,12 @@
 import type { GameState } from '../engine/gameReducer.js'
 import { cardNumber } from '../engine/gameReducer.js'
 
-// The number's type, shared with its sizer so the room kept for it is set exactly as it is.
-const CARD_NUMBER_TYPE = 'text-[11px] tabular-nums'
+// The number's type, shared with its sizer so the room kept for it is set exactly as it is. On the
+// root's scale, pinned to a standard phone (Round 26 review): 11px at the 16.458px root of a 390×844
+// iPhone, where it was tuned, and the same share of the root everywhere else — it was a fixed 11px,
+// so on a small screen's 12px root it stood larger than the text round the card, and on a large one
+// smaller. (tests/textSizeGuard: no text size in pixels.)
+const CARD_NUMBER_TYPE = 'text-[calc(11rem/16.458)] tabular-nums'
 const CARD_NUMBER_CLASS = `absolute right-0 top-0 ${CARD_NUMBER_TYPE} text-(--tx-300-60)`
 
 // ★ THE CORNER IS KEPT FOR AS MANY DIGITS AS THE COUNT HAS NOW (the owner's ruling; components/DateLine
