@@ -315,17 +315,6 @@ const NOT_A_LIST = [
   },
   {
     file: 'src/components/GuidePage.tsx',
-    phrase: 'MoX mean and median, Blitz score and streak',
-    why: 'three bests, the first two each a PAIR; the list’s comma follows (“…, and Per Question sudden-death score”)',
-  },
-  {
-    file: 'src/components/GuidePage.tsx',
-    phrase:
-      'It stays in the History list for as long as the app is open, in every preset and after you leave Full',
-    why: '“in every preset and after you leave Full” is a pair; the comma after it joins a second sentence (“…, and it is gone when the app is really closed”)',
-  },
-  {
-    file: 'src/components/GuidePage.tsx',
     phrase:
       'MoX mean and median, Blitz score and streak (kept separately for Per Round and for Per Question with Allow Mistakes)',
     why: 'three bests, the first two each a PAIR; the list’s comma follows the bracket (“…, and Per Question sudden-death score”)',

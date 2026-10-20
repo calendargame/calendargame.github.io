@@ -1505,10 +1505,7 @@ export default function GuidePage({
         <p>
           Clears your stats, all-time bests, and question history for the current mode (Deduction
           only resets the current sub-type's), for the preset you are on. The other modes keep
-          theirs, and no other preset is touched. While the preset&apos;s Amnesic is on Stats Only
-          or Full, the stats on screen are that session&apos;s, and those are all it clears: your
-          saved stats are set aside behind the session and stay exactly as they were — the popup
-          says so. Details:
+          theirs, and no other preset is touched — whatever its Amnesic setting. Details:
         </p>
         <UL>
           <li>
@@ -1648,18 +1645,16 @@ export default function GuidePage({
             resets when you close the ⚙ menu) and leaving the mode while a run or round is still
             going. In {modeNames('classic', 'deduction', 'flash')} the history belongs to this visit
             and to its preset: a reload keeps it, every date&apos;s Override state included;
-            switching presets sets it aside and it is there when you switch back; and putting
-            Amnesic on Stats Only or Full sets yours aside and gives it back when Amnesic returns to
-            Off (the session&apos;s own is discarded with the rest of that session). After a very
-            long sitting — getting on for a thousand dates or more in one mode — only the most
-            recent of them may come back: about three thousand in Classic and Flash, about two
-            thousand in Deduction&apos;s Day and Year puzzles, and a little under a thousand in its
-            Month puzzle. And if several modes hold very long histories at once, the history of a
-            mode you are not in may not come back at all; the one you are in always does. Your
-            scores and the date numbers are unaffected either way. A MoX run or Blitz round that has{' '}
-            <i>ended</i> comes back the same ways, with every date&apos;s Override state — unless a
-            setting it was played under was changed in the meantime, in which case it is not brought
-            back (the bests it set are kept).
+            switching presets sets it aside and it is there when you switch back; and changing
+            Amnesic leaves it where it is. After a very long sitting — getting on for a thousand
+            dates or more in one mode — only the most recent of them may come back: about three
+            thousand in Classic and Flash, about two thousand in Deduction&apos;s Day and Year
+            puzzles, and a little under a thousand in its Month puzzle. And if several modes hold
+            very long histories at once, the history of a mode you are not in may not come back at
+            all; the one you are in always does. Your scores and the date numbers are unaffected
+            either way. A MoX run or Blitz round that has <i>ended</i> comes back the same ways,
+            with every date&apos;s Override state — unless a setting it was played under was changed
+            in the meantime, in which case it is not brought back (the bests it set are kept).
           </li>
         </UL>
         <p>Override in the run modes:</p>
@@ -1819,7 +1814,8 @@ export default function GuidePage({
           </b>{' '}
           It is shared by every preset — the same list, however many presets you have or whichever
           one you switch to — because a Lookup is a question you asked, not a record of how you did.
-          See <b>Saved Progress</b> below for what that means for Amnesic and for Full Reset.
+          See <b>Saved Progress</b> below for what that means for Full Reset; Amnesic never touches
+          it.
         </p>
         <Subhead>Switching</Subhead>
         <UL>
@@ -1832,8 +1828,8 @@ export default function GuidePage({
           <li>
             A preset&apos;s name is all its row shows, whatever its <b>Amnesic</b> setting (⚙ &rarr;
             Stats) — so a long name is not cut short to make room for a mark. What tells you a
-            preset forgets is on the screen once you are in it: the dashed outline round the numbers
-            that will not be kept (see <b>Stats &mdash; Amnesic</b>).
+            preset forgets is on the screen once you are in it: the dashed outline round what will
+            be forgotten when you close the app (see <b>Stats &mdash; Amnesic</b>).
           </li>
           <li>
             Switching re-reads every mode screen from the copy of your stats that is now live, so an
@@ -2094,11 +2090,11 @@ export default function GuidePage({
             Save Stats off, and it always dims the entire strip, never a single box.
           </li>
           <li>
-            <b>A dashed outline round the whole strip</b> — the numbers are being recorded, but only
-            for this visit: the preset is on Amnesic: Stats Only or Full, and the strip is gone when
-            the app closes. It always goes round the entire strip, never a single box, and in{' '}
+            <b>A dashed outline round the whole strip</b> — what you play now is counted, and
+            forgotten when you close the app: the preset is on Amnesic: Stats Only or Full. It
+            always goes round the entire strip, never a single box, and in{' '}
             {modeNames('aox', 'blitz')} on Full the one outline goes round the strip and the Best
-            readouts under it together, because neither will be kept. See{' '}
+            readouts under it together, because a Best set now is forgotten too. See{' '}
             <b>Stats &mdash; Amnesic</b>.
           </li>
         </UL>
@@ -2160,16 +2156,16 @@ export default function GuidePage({
         </p>
         <p>
           The same rule decides what happens to the date that was waiting when the screen itself
-          comes back — after a reload, a switch to another preset and back, or a spell on Amnesic:
-          Stats Only or Full. Your history returns exactly as it was. The waiting date returns too,
-          with one exception: if a time could be recorded for it when you come back — that
-          mode&apos;s timing is showing and Save Stats is on — and you had not yet answered the date
-          (no wrong answer, no Reveal, no Show Codes), a new date is drawn instead. Its timer starts
-          again when the screen comes back, so the old date would have recorded a time that left out
-          however long you had already looked at it. With timing hidden, or with Save Stats off, no
-          time is recorded, so the same date is waiting, even if you had not played anything yet.
-          (An unanswered date is also redrawn if a date setting was changed while you were away —
-          the same as changing it with the date on screen.)
+          comes back — after a reload, or a switch to another preset and back. Your history returns
+          exactly as it was. The waiting date returns too, with one exception: if a time could be
+          recorded for it when you come back — that mode&apos;s timing is showing and Save Stats is
+          on — and you had not yet answered the date (no wrong answer, no Reveal, no Show Codes), a
+          new date is drawn instead. Its timer starts again when the screen comes back, so the old
+          date would have recorded a time that left out however long you had already looked at it.
+          With timing hidden, or with Save Stats off, no time is recorded, so the same date is
+          waiting, even if you had not played anything yet. (An unanswered date is also redrawn if a
+          date setting was changed while you were away — the same as changing it with the date on
+          screen.)
         </p>
         <Subhead>The breakdown ({modeList('aox', 'blitz')})</Subhead>
         <p>
@@ -2518,9 +2514,9 @@ export default function GuidePage({
           Storage used line's two sr-only spans in components/SettingsPanel; the dots = WeekdayAnswer's per-dot aria-label; the stats strip's
           words = the sr-only spans StatPanel renders — "Off" beside an `off` cell's value,
           "Stats are not being saved" at the top of the strip when `dimmed` (round 16; both
-          pinned in tests/statBoxSignals.dom), and "These stats are for this session only" there
-          when the strip wears the dashed outline (with BestReadout's "Bests are for this session
-          only" beside it under Full; tests/sessionOnlyOutline.dom). ⚠ THAT BULLET NAMES EVERY ONE
+          pinned in tests/statBoxSignals.dom), and "What you play now is forgotten when you close
+          the app" there when the strip wears the dashed outline (with BestReadout's "Bests set now
+          are forgotten when you close the app" beside it under Full; tests/sessionOnlyOutline.dom). ⚠ THAT BULLET NAMES EVERY ONE
           ON PURPOSE: the round-16
           review found the dim was the one signal of the three with no non-visual form, while the
           blank had one, and the section may not claim coverage it only gives to some of them. If
@@ -2676,9 +2672,9 @@ export default function GuidePage({
             the blank. And a strip dimmed because Save Stats is off opens with &quot;Stats are not
             being saved&quot;, so the dashes in it aren&apos;t mistaken for a strip that simply has
             no numbers yet. A strip wearing the dashed outline (Amnesic on Stats Only or Full) opens
-            with &quot;These stats are for this session only&quot;, and on Full the Best readouts
-            under it open with &quot;Bests are for this session only&quot; — the outline itself is
-            only a line.
+            with &quot;What you play now is forgotten when you close the app&quot;, and on Full the
+            Best readouts under it open with &quot;Bests set now are forgotten when you close the
+            app&quot; — the outline itself is only a line.
           </li>
         </UL>
         <Subhead>Panels and popups</Subhead>
@@ -2734,10 +2730,10 @@ export default function GuidePage({
             rather than solid: the keyboard is there, and pressing will do nothing. Nothing inside
             an open list is outlined, in the top bar or in the menu: the soft grey box on an option
             is where the keyboard is, and the ring stays on the list&apos;s button. None of this is
-            the dashed outline Amnesic puts round numbers that won&apos;t be kept — that one is
-            dashed and fainter, marks numbers rather than a control, and has nothing to do with the
-            keyboard; where the stats strip is inside it and has the keyboard too, the solid ring
-            sits just inside the dashes.
+            the dashed outline Amnesic puts round what will be forgotten — that one is dashed and
+            fainter, marks numbers rather than a control, and has nothing to do with the keyboard;
+            where the stats strip is inside it and has the keyboard too, the solid ring sits just
+            inside the dashes.
           </li>
           <li>
             The ⚙ menu itself is not a dialog — it&apos;s a menu hanging off its button — but it
@@ -2908,7 +2904,7 @@ export default function GuidePage({
           Leap Years when your year range cannot use them; Julian Chance while Julian Calendar is
           off, when your range does not include 1582, and in Deduction; and the Year Range pair that
           is not in use. <b>Faded</b> — it cannot be used right now (Amnesic while Save Stats is
-          off, where a change would act at once on what is on screen).
+          off).
         </p>
         <p className="text-(--tx-300-70) text-[calc(12rem/16.458)]">
           Settings changes apply when you <b>close</b> the ⚙ menu, not on each adjustment — so
@@ -3385,45 +3381,59 @@ export default function GuidePage({
         durationMs={motionMs}
       >
         <Lead>
-          How much of what you play on this preset is kept: all of it (<b>Off</b>, the default),
-          only new Bests (<b>Stats Only</b>), or none of it (<b>Full</b>).
+          What happens to what you play on this preset when you close the app: all of it is kept (
+          <b>Off</b>, the default), only the new Bests (<b>Stats Only</b>), or none of it (
+          <b>Full</b>). Nothing changes while you play.
         </Lead>
-        <Subhead>The three values</Subhead>
+        <Subhead>While you play</Subhead>
+        <p>
+          Every answer counts and shows as usual, in every window you have the app open in: the
+          stats strip moves, a new Best is a Best, and other windows see it all. Changing Amnesic
+          never changes a number on the screen — only the dashed outline (below) comes or goes.
+        </p>
+        <Subhead>When you close the app</Subhead>
+        <p>
+          Closing the app means closing every window of it; a reload is not a close. Then whatever
+          you played on this preset since you last turned Amnesic on is forgotten:
+        </p>
         <UL>
           <li>
-            <b>Off</b> — everything is saved, as usual.
+            <b>Off</b> — nothing is forgotten.
           </li>
           <li>
-            <b>Stats Only</b> — for playing around without it counting. The stats strip starts from
-            zero and is thrown away when the app closes, in every mode: score, accuracy, streak
-            (both numbers — the best streak too), and every solve time. Your saved stats are set
-            aside, untouched, and are back when you return to Off. The <b>Bests</b> in{' '}
-            {modeNames('aox', 'blitz')} are the exception — they stay your real, saved ones. You see
-            them, you can beat them, and a new one is saved for good the moment you set it.
+            <b>Stats Only</b> — the stats are forgotten: score, accuracy, streak, best streak, and
+            solve times. Any new Best is kept.
           </li>
           <li>
-            <b>Full</b> — a guest mode. Hand the phone over, let someone play, and when the app
-            closes nothing they scored is kept: the stats strip and the Bests both start from zero,
-            and both are thrown away. Your own saved stats and Bests are set aside, untouched.
-            Nothing is deleted to make that happen — while a preset is on Full, nothing is written
-            to them at all.
+            <b>Full</b> — the stats, and any Best they set: the Best that stood before comes back,
+            exactly as it was.
           </li>
         </UL>
         <p>
-          Either way it sets apart how you <i>did</i>, never how the preset is set up: a setting
-          changed during a Stats Only or Full session stays changed afterward, for you as well (see{' '}
-          <b>What it keeps</b>).
+          What you played before turning it on is never touched, and only the setting at the moment
+          you close counts: set it back to Off before you close and everything is kept, and moving
+          between Stats Only and Full does not start the count again — it runs from when you turned
+          it on from Off, or from when the app was opened, whichever is later. Each preset is
+          forgotten by its own setting. The forgetting happens the next time the app opens, before
+          anything is shown, so you never see the forgotten numbers again. An Override of something
+          you played before turning Amnesic on is a correction, and it is kept.
+        </p>
+        <p>
+          Stats Only and Full differ only in {modeNames('aox', 'blitz')}, the modes with Bests; in{' '}
+          {modeNames('classic', 'deduction', 'flash')} they do the same. Want a clean slate for
+          someone else? Give them their own preset, or a duplicate: a copy starts with no stats and
+          is on the same Amnesic setting.
         </p>
         <Subhead>The dashed outline</Subhead>
         <p>
-          Whatever on the screen is not going to be kept sits inside one dashed outline, so you
-          never have to remember which value a preset is on:
+          Whatever on the screen will be forgotten when you close the app sits inside one dashed
+          outline, so you never have to remember which value a preset is on:
         </p>
         <UL>
           <li>
             On <b>Stats Only</b>, the outline goes round the stats strip, on every mode&apos;s
             screen. The Best readouts under it in {modeNames('aox', 'blitz')} are left outside it —
-            those are being kept.
+            a new Best is kept.
           </li>
           <li>
             On <b>Full</b>, one outline goes round the stats strip and the Best readouts together.
@@ -3434,117 +3444,45 @@ export default function GuidePage({
         </UL>
         <p>
           With Save Stats off the strip is dimmed instead, with no outline: nothing is being counted
-          at all then, so there are no numbers on it to call temporary. (On Full the outline is then
-          drawn round the Best readouts alone — they are still showing the session&apos;s Bests.)
-          The outline changes nothing else: every box stays exactly where it is and works exactly as
-          it did. Nothing is drawn beside a preset&apos;s name in the preset lists; see{' '}
-          <b>Accessibility</b> for what a screen reader says there instead.
+          at all then, so there are no numbers on it to mark. (On Full the outline is then drawn
+          round the Best readouts alone.) The outline changes nothing else: every box stays exactly
+          where it is and works exactly as it did. Nothing is drawn beside a preset&apos;s name in
+          the preset lists; see <b>Accessibility</b> for what a screen reader says there instead.
         </p>
-        <Subhead>What it forgets</Subhead>
+        <Subhead>What it never touches</Subhead>
         <UL>
           <li>
-            <b>On Stats Only and on Full</b> — score, accuracy, streak, and solve times: the whole
-            stats strip. And the question history you browse with Back and Forward in{' '}
-            {modeNames('classic', 'deduction', 'flash')} — the session&apos;s, that is. Your own is
-            set aside and is back when you return to Off.
+            Every ⚙ setting, theme included: a setting changed while Amnesic is on stays changed.
           </li>
-          <li>
-            <b>On Full only</b> — all-time bests: MoX mean and median, Blitz score and streak, and
-            Per Question sudden-death score. And any finished run or round on screen — the
-            guest&apos;s, that is. Your own is set aside and is back when you leave Full, except one
-            whose setup was changed in the meantime (see <b>Changing it</b>).
-          </li>
-        </UL>
-        <Subhead>What it keeps</Subhead>
-        <UL>
-          <li>Every ⚙ setting, theme included.</li>
           <li>
             Your per-mode setup — timers, run length, the Deduction sub-type, and the show / hide
             stat toggles.
           </li>
           <li>Your saved defaults.</li>
           <li>
-            On Stats Only, your Bests in {modeNames('aox', 'blitz')}, and any new one you set.
+            Lookup history, on every value: a lookup is a question you asked, not a stat, and the
+            list is shared by every preset (see <b>Presets</b> above).
           </li>
           <li>
-            Your saved stats, through a <b>Reset Stats</b>: on Stats Only or Full that button clears
-            the session&apos;s numbers — the ones on screen — and leaves the saved ones set aside as
-            they were. (Full Reset is the one that clears those too.)
+            <b>Reset Stats</b>, which clears the mode&apos;s stats and Bests for good on every
+            value, as it always does.
           </li>
           <li>
             The Amnesic value itself. It is one of this preset&apos;s settings: it is still what you
             left it on after the app is closed and opened again, until you change it. A preset you
             have never changed it on is on the value in its saved defaults (Off, if you have not
             saved any). With the app open in more than one window, changing it in one changes it in
-            the others too — and each window keeps a session of its own, so a guest&apos;s numbers
-            in one window are never in another&apos;s.
+            the others too.
           </li>
         </UL>
-        <p>
-          So the split is how you did, not how it is set up: a preset stays itself across a close,
-          and only forgets its numbers.
-        </p>
-        <Subhead>Lookup history</Subhead>
-        <p>
-          Lookup history is shared across every preset (see <b>Presets</b> above), so it is not this
-          preset&apos;s to forget or to keep. On Off and on Stats Only a lookup is saved exactly as
-          normal — a lookup is a question you asked, not a stat. On Full it still works exactly as
-          normal, but it is never written to that saved list — the same &quot;never written
-          down&quot; treatment the guest&apos;s stats get. It stays in the History list for as long
-          as the app is open, in every preset and after you leave Full, and it is gone when the app
-          is really closed: it never becomes a permanent entry.
-        </p>
-        <Subhead>Changing it</Subhead>
-        <p>
-          One rule covers every change between the three: whatever the session was holding is thrown
-          away, and nothing from it is ever added to your saved numbers. What you see afterward
-          depends only on the value you moved to:
-        </p>
-        <UL>
-          <li>
-            <b>To Off</b> — your saved stats and Bests are back exactly as they were, along with any
-            Best you set during a Stats Only session, which was saved as you set it.
-          </li>
-          <li>
-            <b>To Stats Only</b> — the stats strip starts from zero. The Bests shown are your saved
-            ones.
-          </li>
-          <li>
-            <b>To Full</b> — the stats strip and the Bests both start from zero. Everything saved is
-            set aside, untouched.
-          </li>
-        </UL>
-        <p>
-          That holds whichever value you came from. Moving between Stats Only and Full starts from
-          zero as well, so a guest never sees what you were doing and you never inherit what the
-          guest did. Nothing is ever merged: the one thing a session adds to your saved numbers is a
-          Best set on Stats Only.
-        </p>
-        <p>
-          Any change clears the five mode screens, including a MoX run or a Blitz round in progress
-          — the same discard switching preset makes, and for the same reason: every mode screen has
-          to be re-read from whichever copy of your numbers is now live. (This guide and the Lookup
-          page hold no stats, so they stay as they are.) A run or round that had already{' '}
-          <i>ended</i> belongs to the Bests it was played for, and only ever comes back with them.
-          Off and Stats Only share your saved Bests, so a finished run or round stays on screen when
-          you move between those two. Going to Full puts it aside, and it is back on screen, exactly
-          as you left it, when you leave Full — unless a setting it was played under was changed
-          while it was set aside, in which case it is not brought back (any Best it had set is
-          kept). A run or round finished on Full is discarded with the rest of that session when you
-          leave Full, and never touches your saved Bests.
-        </p>
         <Subhead>Two things it deliberately is not</Subhead>
         <UL>
           <li>
             <b>It is not Save Stats.</b> The switch above decides whether a question counts at all;
-            this one decides whether what was counted lasts. They are independent, so you can leave
-            Save Stats off inside an amnesic preset for throwaway questions and not even move the
-            session&apos;s count. With Save Stats off this row fades and locks — not because it has
-            nothing to do, but because changing it restarts what is on screen at once (every mode
-            starts over on the other side's stats and Bests, and a run in progress goes with it),
-            for a setting nothing is being recorded under. It keeps its value, and comes back the
-            moment you turn Save Stats on. Save Stats has no middle value of its own: Stats Only is
-            the way to keep Bests without keeping stats.
+            this one decides whether what was counted is still there after you close. They are
+            independent. With Save Stats off this row fades and locks, keeping its value, and comes
+            back the moment you turn Save Stats on. Save Stats has no middle value of its own: Stats
+            Only is the way to keep Bests without keeping stats.
           </li>
           <li>
             <b>It is not a setting for one visit.</b> It is saved with this preset&apos;s other ⚙
@@ -3552,29 +3490,23 @@ export default function GuidePage({
             snapshot; both Reset Settings and Full Reset restore it along with everything else they
             cover; and moving it away from what your defaults hold lights the ⚙ button&apos;s small
             violet &quot;modified&quot; line, just as changing a menu setting does. See{' '}
-            <b>Save Defaults, Reset Settings, and Full Reset</b> below. The one difference is what a
-            change does: every mode screen starts again on the other copy of your numbers (see{' '}
-            <b>Changing it</b>). That is why it moves only when it is picked — here, or in another
-            window.
+            <b>Save Defaults, Reset Settings, and Full Reset</b> below.
           </li>
         </UL>
         <Subhead>What &quot;closed&quot; honestly means</Subhead>
         <p>
-          A session&apos;s numbers last for the browsing session, and it is the browser that decides
-          when one ends. A refresh or a reload does not end it — come straight back and the session
-          is still going, with the preset still on Stats Only or Full, any finished round still on
-          screen, and the dates you played still there to browse back through. Closing the app does:
-          the preset is still on Stats Only or Full when it is opened again — that is a setting —
-          and a new session starts from zero.
+          The app counts a close when every window of it is gone. A refresh or a reload is not one,
+          and nor is opening the app in a second window beside the first, or switching to another
+          app and back: the count goes on, any finished round is still on screen, and the dates you
+          played are still there to browse back through. A tab your browser brings back with its
+          history (&quot;reopen closed tab&quot;) counts as a reload, so that close is seen at the
+          next real one instead — nothing is lost by it.
         </p>
         <p>
-          On a phone there is no way to tell that apart from the inside. An app the system shuts
-          down in the background — because you left it a while, or because something else needed the
-          memory — looks exactly like one you closed yourself, and takes the session&apos;s numbers
-          with it either way. That is true on iOS in particular, and no web app can promise
-          otherwise, so this one will not: treat an amnesic session as something you could lose at
-          any moment, because you can. (A Best set on Stats Only is the exception — it was saved the
-          moment you set it.)
+          On a phone there is no way to tell from the inside an app you closed yourself from one the
+          system shut down in the background — because you left it a while, or because something
+          else needed the memory. On iPhone in particular, the system closing the app in the
+          background counts as a close, and no web app can promise otherwise.
         </p>
       </GuideSection>
       <Divider label="Data" />
@@ -3638,13 +3570,10 @@ export default function GuidePage({
           — though never something with nothing in it, such as a mode you have not played — with
           whatever is left gathered into one last line, &quot;Everything else&quot;. Under it is
           what you can clear to get some room back: <b>Clear History</b> in Lookup, deleting a
-          preset you no longer use, and <b>Reset Stats</b> in a mode — that last one only while the
-          preset&apos;s Amnesic is <b>Off</b>. Shortening your preset names is suggested there too,
-          first in the list, but only when it would be enough on its own: the warning below is on,
-          and shortening them alone would end it. Otherwise names are not mentioned. On Stats Only
-          or Full, Reset Stats clears that session&apos;s numbers and leaves the saved solve times
-          where they are, so it makes no room; the popup says so there instead of offering it, and
-          says what does (set Amnesic to Off first, then Reset Stats).
+          preset you no longer use, and <b>Reset Stats</b> in a mode. Shortening your preset names
+          is suggested there too, first in the list, but only when it would be enough on its own:
+          the warning below is on, and shortening them alone would end it. Otherwise names are not
+          mentioned.
         </p>
         <p>
           How much room a device gives is something the app has to measure. It does that the first
@@ -3673,19 +3602,17 @@ export default function GuidePage({
         <p>
           If this device ever runs out of room for the app&apos;s saved data, a popup tells you so.
           You can keep playing — nothing already saved is lost, and your newest answers and changes
-          are held exactly where they belong, so switching presets and back, or changing Amnesic and
-          changing it back, still shows them. But they are held in that window only until you close
-          or reload it. Deleting a preset you no longer use makes room, and so does Reset Stats in a
-          mode whose history you don&apos;t need — while that preset&apos;s Amnesic is Off; on Stats
-          Only or Full the popup names <b>Clear History</b> instead, for the reason above. When
-          shortening your preset names alone would be enough, the popup says that first — the same
-          rule as the breakdown above. Everything that couldn&apos;t be saved is then saved by
-          itself, your answers added to whatever another window of the app saved meanwhile; a Reset
-          or a Clear History made while the device was full is cancelled if another window has
-          played since, an Override made then gives way if another window has answered in that mode
-          since, and a setting changed meanwhile gives way to one changed in another window since.
-          While anything is waiting like that, <b>Check for updates</b> won&apos;t reload the app,
-          because a reload would lose it.
+          are held exactly where they belong, so switching presets and back still shows them. But
+          they are held in that window only until you close or reload it. Deleting a preset you no
+          longer use makes room, and so does Reset Stats in a mode whose history you don&apos;t
+          need, or <b>Clear History</b> in Lookup. When shortening your preset names alone would be
+          enough, the popup says that first — the same rule as the breakdown above. Everything that
+          couldn&apos;t be saved is then saved by itself, your answers added to whatever another
+          window of the app saved meanwhile; a Reset or a Clear History made while the device was
+          full is cancelled if another window has played since, an Override made then gives way if
+          another window has answered in that mode since, and a setting changed meanwhile gives way
+          to one changed in another window since. While anything is waiting like that,{' '}
+          <b>Check for updates</b> won&apos;t reload the app, because a reload would lose it.
         </p>
         <p>
           <b>Lookup history</b> — the dates you&apos;ve looked up — is saved on this device too, the
@@ -3693,8 +3620,7 @@ export default function GuidePage({
           is <i>one</i> list, the same one no matter which preset is open, and it survives a preset
           switch and a preset delete alike &mdash; but not a <b>Full Reset</b>, which clears it from
           wherever you press it, exactly because there is only one copy to clear. See <b>Presets</b>{' '}
-          above for why, and <b>Stats &mdash; Amnesic</b> for the one thing that changes what it
-          does while a preset is on Full.
+          above for why. Amnesic never touches it.
         </p>
         <Subhead>With the app open in more than one window</Subhead>
         <p>
@@ -3746,19 +3672,18 @@ export default function GuidePage({
             <b>A timed run or round that has ended</b> but not yet been Reset. It is kept through a
             reload and as you switch presets and return, the same as the page above; a fresh close
             of the app or a manual Reset clears it, and so does a change to any setting it was
-            played under while it was set aside (a guest changing the setup while the preset is on
-            Amnesic: Full, say). A run or round still <i>in progress</i> is not kept: a reload, a
-            preset switch, a change of Amnesic, or leaving the mode ends it. Either way, only a Best
-            it already recorded persists.
+            played under while it was set aside (another window changing the setup, say). A run or
+            round still <i>in progress</i> is not kept: a reload, a preset switch, or leaving the
+            mode ends it. Either way, only a Best it already recorded persists (and on Amnesic:
+            Full, that one too goes when you close the app).
           </li>
           <li>
             <b>The dates you can browse back through</b> in{' '}
             {modeNames('classic', 'deduction', 'flash')}, each with how you answered it and whether
-            it is overridden — and Deduction&apos;s puzzle filters with them. A reload keeps them;
-            each preset keeps its own while you are in another; and yours are set aside while the
-            preset is on Amnesic: Stats Only or Full, and returned when it is back on Off. A Reset
-            or a Full Reset starts the history over, and deleting a preset takes its history with
-            it. The stats those dates earned are saved separately and are not affected.
+            it is overridden — and Deduction&apos;s puzzle filters with them. A reload keeps them,
+            and so does a change of Amnesic; each preset keeps its own while you are in another. A
+            Reset or a Full Reset starts the history over, and deleting a preset takes its history
+            with it. The stats those dates earned are saved separately and are not affected.
           </li>
           <li>
             <b>What is on the Lookup page</b> — the date in the box, the answer or message under it,
@@ -3777,12 +3702,10 @@ export default function GuidePage({
         </UL>
         <p>
           There is one exception, and it applies to a whole preset at a time. With <b>Amnesic</b> (⚙
-          &rarr; Stats) on <b>Full</b>, the last two entries in the first list — your stats and your
-          all-time bests — are not written to this device at all for that preset. They last as long
-          as the app is open and are gone once it closes. On <b>Stats Only</b> that is true of the
-          stats alone: the all-time bests are still saved. Everything else in that list still saves
-          normally. Lookup history follows a related but separate rule of its own, because it is not
-          this preset&apos;s to begin with — see <b>Stats &mdash; Amnesic</b> above.
+          &rarr; Stats) on <b>Stats Only</b> or <b>Full</b>, what you play is saved like everything
+          else, and then, when you close the app, the stats you played since you turned it on are
+          forgotten — on Full, and the Bests you set in that time. Everything else in that list is
+          kept. See <b>Stats &mdash; Amnesic</b> above.
         </p>
         <p>
           <b>Full Reset</b> (below) clears everything that is saved for the preset you are on —
@@ -3934,27 +3857,18 @@ export default function GuidePage({
         </p>
         <p>
           It also restores this preset&apos;s <b>Amnesic</b> value to what it was at the moment you
-          saved your defaults — exactly as if you had changed <b>Amnesic</b> yourself (see{' '}
-          <b>Stats &mdash; Amnesic</b> above for what a change does). That means pressing Reset
-          Settings for an unrelated reason, mid-session, can move it too: whatever the session had
-          recorded is discarded the same as always, and if it lands on Stats Only or Full, your
-          saved stats are set aside exactly as they were the moment before.
+          saved your defaults — exactly as if you had changed <b>Amnesic</b> yourself. That changes
+          nothing on screen, but it is the value that decides what is forgotten when you close the
+          app (see <b>Stats &mdash; Amnesic</b> above).
         </p>
         <p>
           It still leaves the other mode-screen choices alone: the Deduction sub-type, One-by-One,
           Allow Mistakes, Blitz's Per Round versus Per Question, and the show/hide stat toggles all
-          stay exactly as you have them. Your stats and history are untouched too — <i>unless</i>{' '}
-          the <b>Amnesic</b> restore above actually changes the value, in which case whatever that
-          change discards or sets aside (see the paragraph above) is gone the moment you tap, not
-          held back until anything closes. Restoring one of the four capturable mode-screen values
-          while a MoX run or a Blitz round is going resets that run or round when you close the
-          menu, exactly as an ordinary ⚙ panel change does — but an <b>Amnesic</b> change is not a
-          menu value reconciling on close, it changes which numbers the preset is showing outright,
-          so it (and the run or round it can take with it) lands immediately on the tap itself,
-          before the menu is ever closed. The popup confirms the restore itself; an <b>Amnesic</b>{' '}
-          change it carries out still lands on the tap, before the menu closes. When everything the
-          snapshot covers is already at your defaults, the button dims and locks, since tapping it
-          would have no effect.
+          stay exactly as you have them. Your stats and history are untouched too. Restoring one of
+          the four capturable mode-screen values while a MoX run or a Blitz round is going resets
+          that run or round when you close the menu, exactly as an ordinary ⚙ panel change does. The
+          popup confirms the restore itself. When everything the snapshot covers is already at your
+          defaults, the button dims and locks, since tapping it would have no effect.
         </p>
         <Subhead>Full Reset (right)</Subhead>
         <p>Restores the preset you are on to its launch state:</p>
@@ -3964,12 +3878,11 @@ export default function GuidePage({
             <b>Lookup history</b>, and every run and round — the ones in progress and the finished
             ones still on screen. Your stats and all-time bests are saved on this device, so Full
             Reset clears that saved copy permanently. That is true in a preset with <b>Amnesic</b>{' '}
-            on Stats Only or Full as well: it clears both the session you are in and the saved stats
-            and bests waiting behind it, so nothing comes back when you return to Off. Amnesic stops
-            your play from being recorded; it does not shield anything from a reset you asked for.
-            Lookup history is the one thing on this list that isn&apos;t only this preset&apos;s —
-            it is shared by every preset (see <b>Presets</b> above), so Full Reset clears it for all
-            of them, not just this one.
+            on Stats Only or Full as well: nothing of it comes back when you close the app. Amnesic
+            forgets what you played; it does not shield anything from a reset you asked for. Lookup
+            history is the one thing on this list that isn&apos;t only this preset&apos;s — it is
+            shared by every preset (see <b>Presets</b> above), so Full Reset clears it for all of
+            them, not just this one.
           </li>
           <li>
             Resets every setting and toggle across all modes — both the ⚙ menu and the per-mode
@@ -3979,8 +3892,7 @@ export default function GuidePage({
             the show/hide stat toggles) returns to its launch value. The saved defaults themselves
             survive. Full Reset also restores the preset&apos;s <b>Amnesic</b> value to whatever you
             last saved — the same restore <b>Reset Settings</b> makes, above — but it changes
-            nothing about the wipe just above: the session&apos;s numbers and the saved ones are
-            both gone, whichever value Amnesic ends up on afterward.
+            nothing about the wipe just above, whichever value Amnesic ends up on afterward.
           </li>
           <li>
             Closes any open overlay (⚙ menu, codes, method breakdown) and switches to Classic —
