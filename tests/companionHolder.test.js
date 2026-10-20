@@ -4,7 +4,7 @@
 // (engine/blitzBest's companionOf - the door's reader and the screen's alike). v2.26.0 SPREADS a record when
 // one of its rounds beats a field, keeping the old holder's companion, and its id, beside the new holder.
 import { describe, it, expect } from 'vitest'
-import { toRec, fromRec } from '../src/store/bestRecords.js'
+import { toRec, fromRec, passThroughTag } from '../src/store/bestRecords.js'
 import { bestOfBlitz, bestOfAox } from '../src/engine/bestPool.js'
 import { COUNTER_ROUND_ID } from '../src/store/syncRecords.js'
 
@@ -61,5 +61,33 @@ describe('the doc writes each companion beside its holder, and a reader believes
     expect(toRec('aoxBest', spread, 'load', 'k').f.avg.c).toBeNull()
     expect(bestOfAox([spread]).avgMed).toBeNull()
     expect(bestOfAox([spread]).medAvg).toBe(2.5)
+  })
+})
+
+// (the review lane's PLAUSIBLE "stale ops") A new window that holds no version writes its rounds on top
+// of an older page's record as a PASS-THROUGH literal, its rounds as ops beside it; a reader applies
+// them exactly. A v2.26.0 tab that then spreads that record carries the ops along beside values they no
+// longer describe - applied, they would put a round back as it stood before. The literal's own tag
+// (`pw`, the hash of the record as written) says whether it is still the record the ops were written with.
+describe('a pass-through literal’s ops are read only with the record they were written with', () => {
+  const lit = {
+    score: 9,
+    scoreStreak: 4,
+    scoreRoundId: A,
+    streak: 6,
+    streakScore: 7,
+    streakRoundId: A,
+    nr: [A],
+    ops: [{ id: A, v: { score: { v: 9, c: 4 }, streak: { v: 6, c: 7 } } }],
+  }
+  const tagged = { ...lit, pw: passThroughTag(lit) }
+
+  it('as written: the ops are applied', () => {
+    expect(toRec('blitzBest', tagged, 'load', 'k').ops).toEqual(lit.ops)
+  })
+
+  it('spread by an older tab (a field changed, the ops and their tag carried along): not applied', () => {
+    const spread = { ...tagged, score: 11, scoreRoundId: B }
+    expect(toRec('blitzBest', spread, 'load', 'k').ops).toBeUndefined()
   })
 })

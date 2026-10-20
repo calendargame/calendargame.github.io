@@ -17,7 +17,17 @@ import {
   type RecDisk,
   type RecordsOut,
 } from './syncRecords.js'
-import { BEST_MAPS, toRec, fromRec, taggedRecord, type BestMap } from './bestRecords.js'
+import {
+  BEST_MAPS,
+  toRec,
+  fromRec,
+  taggedRecord,
+  passThroughTag,
+  type BestMap,
+} from './bestRecords.js'
+// (a pass-through literal with ops, tagged so a reader applies them only to the record they were written
+// with - store/bestRecords' toRec)
+const passThrough = (r: Record<string, unknown>) => (r.ops ? { ...r, pw: passThroughTag(r) } : r)
 import {
   packSync,
   unpackSync,
@@ -259,7 +269,7 @@ export function composeRecords(
         if (stored)
           m[k] = d.tagged
             ? stored
-            : { ...stored, ...(d.ops?.length ? { nr: d.nr, ops: d.ops } : {}) }
+            : passThrough({ ...stored, ...(d.ops?.length ? { nr: d.nr, ops: d.ops } : {}) })
       }
       const entry = out.env[k]
       const before = prev?.at?.[k]

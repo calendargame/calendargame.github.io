@@ -1,6 +1,7 @@
 import type { RecordSpec, Rec, FV, RecOp } from './syncRecords.js'
 import { scopedRoundId, COUNTER_ROUND_ID, recordTag } from './syncRecords.js'
 import { isRecord } from './json.js'
+import { cyrb53, canonicalJson } from './syncStamp.js'
 import { roundCentis } from '../lib/modeFormat.js'
 import { companionOf, companionHolderKey } from '../engine/blitzBest.js'
 
@@ -101,8 +102,12 @@ export function toRec(map: BestMap, disk: unknown, load: string, slot: string): 
           : raw
     f[fd.key] = { v, ...(fd.comp ? { c: companionOf(disk, fd.comp, fd.holder) } : {}), id }
   }
-  // (a pass-through literal a new window wrote carries its own rounds as ops: applied exactly)
-  const ops = Array.isArray(disk.ops) ? (disk.ops as RecOp[]) : undefined
+  // (a pass-through literal a new window wrote carries its own rounds as ops: applied exactly - but only
+  // while the record is the very one written with them, its `pw` naming it; v2.26.0 SPREADS a record it
+  // changes, which would carry the ops along beside values they no longer describe, and re-applying
+  // them then would put back a round as it stood before - the review lane's PLAUSIBLE "stale ops")
+  const ops =
+    Array.isArray(disk.ops) && disk.pw === passThroughTag(disk) ? (disk.ops as RecOp[]) : undefined
   return { f, ...(ops ? { ops } : {}) } as Rec
 }
 
@@ -129,6 +134,12 @@ export function fromRec(
   }
   if (tagged) out.w = recordTag(out)
   return out
+}
+
+/** A pass-through literal's own tag: the hash of the record as written, its ops included (`pw` aside). */
+export function passThroughTag(disk: Record<string, unknown>): string {
+  const { pw: _pw, ...rest } = disk
+  return cyrb53(canonicalJson(rest))
 }
 
 /** Is this stored record one a new build wrote and nobody has changed since (its tag names its values)? */

@@ -207,6 +207,7 @@ export function makeWorld(opt = {}) {
         if (out[fl].id !== null && out[fl].c !== undefined) out[fl].cid = out[fl].id
     return out
   }
+  const ptTag = ({ pw: _pw, ...rest }) => recordTag(rest)
   function believed(rec) {
     if (!rec) return rec
     const out = clone(rec)
@@ -241,7 +242,8 @@ export function makeWorld(opt = {}) {
       S: side,
       recs: {
         [R]: {
-          rec: b ? { f: b.f, ...(b.ops ? { ops: b.ops } : {}) } : null,
+          // (a pass-through's ops only on the record written with them: its `pw` - store/bestRecords' toRec)
+          rec: b ? { f: b.f, ...(b.ops && raw.pw === ptTag(raw) ? { ops: b.ops } : {}) } : null,
           tagged: tagged(raw),
           env: doc?.sync ? { st: doc.sync.st, fp: doc.sync.fp } : null,
         },
@@ -266,7 +268,8 @@ export function makeWorld(opt = {}) {
     if (!out.st) {
       // a pass-through with my rounds on top: an untagged literal naming them as a new window's, no envelope,
       // the records' key untouched (this is not a version)
-      const lit = o.rec ? { f: withCid(o.rec.f), nr: o.nr, ops: clone(o.ops) } : null
+      const lit0 = o.rec ? { f: withCid(o.rec.f), nr: o.nr, ops: clone(o.ops) } : null
+      const lit = lit0 ? { ...lit0, pw: ptTag(lit0) } : null
       if (!commit(w, 'doc', JSON.stringify({ b: lit, st: cur.st ?? {} }), why)) {
         w.book.refused()
         return false
