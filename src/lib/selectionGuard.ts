@@ -4,8 +4,8 @@
 // lib/sliderValue.ts: the component file only exports components (the react-refresh rule),
 // and the decision is trivially unit-testable without rendering anything.
 //
-// Why it exists: guide section titles are selectable (`select-text` on the title span),
-// but the title lives inside the header <button> — so a desktop drag-select across a
+// Why it exists: guide section titles are selectable with a mouse (`select-text-fine` on the title
+// span; index.css), but the title lives inside the header <button> — so a desktop drag-select across a
 // title fires the button's click on mouse-up, and toggling there would collapse the
 // panel out from under the selection the user just made. Suppress the toggle exactly
 // when the selection is BOTH non-collapsed (a real range, not a bare caret — every

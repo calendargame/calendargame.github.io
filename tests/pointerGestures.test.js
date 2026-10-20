@@ -27,8 +27,13 @@ import {
   TAP_MS,
   TAP_SLOP_PX,
   DOUBLE_TAP_MS,
+  FINE_POINTER_QUERY,
+  onSelectableText,
   installPointerGestures,
 } from '../src/lib/pointerGestures.js'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { scrollBoxTo, scrollWindowHome } from '../src/lib/appScroll.js'
 
 const el = () => ({}) // identity-only stand-in for a DOM element
@@ -932,6 +937,48 @@ describe('pointerGestures controller — touches that are not quick taps, and th
     title.dispatchEvent(end)
     expect(clicks).not.toHaveBeenCalled()
     expect(end.defaultPrevented).toBe(false)
+  })
+
+  // ★ A HOW TO PLAY SECTION TITLE (Round 26 review): selectable only where the main pointer is a fine
+  // one. On a touchscreen it is a button's label like any other, so a long press on it is pressed
+  // here — an iPhone sends no click after a long press on selectable text, and the section never
+  // opened. (jsdom's matchMedia answers false: a touchscreen, unless a test says otherwise.)
+  it('a long press on a section title is pressed here on a touchscreen — the title is no text there', () => {
+    const header = domEl('button', {}, document.body)
+    const title = domEl('span', { class: 'select-text-fine' }, header)
+    const clicks = counted(header)
+    hit = title
+    title.dispatchEvent(ptr('pointerdown'))
+    now += 2000
+    document.dispatchEvent(ptr('pointerup'))
+    const end = touch('touchend')
+    title.dispatchEvent(end)
+    expect(clicks).toHaveBeenCalledTimes(1)
+    expect(end.defaultPrevented).toBe(true)
+  })
+  it('…and where the main pointer is fine (a mouse), the title is text, left to the browser', () => {
+    const fine = vi
+      .spyOn(window, 'matchMedia')
+      .mockImplementation((q) => ({ matches: q === FINE_POINTER_QUERY, media: q }))
+    try {
+      const header = domEl('button', {}, document.body)
+      const title = domEl('span', { class: 'select-text-fine' }, header)
+      expect(onSelectableText(title)).toBe(true)
+      expect(withholdsSecondTap(title)).toBe(false)
+    } finally {
+      fine.mockRestore()
+    }
+    const plain = domEl('span', { class: 'select-text-fine' }, document.body)
+    expect(onSelectableText(plain)).toBe(false)
+  })
+  it('the controller’s fine-pointer query is the stylesheet’s, word for word', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'index.css'),
+      'utf8',
+    )
+    expect(css).toContain(
+      `@media ${FINE_POINTER_QUERY}{.select-text-fine{user-select:text;-webkit-user-select:text}}`,
+    )
   })
 
   it('a press made here lets the keyboard go first, so a box being typed in commits BEFORE the press acts', () => {

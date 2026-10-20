@@ -321,13 +321,20 @@ body{color:var(--body-color)}
    input/textarea elements (so typing/editing stays functional everywhere they
    appear), and any element explicitly tagged with the Tailwind `select-text`
    utility (currently the contact email anchor, so users can long-press to copy
-   it, plus the How-to-Play guide — every section body and header title span —
-   so the documentation is copyable; the guide's header onClick guards against a
-   drag-select collapsing its panel, see lib/selectionGuard). If more allow-list
-   spots are added later, give them `select-text`. */
+   it, plus every How-to-Play section body, so the documentation is copyable).
+   .select-text-fine is selectable only where the main pointer is a fine one (a
+   mouse, a trackpad): the How-to-Play section titles, which are the labels of
+   buttons — on a touchscreen a long press on selectable text is the browser's
+   selection gesture and presses nothing, so there a title is a plain label
+   (lib/pointerGestures' ★ "a How to Play section title"; its FINE_POINTER_QUERY
+   is this query, word for word). With a mouse a drag-select runs through a
+   title as before, and the header's onClick guards against it collapsing the
+   panel (lib/selectionGuard). If more allow-list spots are added later, give
+   them `select-text`. */
 body{user-select:none;-webkit-user-select:none}
 input,textarea{user-select:text;-webkit-user-select:text}
 .select-text{user-select:text;-webkit-user-select:text}
+@media (pointer: fine){.select-text-fine{user-select:text;-webkit-user-select:text}}
 /* Scroll-edge indicator system. Two visual languages, designed to stack:
    FADE = "content extends past this edge." Implemented as a CSS mask on the
      scroll container itself. Applied conditionally (state-driven) so it only

@@ -101,13 +101,15 @@ describe('GuideSection header toggle wiring', () => {
 })
 
 describe('select-text allow-list placement', () => {
-  it('the body wrapper and the title span opt in; the header button itself does not', () => {
+  // The title is selectable with a mouse only (`select-text-fine`, index.css): on a touchscreen a held
+  // title must press its button (lib/pointerGestures' ★ "a How to Play section title").
+  it('the body wrapper opts in, the title span with a mouse only; the header button itself does not', () => {
     const { container, getByText } = render(
       <GuideSection id="overview" title="What Is Calendar Game?" openId={null} onToggle={() => {}}>
         <p>Some body copy.</p>
       </GuideSection>,
     )
-    expect(getByText('What Is Calendar Game?').classList.contains('select-text')).toBe(true)
+    expect(getByText('What Is Calendar Game?').classList.contains('select-text-fine')).toBe(true)
     const body = getByText('Some body copy.').parentElement
     expect(body.classList.contains('select-text')).toBe(true)
     expect(container.querySelector('button').classList.contains('select-text')).toBe(false)

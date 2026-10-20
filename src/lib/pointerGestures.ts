@@ -97,9 +97,20 @@
 //     second touch is held back, a button's included, and a flick there straight after a tap always
 //     moves it. The accepted residual: the lens can come up on a double tap and hold anywhere inside
 //     a scrolling area. A flick after a FLICK is never withheld either.
-//   • TEXT KEEPS EVERYTHING. A touch that begins on text a player can select or type in (TEXT_SELECTOR
-//     — the guide's titles and body, the Contact address, every box) is left wholly to the browser:
-//     its caret, its selection handles, and its lens are the point of it.
+//   • TEXT KEEPS EVERYTHING. A touch that begins on text a player can select or type in
+//     (onSelectableText — the guide's body, the Contact address, every box) is left wholly to the
+//     browser: its caret, its selection handles, and its lens are the point of it.
+//     ★ A HOW TO PLAY SECTION TITLE IS SELECTABLE ONLY WITH A MOUSE (Round 26 review). It is the
+//     label of a button, and on a touchscreen a long press on selectable text is the browser's
+//     selection gesture — iOS sends no click after it — so a held title opened nothing on an iPhone,
+//     where every other control answers however long it is held. A press cannot be both a
+//     selection and a toggle, and the title is the toggle: where the main pointer is a finger
+//     (FINE_POINTER_QUERY does not match) it is no text at all, to the CSS (index.css's
+//     .select-text-fine) or to this controller, and a long press on it is pressed here like any
+//     button's. With a mouse it is selectable as before — a drag-select can run through a section
+//     and its title (lib/selectionGuard tells that drag from a click), and a mouse's press is
+//     always its own click anyway. What a reader would copy, a section's text, is selectable
+//     everywhere.
 //   • A SURFACE IS A CONTROL TOO. A popup's dim closes the popup when it is tapped, and it is not a
 //     <button> — so it carries SURFACE_SELECTOR's marker, and this controller treats it as a control
 //     wherever a press lands on its bare self (never on the card drawn over it, which is the dim's
@@ -147,9 +158,20 @@ const TARGET_SELECTOR = 'button,[data-drag-focus]' // what a release can land on
 const WITHHELD_SELECTOR = '[aria-disabled="true"]' // …and what a gesture must never land on, however it matched above
 // Text a player can select or type in: a touch that starts here stays the browser's (the header's ★).
 const TEXT_SELECTOR = 'input,textarea,select,[contenteditable],.select-text'
+// …and text that is selectable only where the main pointer is a fine one, a mouse or a trackpad —
+// a How to Play section title (the header's ★). The query is index.css's for .select-text-fine,
+// word for word (tests/pointerGestures holds the two together).
+const FINE_TEXT_SELECTOR = '.select-text-fine'
+export const FINE_POINTER_QUERY = '(pointer: fine)'
+/** Does a touch on `target` begin on text a player can select or type in, here and now? */
+export function onSelectableText(target: Element | null): boolean {
+  if (!target) return false
+  if (target.closest(TEXT_SELECTOR)) return true
+  return target.closest(FINE_TEXT_SELECTOR) !== null && matchMedia(FINE_POINTER_QUERY).matches
+}
 // …and everywhere the browser's own gestures are the point, which a double tap's second touch must
 // reach untouched: that text, and links (pressed by the browser, never by this controller).
-const BROWSER_OWNED_SELECTOR = `${TEXT_SELECTOR},a[href]`
+const browserOwned = (target: Element) => onSelectableText(target) || !!target.closest('a[href]')
 // A SURFACE: an element that is a control where a press lands on its bare self, and not where it
 // lands on anything drawn over it (a popup's dim — components/Popup; the header's ★).
 const SURFACE_SELECTOR = '[data-press-surface]'
@@ -248,7 +270,7 @@ export function pressedHere(heldMs: number, movedPx: number, withheld: boolean):
 // presses nothing (a label, a stat's number, a grid's gaps) alike; never on text a player can select
 // or type in, which keeps its own lens, and never on a link, which the browser presses.
 export function withholdsSecondTap(target: Element | null): boolean {
-  if (!(target instanceof Element) || target.closest(BROWSER_OWNED_SELECTOR)) return false
+  if (!(target instanceof Element) || browserOwned(target)) return false
   return !canStartScroll(target)
 }
 
@@ -570,7 +592,7 @@ export function installPointerGestures(): () => void {
     lastX = downX = e.clientX
     lastY = downY = e.clientY
     downAt = performance.now()
-    onText = !!target?.closest(TEXT_SELECTOR)
+    onText = onSelectableText(target)
     heldAt = scrollPlaces(el)
     withheld = withheldEarly
     withheldEarly = false

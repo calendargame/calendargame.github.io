@@ -415,10 +415,11 @@ export function GuideSection({
         aria-expanded={isOpen}
         aria-controls={panelDomId(id)}
         style={motionVar}
-        // Guide text is selectable (`select-text` on the title span + the body wrapper below) —
-        // a desktop drag-select across a title fires this click on mouse-up, so skip the toggle
-        // while such a selection stands (lib/selectionGuard owns the rule) rather than collapse
-        // the panel out from under it.
+        // Guide text is selectable (`select-text` on the body wrapper below; the title span's
+        // `select-text-fine` is selectable with a mouse only — on a touchscreen a held title must
+        // press, lib/pointerGestures' ★ "a How to Play section title") — a desktop drag-select
+        // across a title fires this click on mouse-up, so skip the toggle while such a selection
+        // stands (lib/selectionGuard owns the rule) rather than collapse the panel out from under it.
         onClick={(e) => {
           if (selectionSuppressesToggle(window.getSelection(), e.currentTarget)) return
           onToggle(id)
@@ -427,7 +428,7 @@ export function GuideSection({
         // shadow, held at --shade 0 until GuidePage's dock tracker says text is under it.
         className="guide-head elev-shadow-down w-full text-left px-4 py-3 flex items-center justify-between"
       >
-        <span className="text-sm font-semibold text-(--tx-50) select-text">{title}</span>
+        <span className="text-sm font-semibold text-(--tx-50) select-text-fine">{title}</span>
         {/* The ▼ and the body below are on the root's scale, pinned to a standard phone: N px at
             the 16.458px root of a 390×844 phone, where they were tuned, and the same share of the
             root everywhere else (Round 26 — they were fixed pixels, so below a 14.9px root the
@@ -1456,8 +1457,10 @@ export default function GuidePage({
             Text around the app can't be selected or highlighted, so presses and drags always
             operate the game. The exceptions are anywhere you type (the Year Range, Lookup, and MoX
             run length fields, plus any timer value you've tapped to type), the contact email, and
-            everything in this How to Play guide, section titles included — guide text selects and
-            copies like a normal page.
+            the text of every section of this How to Play guide, which selects and copies like a
+            normal page. A section&apos;s title is the button that opens it, so on a touchscreen it
+            presses like any other button, however long you hold it; with a mouse you can select its
+            words too.
           </li>
         </UL>
         <p>

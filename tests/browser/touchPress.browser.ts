@@ -580,3 +580,61 @@ test('click-less: a double tap’s second touch on a label is cancelled at its s
   await expect(codes).toHaveAttribute('aria-expanded', 'true')
   expect(await clicksSeen(codes)).toBe(1)
 })
+
+// ★ A HOW TO PLAY SECTION TITLE, HELD (Round 26 review): the title is the label of its section's
+// button. It used to be selectable text on a touchscreen too, and a long press on selectable text is
+// the browser's selection gesture — an iPhone sends no click after it — so a held title opened
+// nothing. Where the main pointer is a finger (this file's touchscreen) the title is no text, and a
+// held title presses its button like any other; with a mouse it is selectable as before.
+// Whether text can be selected, as the engine itself has it (WebKit answers through its own prefixed
+// property, and reports the plain one as "auto" whatever the stylesheet says).
+const selectability = (el: Element) =>
+  getComputedStyle(el).getPropertyValue('-webkit-user-select') || getComputedStyle(el).userSelect
+async function guideTitle(page: Page) {
+  await openApp(page)
+  await switchMode(page, 'guide')
+  const header = page.getByRole('button', { name: 'What Is Calendar Game?' })
+  await expect(header).toHaveAttribute('aria-expanded', 'false')
+  await countClicks(header)
+  // The press lands on the title's own words, not on the button around them.
+  const words = header.getByText('What Is Calendar Game?')
+  expect(await words.evaluate(selectability)).toBe('none')
+  return { header, words }
+}
+
+test('click-less: a section title held and lifted brings no click, and opens its section once', async ({
+  page,
+}) => {
+  const { header, words } = await guideTitle(page)
+  const { endCancelled } = await clickless(page, words, { holdMs: HOLD_MS })
+  await expect(header).toHaveAttribute('aria-expanded', 'true')
+  expect(endCancelled, 'the browser’s own tap is withheld').toBe(true)
+  await settled(page)
+  expect(await clicksSeen(header)).toBe(1)
+})
+
+test.describe('real touches (Chromium): a section title', () => {
+  test.skip(({ browserName }) => browserName !== 'chromium', 'DevTools input is Chromium’s')
+  test('held, it opens its section, once', async ({ page }) => {
+    const { header, words } = await guideTitle(page)
+    const finger = await touchscreen(page)
+    await finger.down(await centre(words))
+    await hold(page, HOLD_MS)
+    await finger.up()
+    await expect(header).toHaveAttribute('aria-expanded', 'true')
+    await settled(page)
+    expect(await clicksBy(header)).toEqual(['app'])
+  })
+})
+
+test.describe('with a mouse', () => {
+  test.use({ hasTouch: false })
+  test('a section title is text a player can select, as before', async ({ page }) => {
+    await openApp(page)
+    await switchMode(page, 'guide')
+    const words = page
+      .getByRole('button', { name: 'What Is Calendar Game?' })
+      .getByText('What Is Calendar Game?')
+    expect(await words.evaluate(selectability)).toBe('text')
+  })
+})
