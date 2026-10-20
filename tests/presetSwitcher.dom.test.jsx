@@ -567,8 +567,8 @@ describe('a stock name that would be cut is drawn short', () => {
     )
     expect(first.querySelector('.sr-only').textContent).toBe('Preset 1')
     expect(second.querySelector('.sr-only').textContent).toBe('Preset 2, amnesic')
-    // (The row you are on has its ✓ in front of its name.)
-    expect(screen.getByRole('option', { name: /^✓ ?Preset 1$/ })).toBe(first)
+    // (The row you are on is said to be chosen — its ✓ is the eye's alone, never read.)
+    expect(screen.getByRole('option', { name: 'Preset 1', selected: true })).toBe(first)
     expect(screen.getByRole('option', { name: 'Preset 2, amnesic' })).toBe(second)
     // …and the closed control says where you are in the same words.
     expect(screen.getByRole('button', { name: 'Preset, Preset 1' })).toBe(trigger())

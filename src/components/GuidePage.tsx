@@ -435,6 +435,9 @@ export function GuideSection({
             body read larger than its own section title). The small-print paragraphs are the same,
             at 12. */}
         <span
+          // The eye's alone: aria-expanded says open or closed, and the ▼ was read out as part of
+          // every section title's name.
+          aria-hidden="true"
           className={`text-[calc(7rem/16.458)] text-(--tx-w90) leading-none transition-transform ${isOpen ? 'rotate-180' : ''}`}
           // Read the panel's clock and curve EXACTLY (.expander declares the identical calc —
           // same var, same .24s fallback — and the identical curve) so the triangle and the
@@ -2628,7 +2631,10 @@ export default function GuidePage({
             &quot;amnesic, stats only&quot; for one on Stats Only — in the list and in the bar
             alike. Nothing is drawn there for it, so this is where that fact is said. The same words
             follow the names in the ⚙ menu&apos;s <b>Open in</b> list. A ready-made name shown as
-            &quot;P1&quot; is still read &quot;Preset 1&quot; in all of them.
+            &quot;P1&quot; is still read &quot;Preset 1&quot; in all of them. The arrows drawn on a
+            list&apos;s button, the ✓ beside the row a list is set to, and the ▼ beside each section
+            title in this guide are not read out: each button says whether it is open, and each list
+            which row is chosen.
           </li>
           <li>
             Inside <b>Manage Presets</b>, each row&apos;s name box is called Preset name — the name

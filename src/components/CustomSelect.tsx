@@ -176,7 +176,10 @@ const OPTION_ROW_BOX =
 function OptionRowCells({ checked, children }: { checked: boolean; children: ReactNode }) {
   return (
     <>
+      {/* The ✓ is the eye's; a screen reader is told the option is chosen by aria-selected, and
+          was otherwise read "check mark" in the option's name. */}
       <span
+        aria-hidden="true"
         style={{
           display: 'inline-block',
           // The reserved check column never changes width with the selection, so row indents never
@@ -909,8 +912,14 @@ export default function CustomSelect({
           </div>
         </div>
       )}
+      {/* The ▲▼ says "this opens a list" to the eye only: the trigger already says so to a screen
+          reader (aria-haspopup="listbox", aria-expanded), and the two glyphs were read out after
+          every list button (the Round 26 review). */}
       {showChevron && (
-        <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none text-[7px] text-(--tx-w90)">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center leading-none text-[7px] text-(--tx-w90)"
+        >
           <span>▲</span>
           <span>▼</span>
         </div>

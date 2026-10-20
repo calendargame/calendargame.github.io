@@ -217,6 +217,16 @@ describe('CustomSelect — the trigger names its setting AND its value', () => {
     expect(screen.queryByRole('button', { name: /Alpha|Gamma/ })).toBeNull()
   })
 
+  // Round 26 review: the ▲▼ was read out after every list button, and the ✓ inside the chosen
+  // option's name. Both are the eye's alone (aria-expanded and aria-selected say the same).
+  it('the ▲▼ and the ✓ are hidden from a screen reader: nothing of them is read anywhere', () => {
+    mountBare({ ariaLabel: 'Test', showChevron: true })
+    const chevron = screen.getByText('▲').parentElement
+    expect(chevron.getAttribute('aria-hidden')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Test, Beta' }))
+    expect(screen.getByRole('option', { name: 'Beta', selected: true })).toBeTruthy()
+  })
+
   it('falls back to naming itself from its content when the caller gave no label', () => {
     mountBare({})
     expect(screen.getByRole('button', { name: 'Beta' })).toBeTruthy()
