@@ -1,19 +1,20 @@
 // @vitest-environment jsdom
 //
-// THE DASHED OUTLINE — "these numbers are for this session only" (Amnesic).
+// THE DASHED OUTLINE — "what you play now is forgotten when you close the app" (Amnesic).
 //
-// What is temporary is marked on the page itself (it replaced an "A" beside the preset's name):
+// What the close will forget is marked on the page itself (store/amnesic: it is the ONE thing the
+// Amnesic pill changes on screen — the numbers never move):
 //
 //                      stats strip      Best readouts (MoX, Blitz)
 //   Off                plain            plain
-//   Stats Only         DASHED           plain   — they are being kept
+//   Stats Only         DASHED           plain   — a new Best is kept
 //   Full               DASHED           DASHED
 //   …with Save Stats off, the strip is DIMMED and never dashed (nothing is being recorded at all,
 //   so there are no numbers on it to mark); the Best readouts keep theirs on Full.
 //
 // ★ AND IT IS ONE FRAME. "Dashed" means INSIDE the frame, and there is never more than one frame
-// on a screen: round the strip alone, round the Best readouts alone, or — when both are the
-// session's — ONE frame round the two together, drawn by the group that holds them. (They used to
+// on a screen: round the strip alone, round the Best readouts alone, or — when both will be
+// forgotten — ONE frame round the two together, drawn by the group that holds them. (They used to
 // wear a frame each, of two different widths and corners.)
 //
 // This file pins that table in every mode, which element draws the frame, the words that say the
@@ -33,8 +34,8 @@ import { useSettings } from '../src/store/settings.js'
 import { useModePrefs } from '../src/store/modePrefs.js'
 import { resetAppState, mountApp, tap } from './helpers/settingsPanel.jsx'
 
-const STRIP_WORDS = 'These stats are for this session only'
-const BEST_WORDS = 'Bests are for this session only'
+const STRIP_WORDS = 'What you play now is forgotten when you close the app'
+const BEST_WORDS = 'Bests set now are forgotten when you close the app'
 const DIM_WORDS = 'Stats are not being saved'
 
 const isHidden = (el) => {
@@ -149,7 +150,7 @@ describe('the dashed outline, mode by mode and value by value', () => {
 
   // ★ NOTHING IS RECORDED AT ALL with Save Stats off, so the dim is the whole truth about the strip
   // and the outline stands down — one cue, never two stacked. The Best readouts still show real
-  // records, and on Full those are still the session's.
+  // records, and on Full the ones set now are still forgotten at the close.
   for (const mode of ['stats', 'full'])
     it(`${mode} with Save Stats off: the strip is dimmed and NOT dashed; the dim's own words are the ones said`, () => {
       mountApp()

@@ -22,7 +22,7 @@ import { otherWindow } from './helpers/otherWindow.js'
 import { resetAppState } from './helpers/settingsPanel.jsx'
 import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { fileRoundResult } from '../src/store/screenPool.js'
-import { activeDataId } from '../src/store/amnesic.js'
+import { usePresets } from '../src/store/presets.js'
 import { door } from '../src/store/syncedDoc.js'
 import { newRoundId } from '../src/engine/roundId.js'
 
@@ -127,7 +127,14 @@ describe.each(BUILDS)('%s’s own saves of the progress doc, over this window’
   it('its round that beats the record is taken; this window’s Best on another set-up stands', () => {
     start()
     const mine = newRoundId()
-    fileRoundResult(activeDataId(), 'blitzBest', OTHER, mine, { score: 12, streak: 12 }, false)
+    fileRoundResult(
+      usePresets.getState().activeId,
+      'blitzBest',
+      OTHER,
+      mine,
+      { score: 12, streak: 12 },
+      null,
+    )
     olderWrites(progressWrites('roundBelow', 'roundBeats'))
     expect(live().blitzBest[KEY]).toMatchObject({ score: 7, streak: 7 })
     expect(live().blitzBest[OTHER]).toMatchObject({ score: 12, scoreRoundId: mine })
@@ -136,7 +143,14 @@ describe.each(BUILDS)('%s’s own saves of the progress doc, over this window’
   it('its round taken back below the record on its results screen hands the record back', () => {
     start()
     const mine = newRoundId()
-    fileRoundResult(activeDataId(), 'blitzBest', OTHER, mine, { score: 12, streak: 12 }, false)
+    fileRoundResult(
+      usePresets.getState().activeId,
+      'blitzBest',
+      OTHER,
+      mine,
+      { score: 12, streak: 12 },
+      null,
+    )
     olderWrites(progressWrites('takeBackBeats', 'takeBack', 'takeBackBelow'))
     // (v2.26.0 keeps the field with its own round at the old value - part2-issues #6 - and the later
     // builds put the old holder back: either way the record is 5 and 4 again)
@@ -149,12 +163,12 @@ describe.each(BUILDS)('%s’s own saves of the progress doc, over this window’
       start()
       answerClassic()
       fileRoundResult(
-        activeDataId(),
+        usePresets.getState().activeId,
         'blitzBest',
         OTHER,
         newRoundId(),
         { score: 12, streak: 12 },
-        false,
+        null,
       )
       olderWrites(progressWrites('fullResetKept'))
       expect(live().stats).toEqual(makeProgressDefaults().stats)

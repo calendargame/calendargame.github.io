@@ -398,20 +398,18 @@ export function SettingsPanel({
   // ── AMNESIC (the row directly under Save Stats) ──────────────────────────────────────────────
   //
   // ★ THE PAIR IS THE POINT, AND IT IS WHY THESE TWO ROWS TOUCH. Save Stats answers "does this
-  // COUNT"; Amnesic answers "does it LAST" — Off: all of it; Stats Only: the round modes' Bests,
-  // and not the stats; Full: none of it. They are ORTHOGONAL, not exclusive — in an amnesic preset
-  // you may still want Save Stats off for throwaway questions so even the session's count does not
-  // move. Folding the two into one picker (Saved / Amnesic / Off) was proposed and the owner
+  // COUNT"; Amnesic answers "does it LAST past the close" — Off: all of it; Stats Only: the round
+  // modes' Bests, and not the stats; Full: none of it (store/amnesic). They are ORTHOGONAL, not
+  // exclusive — in an amnesic preset you may still want Save Stats off for throwaway questions. Folding the two into one picker (Saved / Amnesic / Off) was proposed and the owner
   // correctly killed it: it would have made two independent facts look like one choice. (Amnesic's
   // OWN three values are one fact — how much lasts — which is why it is a picker and Save Stats
   // stays a switch; and Save Stats has no matching middle value, by the owner's ruling.)
   //
   // ⚠ A FIELD OF THE PRESET'S SETTINGS, BUT NOT ONE OF THE 16 (store/settings; design-q1-q2.md v4, 9):
   // it stays across a real close and every window of the preset follows it, like any setting — and
-  // it is written only through store/presetControl, which pairs the write with the storage work it
-  // implies. The reasons are argued at the top of store/amnesic; the one that matters here is that the
-  // 16 can be overwritten wholesale by Reset Settings, with no rehydration and no screen remount, and
-  // this value decides WHICH COPY the stats and bests are read from.
+  // it is written only through store/presetControl's setPresetAmnesic, which moves the preset's
+  // switch-on counter with it on a change away from Off (where its Amnesic window starts -
+  // store/amnesicWindow). The 16 can be overwritten wholesale by Reset Settings, which would skip that.
   // ⚠⚠ WHERE IT LIVES IS NOT WHETHER IT COUNTS, AND THIS COMMENT USED TO CONFLATE THE TWO. It said
   // two things followed from the value not being a settings value: that it is not in the Save
   // Defaults snapshot, and that it never lights the gear's "modified" bar. BOTH WERE WRONG, in two
@@ -451,7 +449,7 @@ export function SettingsPanel({
   // neither, just leave it for htp"). A dialog would exist to stop somebody forgetting the state
   // they were in — and people build a whole preset around being amnesic or not, so that is not the
   // problem they have. The How-to-Play section carries the explanation instead.
-  // The teardown, the zero start and the discard all belong to setPresetAmnesic; this is a tap.
+  // A change moves nothing on screen but the dashed outline (store/amnesic); this is a tap.
   // ⚠ IT ALSO MOVES THE FOUR OFFERS AS OF ROUND 22 — the gear's bar, and the Save Defaults /
   // Reset Settings / Full Reset dims — because App compares this value against the preset's saved
   // default now. Nothing here does that; `settingsModified` arrives as a prop and this tap simply
@@ -1776,17 +1774,12 @@ export function SettingsPanel({
             </div>
             {/* AMNESIC — "does it last", directly under "does it count". A PICKER by THE PICKER RULE
                 above (three values, exactly one of them): caption above, one tray, the group named
-                by the caption VERBATIM. See changeAmnesic for why this one row's value is held for
-                the session rather than as a ⚙ setting, and store/amnesic for what each value
-                clears and keeps.
-                ⚠ THE LOCK. With Save Stats off nothing is being recorded at all, so "does it last"
-                has no subject and the tray dims — the app's established "dimmed means disabled",
-                stated once, as PillGroup's `disabled`, like every other picker: the housing greys
-                as one piece and the caption stays lit.
-                ⚠ THE VALUE IS PRESERVED WHILE LOCKED, like Julian Chance's selection — turning
-                Save Stats back on restores an amnesic preset to being amnesic. Locking it is what
-                stops the change: one made from behind the dim would throw away the session and the
-                run in progress with it, for a setting the user was told did not apply. */}
+                by the caption VERBATIM. See changeAmnesic for why this one row's value is written
+                apart from the 16, and store/amnesic for what each value forgets at the close.
+                ⚠ THE LOCK. With Save Stats off nothing is being recorded at all, and the tray dims
+                and locks — PillGroup's `disabled`: the housing greys as one piece and the caption
+                stays lit. ⚠ THE VALUE IS PRESERVED WHILE LOCKED — turning Save Stats back on finds
+                the preset on the value it was on. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Amnesic</div>
             <PillGroup label="Amnesic" disabled={!saveStats}>
               <PillTray value={amnesic} onChange={changeAmnesic} options={AMNESIC_OPTIONS} />
@@ -1988,7 +1981,7 @@ export function SettingsPanel({
         onCancel={closeResetSettingsConfirm}
         onConfirm={confirmResetSettings}
         title="Reset Settings for this preset?"
-        body="Restores this preset's ⚙ settings — Display, Dates, Stats (Amnesic included), and Default Mode — plus Flash speed, the MoX run length, and both Blitz timers, to your saved defaults, or the launch defaults if you've saved none. Your stats and all-time bests are untouched — unless this changes Amnesic, which does exactly what changing it yourself does — and you stay on the page you're on."
+        body="Restores this preset's ⚙ settings — Display, Dates, Stats (Amnesic included), and Default Mode — plus Flash speed, the MoX run length, and both Blitz timers, to your saved defaults, or the launch defaults if you've saved none. Your stats and all-time bests are untouched, and you stay on the page you're on."
         confirmLabel="Reset Settings"
         id="reset-settings-confirm"
       />

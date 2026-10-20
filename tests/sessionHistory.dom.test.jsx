@@ -2,11 +2,11 @@
 //
 // sessionHistory.dom — Classic / Deduction / Flash's back/forward history is kept for the BROWSING
 // SESSION (the owner: "only truly closing the app starts fresh"): a reload keeps it, a preset switch
-// keeps each preset's own, and a guest's Amnesic interlude hands yours back when it ends. A real
+// keeps each preset's own, and an Amnesic change does not touch it (one pool - store/amnesic). A real
 // close, Reset Stats, Full Reset and a preset delete clear it — and nothing brings cleared data back.
 // An in-progress Blitz round is still cleared by a reload (the owner's explicit choice).
 //
-// And THE LIVE-QUESTION RULE, which holds for all three ways back: the question that was waiting is
+// And THE LIVE-QUESTION RULE, which holds for both ways back: the question that was waiting is
 // regenerated only when a time could still be recorded for it — timing is shown in that mode at the
 // moment it comes back, and the question is unanswered with no wrong answer, Reveal or Show Codes.
 // Otherwise the same question returns, including on a screen with no history.
@@ -166,17 +166,9 @@ const switchAwayAndBack = (whileAway) => {
   if (whileAway) whileAway()
   act(() => switchPreset(1))
 }
-// A spell on one of the two amnesic values, then back to Off: a guest's visit (Full), or your own
-// playing around (Stats Only).
-const interlude = (mode) => (whileAway) => {
-  act(() => setPresetAmnesic(1, mode))
-  if (whileAway) whileAway()
-  act(() => setPresetAmnesic(1, 'off'))
-}
-const guestInterlude = interlude('full')
 const historyKeys = () =>
   Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i)).filter((k) =>
-    k.startsWith('cg-history-v1:'),
+    k.startsWith('cg-history-v2:'),
   )
 
 let app
@@ -192,12 +184,10 @@ afterEach(() => {
   document.getElementById('root')?.remove()
 })
 
-// The three ways a casual screen comes back in one browsing session. `reload` reassigns `app`.
+// The two ways a casual screen comes back in one browsing session. `reload` reassigns `app`.
 const WAYS_BACK = [
   ['a reload', () => (app = reloadApp(app))],
   ['a preset switch and back', () => switchAwayAndBack()],
-  ['an Amnesic interlude', () => guestInterlude()],
-  ['a Stats Only interlude', () => interlude('stats')()],
 ]
 
 describe('the history comes back exactly', () => {
@@ -288,53 +278,21 @@ describe('the history comes back exactly', () => {
   })
 })
 
-describe('an Amnesic interlude: your history returns, the guest’s does not', () => {
-  it('the guest never sees your history, and their own is gone when they are', () => {
-    answerRight() // the owner's own card
-    act(() => setPresetAmnesic(1, 'full'))
-    expect(statValue('Score')).toBe('0/0')
-    expect(canGo('ArrowLeft')).toBe(false)
+// ★ AN AMNESIC CHANGE IS NOT A WAY BACK: the screen is never rebuilt for it (store/amnesic - the value
+// decides what is forgotten at the close, never what is on screen), so the history simply stays.
+describe('an Amnesic change leaves the history on screen as it is', () => {
+  it('every value in turn: the same cards behind the same question, the score unmoved', () => {
     answerRight()
     answerRight()
-    app = reloadApp(app)
-    expect(statValue('Score')).toBe('2/2') // still the guest, still amnesic
+    const waiting = readDate()
+    for (const value of ['stats', 'full', 'off', 'full']) {
+      act(() => setPresetAmnesic(1, value))
+      expect(statValue('Score')).toBe('2/2')
+      expect(readDate()).toBe(waiting)
+      expect(canGo('ArrowLeft')).toBe(true)
+    }
     back()
     expect(badge()).toBe('Q2')
-    act(() => setPresetAmnesic(1, 'off'))
-    expect(statValue('Score')).toBe('1/1') // yours, with your one card behind it
-    back()
-    expect(badge()).toBe('Q1')
-    // A later guest starts from nothing — not from the last guest's history.
-    act(() => setPresetAmnesic(1, 'full'))
-    expect(statValue('Score')).toBe('0/0')
-    expect(canGo('ArrowLeft')).toBe(false)
-  })
-
-  // STATS ONLY keeps its stats in the session too, so its history is the session's in the same way:
-  // its own, kept through a reload, and gone at the next change of the value — in EITHER direction,
-  // the other amnesic value included.
-  it('a Stats Only session has its own history, and it does not carry into Full or back', () => {
-    answerRight() // the owner's own card
-    act(() => setPresetAmnesic(1, 'stats'))
-    expect(statValue('Score')).toBe('0/0')
-    expect(canGo('ArrowLeft')).toBe(false)
-    answerRight()
-    answerRight()
-    app = reloadApp(app)
-    expect(statValue('Score')).toBe('2/2') // still the session's
-    back()
-    expect(badge()).toBe('Q2')
-    act(() => setPresetAmnesic(1, 'full')) // Stats Only → Full: a guest starts from nothing
-    expect(statValue('Score')).toBe('0/0')
-    expect(canGo('ArrowLeft')).toBe(false)
-    answerRight()
-    act(() => setPresetAmnesic(1, 'stats')) // Full → Stats Only: nothing of the guest's, or of before
-    expect(statValue('Score')).toBe('0/0')
-    expect(canGo('ArrowLeft')).toBe(false)
-    act(() => setPresetAmnesic(1, 'off'))
-    expect(statValue('Score')).toBe('1/1') // yours, with your one card behind it
-    back()
-    expect(badge()).toBe('Q1')
   })
 })
 
@@ -400,7 +358,7 @@ describe('the question that was waiting', () => {
   it('…and timing turned OFF in between brings the same question back', () => {
     showClassicTiming(true)
     const waiting = readDate() // parked with timing shown
-    guestInterlude(() => showClassicTiming(false)) // the guest hides it (the setup is shared)
+    app = reloadApp(app, () => useModePrefs.getState().setClassicTimingOff(true)) // hidden meanwhile
     expect(readDate()).toBe(waiting)
   })
 
@@ -422,19 +380,17 @@ describe('the question that was waiting', () => {
     showClassicTiming(true)
     act(() => useSettings.getState().setSaveStats(false))
     const waiting = readDate() // parked while nothing counted
-    guestInterlude(() => act(() => useSettings.getState().setSaveStats(true))) // the shared switch
+    app = reloadApp(app, () => useSettings.getState().setSaveStats(true)) // on while it was away
     expect(readDate()).not.toBe(waiting)
   })
 
   it('a date setting changed under a parked history: an unanswered question is redrawn under the new one', () => {
     const waiting = readDate() // timing hidden — on its own this question would return
-    guestInterlude(() =>
-      act(() => {
-        useSettings.getState().setMinY(2000)
-        useSettings.getState().setMaxY(2001)
-        useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
-      }),
-    )
+    app = reloadApp(app, () => {
+      useSettings.getState().setMinY(2000)
+      useSettings.getState().setMaxY(2001)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
+    })
     expect(readDate()).not.toBe(waiting)
     expect([2000, 2001]).toContain(yearOf(readDate()))
   })
@@ -442,13 +398,11 @@ describe('the question that was waiting', () => {
   it('…but a question already answered wrong stays, exactly as it does when the setting changes on screen', () => {
     answerWrong()
     const waiting = readDate()
-    guestInterlude(() =>
-      act(() => {
-        useSettings.getState().setMinY(2000)
-        useSettings.getState().setMaxY(2001)
-        useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
-      }),
-    )
+    app = reloadApp(app, () => {
+      useSettings.getState().setMinY(2000)
+      useSettings.getState().setMaxY(2001)
+      useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
+    })
     expect(readDate()).toBe(waiting)
   })
 
@@ -502,11 +456,11 @@ describe('what starts the history over — and nothing brings it back', () => {
     tap(ctrl('Reveal')) // answered, never scored: its park carries stats of zero, which a reset matches
     newQuestion()
     hide()
-    expect(readSessionHistory('1:saved', 'classic')).not.toBe(null)
+    expect(readSessionHistory(1, 'classic')).not.toBe(null)
     act(() => useSettings.getState().setSaveStats(true))
     answerRight()
     confirmResetStats()
-    expect(readSessionHistory('1:saved', 'classic')).toBe(null)
+    expect(readSessionHistory(1, 'classic')).toBe(null)
     // The page is discarded with no pagehide (a crash, a killed tab) and the session is restored.
     const asLeft = snapshotSession()
     teardown(app)
@@ -532,11 +486,13 @@ describe('what starts the history over — and nothing brings it back', () => {
     },
   )
 
-  it('Full Reset clears the history a guest interlude had put aside as well', () => {
-    answerRight() // yours
-    act(() => setPresetAmnesic(1, 'full')) // parked for the guest's visit
+  it('Full Reset in an Amnesic preset clears the history like any other', () => {
+    answerRight()
+    act(() => setPresetAmnesic(1, 'full'))
+    answerRight()
+    app = reloadApp(app) // (parked)
     openSettings('key')
-    fireFullReset() // in the Amnesic preset: wipes both copies, and turns Amnesic back off
+    fireFullReset()
     expect(statValue('Score')).toBe('0/0')
     expect(canGo('ArrowLeft')).toBe(false)
     expect(historyKeys().filter((k) => sessionStorage.getItem(k)[0] === '1')).toEqual([])
@@ -549,7 +505,7 @@ describe('what starts the history over — and nothing brings it back', () => {
     newQuestion()
     answerRight()
     act(() => deletePreset(p2.id)) // back on preset 1
-    expect(historyKeys().filter((k) => k.startsWith(`cg-history-v1:${p2.id}:`))).toEqual([])
+    expect(historyKeys().filter((k) => k.startsWith(`cg-history-v2:${p2.id}:`))).toEqual([])
   })
 
   it('saved stats that moved on underneath the park: the history is dropped, the stats win', () => {
@@ -566,7 +522,7 @@ describe('what starts the history over — and nothing brings it back', () => {
     answerRight()
     hide()
     const atPagehide = snapshotSession().map(([k, v]) =>
-      k.startsWith('cg-history-v1:') ? [k, '1{"engine":{"stack":"nope"}}'] : [k, v],
+      k.startsWith('cg-history-v2:') ? [k, '1{"engine":{"stack":"nope"}}'] : [k, v],
     )
     teardown(app)
     restoreSession(atPagehide)
@@ -725,9 +681,7 @@ describe('Blitz and MoX — the owner kept a reload clearing a round or run stil
     tap(ctrl(dayName(readDate())))
     hide()
     expect(historyKeys().sort()).toEqual(
-      ['classic', 'dedDay', 'dedMonth', 'dedYear', 'flash'].map(
-        (s) => `cg-history-v1:1:saved:${s}`,
-      ),
+      ['classic', 'dedDay', 'dedMonth', 'dedYear', 'flash'].map((s) => `cg-history-v2:1:${s}`),
     )
   })
 })
@@ -741,7 +695,7 @@ describe('the screen in use is parked last', () => {
     const written = []
     const real = Storage.prototype.setItem
     Storage.prototype.setItem = function (k, v) {
-      if (this === window.sessionStorage && k.startsWith('cg-history-v1:')) written.push(k)
+      if (this === window.sessionStorage && k.startsWith('cg-history-v2:')) written.push(k)
       return real.call(this, k, v)
     }
     try {
@@ -781,7 +735,7 @@ describe("a preset's parked histories go where its other session data goes", () 
     expect(isPresetFactory(p2.id, true)).toBe(true)
     act(() => switchPreset(p2.id)) // looked at…
     act(() => switchPreset(1)) // …and left: its screens parked a waiting question each, no play
-    expect(historyKeys().some((k) => k.startsWith(`cg-history-v1:${p2.id}:`))).toBe(true)
+    expect(historyKeys().some((k) => k.startsWith(`cg-history-v2:${p2.id}:`))).toBe(true)
     expect(isPresetFactory(p2.id, true)).toBe(true)
     act(() => switchPreset(p2.id))
     act(() => useSettings.getState().setSaveStats(false))
@@ -792,21 +746,17 @@ describe("a preset's parked histories go where its other session data goes", () 
   })
   it('deleting a preset removes its parks', () => {
     const p2 = otherPreset()
-    writeSessionHistory(`${p2.id}:saved`, 'classic', '{}', true)
+    writeSessionHistory(p2.id, 'classic', '{}', true)
     expect(isPresetFactory(p2.id, true)).toBe(false)
     act(() => deletePreset(p2.id))
-    expect(readSessionHistory(`${p2.id}:saved`, 'classic')).toBe(null)
+    expect(readSessionHistory(p2.id, 'classic')).toBe(null)
   })
-  it('an Amnesic change discards the parks of both session copies, and only those', () => {
+  it('an Amnesic change leaves its parks where they are', () => {
     const p2 = otherPreset()
+    writeSessionHistory(p2.id, 'classic', '{}', true)
     for (const mode of ['stats', 'full', 'off', 'stats']) {
-      writeSessionHistory(`${p2.id}:saved`, 'classic', '{}', true)
-      writeSessionHistory(`${p2.id}:stats`, 'classic', '{}', true)
-      writeSessionHistory(`${p2.id}:session`, 'classic', '{}', true)
       act(() => setPresetAmnesic(p2.id, mode))
-      expect(readSessionHistory(`${p2.id}:stats`, 'classic')).toBe(null)
-      expect(readSessionHistory(`${p2.id}:session`, 'classic')).toBe(null)
-      expect(readSessionHistory(`${p2.id}:saved`, 'classic')).toBe('{}')
+      expect(readSessionHistory(p2.id, 'classic')).toBe('{}')
     }
   })
 })

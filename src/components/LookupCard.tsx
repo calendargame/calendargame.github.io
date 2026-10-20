@@ -35,9 +35,6 @@ import type { FormatId } from '../lib/format.js'
 // is derived from those inputs by entryLabel/entryReadings below, against the LIVE Date Format. The
 // store also guarantees the date is REAL (normalizeLookupEntries), which is what lets the readings
 // treat "this calendar has no such date" as a fact about the calendar rather than about the data.
-// ⚠ `history` ARRIVES ALREADY MERGED (round 20): the caller combines the shared permanent list
-// with this browsing session's amnesic-suppressed overflow (store/lookupHistory's `mergeForDisplay`)
-// before it ever reaches this component, so nothing here needs to know two buckets exist.
 import type { LookupEntry } from '../store/lookupHistory.js'
 
 interface LookupCardProps {

@@ -4,6 +4,8 @@ import {
   blankSilo,
   encodeTag,
   decodeTag,
+  encodeAnchor,
+  decodeAnchor,
   type CountsShape,
   type Envelope,
   type Silo,
@@ -50,6 +52,9 @@ import { isRecord } from './json.js'
 // envelope `sync`: `{ g, at: <the silos' entries>, rec: { <map>: { <set-up>: entry | 0 } } }`. Beside it, two
 // keys no older build touches: the silos' sync key `cg-sync-v1|<doc>` and the RECORDS' KEY
 // `cg-sync-v1|<doc>|rec` - `{ g, maps: { <map>: <that map's records key> } }`.
+// ★ THE AMNESIC ANCHOR. A silo a new window writes inside an Amnesic window carries `a` (store/syncCounts'
+// encodeAnchor): the mode's counts as they stood before the window's first play, which the forget at the
+// next cold open puts back. An older build carries it with the silo, as it carries the tag.
 // ★ THE WRITE MARK. Every silo a new window writes carries `wl`, that save's stamp. An older build carries
 // a silo's unknown fields through every change but a reset (tests/syncedDoc.olderBuilds, F-A), so the
 // newest `wl` in a doc an older tab saved says WHICH LOAD its records come from - what the records' merge
@@ -158,7 +163,9 @@ export function progressShape(o: {
       return { state, sync: sync ? ({ g: sync.g, at: sync.at ?? {} } as Envelope) : null }
     },
     silo(disk) {
-      return { v: siloOfStats(disk), tag: isRecord(disk) ? decodeTag(disk.w) : null }
+      const v = siloOfStats(disk)
+      const a = isRecord(disk) ? decodeAnchor(disk.a) : null
+      return { v: a ? { ...v, a } : v, tag: isRecord(disk) ? decodeTag(disk.w) : null }
     },
     // (a mode's stored stats compared without spelling out its solve times: their count and hash)
     diskFp(disk) {
@@ -167,7 +174,7 @@ export function progressShape(o: {
       return `${canonicalJson(rest)}#${Array.isArray(times) ? `${times.length}:${timesHash(times as number[])}` : JSON.stringify(times)}`
     },
     diskSilo(v: Silo, tag: Tag) {
-      return { ...statsOfSilo(v), w: encodeTag(tag) }
+      return { ...statsOfSilo(v), w: encodeTag(tag), ...(v.a ? { a: encodeAnchor(v.a) } : {}) }
     },
     write: (state, sync, full) => o.compose(state, sync, full),
     readKey(text) {
@@ -287,7 +294,8 @@ export function composeRecords(
 }
 
 /**
- * A doc's state with the door's own marks taken off - each mode's tag and write mark (`w`, `wl`), each
+ * A doc's state with the door's own marks taken off - each mode's tag, write mark and anchor (`w`, `wl`,
+ * `a`), each
  * record's tag (`w`) and the rounds a pass-through carries (`nr`, `ops`) - and nothing else touched: the
  * values a build of any age reads from it, with whatever this build cannot name left in place
  * (store/presetControl's isPresetFactory compares it with the factory values).
@@ -298,7 +306,7 @@ export function progressStateUnmarked(state: Record<string, unknown>): Record<st
     out.stats = Object.fromEntries(
       Object.entries(state.stats).map(([x, s]) => {
         if (!isRecord(s)) return [x, s]
-        const { w: _w, wl: _wl, ...v } = s
+        const { w: _w, wl: _wl, a: _a, ...v } = s
         return [x, v]
       }),
     )

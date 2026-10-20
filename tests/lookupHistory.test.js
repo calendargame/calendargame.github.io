@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   addLookupEntry,
   moveEntryToTop,
-  mergeForDisplay,
   normalizeLookupEntries,
 } from '../src/store/lookupHistory.js'
 
@@ -60,55 +59,6 @@ describe('lookupHistory — moveEntryToTop', () => {
   })
 })
 
-// ── mergeForDisplay: the session overflow shown ahead of the permanent list ─────────────────
-describe('lookupHistory — mergeForDisplay', () => {
-  const a = { id: 'a', y: 1, m: 1, d: 1 }
-  const b = { id: 'b', y: 2, m: 2, d: 2 }
-  const s1 = { id: 's1', y: 3, m: 3, d: 3 }
-  const s2 = { id: 's2', y: 4, m: 4, d: 4 }
-
-  it('is just the permanent list when there is no session overflow', () => {
-    expect(mergeForDisplay([a, b], [])).toEqual([a, b])
-  })
-
-  it('shows the session overflow ahead of the permanent list, newest of each first', () => {
-    expect(mergeForDisplay([a, b], [s2, s1])).toEqual([s2, s1, a, b])
-  })
-
-  it('an empty permanent list with a session overflow is just the overflow', () => {
-    expect(mergeForDisplay([], [s1])).toEqual([s1])
-  })
-
-  it('both empty is empty', () => {
-    expect(mergeForDisplay([], [])).toEqual([])
-  })
-
-  // The merged DISPLAY list is the whole of both buckets — the session overflow first — with no
-  // re-trim: it used to be cut back to 100 so two capped buckets could not show 200 rows.
-  it('shows every entry of both buckets, the session overflow first', () => {
-    const perm = Array.from({ length: 300 }, (_, i) => ({ id: `p${i}`, y: 1900, m: 1, d: 1 }))
-    const session = Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, y: 2000, m: 1, d: 1 }))
-    const merged = mergeForDisplay(perm, session)
-    expect(merged).toHaveLength(310)
-    expect(merged.slice(0, 10)).toEqual(session)
-    expect(merged.slice(10)).toEqual(perm)
-  })
-
-  it('with nothing in the session bucket it IS the permanent list — the same array, not a copy', () => {
-    // src/main.tsx memoises the merge on the two buckets; with an empty session the list's identity
-    // is the store's own, so nothing downstream sees a "new" history that did not change.
-    const perm = [{ id: 'p', y: 1900, m: 1, d: 1 }]
-    expect(mergeForDisplay(perm, [])).toBe(perm)
-  })
-})
-
-// ── the lookup-history normalizer: shape + validation (moved here verbatim, round 20) ────
-// label/weekday/result were snapshots of how the date read at lookup time; the card derives all
-// three now, so the stored copies were not merely redundant but WRONG after a Date Format change.
-// The VALIDATION half matters just as much: LookupCard carries no per-field guards any more, so an
-// entry that survives this filter is one the card can render. The pure function is unit-tested
-// here; the localStorage/sessionStorage → rehydrate path (where it runs on EVERY load, in EITHER
-// bucket) is in lookupHistory.dom.
 describe('lookupHistory — normalizeLookupEntries', () => {
   it('keeps the date and the id, drops the rendered text', () => {
     expect(

@@ -1,5 +1,5 @@
-// THE ONE DASHED FRAME — "these numbers are for this session only" (Amnesic) — in every practice
-// mode, on every Amnesic value, with Save Stats on and off.
+// THE ONE DASHED FRAME — "what you play now is forgotten when you close the app" (Amnesic) — in every
+// practice mode, on every Amnesic value, with Save Stats on and off.
 //
 //                        Save Stats on                      Save Stats off (the strip is dimmed)
 //   Off                  no frame                           no frame
@@ -10,7 +10,7 @@
 //
 // components/StatPanel decides which element wears the frame and tests/sessionOnlyOutline.dom pins
 // that choice class by class. What only a browser can say is here: that exactly ONE dashed line is
-// DRAWN, that it runs round exactly what is temporary, and that drawing it moves nothing — the
+// DRAWN, that it runs round exactly what will be forgotten, and that drawing it moves nothing — the
 // strip and the readouts are where they are with no frame at all.
 import { test, expect, openApp, statsBlock, switchMode, SAME_PX, THEMES } from './support/app'
 import { PRACTICE_MODES, type PracticeModeId } from '../../src/lib/modes'
@@ -20,8 +20,8 @@ import type { Page } from '@playwright/test'
 const AMNESIC: AmnesicMode[] = ['off', 'stats', 'full']
 const HAS_BESTS: PracticeModeId[] = ['aox', 'blitz']
 const SPOKEN = {
-  strip: 'These stats are for this session only',
-  bests: 'Bests are for this session only',
+  strip: 'What you play now is forgotten when you close the app',
+  bests: 'Bests set now are forgotten when you close the app',
   dimmed: 'Stats are not being saved',
 }
 

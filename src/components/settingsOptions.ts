@@ -44,7 +44,7 @@ export const DOT_ROTATION_OPTIONS: { value: DotRotation; label: string }[] = [
   { value: 'ccw45', label: '45° CCW' },
   { value: 'ccw90', label: '90° CCW' },
 ]
-// Amnesic — how much of what is played LASTS (store/amnesicMode's three values, in AMNESIC_MODES
+// Amnesic — how much of what is played LASTS past the app's close (store/amnesicMode's three values, in AMNESIC_MODES
 // order). "Stats Only" has no hyphen as a label standing on its own. No ariaLabel: the panel's
 // switches also SHOW "Off", but each of those is named for its setting, so "Off" is the name of this
 // one pill only.
@@ -53,10 +53,6 @@ export const AMNESIC_OPTIONS: { value: AmnesicMode; label: string }[] = [
   { value: 'stats', label: 'Stats Only' },
   { value: 'full', label: 'Full' },
 ]
-// A value's name as the pill shows it — for text that has to say which one a preset is on (the two
-// storage popups, where what frees room depends on it).
-export const amnesicLabel = (mode: AmnesicMode): string =>
-  AMNESIC_OPTIONS.find((option) => option.value === mode)?.label ?? mode
 // Theme — two independent picks under Use System Settings, one pick ACROSS both rows when it's off
 // (see the Theme block in the panel).
 export const DARK_THEMES = [

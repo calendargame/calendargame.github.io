@@ -3,15 +3,13 @@ import {
   AMNESIC_MODES,
   AMNESIC_SPOKEN,
   isAmnesicMode,
-  moreAmnesic,
   readAmnesicMode,
   storedAmnesic,
 } from '../src/store/amnesicMode.js'
 
 // amnesicMode — the three values of the Amnesic setting and the ONE reader of every stored spelling
 // of it. Pure, so it is pinned here as a table; where each stored copy actually reaches the reader
-// (a saved-defaults snapshot, another preset's, the settings field, an older build's session record)
-// is tests/amnesicSetting.dom's.
+// (a saved-defaults snapshot, another preset's, the settings field) is tests/amnesicSetting.dom's.
 
 describe('the three values', () => {
   it('are Off, Stats Only, and Full, least amnesic first', () => {
@@ -19,14 +17,6 @@ describe('the three values', () => {
     for (const mode of AMNESIC_MODES) expect(isAmnesicMode(mode)).toBe(true)
     for (const not of [true, false, null, undefined, 'on', 'Full', 1, {}])
       expect(isAmnesicMode(not)).toBe(false)
-  })
-
-  it('moreAmnesic picks the one that keeps less', () => {
-    for (const a of AMNESIC_MODES)
-      for (const b of AMNESIC_MODES)
-        expect(moreAmnesic(a, b)).toBe(
-          AMNESIC_MODES[Math.max(AMNESIC_MODES.indexOf(a), AMNESIC_MODES.indexOf(b))],
-        )
   })
 })
 

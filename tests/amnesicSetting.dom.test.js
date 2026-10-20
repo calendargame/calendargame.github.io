@@ -7,15 +7,16 @@
 //   • a preset whose settings hold no value of their own is on its SAVED DEFAULT, and a load writes
 //     nothing for it; the stored spellings read through the one reader, for every preset;
 //   • the value stays - across a reload, a preset switch, AND a real close (9.6) - until somebody
-//     changes it; changing it writes the setting and nothing else permanent;
+//     changes it; changing it writes the setting and nothing else permanent, and a change away from Off
+//     moves the preset's switch-on counter (`amnesicOn`, where its Amnesic window starts);
 //   • Save Defaults and Clear Saved Defaults never move the value a preset is on;
 //   • a new preset is on its own saved default (none: Off), a duplicate on the original's value;
-//   • another window's change of it comes in at once and does here what the pill does (9.2); an older
-//     build's save, which drops the field, leaves it standing;
-//   • the one hand-over (9.5): a v2.28-v2.29 tab's session record, read at the first load only;
+//   • another window's change of it comes in at once and, like the pill, changes no number on screen; an
+//     older build's save, which drops the field, leaves it standing; the session record a v2.28-v2.29 tab
+//     kept is never read (the hand-over went with the session copies - store/amnesic);
 //   • a full device, and a browser that refuses sessionStorage.
-// What the value DOES to saved progress is tests/amnesic.dom's; what the older builds were observed
-// doing with their own spellings is tests/amnesic.olderBuilds'.
+// What the value DOES to saved progress at the close is tests/amnesic.dom's; what the older builds were
+// observed doing with their own spellings is tests/amnesic.olderBuilds'.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
 import {
@@ -25,9 +26,9 @@ import {
   duplicatePreset,
   setPresetAmnesic,
 } from '../src/store/presetControl.js'
-import { amnesicModeOf, activeDataId } from '../src/store/amnesic.js'
+import { amnesicModeOf } from '../src/store/amnesic.js'
 import { openBrowsingSession } from '../src/store/browsingSession.js'
-import { useSettings, SETTINGS_DOC, usePresetAmnesics } from '../src/store/settings.js'
+import { useSettings, SETTINGS_DOC, usePresetAmnesics, amnesicOnOf } from '../src/store/settings.js'
 import { useProgress } from '../src/store/progress.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 import { useStorageHealth } from '../src/store/storageHealth.js'
@@ -35,7 +36,6 @@ import { resetAppState } from './helpers/settingsPanel.jsx'
 import { loadPage, closeApp } from './helpers/pageLoad.js'
 import { otherWindow } from './helpers/otherWindow.js'
 
-const HANDED_OVER = 'cg-amnesic-v1'
 const PREFS = { flashMs: 800, blitzSec: 60, blitzQSec: 10, aoxN: '10' }
 const settingsKey = (id) => presetKey(PRESET_STORE_KEYS.settings, id)
 const defaultsKey = (id) => presetKey(PRESET_STORE_KEYS.userDefaults, id)
@@ -117,10 +117,17 @@ describe('a preset whose settings hold no value of their own is on its saved def
   it('a load writes nothing for it — not one byte of the device changes', () => {
     seedDefaults(1, { amnesic: true, amnesicMode: 'full' })
     localStorage.removeItem(settingsKey(1))
-    const before = device()
+    // (apart from the one key every close writes: the next session counted - store/amnesicClose)
+    const apart = () =>
+      JSON.stringify(
+        Object.entries({ ...localStorage })
+          .filter(([k]) => k !== 'cg-session-v1')
+          .sort(),
+      )
+    const before = apart()
     closeAndReopen()
     expect(amnesicModeOf(1)).toBe('full')
-    expect(device()).toBe(before)
+    expect(apart()).toBe(before)
   })
 })
 
@@ -139,15 +146,29 @@ describe('the value stays until somebody changes it', () => {
     expect([amnesicModeOf(1), amnesicModeOf(p2.id)]).toEqual(['stats', 'full'])
   })
 
-  it('a real close ends the session’s numbers, and the preset is still on its value', () => {
+  it('a real close forgets what was played since the switch-on, and the preset is still on its value', () => {
     useProgress.getState().setModeStats('classic', played(7))
     setPresetAmnesic(1, 'full')
-    useProgress.getState().setModeStats('classic', played(2)) // the guest's play
+    // the guest's two, one answer at a time (as a mode records them)
+    for (const n of [8, 9]) useProgress.getState().setModeStats('classic', played(n))
+    expect(useProgress.getState().stats.classic.played).toBe(9) // counted while playing
     closeAndReopen()
     expect(amnesicModeOf(1)).toBe('full')
-    expect(useProgress.getState().stats.classic.played).toBe(0) // a new session
-    setPresetAmnesic(1, 'off')
     expect(useProgress.getState().stats.classic.played).toBe(7) // your own, untouched
+  })
+
+  it('the switch-on counter moves on a change away from Off, and only then', () => {
+    const seen = []
+    for (const mode of ['stats', 'full', 'off', 'full', 'stats', 'off', 'stats']) {
+      setPresetAmnesic(1, mode)
+      seen.push(amnesicOnOf(1))
+    }
+    expect(seen).toEqual([1, 1, 1, 2, 2, 2, 3])
+    const p2 = createPreset() // (a preset you are not on: into its own doc)
+    setPresetAmnesic(p2.id, 'full')
+    expect(amnesicOnOf(p2.id)).toBe(1)
+    reload()
+    expect([amnesicOnOf(1), amnesicOnOf(p2.id)]).toEqual([3, 1])
   })
 
   it('changing it writes the setting into the preset’s settings, and nothing else permanent', () => {
@@ -242,16 +263,13 @@ describe('another window', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('its change comes in at once and does here what the pill does: this window’s session starts', () => {
+  it('its change comes in at once, and like the pill it changes no number on screen', () => {
     useProgress.getState().setModeStats('classic', played(7))
-    const data = activeDataId()
     const W = otherWindow()
-    W.save(SETTINGS_DOC, { amnesic: 'full' })
+    W.save(SETTINGS_DOC, { amnesic: 'full', amnesicOn: 1 })
     W.deliver()
-    expect(amnesicModeOf(1)).toBe('full')
-    expect(activeDataId()).not.toBe(data) // the screens remount on the copy now in use
-    expect(useProgress.getState().stats.classic.played).toBe(0) // this window's own session
-    // …and back, from there: your own numbers, untouched
+    expect([amnesicModeOf(1), amnesicOnOf(1)]).toEqual(['full', 1])
+    expect(useProgress.getState().stats.classic.played).toBe(7)
     W.save(SETTINGS_DOC, { amnesic: 'off' })
     W.deliver()
     expect(amnesicModeOf(1)).toBe('off')
@@ -280,14 +298,12 @@ describe('another window', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// THE ONE HAND-OVER (9.5). A guest is playing in a v2.28.0-v2.29.x tab when it updates itself; the
-// reload that follows is this build's first load, in a session the older build started - its record of
-// each preset's value (`cg-amnesic-v1`) still there.
-describe('the hand-over from a v2.28-v2.29 tab’s session', () => {
-  const olderGuestSession = () => {
-    useProgress.getState().setModeStats('classic', played(7)) // the owner's saved stats
-    const p2 = createPreset('Other')
-    // The guest's session copy, where that build kept it (and where this build's Full reads it).
+// WHAT AN OLDER BUILD KEPT FOR THE VALUE. A v2.28.0-v2.29.x tab kept each preset's value in a session
+// record (`cg-amnesic-v1`) and a guest's play in a session copy of the progress; an older build still
+// keeps a flag on the preset registry. This build reads none of them: the value is the preset's setting.
+describe('what an older build kept for the value', () => {
+  it('a v2.28-v2.29 tab’s session record and session copy are never read, and nothing is written for them', () => {
+    useProgress.getState().setModeStats('classic', played(7))
     sessionStorage.setItem(
       presetKey(PRESET_STORE_KEYS.progress, 1),
       JSON.stringify({
@@ -295,54 +311,13 @@ describe('the hand-over from a v2.28-v2.29 tab’s session', () => {
         version: 5,
       }),
     )
-    sessionStorage.setItem(HANDED_OVER, JSON.stringify({ 1: 'full', [p2.id]: 'off' }))
-    sessionStorage.setItem('cg-browsing-session-v1', '1')
-    return p2
-  }
-
-  it('★ the guest stays a guest, with the session’s numbers — the value written as the preset’s setting, the record gone', () => {
-    const p2 = olderGuestSession()
-    reload()
-    expect(amnesicModeOf(1)).toBe('full')
-    expect(amnesicModeOf(p2.id)).toBe('off')
-    expect(useProgress.getState().stats.classic.played).toBe(2) // the guest's session, carried over
-    expect(storedField(1)).toBe('full')
-    expect(storedField(p2.id)).toBeUndefined() // (the same as its own: nothing written)
-    expect(sessionStorage.getItem(HANDED_OVER)).toBeNull()
-    // …and it is a setting from here on: a real close keeps it
-    closeAndReopen()
-    expect(amnesicModeOf(1)).toBe('full')
-  })
-
-  it('at the first load only: a later load finds no record and changes nothing', () => {
-    olderGuestSession()
-    reload()
-    setPresetAmnesic(1, 'off')
+    sessionStorage.setItem('cg-amnesic-v1', JSON.stringify({ 1: 'full' }))
     sessionStorage.setItem('cg-browsing-session-v1', '1')
     const before = device()
     reload()
     expect(amnesicModeOf(1)).toBe('off')
+    expect(useProgress.getState().stats.classic.played).toBe(7)
     expect(device()).toBe(before)
-  })
-
-  it('a record that says what the preset is already on writes nothing', () => {
-    useProgress.getState().setModeStats('classic', played(7))
-    sessionStorage.setItem(HANDED_OVER, JSON.stringify({ 1: 'off' }))
-    const before = device()
-    reload()
-    expect(device()).toBe(before)
-    expect(sessionStorage.getItem(HANDED_OVER)).toBeNull()
-  })
-
-  it('a record value this build does not know is handed over as Full; a record that is not JSON is dropped', () => {
-    sessionStorage.setItem(HANDED_OVER, JSON.stringify({ 1: 'later' }))
-    reload()
-    expect(amnesicModeOf(1)).toBe('full')
-    setPresetAmnesic(1, 'off')
-    sessionStorage.setItem(HANDED_OVER, '{not json')
-    reload()
-    expect(amnesicModeOf(1)).toBe('off')
-    expect(sessionStorage.getItem(HANDED_OVER)).toBeNull()
   })
 
   it('the registry flag an older build kept is carried and never read', () => {

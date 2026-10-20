@@ -15,8 +15,8 @@
 // history was played over.
 //
 // ★ WHAT COMES BACK — NOTHING THAT CANNOT BE CHECKED. A parked history is a claim about the stats
-// underneath it, and those stats live somewhere else (store/progress, localStorage — or the session
-// copy for an Amnesic preset). So restoreParked accepts a history ONLY if it is exactly the state
+// underneath it, and those stats live somewhere else (store/progress, localStorage). So restoreParked
+// accepts a history ONLY if it is exactly the state
 // those stats support:
 //   • its counts — played, good, streak, best, timesLost — equal the saved ones, and so does the
 //     hash of the saved times (a park from before the hash was kept has none, and goes on to the

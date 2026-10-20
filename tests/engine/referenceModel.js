@@ -77,6 +77,8 @@
 //     stamped, and that the answer its grid marks is the model's own answer in that calendar.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { statsAtCard } from '../../src/engine/gameReducer.js'
+
 // ── The model's own calendar arithmetic (0 = Sunday … 6 = Saturday) ──────────────────────────────
 // Julian applies to a date up to October 4, 1582, and only when the question's calendar says so.
 const beforeReform = (q) => q.y < 1582 || (q.y === 1582 && (q.m < 10 || (q.m === 10 && q.d <= 4)))
@@ -456,5 +458,48 @@ export function compareRefModel(m, state, plan, cards) {
   // mid-correction the displayed streak is transitional by design.
   if (m.cursor === 0 && !viewBurned(m.live) && !viewRevealed(m.live) && s.streak !== trailing)
     v.push(`REF streak: model ${trailing}, reducer ${s.streak}`)
+
+  // ★ THE STATS AS THEY STOOD AFTER AN EARLIER QUESTION (the reducer's statsAtCard - what Amnesic's anchor
+  // is corrected to when an Override changes a question from before its window): the model's own prefix
+  // of the same ledger, every Override since applied, at the hydrated start, the newest question, and two
+  // between - and nothing for a point before the hydrated start or past the newest.
+  const prior = m.priorHistory.length
+  const own = seq.length - prior
+  for (const j of new Set([0, own >> 1, Math.max(0, own - 1), own])) {
+    const got = statsAtCard(state, prior + j)
+    const pre = seq.slice(0, prior + j)
+    const preTimes = [...m.priorTimes]
+    const asked = [...m.history, ...(liveScored ? [m.live] : [])].slice(0, j)
+    for (const q of asked) if (contribution(q) != null) preTimes.push(contribution(q))
+    let pBest = 0
+    let pRun = 0
+    for (const c of pre) {
+      pRun = c ? pRun + 1 : 0
+      if (pRun > pBest) pBest = pRun
+    }
+    const want = {
+      played: prior + j,
+      good: pre.filter(Boolean).length,
+      streak: pRun,
+      best: pBest,
+      times: preTimes,
+    }
+    const seen = got && {
+      played: got.played,
+      good: got.good,
+      streak: got.streak,
+      best: got.best,
+      times: got.times,
+    }
+    // (the streak at the newest question is the one the strip shows: transitional mid-correction, above)
+    if (seen && j === own && !(m.cursor === 0 && !viewBurned(m.live) && !viewRevealed(m.live)))
+      seen.streak = want.streak
+    if (JSON.stringify(seen) !== JSON.stringify(want))
+      v.push(
+        `REF statsAtCard(${prior + j}): model ${JSON.stringify(want)}, reducer ${JSON.stringify(seen)}`,
+      )
+  }
+  if (statsAtCard(state, prior - 1) !== null || statsAtCard(state, prior + own + 1) !== null)
+    v.push('REF statsAtCard: a point outside the history gave stats')
   return v
 }

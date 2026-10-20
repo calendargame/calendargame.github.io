@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
 // screenPool — THE ONE DOOR A MODE SCREEN WRITES THROUGH (store/screenPool), and the property it
-// exists for: a write names the copy of the data its screen was drawn for, and lands only while that
-// copy is the live one. Each of the three ways the live copy moves — a preset switch, an Amnesic
-// change, a preset delete — is driven for real through store/presetControl, and every function of
-// the door is then called with the copy that was live BEFORE the move (refused, nothing anywhere
-// changes) and with the one live after it (written, as the raw setter would).
+// exists for: a write names the preset its screen was drawn for, and lands only while that preset is
+// the live one. Each of the two ways the live preset moves — a preset switch, a preset delete — is
+// driven for real through store/presetControl, and every function of the door is then called with the
+// preset that was live BEFORE the move (refused, nothing anywhere changes) and with the one live after
+// it (written, as the raw setter would). An Amnesic change moves nothing (store/amnesic: one pool).
 // (T-F1d of design-q6.md; tests/screenPool.gap.dom is the race the door closes, in the real app.)
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
@@ -16,7 +16,6 @@ import {
 } from '../src/store/presetControl.js'
 import { usePresets } from '../src/store/presets.js'
 import { useProgress } from '../src/store/progress.js'
-import { activeDataId, activeBestsId } from '../src/store/amnesic.js'
 import { readSessionRound, writeSessionRound } from '../src/store/sessionRound.js'
 import {
   fileRoundResult,
@@ -44,15 +43,19 @@ const REC = {
   streakRoundId: ROUND_ID(1),
 }
 const STATS = { played: 3, good: 2, streak: 1, best: 2, times: [1.5, 2.25] }
+// (a mirror whose engine holds no earlier card to read the stats at - modes/modeHooks' useStatsMirror)
+const NO_CARDS = () => null
+// (what a screen kept of a round's first filing, made under Off - store/screenPool's Filed)
+const FILED = { text: JSON.stringify(ROUND), e: null }
 const store = () => {
   const { stats, blitzBest, suddenBest, suddenAmBest, aoxBest } = useProgress.getState()
   return JSON.stringify({ stats, blitzBest, suddenBest, suddenAmBest, aoxBest })
 }
 
-// Each way the live copy moves, from a state where the copy that is live now can be named.
+const live = () => usePresets.getState().activeId
+// Each way the live preset moves, from a state where the preset that is live now can be named.
 const MOVES = {
   'a preset switch': () => switchPreset(createPreset().id),
-  'an Amnesic change': () => setPresetAmnesic(usePresets.getState().activeId, 'full'),
   'a preset delete': () => {
     const was = usePresets.getState().activeId
     createPreset()
@@ -60,52 +63,65 @@ const MOVES = {
   },
 }
 
-describe('store/screenPool — a screen writes only to the copy it was drawn for', () => {
+describe('store/screenPool — a screen writes only to the preset it was drawn for', () => {
   beforeEach(() => resetAppState())
 
   for (const [what, move] of Object.entries(MOVES)) {
-    it(`after ${what}, every write named with the old copy is refused, and with the new one lands`, () => {
-      const oldData = activeDataId()
+    it(`after ${what}, every write named with the old preset is refused, and with the new one lands`, () => {
+      const oldId = live()
       move()
-      const newData = activeDataId()
-      const newBests = activeBestsId()
-      expect(newData, 'the live copy moved').not.toBe(oldData)
+      const newId = live()
+      expect(newId, 'the live preset moved').not.toBe(oldId)
       const before = store()
-      writeSessionRound(newBests, 'aox', { b: 2 })
-      const parkedBefore = sessionStorage.getItem('cg-round-v2')
+      writeSessionRound(newId, 'aox', { b: 2 })
+      const parkedBefore = sessionStorage.getItem('cg-round-v3')
 
       for (const map of ['blitzBest', 'suddenBest', 'suddenAmBest'])
-        expect(fileRoundResult(oldData, map, 'k', ROUND_ID(1), ROUND, false)).toBe(false)
-      expect(fileRoundResult(oldData, 'aoxBest', 'k', ROUND_ID(1), { avg: 1, med: 1 }, false)).toBe(
-        false,
-      )
-      saveModeStats(oldData, 'classic', useProgress.getState().stats.classic, STATS)
-      parkRound(oldData, newBests, 'blitz', { c: 3 })
-      unparkRound(oldData, newBests, 'aox')
+        expect(fileRoundResult(oldId, map, 'k', ROUND_ID(1), ROUND, null)).toBeNull()
+      expect(
+        fileRoundResult(oldId, 'aoxBest', 'k', ROUND_ID(1), { avg: 1, med: 1 }, null),
+      ).toBeNull()
+      saveModeStats(oldId, 'classic', useProgress.getState().stats.classic, STATS, NO_CARDS)
+      parkRound(oldId, 'blitz', { c: 3 })
+      unparkRound(oldId, 'aox')
       expect(store(), 'nothing in the store moved').toBe(before)
-      expect(sessionStorage.getItem('cg-round-v2'), 'nothing parked or unparked').toBe(parkedBefore)
+      expect(sessionStorage.getItem('cg-round-v3'), 'nothing parked or unparked').toBe(parkedBefore)
 
-      expect(fileRoundResult(newData, 'blitzBest', 'k', ROUND_ID(1), ROUND, false)).toBe(true)
+      expect(fileRoundResult(newId, 'blitzBest', 'k', ROUND_ID(1), ROUND, null)).not.toBeNull()
       expect(useProgress.getState().blitzBest.k).toEqual(REC)
-      saveModeStats(newData, 'classic', useProgress.getState().stats.classic, STATS)
+      saveModeStats(newId, 'classic', useProgress.getState().stats.classic, STATS, NO_CARDS)
       expect(useProgress.getState().stats.classic).toEqual(STATS)
-      parkRound(newData, newBests, 'blitz', { c: 3 })
-      expect(readSessionRound(newBests, 'blitz')).toEqual({ c: 3 })
-      unparkRound(newData, newBests, 'aox')
-      expect(readSessionRound(newBests, 'aox')).toBe(null)
+      parkRound(newId, 'blitz', { c: 3 })
+      expect(readSessionRound(newId, 'blitz')).toEqual({ c: 3 })
+      unparkRound(newId, 'aox')
+      expect(readSessionRound(newId, 'aox')).toBe(null)
     })
   }
 
+  it('an Amnesic change moves nothing: the writes named with the preset still land', () => {
+    const id = live()
+    for (const value of ['stats', 'full', 'off']) {
+      expect(setPresetAmnesic(id, value)).toBe(true)
+      expect(live()).toBe(id)
+    }
+    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), ROUND, null)).not.toBeNull()
+    expect(useProgress.getState().blitzBest.k).toEqual(REC)
+    expect(
+      saveModeStats(id, 'classic', useProgress.getState().stats.classic, STATS, NO_CARDS),
+    ).toBe(true)
+    expect(useProgress.getState().stats.classic).toEqual(STATS)
+  })
+
   it('a round a Reset has since removed files nothing: there is nothing left of it to change', () => {
-    const id = activeDataId()
-    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), ROUND, false)).toBe(true)
+    const id = live()
+    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), ROUND, null)).not.toBeNull()
     useProgress.getState().resetProgress() // (Full Reset)
     const before = store()
     // an Override of that round on the screen still showing it, and a take-back of it
-    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), { score: 9, streak: 9 }, true)).toBe(
-      false,
-    )
-    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), null, true)).toBe(false)
+    expect(
+      fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), { score: 9, streak: 9 }, FILED),
+    ).toBeNull()
+    expect(fileRoundResult(id, 'blitzBest', 'k', ROUND_ID(1), null, FILED)).toBeNull()
     expect(store()).toBe(before)
   })
 })
@@ -119,17 +135,17 @@ describe('store/screenPool — a stale mirror is refused, and its engine rebuilt
   beforeEach(() => resetAppState())
 
   it('a write over its own base lands, and the next one carries the new base', () => {
-    const id = activeDataId()
+    const id = live()
     const base = useProgress.getState().stats.classic
-    expect(saveModeStats(id, 'classic', base, STATS)).toBe(true)
+    expect(saveModeStats(id, 'classic', base, STATS, NO_CARDS)).toBe(true)
     expect(useProgress.getState().stats.classic).toBe(STATS)
     const next = { ...STATS, played: 4 }
-    expect(saveModeStats(id, 'classic', STATS, next)).toBe(true)
+    expect(saveModeStats(id, 'classic', STATS, next, NO_CARDS)).toBe(true)
     expect(useProgress.getState().stats.classic).toBe(next)
   })
 
   it('a write over stats that moved is refused: nothing written, the engine rebuilt, reported once', () => {
-    const id = activeDataId()
+    const id = live()
     const base = useProgress.getState().stats.flash
     const elsewhere = { ...STATS, played: 9, good: 9 }
     useProgress.getState().setModeStats('flash', elsewhere) // (another window's, merged in the gap)
@@ -137,13 +153,13 @@ describe('store/screenPool — a stale mirror is refused, and its engine rebuilt
     const epochs = useScreenEpoch.getState()
     const swaps = useSwapEpoch.getState()
     vi.mocked(captureError).mockClear()
-    expect(saveModeStats(id, 'flash', base, STATS)).toBe(false)
+    expect(saveModeStats(id, 'flash', base, STATS, NO_CARDS)).toBe(false)
     expect(useProgress.getState().stats.flash).toBe(elsewhere)
     expect(useScreenEpoch.getState()).toEqual({ ...epochs, flash: epochs.flash + 1 }) // that engine's alone
     expect(useSwapEpoch.getState().flash.epoch).toBe(swaps.flash.epoch + 1) // (Flash's own)
     expect(useSwapEpoch.getState().classic).toBe(swaps.classic)
     expect(readSessionHistory(id, 'flash')).toBe(null)
-    expect(saveModeStats(id, 'flash', base, STATS)).toBe(false)
+    expect(saveModeStats(id, 'flash', base, STATS, NO_CARDS)).toBe(false)
     expect(vi.mocked(captureError).mock.calls.map(([, ctx]) => ctx.tripwire)).toEqual([
       'staleMirror',
     ])

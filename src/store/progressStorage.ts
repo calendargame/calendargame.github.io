@@ -46,9 +46,8 @@ import { cyrb53 } from './syncStamp.js'
 // only once it is there; anything not named by a main key is ignored by every reader. A chunk the
 // device refuses is simply not sealed — those times stay in the tail, nothing is unsaved.
 //
-// ★ WHAT MAY DELETE A CHUNK — four cases, each by exact key name, and each bound to the storage AREA
-// being written (an Amnesic preset's session copy lives in sessionStorage under the same names, and
-// nothing here may reach across to the permanent one):
+// ★ WHAT MAY DELETE A CHUNK — five cases, each by exact key name, and each bound to the storage AREA
+// being written:
 //   a. A RESET SEEN BY THIS PAGE: a silo this page last saved with times is now saved empty. EVERY
 //      chunk key of that silo on the device goes, once that main save is on the device - the ones this
 //      page knew, and the ones a deep Override re-sealed away or another tab left (Round 26's review
@@ -57,9 +56,13 @@ import { cyrb53 } from './syncStamp.js'
 //      older build reset it, or saved a complete copy over a sealed one). The exact names found are
 //      remembered, and at the next main save that lands each is deleted — UNLESS it still spells the
 //      times at its position in what was just saved, which is the chunk a sealing save would name.
-//   c. removeProgressCopy: the whole copy is going (a preset deleted, a guest session thrown away,
-//      Full Reset's wipe of an Amnesic preset's parked stats).
+//   c. removeProgressCopy: the whole copy is going (a preset deleted).
 //   d. sweepAbandonedTimes: once per fresh open — a preset that no longer exists and has no main key.
+//   e. AMNESIC'S FORGET (store/progressDoor's forget; design-amnesic-close.md 3): a silo put back to what
+//      it held before an Amnesic window is a Reset to that point, and is treated as one - every chunk
+//      key of it on the device goes once that main save is on the device, UNLESS it still spells the
+//      times at its position in what was saved (the chunks of the times kept, which the save names).
+//      Without it every window's sealed times would stay on the device, unreachable, for good.
 // Chunks that are merely unreachable — a deep Override re-sealed its part under new names, two tabs
 // diverged — are KEPT until that silo is reset: an older page may still hold a save that names them.
 
@@ -369,8 +372,8 @@ export function expandProgress(area: Storage, presetId: number, text: string | n
 }
 
 /**
- * The reader and writer of the saved progress for one page. `load` and `save` are what zustand's
- * persist calls (through store/amnesic's router, which decides which copy); both are synchronous.
+ * The reader and writer of the saved progress for one page (store/progressDoor's, for each copy it
+ * reads and lands); every call is synchronous.
  */
 export function createProgressCodec<S>() {
   let book: Book | null = null
@@ -466,10 +469,12 @@ export function createProgressCodec<S>() {
    * Seal `value` for one copy: its chunks written (every chunk it names is on the device after this),
    * and the main key's TEXT - which the caller writes, and then tells `finish` whether it landed (the
    * windows-in-sync door lands it with its sync keys, store/syncedDoc). Nothing is deleted before then.
+   * `cut`: the silos Amnesic's forget put back in this save (rule e).
    */
   function seal(
     copy: ProgressCopy,
     value: StorageValue<S>,
+    cut: ReadonlySet<string> = new Set(),
   ): { area: Storage; text: string; finish(landed: boolean): void } {
     const mainKey = mainKeyOf(copy.presetId)
     const samePlace = !!book && book.area === copy.area && book.mainKey === mainKey
@@ -515,6 +520,12 @@ export function createProgressCodec<S>() {
         for (const key of keys) b.doomed.set(key, name)
         for (const key of keysUnder(b.area, `${b.family}${name}:`)) b.doomed.set(key, name)
         keys.clear()
+      }
+      // AMNESIC'S FORGET (rule e): every chunk of it goes once this save is on the device, but those that
+      // still spell the times kept (finish's stillSpells)
+      if (cut.has(name)) {
+        for (const key of keys) b.doomed.set(key, name)
+        for (const key of keysUnder(b.area, `${b.family}${name}:`)) b.doomed.set(key, name)
       }
       const target = sealedChunks(times.length)
       // How many remembered ids still name their chunk: all of them when the times are the very

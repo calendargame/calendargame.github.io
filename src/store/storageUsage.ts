@@ -34,7 +34,7 @@ import { captureError } from '../observability/sentry.js'
 // History or a preset delete takes something away — and an answer costs it one addition, however
 // much is saved. No write is left out: the one module that writes for itself (src/changelog) names
 // each key to the door as it does, and the door reports it like any other.
-// It counts localStorage and nothing else: a session copy of an Amnesic preset lives in
+// It counts localStorage and nothing else: what the app keeps for the browsing session lives in
 // sessionStorage, which has an allowance of its own and empties itself.
 //
 // ★ WHAT IS FILLING IT is a second, slower reading (readStorageUsage) — it has to look inside the

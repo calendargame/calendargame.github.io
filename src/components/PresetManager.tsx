@@ -924,7 +924,7 @@ export default function PresetManager({
     // to the handle itself rather than to `window`. Optional-chained because jsdom has no
     // implementation to call.
     // ⚠ ALSO try/catch'd, matching this app's own idiom for a browser call that can throw rather
-    // than quietly no-op (store/amnesic's openSessionStorage, lib/presetNameWidth's canvas guard,
+    // than quietly no-op (store/amnesicWindow's storage area, lib/presetNameWidth's canvas guard,
     // the windows-in-sync door's own localStorage try — this is the same shape of defensiveness applied
     // to a browser API instead of storage). setPointerCapture throws `NotFoundError` for a pointer
     // id the browser does not currently recognise as active; the drag has already been armed by

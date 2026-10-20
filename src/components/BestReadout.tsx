@@ -7,19 +7,19 @@ import type { ReactNode } from 'react'
 //
 // ★ ONLY components/StatPanel RENDERS IT (a mode hands the strip its readouts as `bests`), because
 // the question it has to answer is answered for the strip and the Bests TOGETHER:
-// WILL THESE BESTS BE KEPT? Under Amnesic: Full they will not — they are the session's, gone when
-// the app is closed — so the row is inside the dashed frame (index.css's .session-only) that marks
-// whatever on the page is temporary, and says so in words for a screen reader (`sessionOnly`).
-// Under Off they are the saved ones; under Stats Only they are the saved ones too, read from and
-// written to the permanent copy (store/amnesic) — so on both of those the row is outside any frame,
-// and that difference from the stats strip above it (framed on Stats Only AND Full) is exactly how
-// the two kinds of Amnesic are told apart at a glance.
-// `framed` is the rarer half: the row draws the frame ITSELF only when it is the one temporary thing
+// WILL A BEST SET NOW BE KEPT? Under Amnesic: Full it will not — a Best set since the value was
+// switched on is forgotten when the app closes, and the one before it comes back (store/amnesic) — so
+// the row is inside the dashed frame (index.css's .session-only) that marks whatever on the page will
+// be forgotten, and says so in words for a screen reader (`sessionOnly`). Under Off and under Stats
+// Only a new Best is kept — so on both of those the row is outside any frame, and that difference
+// from the stats strip above it (framed on Stats Only AND Full) is exactly how the two kinds of
+// Amnesic are told apart at a glance.
+// `framed` is the rarer half: the row draws the frame ITSELF only when it is the one forgotten thing
 // there (Full with Save Stats off — the strip is dimmed and holds no numbers to mark). When the
-// strip is temporary too, ONE frame goes round both, and StatPanel's group draws it.
+// strip's are forgotten too, ONE frame goes round both, and StatPanel's group draws it.
 // ⚠ IT DOES NOT FOLLOW SAVE STATS, unlike the strip's dim. With Save Stats off no NEW Best is
-// recorded, but the Bests shown are still real records, and under Full they are still the
-// session's — so the frame still tells the truth about what is on screen.
+// recorded, but the Bests shown are still real records, and under Full the ones this window set
+// still go at the close — so the frame still tells the truth about what is on screen.
 //
 // ⚠ THE ROW IS THE SAME SIZE AND IN THE SAME PLACE IN EVERY ONE OF THOSE STATES — the padding below
 // is there always, framed or not, so that turning Amnesic on or off moves nothing:
@@ -171,7 +171,9 @@ export default function BestReadout({
     >
       {/* `sr-only` is positioned out of flow, so the word costs no layout. First, so it is heard
           before the readouts it qualifies. */}
-      {sessionOnly && <span className="sr-only">Bests are for this session only</span>}
+      {sessionOnly && (
+        <span className="sr-only">Bests set now are forgotten when you close the app</span>
+      )}
       {children}
     </div>
   )

@@ -9,7 +9,9 @@
 //   • store/progress (where the setters live), store/sessionRound (where the round slots live), and
 //     store/screenPool (the door);
 //   • src/main.tsx's crash forgetter, forgetCrashedRound: it acts for the app, not for a screen — a
-//     mode that crashed has no render left to name a copy, and it discards the live copy's round.
+//     mode that crashed has no render left to name a copy, and it discards the live copy's round;
+//   • store/amnesicClose's forget: it acts for the app at a cold open, before any screen is drawn, on
+//     every preset whose Amnesic value says so (PROGRESS_DOOR.forget) — no screen exists to name one.
 // A new reference fails here until it is either moved behind the door or added below with the reason
 // it is not a screen's write.
 import { describe, it, expect } from 'vitest'
@@ -28,6 +30,7 @@ const code = (line) => !/^\s*(\/\/|\*|\{\/\*)/.test(line)
 
 const ALLOWED = {
   'main.tsx': ['discardSessionRound'],
+  'store/amnesicClose.ts': ['PROGRESS_DOOR'],
   'store/progress.ts': [
     'PROGRESS_DOOR',
     'setAoxBest',
@@ -46,7 +49,7 @@ const ALLOWED = {
 }
 
 describe('every write a mode screen makes goes through store/screenPool', () => {
-  it('the raw setters and round slots are named only by the stores, the door, and the crash forgetter', () => {
+  it('the raw setters and round slots are named only by the stores, the door, the crash forgetter, and the close', () => {
     const found = {}
     for (const p of files(SRC)) {
       const file = relative(SRC, p).replace(/\\/g, '/')

@@ -4,8 +4,8 @@ import type { DefaultMode } from './settings.js'
 // store/sessionMode.ts — the CURRENT PAGE, per preset, for THIS browsing session only (round 21).
 //
 // WHAT IT IS. src/main.tsx's `mode` was `useState("classic")` — app-global, not persisted, not
-// per-preset. Round 21 makes "which page you are on" a per-preset fact with the SAME lifetime Amnesic's
-// session stats already use: it survives a reload, and a full app close throws it away.
+// per-preset. Round 21 makes "which page you are on" a per-preset fact with the lifetime of the browsing
+// session (store/browsingSession): it survives a reload, and a full app close throws it away.
 //   • On a COLD OPEN (no session entry for a preset) that preset opens on its `defaultMode` ⚙
 //     setting (store/settings, read via readStoredDefaultMode).
 //   • On a page change, the active preset's session page is written here.
@@ -16,8 +16,8 @@ import type { DefaultMode } from './settings.js'
 //
 // WHY sessionStorage AND NOT a zustand store. It is a tiny key→value map with no reactivity needs
 // (main.tsx reads it once per switch and once at boot, and writes it from switchMode), and
-// sessionStorage IS the "gone on a full close, kept across a reload" lifetime — exactly what
-// store/amnesic reaches for. A store would add a persist adapter and a subscription for nothing.
+// sessionStorage IS the "gone on a full close, kept across a reload" lifetime. A store would add a
+// persist adapter and a subscription for nothing.
 //
 // KEYED BY PRESET ID in ONE JSON blob under a single key, so "forget this preset" is one delete of
 // one entry and "forget everything" is the browser closing the session. A deleted preset's entry
@@ -51,7 +51,7 @@ const write = (blob: PageMap): void => {
   try {
     window.sessionStorage.setItem(KEY, JSON.stringify(blob))
   } catch {
-    /* storage refused — the session page only ever lived in memory, which is more amnesic, not less */
+    /* storage refused — the session page only ever lives in memory */
   }
 }
 

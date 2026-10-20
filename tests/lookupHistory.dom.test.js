@@ -2,31 +2,27 @@
 //
 // lookupHistory.dom.test.js — store/lookupHistory against REAL (jsdom) storage, end to end, and
 // the app-level consequences of round 20: Lookup history left store/progress to become ONE
-// list shared by every preset, with a session-only overflow for lookups made while the active
-// preset is Amnesic. This file is the "tests/lookupHistory.dom" this round's other files (progress,
-// amnesic, persistence, settingsPanel.defaults) point readers at.
+// list shared by every preset. This file is the "tests/lookupHistory.dom" this round's other files
+// (progress, amnesic, persistence, settingsPanel.defaults) point readers at.
 //
-// Five claims, one section each:
-//   (a) the permanent list persists across a real reopen, and untrusted payloads are screened —
-//       the store-level twin of what progress.dom used to prove against the OLD key.
-//   (b) the session-only bucket is sessionStorage-backed: survives a refresh, gone on a close.
+// Four claims, one section each:
+//   (a) the list persists across a real reopen, and untrusted payloads are screened — the
+//       store-level twin of what progress.dom used to prove against the OLD key.
 //   (c) switching the active preset does not change what Lookup shows — the whole point of the move.
 //   (d) Full Reset clears it, from any preset, amnesic or not — the one exception to "Full Reset is
 //       a per-preset operation", because there is only one copy of this list to clear.
-//   (e) an amnesic preset's lookups never join the permanent list, and do not survive the app
-//       being reopened (sessionStorage.clear() + rehydrate — the SAME "close" simulation
-//       tests/amnesic.dom uses for the stats session copy) — while a non-amnesic preset's lookups
-//       persist through it normally.
+//   (e) AMNESIC NEVER TOUCHES IT (the owner's rule): a lookup made on any value joins the list and
+//       survives the app being reopened. (That the close's forget leaves it alone is tests/amnesic.dom's.)
 //
 // ⚠ THIS FILE MAY IMPORT store/lookupHistory'S OWN MODULE DIRECTLY, unlike tests/persistence.dom,
 // because that file's whole indirection exists to survive the PRESET namespacing scheme — this
 // store is deliberately outside that scheme (see its header), so there is no namespacing left to
-// insulate against. Its two keys are named here on purpose, the same way tests/buildStamp.dom and
+// insulate against. Its key is named here on purpose, the same way tests/buildStamp.dom and
 // tests/changelog.dom name theirs: a GLOBAL key is the contract for those files, not an
 // implementation detail about to move.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, cleanup, fireEvent, act } from '@testing-library/react'
-import { useLookupHistory, useLookupSession } from '../src/store/lookupHistory.js'
+import { useLookupHistory } from '../src/store/lookupHistory.js'
 import { usePresets } from '../src/store/presets.js'
 import {
   createPreset,
@@ -43,7 +39,6 @@ import {
 } from './helpers/settingsPanel.jsx'
 
 const LOOKUP_KEY = 'cg-lookup-v1'
-const SESSION_KEY = 'cg-lookup-session-v1'
 
 // Re-import store/lookupHistory fresh — the same "did it actually reach storage" proof
 // tests/helpers/persistence's reopenApp gives the four preset stores, scoped to this one module
@@ -51,7 +46,7 @@ const SESSION_KEY = 'cg-lookup-session-v1'
 async function reopenLookupHistory() {
   vi.resetModules()
   const mod = await import('../src/store/lookupHistory.js')
-  return { useLookupHistory: mod.useLookupHistory, useLookupSession: mod.useLookupSession }
+  return { useLookupHistory: mod.useLookupHistory }
 }
 
 // A real lookup, driven through the mounted app exactly as a player would: switch to Lookup, type
@@ -77,8 +72,8 @@ afterEach(() => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// (a) THE PERMANENT LIST PERSISTS, AND UNTRUSTED PAYLOADS ARE SCREENED.
-describe('the permanent list', () => {
+// (a) THE LIST PERSISTS, AND UNTRUSTED PAYLOADS ARE SCREENED.
+describe('the list', () => {
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
@@ -150,51 +145,6 @@ describe('the permanent list', () => {
   })
 })
 
-// ══════════════════════════════════════════════════════════════════════════════════════════════
-// (b) THE SESSION-ONLY OVERFLOW: sessionStorage-backed, survives a refresh, gone on a close.
-describe('the session-only overflow (amnesic suppression bucket)', () => {
-  beforeEach(() => {
-    localStorage.clear()
-    sessionStorage.clear()
-    useLookupSession.getState().setSessionEntries([])
-  })
-
-  it('lives in sessionStorage, under its own key — not the permanent one', () => {
-    useLookupSession.getState().setSessionEntries([{ id: 'a', y: 1, m: 1, d: 1 }])
-    expect(sessionStorage.getItem(SESSION_KEY)).not.toBeNull()
-    expect(localStorage.getItem(LOOKUP_KEY)).toBeNull() // never mirrored to the permanent key
-  })
-
-  it('a reload keeps it — only a close ends it (the same promise Amnesic states for stats)', async () => {
-    useLookupSession.getState().setSessionEntries([{ id: 'a', y: 1, m: 1, d: 1 }])
-    await useLookupSession.persist.rehydrate() // the refresh: same tab, same sessionStorage
-    expect(useLookupSession.getState().sessionEntries).toEqual([{ id: 'a', y: 1, m: 1, d: 1 }])
-  })
-
-  it('closing the app (sessionStorage cleared) leaves it empty on the way back in', async () => {
-    useLookupSession.getState().setSessionEntries([{ id: 'a', y: 1, m: 1, d: 1 }])
-    sessionStorage.clear() // the close
-    await useLookupSession.persist.rehydrate() // …and the next launch reads storage again
-    expect(useLookupSession.getState().sessionEntries).toEqual([])
-  })
-
-  it('is screened on load exactly like the permanent list — untrusted storage either way', async () => {
-    sessionStorage.setItem(
-      SESSION_KEY,
-      JSON.stringify({
-        state: { sessionEntries: [{ id: 'ok', y: 1, m: 1, d: 1 }, { id: 'x' }] },
-        version: 1,
-      }),
-    )
-    await useLookupSession.persist.rehydrate()
-    expect(useLookupSession.getState().sessionEntries).toEqual([{ id: 'ok', y: 1, m: 1, d: 1 }])
-  })
-})
-
-// ══════════════════════════════════════════════════════════════════════════════════════════════
-// (c) SHARED ACROSS EVERY PRESET — the whole point of the move. Driven with the real <App/>
-// mounted, exactly like tests/presetSwitch.dom, because the claim is about what the SCREEN shows,
-// not just where the bytes sit.
 describe('shared across every preset', () => {
   beforeEach(() => resetAppState())
 
@@ -226,8 +176,8 @@ describe('shared across every preset', () => {
     // refuses to remove the active preset's last-standing self, and this is the shape a player
     // actually reaches: you can only delete a preset you are not currently on, or one being closed
     // out from under you (presetControl's own deletePreset docs). Either way, clearPresetStorage
-    // only ever removes that preset's four namespaced keys plus its session stats copy — nothing
-    // in it can reach a key that was never namespaced to begin with.
+    // only ever removes that preset's namespaced keys and its browsing-session parts — nothing in it
+    // can reach a key that was never namespaced to begin with.
     const p2 = act(() => createPreset())
     act(() => switchPreset(p2.id))
     act(() => deletePreset(1))
@@ -258,131 +208,27 @@ describe('Full Reset clears it too', () => {
     expect(historyRowCount()).toBe(0)
   })
 
-  it('clears the session overflow too, in an amnesic preset', () => {
+  it('in an amnesic preset too', () => {
     mountApp()
     act(() => setPresetAmnesic(1, 'full'))
-    lookFourthOfJuly() // held in the session overflow — see the next describe block
+    lookFourthOfJuly()
     expect(historyRowCount()).toBe(1)
     pressKey('K')
     openSettings()
     fireFullReset()
-    // The entry never reached the permanent list (it is amnesic — see the next describe block), and
-    // clearLookupHistory() empties BOTH buckets regardless of which one actually held anything, so
-    // the session overflow is wiped right alongside the (already-empty) permanent list.
     expect(useLookupHistory.getState().history).toEqual([])
-    expect(useLookupSession.getState().sessionEntries).toEqual([])
     pressKey('L')
     expect(historyRowCount()).toBe(0)
   })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// (e) AMNESIC: FULL — SUPPRESSION: a lookup made while the active preset is on Full never joins the
-// permanent list, still shows for the rest of the session, and does not survive the app being
-// reopened — while a non-amnesic preset's lookup persists through the identical reopen normally.
-describe('a lookup made while the active preset is on Amnesic: Full', () => {
+// (e) AMNESIC NEVER TOUCHES LOOKUP: a lookup is a question you asked, not a stat, so on every value it
+// joins the one list, exactly as under Off, and survives the app closing.
+describe('a lookup made on any Amnesic value', () => {
   beforeEach(() => resetAppState())
 
-  it('shows on screen, but is held in the session overflow, never the permanent list', () => {
-    mountApp()
-    act(() => setPresetAmnesic(1, 'full'))
-    lookFourthOfJuly()
-    expect(historyRowCount()).toBe(1)
-    expect(historyText()).toContain('July 4, 1776')
-    expect(useLookupHistory.getState().history).toEqual([]) // the permanent list never saw it
-    expect(useLookupSession.getState().sessionEntries).toEqual([
-      { id: expect.any(String), y: 1776, m: 7, d: 4 },
-    ])
-  })
-
-  // ★★ THE CASE THE BRIEF IS BUILT AROUND. "The app is reopened" — the exact simulation
-  // tests/amnesic.dom uses for the stats session copy: sessionStorage is what a real close empties,
-  // so clearing it and rehydrating in place is the honest jsdom stand-in for closing the tab and
-  // opening it again (see that file's own header for why this is a close and not merely a reload).
-  it('does not survive the app being reopened, while a non-amnesic lookup does', async () => {
-    mountApp()
-    act(() => setPresetAmnesic(1, 'full'))
-    lookFourthOfJuly() // 7/4/1776 — session-only
-    pressKey('K')
-
-    act(() => setPresetAmnesic(1, 'off')) // back to normal — the session entry is not reconciled in
-    // Ask the SAME date again, now while non-amnesic. LookupCard's runLookup() matches on y/m/d
-    // against the merged display (which still shows the amnesic entry) and calls onMoveHistory, not
-    // onAddHistory — so this exercises moveHistoryEntryToTop's own "stays in whichever list it came
-    // from" rule (main.tsx): it re-affirms the SAME session entry rather than pushing a new
-    // permanent one. Prove the permanent list stays empty here, before reopening, so the reopen
-    // assertion below is unambiguous about what it is testing.
-    lookFourthOfJuly()
-    expect(useLookupHistory.getState().history).toEqual([])
-    expect(useLookupSession.getState().sessionEntries).toHaveLength(1)
-
-    // Add a genuinely NEW, non-amnesic lookup — this is the one that must survive the reopen.
-    pressKey('L')
-    const input = document.querySelector('input[placeholder^="e.g.,"]')
-    act(() => fireEvent.change(input, { target: { value: '1/1/1900' } }))
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Lookup' })))
-    expect(useLookupHistory.getState().history).toEqual([
-      { id: expect.any(String), y: 1900, m: 1, d: 1 },
-    ])
-    pressKey('K')
-
-    // THE CLOSE.
-    sessionStorage.clear()
-    await act(async () => {
-      await useLookupSession.persist.rehydrate()
-    })
-
-    expect(useLookupSession.getState().sessionEntries).toEqual([]) // gone
-    expect(useLookupHistory.getState().history).toEqual([
-      { id: expect.any(String), y: 1900, m: 1, d: 1 },
-    ]) // still here
-
-    pressKey('L')
-    expect(historyRowCount()).toBe(1) // only the permanent one shows — the amnesic 7/4/1776 is gone
-    expect(historyText()).not.toContain('July 4, 1776')
-    expect(historyText()).toContain('January 1, 1900')
-  })
-
-  it('turning Amnesic off does not reach back and promote what is already in the session bucket', () => {
-    mountApp()
-    act(() => setPresetAmnesic(1, 'full'))
-    lookFourthOfJuly()
-    expect(useLookupSession.getState().sessionEntries).toHaveLength(1)
-    act(() => setPresetAmnesic(1, 'off'))
-    // No merge on toggle-off — the same rule store/amnesic states for stats. The entry is still
-    // only in the session bucket; it did not just become permanent because Amnesic turned off.
-    expect(useLookupHistory.getState().history).toEqual([])
-    expect(useLookupSession.getState().sessionEntries).toHaveLength(1)
-  })
-})
-
-// ══════════════════════════════════════════════════════════════════════════════════════════════
-// (f) STATS ONLY IS NOT FULL: a lookup is a question you asked, not a stat, so under Stats Only it
-// is saved exactly as under Off — to the permanent, shared list — and survives the app closing.
-describe('a lookup made while the active preset is on Stats Only', () => {
-  beforeEach(() => resetAppState())
-
-  it('joins the permanent list, not the session overflow — and survives the app being reopened', async () => {
-    mountApp()
-    act(() => setPresetAmnesic(1, 'stats'))
-    lookFourthOfJuly()
-    expect(historyRowCount()).toBe(1)
-    const saved = [{ id: expect.any(String), y: 1776, m: 7, d: 4 }]
-    expect(useLookupHistory.getState().history).toEqual(saved)
-    expect(useLookupSession.getState().sessionEntries).toEqual([])
-    // On the device already, under the shared key.
-    expect(JSON.parse(localStorage.getItem('cg-lookup-v1')).state.history).toEqual(saved)
-
-    // THE CLOSE (the same stand-in as the Full case above).
-    sessionStorage.clear()
-    await act(async () => {
-      await useLookupSession.persist.rehydrate()
-      await useLookupHistory.persist.rehydrate()
-    })
-    expect(useLookupHistory.getState().history).toEqual(saved)
-  })
-
-  it('each lookup goes where the value says at the moment it is made: Off, Stats Only, Full, Stats Only', () => {
+  it('joins the one list as under Off — Off, Stats Only, Full, Stats Only — and survives a reopen', async () => {
     mountApp()
     const lookUp = (text) => {
       pressKey('L')
@@ -398,9 +244,17 @@ describe('a lookup made while the active preset is on Stats Only', () => {
     lookUp('1/1/1902')
     act(() => setPresetAmnesic(1, 'stats'))
     lookUp('1/1/1903')
-    expect(years(useLookupHistory.getState().history)).toEqual([1903, 1901, 1900])
-    expect(years(useLookupSession.getState().sessionEntries)).toEqual([1902])
-    // The page shows all four for the rest of the visit, whatever the value is by then.
+    expect(years(useLookupHistory.getState().history)).toEqual([1903, 1902, 1901, 1900])
     expect(historyRowCount()).toBe(4)
+    expect(years(JSON.parse(localStorage.getItem(LOOKUP_KEY)).state.history)).toEqual([
+      1903, 1902, 1901, 1900,
+    ])
+    // THE CLOSE (sessionStorage is what a real close empties) and a reopen: all four are still there.
+    sessionStorage.clear()
+    const { useLookupHistory: reopened } = await reopenLookupHistory()
+    await act(async () => {
+      await reopened.persist.rehydrate()
+    })
+    expect(years(reopened.getState().history)).toEqual([1903, 1902, 1901, 1900])
   })
 })

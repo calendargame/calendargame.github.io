@@ -61,8 +61,8 @@ export type PrefDefaults = {
 }
 // The Amnesic setting of the ACTIVE PRESET at the moment of saving (round 20; three-way since
 // round 24). Owner's explicit, confirmed decision: Save Defaults captures it, and Reset Settings /
-// Full Reset restore it along with everything else — even though pressing either mid-guest-session
-// for an unrelated reason will then silently put Amnesic back to whatever was saved. See
+// Full Reset restore it along with everything else — even though pressing either for an unrelated
+// reason will then silently put Amnesic back to whatever was saved. See
 // effectiveAmnesicDefault below and main.tsx's resetSettings for the restore.
 // ⚠ A SNAPSHOT IS HANDED IN WITH THE VALUE AND SAVED IN ITS TWO-FIELD SPELLING (store/amnesicMode's
 // StoredAmnesic — the boolean an older build on this origin acts on, and the three-way value beside

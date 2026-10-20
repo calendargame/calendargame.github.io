@@ -7,10 +7,7 @@
 // them for exactly the session's lifetime, across everything that rebuilds a screen without the
 // player asking for a clean start:
 //   • a RELOAD — a browser reload, the app's own update reload, the error card's Reload;
-//   • a PRESET SWITCH — each preset's history is waiting when you switch back to it;
-//   • an AMNESIC interlude (Stats Only or Full) — your own history, parked for the session, returns
-//     with your own stats when the preset is back on Off (and the session's is thrown away with the
-//     session).
+//   • a PRESET SWITCH — each preset's history is waiting when you switch back to it.
 // A real close clears it (the browser drops sessionStorage; nothing here schedules a wipe).
 //
 // THIS FILE IS THE STORAGE HALF, and it never looks inside what it stores — the same split as
@@ -24,28 +21,26 @@
 // answer. Nothing needs it until the screen goes, and a screen never goes unannounced:
 //   • the PAGE going away or to the background — every reload fires `pagehide`, and a mobile browser
 //     that later discards a backgrounded tab fired `visibilitychange` → hidden on the way out;
-//   • the STATS COPY underneath the screens being swapped — a preset switch, an Amnesic change, the
-//     active preset being deleted — which src/main.tsx sees in its registry subscription, while the
-//     outgoing screens are still mounted and still hold the outgoing copy.
+//   • the PRESET underneath the screens being swapped — a preset switch, the active preset being
+//     deleted — which src/main.tsx sees in its registry subscription, while the outgoing screens are
+//     still mounted and still hold the outgoing preset.
 // Both call modes/modeHooks' parkCasualHistories, which parks every mounted casual screen under the
-// stats copy it was MOUNTED on. ⚠ A screen does NOT park when it unmounts: an unmount cannot tell a
+// preset it was MOUNTED on. ⚠ A screen does NOT park when it unmounts: an unmount cannot tell a
 // preset switch from a Full Reset or a crash, and parking on either of those would bring back
 // exactly what they exist to throw away.
 // ★ WHEN IT IS RETIRED — BY WHATEVER CLEARS THE HISTORY IT DESCRIBES, at the moment it clears it, so
 // a park can never bring cleared data back:
 //   • Reset Stats / "Enable and Reset Stats" / Flash's Reset — the engine's own reset; the screen
 //     discards its slot in the same breath (modes/modeHooks' useParkedHistory);
-//   • Full Reset — discards the preset's histories, every copy's, BEFORE its remount (src/main.tsx);
+//   • Full Reset — discards the preset's histories BEFORE its remount (src/main.tsx);
 //   • a preset DELETE — store/presetControl's clearPresetStorage, after the registry write that
 //     parks the outgoing screens, so the delete has the last word;
-//   • an Amnesic change — the SESSION copies' histories, with the session's stats, same ordering;
 //   • a mode screen that CRASHES — src/main.tsx's error boundary hook, so a history that somehow
 //     breaks its screen cannot come back after the Reload and break it again.
 //
 // ★ SIZE. sessionStorage has a fixed allowance (~5 MB, shared by the whole origin — live and staging
-// both), and it also holds things that are NOT best-effort: an Amnesic preset's session stats above
-// all, whose refused write puts up the storage-full notice. A history must never be the thing that
-// crowds those out, so every history together is held to TOTAL_BUDGET characters, and any one to
+// both), and other session-lived things share it. A history must never be the thing that crowds those
+// out, so every history together is held to TOTAL_BUDGET characters, and any one to
 // SLOT_BUDGET (so two long histories — say two Deduction sub-types — can both be kept):
 //   • a history longer than its slot budget is parked with its OLDEST cards forgotten (engine/
 //     parkedHistory's fittedParkedText — the scores, the badge numbers and every remaining card's
@@ -60,11 +55,14 @@
 //     back in its place. The history then simply starts over — never an error, and never the
 //     storage-full notice (this is a convenience, not saved data).
 //
-// ⚠ THE KEY IS `cg-history-v1:<dataId>:<silo>` — one entry per (stats copy, silo), so parking one
-// silo never re-serialises another's thousands of cards, and "forget this preset" is a prefix sweep.
-// KEYED BY THE STATS COPY (store/amnesic's dataId — "<presetId>:saved", "<presetId>:stats" or
-// "<presetId>:session", one per Amnesic value): a history only ever comes back over the stats it
-// was played on.
+// ⚠ THE KEY IS `cg-history-v2:<presetId>:<silo>` — one entry per (preset, silo), so parking one silo
+// never re-serialises another's thousands of cards, and "forget this preset" is a prefix sweep. A preset
+// has one pool of stats whatever its Amnesic value (store/amnesic), so a history only ever comes back over
+// the stats it was played on.
+// ⚠ v1 KEYED "<presetId>:<copy>:<silo>", one per copy of a preset's stats while Amnesic kept its own: it is
+// not read at all - the copies are gone - and the cost is bounded and one-off, as cg-round-v2's was (a
+// casual history parked at the moment the update reload lands is not restored; its stats were saved with
+// every answer). The browser drops the v1 entries at the session's end.
 // No older build knows the prefix, so none of them reads it (live and staging share this origin); a
 // later build that changes the parked shape must change the version in the prefix, and the restore
 // door refuses any blob it cannot read anyway.
@@ -77,7 +75,7 @@
 // browsing, where a history simply is not kept.
 import type { StatsKey } from './progress.js'
 
-const PREFIX = 'cg-history-v1:'
+const PREFIX = 'cg-history-v2:'
 const HOLDS_PLAY = '1'
 const QUESTION_ONLY = '0'
 /** The most characters one parked history may take. */
@@ -88,12 +86,12 @@ export const TOTAL_BUDGET = 1_000_000
 // The silos are exactly the casual modes' stats silos — one engine each (Deduction runs three).
 export type HistorySilo = StatsKey
 
-const slotKey = (dataId: string, silo: HistorySilo) => `${PREFIX}${dataId}:${silo}`
+const slotKey = (presetId: number, silo: HistorySilo) => `${PREFIX}${presetId}:${silo}`
 
-/** This (stats copy, silo)'s parked text, or null when nothing readable is parked. */
-export function readSessionHistory(dataId: string, silo: HistorySilo): string | null {
+/** This (preset, silo)'s parked text, or null when nothing readable is parked. */
+export function readSessionHistory(presetId: number, silo: HistorySilo): string | null {
   try {
-    const value = window.sessionStorage.getItem(slotKey(dataId, silo))
+    const value = window.sessionStorage.getItem(slotKey(presetId, silo))
     if (value === null) return null
     const mark = value[0]
     return mark === HOLDS_PLAY || mark === QUESTION_ONLY ? value.slice(1) : null
@@ -124,18 +122,18 @@ function makeRoom(store: Storage, own: string, incoming: number): void {
 }
 
 /**
- * Park this (stats copy, silo)'s text — already within SLOT_BUDGET (engine/parkedHistory's
+ * Park this (preset, silo)'s text — already within SLOT_BUDGET (engine/parkedHistory's
  * fittedParkedText) — making room among the other parked histories first. `holdsPlay` says whether
  * the text is more than a waiting question (see the header). Never throws: a text the browser
  * refuses removes the slot instead.
  */
 export function writeSessionHistory(
-  dataId: string,
+  presetId: number,
   silo: HistorySilo,
   text: string,
   holdsPlay: boolean,
 ): void {
-  const key = slotKey(dataId, silo)
+  const key = slotKey(presetId, silo)
   try {
     const store = window.sessionStorage
     try {
@@ -149,10 +147,10 @@ export function writeSessionHistory(
   }
 }
 
-/** Forget this (stats copy, silo)'s parked history — its engine was reset, or it cannot be parked. */
-export function discardSessionHistory(dataId: string, silo: HistorySilo): void {
+/** Forget this (preset, silo)'s parked history — its engine was reset, or it cannot be parked. */
+export function discardSessionHistory(presetId: number, silo: HistorySilo): void {
   try {
-    window.sessionStorage.removeItem(slotKey(dataId, silo))
+    window.sessionStorage.removeItem(slotKey(presetId, silo))
   } catch {
     /* storage refused — nothing was ever written */
   }
@@ -178,23 +176,16 @@ const discardPrefixed = (prefix: string): void => {
   }
 }
 
-/**
- * Forget every parked history of ONE stats copy — setPresetAmnesic for the two session copies, and
- * a crashed mode screen for the copy it was showing.
- */
-export const discardSessionHistoriesOf = (dataId: string): void =>
-  discardPrefixed(`${PREFIX}${dataId}:`)
-
-/** Forget every parked history of one preset, every copy's — Full Reset and a preset delete. */
+/** Forget every parked history of one preset — Full Reset and a preset delete. */
 export const discardSessionHistories = (presetId: number): void =>
   discardPrefixed(`${PREFIX}${presetId}:`)
 
 /**
- * Does this preset have PLAY parked on any copy — a history, an answered question, a screen
- * setting; anything beyond the unanswered question a screen was waiting on? store/presetControl's
- * isPresetFactory asks, for a preset that is not the one on screen: parked play comes back the next
- * time that copy's screens mount, so a preset holding some is not factory-fresh. (A preset the player
- * merely looked at has parked questions and nothing else, and still is.)
+ * Does this preset have PLAY parked — a history, an answered question, a screen setting; anything
+ * beyond the unanswered question a screen was waiting on? store/presetControl's isPresetFactory asks,
+ * for a preset that is not the one on screen: parked play comes back the next time that preset's
+ * screens mount, so a preset holding some is not factory-fresh. (A preset the player merely looked at
+ * has parked questions and nothing else, and still is.)
  */
 export const hasSessionHistory = (presetId: number): boolean => {
   try {
@@ -208,8 +199,8 @@ export const hasSessionHistory = (presetId: number): boolean => {
 }
 
 /**
- * Forget every parked history, all presets. The app never needs this — a full close clears the
- * session and the browser does that — but the test harness has no "close the browser" event, so
- * tests/setup/dom.js calls it before every test (the same reason it resets the parked rounds).
+ * Forget every parked history, all presets: a window that comes back to a session that has ended
+ * (store/amnesicClose). A full close clears them with the browsing session; the test harness, which has
+ * no close, calls it before every test (tests/setup/dom.js).
  */
 export const discardAllSessionHistories = (): void => discardPrefixed(PREFIX)

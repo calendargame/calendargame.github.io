@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { activeDataId } from './amnesic.js'
+import { usePresets } from './presets.js'
 import { useProgress, onProgressRebase, PROGRESS_DOOR, type StatsKey } from './progress.js'
 import { roundOp, type BestMap } from './bestRecords.js'
 import { writeSessionRound, discardSessionRound } from './sessionRound.js'
@@ -7,6 +7,8 @@ import { discardSessionHistory } from './sessionHistory.js'
 import type { Stats } from '../engine/gameReducer.js'
 import { noteUnaskedSwap, swapScreenOf } from '../lib/unaskedSwap.js'
 import { captureError } from '../observability/sentry.js'
+import { amnesicWindowOf } from './amnesicWindow.js'
+import { isRecord } from './json.js'
 
 // store/screenPool.ts — THE ONE DOOR THROUGH WHICH A MODE SCREEN WRITES SAVED PROGRESS OR A PARKED
 // ROUND, and it lets a screen write only to the copy of the data it was DRAWN for.
@@ -15,17 +17,15 @@ import { captureError } from '../observability/sentry.js'
 // effect runs with the values of the render that scheduled it. A Blitz round that ends on its CLOCK
 // (a requestAnimationFrame callback — the one ending that is not a tap) commits in one task; until
 // v2.29.x its Best reconcile and its park were passive effects, which React runs in a LATER task. A
-// tap in between — the Amnesic pill, a preset switch — swaps the copy of the data under the screens
-// (store/presetControl) and runs to completion first; the round's old effects then wrote with the old
-// render's values into the NEW copy: a guest's score filed as a permanent Best, the last guest's
-// round parked into the next guest session, preset A's result filed in preset B
-// (tests/screenPool.gap.dom). Two layers close it, and this file is the first:
-//   1. BY CONSTRUCTION, whatever the timing: every write here names the pool (`dataId` —
-//      store/amnesic's activeDataId, "<preset>:saved|stats|session") the CALLING RENDER was made
-//      under, and is refused unless that pool is still the live one. A preset switch, an Amnesic
-//      change, and a preset delete all move activeDataId, so a write from a screen drawn for the
-//      outgoing copy cannot land in the incoming one. A refused write is SILENT: it is the expected
-//      outcome of a rare race, not an impossible state.
+// tap in between — a preset switch — swaps the data under the screens (store/presetControl) and runs
+// to completion first; the round's old effects then wrote with the old render's values into the NEW
+// preset: preset A's result filed in preset B (tests/screenPool.gap.dom). Two layers close it, and this
+// file is the first:
+//   1. BY CONSTRUCTION, whatever the timing: every write here names the pool (`presetId` - the preset
+//      the CALLING RENDER was made under) and is refused unless that preset is still the live one. A
+//      preset switch and a preset delete both move it, so a write from a screen drawn for the outgoing
+//      preset cannot land in the incoming one. A refused write is SILENT: it is the expected outcome of
+//      a rare race, not an impossible state.
 //   2. In the commit itself: the round screens' reconcile and park are LAYOUT effects (modes/
 //      BlitzMode, modes/AoxMode say why), so an ended round is filed and parked in the commit it ends
 //      in — no tap can land between. That is what keeps the round's own legitimate Best (layer 1
@@ -52,8 +52,21 @@ import { captureError } from '../observability/sentry.js'
 // screen held — a "Reset Stats?" question the player had open, the keyboard's place — for a change
 // to nothing but the engine (design 14.4 (12); the browser lane's windowSyncPins pins it).
 
-/** Is `dataId` the pool the app is reading right now? */
-const live = (dataId: string): boolean => dataId === activeDataId()
+/** Is `presetId` the pool the app is reading right now? */
+const live = (presetId: number): boolean => presetId === usePresets.getState().activeId
+
+/**
+ * What a round screen keeps of its round's filings (and parks with it): the result as last filed (`text`,
+ * its JSON) and the Amnesic window the round was FIRST filed in (`e`; null: none - its preset was on Off).
+ * The window is what tells a later change of the round (an Override) from a correction of a round from
+ * before the window - which the window's anchor takes too, so Amnesic's forget keeps it (store/syncRecords'
+ * `re`; design-amnesic-close.md 1).
+ */
+export type Filed = { text: string; e: string | null }
+/** Is `v` a round's filings as a screen parks them (null: never filed)? */
+export const isFiled = (v: unknown): v is Filed | null =>
+  v === null ||
+  (isRecord(v) && typeof v.text === 'string' && (v.e === null || typeof v.e === 'string'))
 
 /**
  * File a round's RESULT on its Best record: the round's own values for every field of `map`'s record (a
@@ -62,40 +75,33 @@ const live = (dataId: string): boolean => dataId === activeDataId()
  * standing). It goes to the windows-in-sync door as an op on the record `setup` (store/progressDoor's
  * round; design-q1-q2.md v4, 4.1), which keeps every round's figures beside the record - so a take-back
  * of the round that holds a field lands on the true next value, whoever played it and in whichever
- * window. `filedBefore`: this round's result was filed before (an Override of an ended round, a resume,
- * an ending after a resume). Returns whether it was filed: not when `dataId` is not live (the screen is
- * about to be remounted on the copy that is), nor for a round a Reset has since removed - there is
- * nothing left of it to change.
+ * window. `filed`: what the screen kept of this round's earlier filings (null: none - this is its first;
+ * otherwise an Override of an ended round, a resume, an ending after a resume). Returns what the screen
+ * keeps now, or null when nothing was filed: `presetId` is not live (the screen is about to be remounted
+ * on the preset that is), or a Reset has since removed the round - there is nothing left of it to change.
  */
 export function fileRoundResult(
-  dataId: string,
+  presetId: number,
   map: BestMap,
   setup: string,
   roundId: number,
   values: { score: number; streak?: number } | { avg: number; med: number } | null,
-  filedBefore: boolean,
-): boolean {
-  if (!live(dataId) || PROGRESS_DOOR.roundGone(map, roundId)) return false
-  PROGRESS_DOOR.round(map, setup, roundOp(map, roundId, values, filedBefore))
-  return true
+  filed: Filed | null,
+): Filed | null {
+  if (!live(presetId) || PROGRESS_DOOR.roundGone(map, roundId)) return null
+  const op = roundOp(map, roundId, values, filed !== null)
+  PROGRESS_DOOR.round(map, setup, filed ? { ...op, re: filed.e } : op)
+  return { text: JSON.stringify(values), e: filed ? filed.e : amnesicWindowOf(presetId) }
 }
 
-/**
- * Park an ended round under its bests copy (`bestsId` — store/amnesic's bestsIdOf; store/sessionRound
- * keys by it). A no-op unless the stats pool the screen was drawn for (`dataId`) is live.
- */
-export function parkRound(
-  dataId: string,
-  bestsId: string,
-  mode: 'blitz' | 'aox',
-  snapshot: unknown,
-): void {
-  if (live(dataId)) writeSessionRound(bestsId, mode, snapshot)
+/** Park an ended round under its preset (store/sessionRound) — a no-op unless `presetId` is live. */
+export function parkRound(presetId: number, mode: 'blitz' | 'aox', snapshot: unknown): void {
+  if (live(presetId)) writeSessionRound(presetId, mode, snapshot)
 }
 
-/** Forget the round parked under `bestsId` — a no-op unless `dataId` is live. */
-export function unparkRound(dataId: string, bestsId: string, mode: 'blitz' | 'aox'): void {
-  if (live(dataId)) discardSessionRound(bestsId, mode)
+/** Forget the round parked under `presetId` — a no-op unless it is live. */
+export function unparkRound(presetId: number, mode: 'blitz' | 'aox'): void {
+  if (live(presetId)) discardSessionRound(presetId, mode)
 }
 
 /** Each casual engine's data epoch (★ above). */
@@ -113,23 +119,31 @@ export const useScreenEpoch = create<Record<StatsKey, number>>()(() => ({
  * first (a park describes the history about to be dropped), and it is a question replaced without
  * this window's input (lib/unaskedSwap).
  */
-export function rebaseEngine(dataId: string, key: StatsKey): void {
-  discardSessionHistory(dataId, key)
+export function rebaseEngine(presetId: number, key: StatsKey): void {
+  discardSessionHistory(presetId, key)
   useScreenEpoch.setState((s) => ({ ...s, [key]: s[key] + 1 }))
   noteUnaskedSwap(swapScreenOf(key))
 }
 
 // (another window's stats for a mode, merged in: that engine is rebuilt - store/progress asks here)
-onProgressRebase((silo) => rebaseEngine(activeDataId(), silo as StatsKey))
+onProgressRebase((silo) => rebaseEngine(usePresets.getState().activeId, silo as StatsKey))
 
 const staleReported = new Set<StatsKey>()
 /**
- * Mirror a casual engine's stats (`next`) into the pool `dataId`, over `base` — the stats object the
+ * Mirror a casual engine's stats (`next`) into the pool `presetId`, over `base` — the stats object the
  * mirror last read or wrote (★ above). True when the store holds `next` afterwards; false, with
- * nothing written, when `dataId` is not live or the slice has moved under the mirror.
+ * nothing written, when `presetId` is not live or the slice has moved under the mirror. `at`: the
+ * engine's stats as they stood after an earlier card (engine/gameReducer's statsAtCard), for an
+ * Override of a card from before an Amnesic window (store/progressDoor's correcting).
  */
-export function saveModeStats(dataId: string, key: StatsKey, base: Stats, next: Stats): boolean {
-  if (!live(dataId)) return false
+export function saveModeStats(
+  presetId: number,
+  key: StatsKey,
+  base: Stats,
+  next: Stats,
+  at: (played: number) => Stats | null,
+): boolean {
+  if (!live(presetId)) return false
   const now = useProgress.getState().stats[key]
   if (now === next) return true
   if (now !== base) {
@@ -143,9 +157,9 @@ export function saveModeStats(dataId: string, key: StatsKey, base: Stats, next: 
         },
       )
     }
-    rebaseEngine(dataId, key)
+    rebaseEngine(presetId, key)
     return false
   }
-  useProgress.getState().setModeStats(key, next)
+  PROGRESS_DOOR.correcting(key, at, () => useProgress.getState().setModeStats(key, next))
   return true
 }

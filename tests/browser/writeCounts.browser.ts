@@ -5,7 +5,9 @@
 //   • G7: a page load writes nothing - with named exceptions, all on a device's FIRST open: Q7's
 //     Julian-on Year Range pin (once per preset), the measurement of how much room the device gives
 //     (store/storageUsage), and the two update stamps (lib/buildStamp, src/changelog) a first visit
-//     has none of. A second window's load writes nothing at all.
+//     has none of. A second window's load writes nothing at all. (A cold open after a close that
+//     FORGETS - a preset on Amnesic: Stats Only or Full - writes that forget and the session counter:
+//     store/amnesicClose, tests/browser/amnesicClose. A close that owes none writes nothing.)
 //   • An answer: one write of the doc and one of its sync key, in the window that answered; nothing
 //     in the others.
 //   • An older window's write, with this build's windows awake: written back, by each window at most

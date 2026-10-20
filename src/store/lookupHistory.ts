@@ -1,6 +1,5 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import { guardedStorage } from './storageHealth.js'
+import { persist } from 'zustand/middleware'
 import { door } from './syncedDoc.js'
 import { dimEither } from '../lib/calendar.js'
 import { reportedHydration } from './hydrationReport.js'
@@ -17,8 +16,10 @@ import { reportedHydration } from './hydrationReport.js'
 // (lib/buildStamp) or the changelog's seen-signature (src/changelog) — it describes something the
 // DEVICE remembers, not something any one preset owns — except unlike those two flags it is
 // reactive UI state a component renders, so it needs zustand rather than a plain synchronous read.
-// It therefore persists to ONE un-namespaced key — never presetDoc or the progress door's preset copies,
-// which would namespace or session-park it per preset, the one thing this list must never do.
+// It therefore persists to ONE un-namespaced key — never presetDoc or the progress door, which would
+// namespace it per preset, the one thing this list must never do.
+// ★ AMNESIC NEVER TOUCHES IT, on any value (design-amnesic-close.md: the owner's rule). A lookup is a
+// question you asked, not a stat.
 // ★ THROUGH THE WINDOWS-IN-SYNC DOOR (Round 26, Q2: store/syncedDoc's list door, store/syncList's
 // merge). Two windows of the app show the same history, and a lookup in one appears in the other at
 // once; a Clear made in a new window stays cleared even with an OLDER build's tab open (its next lookup
@@ -35,29 +36,6 @@ import { reportedHydration } from './hydrationReport.js'
 // more, and the very next save drops it, since it is no longer in that store's PERSISTED_KEYS) —
 // see the version-bump note on that store's `persist` options for the full reasoning and its test.
 //
-// WHAT THIS FILE OWNS, in two halves:
-//   • the PERMANENT list (`useLookupHistory`) — localStorage-backed, one un-namespaced key,
-//     survives forever exactly like today's saved Lookup history always has;
-//   • the SESSION-ONLY overflow (`useLookupSession`) — sessionStorage-backed, for lookups made
-//     while the ACTIVE preset is on Amnesic: Full (store/amnesic), which must never reach the permanent list
-//     but still have to appear on screen for the rest of the browsing session. See that store's
-//     header for what "session" means here (survives a refresh, gone when the browser closes) —
-//     the identical promise an amnesic preset's session copy makes, for the same reason: a
-//     browser can only honestly promise to forget what it never wrote down permanently.
-//     (Under Amnesic: Stats Only a lookup is saved normally — it is not a stat.)
-//     ⚠ IT IS NOT KEYED BY PRESET, unlike an amnesic preset's session copy (store/amnesic's `statsKey`).
-//     That key exists per preset because the store it shadows is per-preset; this list is GLOBAL,
-//     so its session overflow is one bucket for the whole browsing session, not one per preset. A
-//     lookup made while Preset 2 was on Full and one made while Preset 4 was on Full later in the
-//     same session sit in the same bucket — consistent with the permanent list being one shared
-//     list too. Nothing here ever reads which preset a session entry was added under, because the
-//     permanent list does not track that either.
-//   • main.tsx (not this file) decides WHICH bucket a new entry goes into, by asking store/amnesic
-//     (`keepsLookups` of the active preset's Amnesic value) at the moment of the push. It is not
-//     decided here so this file stays what every other store in this folder is: state plus
-//     setters, with the app owning the one piece of cross-store business logic ("is the active
-//     preset on Full right now") the way it already does for Full Reset.
-
 // A saved Lookup history entry — moved verbatim from store/progress (Stage D1 → round 20),
 // unchanged: {id, y, m, d, isGap?} and nothing else. It carries only what the user supplied — the
 // parsed date, a stable id for selection, and the Oct 5–14, 1582 gap marker. Everything the card
@@ -88,34 +66,14 @@ export const addLookupEntry = (prev: LookupEntry[], entry: LookupEntry): LookupE
   ...prev,
 ]
 
-// Move an existing entry to the front of ITS OWN list — a re-asked question reads as "the most
-// recent one again" without duplicating it. Extracted from main.tsx's inline moveHistoryEntryToTop
-// (it used to be written out once, for the one list there was); now there are two lists to apply it
-// to — the permanent one and the session-only one — a shared pure function is what keeps the two
-// call sites from drifting into two slightly different rewrites of the same array surgery.
+// Move an existing entry to the front of the list — a re-asked question reads as "the most recent
+// one again" without duplicating it.
 export const moveEntryToTop = (prev: LookupEntry[], id: string): LookupEntry[] => {
   const idx = prev.findIndex((e) => e.id === id)
   if (idx <= 0) return prev
   const entry = prev[idx]
   return [entry, ...prev.slice(0, idx), ...prev.slice(idx + 1)]
 }
-
-// Merge the permanent list with this session's amnesic-suppressed overflow for DISPLAY. Session
-// entries lead: they are always the most recent thing that can have happened relative to whatever
-// the permanent list held the moment Amnesic went to Full, since nothing NEW can be prepended to the
-// permanent list while the active preset is on Full (that is the whole point of the suppression).
-// ⚠ THE ONE ORDERING NUANCE THIS TRADES AWAY, named rather than hidden: if the player leaves an
-// amnesic preset mid-session and looks something up from a NON-amnesic one afterwards, that newer
-// permanent entry is NOT re-sorted ahead of older session entries by wall-clock time — it lands
-// after them here. Getting that exactly right would mean stamping every entry with a timestamp
-// purely to compare across the two buckets, which the entry shape above is deliberately without
-// (store/progress' own header explains why: inputs only, nothing derived or timestamped). The case
-// is rare enough — crossing the amnesic boundary mid-session and then looking something up again —
-// that trading it away for a shape with no extra field is the right side of that line.
-export const mergeForDisplay = (
-  history: LookupEntry[],
-  sessionEntries: LookupEntry[],
-): LookupEntry[] => (sessionEntries.length ? [...sessionEntries, ...history] : history)
 
 // The lookup-history normalizer, and the ONLY thing that decides what shape a stored entry has.
 // Moved verbatim from store/progress (see that store's git history for the v1→v3 shape story this
@@ -134,9 +92,8 @@ export const mergeForDisplay = (
 // weekday belonging to no day. Deliberately NOT bounded to Lookup's 1–10000 years: an out-of-range
 // year still names a real date and still reads correctly, so there is nothing wrong to drop.
 //
-// Runs on EVERY rehydrate of EITHER bucket below, not just on a shape upgrade: a payload is read
-// from the same untrusted storage whether it is this version or an older one, sessionStorage
-// included. Exported for tests.
+// Runs on EVERY rehydrate below, not just on a shape upgrade: a payload is read from the same
+// untrusted storage whether it is this version or an older one. Exported for tests.
 export function normalizeLookupEntries(entries: unknown): LookupEntry[] {
   if (!Array.isArray(entries)) return []
   return entries
@@ -164,7 +121,7 @@ type Updater<T> = T | ((prev: T) => T)
 const resolve = <T>(next: Updater<T>, prev: T): T =>
   typeof next === 'function' ? (next as (prev: T) => T)(prev) : (next as T)
 
-// ── The permanent list ────────────────────────────────────────────────────────────────────────
+// ── The list ──────────────────────────────────────────────────────────────────────────────────
 
 export const LOOKUP_HISTORY_KEY = 'cg-lookup-v1'
 // v2.26.0, the oldest build that may share this origin, trimmed the list to its newest 100 on every
@@ -215,41 +172,4 @@ export const useLookupHistory: UseBoundStore<StoreApi<LookupHistoryState>> =
     ),
   )
 
-// ── The session-only overflow (Amnesic suppression) ──────────────────────────────────────────
-//
-// A lookup made while the active preset is on Amnesic: Full must never reach the list above, but it still
-// has to appear on screen for the rest of THIS browsing session — the file header argues why this
-// is its own bucket rather than a reuse of store/amnesic's per-preset session machinery. It is
-// created here, alongside the permanent list, rather than in store/amnesic itself, because it is
-// Lookup's data and Lookup's shape (LookupEntry, likewise unlimited) — amnesic.ts stays the single owner
-// of the RULE (`keepsLookups`) that main.tsx asks to decide which of the two stores below a new
-// entry goes into; it does not need to know this bucket exists.
-const LOOKUP_SESSION_KEY = 'cg-lookup-session-v1'
-
-export type LookupSessionState = {
-  sessionEntries: LookupEntry[]
-  setSessionEntries: (v: Updater<LookupEntry[]>) => void
-}
-
-export const useLookupSession = create<LookupSessionState>()(
-  persist(
-    (set) => ({
-      sessionEntries: [],
-      setSessionEntries: (v) => set((s) => ({ sessionEntries: resolve(v, s.sessionEntries) })),
-    }),
-    {
-      name: LOOKUP_SESSION_KEY,
-      version: 1,
-      storage: createJSONStorage(guardedStorage(() => window.sessionStorage)),
-      partialize: (state) => ({ sessionEntries: state.sessionEntries }),
-      merge: (persisted, current) => ({
-        ...current,
-        sessionEntries: normalizeLookupEntries(
-          (persisted as Partial<LookupSessionState> | null)?.sessionEntries,
-        ),
-      }),
-      onRehydrateStorage: reportedHydration('lookupSessionRehydrate'),
-    },
-  ),
-)
 LOOKUP_DOOR.attach(useLookupHistory)

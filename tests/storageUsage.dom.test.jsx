@@ -59,7 +59,6 @@ import {
   deletePreset,
   setPresetAmnesic,
 } from '../src/store/presetControl.js'
-import { resetStatsFreesRoom } from '../src/store/amnesic.js'
 import { usePlayerBusy } from '../src/lib/playerBusy.js'
 import {
   GEAR_DOT_KEY,
@@ -783,8 +782,8 @@ describe('the count is kept by the storage door, and is right the moment a chang
   })
 })
 
-// What the popup and the storage-full notice may truthfully recommend (store/amnesic's
-// resetStatsFreesRoom, and the two remedies that hold under every value).
+// What the popup and the storage-full notice may truthfully recommend: all three remedies, on every
+// Amnesic value alike (one pool - store/amnesic).
 describe.each(['off', 'stats', 'full'])(
   'what makes room while the preset is on Amnesic: %s',
   (mode) => {
@@ -802,17 +801,10 @@ describe.each(['off', 'stats', 'full'])(
       watch()
     })
 
-    it(`Reset Stats ${mode === 'off' ? 'frees the mode’s solve times' : 'clears the session’s copy and frees nothing'}`, () => {
-      expect(resetStatsFreesRoom(mode)).toBe(mode === 'off')
-      const saved = localStorage.getItem('cg-progress-v1')
+    it('Reset Stats frees the mode’s solve times', () => {
       const before = storageUsed()
-      useProgress.getState().setModeStats('classic', long(3)) // play, on whichever copy is live
       useProgress.getState().setModeStats('classic', long(0)) // Reset Stats
-      if (mode === 'off') expect(before - storageUsed()).toBeGreaterThan(40_000)
-      else {
-        expect(storageUsed()).toBe(before)
-        expect(localStorage.getItem('cg-progress-v1')).toBe(saved)
-      }
+      expect(before - storageUsed()).toBeGreaterThan(40_000)
     })
 
     it('Clear History frees the Lookup history', () => {
@@ -2040,14 +2032,9 @@ describe('the breakdown names what is saved at every size', () => {
   })
 })
 
-// ── "TO MAKE ROOM" SAYS ONLY WHAT IS TRUE FOR THE PRESET YOU ARE ON ──────────────────────────────
-// Reset Stats frees room only while Amnesic is Off (store/amnesic's resetStatsFreesRoom, proved
-// against the device in the group above). Both popups used to recommend it whatever the value.
-describe.each([
-  ['off', null],
-  ['stats', 'Stats Only'],
-  ['full', 'Full'],
-])('the advice while the preset is on Amnesic: %s', (mode, label) => {
+// ── "TO MAKE ROOM" SAYS THE SAME ON EVERY AMNESIC VALUE ──────────────────────────────────────────
+// Reset Stats frees room whatever the value (proved against the device in the group above).
+describe.each(['off', 'stats', 'full'])('the advice while the preset is on Amnesic: %s', (mode) => {
   beforeEach(() => {
     resetAppState()
     act(() => setPresetAmnesic(1, mode))
@@ -2065,17 +2052,8 @@ describe.each([
     expect(
       advice.some((t) => /^Deleting a preset you no longer use removes everything/.test(t)),
     ).toBe(true)
-    const offered = advice.some((t) => /^Reset Stats, on a mode.s own screen, clears/.test(t))
-    expect(offered).toBe(resetStatsFreesRoom(mode))
-    if (label === null) expect(advice).toHaveLength(3)
-    else {
-      // Named, because it is the first thing a player reaches for — as something that will NOT
-      // help here, with the value by its name and what to do instead.
-      const warning = advice.find((t) => /^Reset Stats won.t make room/.test(t))
-      expect(warning).toContain(`Amnesic is on ${label}`)
-      expect(warning).toMatch(/set Amnesic to Off first/)
-      expect(advice.at(-1)).toBe(warning)
-    }
+    expect(advice.some((t) => /^Reset Stats, on a mode.s own screen, clears/.test(t))).toBe(true)
+    expect(advice).toHaveLength(3)
   })
 
   it('the storage-full notice', () => {
@@ -2083,16 +2061,8 @@ describe.each([
     act(() => useStorageHealth.setState({ unsaved: true, noticeOpen: true }))
     const notice = screen.getByRole('dialog', { name: /^Your progress isn.t being saved$/ })
     expect(notice.textContent).toMatch(/delete a preset you no longer use/)
-    if (label === null) {
-      expect(notice.textContent).toMatch(/or use\s+Reset Stats in a mode whose history/)
-      expect(notice.textContent).not.toMatch(/won.t\s+make room/)
-    } else {
-      expect(notice.textContent).toMatch(/Clear History, on the Lookup page/)
-      expect(notice.textContent).toMatch(
-        new RegExp(`Reset Stats won.t\\s+make room while this preset.s Amnesic is on ${label}`),
-      )
-      expect(notice.textContent).not.toMatch(/or use\s+Reset Stats in a mode whose history/)
-    }
+    expect(notice.textContent).toMatch(/or use\s+Reset Stats in a mode whose history/)
+    expect(notice.textContent).not.toMatch(/won.t\s+make room/)
     expect(notice.textContent).toMatch(/saved by itself/)
   })
 })

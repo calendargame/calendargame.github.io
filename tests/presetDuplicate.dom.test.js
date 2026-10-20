@@ -185,6 +185,7 @@ describe('Duplicate Preset', () => {
       dotRotation: 'ccw90',
       minY: 1650,
       amnesic: amnesicModeOf(other.id),
+      amnesicOn: 0,
     })
     expect(copied.sync.g).not.toBe(saved(PRESET_STORE_KEYS.modePrefs, other.id).sync?.g)
     expect(saved(PRESET_STORE_KEYS.modePrefs, copy.id).state).toEqual({
@@ -271,11 +272,11 @@ describe('THE GUARD: every per-preset key has an answer in DUPLICATE_RULES', () 
       // Every part of preset `p`, filled through the app's own doors.
       setUpThisPreset() // settings, modePrefs, progress, userDefaults
       setPresetAmnesic(p, 'stats') // the Amnesic value (a setting)…
-      useProgress.getState().setModeStats('flash', PLAYED) // …and its session stats
+      useProgress.getState().setModeStats('flash', PLAYED) // …and play under it (the one pool)
       writeSessionMode(p, 'flash')
       writeSessionDedType(p, 'month')
-      writeSessionRound(`${p}:saved`, 'blitz', { engine: {} })
-      writeSessionHistory(`${p}:stats`, 'classic', '{"h":[]}')
+      writeSessionRound(p, 'blitz', { engine: {} })
+      writeSessionHistory(p, 'classic', '{"h":[]}')
 
       // Which part of preset `p` a key is — or null. (The ownership rule each part's own module
       // writes by: the four stores' keys and their solve-time chunks; and the session's.)
@@ -288,12 +289,10 @@ describe('THE GUARD: every per-preset key has an answer in DUPLICATE_RULES', () 
           if (parseTimesKey(key)?.presetId === p) return 'progress'
           return null
         }
-        if (key === presetKey(PRESET_STORE_KEYS.progress, p)) return 'sessionStats'
-        if (parseTimesKey(key)?.presetId === p) return 'sessionStats'
         if (key === 'cg-session-mode-v1') return 'sessionPage'
         if (key === 'cg-session-dedtype-v1') return 'sessionDedType'
-        if (key === 'cg-round-v2') return 'sessionRounds'
-        if (key.startsWith(`cg-history-v1:${p}:`)) return 'sessionHistories'
+        if (key === 'cg-round-v3') return 'sessionRounds'
+        if (key.startsWith(`cg-history-v2:${p}:`)) return 'sessionHistories'
         return null
       }
       // The keys that belong to no preset at all.

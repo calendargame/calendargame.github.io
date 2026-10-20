@@ -9,8 +9,6 @@ import {
 import type { UsageRow } from '../store/storageUsage.js'
 import { usePresets } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
-import { resetStatsFreesRoom, useActiveAmnesicMode } from '../store/amnesic.js'
-import { amnesicLabel } from './settingsOptions.js'
 import { modeNames } from '../lib/modes.js'
 import QuotedName from './QuotedName.jsx'
 
@@ -105,7 +103,6 @@ export default function StorageUsagePopup() {
   const rows = useStorageUsage((s) => s.rows)
   const limit = useStorageUsage((s) => s.limit)
   const presets = usePresets((s) => s.presets)
-  const amnesic = useActiveAmnesicMode()
   if (!open) return null
   // Each owner's share of the WHOLE allowance, written by the rule the headline is written by
   // (store/storageUsage's percentText): each is cut at its last digit, so together they come to the
@@ -180,13 +177,8 @@ export default function StorageUsagePopup() {
               "would be enough on its own" — and none about the names being large (it once opened
               "Your preset names are taking up much of this room", which was false there). How
               much they hold is the "Preset names" row above, in its own figure. */}
-          {/* ★ ONLY WHAT IS TRUE FOR THE PRESET YOU ARE ON, RIGHT NOW. Reset Stats clears the stats
-              on screen, and under Amnesic: Stats Only or Full those are the session's copy — the
-              saved solve times, which are what is taking the room, are not touched (store/amnesic's
-              resetStatsFreesRoom). So there it is not offered as a way to make room; it is named,
-              because it is the first thing a player would reach for, with what to do instead. The
-              other two work under every value: Clear History empties the saved Lookup list
-              whatever the value, and deleting a preset removes everything it holds. */}
+          {/* (Each works on every Amnesic value alike: nothing is kept anywhere but the saved
+              progress and the Lookup history.) */}
           <ul className="space-y-1 list-disc ps-4">
             {suggestShorterNames(warning, rows, limit) && (
               <li>
@@ -194,12 +186,10 @@ export default function StorageUsagePopup() {
                 (⚙ → Global → Manage Presets).
               </li>
             )}
-            {resetStatsFreesRoom(amnesic) && (
-              <li>
-                <b>Reset Stats</b>, on a mode&apos;s own screen, clears that mode&apos;s solve times
-                in the preset you are on.
-              </li>
-            )}
+            <li>
+              <b>Reset Stats</b>, on a mode&apos;s own screen, clears that mode&apos;s solve times
+              in the preset you are on.
+            </li>
             <li>
               <b>Clear History</b>, on the Lookup page, empties the Lookup history.
             </li>
@@ -207,14 +197,6 @@ export default function StorageUsagePopup() {
               Deleting a preset you no longer use removes everything it holds (⚙ → Global → Manage
               Presets).
             </li>
-            {!resetStatsFreesRoom(amnesic) && (
-              <li>
-                <b>Reset Stats</b> won&apos;t make room while this preset&apos;s Amnesic is on{' '}
-                <b>{amnesicLabel(amnesic)}</b>: it clears only this session&apos;s numbers, and the
-                solve times saved before stay. To clear those, set Amnesic to <b>Off</b> first (⚙ →
-                Stats), then use Reset Stats on the mode&apos;s screen.
-              </li>
-            )}
           </ul>
         </div>
       </div>

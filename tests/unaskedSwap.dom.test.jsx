@@ -19,7 +19,7 @@ import { useSettings, SETTINGS_DOC } from '../src/store/settings.js'
 import { useJulianRange } from '../src/store/julianRange.js'
 import { SWAP_GUARD_MS, VOID_MS } from '../src/lib/unaskedSwap.js'
 import { rebaseEngine } from '../src/store/screenPool.js'
-import { activeDataId } from '../src/store/amnesic.js'
+import { usePresets } from '../src/store/presets.js'
 
 const touch = (type) => {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 })
@@ -100,7 +100,7 @@ describe('a rebuild on another window’s stats is one engine’s', () => {
   // stats came in from another window) must not void a press on the one on display.
   it('a hidden screen rebuilt: the screen on display takes its answers at once, with no cue', () => {
     mountApp() // on Classic
-    act(() => rebaseEngine(activeDataId(), 'flash'))
+    act(() => rebaseEngine(usePresets.getState().activeId, 'flash'))
     tap(day('Tuesday'))
     expect(statValue('Score')).not.toBe('0/0')
     expect(day('Tuesday').classList.contains('press-void')).toBe(false)
@@ -128,7 +128,7 @@ describe('a rebuild on another window’s stats is one engine’s', () => {
 
   it('the screen on display rebuilt: its answers are guarded for a moment, with the cue', () => {
     mountApp()
-    act(() => rebaseEngine(activeDataId(), 'classic'))
+    act(() => rebaseEngine(usePresets.getState().activeId, 'classic'))
     tap(day('Tuesday'))
     expect(statValue('Score')).toBe('0/0')
     expect(day('Tuesday').classList.contains('press-void')).toBe(true)
@@ -142,9 +142,9 @@ describe('a rebuild on another window’s stats is one engine’s', () => {
         (el) => el.children.length === 0 && el.textContent.includes('__'),
       ).textContent
     const dayPuzzle = puzzle()
-    act(() => rebaseEngine(activeDataId(), 'dedMonth'))
+    act(() => rebaseEngine(usePresets.getState().activeId, 'dedMonth'))
     expect(puzzle()).toBe(dayPuzzle) // Day (on screen) untouched
-    act(() => rebaseEngine(activeDataId(), 'dedDay'))
+    act(() => rebaseEngine(usePresets.getState().activeId, 'dedDay'))
     expect(puzzle()).not.toBe(dayPuzzle)
   })
 })

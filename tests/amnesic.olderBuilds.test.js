@@ -72,11 +72,11 @@ describe.each(['v2.27.3', 'v2.26.0'])('%s, as the real build behaved', (build) =
   })
 
   describe('the registry flag', () => {
-    // A guest is playing in the older build: its flag is true, and its session copy sits under the key
-    // this build's Full reads. ⚠ THIS BUILD CARRIES THE FLAG AND NEVER READS IT (design 9.4): the one
-    // hand-over is v2.28-v2.29's session record (9.5, tests/amnesicSetting.dom) - a v2.27.3 or v2.26.0
-    // guest session that updates straight into this build lands on the preset's own value.
-    it('a guest session in the older build: its flag is true, and its session copy is where this build’s Full reads', () => {
+    // A guest is playing in the older build: its flag is true, and its play is in a session copy of its
+    // own, never in the saved stats. ⚠ THIS BUILD CARRIES THE FLAG AND READS NEITHER IT NOR THAT COPY
+    // (design-amnesic-close.md 3 and 7): an older guest session that updates into this build lands on the
+    // preset's own value, and the session copy's numbers - which that build never saved - are not shown.
+    it('a guest session in the older build: its flag is true, and its play is in its own session copy', () => {
       const s = seen.guestSession
       expect([s.permanentPlayed, s.sessionPlayed]).toEqual([SAVED, 1])
       const preset = s.registry.presets.find((p) => p.id === s.registry.activeId)
@@ -120,3 +120,37 @@ describe('a stale true flag at a reload of the older build', () => {
     expect(recorded('v2.26.0').staleFlag.reload.flag).toBe(false)
   })
 })
+
+// ★ THE AMNESIC ANCHOR IN AN OLDER BUILD'S HANDS (design-amnesic-close.md 1, "WHERE IT LIVES"). This build
+// writes a mode's anchor as one more field of its silo in the doc (`a`, store/progressDoc) - and the four
+// older builds on this origin were RUN over a silo carrying an unknown field (syncedDoc.olderBuilds' F-A:
+// `zz`, beside the door's tag): every one of them carries it through each answer and an Override at any
+// depth, and drops it - with the counts it described - on its own Reset. So an older tab's answers keep
+// the anchor of the version they were played on (the forget then puts that mode back, or leaves the older
+// tab's cards on the far side of it - the residuals R16-R19), and its Reset drops the anchor with the
+// content, as this build's own Reset does: after a Reset there is nothing older left to forget.
+describe.each(['v2.26.0', 'v2.27.3', 'v2.28.0', 'v2.29.0'])(
+  '%s carries a silo field it does not know, as the anchor needs',
+  (build) => {
+    const seen = JSON.parse(
+      readFileSync(new URL(`./fixtures/olderBuilds/sync-${build}.json`, import.meta.url), 'utf8'),
+    )
+    const classic = (writes) =>
+      writes
+        .filter((w) => w.op === 'set' && w.key === 'cg-progress-v1')
+        .map((w) => w.value.state.stats.classic)
+    it('through every answer and an Override at any depth', () => {
+      const written = [
+        ...classic(seen.answers),
+        ...classic(seen.overrideAtDepth),
+        ...classic(seen.overrideBack),
+      ]
+      expect(written.length).toBeGreaterThan(3)
+      for (const silo of written) expect(silo.zz).toBe(1)
+    })
+    it('and not through its own Reset: the field goes with the counts', () => {
+      const [after] = classic(seen.reset)
+      expect('zz' in after).toBe(false)
+    })
+  },
+)

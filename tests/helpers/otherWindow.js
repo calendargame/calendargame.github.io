@@ -5,9 +5,10 @@
 // by deliver(), as src/store/windowSync does with the real ones.
 // An OLDER build's save is olderSave(): the doc's whole state, no envelope, no sync key.
 // That window's SAVED PROGRESS is progress(): its own progress store (the five modes' stats and the four
-// Best maps) persisted through its door's progress binding (store/progressDoor), on Off - an answer is a
-// mode's stats one answer on, a round's result an op on its record, exactly as this build's screens
-// make them.
+// Best maps) persisted through its door's progress binding (store/progressDoor) - an answer is a mode's
+// stats one answer on, a round's result an op on its record, exactly as this build's screens make them;
+// its play anchored in the Amnesic window the shared settings and session name (store/amnesicWindow), as
+// this window's is.
 import { act } from '@testing-library/react'
 import { vi } from 'vitest'
 import { createDoor, door } from '../../src/store/syncedDoc.js'
@@ -15,6 +16,7 @@ import { presetDocSpec, usePresets, presetKey } from '../../src/store/presets.js
 import { makeProgressStorage } from '../../src/store/progressDoor.js'
 import { makeProgressDefaults, migrateProgress } from '../../src/store/progress.js'
 import { mainKeyOf } from '../../src/store/progressStorage.js'
+import { amnesicWindowOf } from '../../src/store/amnesicWindow.js'
 import { roundOp } from '../../src/store/bestRecords.js'
 
 export function otherWindow() {
@@ -50,11 +52,11 @@ export function otherWindow() {
     const storage = makeProgressStorage(other.progressKit, {
       presetId: () => usePresets.getState().activeId,
       key: () => mainKeyOf(usePresets.getState().activeId),
-      mode: () => 'off',
+      keyOf: mainKeyOf,
+      win: amnesicWindowOf,
       version: 5,
       migrate: migrateProgress,
       defaults: makeProgressDefaults,
-      session: { load: () => null, save() {}, discard() {} },
       gate: () => true,
       rebase() {},
     })

@@ -3,14 +3,14 @@
 // together because every screen uses some subset and none of them belongs to any one screen.
 import * as React from 'react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { gameReducer, waitingDateMissing } from '../engine/gameReducer.js'
+import { gameReducer, waitingDateMissing, statsAtCard } from '../engine/gameReducer.js'
 import type { GameState, Question, Stats } from '../engine/gameReducer.js'
 import type { GameEngine, FlashState } from './modeTypes.js'
 import { calcLast, calcAvg, calcMed } from '../engine/stats.js'
 import { fittedParkedText, restoreParkedText } from '../engine/parkedHistory.js'
 import type { ParkedScreen, RestoredHistory } from '../engine/parkedHistory.js'
 import { fmtAccuracyPct, truncTime, fmtTime } from '../lib/modeFormat.js'
-import { activeDataId, activeBestsId, useActiveAmnesicMode } from '../store/amnesic.js'
+import { usePresets } from '../store/presets.js'
 import { useProgress, type StatsKey } from '../store/progress.js'
 import { saveModeStats } from '../store/screenPool.js'
 import {
@@ -259,19 +259,13 @@ export function useStatsHideToggles({
 // `S` keyboard shortcut routes through the same onClick via .click() (see the keyboard effect), so
 // it opens the popup identically. Leaving the mode drops a pending confirm (the popup portals to
 // #root, so a hidden mode's would otherwise sit over the visible one).
-// ★ WHAT THE "RESET STATS?" POPUP SAYS — true for the Amnesic value the preset is on. Under Off the
-// numbers on screen ARE the saved ones, and the button clears them for good. Under Stats Only and
-// Full they are the session's (store/amnesic), so that is all the button clears: the saved stats
-// are set aside behind the session and are exactly as they were when Amnesic goes back to Off. The
-// popup used to promise the first under all three. `subType`: Deduction, whose three puzzle types
-// each keep their own stats.
-export function useResetStatsBody(subType = false): string {
-  const amnesic = useActiveAmnesicMode()
+// ★ WHAT THE "RESET STATS?" POPUP SAYS. The numbers on screen are the preset's saved ones whatever its
+// Amnesic value (store/amnesic: one pool), so the button clears them for good. `subType`: Deduction,
+// whose three puzzle types each keep their own stats.
+export function resetStatsBody(subType = false): string {
   const whose = subType ? 'sub-type' : 'mode'
   const others = `The other modes${subType ? ' and sub-types' : ''} keep theirs, and no other preset is touched.`
-  return amnesic === 'off'
-    ? `Clears this ${whose}'s stats and all-time bests for the preset you are on. ${others}`
-    : `Clears this ${whose}'s stats for this session — the numbers on screen. This preset's Amnesic is on ${amnesic === 'stats' ? 'Stats Only' : 'Full'}, so its saved stats are set aside and are not touched: they are back, as they were, when Amnesic is set to Off. ${others}`
+  return `Clears this ${whose}'s stats and all-time bests for the preset you are on. ${others}`
 }
 export function useResetStatsConfirm(resetFn: () => void, hasData: boolean, visible: boolean) {
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -380,32 +374,31 @@ export function useSaveStatsOnRegen(
  * READ (the store's slice as this screen mounted) or last WROTE: if the slice moved under it since (an
  * other window's answers merged in the gap), the write is refused and the engine is rebuilt on them.
  */
-export function useStatsMirror(dataId: string, key: StatsKey, stats: Stats): void {
+export function useStatsMirror(presetId: number, key: StatsKey, state: GameState): void {
   const [mounted] = useState(() => useProgress.getState().stats[key])
   const base = useRef(mounted)
+  // (the stats last mirrored: a change of the engine that leaves its stats as they are is no save)
+  const mirrored = useRef<Stats | null>(null)
   useEffect(() => {
-    if (saveModeStats(dataId, key, base.current, stats)) base.current = stats
-  }, [stats, dataId, key])
+    const { stats } = state
+    if (stats === mirrored.current) return
+    mirrored.current = stats
+    // (the engine as it is now, for an Override of a card from before an Amnesic window: the stats as
+    // they stood after an earlier card - store/progressDoor's correcting)
+    const at = (played: number) => statsAtCard(state, played)
+    if (saveModeStats(presetId, key, base.current, stats, at)) base.current = stats
+  }, [state, presetId, key])
 }
 
-// ★ THE COPY THIS SCREEN WAS MOUNTED ON, read ONCE at mount and never again — and there are two,
-// because a screen parks two different things (store/amnesic spells both):
-//   • useMountedDataId — the STATS copy ("1:saved" / "1:stats" / "1:session"). A casual mode's parked
-//     history (store/sessionHistory) is keyed by it, so a history is only ever restored over the
-//     stats it was PLAYED on.
-//   • useMountedBestsId — the BESTS copy ("1:saved" / "1:session"). A Blitz round or MoX run's parked
-//     ending (store/sessionRound) is keyed by it, so a round is only ever restored over the Best
-//     records it was scored against — and there is only ever one such round per copy of them.
-// Fixed for the life of the mount is exactly right, not a shortcut: any change of copy (a preset
-// switch, a change of the Amnesic value) remounts every mode screen (src/main.tsx's subscription on
-// activeDataId), so a mount's engine never belongs to any other copy.
-export function useMountedDataId(): string {
-  const [dataId] = useState(activeDataId)
-  return dataId
-}
-export function useMountedBestsId(): string {
-  const [bestsId] = useState(activeBestsId)
-  return bestsId
+// ★ THE PRESET THIS SCREEN WAS MOUNTED ON, read ONCE at mount and never again: every write it makes
+// names it (store/screenPool), and what it parks is keyed by it - a casual mode's history
+// (store/sessionHistory), a Blitz round's or MoX run's ending (store/sessionRound) - so either only ever
+// comes back over the preset it was played on. Fixed for the life of the mount is exactly right, not a
+// shortcut: a preset switch remounts every mode screen (src/main.tsx's subscription on the active
+// preset), so a mount's engine never belongs to any other.
+export function useMountedPresetId(): number {
+  const [presetId] = useState(() => usePresets.getState().activeId)
+  return presetId
 }
 
 // ── A CASUAL MODE'S HISTORY, KEPT FOR THE BROWSING SESSION ────────────────────────────────────────
@@ -431,19 +424,19 @@ interface LiveQuestion {
 }
 
 /**
- * This (stats copy, silo)'s parked history, restored over the silo's SAVED stats — the very stats the
+ * This (preset, silo)'s parked history, restored over the silo's SAVED stats — the very stats the
  * engine would otherwise hydrate from (getInitialStats) — or null to start from those stats as
  * before. Read ONCE, in a screen's useState initializer, before its engine and any of its own fields
  * the snapshot carries (a screen's fields can decide what its engine draws — Deduction's filters —
  * so the two are read here and the engine's first state is settled separately, below).
  */
 export function readParkedHistory(
-  dataId: string,
+  presetId: number,
   silo: HistorySilo,
   useJulian: boolean,
 ): RestoredHistory | null {
   return restoreParkedText(
-    readSessionHistory(dataId, silo),
+    readSessionHistory(presetId, silo),
     useProgress.getState().stats[silo],
     useJulian,
     silo,
@@ -454,8 +447,8 @@ export function readParkedHistory(
  * The engine's FIRST STATE from a restored history (useGameEngine's getInitialState) — null when
  * nothing was restored.
  *
- * ★ THE LIVE-QUESTION RULE (the owner's, and it holds for a reload, a preset switch and an Amnesic
- * interlude alike). The history comes back exactly; the question that was WAITING comes back only
+ * ★ THE LIVE-QUESTION RULE (the owner's, and it holds for a reload and a preset switch alike). The
+ * history comes back exactly; the question that was WAITING comes back only
  * when nothing could be gained from having seen it:
  *   • it is REGENERATED when a time could still be recorded for it — this mode's timing is shown
  *     and Save Stats is on NOW (either may have been changed since the park), and the question is
@@ -467,12 +460,12 @@ export function readParkedHistory(
  *     time either — including on a screen with no history at all. (Each of the two switches has its
  *     own door for the moment it comes back ON over a question that was kept: useStatsHideToggles
  *     and useSaveStatsOnRegen, above.)
- *   • and an unanswered question drawn under DIFFERENT date settings is regenerated too (the settings
- *     are shared by every copy of a preset's stats and bests, so a guest can change them under a parked history) —
- *     which is only what changing those settings does to a question on screen;
+ *   • and an unanswered question drawn under DIFFERENT date settings is regenerated too (another
+ *     window can change them under a parked history) — which is only what changing those settings
+ *     does to a question on screen;
  *   • and so is an unanswered date the calendar now in force does not have (gameReducer's
  *     waitingDateMissing) — the Julian Calendar setting was switched off while the history was away,
- *     by another tab or under a guest — again exactly what switching it does to a date on screen
+ *     by another window — again exactly what switching it does to a date on screen
  *     (useDateSettingsOnRegen, above).
  * All of them are ONE engine action, REGEN_DATE: the rule the app already had for "turning timing back
  * on" and for a date-setting change — it keeps a question that has been used, and reaches the live
@@ -494,10 +487,10 @@ export function restoredEngine(back: RestoredHistory | null, live: LiveQuestion)
 const parkers = new Set<{ inUse: () => boolean; park: () => void }>()
 
 /**
- * Park every mounted casual history NOW — each under the stats copy its screen was mounted on.
+ * Park every mounted casual history NOW — each under the preset its screen was mounted on.
  * src/main.tsx calls it at the two moments a screen is about to go away without the player asking
- * for a clean start: the page being hidden (a reload, the background), and the stats copy underneath
- * the screens being swapped (a preset switch, an Amnesic change).
+ * for a clean start: the page being hidden (a reload, the background), and the preset underneath
+ * the screens being swapped (a preset switch).
  * ★ THE SCREEN IN USE PARKS LAST. store/sessionHistory holds every history together to one budget,
  * and each write makes room for itself by dropping others — so the last one written is the one that
  * always survives, and that has to be the history the player is looking at, not whichever screen
@@ -529,7 +522,7 @@ export function parkCasualHistories(): void {
  * screen, never a render that did not commit.
  */
 export function useParkedHistory(
-  dataId: string,
+  presetId: number,
   silo: HistorySilo,
   state: GameState,
   inUse: boolean,
@@ -547,20 +540,20 @@ export function useParkedHistory(
       park: () => {
         const { state: s, screen: sc } = latest.current
         const text = fittedParkedText(s, sc, SLOT_BUDGET)
-        if (text === null) return discardSessionHistory(dataId, silo)
+        if (text === null) return discardSessionHistory(presetId, silo)
         const holdsPlay = !engineUntouched(s) || Object.values(sc.ui ?? {}).some(Boolean)
-        writeSessionHistory(dataId, silo, text, holdsPlay)
+        writeSessionHistory(presetId, silo, text, holdsPlay)
       },
     }
     parkers.add(parker)
     return () => {
       parkers.delete(parker)
     }
-  }, [dataId, silo])
+  }, [presetId, silo])
   // ★ A RESET RETIRES THE PARK IN THE SAME BREATH. Reset Stats, "Enable and Reset Stats", Flash's
   // Reset, and a rebuild on another window's stats (HYDRATE) all clear the engine's history, and
   // `gridEpoch` moves on exactly those (gameReducer). A
   // park standing from an earlier hide describes the history that was just cleared; nothing may
   // bring it back, so it goes now rather than waiting to be overwritten by the next park.
-  useChangeEffect([state.gridEpoch], () => discardSessionHistory(dataId, silo))
+  useChangeEffect([state.gridEpoch], () => discardSessionHistory(presetId, silo))
 }

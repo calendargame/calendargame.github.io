@@ -26,7 +26,7 @@
 // bump. (Pinned by tests/moxRename.dom — a Best recorded under the old label is still found.)
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ModeProps, FmtDate, GenDate } from './modeTypes.js'
-import { FLASH_MS, useButtonFlash, useMountedBestsId, useMountedDataId } from './modeHooks.js'
+import { FLASH_MS, useButtonFlash, useMountedPresetId } from './modeHooks.js'
 import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { NUM_INPUT_CLASS, RESET_BTN_CLASS, DATE_CARD_CLASS } from '../components/controlClasses.js'
 import { dateLineShapes } from '../lib/dateLineFit.js'
@@ -53,7 +53,13 @@ import { useGameEngine } from '../engine/useGameEngine.js'
 import { creditsLiveCard, questionIdAfterReset, topCardNumber } from '../engine/gameReducer.js'
 import type { GameState } from '../engine/gameReducer.js'
 import { readSessionRound } from '../store/sessionRound.js'
-import { fileRoundResult, parkRound, unparkRound } from '../store/screenPool.js'
+import {
+  fileRoundResult,
+  parkRound,
+  unparkRound,
+  isFiled,
+  type Filed,
+} from '../store/screenPool.js'
 import type { ParkedSnapshot } from '../store/sessionRound.js'
 import { restoreParkedEngine } from '../engine/parkedEngine.js'
 import { useBackButton } from '../components/overlayStack.js'
@@ -70,8 +76,9 @@ interface AoxRunSnapshot {
   revealedQ: number | null
   currentRunId: number | null
   run: RunConfig
-  // The run's result as last filed on its record (JSON; null: never filed).
-  filed: string | null
+  // What the run last filed on its record, and the Amnesic window it was first filed in (store/screenPool's
+  // Filed; null: never filed).
+  filed: Filed | null
   // Does this run count toward the Bests — was Save Stats on as it FIRST ended (`recordedRef` in the
   // component, which argues it).
   recorded: boolean
@@ -86,9 +93,9 @@ interface AoxRunSnapshot {
 //     live there completed a 10-solve run at 3 solves, or took a finished run's Best away;
 //   • the Best is filed under the key the run was played on;
 //   • a run PARKED for the browsing session (store/sessionRound) carries it, and comes back only if
-//     it is still exactly the live configuration (sameRun). Settings and the per-mode setup are
-//     shared by every copy of a preset's stats and bests, so a guest's interlude can change them under a parked
-//     run — and a run restored over a different length or a different date range reconciled its Best
+//     it is still exactly the live configuration (sameRun). Settings and the per-mode setup can
+//     change under a parked run (another window's change, or this one's while the run waited on another
+//     preset) — and a run restored over a different length or a different date range reconciled its Best
 //     against settings it was never played on (erasing it), or would have resumed drawing the wrong
 //     dates. A run that no longer matches is simply not restored: the screen comes up idle, exactly
 //     as a settings change resets a run that is on screen, and the Best it set stays as it was saved.
@@ -152,12 +159,10 @@ function AoxMode({
     setOneByOne = useModePrefs((s) => s.setAoxOneByOne) // persisted (mode-prefs store)
   const timingOff = useModePrefs((s) => s.aoxTimingOff),
     setTimingOff = useModePrefs((s) => s.setAoxTimingOff) // persisted; VISUAL-ONLY — blanks the trio of a run still going; an ENDED run (done or failed) always shows its times
-  // ★ THE BESTS COPY THIS SCREEN WAS MOUNTED ON, read once — see modes/modeHooks' useMountedBestsId
-  // for why a run is parked and restored ONLY against the Best records it was scored on — and the
-  // STATS copy, which every write below names to store/screenPool, so a write from this screen can
-  // only ever land in the copy it was drawn for.
-  const bestsId = useMountedBestsId()
-  const dataId = useMountedDataId()
+  // ★ THE PRESET THIS SCREEN WAS MOUNTED ON, read once — every parked-run read, write and discard
+  // below names it, and so does every filing (store/screenPool), so a write from this screen can only
+  // ever land in the preset it was drawn for (modes/modeHooks' useMountedPresetId).
+  const presetId = useMountedPresetId()
   const n = +normalizeAoxN(aoxN) // the ONE 2–1000 clamp (store/userDefaults normalizeAoxN; junk → 10)
   // Best keying: bests are siloed per difficulty configuration. Dimensions: n, allowMistakes, then
   // the date settings IN EFFECT (`dateDraw`: the format bucket, the three chances, the year range) and
@@ -169,12 +174,11 @@ function AoxMode({
   const bestKey = `${n}|${allowMistakes}|${dateDraw}|${useJulian}`
   // The configuration a run begun (or restored) RIGHT NOW is played under — see RunConfig.
   const liveRun: RunConfig = { n, bestKey, oneByOne }
-  // The ended run this (bests copy, mode) parked before its last unmount, read EXACTLY ONCE at
-  // mount. On a preset switch or an Amnesic change the always-mounted screens remount (src/main.tsx
-  // remountScreens) and the INCOMING copy is ALREADY the one named by then — its name is
-  // written before the stores rehydrate, one synchronous turn (store/presetControl). So this is the
-  // incoming copy's OWN parked run and never the one just left; the copy key is the whole
-  // contamination guard. Factored into one read so the initializers below don't each hit
+  // The ended run this (preset, mode) parked before its last unmount, read EXACTLY ONCE at mount. On a
+  // preset switch the always-mounted screens remount (src/main.tsx remountScreens) and the INCOMING
+  // preset is ALREADY the one named by then — it is written before the stores rehydrate, one
+  // synchronous turn (store/presetControl). So this is the incoming preset's OWN parked run and never
+  // the one just left; the preset key is the whole contamination guard. Factored into one read so the initializers below don't each hit
   // sessionStorage. Two gates, before any initializer reads the snapshot, and either one drops the
   // WHOLE snapshot so the screen never shows an ended run over a fresh engine:
   //   • the run was played under exactly the live configuration (RunConfig argues why);
@@ -182,12 +186,12 @@ function AoxMode({
   //     restoreParkedEngine) — a blob this build cannot read is not a run.
   // (…and a blob that does not say whether its run counts is not one this build parked.)
   const [parkedRun] = useState<AoxRunSnapshot | null>(() => {
-    const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(bestsId, 'aox')
+    const snap = readSessionRound<ParkedSnapshot<AoxRunSnapshot>>(presetId, 'aox')
     if (
       !snap ||
       !sameRun(snap.run, liveRun) ||
       typeof snap.recorded !== 'boolean' ||
-      !(snap.filed === null || typeof snap.filed === 'string')
+      !isFiled(snap.filed)
     )
       return null
     const engine = restoreParkedEngine(snap.engine, useJulian, 'aox')
@@ -226,8 +230,8 @@ function AoxMode({
     // While a run is under way — all of it, the wait for Continue between two One-by-One dates too.
     play: visible && runPhase === 'running' ? 'live' : 'idle',
     // Round 21 — seed the reducer from the parked ended run when there is one (a getter, read
-    // once in the lazy init). `parkedRun` was keyed to the bests copy live at mount, so this only ever
-    // restores the incoming copy's own run.
+    // once in the lazy init). `parkedRun` was keyed to the preset live at mount, so this only ever
+    // restores the incoming preset's own run.
     getInitialState: () => parkedRun?.engine ?? null,
   })
   const { state, correct, overrideAvail, overridden } = eng
@@ -270,7 +274,7 @@ function AoxMode({
   // AoX all-time bests (avg/median, config-keyed) persist across reloads (Stage D1): from the
   // progress store. Their ★ markers are not stored anywhere — each is DERIVED from the record's run id
   // (engine/roundId's isNewBest).
-  // Every write to them goes through store/screenPool's door, named with this screen's copy.
+  // Every write to them goes through store/screenPool's door, named with this screen's preset.
   const bests = useProgress((s) => s.aoxBest)
   // ★ THE RUN ON SCREEN — its id, from Begin until Reset (null while there is none). A Best tagged
   // with it is a best this run set, which is the whole ★ rule (round 23). State, not a ref, because
@@ -291,19 +295,19 @@ function AoxMode({
     }
     setRevealFlowing(false)
   }
-  // WHAT THE RUN ON SCREEN LAST FILED ON ITS RECORD (JSON) — null until its first filing: a filing that
-  // would say the same again is skipped, and every later one is an Override of the run's result
-  // (store/screenPool's `filedBefore`). Restored with a parked run, so after a reload an Override on it
-  // changes the same run's result.
-  const filedRef = useRef<string | null>(parkedRun?.filed ?? null)
+  // WHAT THE RUN ON SCREEN LAST FILED ON ITS RECORD, and the Amnesic window it was first filed in
+  // (store/screenPool's Filed) — null until its first filing: a filing that would say the same again is
+  // skipped, and every later one is an Override of the run's result (store/screenPool's `filed`).
+  // Restored with a parked run, so after a reload an Override on it changes the same run's result.
+  const filedRef = useRef<Filed | null>(parkedRun?.filed ?? null)
   // ★ DOES THE RUN ON SCREEN COUNT TOWARD THE BESTS? Decided ONCE, by the Save Stats setting as the
   // run FIRST ends — completed or failed — and it is the run's for the rest of its life: null from
   // Begin until that first ending, then true or false until Reset or the next Begin — through every
-  // Override and Undo, a resume and the ending after it, a guest's interlude and a reload (it is
-  // parked with the run). The effect below takes the verdict; Begin and Reset clear it. The live
-  // setting is never asked after that, in either direction: a practice run is not recorded by turning
-  // Save Stats on (nor is one parked for the session, when a guest turns the shared setting on), and
-  // a recorded run keeps being filed while Save Stats is off.
+  // Override and Undo, a resume and the ending after it, a preset switch and a reload (it is parked
+  // with the run). The effect below takes the verdict; Begin and Reset clear it. The live setting is
+  // never asked after that, in either direction: a practice run is not recorded by turning Save Stats
+  // on (nor is one parked, when the setting moves while it waits), and a recorded run keeps being filed
+  // while Save Stats is off.
   // WHY ONCE PER RUN AND NOT ONCE PER ENDING. A press can hand an ended run back to the player, and the
   // press after it can end it again without a single date being answered in between (Override, then
   // Undo, on the completing solve). When every completion was judged afresh, that pair of presses was
@@ -362,19 +366,19 @@ function AoxMode({
     }
     if (!recordedRef.current) return // a practice run writes no Best
     const result = aoxRunResult(S.good, runN, S.times)
-    const text = JSON.stringify(result)
+    if (filedRef.current?.text === JSON.stringify(result)) return
     // (nothing filed yet and nothing to file — a run that has not stood — is no filing)
-    if (filedRef.current === text || (result === null && filedRef.current === null)) return
-    // (through store/screenPool: drawn for a copy that is no longer live, nothing is filed)
-    if (fileRoundResult(dataId, 'aoxBest', run.bestKey, runId, result, filedRef.current !== null))
-      filedRef.current = text
+    if (result === null && filedRef.current === null) return
+    // (through store/screenPool: drawn for a preset that is no longer live, nothing is filed)
+    const filed = fileRoundResult(presetId, 'aoxBest', run.bestKey, runId, result, filedRef.current)
+    if (filed) filedRef.current = filed
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runPhase, doneCount, runN, saveStats, S.good, S.times, runId, dataId])
+  }, [runPhase, doneCount, runN, saveStats, S.good, S.times, runId, presetId])
 
-  // Round 21 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the bests copy
-  // this screen was mounted on (`bestsId`), exactly as the effect above mirrors the run's Best to
-  // its record. On the remount a preset switch or an Amnesic change causes, the mount-time reads
-  // restore whatever is parked for the now-live copy (see `parkedRun`). Only an ended run is parked; every other state DISCARDS the slot:
+  // Round 21 — mirror an ENDED run (done | failed) to sessionStorage, keyed by the preset this screen
+  // was mounted on (`presetId`), exactly as the effect above files the run's Best on its record. On
+  // the remount a preset switch causes, the mount-time reads restore whatever is parked for the
+  // now-live preset (see `parkedRun`). Only an ended run is parked; every other state DISCARDS the slot:
   //   • running → discard, so a mid-run switch parks nothing and the remount starts fresh (owner's
   //     rule), and any stale blob from a prior run goes;
   //   • idle after Reset / Begin / an Override that resumed the run → discard, the park is stale.
@@ -386,7 +390,7 @@ function AoxMode({
   // ended (they are deps only because they are state this effect reads).
   useLayoutEffect(() => {
     if ((runPhase === 'done' || runPhase === 'failed') && run)
-      parkRound(dataId, bestsId, 'aox', {
+      parkRound(presetId, 'aox', {
         engine: state,
         runPhase,
         revealedQ,
@@ -395,8 +399,8 @@ function AoxMode({
         filed: filedRef.current,
         recorded: recordedRef.current === true,
       } satisfies AoxRunSnapshot)
-    else unparkRound(dataId, bestsId, 'aox')
-  }, [runPhase, revealedQ, state, runId, run, bestsId, dataId])
+    else unparkRound(presetId, 'aox')
+  }, [runPhase, revealedQ, state, runId, run, presetId])
 
   // Settings reconcile now fires on the ⚙ popover CLOSE — the useSettingsCloseEffect is below,
   // after reset() is defined (a RUNNING or ENDED run resets, an idle run regenerates its hidden date).

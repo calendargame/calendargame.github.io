@@ -1,27 +1,22 @@
 // store/amnesicMode.ts — the three values of the Amnesic setting, and the ONE reader of every stored
 // spelling of it.
 //
-// THE THREE VALUES (the ⚙ pill's Off / Stats Only / Full):
-//   'off'   — everything is saved, as if the setting did not exist.
-//   'stats' — STATS ONLY: the stats strip belongs to the session (every mode's score, accuracy,
-//             streak and solve times start from zero and are gone on a real close), while the round
-//             modes' BESTS are the permanent ones — shown, beatable, and saved for good.
-//   'full'  — the whole of a preset's saved progress belongs to the session: stats AND bests.
-// What each one keeps where is store/amnesic's (AMNESIC_CLEARS); which value a preset has right now is
-// its settings' (store/settings). This file is only the value and its spellings, and imports nothing, so
-// every store can read it.
+// THE THREE VALUES (the ⚙ pill's Off / Stats Only / Full) say what happens, at the app's close, to what
+// was played on the preset since its Amnesic was switched on (store/amnesic says it in full):
+//   'off'   — everything is kept.
+//   'stats' — STATS ONLY: those answers' stats are forgotten; any new Best is kept.
+//   'full'  — those, and the Bests they set: the previous holders come back.
+// While playing, none of them changes anything. Which value a preset has right now is its settings'
+// (store/settings). This file is only the value and its spellings, and imports nothing, so every store
+// can read it.
 
 export type AmnesicMode = 'off' | 'stats' | 'full'
 
-/** The pill's order, least amnesic first — also the order `moreAmnesic` ranks by. */
+/** The pill's order, least amnesic first. */
 export const AMNESIC_MODES: readonly AmnesicMode[] = ['off', 'stats', 'full']
 
 export const isAmnesicMode = (v: unknown): v is AmnesicMode =>
   v === 'off' || v === 'stats' || v === 'full'
-
-/** The more amnesic of two values (off < stats < full). */
-export const moreAmnesic = (a: AmnesicMode, b: AmnesicMode): AmnesicMode =>
-  AMNESIC_MODES.indexOf(a) >= AMNESIC_MODES.indexOf(b) ? a : b
 
 // What a preset list SAYS after an amnesic preset's name, for a screen reader — nothing for a preset
 // on Off. (Nothing is drawn in a list; components/PresetSwitcher argues both halves, and
@@ -38,9 +33,9 @@ export const AMNESIC_SPOKEN: Record<AmnesicMode, string | null> = {
 // ★ TWO FIELDS, AND THE OLDER ONE IS KEPT ON PURPOSE. Until this setting became three-way it was a
 // boolean called `amnesic`. Live and staging share one browser origin, so a build from before the
 // change can read anything this one saves — and what such a build does with a value it does not
-// recognise in `amnesic` is treat the preset as NOT amnesic: it would record a guest's play into the
-// permanent stats of a preset saved as a guest preset. So the boolean keeps its name and its meaning
-// ("some kind of amnesic"), and the kind rides beside it in a field an older build never reads:
+// recognise in `amnesic` is treat the preset as NOT amnesic: it would keep, for good, the play of a
+// preset saved as one that forgets. So the boolean keeps its name and its meaning ("some kind of
+// amnesic"), and the kind rides beside it in a field an older build never reads:
 //
 //     amnesic: boolean          true for Stats Only and for Full — what an older build acts on
 //     amnesicMode: AmnesicMode  which of the three — what this build acts on
@@ -68,10 +63,9 @@ export const storedAmnesic = (mode: AmnesicMode): Required<StoredAmnesic> => ({
  *     says off, which no build writes; then the more amnesic reading wins.
  * ⚠ ANYTHING IT DOES NOT RECOGNISE READS AS 'full' — a mode a newer build added, a boolean that is
  * not one. The two wrong answers are not equal: reading "off" for a preset that was meant to forget
- * writes a guest's play into the owner's permanent record, which cannot be undone; reading "full"
- * for one that was meant to remember shows a zeroed, dashed strip and the pill on Full, loses nothing
- * that was already saved, and is put right with one tap. So every doubt resolves toward not
- * recording.
+ * keeps that play in the preset's record for good, which cannot be undone; reading "full" for one
+ * that was meant to remember shows the dashed outline and the pill on Full before anything is
+ * forgotten, and is put right with one tap. So every doubt resolves toward forgetting.
  */
 export function readAmnesicMode(stored: unknown): AmnesicMode {
   if (!stored || typeof stored !== 'object') return 'off'

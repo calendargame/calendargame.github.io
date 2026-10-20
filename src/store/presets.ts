@@ -118,8 +118,8 @@ export type Preset = {
   // value in the preset's settings instead (store/settings) and NEVER CHANGES this field, nor reads it
   // (design-q1-q2.md v4, 9.4): the windows-in-sync door carries each preset's value as its own slice,
   // so an older tab's change to it is taken as that tab made it and nothing this build does can switch
-  // its guest session off, or on. A new preset is given `false`, which is what an older build's own new
-  // preset has.
+  // that tab's own Amnesic session off, or on. A new preset is given `false`, which is what an older
+  // build's own new preset has.
   amnesic: boolean
 }
 
@@ -129,8 +129,8 @@ export type Preset = {
 //   <preset id> → always open in THAT preset, whatever was active last time.
 // ★ A FRESH OPEN ONLY. A reload — a browser reload, the app's own update reload, the error card's
 // Reload — is the same browsing session (store/browsingSession), and it stays on the preset the
-// player was on (store/sessionPreset's record of it), whatever the pin says: a guest playing in an
-// Amnesic preset must not be dropped into the pinned (permanent) one by a refresh.
+// player was on (store/sessionPreset's record of it), whatever the pin says: a refresh must not drop the
+// player into another preset.
 // It lives HERE, on the registry, and not in useSettings, because useSettings is per-preset — a
 // "which preset" preference cannot live inside a preset. It is NOT captured by Save Defaults
 // (SavedDefaults carries settings, prefs and the Amnesic value — no registry field is in any of those), by
@@ -372,10 +372,9 @@ export const resolveActiveId = (
  *
  * ⚠⚠ IT IS NOT A SECOND SOURCE OF TRUTH AND NO RENDER MAY READ IT. The live registry above is what
  * the app runs on — and, since the windows-in-sync door (Round 26), it is merged with the device on
- * every notice, so another window's presets are in it. This reads the same key BEHIND it, for the two
- * questions about what is on disk itself: store/presetControl's sweep of a deleted preset's leftovers
- * (a preset neither list knows), and store/amnesic's check that a preset still exists before a Best
- * is written for it.
+ * every notice, so another window's presets are in it. This reads the same key BEHIND it, for the one
+ * question about what is on disk itself: store/presetControl's sweep of a deleted preset's leftovers (a
+ * preset neither list knows).
  */
 export function readStoredRegistry(): PresetRegistryValues | null {
   try {

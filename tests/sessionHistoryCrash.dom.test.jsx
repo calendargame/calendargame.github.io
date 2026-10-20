@@ -97,14 +97,14 @@ describe('a crashed casual screen', () => {
     answerRight()
     answerRight()
     hide() // every casual screen has parked
-    expect(readSessionHistory('1:saved', 'classic')).not.toBe(null)
-    expect(readSessionHistory('1:saved', 'flash')).not.toBe(null)
+    expect(readSessionHistory(1, 'classic')).not.toBe(null)
+    expect(readSessionHistory(1, 'flash')).not.toBe(null)
 
     crash.on = true
     tap(ctrl('New')) // Classic re-renders — and crashes
     expect(screen.getByText('This mode hit an unexpected error.')).toBeInTheDocument()
-    expect(readSessionHistory('1:saved', 'classic')).toBe(null)
-    expect(readSessionHistory('1:saved', 'flash')).not.toBe(null) // Flash did not crash
+    expect(readSessionHistory(1, 'classic')).toBe(null)
+    expect(readSessionHistory(1, 'flash')).not.toBe(null) // Flash did not crash
 
     // The error card's Reload: the page goes away (the crashed screen is gone, so it parks nothing)
     // and comes back.
@@ -177,12 +177,12 @@ describe('a timed screen that crashes while restoring its parked round', () => {
     tap(ctrl('Begin'))
     answerShownRight()
     tap(ctrl('Reveal')) // the round ends, and is parked for the session
-    expect(readSessionRound('1:saved', 'blitz')).not.toBe(null)
+    expect(readSessionRound(1, 'blitz')).not.toBe(null)
 
     crash.on = true
     app = reloadPage(app) // the restored round's screen crashes on its FIRST render
     expect(errorCard()).toBeInTheDocument()
-    expect(readSessionRound('1:saved', 'blitz')).toBe(null)
+    expect(readSessionRound(1, 'blitz')).toBe(null)
 
     crash.on = false
     reloadPage(app) // the error card's Reload
@@ -199,12 +199,12 @@ describe('a timed screen that crashes while restoring its parked round', () => {
     tap(ctrl('Begin'))
     answerShownRight()
     answerShownRight() // the run completes, and is parked for the session
-    expect(readSessionRound('1:saved', 'aox')).not.toBe(null)
+    expect(readSessionRound(1, 'aox')).not.toBe(null)
 
     crash.on = true
     app = reloadPage(app)
     expect(errorCard()).toBeInTheDocument()
-    expect(readSessionRound('1:saved', 'aox')).toBe(null)
+    expect(readSessionRound(1, 'aox')).toBe(null)
 
     crash.on = false
     reloadPage(app)

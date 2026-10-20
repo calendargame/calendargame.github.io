@@ -9,7 +9,7 @@
 //
 // ★ IT BELONGS TO THE APP, NOT TO A PRESET. The history list is shared by every preset, so what is
 // selected in it — and the box, the answer and the codes that follow from the selection — is too:
-// a preset switch, an Amnesic change and deleting the preset you are on all leave it exactly as it
+// a preset switch and deleting the preset you are on both leave it exactly as it
 // was. What a preset CAN change under it is the Date Format the box is typed in, which is why the
 // format the text was written in is kept beside it (`format`): components/LookupCard compares that
 // with the live one and applies its one format-change rule, whether the format changed with the

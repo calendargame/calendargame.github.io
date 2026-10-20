@@ -21,13 +21,13 @@ import { reportWritesTo } from '../changelog.js'
 // is caught
 // and HELD IN MEMORY UNDER THE EXACT PLACE IT WAS FOR: this storage area, this key. From then on:
 //   • a READ of that place returns the held value — it is what that place would hold if it had fit.
-//     So anything that re-reads saved data inside this page (a preset switch and the switch back, an
-//     Amnesic change, "is this preset factory-fresh?") sees the player's newest answers, not the
-//     older copy on the device;
+//     So anything that re-reads saved data inside this page (a preset switch and the switch back,
+//     "is this preset factory-fresh?") sees the player's newest answers, not the older copy on the
+//     device;
 //   • the next write that DOES fit (or the app itself freeing space — a preset deleted) retries
 //     every held value, each to its own place and nowhere else;
-//   • REMOVING a place forgets what was held for it: a deleted preset's keys, a guest session being
-//     thrown away. A held value can never bring back something the player deleted;
+//   • REMOVING a place forgets what was held for it: a deleted preset's keys. A held value can never
+//     bring back something the player deleted;
 //   • ANOTHER TAB changing a place forgets a plain value held for it (placeChangedElsewhere): the
 //     held value stands in for what that place would hold if the save had fit, and a save that had
 //     fit would have been replaced by the other tab's later one. A place the windows-in-sync door
@@ -43,9 +43,9 @@ import { reportWritesTo } from '../changelog.js'
 // ★ WHY THE HELD VALUE IS KEYED BY ITS DESTINATION, AND NOT RE-MADE FROM THE STORE. The first design
 // remembered only WHICH store had been refused and re-saved "what that store holds now" through the
 // store's own adapter. That adapter writes to whichever preset is active AT THE MOMENT OF THE RETRY —
-// and the retry ran inside the registry write of a preset switch, a preset delete and an Amnesic
-// change, i.e. after the incoming preset or copy was named and before the stores had reloaded. One
-// preset's stats were written over another's, and a guest's session over the permanent copy. A value
+// and the retry ran inside the registry write of a preset switch and a preset delete, i.e. after the
+// incoming preset was named and before the stores had reloaded. One preset's stats were written over
+// another's. A value
 // held under its own destination has no adapter to be redirected by: the retry is that string, to
 // that key, in that area.
 //

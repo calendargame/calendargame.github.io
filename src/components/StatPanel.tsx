@@ -33,22 +33,24 @@ import BestReadout from './BestReadout.jsx'
 //   • DIM             = nothing is being recorded at all (Save Stats off). Comes from `dimmed`, and
 //                       applies to the WHOLE STRIP — never to one cell, because "this cell is not
 //                       recording" is not a state the app has.
-//   • A DASHED OUTLINE = these numbers are being recorded, but ONLY FOR THIS SESSION: the preset is
-//                       on Amnesic: Stats Only or Full, and the strip is gone when the app is closed
-//                       (index.css's .session-only argues the look). The whole strip, in every
-//                       mode — under either value nothing in it is kept. The strip reads the value
-//                       itself (store/amnesic), not a prop, so no mode screen can show a session's
-//                       numbers unmarked by forgetting to pass one.
+//   • A DASHED OUTLINE = what is played now is FORGOTTEN WHEN YOU CLOSE THE APP: the preset is on
+//                       Amnesic: Stats Only or Full, and at the close every answer given since the
+//                       value was switched on leaves the strip (store/amnesic; index.css's
+//                       .session-only argues the look). The whole strip, in every mode — under either
+//                       value those stats go. The strip reads the value itself (store/amnesic), not a
+//                       prop, so no mode screen can leave what will be forgotten unmarked by
+//                       forgetting to pass one. It is the ONE thing the pill changes on screen.
 //                       ⚠ THE DIM WINS when both apply. With Save Stats off the strip holds no
 //                       numbers at all — six dashes — so there is nothing on it to call
-//                       temporary, and "nothing is being recorded" is the whole truth. One cue,
+//                       forget, and "nothing is being recorded" is the whole truth. One cue,
 //                       never two stacked. (The Best readouts under it keep theirs: they still
 //                       show real records — components/BestReadout.)
-//                       ★ ONE FRAME, ROUND EXACTLY WHAT IS TEMPORARY. A part is inside it exactly
-//                       when it is the session's, and there is never more than one frame:
-//                         strip temporary, Bests kept or absent .... round the strip
-//                         strip AND Bests temporary (Full) .......... ONE frame round both
-//                         only the Bests (Full, Save Stats off) ..... round the Best readouts
+//                       ★ ONE FRAME, ROUND EXACTLY WHAT WILL BE FORGOTTEN. A part is inside it
+//                       exactly when what is played now in it goes at the close, and there is never
+//                       more than one frame:
+//                         strip forgotten, Bests kept or absent ...... round the strip
+//                         strip AND Bests forgotten (Full) ........... ONE frame round both
+//                         only the Bests (Full, Save Stats off) ...... round the Best readouts
 //                       `frame` below is that table, and whichever element it names — the strip,
 //                       the readouts' row, or the group that holds the two — wears the class.
 // The full table this builds to:
@@ -103,7 +105,8 @@ import BestReadout from './BestReadout.jsx'
 // data yet both announce as six dashes. It sits on the strip and not on a cell because the fact is
 // the strip's — the same reason `dimmed` is one flag rather than six. `sr-only` is absolutely
 // positioned, so like the "Off" it costs no layout and moves no pixel.
-// ⚠ THE DASHED OUTLINE CARRIES ONE AS WELL — "These stats are for this session only" — in the same
+// ⚠ THE DASHED OUTLINE CARRIES ONE AS WELL — "What you play now is forgotten when you close the
+// app" — in the same
 // place. And since the strip can be ONE BUTTON (onActivate), whose aria-label replaces its content
 // as its name, the line is also the strip's DESCRIPTION (aria-describedby): a screen reader that
 // lands on the button hears its name and then this.
@@ -197,14 +200,14 @@ export default function StatPanel({
   // HTMLElement, not HTMLDivElement: the root is a <div> or a <button> depending on onActivate, and
   // everything this ref is used for (querySelectorAll for the fit, ResizeObserver) is on HTMLElement.
   const rootRef = useRef<HTMLElement | null>(null)
-  // The session's numbers, not kept (see the fourth signal in the header) — unless nothing is being
-  // recorded at all, which the dim says on its own.
+  // What is played now is forgotten at the close (see the fourth signal in the header) — unless
+  // nothing is being recorded at all, which the dim says on its own.
   const amnesic = useActiveAmnesicMode()
   const sessionOnly = amnesic !== 'off' && !dimmed
-  // The Bests are the session's under Full and only then (components/BestReadout says why Save
+  // A Best set now is forgotten under Full and only then (components/BestReadout says why Save
   // Stats has no say in it).
   const bestsSessionOnly = bests != null && amnesic === 'full'
-  // WHICH ELEMENT WEARS THE ONE FRAME — the smallest that holds exactly what is temporary.
+  // WHICH ELEMENT WEARS THE ONE FRAME — the smallest that holds exactly what will be forgotten.
   const frame =
     sessionOnly && bestsSessionOnly
       ? 'group'
@@ -217,7 +220,7 @@ export default function StatPanel({
   const note = dimmed
     ? 'Stats are not being saved'
     : sessionOnly
-      ? 'These stats are for this session only'
+      ? 'What you play now is forgotten when you close the app'
       : null
   const noteId = useId()
   // A CALLBACK ref, not `ref={rootRef}`, and the reason is the line above: the root is a <div> or a

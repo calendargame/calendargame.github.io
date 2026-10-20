@@ -11,8 +11,8 @@ import {
   useChangeEffect,
   engineFresh,
   useResetStatsConfirm,
-  useResetStatsBody,
-  useMountedDataId,
+  resetStatsBody,
+  useMountedPresetId,
   readParkedHistory,
   restoredEngine,
   useParkedHistory,
@@ -43,7 +43,6 @@ import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
 import { MethodBreakdownSection } from '../components/MethodBreakdown.jsx'
 import { useModePrefs } from '../store/modePrefs.js'
-import { usePresets } from '../store/presets.js'
 import { readSessionDedType, writeSessionDedType } from '../store/sessionDedType.js'
 import { useProgress } from '../store/progress.js'
 import { useScreenEpoch } from '../store/screenPool.js'
@@ -114,8 +113,8 @@ function DeductionMode({
   // (the shared `dedType`, which the windows-in-sync door brings in) moves nothing on screen here. A
   // window that holds none for the preset starts from the shared choice and holds it from then on; a
   // choice made here writes both. The screen remounts on a preset switch, so the preset is the mounted
-  // one's.
-  const [presetId] = useState(() => usePresets.getState().activeId)
+  // one's (modes/modeHooks' useMountedPresetId - what everything this screen parks and writes names).
+  const presetId = useMountedPresetId()
   const [dedType, setDedTypeHere] = useState(
     () => readSessionDedType(presetId) ?? useModePrefs.getState().dedType,
   )
@@ -127,13 +126,12 @@ function DeductionMode({
   // (the sub-type it started on is this window's from now: written down, so a reload keeps it)
   useEffect(() => writeSessionDedType(presetId, dedType), [presetId, dedType])
   // Each silo's HISTORY is kept for the browsing session (store/sessionHistory): parked per silo
-  // (useParkedHistory below), read back once here, keyed by the stats copy this screen is mounted on.
+  // (useParkedHistory below), read back once here, keyed by the preset this screen is mounted on.
   // Read FIRST, because the parks also carry this screen's three puzzle filters, and the filters
   // decide what each engine draws.
-  const dataId = useMountedDataId()
-  const [parkedDay] = useState(() => readParkedHistory(dataId, 'dedDay', useJulian))
-  const [parkedMonth] = useState(() => readParkedHistory(dataId, 'dedMonth', useJulian))
-  const [parkedYear] = useState(() => readParkedHistory(dataId, 'dedYear', useJulian))
+  const [parkedDay] = useState(() => readParkedHistory(presetId, 'dedDay', useJulian))
+  const [parkedMonth] = useState(() => readParkedHistory(presetId, 'dedMonth', useJulian))
+  const [parkedYear] = useState(() => readParkedHistory(presetId, 'dedYear', useJulian))
   // ★ THE THREE PUZZLE FILTERS COME BACK WITH THE HISTORY. They are this screen's own state, saved
   // nowhere else, and each engine's waiting puzzle was drawn under them — so a history restored
   // without them left a filter's puzzle on screen under a filter button reading "off". Every silo
@@ -257,9 +255,9 @@ function DeductionMode({
   const parkedScreen = { ui: { abCrossOnly, julCrossOnly, monthOnly1582 }, config: dateConfig }
   const panelOpen = settingsOpen ?? false
   const showing = (type: string) => visible && dedType === type
-  useParkedHistory(dataId, 'dedDay', dayEng.state, showing('day'), parkedScreen, panelOpen)
-  useParkedHistory(dataId, 'dedMonth', monthEng.state, showing('month'), parkedScreen, panelOpen)
-  useParkedHistory(dataId, 'dedYear', yearEng.state, showing('year'), parkedScreen, panelOpen)
+  useParkedHistory(presetId, 'dedDay', dayEng.state, showing('day'), parkedScreen, panelOpen)
+  useParkedHistory(presetId, 'dedMonth', monthEng.state, showing('month'), parkedScreen, panelOpen)
+  useParkedHistory(presetId, 'dedYear', yearEng.state, showing('year'), parkedScreen, panelOpen)
   const eng = dedType === 'month' ? monthEng : dedType === 'year' ? yearEng : dayEng
   const { state, correct, overrideAvail, overridden } = eng
   const swapEpoch = useSwapEpoch((s) => s.deduction.epoch)
@@ -267,9 +265,9 @@ function DeductionMode({
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
-  useStatsMirror(dataId, 'dedDay', dayEng.state.stats)
-  useStatsMirror(dataId, 'dedMonth', monthEng.state.stats)
-  useStatsMirror(dataId, 'dedYear', yearEng.state.stats)
+  useStatsMirror(presetId, 'dedDay', dayEng.state)
+  useStatsMirror(presetId, 'dedMonth', monthEng.state)
+  useStatsMirror(presetId, 'dedYear', yearEng.state)
   // One flash for the active grid (only one sub-mode visible at a time). setFlash is cleared
   // directly on sub-type switch (changeDedType), so it's destructured alongside the pulse setter.
   const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
@@ -432,7 +430,7 @@ function DeductionMode({
     closeConfirm: closeResetStats,
     confirmReset: confirmResetStats,
   } = useResetStatsConfirm(eng.resetStats, !engineFresh(state), visible)
-  const resetStatsBody = useResetStatsBody(true)
+  const resetBody = resetStatsBody(true)
   useEffect(() => {
     onFreshChange?.(deductionIsFresh)
   }, [deductionIsFresh, onFreshChange])
@@ -505,7 +503,7 @@ function DeductionMode({
         onCancel={closeResetStats}
         onConfirm={confirmResetStats}
         title="Reset Stats?"
-        body={resetStatsBody}
+        body={resetBody}
         confirmLabel="Reset Stats"
         id="reset-stats-deduction"
       />

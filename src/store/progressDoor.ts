@@ -29,28 +29,25 @@ import { holdForDoor, releaseDoorHold } from './storageHealth.js'
 import { roundClock } from '../engine/roundId.js'
 import { timesHash, timesHashAppended } from '../engine/timesPool.js'
 import { sameJson, isRecord } from './json.js'
+import type { Stats } from '../engine/gameReducer.js'
 
 // store/progressDoor.ts — THE SAVED PROGRESS THROUGH THE WINDOWS-IN-SYNC DOOR (design-q1-q2.md v4: 2, 4, 6.1,
 // 8.2, 9.3). The progress store persists through this: one CountsBook for the five modes' stats and one
 // RecordsBook per Best map, over one doc (store/progressDoc says how the doc maps onto them), landed whole -
 // the doc (its chunks first), then the silos' sync key, then the records' key - or not at all.
 //
-// ★ THE THREE AMNESIC VALUES (9.3):
-//   Off         the stats and the Bests are the device's: both merged, both written.
-//   Stats Only  the stats are this window's SESSION copy (sessionStorage, never merged - its bytes exactly
-//               today's); the device's doc is attached with ONLY its Best records owned. Its silos pass
-//               through byte for byte, never re-asserted, and a Best this window sets is written into it.
-//   Full        nothing permanent is read or written, and notices for the doc are not acted on; leaving
-//               Full reads the device afresh (the store reloads).
+// ★ ONE POOL, WHATEVER THE AMNESIC VALUE (design-amnesic-close.md): every answer, round, and Best is the
+// device's, merged and written like any other. What Amnesic changes is kept INSIDE the merge: play in an
+// Amnesic window anchors the slice it changes (store/syncCounts, store/syncRecords - `spec.win` names the
+// window), and the forget at the next cold open puts the anchored slices back (store/amnesicClose).
 // ★ A ROUND'S RESULT IS AN OP (`round`), never a record built here or on the screen: the round's own values,
 // applied to the merged record (store/syncRecords' runner-ups make a take-back land on the true next value).
 // ★ ANOTHER WINDOW'S CHANGE (adopt) patches exactly the slices that moved: a mode's stats (and that mode's
 // engine is rebuilt on them - `spec.rebase`, store/screenPool's data epoch, in the same turn), a Best map's
 // changed records. Every other slice keeps its object.
 // ★ A FULL RESET (`fullReset`) writes the factory doc as a change every other window adopts - stats and
-// Bests alike, whatever the Amnesic value - and empties this window's session copy (8.7).
+// Bests alike (8.7).
 
-export type ProgressMode = 'off' | 'stats' | 'full'
 type ProgressState = {
   stats: Record<string, unknown>
   blitzBest: Record<string, unknown>
@@ -61,21 +58,17 @@ type ProgressState = {
 
 /** What the door needs of the store and the app (store/progress). */
 export type ProgressSpec = {
-  /** The active preset, its progress key, and its Amnesic value. */
+  /** The active preset, its progress key, and any preset's. */
   presetId(): number
   key(): string
-  mode(): ProgressMode
+  keyOf(presetId: number): string
+  /** The Amnesic window play on preset `presetId` is anchored in now - null when none (store/amnesicClose). */
+  win(presetId: number): string | null
   version: number
   /** The store's migration, applied to a doc saved at another version as it is read. */
   migrate(state: Record<string, unknown>, version: number): Record<string, unknown>
   /** The store's factory values. */
   defaults(): ProgressState
-  /** The active preset's SESSION copy (Stats Only's stats; everything under Full). */
-  session: {
-    load(): StorageValue<ProgressState> | null
-    save(value: StorageValue<ProgressState>): void
-    discard(): void
-  }
   /** May this doc be written (8.2: its preset is listed)? */
   gate(key: string): boolean
   /** A mode's stats came in from another window: that engine is rebuilt on them (store/screenPool). */
@@ -114,6 +107,20 @@ export type ProgressStorage<S> = PersistStorage<S> & {
   roundGone(map: BestMap, id: number): boolean
   /** Full Reset of the active preset's progress (8.7). */
   fullReset(): void
+  /**
+   * AMNESIC'S FORGET of preset `presetId`'s window `e` (design-amnesic-close.md 1; store/amnesicClose runs
+   * it at a cold open): every mode anchored in it back to its anchor, and under Full (`full`) every Best
+   * record too - written as one version, like any save. True when there is nothing more to do (it landed,
+   * or there was nothing to forget); false when the device refused it (held, and retried like any save).
+   */
+  forget(presetId: number, e: string, full: boolean): boolean
+  /**
+   * Run `write` - a screen's save of mode `x`'s stats - with `at`: the stats as they stood after an
+   * earlier card, with every Override since applied (engine/gameReducer's statsAtCard). An Override in it
+   * of a card from before the mode's Amnesic window is a correction, not play in the window: it is made
+   * on the window's anchor too, so the forget keeps it (design-amnesic-close.md 1).
+   */
+  correcting(x: string, at: (played: number) => Stats | null, write: () => void): void
 }
 
 type Landing = {
@@ -138,6 +145,9 @@ type Entry = {
   prev: { forDoc: string | null; old: string | null | undefined }
   recSeen: { doc: string | null; rec: string | null }
   landing: Landing | null
+  // The silos Amnesic's forget has put back and the next landing seals (their cut chunks go -
+  // store/progressStorage's rule e).
+  cut: Set<string>
 }
 
 const blankState = (spec: ProgressSpec): ProgressState => spec.defaults()
@@ -217,12 +227,39 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
   const entries = new Map<string, Entry>()
   let store: StoreApi<S> | null = null
   let adopting = false
+  // (a screen's save of one mode's stats in progress, and how to read them as they stood after an earlier
+  // card - ★ correcting)
+  let correction: { x: string; at: (played: number) => Stats | null } | null = null
   const area = () => kit.area()
-  // (Full's Bests: this window's own books over the session copy - never the device's)
-  const sessionBooks = new Map<string, RecordsBook>()
+  // AN OVERRIDE OF A CARD FROM BEFORE THE MODE'S AMNESIC WINDOW is a correction, not play in it: the
+  // window's anchor - the stats as they stood just before the window - is read again with the Override
+  // applied, and the whole-slice change carries it (store/syncCounts' `ca`). An Override of a card INSIDE
+  // the window reads the anchor back unchanged; a point the screen's history does not reach (every card it
+  // holds is after the anchor) gives nothing to correct.
+  const corrected = (
+    e: Entry,
+    x: string,
+    op: Extract<Op, { kind: 'rep' }>,
+    at: (played: number) => Stats | null,
+  ): void => {
+    const a = (e.counts.mem[x]?.v as Silo | undefined)?.a
+    const s = a ? at(a.pl) : null
+    if (!a || !s) return
+    const v = siloOfStats(s)
+    op.ca = {
+      e: a.e,
+      st: a.st,
+      pl: v.pl,
+      gd: v.gd,
+      sk: v.sk,
+      bs: v.bs,
+      n: v.t.length,
+      h: timesHash(v.t),
+      tl: a.tl,
+    }
+  }
 
-  const make = (key: string): Entry => {
-    const presetId = spec.presetId()
+  const make = (key: string, presetId: number): Entry => {
     const syncKey = kit.syncKeyOf(key)
     const recKey = kit.recordsKeyOf(key)
     // (the last few texts read, parsed: a notice reads the device's text, the one it replaced, and the one
@@ -245,6 +282,7 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
       prev: { forDoc: null, old: undefined },
       recSeen: { doc: null, rec: null },
       landing: null,
+      cut: new Set(),
     } as unknown as Entry
     e.parsed = (text) => {
       const known = cache.get(text)
@@ -265,9 +303,11 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
       parsed: (t) => e.parsed(t),
       compose: (silos, sync, full) => compose(e, silos, sync, full),
     })
+    const win = () => spec.win(presetId)
     e.counts = new CountsBook({
       shape,
       tag: kit.tag,
+      win,
       io: {
         view: () => {
           const s = area()
@@ -290,6 +330,7 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
         tag: kit.tag,
         clock: roundClock,
         hlc: e.rclock,
+        win,
         io: { view: () => recView(e, map), deviceKey: () => deviceRecKey(e)?.maps?.[map] ?? null },
       })
     mergeRecords(e)
@@ -317,8 +358,8 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     e.counts.owes || Object.keys(e.counts.dirty).length > 0 || recordsOwe(e)
 
   // ── writing ──
-  // The doc as a landing writes it (Off): the silos the CountsBook hands over - each it writes as a version
-  // with this landing's write mark - and every Best map as the landing's records say.
+  // The doc as a landing writes it: the silos the CountsBook hands over - each it writes as a version with
+  // this landing's write mark - and every Best map as the landing's records say.
   // (the object, never a text: save seals it - its solve times into chunks - and spells the text itself)
   function compose(
     e: Entry,
@@ -369,7 +410,8 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     if (!s || !copy) return true
     // (the copy as the device has it, so the chunks a reset or an older build's plain save left are judged)
     e.codec.follow(copy)
-    const sealed = e.codec.seal(copy, doc)
+    const sealed = e.codec.seal(copy, doc, e.cut)
+    e.cut = new Set() // (a landing the device refuses keeps them doomed in the codec, for the next)
     const before = s.getItem(e.key)
     const writes = [
       { key: e.key, text: sealed.text },
@@ -381,10 +423,10 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     if (ok) e.prev = { forDoc: sealed.text, old: before }
     return ok
   }
-  // One landing of everything owed (Off): the records prepared, the write mark minted after them (so it is
-  // above every version they write - a page that loaded this doc loaded after them), the CountsBook landing
-  // the doc that carries both.
-  function landOff(e: Entry): boolean {
+  // One landing of everything owed: the records prepared, the write mark minted after them (so it is above
+  // every version they write - a page that loaded this doc loaded after them), the CountsBook landing the
+  // doc that carries both.
+  function land(e: Entry): boolean {
     const outs: Landing['outs'] = {}
     const clock0 = { ...e.rclock }
     for (const map of BEST_MAPS) outs[map] = e.recs[map].prepare()
@@ -402,67 +444,17 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     e.landing = null
     return ok
   }
-  // One landing under Stats Only: the device's doc exactly as it is, but for its Best maps and the records'
-  // part of its envelope; the silos' key untouched.
-  function landStats(e: Entry): boolean {
-    const s = area()
-    if (!s) return true
-    const outs: Landing['outs'] = {}
-    const clock0 = { ...e.rclock }
-    for (const map of BEST_MAPS) outs[map] = e.recs[map].prepare()
-    if (BEST_MAPS.every((m) => !outs[m])) return true
-    const text = s.getItem(e.key)
-    let raw: Record<string, unknown> | null
-    try {
-      raw = text === null ? null : (JSON.parse(text) as Record<string, unknown>)
-    } catch {
-      raw = null
-    }
-    // A doc that will not read (a write cut short) is never written over by a Stats Only window: its stats
-    // are the player's, and only Bests may move. The Bests are held - unsaved - until it reads again.
-    if (text !== null && !isRecord(raw)) {
-      for (const map of BEST_MAPS) if (outs[map]) e.recs[map].refused()
-      Object.assign(e.rclock, clock0)
-      return false
-    }
-    const L: Landing = { outs, wl: null, prevKey: deviceRecKey(e), recKeyText: null }
-    const { maps, rec } = composeRecords(outs, e.parsed(text).env, L.prevKey)
-    const rawSync = raw && isRecord(raw.sync) ? raw.sync : {}
-    const doc = {
-      ...(raw ?? { version: spec.version }),
-      state: { ...(raw && isRecord(raw.state) ? raw.state : {}), ...maps },
-      sync: { ...rawSync, ...(Object.keys(rec).length ? { rec } : {}) },
-    }
-    L.recKeyText = recKeyText(e, L, typeof rawSync.g === 'string' ? rawSync.g : countsG(e))
-    const writes = [
-      { key: e.key, text: JSON.stringify(doc) },
-      ...(L.recKeyText ? [{ key: e.recKey, text: L.recKeyText }] : []),
-    ]
-    const ok = spec.gate(e.key) && kit.landAll(s, writes)
-    for (const map of BEST_MAPS) {
-      const out = outs[map]
-      if (!out) continue
-      if (ok) e.recs[map].landed(out)
-      else e.recs[map].refused()
-    }
-    if (!ok) Object.assign(e.rclock, clock0)
-    else e.recSeen = { doc: s.getItem(e.key), rec: s.getItem(e.recKey) }
-    return ok
-  }
-
   // ── settling: merge, then land what is owed ──
   const activeEntry = (): Entry | null => entries.get(spec.key()) ?? null
-  const open = (key: string): Entry => {
+  const open = (key: string, presetId = spec.presetId()): Entry => {
     const had = entries.get(key)
     if (had && owing(had)) return had
-    const e = make(key)
+    const e = make(key, presetId)
     entries.set(key, e)
     return e
   }
   const settle = (e: Entry, mayLand: boolean, keptBefore = false): boolean => {
-    const mode = e === activeEntry() ? spec.mode() : 'off'
-    if (mode === 'full') return false
-    const kept = (mode === 'off' && e.counts.handle(false, keptBefore)) || false
+    const kept = e.counts.handle(false, keptBefore)
     const rkept = mergeRecords(e)
     if (!mayLand) return kept || rkept
     if (kept || rkept || keptBefore || owing(e)) {
@@ -473,8 +465,7 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
         entries.delete(e.key)
         return false
       }
-      const ok = mode === 'stats' ? landStats(e) : landOff(e)
-      e.counts.owes = !ok
+      e.counts.owes = !land(e)
     }
     hold(e)
     return false
@@ -484,7 +475,7 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     if (!s) return
     if (owing(e)) {
       // (what a read of the key shows while the save is held: the doc as this window holds it)
-      const held = { ...blankState(spec), ...booksState(e, spec.mode() === 'off') }
+      const held = { ...blankState(spec), ...booksState(e) }
       holdForDoor(
         s,
         e.key,
@@ -505,13 +496,12 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
   const storeState = (): ProgressState => store!.getState() as unknown as ProgressState
   const recordOf = (e: Entry, map: BestMap, setup: string) =>
     fromRec(map, e.recs[map].recs[setup]?.mem ?? null, false)
-  // what the books hold, as the store holds it (stats only under Off)
-  const booksState = (e: Entry, withStats: boolean): Partial<ProgressState> => {
+  // what the books hold, as the store holds it
+  const booksState = (e: Entry): Partial<ProgressState> => {
     const out: Partial<ProgressState> = {}
-    if (withStats)
-      out.stats = Object.fromEntries(
-        PROGRESS_SILOS.map((x) => [x, statsOfSilo(e.counts.mem[x].v as Silo)]),
-      )
+    out.stats = Object.fromEntries(
+      PROGRESS_SILOS.map((x) => [x, statsOfSilo(e.counts.mem[x].v as Silo)]),
+    )
     for (const map of BEST_MAPS) {
       const m: Record<string, unknown> = {}
       for (const k of Object.keys(e.recs[map].recs)) {
@@ -523,8 +513,7 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     return out
   }
   const adopt = (e: Entry) => {
-    const mode = spec.mode()
-    if (!store || e !== activeEntry() || mode === 'full') return
+    if (!store || e !== activeEntry()) return
     if (kit.hidden()) {
       kit.owe(() => adopt(e))
       return
@@ -532,17 +521,15 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     const cur = storeState()
     const patch: Partial<ProgressState> = {}
     const moved: string[] = []
-    if (mode === 'off') {
-      const stats = { ...cur.stats }
-      for (const x of PROGRESS_SILOS) {
-        const v = e.counts.mem[x].v as Silo
-        if (siloFp(v) !== siloFp(siloOfStats(cur.stats[x]))) {
-          stats[x] = statsOfSilo(v)
-          moved.push(x)
-        }
+    const stats = { ...cur.stats }
+    for (const x of PROGRESS_SILOS) {
+      const v = e.counts.mem[x].v as Silo
+      if (siloFp(v) !== siloFp(siloOfStats(cur.stats[x]))) {
+        stats[x] = statsOfSilo(v)
+        moved.push(x)
       }
-      if (moved.length) patch.stats = stats
     }
+    if (moved.length) patch.stats = stats
     for (const map of BEST_MAPS) {
       const next = { ...cur[map] }
       let changed = false
@@ -594,105 +581,55 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     },
     forget() {
       entries.clear()
-      sessionBooks.clear()
     },
   }
   kit.register(binding)
-
-  // Full's Bests: this window's own book per map over the session copy (seeded from the store's record)
-  const sessionBook = (map: BestMap): RecordsBook => {
-    const id = `${spec.presetId()}|${map}`
-    let b = sessionBooks.get(id)
-    if (!b)
-      sessionBooks.set(
-        id,
-        (b = new RecordsBook({
-          spec: recordSpec(map),
-          tag: kit.tag,
-          clock: roundClock,
-          io: {
-            view: () => ({
-              docPresent: false,
-              env: false,
-              stTag: null,
-              stBoot: false,
-              stFresh: false,
-              S: null,
-              recs: {},
-            }),
-            deviceKey: () => null,
-          },
-        })),
-      )
-    return b
-  }
 
   return {
     attach(s) {
       store = s
     },
     getItem: kit.outer((): StorageValue<S> | null => {
-      const mode = spec.mode()
-      if (mode === 'full') {
-        sessionBooks.clear()
-        return spec.session.load() as StorageValue<S> | null
-      }
       const key = spec.key()
       const e = open(key)
       const s = area()
       const docText = s?.getItem(key) ?? null
-      if (mode === 'off') {
-        if (docText === null && !e.counts.g) {
-          e.last = blankState(spec)
-          return null
-        }
-        const state = { ...blankState(spec), ...booksState(e, true) } as ProgressState
-        e.last = state
-        return { state: state as unknown as S, version: spec.version }
+      if (docText === null && !e.counts.g) {
+        e.last = blankState(spec)
+        return null
       }
-      // Stats Only: the session's stats, the device's Bests
-      const session = spec.session.load()
-      const state = {
-        ...blankState(spec),
-        ...(session?.state?.stats ? { stats: session.state.stats } : {}),
-        ...booksState(e, false),
-      } as ProgressState
+      const state = { ...blankState(spec), ...booksState(e) } as ProgressState
       e.last = state
       return { state: state as unknown as S, version: spec.version }
     }),
     setItem: kit.outer((_name: string, value: StorageValue<S>) => {
       const next = value.state as unknown as ProgressState
-      const mode = spec.mode()
       if (adopting) {
         const e = activeEntry()
         if (e) e.last = next
         return
       }
-      if (mode === 'full') {
-        spec.session.save(value as unknown as StorageValue<ProgressState>)
-        return
-      }
-      if (mode === 'stats')
-        spec.session.save({
-          state: { stats: next.stats } as ProgressState,
-          version: value.version,
-        })
       const e = entries.get(spec.key()) ?? open(spec.key())
       const prev = e.last ?? blankState(spec)
       e.last = next
+      const fix = correction
+      correction = null
       settle(e, false) // catch up with the device first (a notice may not have come yet)
       // A Full Reset by way of the store (every value back to the factory's): every silo and every Best
       if (isDefaults(next, spec) && !isDefaults(prev, spec)) {
-        if (mode === 'off') for (const x of PROGRESS_SILOS) e.counts.reset(x)
+        for (const x of PROGRESS_SILOS) e.counts.reset(x)
         for (const map of BEST_MAPS) e.recs[map].reset()
       } else {
-        if (mode === 'off')
-          for (const x of PROGRESS_SILOS) {
-            const d = opsOf(siloOfStats(prev.stats[x]), siloOfStats(next.stats[x]))
-            if (!d) continue
-            if ('reset' in d) e.counts.reset(x)
-            else for (const op of d.ops) e.counts.answer(x, op)
-          }
+        for (const x of PROGRESS_SILOS) {
+          const d = opsOf(siloOfStats(prev.stats[x]), siloOfStats(next.stats[x]))
+          if (!d) continue
+          if ('reset' in d) e.counts.reset(x)
+          else
+            for (const op of d.ops) {
+              if (op.kind === 'rep' && fix?.x === x) corrected(e, x, op, fix.at)
+              e.counts.answer(x, op)
+            }
+        }
         for (const map of BEST_MAPS)
           for (const k of new Set([
             ...Object.keys(prev[map] ?? {}),
@@ -712,25 +649,6 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
     },
     round: kit.outer((map: BestMap, setup: string, op: RecOp) => {
       if (!store) return
-      const mode = spec.mode()
-      let rec: Record<string, unknown> | undefined
-      if (mode === 'full') {
-        const b = sessionBook(map)
-        const r = b.rec(setup)
-        if (!r.dirty.length && !r.mem) {
-          r.mem = toRec(map, storeState()[map]?.[setup], 'session', `${map}|${setup}`)
-          r.held = r.mem
-        }
-        b.op(setup, op)
-        r.dirty = []
-        r.held = r.mem
-        rec = fromRec(map, r.mem, false)
-        const next = { ...storeState()[map] }
-        if (rec) next[setup] = rec
-        else delete next[setup]
-        store.setState({ [map]: next } as unknown as Partial<S>) // (persisted to the session copy)
-        return
-      }
       const e = entries.get(spec.key()) ?? open(spec.key())
       settle(e, false)
       e.recs[map].op(setup, op)
@@ -738,23 +656,47 @@ export function makeProgressStorage<S>(kit: DoorKit, spec: ProgressSpec): Progre
       adopt(e)
     }),
     roundGone(map, id) {
-      if (spec.mode() === 'full') return sessionBook(map).roundDead(id)
       const e = activeEntry()
       return !!e && e.recs[map].roundDead(id)
+    },
+    forget: kit.outer((presetId: number, win: string, full: boolean): boolean => {
+      const key = spec.keyOf(presetId)
+      const e = entries.get(key) ?? open(key, presetId)
+      settle(e, false) // (the device as it is now: an older tab's cards since included)
+      const silos = e.counts.forgetWindow(win).restored
+      for (const x of silos) e.cut.add(x)
+      const recs = full ? BEST_MAPS.flatMap((map) => e.recs[map].forgetWindow(win)) : []
+      if (!silos.length && !recs.length) {
+        hold(e) // (nothing to forget: an entry for another preset goes with it)
+        return true
+      }
+      if (!spec.gate(e.key)) {
+        entries.delete(e.key)
+        return true
+      }
+      e.counts.owes = !land(e)
+      hold(e)
+      adopt(e)
+      return !e.counts.owes
+    }),
+    correcting(x, at, write) {
+      correction = { x, at }
+      try {
+        write()
+      } finally {
+        correction = null
+      }
     },
     fullReset: kit.outer(() => {
       const key = spec.key()
       const e = entries.get(key) ?? open(key)
       settle(e, false)
-      // the doc's factory values as a change every window adopts - whatever the Amnesic value
+      // the doc's factory values as a change every window adopts
       for (const x of PROGRESS_SILOS) e.counts.reset(x)
       for (const map of BEST_MAPS) e.recs[map].reset()
-      sessionBooks.clear()
-      spec.session.discard()
-      // (landed as Off lands it: the silos too, under any value - 8.7)
       if (!spec.gate(e.key)) entries.delete(e.key)
       else {
-        e.counts.owes = !landOff(e)
+        e.counts.owes = !land(e)
         hold(e)
       }
       if (!store) return

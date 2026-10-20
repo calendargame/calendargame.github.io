@@ -3,16 +3,16 @@
 // ★ THE OWNER'S RULE, which this file is the whole mechanism for: "only truly closing the app starts
 // fresh." A reload — the browser's own reload, the app's own auto-update reload, the Reload button on
 // the error card — is the SAME browsing session, everywhere on the site: the page you were on stays,
-// a finished round stays, and a guest's Amnesic preset keeps its session stats.
+// a finished round stays, and nothing an Amnesic preset played is forgotten (only a close forgets it -
+// store/amnesicClose, which asks this marker whether a boot with no other window alive is a reload).
 //
 // WHY A MARKER IS NEEDED AT ALL. Almost everything session-lived in this app is already right about
 // reloads for free, because it lives in sessionStorage (store/sessionMode, store/sessionRound,
-// store/sessionHistory, store/sessionGuide, an amnesic preset's session copy, the session Lookup
-// overflow): a reload keeps sessionStorage and a real close clears it, and nothing has to notice
-// either. The one thing that has to know which it was is the "Open in" pin (store/presets — a fresh
-// open lands in the pinned preset, a reload stays where the player was), and it cannot tell a reload
-// from a cold open by itself: both boot the page from scratch. (Each preset's Amnesic value used to be
-// the other; it is a field of the preset's settings now, read as every setting is - store/settings.)
+// store/sessionHistory, store/sessionGuide): a reload keeps sessionStorage and a real close clears it,
+// and nothing has to notice either. The two things that have to know which it was are the "Open in" pin
+// (store/presets — a fresh open lands in the pinned preset, a reload stays where the player was) and
+// Amnesic's close (store/amnesicClose), and neither can tell a reload from a cold open by itself: both
+// boot the page from scratch.
 // Round 21 treated every mount as a fresh open and called a reload "a reopen"; the owner reversed
 // that.
 // So the question is asked of sessionStorage itself: the marker below is written on the first boot of
@@ -20,9 +20,8 @@
 // session" — the same fact everything else here already leans on, read from the same place.
 //
 // ⚠ A BROWSER THAT REFUSES sessionStorage answers "cold" every time. That is the consistent answer
-// rather than a guess: in such a browser an amnesic preset's session was never written anywhere but
-// memory, so a reload has ALREADY thrown the guest's session away — each preset back on its saved
-// default is the only state that matches what is left.
+// rather than a guess: in such a browser every session-lived thing was never written anywhere but
+// memory, so a reload has ALREADY thrown it away — a reload there is a fresh start in every way.
 // ⚠ ⚠ UNVERIFIABLE FROM HERE: that swiping the installed iOS app away clears its sessionStorage (the
 // expected behaviour — a new process, a new browsing session). The owner checks it on his device.
 

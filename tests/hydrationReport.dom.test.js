@@ -14,7 +14,7 @@ beforeAll(async () => {
   vi.resetModules()
   ;({ captureError } = await import('../src/observability/sentry.js'))
   ;({ reportedHydration } = await import('../src/store/hydrationReport.js'))
-  const { useLookupHistory, useLookupSession } = await import('../src/store/lookupHistory.js')
+  const { useLookupHistory } = await import('../src/store/lookupHistory.js')
   Object.assign(STORES, {
     settingsRehydrate: (await import('../src/store/settings.js')).useSettings,
     modePrefsRehydrate: (await import('../src/store/modePrefs.js')).useModePrefs,
@@ -23,7 +23,6 @@ beforeAll(async () => {
     presetsRehydrate: (await import('../src/store/presets.js')).usePresets,
     progressRehydrate: (await import('../src/store/progress.js')).useProgress,
     lookupHistoryRehydrate: useLookupHistory,
-    lookupSessionRehydrate: useLookupSession,
   })
   atCreation = reportedTripwires()
 })
@@ -35,7 +34,6 @@ const TRIPWIRES = [
   'presetsRehydrate',
   'progressRehydrate',
   'lookupHistoryRehydrate',
-  'lookupSessionRehydrate',
 ]
 const reportedTripwires = () =>
   captureError.mock.calls.map(([, context]) => context?.tripwire).filter(Boolean)

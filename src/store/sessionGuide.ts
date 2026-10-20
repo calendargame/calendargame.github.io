@@ -24,7 +24,7 @@
 //     the remount renders: the new GuidePage reads its place during that render, before the old
 //     one's unmount cleanup would run.
 // ★ A PRESET SWITCH DOES NOT TOUCH IT. The guide is not a preset's: it reads no saved data, so a
-// preset switch, an Amnesic change and deleting the preset you are on leave it mounted, with its
+// preset switch and deleting the preset you are on leave it mounted, with its
 // open section and its reading offset exactly where they were.
 //
 // ONE SMALL JSON VALUE under one key; `cg-guide-place-v1` is new, so no older build on this shared

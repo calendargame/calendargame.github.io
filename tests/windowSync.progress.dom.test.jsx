@@ -18,7 +18,7 @@ import { seedSealed } from './helpers/progressWorld.js'
 import { newRoundId } from '../src/engine/roundId.js'
 import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { useScreenEpoch, fileRoundResult } from '../src/store/screenPool.js'
-import { activeDataId } from '../src/store/amnesic.js'
+import { usePresets } from '../src/store/presets.js'
 import { useRemoteEpoch } from '../src/store/syncedDoc.js'
 
 const KEY = 'cg-progress-v1'
@@ -103,13 +103,13 @@ describe('Bests in two windows', () => {
     W.progress().round('blitzBest', 'k', ROUND(2), blitz(8, 8))
     W.deliver()
     expect(live().blitzBest.k).toMatchObject({ score: 8, scoreRoundId: ROUND(2) })
-    fileRoundResult(activeDataId(), 'blitzBest', 'k', ROUND(3), blitz(5, 5), false)
+    fileRoundResult(usePresets.getState().activeId, 'blitzBest', 'k', ROUND(3), blitz(5, 5), null)
     expect(live().blitzBest.k).toMatchObject({ score: 8, scoreRoundId: ROUND(2) })
     expect(onDevice().blitzBest.k).toMatchObject({ score: 8, scoreRoundId: ROUND(2) })
   })
 
   it('a round taken back in another window hands the field to this window’s round — the next best', () => {
-    fileRoundResult(activeDataId(), 'blitzBest', 'k', ROUND(1), blitz(5, 4), false)
+    fileRoundResult(usePresets.getState().activeId, 'blitzBest', 'k', ROUND(1), blitz(5, 4), null)
     const W = otherWindow()
     W.progress().round('blitzBest', 'k', ROUND(2), blitz(8, 8))
     W.deliver()
@@ -127,7 +127,14 @@ describe('Bests in two windows', () => {
   })
 
   it('a MoX record is the fastest of both windows’ runs, each metric on its own', () => {
-    fileRoundResult(activeDataId(), 'aoxBest', 'k', ROUND(1), { avg: 2.5, med: 2.2 }, false)
+    fileRoundResult(
+      usePresets.getState().activeId,
+      'aoxBest',
+      'k',
+      ROUND(1),
+      { avg: 2.5, med: 2.2 },
+      null,
+    )
     const W = otherWindow()
     W.progress().round('aoxBest', 'k', ROUND(2), { avg: 2.3, med: 2.6 })
     W.deliver()
@@ -146,7 +153,7 @@ describe('a Full Reset in another window', () => {
   it('is adopted here at once — the stats and the Bests — and this window’s next answer does not undo it', () => {
     answer('classic', true, 1)
     answer('classic', true, 2)
-    fileRoundResult(activeDataId(), 'suddenBest', 'k', ROUND(1), { score: 6 }, false)
+    fileRoundResult(usePresets.getState().activeId, 'suddenBest', 'k', ROUND(1), { score: 6 }, null)
     const W = otherWindow()
     W.progress().fullReset()
     W.deliver()
@@ -157,9 +164,17 @@ describe('a Full Reset in another window', () => {
     expect(onDevice().stats.classic).toMatchObject({ played: 1, times: [3] })
     expect(onDevice().suddenBest).toEqual({})
     // …and the round this window filed before it is gone: an Override of it changes nothing
-    expect(fileRoundResult(activeDataId(), 'suddenBest', 'k', ROUND(1), { score: 9 }, true)).toBe(
-      false,
-    )
+    const filed = { text: JSON.stringify({ score: 6 }), e: null } // (its first filing, above)
+    expect(
+      fileRoundResult(
+        usePresets.getState().activeId,
+        'suddenBest',
+        'k',
+        ROUND(1),
+        { score: 9 },
+        filed,
+      ),
+    ).toBeNull()
     expect(live().suddenBest).toEqual({})
   })
 })

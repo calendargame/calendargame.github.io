@@ -1756,4 +1756,21 @@ export function decodeTag(text: unknown): Tag | null {
     return null
   return { g: p[0], st, pl: n[0], gd: n[1], sk: n[2], bs: n[3], n: n[4], h: p[7], tl }
 }
+
+// ── THE ANCHOR AS STORED in a silo of the doc (★ above): one string,
+// `<window>|<stamp or nothing>|<played>|<right>|<streak>|<best>|<n>|<hash>|<lost>` ──
+export function encodeAnchor(a: Anchor): string {
+  return [a.e, a.st ? encodeStamp(a.st) : '', a.pl, a.gd, a.sk, a.bs, a.n, a.h, a.tl].join('|')
+}
+/** A stored anchor read back — or null for anything that is not one this build wrote. */
+export function decodeAnchor(text: unknown): Anchor | null {
+  if (typeof text !== 'string') return null
+  const p = text.split('|')
+  if (p.length !== 9 || !/^s?\d+(:\d+)?$/.test(p[0]) || !p[7]) return null
+  const st = p[1] === '' ? null : decodeStamp(p[1])
+  if (p[1] !== '' && !st) return null
+  const c = [p[2], p[3], p[4], p[5], p[6], p[8]].map(Number)
+  if (!c.every((v) => Number.isSafeInteger(v) && v >= 0)) return null
+  return { e: p[0], st, pl: c[0], gd: c[1], sk: c[2], bs: c[3], n: c[4], h: p[7], tl: c[5] }
+}
 export { isVersion, extendsSum }

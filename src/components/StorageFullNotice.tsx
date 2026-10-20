@@ -3,8 +3,6 @@ import { MODAL_PLAIN_CARD_CLASS } from './modalContract.js'
 import { useState } from 'react'
 import { useStorageHealth } from '../store/storageHealth.js'
 import { readUsageRowsNow, suggestShorterNames, useStorageUsage } from '../store/storageUsage.js'
-import { resetStatsFreesRoom, useActiveAmnesicMode } from '../store/amnesic.js'
-import { amnesicLabel } from './settingsOptions.js'
 
 // ─────────────────────────────────────────────────────────────────────────
 // StorageFullNotice — the device refused a save, and the player is told.
@@ -30,8 +28,8 @@ import { amnesicLabel } from './settingsOptions.js'
 // ⚠ THE COPY PROMISES ONLY WHAT storageHealth DOES, and each clause is one of its facts:
 //   • "you can keep playing" — a refused save never throws; the screen is untouched by it.
 //   • "being kept here until there's room" — what could not be saved is held in this window's
-//     memory, each piece for the exact place it belongs (that preset, that stats copy), so it
-//     survives switching presets and back and changing Amnesic and back. It is lost only when the
+//     memory, each piece for the exact place it belongs (that preset's doc), so it survives
+//     switching presets and back. It is lost only when the
 //     page goes away: closing the window, or RELOADING it (a browser reload, the error card's
 //     Reload). Check for updates declines to reload while anything is unsaved.
 //   • "saved by itself — your answers added to whatever another window saved meanwhile" — a held save
@@ -48,11 +46,8 @@ import { amnesicLabel } from './settingsOptions.js'
 //     rule (store/storageUsage's suggestShorterNames), over the device as it was when the notice
 //     opened: only when that alone would be enough. On a device filled by solve times it would be
 //     advice that cannot help, so it is not given.
-//   • WHAT MAKES ROOM — only what is true for the preset the player is on (store/amnesic's
-//     resetStatsFreesRoom, the rule components/StorageUsagePopup follows too). Deleting a preset
-//     always does. Reset Stats does only while Amnesic is Off: on Stats Only or Full it clears the
-//     session's numbers and leaves the saved solve times — the thing taking the room — where they
-//     are, so there the notice names Clear History instead and says why Reset Stats will not help.
+//   • WHAT MAKES ROOM — deleting a preset, and Reset Stats in a mode (its solve times go with it), on
+//     every Amnesic value alike: nothing is kept anywhere but the saved progress.
 // It says nothing about live and staging sharing one allowance — that is true, and it is not the
 // player's business.
 // ─────────────────────────────────────────────────────────────────────────
@@ -64,7 +59,6 @@ export default function StorageFullNotice() {
 
 function StorageFullCard() {
   const dismiss = useStorageHealth((s) => s.dismissStorageNotice)
-  const amnesic = useActiveAmnesicMode()
   const warning = useStorageUsage((s) => s.warning)
   const limit = useStorageUsage((s) => s.limit)
   const [rows] = useState(readUsageRowsNow)
@@ -97,20 +91,10 @@ function StorageFullCard() {
               Global → Manage Presets).
             </p>
           )}
-          {resetStatsFreesRoom(amnesic) ? (
-            <p>
-              To make room, delete a preset you no longer use (⚙ → Global → Manage Presets), or use
-              Reset Stats in a mode whose history you don&apos;t need.
-            </p>
-          ) : (
-            <p>
-              To make room, delete a preset you no longer use (⚙ → Global → Manage Presets), or
-              empty the Lookup history (Clear History, on the Lookup page). Reset Stats won&apos;t
-              make room while this preset&apos;s Amnesic is on {amnesicLabel(amnesic)} — it clears
-              only this session&apos;s numbers; set Amnesic to Off first (⚙ → Stats) and it clears
-              the saved ones.
-            </p>
-          )}
+          <p>
+            To make room, delete a preset you no longer use (⚙ → Global → Manage Presets), or use
+            Reset Stats in a mode whose history you don&apos;t need.
+          </p>
         </div>
       </div>
     </Popup>

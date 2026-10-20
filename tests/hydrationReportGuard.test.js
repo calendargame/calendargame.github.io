@@ -33,6 +33,6 @@ describe('every persisted store reports a load that threw', () => {
       if (reported !== persists) off[relative(SRC, p).replace(/\\/g, '/')] = { persists, reported }
     }
     expect(off).toEqual({})
-    expect(stores).toBeGreaterThanOrEqual(8) // (the guard is looking at the stores at all)
+    expect(stores).toBeGreaterThanOrEqual(7) // (the guard is looking at the stores at all)
   })
 })

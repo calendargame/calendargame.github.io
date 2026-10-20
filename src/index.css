@@ -618,15 +618,15 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .card{background:var(--card-bg);border:1px solid var(--card-bd)}
 .panel{background:var(--panel-bg);border:1px solid var(--panel-bd)}
 .thin{border:1px solid var(--thin-bd)}
-/* ★ THE DASHED OUTLINE — "these numbers are for this session only" (Amnesic). It marks WHAT IS
-   TEMPORARY, ON THE PAGE ITSELF: the stats strip while the preset is on Stats Only or Full, and
-   the Best readouts too under Full. It replaced a letter "A" beside the preset's name, which said
+/* ★ THE DASHED OUTLINE — "what you play now is forgotten when you close the app" (Amnesic). It marks
+   WHAT WILL BE FORGOTTEN, ON THE PAGE ITSELF: the stats strip while the preset is on Stats Only or
+   Full, and the Best readouts too under Full. It replaced a letter "A" beside the preset's name, which said
    that something about the preset was amnesic and cost the name its width; this says WHICH
    numbers, where they are, and tells the two kinds apart for free — a frame round the strip with
    the Bests left outside it is Stats Only, a frame round both is Full.
-   ★ ONE FRAME, ONE SHAPE. Whatever is temporary is inside a single frame, and the frame is always
-   the same one: on the page column's own edges, never wider, with the strip's radius. The class
-   goes on the smallest element that holds exactly the temporary parts — the strip, the Best
+   ★ ONE FRAME, ONE SHAPE. Whatever will be forgotten is inside a single frame, and the frame is
+   always the same one: on the page column's own edges, never wider, with the strip's radius. The
+   class goes on the smallest element that holds exactly those parts — the strip, the Best
    readouts' row, or the group that holds the two (components/StatPanel decides, and says when
    each). The strip and the readouts used to wear a frame EACH, and the readouts' sat 4px outside
    the column with a tighter corner, so under Full the page showed two boxes of different widths

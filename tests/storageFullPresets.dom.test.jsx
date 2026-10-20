@@ -466,45 +466,34 @@ describe('a full device (one shared allowance)', () => {
   })
 })
 
-describe('a full session area, and the Amnesic toggle', () => {
-  let refuseSession
+// ★ AMNESIC CHANGES NOTHING WHILE YOU PLAY (store/amnesic: one pool) — a save the full device is holding
+// included: the pill moves no number, drops nothing held, and the held answers land when there is room.
+describe('a full device, and the Amnesic toggle', () => {
+  let refuse
   beforeEach(() => {
     resetAppState()
-    sessionStorage.clear()
-    refuseSession = false
+    refuse = false
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
-      if (this === window.sessionStorage && refuseSession && key === progressKey()) throw quota()
+      if (this === window.localStorage && refuse && key === progressKey()) throw quota()
       return realSetItem.call(this, key, value)
     })
   })
 
-  it("Amnesic off: the guest's unsaved session is thrown away, never written over the permanent stats", () => {
-    useProgress.getState().setModeStats('classic', stats(500)) // the owner's permanent stats
-    setPresetAmnesic(1, 'full')
-    expect(liveClassic().played).toBe(0)
-    useProgress.getState().setModeStats('classic', stats(2))
-    refuseSession = true
-    useProgress.getState().setModeStats('classic', stats(3))
+  it('toggling the value moves no number, and the held answers still land when there is room', () => {
+    useProgress.getState().setModeStats('classic', stats(500))
+    refuse = true
+    useProgress.getState().setModeStats('classic', stats(503))
     expect(useStorageHealth.getState().unsaved).toBe(true)
-    setPresetAmnesic(1, 'off')
+    for (const value of ['full', 'stats', 'off', 'full']) {
+      setPresetAmnesic(1, value)
+      expect(liveClassic().played).toBe(503)
+      expect(useStorageHealth.getState().unsaved).toBe(true)
+    }
     expect(savedClassic().played).toBe(500)
-    expect(liveClassic().played).toBe(500)
+    refuse = false
+    useProgress.getState().setModeStats('classic', stats(504)) // (a save that fits: the held one with it)
+    expect(savedClassic().played).toBe(504)
     expect(useStorageHealth.getState().unsaved).toBe(false)
-    // …and a later guest starts from zero: the refused session did not come back.
-    refuseSession = false
-    setPresetAmnesic(1, 'full')
-    expect(liveClassic().played).toBe(0)
-    expect(savedClassic(1, sessionStorage)).toBeUndefined()
-  })
-
-  it("a switch away and back keeps a guest's unsaved session", () => {
-    const p2 = createPreset()
-    setPresetAmnesic(1, 'full')
-    refuseSession = true
-    useProgress.getState().setModeStats('classic', stats(3))
-    switchPreset(p2.id)
-    switchPreset(1)
-    expect(liveClassic().played).toBe(3)
   })
 })
 

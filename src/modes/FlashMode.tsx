@@ -10,8 +10,8 @@ import {
   useStatsMirror,
   engineFresh,
   useResetStatsConfirm,
-  useResetStatsBody,
-  useMountedDataId,
+  resetStatsBody,
+  useMountedPresetId,
   readParkedHistory,
   restoredEngine,
   useParkedHistory,
@@ -76,8 +76,8 @@ function FlashMode({
   clockPaused,
   onFreshChange,
 }: ModeProps & { genDate: GenDate; fmtDate: FmtDate }) {
-  // The history this screen last parked (store/sessionHistory — before a reload, a preset switch, a
-  // guest's interlude), read once, keyed by the stats copy this screen is mounted on. It carries the
+  // The history this screen last parked (store/sessionHistory — before a reload or a preset switch),
+  // read once, keyed by the preset this screen is mounted on. It carries the
   // engine AND the one field of Flash's own that says what the engine's live card looks like on
   // screen — `showTimerDate`, whether its date is shown (after a Reveal, or a Show Codes that froze a
   // flash) — so a revealed card does not come back with its answer lit and its date a dash. (Read
@@ -86,14 +86,14 @@ function FlashMode({
   // `showTimerDate` is declared, below the engine.)
   // A flash that was RUNNING is not restored, exactly as leaving the mode stops one (onHide below):
   // the screen comes back idle over the same engine, and Begin moves on as it would have then.
-  const dataId = useMountedDataId()
+  const presetId = useMountedPresetId()
   // The date settings a question is drawn under on this screen — the ones IN EFFECT, as one string
   // (`dateDraw`, modes/modeTypes) — read by the park (as the settings the waiting question belongs to)
   // and by the settings-close regen below. A setting that is not in effect is not in it, so changing
   // one regenerates nothing.
   const dateSettings = [dateDraw]
   const dateConfig = dateDraw
-  const [parked] = useState(() => readParkedHistory(dataId, 'flash', useJulian))
+  const [parked] = useState(() => readParkedHistory(presetId, 'flash', useJulian))
   const [active, setActive] = useState(false)
   const [flashPhase, setFlashPhase] = useState('dash') // dash (idle) | show (revealing) | hide ("…")
   const flashMs = useModePrefs((s) => s.flashMs),
@@ -147,7 +147,7 @@ function FlashMode({
     () => parkedFlag(parked?.ui, 'showTimerDate') && !regenReplaces(state),
   )
   useParkedHistory(
-    dataId,
+    presetId,
     'flash',
     state,
     visible,
@@ -158,7 +158,7 @@ function FlashMode({
   // the on-screen mode registers (the others are mounted-but-hidden); `eng` is the active engine
   // (for Deduction it's the current silo), so this is one line per mode. See components/overlayStack.
   useBackButton(visible && state.calcOpen, () => eng.showCodes(false), 'codes')
-  useStatsMirror(dataId, 'flash', state.stats)
+  useStatsMirror(presetId, 'flash', state)
   const { flash, setFlash, setFlashWithTimeout } = useButtonFlash() // green/red answer pulse
 
   const resetFlashBar = () => {
@@ -483,7 +483,7 @@ function FlashMode({
     closeConfirm: closeResetStats,
     confirmReset: confirmResetStats,
   } = useResetStatsConfirm(onResetStats, !engineFresh(state), visible)
-  const resetStatsBody = useResetStatsBody()
+  const resetBody = resetStatsBody()
   const date = state.date
   const dateText =
     shouldShowTimerDate || inBack
@@ -508,7 +508,7 @@ function FlashMode({
         onCancel={closeResetStats}
         onConfirm={confirmResetStats}
         title="Reset Stats?"
-        body={resetStatsBody}
+        body={resetBody}
         confirmLabel="Reset Stats"
         id="reset-stats-flash"
       />

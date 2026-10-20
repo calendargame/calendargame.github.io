@@ -227,7 +227,7 @@ export function createDoor(env: DoorEnv) {
       }
     }
   // A HELD SAVE'S RETRY (store/storageHealth's holdForDoor) runs only OUTSIDE the door's calls. A write this
-  // window makes inside one through store/storageHealth (the session copy, a chunk's removal) can free room,
+  // window makes inside one through store/storageHealth (a chunk's removal) can free room,
   // and storageHealth retries what it holds at once - but a retry landing there would act on a store in the
   // middle of a change (a setter's new value not yet in its book: the retry's adopt would put the old one
   // back). Inside a call it is put off to the moment the outermost one returns, as a landing's is.

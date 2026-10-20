@@ -768,6 +768,50 @@ const withStreaks = (s: GameState): GameState => {
   }
 }
 
+// ── THE STATS AS THEY STOOD AFTER AN EARLIER CARD ───────────────────────────────────────────────
+// What the stats were when this mode's `played`-th card had just been played — with every toggle made
+// since applied, as if each had been made at the time — or null when that point is not inside this
+// engine's history (before the cards it hydrated with no history behind them, or past its last card).
+// The four ledgers say it exactly: `played` is the card count; `good` is the count now less the credits
+// of the cards after that point; the times are the pool's first `timesBase` plus those the cards up to it
+// name (the pool is in play order); streak and best are the credit sequence up to it, as withStreaks
+// reads the whole. Its one reader: Amnesic's anchor of the stats as they stood before a window, corrected
+// when an Override changes a card from before it (modes/modeHooks' useStatsMirror, store/progressDoor).
+export function statsAtCard(s: GameState, played: number): Stats | null {
+  const j = played - s.historyBase
+  if (j < 0) return null
+  const credits: boolean[] = []
+  const timed: boolean[] = []
+  forEachCard(s, (e) => {
+    const ls = e.liveState
+    if (!e.isLive) {
+      credits.push(!!e.hasCredit)
+      timed.push(e.solveTime != null)
+    } else if (ls?.saveStatsFrozen === true && e.btns && Object.keys(e.btns).length) {
+      credits.push(earnedCredit(e.btns, ls.revealed, ls.countedWrong))
+      timed.push(e.solveTime != null)
+    }
+  })
+  if (j > credits.length) return null
+  let goodAfter = 0
+  let timedBefore = 0
+  for (let i = 0; i < credits.length; i++)
+    if (i >= j) goodAfter += credits[i] ? 1 : 0
+    else timedBefore += timed[i] ? 1 : 0
+  const { curStreak, bestStreak } = computeStreaks([
+    ...Array.from({ length: s.streakCarry }, () => true),
+    ...credits.slice(0, j),
+  ])
+  return {
+    ...s.stats,
+    played,
+    good: s.stats.good - goodAfter,
+    streak: curStreak,
+    best: Math.max(s.bestFloor, bestStreak),
+    times: s.stats.times.slice(0, s.timesBase + timedBefore),
+  }
+}
+
 // ── FORGETTING THE OLDEST CARDS ─────────────────────────────────────────────────────────────────
 // Drop the `k` oldest cards of the history — the front of `stack` — and fold them into the state's
 // carried-in baselines, exactly as a hydrated start or RESET_ROUND carries what no card names any

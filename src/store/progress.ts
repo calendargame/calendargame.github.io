@@ -12,11 +12,11 @@ import {
   presetListed,
   presetIdOfSuffix,
 } from './presets.js'
-import { sessionProgress, activeAmnesicMode } from './amnesic.js'
 import { door } from './syncedDoc.js'
 import { makeProgressStorage } from './progressDoor.js'
 import { mainKeyOf } from './progressStorage.js'
 import { useSettings } from './settings.js'
+import { amnesicWindowOf } from './amnesicWindow.js'
 import { isRecord } from './json.js'
 import { reportedHydration } from './hydrationReport.js'
 
@@ -215,18 +215,16 @@ export const onProgressRebase = (fn: (silo: string) => void): void => {
 
 // ★ THROUGH THE WINDOWS-IN-SYNC DOOR (store/progressDoor; design-q1-q2.md v4): the stats and the Bests are
 // merged with what other windows wrote, the doc is landed whole with its sync keys, and a round's result
-// is an op on its Best record (`PROGRESS_DOOR.round`, through store/screenPool). The active preset's
-// Amnesic value says which copy the store is on (store/amnesic: Stats Only's stats and Full's everything
-// are this window's session copy).
-const PROGRESS_SESSION = sessionProgress()
+// is an op on its Best record (`PROGRESS_DOOR.round`, through store/screenPool). One pool, whatever the
+// Amnesic value (store/amnesic).
 export const PROGRESS_DOOR = makeProgressStorage<Partial<ProgressState>>(door.progressKit, {
   presetId: () => usePresets.getState().activeId,
   key: () => mainKeyOf(usePresets.getState().activeId),
-  mode: () => activeAmnesicMode(),
+  keyOf: mainKeyOf,
+  win: amnesicWindowOf,
   version: 5,
   migrate: migrateProgress,
   defaults: () => makeProgressDefaults() as never,
-  session: PROGRESS_SESSION as never,
   gate: (key) => presetListed(presetIdOfSuffix(key.slice(PRESET_STORE_KEYS.progress.length))),
   rebase: (silo) => rebaseHook?.(silo),
 })
@@ -243,8 +241,7 @@ export const useProgress = create<ProgressState>()(
       setSuddenAmBest: (v) => set((s) => ({ suddenAmBest: resolve(v, s.suddenAmBest) })),
       setAoxBest: (v) => set((s) => ({ aoxBest: resolve(v, s.aoxBest) })),
       // Wipe all saved progress back to launch defaults: FULL RESET (store/progressDoor's fullReset) -
-      // the factory doc written as a change every other window adopts, the stats and the Bests alike,
-      // whatever the Amnesic value, and this window's session copy emptied.
+      // the factory doc written as a change every other window adopts, the stats and the Bests alike.
       resetProgress: () => PROGRESS_DOOR.fullReset(),
     }),
     {
@@ -256,11 +253,10 @@ export const useProgress = create<ProgressState>()(
       // matters here more than anywhere, because live and staging share one browser origin.
       name: PRESET_STORE_KEYS.progress,
       // Presets 2, 3, 4… read and write a namespaced key instead. The `name` above never moves; the
-      // door resolves the active preset per read/write — and, uniquely among the per-preset stores,
-      // which COPY it is on (PROGRESS_DOOR, above). ★ THIS IS THE ONE STORE AMNESIC TOUCHES, and that
-      // is the whole of the CLEARS/KEEPS split: the settings, the per-mode setup and the saved personal
-      // defaults are always the preset's own, so an amnesic preset cannot forget any of them however
-      // this file changes. See store/amnesic.
+      // door resolves the active preset per read/write (PROGRESS_DOOR, above). ★ THIS IS THE ONE STORE
+      // AMNESIC TOUCHES - at the app's close, through the door's anchors (store/amnesic): the settings,
+      // the per-mode setup and the saved personal defaults are always kept, so an amnesic preset cannot
+      // forget any of them however this file changes.
       storage: PROGRESS_DOOR,
       // v5 = every solve time is kept; a save the old 1,000 cap trimmed gains its `timesLost`
       // baseline as it is read (store/progressStorage, which sees the stored array) — and no Best

@@ -3,11 +3,11 @@
 // screenPool.gap.dom — THE COMMIT/EFFECT GAP (Round 26, F1). A Blitz round that ends on its CLOCK —
 // a requestAnimationFrame callback, the one ending that is not a tap — commits in one task, and in
 // v2.29.0 its Best reconcile and its park were passive effects, which React runs in a LATER task. A
-// tap landing between the two (the Amnesic pill, a preset switch, Full Reset) runs to completion
-// first and swaps the copy of the data under the screens; the round's old effects then ran with the
-// old render's values against the NEW copy: a guest's score filed as a permanent Best, the last
-// guest's round parked into the next guest session, preset A's result filed in preset B, a Best and
-// a parked round put back after Full Reset's wipe.
+// tap landing between the two (a preset switch, Full Reset) runs to completion first and swaps the
+// data under the screens; the round's old effects then ran with the old render's values against the
+// NEW data: preset A's result filed in preset B, a Best and a parked round put back after Full Reset's
+// wipe. (And the Amnesic pill, which swaps nothing since Amnesic is decided at the close: the round is
+// filed and parked as ever.)
 //
 // ⚠ NOTHING HERE MAY GO THROUGH `act` WHILE THE ROUND ENDS. act flushes every effect before it
 // returns, which is exactly the gap these cases exist to open. So the race runs with React's act
@@ -17,9 +17,8 @@
 // MutationObserver then presses the control in the microtask after the ended commit reaches the DOM:
 // a real task boundary after the commit, before the effects task.
 //
-// The oracle is the owner's words, not the mechanism: a round played under Full belongs to that
-// session and never to the permanent Bests; a round belongs to the preset it was played on; after
-// Full Reset there is nothing.
+// The oracle is the owner's words, not the mechanism: a round belongs to the preset it was played on,
+// whatever its Amnesic value while it is played; after Full Reset there is nothing.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, cleanup, act, fireEvent, within } from '@testing-library/react'
 import { setPresetAmnesic, createPreset, switchPreset } from '../src/store/presetControl.js'
@@ -91,7 +90,7 @@ const liveBests = () => {
     aoxBest: s.aoxBest,
   }
 }
-const parkedSlots = () => Object.keys(JSON.parse(sessionStorage.getItem('cg-round-v2') ?? '{}'))
+const parkedSlots = () => Object.keys(JSON.parse(sessionStorage.getItem('cg-round-v3') ?? '{}'))
 
 function pinReadable() {
   act(() => {
@@ -148,21 +147,24 @@ describe('the commit/effect gap: a round that ends on its clock, then a tap befo
     document.getElementById('root')?.remove()
   })
 
-  it("T-F1a: a guest's round under Full, then Off — never a permanent Best, never parked for the next guest", async () => {
+  it('T-F1a: an Amnesic change in the gap changes nothing — the round is filed and parked as ever', async () => {
     mountApp()
     pinReadable()
     act(() => setPresetAmnesic(1, 'full'))
-    const before = savedBests()
     playRound(3)
     openSettings()
     const off = within(picker('Amnesic')).getByRole('radio', { name: 'Off' })
     await endOnTheClockThen(() => off.click())
     expect(usePresets.getState().activeId).toBe(1)
-    expect(savedBests(), 'the permanent Bests on the device are as they were').toEqual(before)
-    expect(liveBests(), 'and so are the ones on screen').toEqual(before)
-    expect(parkedSlots(), 'the guest round is not waiting for the next guest').not.toContain(
-      '1:session:blitz',
-    )
+    expect(
+      Object.values(savedBests().blitzBest).map((r) => r.score),
+      "the round's Best is saved",
+    ).toEqual([3])
+    expect(
+      Object.values(liveBests().blitzBest).map((r) => r.score),
+      'and shown',
+    ).toEqual([3])
+    expect(parkedSlots(), 'and its round is waiting on screen').toContain('1:blitz')
   })
 
   it("T-F1b: a preset switch in the gap — preset B's Bests untouched, preset A's round recorded and parked", async () => {
@@ -183,7 +185,7 @@ describe('the commit/effect gap: a round that ends on its clock, then a tap befo
       Object.values(a).map((r) => r.score),
       "the round's Best is its own preset's",
     ).toEqual([2])
-    expect(parkedSlots(), 'and its round is waiting for it there').toContain('1:saved:blitz')
+    expect(parkedSlots(), 'and its round is waiting for it there').toContain('1:blitz')
     act(() => switchPreset(1))
     expect(ctrl('Reset'), 'back on the first preset, the ended round is on screen').toBeTruthy()
   })

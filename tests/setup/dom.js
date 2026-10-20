@@ -25,7 +25,8 @@ import '@testing-library/jest-dom/vitest'
 import { beforeEach } from 'vitest'
 import { useProgress } from '../../src/store/progress.js'
 import { useModePrefs } from '../../src/store/modePrefs.js'
-import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
+import { useLookupHistory } from '../../src/store/lookupHistory.js'
+import { forgetJoinedSession } from '../../src/store/amnesicWindow.js'
 import { discardAllSessionModes } from '../../src/store/sessionMode.js'
 import { discardAllSessionDedTypes } from '../../src/store/sessionDedType.js'
 import { discardAllSessionRounds } from '../../src/store/sessionRound.js'
@@ -132,10 +133,11 @@ beforeEach(() => {
   // It is the same ordering tests/helpers/settingsPanel's resetAppState states for the same reason;
   // this is the global net saying it for every file, including the ones with a reset of their own.
   usePresets.setState(makePresetRegistryDefaults())
-  // …and with it the active preset's AMNESIC VALUE (store/settings - a field of its settings, which the
-  // factory reset of the 16 does not touch, by design), the other half of "where does a reset land":
-  // while a preset is on Stats Only or Full the progress reset below would go to its session copy.
-  useSettings.setState({ amnesic: 'off' })
+  // …and with it the active preset's AMNESIC VALUE and its switch-on counter (store/settings - fields of
+  // its settings, which the factory reset of the 16 does not touch, by design), and the app session this
+  // page joined (store/amnesicWindow - page state a close drops; the device's counter went with the clear).
+  useSettings.setState({ amnesic: 'off', amnesicOn: 0 })
+  forgetJoinedSession()
   // …and the session's record of WHICH PRESET it is on (store/sessionPreset), for the same reason
   // and by the same route: it is what a reload lands in, so one left by an earlier test would put a
   // later test's "reload" on a preset that test never opened.
@@ -143,15 +145,13 @@ beforeEach(() => {
   useProgress.getState().resetProgress()
   // The per-mode setup store (Stage D follow-up) is the same kind of persisted singleton.
   useModePrefs.getState().resetModePrefs()
-  // Lookup history (round 20) left store/progress for its own two stores, and it is a module
-  // singleton for the SAME reason the two above are: localStorage.clear() (wherever a test file
-  // does its own) cannot reach an in-memory value already sitting in either store, so a test that
-  // looked something up would otherwise leak it into every later test in the suite — permanent
-  // history into the localStorage-backed store, session-only entries into the sessionStorage one.
-  // Reset directly rather than via any "resetX" action neither store needs for app code: setting
-  // each list to [] both clears memory and (through persist) overwrites whatever was on disk.
+  // Lookup history (round 20) left store/progress for its own store, and it is a module singleton
+  // for the SAME reason the two above are: localStorage.clear() (wherever a test file does its own)
+  // cannot reach an in-memory value already sitting in the store, so a test that looked something up
+  // would otherwise leak it into every later test in the suite. Reset directly rather than via any
+  // "resetX" action the store does not need for app code: setting the list to [] both clears memory
+  // and (through persist) overwrites whatever was on disk.
   useLookupHistory.getState().setHistory([])
-  useLookupSession.getState().setSessionEntries([])
   // The per-preset SESSION PAGE (store/sessionMode, round 21) is sessionStorage-backed and keyed
   // by preset id, so a test that switches modes leaves a page choice that a later test's cold
   // mountApp() would restore instead of opening on the launch Classic. Same class of leak as the

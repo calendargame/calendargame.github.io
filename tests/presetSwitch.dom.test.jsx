@@ -267,8 +267,8 @@ describe('switching presets, with the app running', () => {
   // Creating, renaming and REORDERING rewrite the registry too. None of the three moves the active
   // preset or repoints its storage, so none of them may throw away the run the player is in the
   // middle of — and the cheap way to get this wrong is to remount on any registry write at all.
-  // (What makes it right is that main.tsx's subscription compares store/amnesic's activeDataId,
-  // which is deliberately blind to names and to order.)
+  // (What makes it right is that main.tsx's subscription compares the active preset's id, which is
+  // blind to names and to order.)
   it('creating a preset does not disturb the one you are playing', () => {
     mountApp()
     pinReadableQuestions()

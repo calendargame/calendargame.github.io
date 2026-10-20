@@ -319,9 +319,8 @@ describe('⚙ Settings → the pickers not in effect, the one lock, and their ex
     expect(pickerChosen('Date Format')).toEqual([other.replace(/^(Written|Numeric) /, '')])
   })
 
-  // G2.8b — THE ONE LOCK. Amnesic while Save Stats is off is the only picker that still LOCKS: a
-  // change to it remounts every screen and throws a run in progress away (components/SettingsPanel's
-  // AMNESIC note), for a setting nothing is being recorded under. The whole lock, and a refused press.
+  // G2.8b — THE ONE LOCK. Amnesic while Save Stats is off is the only picker that still LOCKS
+  // (components/SettingsPanel's AMNESIC note). The whole lock, and a refused press.
   it('Amnesic while Save Stats is off is the one locked picker: the whole lock, and a press refused', () => {
     standUp()
     toggleSwitch('Save Stats')

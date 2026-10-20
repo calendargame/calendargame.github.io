@@ -44,10 +44,9 @@ import { useJulianRange, JULIAN_RANGE_DEFAULTS } from '../../src/store/julianRan
 import { useModePrefs } from '../../src/store/modePrefs.js'
 import { useUserDefaults, effectiveSettingsDefaults } from '../../src/store/userDefaults.js'
 import { useProgress } from '../../src/store/progress.js'
-import { useLookupHistory, useLookupSession } from '../../src/store/lookupHistory.js'
+import { useLookupHistory } from '../../src/store/lookupHistory.js'
 import { door } from '../../src/store/syncedDoc.js'
 import { usePresets, makePresetRegistryDefaults } from '../../src/store/presets.js'
-import { discardSessionStats } from '../../src/store/amnesic.js'
 // Re-exported so the panel helper's API is complete at one import, while the definition lives in
 // the file that owns the question — mode-screen tests ask "is this offered" about game controls
 // that have nothing to do with settings, and should not be importing from a settings helper.
@@ -94,17 +93,6 @@ export { isOffered, isDimmed, isOutlined }
 // entry at all (store/presets — a default registry says nothing a missing one does not), which is
 // the state every case in this suite is entitled to assume.
 export function resetAppState() {
-  // ★ AN AMNESIC PRESET'S SESSION IS THE ONE PIECE OF APP STATE localStorage.clear() CANNOT REACH —
-  // its session copy lives in sessionStorage (store/amnesic) — so a case that puts a preset on Stats
-  // Only or Full would otherwise leave it standing for every later case in its file, and the symptom
-  // would be "stats I never wrote" rather than anything naming amnesia. Discarded through the app's own
-  // calls, so this file still never spells a storage key, and BEFORE the registry goes back to its
-  // defaults, because the registry is what says which presets have a copy to discard.
-  // ⚠ NOT sessionStorage.clear(). The other two things that live there are not app state — the
-  // post-update splash-skip flag and the update-attempt loop breaker (src/main.tsx) — and the two
-  // files that care about them keep their own explicit clear, where it reads as the setup for the
-  // thing they are testing instead of as a line nobody can account for.
-  for (const preset of usePresets.getState().presets) discardSessionStats(preset.id)
   // The device is emptied FIRST and the windows-in-sync door forgets what it knew (store/syncedDoc):
   // a registry put back to one preset over a device still listing several would be merged with them
   // (design 8.1). The registry's reset writes, so the device is emptied again after it, and the door
@@ -125,7 +113,6 @@ export function resetAppState() {
   useUserDefaults.getState().clearDefaults()
   useProgress.getState().resetProgress()
   useLookupHistory.getState().setHistory([])
-  useLookupSession.getState().setSessionEntries([])
 }
 
 // Mounts the real <App/> with the panel CLOSED, and returns Testing Library's render result.

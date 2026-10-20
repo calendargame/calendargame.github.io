@@ -1,29 +1,25 @@
 // @vitest-environment jsdom
 //
-// amnesicRound.dom — round 23: an Amnesic (guest) preset must NEVER touch the other copy of the
-// stats, and a reload is the SAME session everywhere (only a real close of the app starts fresh).
+// amnesicRound.dom — THE ROUND MODES (Blitz and MoX) UNDER AMNESIC (design-amnesic-close.md; store/amnesic).
 //
-// ★ THE BUG THESE CASES WERE WRITTEN AGAINST (all reproduced on v2.26.0 by the investigation that
-// queued this fix — 14 of its 19 probes failed): a Blitz round / MoX run that ENDED while the preset was
-// Amnesic was parked in store/sessionRound under "<preset>:<mode>" only. Turning Amnesic OFF remounts
-// the screens against the PERMANENT stats, and the remount restored the guest's round and reconciled
-// it into the permanent Bests — replacing a best, LOWERING one (round ids collided at 1), or ERASING
-// one (a MoX retraction restores the guest run's empty floor). The reverse flip copied the player's
-// own result into the fresh guest copy. The fix keys each parked round by the copy of the BESTS it
-// was scored against (store/amnesic's bestsIdOf — "1:saved" / "1:session"), so a round only ever
-// comes back over those, and the session slot shares the session copy's lifetime.
-// (In this file "Amnesic" is the Full value — the guest mode these cases were written for. What
-// Stats Only does to a round, which shares the PERMANENT bests, is the last block.)
+// ★ THE OWNER'S RULES, as they reach a round:
+//   • while playing, Amnesic changes nothing: a round played on any value counts in the one pool - its Best
+//     is on screen and on the device the moment it ends - and turning the pill never changes the round on
+//     screen or a Best;
+//   • at the app's close (a reload is not one), going by the value AT THE CLOSE, for what was played since
+//     the value was last switched on from Off: Stats Only keeps a new Best; Full puts back the Best that
+//     stood before, exactly - its holders, its companion numbers, its ★ round;
+//   • so Stats Only and Full differ only here, in the modes with Bests (How to Play says so).
+// What a close does to the casual strips (Classic, Flash, Deduction) is tests/amnesic.dom's; what makes the
+// close a close (the Web Locks) is tests/amnesicClose's.
 //
-// The first 19 cases are the investigation's probes, kept exactly as questions (the permanent bytes
-// before vs after) and turned into real tests. The rest pin the owner's two session rules:
-//   (a) within one session everything comes back exactly as it was left — your own finished round,
-//       hidden during a guest interlude, reappears when Amnesic goes off;
-//   (b) a reload keeps the session (Amnesic stays on, the guest round stays on screen); only a real
-//       close — the browser clearing sessionStorage — puts Amnesic back on the saved default.
+// The rest of the file pins how a finished round itself lives, on every value alike: it is the screen's,
+// for one browsing session - a reload keeps it, a close drops it - and it comes back only over the setup it
+// was played under; a run keeps the length it was begun at; round ids never repeat across loads; a
+// practice round stays a practice round.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { screen, cleanup, act, fireEvent, within } from '@testing-library/react'
-import { setPresetAmnesic, createPreset, switchPreset } from '../src/store/presetControl.js'
+import { setPresetAmnesic } from '../src/store/presetControl.js'
 import { amnesicModeOf } from '../src/store/amnesic.js'
 import { loadPage, closeApp } from './helpers/pageLoad.js'
 import { usePresets, presetKey, PRESET_STORE_KEYS } from '../src/store/presets.js'
@@ -38,7 +34,6 @@ import {
   tap,
   openSettings,
   fireResetSettings,
-  fireFullReset,
 } from './helpers/settingsPanel.jsx'
 import { wday } from '../src/lib/calendar.js'
 import { DAY } from '../src/lib/format.js'
@@ -74,13 +69,18 @@ const pinReadable = () =>
     s.setMaxY(10000)
     useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
   })
-// The ⚙ pill, as one call: true is Full (the guest mode this file is about), false is Off; the last
-// block passes 'stats'.
-const setAmnesic = (on, id = usePresets.getState().activeId) =>
-  act(() => setPresetAmnesic(id, on === true ? 'full' : on === false ? 'off' : on))
+// The ⚙ pill, as one call.
+const setAmnesic = (mode, id = usePresets.getState().activeId) =>
+  act(() => setPresetAmnesic(id, mode))
 const statsKey = (id = 1) => presetKey(PRESET_STORE_KEYS.progress, id)
 const permanent = (id = 1) => JSON.parse(localStorage.getItem(statsKey(id)) ?? 'null')?.state
-const amnesicNow = (id = 1) => amnesicModeOf(id) !== 'off'
+// A Best record as the app's values: without the tag that names its values (`w`) and the holder ids
+// written beside its companions (store/bestRecords: the doc's, for its reader).
+const recordValues = (rec) => {
+  if (!rec) return rec
+  const { w: _w, scoreStreakOf: _s, streakScoreOf: _k, avgMedOf: _a, medAvgOf: _m, ...values } = rec
+  return values
+}
 function finishBlitz(n) {
   tap(ctrl('Begin'))
   for (let i = 0; i < n; i++) tap(screen.getByRole('button', { name: correctName(readDate()) }))
@@ -108,8 +108,8 @@ const reload = () => {
   })
   mountApp()
 }
-// A REAL CLOSE, then an open: the browser ends the session (sessionStorage is gone) and localStorage
-// is all that is left.
+// A REAL CLOSE, then an open (tests/helpers/pageLoad): sessionStorage is gone, and the opener runs the
+// close - Amnesic's forget - before the app is drawn.
 const closeAndReopen = () => {
   unmount()
   act(() => {
@@ -118,311 +118,343 @@ const closeAndReopen = () => {
   })
   mountApp()
 }
+const bestLine = (label) =>
+  Array.from(document.querySelectorAll('div')).find(
+    (el) => !isHidden(el) && new RegExp(`^\\s*${label}:`).test(el.firstChild?.nodeValue ?? ''),
+  ).textContent
 
-const variants = [
-  { name: 'per-round', perQ: false, am: false, field: 'blitzBest' },
-  { name: 'per-Q sudden death', perQ: true, am: false, field: 'suddenBest' },
-  { name: 'per-Q + Allow Mistakes', perQ: true, am: true, field: 'suddenAmBest' },
+const BLITZ = [
+  { name: 'Blitz, Per Round', perQ: false, am: false, field: 'blitzBest' },
+  { name: 'Blitz, Per Question sudden death', perQ: true, am: false, field: 'suddenBest' },
+  { name: 'Blitz, Per Question + Allow Mistakes', perQ: true, am: true, field: 'suddenAmBest' },
 ]
-// A permanent Best planted under the config's key. `rid` 1 is the id the old per-screen counter gave
-// EVERY first round — the collision that let a guest round lower a real record.
-const sentinel = (field, score, rid) =>
-  field === 'suddenBest'
-    ? { score, roundId: rid }
-    : { score, streak: score, scoreRoundId: rid, streakRoundId: rid }
+const toBlitz = (v) => {
+  act(() => {
+    useModePrefs.getState().setBlitzPerQ(v.perQ)
+    useModePrefs.getState().setBlitzAllowMistakes(v.am)
+  })
+  press('B')
+}
 
-describe('Blitz: a guest round on screen, Amnesic ON → OFF, leaves the permanent Best alone', () => {
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('while playing, a round counts in the one pool on every value', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)
-  for (const v of variants) {
-    for (const [label, permScore, permRid, guestScore] of [
-      ['guest beats permanent (different round id)', 1, 99, 3],
-      ['guest below permanent, the colliding round id 1', 30, 1, 3],
-      ['guest below permanent, different round id', 30, 99, 3],
-    ]) {
-      it(`${v.name}: ${label}`, () => {
+
+  for (const v of BLITZ)
+    for (const mode of ['stats', 'full'])
+      it(`${v.name}, ${mode}: the new Best is on screen and on the device the moment the round ends`, () => {
         mountApp()
         pinReadable()
-        act(() => {
-          useModePrefs.getState().setBlitzPerQ(v.perQ)
-          useModePrefs.getState().setBlitzAllowMistakes(v.am)
-        })
-        press('B')
-        finishBlitz(1) // create the config's key permanently…
+        toBlitz(v)
+        finishBlitz(2) // an Off round: Best 2
         tap(ctrl('Reset'))
         const key = onlyKey(useProgress.getState()[v.field])
-        // …then plant the permanent record under test.
-        act(() =>
-          useProgress.setState({ [v.field]: { [key]: sentinel(v.field, permScore, permRid) } }),
-        )
-        const before = JSON.stringify(permanent()[v.field])
-        setAmnesic(true)
-        expect(useProgress.getState()[v.field]).toEqual({})
-        finishBlitz(guestScore)
-        expect(useProgress.getState()[v.field][key].score).toBe(guestScore)
-        expect(JSON.stringify(permanent()[v.field])).toBe(before) // untouched while amnesic
-        setAmnesic(false)
-        expect(JSON.stringify(permanent()[v.field])).toBe(before)
-        expect(ctrl('Begin')).toBeInTheDocument() // the guest's round went with the guest's stats
+        setAmnesic(mode)
+        expect(useProgress.getState()[v.field][key].score).toBe(2) // shown, to be beaten
+        finishBlitz(4)
+        expect(useProgress.getState()[v.field][key].score).toBe(4)
+        expect(permanent()[v.field][key].score).toBe(4)
+        expect(bestLine('Best Score')).toContain('★')
       })
-    }
-  }
-})
 
-describe('Blitz: your own round on screen, Amnesic OFF → ON', () => {
-  beforeEach(() => resetAppState())
-  afterEach(unmount)
-  it('per-round: the guest copy starts at zero and your permanent stats are untouched', () => {
+  it('MoX, Full: Best Mean and Best Median are on the device the moment the run completes', () => {
+    mountApp()
+    pinReadable()
+    act(() => useModePrefs.getState().setAoxN('2'))
+    press('A')
+    setAmnesic('full')
+    finishMox(2)
+    const record = Object.values(permanent().aoxBest)[0]
+    expect(record.avg).toEqual(expect.any(Number))
+    expect(record.med).toEqual(expect.any(Number))
+    expect(bestLine('Best Mean')).toContain('★')
+  })
+
+  it('turning the pill, every value in turn, leaves the round on screen, its ★, and the device as they are', () => {
     mountApp()
     pinReadable()
     press('B')
     finishBlitz(4)
-    const before = localStorage.getItem(statsKey())
-    setAmnesic(true)
-    expect(localStorage.getItem(statsKey())).toBe(before)
-    expect(useProgress.getState().blitzBest).toEqual({})
-    expect(ctrl('Begin')).toBeInTheDocument() // your round is not the guest's to see
+    const device = localStorage.getItem(statsKey())
+    for (const mode of ['stats', 'full', 'off', 'full', 'stats', 'off']) {
+      setAmnesic(mode)
+      expect(statValue('Score')).toBe('4/5')
+      expect(bestLine('Best Score')).toContain('★')
+      expect(localStorage.getItem(statsKey())).toBe(device)
+    }
   })
-})
 
-describe('Blitz: a reload with a guest round parked', () => {
-  beforeEach(() => resetAppState())
-  afterEach(unmount)
-  it('the reload keeps Amnesic on and the guest round on screen; the permanent Best is untouched', () => {
+  it('…and a MoX run, with its breakdown', () => {
+    mountApp()
+    pinReadable()
+    act(() => useModePrefs.getState().setAoxN('2'))
+    press('A')
+    finishMox(2)
+    const device = localStorage.getItem(statsKey())
+    for (const mode of ['full', 'stats', 'off']) {
+      setAmnesic(mode)
+      expect(statValue('Score')).toBe('2/2')
+      expect(bestLine('Best Mean')).toContain('★')
+      expect(localStorage.getItem(statsKey())).toBe(device)
+    }
+    tap(ctrl('Show mean breakdown'))
+    expect(within(screen.getByRole('dialog')).getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('Save Stats off still means nothing is recorded, on any value', () => {
     mountApp()
     pinReadable()
     press('B')
-    finishBlitz(1)
-    tap(ctrl('Reset'))
-    const key = onlyKey(useProgress.getState().blitzBest)
-    act(() => useProgress.setState({ blitzBest: { [key]: sentinel('blitzBest', 30, 1) } }))
-    const before = JSON.stringify(permanent().blitzBest)
-    setAmnesic(true)
-    finishBlitz(3)
-    reload()
-    expect(amnesicNow()).toBe(true) // a reload is the SAME session — the value is the session's
-    expect(JSON.stringify(permanent().blitzBest)).toBe(before)
-    expect(statValue('Score')).toBe('3/4') // the guest's round, still on screen
-    expect(useProgress.getState().blitzBest[key].score).toBe(3)
-  })
-})
-
-describe('MoX: a guest run and the permanent Best', () => {
-  beforeEach(() => resetAppState())
-  afterEach(unmount)
-  for (const [label, retract] of [
-    ['guest run standing', false],
-    ['guest run with a credit retracted (Override)', true],
-  ]) {
-    it(`ON → OFF: ${label}`, () => {
-      mountApp()
-      pinReadable()
-      press('A')
-      act(() => useModePrefs.getState().setAoxN('2'))
-      finishMox(2)
+    act(() => useSettings.getState().setSaveStats(false))
+    for (const mode of ['stats', 'full']) {
+      setAmnesic(mode)
+      const before = localStorage.getItem(statsKey())
+      finishBlitz(4)
       tap(ctrl('Reset'))
-      const key = onlyKey(useProgress.getState().aoxBest)
-      const sent = { avg: 0.5, avgMed: 0.5, avgRoundId: 7, med: 0.5, medAvg: 0.5, medRoundId: 7 }
-      act(() => useProgress.setState({ aoxBest: { [key]: sent } }))
-      const before = JSON.stringify(permanent().aoxBest)
-      setAmnesic(true)
-      finishMox(2)
-      if (retract) tap(ctrl('Override')) // take the completing solve's credit away
-      expect(JSON.stringify(permanent().aoxBest)).toBe(before)
-      setAmnesic(false)
-      expect(JSON.stringify(permanent().aoxBest)).toBe(before)
-    })
-  }
-  it('OFF → ON: the guest copy starts at zero', () => {
-    mountApp()
-    pinReadable()
-    press('A')
-    act(() => useModePrefs.getState().setAoxN('2'))
-    finishMox(2)
-    setAmnesic(true)
-    expect(useProgress.getState().aoxBest).toEqual({})
+      expect(useProgress.getState().blitzBest).toEqual({})
+      expect(localStorage.getItem(statsKey())).toBe(before)
+    }
   })
 })
 
-describe('more paths into the permanent copy', () => {
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// AT THE CLOSE: Stats Only keeps a new Best, Full puts back the one before - and what stood before the
+// switch-on is never touched.
+describe('at the close: Stats Only keeps a new Best, Full puts the one before back exactly', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)
 
-  it('MoX: a SLOWER guest run does not overwrite a FASTER permanent best', () => {
+  for (const v of BLITZ)
+    for (const mode of ['stats', 'full'])
+      it(`${v.name}, ${mode}`, () => {
+        mountApp()
+        pinReadable()
+        toBlitz(v)
+        finishBlitz(2) // before the switch-on: Best 2
+        tap(ctrl('Reset'))
+        const key = onlyKey(useProgress.getState()[v.field])
+        const before = recordValues(permanent()[v.field][key])
+        setAmnesic(mode)
+        finishBlitz(3)
+        tap(ctrl('Reset'))
+        finishBlitz(5) // beaten twice inside the window
+        const set = recordValues(permanent()[v.field][key])
+        expect(set.score).toBe(5)
+        closeAndReopen()
+        expect(amnesicModeOf(1)).toBe(mode) // a setting: it stays
+        const now = mode === 'stats' ? set : before
+        expect(recordValues(permanent()[v.field][key])).toEqual(now)
+        expect(recordValues(useProgress.getState()[v.field][key])).toEqual(now)
+        toBlitz(v)
+        expect(ctrl('Begin')).toBeInTheDocument() // the round itself went with the session
+        expect(bestLine('Best Score')).toContain(String(now.score))
+        expect(bestLine('Best Score')).not.toContain('★')
+      })
+
+  it('Full: a Best first set inside the window leaves no record at all', () => {
     mountApp()
     pinReadable()
-    press('A')
+    press('B')
+    setAmnesic('full')
+    finishBlitz(3)
+    expect(Object.keys(permanent().blitzBest)).toHaveLength(1)
+    closeAndReopen()
+    expect(permanent().blitzBest).toEqual({})
+    expect(useProgress.getState().blitzBest).toEqual({})
+  })
+
+  it('Full, MoX: Best Mean and Best Median come back as they stood, run and all', () => {
+    mountApp()
+    pinReadable()
     act(() => useModePrefs.getState().setAoxN('2'))
-    finishMox(2)
+    press('A')
+    finishMox(2) // a run before the switch-on (its record's key)…
     tap(ctrl('Reset'))
     const key = onlyKey(useProgress.getState().aoxBest)
-    act(() =>
-      useProgress.setState({
-        aoxBest: { [key]: { avg: 0, avgMed: 0, avgRoundId: 7, med: 0, medAvg: 0, medRoundId: 7 } },
-      }),
-    )
-    const before = JSON.stringify(permanent().aoxBest)
-    setAmnesic(true)
-    finishMox(2)
-    setAmnesic(false)
-    expect(JSON.stringify(permanent().aoxBest)).toBe(before)
+    // …and a SLOW record planted there, which any run beats (seconds; a round id from before)
+    const slow = { avg: 999, avgMed: 999, avgRoundId: 7, med: 999, medAvg: 999, medRoundId: 7 }
+    act(() => useProgress.setState({ aoxBest: { [key]: slow } }))
+    const before = recordValues(permanent().aoxBest[key])
+    setAmnesic('full')
+    finishMox(2) // a faster run
+    expect(recordValues(permanent().aoxBest[key])).not.toEqual(before)
+    closeAndReopen()
+    expect(recordValues(permanent().aoxBest[key])).toEqual(before)
   })
 
-  it('Blitz: Reset Settings (saved default = not amnesic) with a guest round on screen', () => {
+  it('Stats Only, MoX: the faster run’s Best is kept', () => {
     mountApp()
     pinReadable()
-    press('B')
-    finishBlitz(1)
-    tap(ctrl('Reset'))
-    const key = onlyKey(useProgress.getState().blitzBest)
-    act(() => useProgress.setState({ blitzBest: { [key]: sentinel('blitzBest', 30, 1) } }))
-    const before = JSON.stringify(permanent().blitzBest)
-    setAmnesic(true)
-    finishBlitz(3)
-    openSettings('gear')
-    fireResetSettings() // restores the saved Amnesic value (Off) — the same discard as the pill
-    expect(amnesicNow()).toBe(false)
-    expect(JSON.stringify(permanent().blitzBest)).toBe(before)
-  })
-
-  it('Blitz: Full Reset in an amnesic preset with a guest round on screen wipes the permanent copy', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    setAmnesic(true)
-    finishBlitz(3)
-    openSettings('gear')
-    fireFullReset()
-    expect(permanent()?.blitzBest ?? {}).toEqual({})
-  })
-
-  it('Blitz: preset 1 guest round, switch to preset 2, reload, switch back — nothing leaks', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    finishBlitz(1)
-    tap(ctrl('Reset'))
-    const key = onlyKey(useProgress.getState().blitzBest)
-    act(() => useProgress.setState({ blitzBest: { [key]: sentinel('blitzBest', 30, 1) } }))
-    const before = JSON.stringify(permanent().blitzBest)
-    setAmnesic(true)
-    finishBlitz(3)
-    const p2 = createPreset()
-    act(() => switchPreset(p2.id))
-    reload()
-    expect(amnesicNow(1)).toBe(true) // the reload kept preset 1's guest session
-    expect(JSON.stringify(permanent(1).blitzBest)).toBe(before)
-    act(() => switchPreset(1))
-    expect(JSON.stringify(permanent(1).blitzBest)).toBe(before)
-    expect(statValue('Score')).toBe('3/4') // the guest round, still preset 1's this session
-  })
-
-  it('Blitz: a plain preset switch while amnesic (no flip) is harmless', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    finishBlitz(1)
-    tap(ctrl('Reset'))
-    const before = JSON.stringify(permanent().blitzBest)
-    setAmnesic(true)
-    finishBlitz(3)
-    const p2 = createPreset()
-    act(() => switchPreset(p2.id))
-    act(() => switchPreset(1))
-    expect(JSON.stringify(permanent().blitzBest)).toBe(before)
-    expect(Object.values(useProgress.getState().blitzBest)[0].score).toBe(3)
-  })
-})
-
-// ── The owner's session rules ─────────────────────────────────────────────────────────────────
-describe('within one session everything comes back exactly as it was left', () => {
-  beforeEach(() => resetAppState())
-  afterEach(unmount)
-
-  it('Blitz: your own finished round, hidden during a guest interlude, reappears when Amnesic goes off', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    finishBlitz(4) // YOUR round: 4/5
-    const before = localStorage.getItem(statsKey())
-    setAmnesic(true)
-    expect(ctrl('Begin')).toBeInTheDocument() // hidden from the guest
-    finishBlitz(2) // the guest's round
-    setAmnesic(false)
-    expect(statValue('Score')).toBe('4/5') // yours again, exactly as you left it
-    expect(localStorage.getItem(statsKey())).toBe(before) // and nothing moved underneath it
-  })
-
-  it('MoX: your own finished run reappears when Amnesic goes off, with its ★', () => {
-    mountApp()
-    pinReadable()
-    press('A')
     act(() => useModePrefs.getState().setAoxN('2'))
+    press('A')
+    setAmnesic('stats')
     finishMox(2)
-    const before = localStorage.getItem(statsKey())
-    expect(screen.getByText(/Best Mean:/).textContent).toContain('★')
-    setAmnesic(true)
-    expect(ctrl('Begin')).toBeInTheDocument()
-    setAmnesic(false)
-    expect(statValue('Score')).toBe('2/2')
-    expect(screen.getByText(/Best Mean:/).textContent).toContain('★') // still the run that set it
-    expect(localStorage.getItem(statsKey())).toBe(before)
+    const key = onlyKey(useProgress.getState().aoxBest)
+    const set = recordValues(permanent().aoxBest[key])
+    closeAndReopen()
+    expect(recordValues(permanent().aoxBest[key])).toEqual(set)
   })
 
-  it('turning Amnesic back ON gives a fresh guest start — not the previous guest round', () => {
+  // ONLY THE VALUE AT THE CLOSE DECIDES, and the window starts at the switch-on from Off: Stats Only ↔
+  // Full moves no start.
+  for (const [label, path, kept] of [
+    ['Full, then Stats Only at the close: the Best is kept', ['full', 'stats'], true],
+    ['Stats Only, then Full at the close: the Best goes', ['stats', 'full'], false],
+    ['Full, then Off at the close: the Best is kept', ['full', 'off'], true],
+  ])
+    it(label, () => {
+      mountApp()
+      pinReadable()
+      press('B')
+      finishBlitz(2)
+      tap(ctrl('Reset'))
+      const key = onlyKey(useProgress.getState().blitzBest)
+      setAmnesic(path[0])
+      finishBlitz(4)
+      tap(ctrl('Reset'))
+      setAmnesic(path[1])
+      closeAndReopen()
+      expect(permanent().blitzBest[key].score).toBe(kept ? 4 : 2)
+    })
+
+  it('Full, off and on again: only the Best set after the last switch-on goes', () => {
     mountApp()
     pinReadable()
     press('B')
-    setAmnesic(true)
+    setAmnesic('full')
+    finishBlitz(2) // in the first window
+    tap(ctrl('Reset'))
+    setAmnesic('off')
+    finishBlitz(3) // on Off
+    tap(ctrl('Reset'))
+    const key = onlyKey(useProgress.getState().blitzBest)
+    const before = recordValues(permanent().blitzBest[key])
+    setAmnesic('full')
+    finishBlitz(6) // in the window that is open at the close
+    closeAndReopen()
+    expect(recordValues(permanent().blitzBest[key])).toEqual(before)
+  })
+
+  it('a reload is not a close: the round stays on screen and the Best stands - until the close', () => {
+    mountApp()
+    pinReadable()
+    press('B')
     finishBlitz(2)
-    setAmnesic(false)
-    setAmnesic(true)
-    expect(ctrl('Begin')).toBeInTheDocument()
-    expect(useProgress.getState().blitzBest).toEqual({})
+    setAmnesic('full')
+    tap(ctrl('Reset'))
+    finishBlitz(4)
+    reload()
+    expect(amnesicModeOf(1)).toBe('full')
+    expect(ctrl('Reset')).toBeInTheDocument() // Blitz, with the ended round still up
+    expect(statValue('Score')).toBe('4/5')
+    expect(Object.values(permanent().blitzBest)[0].score).toBe(4)
+    closeAndReopen()
+    expect(Object.values(permanent().blitzBest)[0].score).toBe(2)
+  })
+
+  // ★ AN OVERRIDE IS PLAY IN THE WINDOW ONLY FOR A ROUND PLAYED IN IT. On a round from before the switch-on
+  // it is a correction: the anchor takes it too, so Full's forget keeps it (store/screenPool's Filed - the
+  // window a round was first filed in, parked with it - and store/syncRecords' `re`).
+  it('Full: an Override of a round played in the window goes with the window', () => {
+    mountApp()
+    pinReadable()
+    press('B')
+    finishBlitz(2)
+    tap(ctrl('Reset'))
+    const key = onlyKey(useProgress.getState().blitzBest)
+    const before = recordValues(permanent().blitzBest[key])
+    setAmnesic('full')
+    finishBlitz(3)
+    tap(ctrl('Override')) // credits the revealed card: 4, back in play…
+    tap(ctrl('Reveal')) // …and ended again
+    expect(permanent().blitzBest[key].score).toBe(4)
+    closeAndReopen()
+    expect(recordValues(permanent().blitzBest[key])).toEqual(before)
+  })
+
+  it('Full: an Override of a round from before the switch-on is a correction, and the close keeps it', () => {
+    mountApp()
+    pinReadable()
+    press('B')
+    finishBlitz(3) // an Off round, still on screen
+    setAmnesic('full')
+    tap(ctrl('Override')) // corrected: 4
+    tap(ctrl('Reveal'))
+    expect(Object.values(permanent().blitzBest)[0].score).toBe(4)
+    reload() // (the round comes back with the window it was first filed in)
+    tap(ctrl('Override')) // and once more, after a reload: 5
+    tap(ctrl('Reveal'))
+    expect(Object.values(permanent().blitzBest)[0].score).toBe(5)
+    tap(ctrl('Reset'))
+    finishBlitz(7) // a round of the window's own
+    closeAndReopen()
+    const record = Object.values(permanent().blitzBest)[0]
+    expect(record.score).toBe(5) // the correction stands; the window's round is gone
+  })
+
+  it('an Override on the finished round moves its Best, and Stats Only keeps that too', () => {
+    mountApp()
+    pinReadable()
+    press('B')
+    finishBlitz(3) // saved Best: 3
+    tap(ctrl('Reset'))
+    setAmnesic('stats')
+    finishBlitz(3) // ties it: the record stays with the earlier round
+    expect(Object.values(permanent().blitzBest)[0].score).toBe(3)
+    expect(bestLine('Best Score')).not.toContain('★')
+    tap(ctrl('Override')) // credits the revealed card: 4, and the round is back in play
+    tap(ctrl('Reveal'))
+    expect(Object.values(permanent().blitzBest)[0].score).toBe(4)
+    expect(bestLine('Best Score')).toContain('★')
+    closeAndReopen()
+    expect(Object.values(permanent().blitzBest)[0].score).toBe(4)
   })
 })
 
-// ── A parked round carries the configuration it was played under ───────────────────────────────
-// The ⚙ settings and the per-mode setup are shared by every copy of a preset's stats, and a guest's idle
-// screen leaves every one of them editable. So "your finished round comes back" has a condition: it
-// comes back only over the configuration it was played under. Restored over a different one, the
-// round reconciled against settings it was never played on — and each of these changed a PERMANENT
-// best (round 23's review, reproduced as found). A round that no longer matches is not restored: the
-// screen is idle, and every saved Best is exactly as the round left it.
-describe('a guest who changes the setup never changes your saved bests', () => {
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// A FINISHED ROUND IS THE SCREEN'S, FOR ONE BROWSING SESSION — whatever the Amnesic value.
+// ── It comes back only over the configuration it was played under ─────────────────────────────
+// The ⚙ settings and the per-mode setup can move while a finished round is parked (another tab on this
+// origin, between a reload's two loads). Restored over a different one, the round reconciled against
+// settings it was never played on — and each of these changed a saved Best (round 23's review). A round
+// that no longer matches is not restored: the screen is idle, and every saved Best is as the round left it.
+describe('a parked round comes back only over the setup it was played under', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)
+  const moved = (edit) => {
+    unmount()
+    act(edit) // (moved while the page was away)
+    mountApp()
+  }
 
-  it('MoX: the guest raises the run length — your Best is not taken away', () => {
+  it('MoX: a raised run length — the Best is not taken away', () => {
     mountApp()
     pinReadable()
     press('A')
     act(() => useModePrefs.getState().setAoxN('2'))
-    finishMox(2) // YOUR run: done, its Best recorded
+    finishMox(2)
     const before = JSON.stringify(permanent().aoxBest)
-    expect(Object.values(permanent().aoxBest)[0].avg).toEqual(expect.any(Number))
-    setAmnesic(true)
-    act(() => useModePrefs.getState().setAoxN('5')) // the guest edits the (idle) run length
-    setAmnesic(false)
+    moved(() => useModePrefs.getState().setAoxN('5'))
+    press('A')
     expect(JSON.stringify(permanent().aoxBest)).toBe(before)
     expect(ctrl('Begin')).toBeInTheDocument() // a Mo2 run is not shown as a Mo5 one
   })
 
-  it('MoX: the guest flips One-by-One — your run is not restored into the other sub-mode', () => {
+  it('MoX: One-by-One flipped — the run is not restored into the other sub-mode', () => {
     mountApp()
     pinReadable()
     press('A')
     act(() => useModePrefs.getState().setAoxN('2'))
     finishMox(2)
     const before = JSON.stringify(permanent().aoxBest)
-    setAmnesic(true)
-    act(() => useModePrefs.getState().setAoxOneByOne(true))
-    setAmnesic(false)
+    moved(() => useModePrefs.getState().setAoxOneByOne(true))
+    press('A')
     expect(JSON.stringify(permanent().aoxBest)).toBe(before)
     expect(ctrl('Begin')).toBeInTheDocument()
   })
 
-  for (const [label, guestEdit] of [
+  for (const [label, edit] of [
     ['Per Question', () => useModePrefs.getState().setBlitzPerQ(true)],
     [
       'Per Question + Allow Mistakes off',
@@ -433,73 +465,37 @@ describe('a guest who changes the setup never changes your saved bests', () => {
     ],
     ['Allow Mistakes off', () => useModePrefs.getState().setBlitzAllowMistakes(false)],
     ['a different round length', () => useModePrefs.getState().setBlitzSec(30)],
+    ['the shared Julian range', () => useJulianRange.getState().setJulianMinY(1900)],
   ])
-    it(`Blitz: the guest picks ${label} — no Best appears in a sub-mode you never played`, () => {
+    it(`Blitz: ${label} — no Best appears in a sub-mode never played, and no round is resumed`, () => {
       mountApp()
       pinReadable()
       press('B')
-      finishBlitz(4) // YOUR Per Round round: 4/5
+      finishBlitz(4)
       const before = JSON.stringify(permanent())
-      setAmnesic(true)
-      act(guestEdit) // the guest's screen is idle, so its setup is all live
-      setAmnesic(false)
-      expect(JSON.stringify(permanent())).toBe(before)
+      moved(edit)
+      press('B')
       expect(ctrl('Begin')).toBeInTheDocument()
+      expect(JSON.stringify(permanent())).toBe(before)
     })
 
-  it('Blitz: the guest changes the year range — your round does not come back to be resumed on it', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    finishBlitz(4) // 4 right, then Reveal ends it: 4/5 on 1583–10000
-    const before = JSON.stringify(permanent())
-    setAmnesic(true)
-    act(() => {
-      useSettings.getState().setMinY(2000)
-      useSettings.getState().setMaxY(2001)
-      useJulianRange.getState().applyJulianRange({ julianMinY: 2000, julianMaxY: 2001 })
-    })
-    setAmnesic(false)
-    // Restored, an Override on the revealed card resumed the round drawing 2000–2001 dates and the
-    // 1583–10000 Best rose with them. There is no round to resume.
-    expect(ctrl('Begin')).toBeInTheDocument()
-    expect(statValue('Score')).toBe('0/0')
-    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
-    expect(JSON.stringify(permanent())).toBe(before)
-  })
-
-  it('a guest who changes nothing: your round still comes back, untouched', () => {
+  it('a setup changed and put back: the round still comes back, untouched', () => {
     mountApp()
     pinReadable()
     press('B')
     finishBlitz(4)
     const before = JSON.stringify(permanent())
-    setAmnesic(true)
-    act(() => useModePrefs.getState().setBlitzPerQ(true)) // changed…
-    act(() => useModePrefs.getState().setBlitzPerQ(false)) // …and put back
-    setAmnesic(false)
+    moved(() => {
+      useModePrefs.getState().setBlitzPerQ(true)
+      useModePrefs.getState().setBlitzPerQ(false)
+    })
+    press('B')
     expect(statValue('Score')).toBe('4/5')
     expect(JSON.stringify(permanent())).toBe(before)
   })
-
-  it('the same holds across a reload: a round parked under settings that have since moved is dropped', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    finishBlitz(4)
-    const before = JSON.stringify(permanent().blitzBest)
-    unmount()
-    act(() => {
-      useJulianRange.getState().setJulianMinY(1900) // another tab on this origin moved the shared settings
-    })
-    mountApp()
-    press('B')
-    expect(ctrl('Begin')).toBeInTheDocument()
-    expect(JSON.stringify(permanent().blitzBest)).toBe(before)
-  })
 })
 
-// The same rule from inside one copy: Reset Settings can move the run length under a MoX run that is
+// The same rule from inside one page: Reset Settings can move the run length under a MoX run that is
 // still on screen (the run resets when the ⚙ panel closes). The run's own arithmetic uses the length
 // it was BEGUN at, so nothing happens to it — or to its Best — in between.
 describe('MoX: a run keeps the length it was begun at', () => {
@@ -559,39 +555,6 @@ describe('MoX: a retracted run with no earlier Best leaves no record behind', ()
   })
 })
 
-describe('a reload is the same session; only a real close starts fresh', () => {
-  beforeEach(() => resetAppState())
-  afterEach(unmount)
-
-  it('a reload keeps the page, a finished round, and an Amnesic preset Amnesic', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    setAmnesic(true)
-    finishBlitz(2)
-    reload()
-    expect(amnesicNow()).toBe(true)
-    expect(ctrl('Reset')).toBeInTheDocument() // Blitz, with the ended round still up
-    expect(statValue('Score')).toBe('2/3')
-    expect(Object.values(useProgress.getState().blitzBest)[0].score).toBe(2)
-  })
-
-  it('a real close ends the guest session — the preset stays Amnesic, a setting like any other', () => {
-    mountApp()
-    pinReadable()
-    const permBefore = localStorage.getItem(statsKey())
-    setAmnesic(true)
-    press('B')
-    finishBlitz(2)
-    closeAndReopen()
-    expect(amnesicNow()).toBe(true) // (design-q1-q2.md v4, 9.6: it stays until somebody turns it off)
-    expect(localStorage.getItem(statsKey())).toBe(permBefore)
-    press('B')
-    expect(ctrl('Begin')).toBeInTheDocument() // the guest's round went with the guest's session
-    expect(useProgress.getState().blitzBest).toEqual({})
-  })
-})
-
 describe('round ids are never reused across screen loads (what the ★ rule rests on)', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)
@@ -636,28 +599,26 @@ describe('round ids are never reused across screen loads (what the ★ rule rest
   })
 })
 
-// ── A PRACTICE ROUND STAYS A PRACTICE ROUND ACROSS A GUEST'S INTERLUDE ─────────────────────────
-// Save Stats is a ⚙ setting, and the settings are shared by every copy of a preset's stats — so a guest
-// can turn it back ON while the owner's ended practice round (played with Save Stats OFF) waits
-// parked. Whether a round counts was settled as it FIRST ended and is parked with it (recordedRef in
-// both screens): the round comes back exactly as it was left, and records nothing — not on its
-// return, and not when an Override puts it back in play and it ends again with the switch on.
-describe('a parked practice round is not recorded when a guest turns Save Stats on', () => {
+// ── A PRACTICE ROUND STAYS A PRACTICE ROUND ─────────────────────────────────────────────────────
+// Whether a round counts was settled as it FIRST ended and is parked with it (recordedRef in both
+// screens): with Save Stats turned on while a practice round (played with it OFF) waits parked, the
+// round comes back exactly as it was left, and records nothing — not on its return, and not when an
+// Override puts it back in play and it ends again with the switch on.
+describe('a parked practice round is not recorded when Save Stats is turned on', () => {
   beforeEach(() => resetAppState())
   afterEach(unmount)
   const setSaveStats = (on) => act(() => useSettings.getState().setSaveStats(on))
 
-  it('Blitz: the practice round comes back, and the permanent Bests are still empty', () => {
+  it('Blitz: the practice round comes back, and the Bests are still empty', () => {
     mountApp()
     pinReadable()
     setSaveStats(false)
     press('B')
     finishBlitz(3) // ended on an internally-tracked 3, in practice mode
     expect(useProgress.getState().blitzBest).toEqual({})
-    setAmnesic(true) // the guest's turn…
-    setSaveStats(true) // …and the guest turns the shared switch on
-    setAmnesic(false)
-    expect(statValue('Score')).toBe('3/4') // the owner's round is back on screen
+    setSaveStats(true)
+    reload()
+    expect(statValue('Score')).toBe('3/4') // the round is back on screen
     expect(useProgress.getState().blitzBest).toEqual({})
     expect(permanent().blitzBest).toEqual({})
     tap(ctrl('Override')) // credits the revealed card → the round is back in play
@@ -667,7 +628,7 @@ describe('a parked practice round is not recorded when a guest turns Save Stats 
     expect(permanent().blitzBest).toEqual({})
   })
 
-  it('MoX: the practice run comes back, and the permanent Bests are still empty', () => {
+  it('MoX: the practice run comes back, and the Bests are still empty', () => {
     mountApp()
     pinReadable()
     act(() => useModePrefs.getState().setAoxN('2'))
@@ -675,9 +636,8 @@ describe('a parked practice round is not recorded when a guest turns Save Stats 
     press('A')
     finishMox(2)
     expect(useProgress.getState().aoxBest).toEqual({})
-    setAmnesic(true)
     setSaveStats(true)
-    setAmnesic(false)
+    reload()
     expect(statValue('Score')).toBe('2/2')
     expect(useProgress.getState().aoxBest).toEqual({})
     expect(permanent().aoxBest).toEqual({})
@@ -688,188 +648,5 @@ describe('a parked practice round is not recorded when a guest turns Save Stats 
     expect(statValue('Score')).toBe('2/2')
     expect(useProgress.getState().aoxBest).toEqual({})
     expect(permanent().aoxBest).toEqual({})
-  })
-})
-
-// ══════════════════════════════════════════════════════════════════════════════════════════════
-// STATS ONLY — the round modes' Bests are the PERMANENT ones. A round played on Stats Only is scored
-// against the same Best records as one played on Off, so the two share one parked slot
-// (store/amnesic's bestsIdOf): there is only ever one finished round per copy of the Bests, which is
-// what keeps a returning round from rebuilding a record somebody else has since beaten.
-describe('Stats Only: a round’s Best is saved for good, and its other numbers are not', () => {
-  beforeEach(() => resetAppState())
-  afterEach(unmount)
-  const BESTS = ['blitzBest', 'suddenBest', 'suddenAmBest', 'aoxBest']
-  // The permanent copy with its Bests set aside — its four Best maps and the records' part of its
-  // envelope (store/progressDoc) — what a Stats Only session may never change.
-  const permanentMinusBests = () => {
-    const envelope = JSON.parse(localStorage.getItem(statsKey()))
-    for (const key of BESTS) delete envelope.state[key]
-    if (envelope.sync) delete envelope.sync.rec
-    return JSON.stringify(envelope)
-  }
-  const blitzBest = () => Object.values(permanent().blitzBest)[0]
-  const bestScoreLine = () =>
-    Array.from(document.querySelectorAll('div')).find(
-      (el) => !isHidden(el) && /^\s*Best Score:/.test(el.firstChild?.nodeValue ?? ''),
-    ).textContent
-  const bestMeanLine = () =>
-    Array.from(document.querySelectorAll('div')).find(
-      (el) => !isHidden(el) && /^\s*Best Mean:/.test(el.firstChild?.nodeValue ?? ''),
-    ).textContent
-  const playClassic = (n) => {
-    press('K')
-    tap(ctrl('New'))
-    for (let i = 0; i < n; i++) {
-      tap(screen.getByRole('button', { name: correctName(readDate()) }))
-      if (i < n - 1) tap(ctrl('New'))
-    }
-  }
-
-  it('Blitz: a new Best is on the device the moment the round ends — and nothing else there moved', () => {
-    mountApp()
-    pinReadable()
-    playClassic(3) // your saved Classic stats: 3/3
-    press('B')
-    finishBlitz(2) // your saved Best: 2
-    tap(ctrl('Reset'))
-    const before = permanentMinusBests()
-
-    setAmnesic('stats')
-    expect(Object.values(useProgress.getState().blitzBest)[0].score).toBe(2) // shown, to be beaten
-    finishBlitz(5)
-    expect(blitzBest().score).toBe(5) // saved, already
-    expect(bestScoreLine()).toContain('★')
-    expect(permanentMinusBests()).toBe(before)
-  })
-
-  it('Blitz: the Best survives a reload and a real close; the casual stats of the session do not', () => {
-    mountApp()
-    pinReadable()
-    playClassic(3)
-    setAmnesic('stats')
-    playClassic(2) // the session's Classic: 2/2
-    press('B')
-    finishBlitz(5)
-
-    reload()
-    expect(amnesicNow()).toBe(true) // still Stats Only
-    expect(statValue('Score')).toBe('5/6') // the finished round, still on screen, still starred
-    expect(bestScoreLine()).toContain('★')
-    press('K')
-    expect(statValue('Score')).toBe('2/2')
-
-    closeAndReopen()
-    expect(amnesicNow()).toBe(true) // still Stats Only: a setting stays
-    expect(blitzBest().score).toBe(5) // kept for good
-    press('K')
-    expect(statValue('Score')).toBe('0/0') // a new session's
-    setAmnesic('off')
-    press('K')
-    expect(statValue('Score')).toBe('3/3') // your own, exactly as they were
-    press('B')
-    expect(ctrl('Begin')).toBeInTheDocument() // the round itself went with the session
-    expect(bestScoreLine()).toContain('5')
-    expect(bestScoreLine()).not.toContain('★')
-  })
-
-  // ★ THE CASE THE SHARED SLOT EXISTS FOR. Parked apart, the Off round below would come back after
-  // the Stats Only round had beaten it and rebuild the record from its own starting point — a saved
-  // Best of 5 put back to 2.
-  it('★ Off → Stats Only → Off: a finished round stays the round on screen, and a later Best is never lowered', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    finishBlitz(2) // an Off round: 2/3, Best 2
-    setAmnesic('stats')
-    expect(statValue('Score')).toBe('2/3') // the SAME round, still on screen — one per copy of the Bests
-    expect(bestScoreLine()).toContain('★')
-    tap(ctrl('Reset'))
-    finishBlitz(5) // a Stats Only round beats it
-    expect(blitzBest().score).toBe(5)
-
-    setAmnesic('off')
-    expect(statValue('Score')).toBe('5/6') // the Stats Only round, still on screen
-    expect(blitzBest().score).toBe(5) // …and nothing rebuilt the record from the older round
-    reload()
-    expect(blitzBest().score).toBe(5)
-    expect(statValue('Score')).toBe('5/6')
-  })
-
-  it('a guest on Full in between: the Stats Only round is hidden, untouched, and back afterwards', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    setAmnesic('stats')
-    finishBlitz(5)
-    const before = localStorage.getItem(statsKey())
-
-    setAmnesic('full')
-    expect(ctrl('Begin')).toBeInTheDocument() // not the guest's to see
-    expect(useProgress.getState().blitzBest).toEqual({}) // nor are the Bests
-    finishBlitz(8) // the guest beats everything
-    expect(localStorage.getItem(statsKey())).toBe(before)
-
-    setAmnesic('stats')
-    expect(statValue('Score')).toBe('5/6') // yours again, exactly as you left it
-    expect(bestScoreLine()).toContain('★')
-    expect(blitzBest().score).toBe(5)
-    expect(localStorage.getItem(statsKey())).toBe(before)
-  })
-
-  it('an Override on the finished round moves its Best — from the saved one before it, never below', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    finishBlitz(3) // saved Best: 3
-    tap(ctrl('Reset'))
-    setAmnesic('stats')
-    finishBlitz(3) // ties it: the record stays with the earlier round
-    expect(blitzBest().score).toBe(3)
-    expect(bestScoreLine()).not.toContain('★')
-    tap(ctrl('Override')) // credits the revealed card: 4, and the round is back in play
-    tap(ctrl('Reveal'))
-    expect(blitzBest().score).toBe(4)
-    expect(bestScoreLine()).toContain('★')
-  })
-
-  it('Save Stats off still means nothing is recorded — Stats Only does not change that', () => {
-    mountApp()
-    pinReadable()
-    press('B')
-    setAmnesic('stats')
-    act(() => useSettings.getState().setSaveStats(false))
-    const before = localStorage.getItem(statsKey())
-    finishBlitz(4)
-    expect(useProgress.getState().blitzBest).toEqual({})
-    expect(localStorage.getItem(statsKey())).toBe(before)
-  })
-
-  it('MoX: Best Mean and Best Median are saved for good, with their ★, and the breakdown still opens', () => {
-    mountApp()
-    pinReadable()
-    act(() => useModePrefs.getState().setAoxN('2'))
-    press('A')
-    const before = permanentMinusBests()
-    setAmnesic('stats')
-    finishMox(2)
-    const record = Object.values(permanent().aoxBest)[0]
-    expect(record.avg).toEqual(expect.any(Number))
-    expect(record.med).toEqual(expect.any(Number))
-    expect(permanentMinusBests()).toBe(before)
-    expect(bestMeanLine()).toContain('★')
-
-    reload()
-    expect(statValue('Score')).toBe('2/2') // the run is still on screen…
-    expect(bestMeanLine()).toContain('★') // …and still the run that set it
-    tap(ctrl('Show mean breakdown'))
-    const breakdown = screen.getByRole('dialog')
-    expect(within(breakdown).getAllByRole('listitem')).toHaveLength(2) // every solve of the run
-
-    closeAndReopen()
-    expect(JSON.stringify(Object.values(permanent().aoxBest)[0])).toBe(JSON.stringify(record))
-    press('A')
-    expect(ctrl('Begin')).toBeInTheDocument()
-    expect(bestMeanLine()).not.toContain('★')
   })
 })

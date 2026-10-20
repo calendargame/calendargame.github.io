@@ -54,7 +54,6 @@ import { useModePrefs } from '../src/store/modePrefs.js'
 import { useProgress, makeProgressDefaults } from '../src/store/progress.js'
 import { progressStateUnmarked } from '../src/store/progressDoc.js'
 import { fileRoundResult } from '../src/store/screenPool.js'
-import { activeDataId } from '../src/store/amnesic.js'
 import { newRoundId } from '../src/engine/roundId.js'
 import { useUserDefaults } from '../src/store/userDefaults.js'
 
@@ -1032,7 +1031,14 @@ describe('deleting a preset', () => {
     const p2 = createPreset()
     switchPreset(p2.id)
     playOnThisPreset()
-    fileRoundResult(activeDataId(), 'blitzBest', 'k', newRoundId(), { score: 5, streak: 5 }, false)
+    fileRoundResult(
+      usePresets.getState().activeId,
+      'blitzBest',
+      'k',
+      newRoundId(),
+      { score: 5, streak: 5 },
+      null,
+    )
     switchPreset(1)
     playOnThisPreset()
     const ofPreset = (id) =>
@@ -1287,11 +1293,12 @@ describe('is a preset factory-fresh', () => {
     expect(isPresetFactory(id, true)).toBe(false)
   })
 
-  // …and the other direction: the session copy is real data too, and deleting takes it.
-  it('an amnesic SESSION copy of the stats is not factory either', () => {
+  // …and an amnesic preset's play is in its saved progress like any other's (one pool, store/amnesic):
+  // until the close forgets it, it is data, and deleting takes it.
+  it('an amnesic preset that has been played on is not factory either', () => {
     const id = other('Guest')
     setPresetAmnesic(id, 'full')
-    sessionStorage.setItem(
+    localStorage.setItem(
       presetKey(PRESET_STORE_KEYS.progress, id),
       envelope({ stats: { classic: PLAYED } }, 4),
     )
@@ -1303,15 +1310,10 @@ describe('is a preset factory-fresh', () => {
   // key (store/sessionRound).
   it('a parked ended round is not factory', () => {
     const id = other('Raced')
-    writeSessionRound(`${id}:saved`, 'blitz', { score: 12 })
+    writeSessionRound(id, 'blitz', { score: 12 })
     expect(isPresetFactory(id, true)).toBe(false)
     // …and the prefix scan is per preset: a neighbour's parked round says nothing about this one.
     expect(isPresetFactory(other('Clean'), true)).toBe(true)
-    // A round parked on the preset's GUEST (Amnesic session) copy counts as well (round 23 keys
-    // parked rounds by stats copy — the scan covers both of a preset's copies).
-    const guest = other('Guest')
-    writeSessionRound(`${guest}:session`, 'aox', { score: 3 })
-    expect(isPresetFactory(guest, true)).toBe(false)
   })
 
   // ★ A SAVED COPY IS JUDGED IN TODAY'S SHAPE — after the store's OWN migration, the one opening
