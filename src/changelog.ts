@@ -102,6 +102,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-20',
     items: [
+      'In Flash, the speed slider and the countdown are now one, as in Blitz. Press Begin and the slider becomes the countdown of the flash in the same place, with the time left where the slider’s value was. Once the flash is over, the slider is back, so you can change the speed straight away. The Flash page is a little shorter for it.',
       "In Blitz, the time slider and the countdown are now one. Press Begin and the slider becomes the round's countdown in the same place, with the time left where the slider's value was; Reset brings the slider back. The Blitz page is a little shorter for it.",
       "In Blitz, a small line under each best now gives that round's other number: its streak under Best Score, and its score under Best Streak — so even a narrow phone can tell whether one round set both. A best from before this update shows a dash there until you beat it.",
       'With the Julian Calendar setting on, years now run to 11582. Years 10001 to 11582 follow the modern calendar and repeat its patterns for years 1 to 1582. If your range was the standard 1–10000, it is now 1–11582.',

@@ -63,14 +63,22 @@ function dateDisplayText() {
   return el ? el.textContent.trim() : null
 }
 
-// The Flash countdown NUMBER (the reveal-time label sitting directly above the timer bar),
-// visible copy only — it's the element immediately before the visible `.bar`. Used to prove the
-// number freezes (doesn't drain to 0) when the flash is frozen.
+// The Flash countdown NUMBER — the time left, in the slot the slider shares with its countdown
+// (components/TimeSlot: the timer where the slider's value box stands; idle, it holds the speed the
+// next flash starts from, out of sight). Visible screen only. Used to prove the number freezes
+// (doesn't drain to 0) when the flash is frozen.
 function flashCountdownText() {
-  const bar = Array.from(document.querySelectorAll('.bar')).find((b) => !isHidden(b))
-  const num = bar?.previousElementSibling
-  return num ? num.textContent.trim() : null
+  const timer = Array.from(document.querySelectorAll('[role="timer"]')).find((t) => !isHidden(t))
+  return timer ? timer.lastElementChild.textContent.trim() : null
 }
+// The Flash speed slider (the visible screen's).
+const speedSlider = () =>
+  screen
+    .getAllByRole('slider', { hidden: true })
+    .find((s) => !isHidden(s) && s.getAttribute('aria-label') === 'Flash speed')
+// …and the countdown's bar: the fill drawn over the slider's track.
+const flashBar = () =>
+  Array.from(document.querySelectorAll('.range-clock')).find((c) => !isHidden(c)).firstElementChild
 
 const correctName = ({ y, m, d }) => DAY[wday(y, m, d)]
 const wrongName = ({ y, m, d }) => DAY[(wday(y, m, d) + 1) % 7]
@@ -303,9 +311,10 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
 
   // Bug #4 (ROOT): opening Show Codes during the "show" phase CANCELS the pending hide-timer, so
   // advancing past the flash duration can never flip the phase to "hide" — the main date stays on
-  // the real date (never "…") and the countdown number stays frozen (never drains to 0). This is
-  // the narrow edge a visual-only freeze would miss (a timer still pending under the codes panel).
-  it('Show Codes during "show" cancels the hide-timer at the root: date never flips to "…", countdown frozen', () => {
+  // the real date (never "…"). This is the narrow edge a visual-only stop would miss (a timer still
+  // pending under the codes panel). The flash is over: its countdown is back at rest, and the slot
+  // is the slider again (FlashMode's settleFlash — the speed can be changed at once).
+  it('Show Codes during "show" cancels the hide-timer at the root: date never flips to "…", the slider is back', () => {
     mountApp()
     switchToFlash()
     act(() => {
@@ -316,21 +325,20 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
     act(() => {
       fireEvent.click(ctrl('Show Codes'))
     })
-    const frozenCountdown = flashCountdownText()
     // Advance WELL past the 2000ms reveal window. A still-pending hide-timer would fire here:
     // flip the phase to "hide", set the countdown to 0, and glitch the main date to "…".
     act(() => {
       vi.advanceTimersByTime(5000)
     })
     expect(dateDisplayText()).toBe(shownDate) // STILL the same real date — hide-timer was cancelled
-    expect(flashCountdownText()).toBe(frozenCountdown) // countdown number frozen, not drained to 0
+    expect(flashCountdownText()).toBe('2.0s') // the countdown at rest, not drained to 0
+    expect(speedSlider().disabled).toBe(false) // the slot is the slider again
     expect(statValue('Score')).toBe('0/1') // codes penalty counted the question as a miss
   })
 
-  // Reveal during a live flash now FREEZES the countdown like Show Codes (onReveal → freezeFlash):
-  // the hide-timer is cancelled, so the date never flips to "…" and the countdown never drains to 0.
-  // (Freeze-in-place vs reset-to-full is a CSS/timing visual — browser-verified, not jsdom-testable.)
-  it('Reveal during "show" cancels the hide-timer like Show Codes: date never "…", countdown not drained', () => {
+  // Reveal during a live flash stops it like Show Codes (onReveal → settleFlash): the hide-timer is
+  // cancelled, so the date never flips to "…", and the slot is the slider again.
+  it('Reveal during "show" cancels the hide-timer like Show Codes: date never "…", the slider is back', () => {
     mountApp()
     switchToFlash()
     act(() => {
@@ -341,12 +349,12 @@ describe('Flash — bug fixes (Reveal availability + Show Codes freeze)', () => 
     act(() => {
       fireEvent.click(ctrl('Reveal'))
     })
-    const frozenCountdown = flashCountdownText()
     act(() => {
       vi.advanceTimersByTime(5000)
     })
     expect(dateDisplayText()).toBe(shownDate) // still the real date, never "…"
-    expect(flashCountdownText()).toBe(frozenCountdown) // countdown held, never drained to 0
+    expect(flashCountdownText()).toBe('2.0s') // the countdown at rest, never drained to 0
+    expect(speedSlider().disabled).toBe(false)
     expect(statValue('Score')).toBe('0/1') // Reveal counted the miss
   })
 })
@@ -651,8 +659,7 @@ describe('Flash — Override ⇄ Undo', () => {
       },
     ],
   ]
-  const bar = () =>
-    Array.from(document.querySelectorAll('.bar')).find((b) => !isHidden(b)).firstElementChild
+  const bar = flashBar
   it.each(FREEZES)('%s, then Reset Stats: the countdown is back at rest', (_, freeze) => {
     mountApp()
     switchToFlash()
@@ -660,7 +667,7 @@ describe('Flash — Override ⇄ Undo', () => {
     press('Begin')
     wait(700)
     freeze()
-    expect(flashCountdownText()).not.toBe(atRest) // frozen part-way down
+    expect(flashCountdownText()).toBe(atRest) // the flash stopped: its countdown at rest
     act(() => fireEvent.click(ctrl('Reset Stats')))
     act(() =>
       fireEvent.click(
@@ -690,7 +697,7 @@ describe('Flash — Override ⇄ Undo', () => {
       press('Begin')
       wait(700)
       freeze()
-      expect(flashCountdownText()).not.toBe(atRest)
+      expect(flashCountdownText()).toBe(atRest) // the flash stopped: its countdown at rest
       act(() => fireEvent.click(statCell('Last'))) // show them again — which has to reset first
       act(() =>
         fireEvent.click(
@@ -810,5 +817,48 @@ describe('Flash — a regenerated question takes its flash with it; a kept one k
     expect(dateDisplayText()).toBe(shown(date))
     openDoor()
     expect(dateDisplayText()).toBe(shown(date)) // not blanked to "—" under its answer
+  })
+})
+
+// ★ ONE SLOT (Round 26, the owner's go — components/TimeSlot, shared with Blitz): the Flash speed's
+// slider and the countdown it sets share one row. Idle: the slider, live, and the time left out of
+// sight. From Begin: the slider disabled and hidden from a screen reader, and the time left read as a
+// timer. Once the flash stops — here, answered right — the slider is back.
+describe('Flash — the speed slider and the countdown are one slot', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs()
+    useSettings.getState().setRandomFormat(false)
+    useSettings.getState().setDateFormat('numeric-ymd')
+    useSettings.getState().setMinY(1583)
+    useSettings.getState().setMaxY(10000)
+    useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+  const timer = () =>
+    Array.from(document.querySelectorAll('[role="timer"]')).find((t) => !isHidden(t))
+  const press = (name) => act(() => fireEvent.click(ctrl(name)))
+
+  it('idle → Begin → answered right: slider, countdown, slider', () => {
+    mountApp()
+    switchToFlash()
+    expect(speedSlider().disabled).toBe(false)
+    expect(speedSlider().hasAttribute('aria-hidden')).toBe(false)
+    expect(timer().className).toContain('invisible')
+    press('Begin')
+    expect(speedSlider().disabled).toBe(true)
+    expect(speedSlider().getAttribute('aria-hidden')).toBe('true')
+    expect(timer().className).not.toContain('invisible')
+    expect(timer().textContent).toBe('Time left 2.0s')
+    act(() => fireEvent.click(dayBtn(correctName(readDate()))))
+    expect(speedSlider().disabled).toBe(false)
+    expect(timer().className).toContain('invisible')
   })
 })

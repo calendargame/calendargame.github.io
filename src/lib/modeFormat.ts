@@ -27,11 +27,14 @@ export const fmtBlitzT = (s: number) => {
   return m + 'm ' + r + 's'
 }
 export const fmtFlashT = (ms: number) => (ms / 1000).toFixed(1) + 's'
-// The ONE readout-width strut string shared by six of the SEVEN SliderValueEditor sites (3
-// mode-screen + 3 timer rows in the Save Defaults popup; the seventh — the defaults manager's
-// AoX run-length row — is a plain count, not a time, and carries its own "1000" strut): the
-// widest value ANY timer readout can display, derivation at the first site (FlashMode). One
-// const = all six of those columns identical, constant at runtime.
+// The ONE readout-width strut string shared by every timer's SliderValueEditor: components/TimeSlot
+// (the Flash and Blitz screens' one slot) and the 3 timer rows in the Save Defaults popup. (The
+// defaults manager's AoX run-length row is a plain count, not a time, and carries its own "1000"
+// strut.) The widest value ANY timer readout can display, as measured in the device's own font — a
+// hand-measured width was Segoe UI's, and iOS's SF Pro renders wider: only the Blitz round timer
+// (10–300s, step 5) ever formats "Xm YZs", and any two-digit remainder out-measures the 300 cap's
+// "5m 0s" (one more digit, tabular-nums); fmtFlashT tops out at "5.0s", the per-question timer at
+// "29.5s". One const = all those columns identical, constant at runtime.
 export const SLIDER_READOUT_WIDEST = fmtBlitzT(175) /* "2m 55s" */
 // Time display follows WCA convention (regulation 9f1): individual single times
 // (Last) are truncated to hundredths — the third decimal is dropped, never rounded.

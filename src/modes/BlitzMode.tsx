@@ -9,20 +9,13 @@ import { useSettingsCloseEffect } from '../components/useSettingsCloseEffect.js'
 import { RESET_BTN_CLASS, DATE_CARD_CLASS } from '../components/controlClasses.js'
 import { dateLineShapes } from '../lib/dateLineFit.js'
 import DateLine from '../components/DateLine.jsx'
-import {
-  fmtTime,
-  truncTime,
-  fmtBlitzT,
-  fmtAccuracyPct,
-  SLIDER_READOUT_WIDEST,
-  EM_DASH,
-} from '../lib/modeFormat.js'
+import { fmtTime, truncTime, fmtBlitzT, fmtAccuracyPct, EM_DASH } from '../lib/modeFormat.js'
 import WeekdayAnswer from '../components/WeekdayAnswer.jsx'
 import StatPanel from '../components/StatPanel.jsx'
 import RunBreakdown from '../components/RunBreakdown.jsx'
 import CardNumber from '../components/CardNumber.jsx'
 import OverrideButton from '../components/OverrideButton.jsx'
-import SliderValueEditor from '../components/SliderValueEditor.jsx'
+import TimeSlot from '../components/TimeSlot.jsx'
 import BlitzBestRow from '../components/BlitzBestRow.jsx'
 import { BestColumn, BestLine, BestSubLine } from '../components/BestReadout.jsx'
 import { NewBestStar } from '../components/primitives.jsx'
@@ -1093,77 +1086,24 @@ function BlitzMode({
           {perQ ? 'Per Question' : 'Per Round'}
         </button>
       </div>
-      {/* ★ ONE SLOT: THE TIME LIMIT'S SLIDER, AND THE COUNTDOWN IT SETS (Q12, the owner's idea — a try
-          for his phone). The two were never useful at the same moment: idle, the countdown under the
-          slider only repeated the slider's own number; from Begin until Reset the slider was a dimmed
-          control nobody could move. So they share one row:
-            • IDLE — the slider and its value box (tap the value to type), as before.
-            • FROM BEGIN UNTIL RESET (`roundUp`) — the same track is the countdown. The slider fades
-              out, thumb and fill with it, and the countdown's track fades in exactly over it: the same
-              size, the same unfilled colour (the range rules in index.css), full at Begin and draining
-              from there. The value box's place shows the time left, in the same cell and the same type,
-              so the number never moves. A round that has ENDED keeps its countdown on screen, where it
-              stopped (or still draining, after a tap ended it — see EndKind), until Reset brings the
-              slider back. Nothing changes size: the input stays mounted under the countdown, so the
-              track keeps its box, and the value cell keeps the widest-value strut.
-            • The cross-fade is decorative and runs on --motion-scale (index.css's .range-slot /
-              .range-clock): with Reduce Motion it is instant. The drain itself is the countdown's
-              functional motion, transform:scaleX on a GPU layer, exactly the .bar countdown's.
-            • KEYBOARD AND SCREEN READERS: while it is a countdown the slider is disabled (not
-              operable, not focusable) and hidden from assistive tech, the value box with it; what is
-              there instead is a timer, read as "Time left" and its value. */}
-      <div className="mt-3 flex items-center gap-2">
-        <span className="relative flex-1 min-w-0">
-          <input
-            type="range"
-            min={slider.min}
-            max={slider.max}
-            step={slider.step}
-            value={slider.value}
-            onChange={(e) => slider.set(+e.target.value)}
-            disabled={roundUp}
-            aria-hidden={roundUp || undefined}
-            aria-label={slider.label}
-            style={{ '--rng-fill': slider.fill } as React.CSSProperties}
-            className={`range-slot block w-full ${roundUp ? 'opacity-0' : 'opacity-100'}`}
-          />
-          <span
-            aria-hidden="true"
-            className={`range-clock ${roundUp ? 'opacity-100' : 'opacity-0'}`}
-          >
-            <span ref={clockBarRef} />
-          </span>
-        </span>
-        {/* The value cell: the value box and the time left stacked in ONE grid area, so they share a
-            box — the value box's widest-value strut sets it, and both are one text-xs line in it, on
-            one baseline. (The flex wrapper keeps the value box's inline-block from sitting on a line
-            of the row's own, larger, text.) */}
-        <span className="grid shrink-0">
-          <span className={`col-start-1 row-start-1 flex ${roundUp ? 'invisible' : 'visible'}`}>
-            <SliderValueEditor
-              key={perQ ? 'question' : 'round'}
-              value={slider.value}
-              min={slider.min}
-              max={slider.max}
-              snap={slider.step}
-              disabled={roundUp}
-              inputMode={slider.inputMode}
-              label={slider.label}
-              format={slider.format}
-              toText={String}
-              widest={SLIDER_READOUT_WIDEST}
-              onCommit={slider.set}
-            />
-          </span>
-          <span
-            role="timer"
-            className={`col-start-1 row-start-1 whitespace-nowrap tabular-nums text-xs text-right ${roundUp ? 'visible' : 'invisible'}`}
-          >
-            <span className="sr-only">Time left </span>
-            <span ref={clockTimeRef} />
-          </span>
-        </span>
-      </div>
+      {/* ★ ONE SLOT: the time limit's slider, and the countdown it sets (components/TimeSlot, shared
+          with Flash). From Begin until Reset (`roundUp`) the slider is the countdown; a round that
+          has ENDED keeps its countdown on screen, where it stopped (or still draining, after a tap
+          ended it — see EndKind), until Reset brings the slider back. */}
+      <TimeSlot
+        up={roundUp}
+        min={slider.min}
+        max={slider.max}
+        step={slider.step}
+        value={slider.value}
+        onChange={slider.set}
+        label={slider.label}
+        fill={slider.fill}
+        inputMode={slider.inputMode}
+        format={slider.format}
+        barRef={clockBarRef}
+        timeRef={clockTimeRef}
+      />
       <div className="mt-4 rounded-2xl panel p-4">
         <div className={DATE_CARD_CLASS}>
           <CardNumber state={state} show={state.backDepth > 0} />

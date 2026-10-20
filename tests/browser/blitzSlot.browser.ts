@@ -44,7 +44,7 @@ function parts(page: Page) {
     row,
     slider,
     clock: row.locator('.range-clock'),
-    valueBox: row.locator('button[aria-label^="Edit Blitz"]'),
+    valueBox: row.locator('button[aria-label^="Edit "]'),
     timer: row.locator('[role="timer"]'),
     card,
     // The date on the card, above the weekday buttons: the last child of the card's first block
@@ -230,4 +230,53 @@ for (const viewport of [
       over - extra,
       `the Blitz page scrolls with Show Codes open (the date, "${await date.textContent()}", takes ${await linesOf(date)} line(s))`,
     ).toBeLessThanOrEqual(0)
+  })
+
+// ★ FLASH HAS THE SAME SLOT (Round 26, the owner's go — components/TimeSlot, one component for both):
+// idle, the Flash speed's slider and its value; from Begin, the same track is the flash's countdown
+// and the time left stands where the value was; once the flash stops (here a Reveal) the slider is
+// back at once — so the speed can be changed straight after a Reveal (FlashMode's settleFlash).
+// Nothing moves as the slot changes face, and the number keeps its place.
+test('Flash: idle → Begin → Reveal, and nothing in the slot moves', async ({ page }) => {
+  await openApp(page, { seed: { modePrefs: { flashMs: 3000 } } })
+  await switchMode(page, 'flash')
+  const idle = await faceOf(page)
+  expectIdle(idle, '3.0s')
+  expectSameBox(idle.clockBox, idle.track, 'idle: the countdown waits exactly over the track')
+  await page.getByRole('button', { name: 'Begin' }).click()
+  const running = await faceOf(page)
+  expectClocking(running)
+  expectNothingMoved(idle, running, 'running', true)
+  expect(running.timerText).toMatch(/^\d\.\ds$/)
+  await page.locator('button[data-key="R"]:visible').click() // Reveal stops the flash
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible()
+  const stopped = await faceOf(page)
+  expectIdle(stopped, '3.0s') // the slider is back, at the speed
+  expectNothingMoved(idle, stopped, 'after the Reveal', false)
+})
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 360, height: 800 },
+])
+  test(`Flash: a flash with Show Codes open fits the window at ${viewport.width}×${viewport.height}`, async ({
+    page,
+  }) => {
+    await openApp(page, { viewport })
+    await switchMode(page, 'flash')
+    await page.getByRole('button', { name: 'Begin' }).click()
+    await page.locator('button[data-key="C"]:visible').click()
+    await expect(page.locator('button[data-key="C"]:visible')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await settled(page)
+    const over = await page
+      .locator('#appScroll')
+      .evaluate((el) => el.scrollHeight - el.clientHeight)
+    const date = parts(page).date
+    const extra =
+      ((await linesOf(date)) - 1) *
+      (await date.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight)))
+    expect(over - extra, 'the Flash page scrolls with Show Codes open').toBeLessThanOrEqual(0)
   })

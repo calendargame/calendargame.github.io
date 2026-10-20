@@ -1727,7 +1727,7 @@ export default function GuidePage({
               ),
               flash: (
                 <>
-                  <b>Flash</b> — freezes the countdown so the date stays on screen while you study.
+                  <b>Flash</b> — stops the flash, so the date stays on screen while you study.
                 </>
               ),
               aox: (
@@ -2533,8 +2533,8 @@ export default function GuidePage({
           has TEN consumers — index.css's .expander rule, this file's own inline transitionDuration
           + scroll glide (and, on that same read, a closing header's shadow hand-back and a header
           tapped above the line being brought down to it), the three
-          `transition:background-color` surface fades, .boot-d's bootPulse, and Blitz's slider and
-          countdown cross-fading in one slot (.range-slot, .range-clock), a not-in-effect choice's
+          `transition:background-color` surface fades, .boot-d's bootPulse, and the Flash and Blitz time sliders and their
+          countdowns cross-fading in one slot (.range-slot, .range-clock), a not-in-effect choice's
           fill fade (.pill-dormant-on), and the ring that says a press did not count
           (.press-void-fade) — so those are the only things the paragraph may claim, and index.css's own
           words for the rest are "Functional motion — the .bar countdown and the color flashes — is
@@ -2782,9 +2782,9 @@ export default function GuidePage({
           If your device is set to reduce motion, nothing decorative moves. The panels that slide
           open — the sections of this guide, and Show Codes — open instantly instead, this guide
           stops gliding when it scrolls itself, the short colour fade a button does under your
-          finger arrives at once, Blitz&apos;s time slider turns into its countdown (and back) at
-          once, the ring that marks a press that did not count goes at once, and the three dots on
-          the updating screen stop pulsing. Countdown bars and the right/wrong colour flashes are
+          finger arrives at once, the time sliders turn into their countdowns (and back) at once,
+          the ring that marks a press that did not count goes at once, and the three dots on the
+          updating screen stop pulsing. Countdown bars and the right/wrong colour flashes are
           unchanged, because those are telling you something rather than decorating.
         </p>
         <Subhead>Where it falls short</Subhead>
@@ -4345,14 +4345,23 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
           type) then hidden.
         </li>
         <li>
+          <b>The slider is the countdown.</b> When you press Begin, the speed slider becomes the
+          flash&apos;s countdown in the same place: its handle fades away and the bar, now full,
+          runs down over the flash, and where the slider&apos;s value was, the time left counts
+          down. It stays a countdown while the date is hidden and waiting for your answer. The
+          moment the flash is over — answered right, revealed, its codes shown, or reset — the
+          slider is back, so you can change the speed straight away. It works as Blitz&apos;s time
+          slider does.
+        </li>
+        <li>
           Reset Stats clears your stats and question history. Mid-question, Reset Stats always
           generates a new date and returns to the dash state.
         </li>
       </UL>
       <Subhead>While the date is showing</Subhead>
       <p>
-        You can press Reveal or Show Codes — both freeze the countdown (the timer bar and the number
-        stop together) and keep the date on screen. Reveal shows the answer and counts a miss; Show
+        You can press Reveal or Show Codes — both stop the flash and keep the date on screen, and
+        the countdown gives way to the speed slider. Reveal shows the answer and counts a miss; Show
         Codes does the same and also opens the calculation breakdown.
       </p>
       <p>

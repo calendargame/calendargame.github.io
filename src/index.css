@@ -1237,7 +1237,8 @@ html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
      • .surface-button  ⎫
      • .surface-toggle  ⎬ the three .2s background fades, ~line 365 and ~line 410
      • .btn-solid       ⎭
-     • .range-slot  ⎫ Blitz's time-limit slider and its countdown cross-fading in one slot (Q12),
+     • .range-slot  ⎫ a time limit's slider and its countdown cross-fading in one slot (Flash's and
+                    ⎪ Blitz's — components/TimeSlot),
      • .range-clock ⎭ beside the range rules at the foot of this file
      • .boot-d          — the Updating screen's three-dot pulse, ~line 590 (duration + both delays)
      • .pill-dormant-on — a not-in-effect choice's .2s fill fade, with the not-in-effect rules
