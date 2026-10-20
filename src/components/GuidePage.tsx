@@ -1920,8 +1920,11 @@ export default function GuidePage({
             are using, by drawing it: a character your device draws as nothing counts as nothing,
             and one it has no picture for, which it shows as an empty box, counts as something to
             see — so the same name can be kept on one device and shown as &quot;Preset 2&quot; on
-            another. Only what is shown changes; the name as it was saved is not touched until you
-            next change the list. (While you type, the note under the box treats such a name as the
+            another. Some browsers&apos; privacy settings change what the app reads back from a
+            drawing; where it does not read back what it drew, nothing is judged by drawing, and
+            only a name of spaces and characters that never show anything counts as blank. Only what
+            is shown changes; the name as it was saved is not touched until you next change the
+            list. (While you type, the note under the box treats such a name as the
             &quot;Preset&quot; name it is about to become.) If the device has no room left to save a
             name, it is not changed: the box goes back to the name it had, and a note under it says
             &quot;This device has no room to save that name, so it was not changed.&quot; That is so

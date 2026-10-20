@@ -18,8 +18,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 const BLANK = /^[\s\u200B\u2800\u3164\uFFFC\uFFF9-\uFFFB]*$/u
 const OBJECT = '\uFFFC'
 
-// Every text the fake canvas was asked to draw, in order.
+// Every text the fake canvas was asked to draw, in order — and those that were NAMES, leaving out the
+// calibration (lib/presetNameInk's canvasIsTrue: a known letter and a space, drawn once per font
+// before the canvas is believed).
 let drawn
+const CALIBRATION = ['H', ' ']
+const named = () => drawn.filter((text) => !CALIBRATION.includes(text))
+// How the fake canvas reads back: 'true' (what was drawn), 'noise' (every pixel faintly inked, as a
+// fingerprinting defence may make it), or 'blank' (nothing, whatever was drawn).
+let readback
 // What document.fonts.check answers.
 let fontReady
 
@@ -43,7 +50,8 @@ function fakeContext(canvas) {
     },
     getImageData: (x, y, w, h) => {
       const data = new Uint8ClampedArray(w * h * 4)
-      if (ink) data[data.length - 1] = 1 // one faint pixel is enough
+      if (readback === 'noise') data.fill(1)
+      else if (readback === 'true' && ink) data[data.length - 1] = 1 // one faint pixel is enough
       return { data }
     },
   }
@@ -65,6 +73,7 @@ async function load({ canvas = true } = {}) {
 
 beforeEach(() => {
   drawn = []
+  readback = 'true'
   fontReady = true
   Object.defineProperty(document, 'fonts', {
     configurable: true,
@@ -114,26 +123,26 @@ describe('a name that draws nothing is an empty name', () => {
     // A short name is one drawing of the whole of it, invisible characters and all: what a
     // character draws can depend on what stands next to it.
     normalizePresetName('\u200B \uFFFC\uFFFC\u2800\uFFFC', 3)
-    expect(drawn).toEqual(['\u200B \uFFFC\uFFFC\u2800\uFFFC'])
+    expect(named()).toEqual(['\u200B \uFFFC\uFFFC\u2800\uFFFC'])
     // A book of one ordinary phrase, many times over: its first piece answers.
     drawn = []
     const book = 'practice '.repeat(100_000).trim()
     expect(normalizePresetName(book, 3)).toBe(book)
-    expect(drawn).toEqual([book.slice(0, 64)])
+    expect(named()).toEqual([book.slice(0, 64)])
     // A book of one blank character: every piece is the same, so it is drawn once.
     drawn = []
     expect(normalizePresetName(OBJECT.repeat(6_400), 3)).toBe('Preset 3')
-    expect(drawn).toEqual([OBJECT.repeat(64)])
+    expect(named()).toEqual([OBJECT.repeat(64)])
     // A piece with nothing in it that Unicode calls visible is not drawn at all; the ink at the
     // end of the name is still found.
     drawn = []
     const late = `${OBJECT}${' '.repeat(200)}z`
     expect(normalizePresetName(late, 3)).toBe(late)
-    expect(drawn).toEqual([`${OBJECT}${' '.repeat(63)}`, `${' '.repeat(9)}z`])
+    expect(named()).toEqual([`${OBJECT}${' '.repeat(63)}`, `${' '.repeat(9)}z`])
     // A piece never ends between an emoji's two units.
     drawn = []
     normalizePresetName(`${OBJECT.repeat(63)}\u{1F600}`, 3)
-    expect(drawn).toEqual([`${OBJECT.repeat(63)}\u{1F600}`])
+    expect(named()).toEqual([`${OBJECT.repeat(63)}\u{1F600}`])
   })
 
   it('a book of many different blank pieces is given up on — the name is kept, as where nothing can be drawn', async () => {
@@ -143,17 +152,43 @@ describe('a name that draws nothing is an empty name', () => {
     )
     const name = pieces.join('')
     expect(normalizePresetName(name, 3)).toBe(name)
-    expect(drawn).toHaveLength(32)
+    expect(named()).toHaveLength(32)
   })
 
   it('a font that is not ready to draw gives no answer — the name is kept — and the next question asks again', async () => {
     const { normalizePresetName } = await load()
     fontReady = false
     expect(normalizePresetName(OBJECT, 3)).toBe(OBJECT)
-    expect(drawn).toEqual([])
+    expect(named()).toEqual([])
     fontReady = true
     expect(normalizePresetName(OBJECT, 3)).toBe('Preset 3')
-    expect(drawn).toEqual([OBJECT])
+    expect(named()).toEqual([OBJECT])
+  })
+
+  // ★ A CANVAS THAT DOES NOT READ BACK WHAT WAS DRAWN (the Round 26 review): fingerprinting defences
+  // change what a canvas reads back. Before it is believed, a letter must read as ink and a space as
+  // none; where either reads wrong, no name is judged by it, and the Unicode rule alone answers.
+  it('a canvas that reads noise everywhere is not believed: a name it would never call blank is judged by the Unicode rule', async () => {
+    readback = 'noise'
+    const { normalizePresetName } = await load()
+    expect(normalizePresetName(OBJECT, 3)).toBe(OBJECT)
+    expect(normalizePresetName('Mornings', 3)).toBe('Mornings')
+    expect(normalizePresetName('⠀ㅤ', 3)).toBe('Preset 3') // (the Unicode rule's own blank)
+    expect(named()).toEqual([]) // no name was drawn
+  })
+  it('a canvas that reads back nothing is not believed either: every custom name is kept', async () => {
+    readback = 'blank'
+    const { normalizePresetName, renamePreset, activePreset } = await load()
+    expect(normalizePresetName('Mornings', 3)).toBe('Mornings')
+    expect(renamePreset(1, 'Weekend')).toBe('renamed')
+    expect(activePreset().name).toBe('Weekend')
+    expect(named()).toEqual([])
+  })
+  it('a canvas that tells the truth is calibrated once, then believed for every name in that font', async () => {
+    const { normalizePresetName } = await load()
+    expect(normalizePresetName(OBJECT, 3)).toBe('Preset 3')
+    expect(normalizePresetName('Mornings', 3)).toBe('Mornings')
+    expect(drawn).toEqual([...CALIBRATION, OBJECT, 'Mornings'])
   })
 
   it('reading a stored name the device draws as nothing writes nothing', async () => {

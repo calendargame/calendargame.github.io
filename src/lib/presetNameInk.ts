@@ -46,6 +46,17 @@
 //     against the wrong letters.
 //   • FOR A BOOK OF MANY DIFFERENT BLANK PIECES — past MOST_PIECES drawings with no ink — the
 //     question is given up rather than allowed to cost a frame its time.
+//   • ★ WHERE THE CANVAS DOES NOT TELL THE TRUTH (Round 26 review). Reading pixels back from a canvas
+//     is a way to fingerprint a device, and browsers that fight that change what is read: Safari's
+//     fingerprinting protection adds noise to it — a blank drawing could then never read blank, and
+//     no name would ever be judged empty — and Firefox's and Tor's resistance can hand back a blank
+//     picture, or one of their own, for whatever was drawn — and every custom name would be judged
+//     empty and lost. So before the canvas is believed for a font, it is CALIBRATED (canvasIsTrue):
+//     a letter every font draws ("H") must read as ink, and a space must read as none. If either
+//     reads wrong, the canvas is not asked about any name in that font: there is no answer, and the
+//     Unicode rule alone decides — the same safe direction as no canvas at all. A font's verdict is
+//     kept for the life of the page (it is a fact about the browser, not about a name); "not ready
+//     yet" is not a verdict, and is asked again.
 //
 // ⚠ NOTHING IS WRITTEN, AND NOTHING IS REMEMBERED BUT THE LAST QUESTION. The same name is asked
 // about on every render of the rename box's note, so the last answer is kept beside its question
@@ -127,13 +138,30 @@ function* piecesOf(name: string): Generator<string> {
   }
 }
 
+// THE CALIBRATION (the header's ★ "where the canvas does not tell the truth"): a letter every font
+// draws, and a character that draws nothing in any.
+const KNOWN_INK = 'H'
+const KNOWN_BLANK = ' '
+const verdicts = new Map<string, boolean>()
+/** Does the canvas read back what was drawn, in `font`? null when that cannot be known now. */
+function canvasIsTrue(ctx: CanvasRenderingContext2D, font: string): boolean | null {
+  const known = verdicts.get(font)
+  if (known !== undefined) return known
+  const ink = pieceHasInk(ctx, font, KNOWN_INK)
+  const blank = pieceHasInk(ctx, font, KNOWN_BLANK)
+  if (ink === null || blank === null) return null
+  const verdict = ink && !blank
+  verdicts.set(font, verdict)
+  return verdict
+}
+
 let last: { name: string; inked: boolean } | null = null
 
 /**
  * Does `name` put any ink on the screen, drawn in the app's font on this device? true or false —
- * or null when that cannot be known here and now (no canvas, the font not ready to draw, or too
- * many blank pieces to draw). `visible` is the Unicode rule (store/presets): a piece it finds
- * nothing visible in is not drawn.
+ * or null when that cannot be known here and now (no canvas, a canvas that does not read back what
+ * was drawn, the font not ready to draw, or too many blank pieces to draw). `visible` is the Unicode
+ * rule (store/presets): a piece it finds nothing visible in is not drawn.
  */
 export function nameHasInk(name: string, visible: (text: string) => boolean): boolean | null {
   if (last?.name === name) return last.inked
@@ -143,6 +171,9 @@ export function nameHasInk(name: string, visible: (text: string) => boolean): bo
   const blank = new Set<string>()
   for (const piece of piecesOf(name)) {
     if (blank.has(piece) || !visible(piece)) continue
+    // Calibrated before the first piece is drawn — and only then, so a name the Unicode rule
+    // answers alone costs no drawing at all.
+    if (blank.size === 0 && canvasIsTrue(ctx, font) !== true) return null
     if (blank.size === MOST_PIECES) return null
     const inked = pieceHasInk(ctx, font, piece)
     if (inked !== false) return remember(name, inked)
