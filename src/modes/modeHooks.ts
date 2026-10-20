@@ -59,6 +59,14 @@ export function useButtonFlash() {
       flashClearRef.current = null
     }, FLASH_MS)
   }
+  // A screen that goes away mid-flash takes its clear-the-flash timer with it, so nothing is set on a
+  // screen that is no longer there.
+  useEffect(
+    () => () => {
+      if (flashClearRef.current) clearTimeout(flashClearRef.current)
+    },
+    [],
+  )
   return { flash, setFlash, setFlashWithTimeout }
 }
 // The engine-state half of a mode's freshness check (stats all zero, and engineUntouched below) —
