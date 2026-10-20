@@ -377,6 +377,10 @@ function BlitzMode({
     const length = perQ ? qSec : blitzSec
     const sx = length > 0 ? Math.max(0, Math.min(1, r / length)) : 1
     if (clockBarRef.current) clockBarRef.current.style.transform = 'scaleX(' + sx + ')'
+    drawReadout(r)
+  }
+  // The time left, in words — the readout half of drawClock.
+  const drawReadout = (r: number) => {
     if (clockTimeRef.current)
       clockTimeRef.current.textContent = perQ ? Math.ceil(r) + 's' : fmtBlitzT(r)
   }
@@ -715,12 +719,17 @@ function BlitzMode({
     endedAtRef.current = null
     setShowTimerDate(false)
     stopRound()
-    // ★ A RESET ROUND SHOWS A RESET COUNTDOWN (Q11): the full configured length, on the readout AND the
-    // bar, and as the remaining the next Begin starts from. The countdown is drawn by direct DOM writes
-    // (drawClock), so nothing React renders can put it back — this reset used to redraw the bar alone
-    // and leave the readout on whatever the round last drew, which read as a countdown frozen through
-    // the Reset. paintClock is the one draw for both, and the remaining with them.
-    paintClock(perQ ? qSec : blitzSec)
+    // ★ A RESET ROUND IS A RESET COUNTDOWN (Q11): the full configured length, as the remaining the
+    // next Begin starts from and on the readout (which the slot hides the moment the round is gone).
+    // This reset once left the readout on whatever the round last drew — a countdown frozen through
+    // the Reset.
+    // ⚠ BUT NOT ON THE BAR, WHICH IS STILL ON SCREEN, FADING OUT (the slot's cross-fade, .range-clock,
+    // under Reduce Motion off): drawn full here, it flashed a whole countdown for the length of the
+    // fade where the round's own reading had been. It fades out as the round left it; every way the
+    // countdown comes back on screen draws it first — Begin and a resume through armClock, a restored
+    // round through the mount draw.
+    clockRemainRef.current = perQ ? qSec : blitzSec
+    drawReadout(clockRemainRef.current)
   } // App's arm (resets stats for blitz)
 
   // Leaving the mode mid-round ABANDONS the round (the original App discarded an active round

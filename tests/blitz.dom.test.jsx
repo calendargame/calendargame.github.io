@@ -1915,8 +1915,10 @@ describe('Blitz — the ★ marks exactly the bests the round on screen set', ()
 
 // ★ Q11 (Round 26, the owner's report): begin a round, Reset, and the countdown stayed where the
 // round left it. A countdown stays still only while a round sits ENDED (by a wrong answer, a
-// Reveal, Show Codes, or its own clock) and has not been reset; a reset round always shows a full,
-// reset countdown — readout and bar — in both timing sub-modes.
+// Reveal, Show Codes, or its own clock) and has not been reset; a reset round is a full, reset
+// countdown, in both timing sub-modes — on its readout at once, and on its bar when the countdown
+// next comes back on screen. (Not on the bar AT the Reset: it is fading out there, and a full bar
+// drawn under the fade flashed for its length — a finding of the Round 26 review.)
 describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -1946,12 +1948,14 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
     tick(4500)
     expect(clockText()).toBe('26s')
     expect(barScale()).not.toBe('scaleX(1)')
+    const left = barScale()
     clickText('Reset')
     expect(clockText()).toBe('30s')
-    expect(barScale()).toBe('scaleX(1)')
+    expect(barScale()).toBe(left) // the bar fades out as the round left it — no full one flashed in
     tick(3000) // and it stays reset: nothing is running
     expect(clockText()).toBe('30s')
-    begin() // …and the next round starts from the top
+    begin() // …and the next round starts from the top, on a full bar
+    expect(barScale()).toBe('scaleX(1)')
     tick(1500)
     expect(clockText()).toBe('29s')
   })
@@ -1965,8 +1969,11 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
     click(wrongName(readDate()))
     tick(5000)
     expect(clockText()).toBe('26s') // frozen: ended, not reset
+    const left = barScale()
     clickText('Reset')
     expect(clockText()).toBe('30s')
+    expect(barScale()).toBe(left) // the bar fades out as the round left it — no full one flashed in
+    begin() // …and the countdown that comes back is a full one
     expect(barScale()).toBe('scaleX(1)')
   })
 
@@ -1993,8 +2000,11 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
     begin()
     tick(3200)
     expect(clockText()).toBe('7s')
+    const left = barScale()
     clickText('Reset')
     expect(clockText()).toBe('10s')
+    expect(barScale()).toBe(left) // the bar fades out as the round left it — no full one flashed in
+    begin() // …and the countdown that comes back is a full one
     expect(barScale()).toBe('scaleX(1)')
   })
 
@@ -2008,8 +2018,11 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
     click(wrongName(readDate()))
     tick(3000)
     expect(clockText()).toBe('7s')
+    const left = barScale()
     clickText('Reset')
     expect(clockText()).toBe('10s')
+    expect(barScale()).toBe(left) // the bar fades out as the round left it — no full one flashed in
+    begin() // …and the countdown that comes back is a full one
     expect(barScale()).toBe('scaleX(1)')
   })
 })
