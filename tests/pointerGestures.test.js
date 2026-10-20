@@ -1289,6 +1289,33 @@ describe('pointerGestures controller — touches that are not quick taps, and th
     expect(clicks).toHaveBeenCalledTimes(1)
   })
 
+  // ★ A TOUCH WHOSE ELEMENT LEAVES THE PAGE BEFORE THE FINGER LIFTS (Round 26 review): a row of a
+  // list, pressed here, closes the list. Its touchend goes to the row, off the page, where the
+  // document cannot hear it — and the next touch's end was cancelled in its place, so a quick tap on
+  // Begin straight after pressed nothing.
+  it('a press made here on an element that leaves the page: its own end is cancelled, and the next tap is untouched', () => {
+    const list = domEl('div', {}, document.body)
+    const row = domEl('button', {}, list)
+    row.addEventListener('click', () => list.remove()) // choosing the row closes the list
+    hit = row
+    row.dispatchEvent(ptr('pointerdown'))
+    row.dispatchEvent(touch('touchstart', 1))
+    now += 600 // held: pressed here
+    document.dispatchEvent(ptr('pointerup'))
+    expect(row.isConnected).toBe(false)
+    const rowEnd = touch('touchend')
+    row.dispatchEvent(rowEnd) // heard on the row itself
+    expect(rowEnd.defaultPrevented).toBe(true)
+    // The next tap, on Begin, well after: the browser's click is its press, and nothing withholds it.
+    now += 600
+    const begin = domEl('button', {}, document.body)
+    const clicks = counted(begin)
+    const { end } = press(begin)
+    expect(end.defaultPrevented).toBe(false)
+    begin.click() // the browser's click for the tap
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
   // A MOUSE press is never a scroll (the header: mouse presses are left alone, a mouse always gets
   // its click) — a wheel turned while the button is held down does not swallow the click.
   it('a mouse press during which the region holding its button scrolled still gets its click', () => {

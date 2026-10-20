@@ -401,6 +401,7 @@ export function movedSince(places: readonly ScrollPlace[], target: Node): boolea
 // effect). Safe to call where `document` exists; a no-op-ish guard keeps it import-safe in non-DOM envs.
 export function installPointerGestures(): () => void {
   if (typeof document === 'undefined') return () => {}
+  let live = true // false once uninstalled: listeners left on touched elements then do nothing
 
   let pointerId: number | null = null // the latched pointer — all other ids are ignored until endGesture
   let pointerKind: string | null = null // the latched pointer's pointerType — a stale-latch reset is only safe within the same type (onDown)
@@ -755,6 +756,7 @@ export function installPointerGestures(): () => void {
   // at its first comparison for every touch that is not inside a double tap's window, which is all of
   // them that start a scroll after anything but a tap.
   const onTouchStart = (e: TouchEvent) => {
+    watchTouchEnd(e.target)
     if (e.touches.length !== 1) return // a second finger is no tap's second half
     touchTaken = false
     if (performance.now() - lastTapEnd >= DOUBLE_TAP_MS) return
@@ -766,7 +768,19 @@ export function installPointerGestures(): () => void {
   // The end of a touch: cancel it when its press was made here (pressOnRelease) — the browser then
   // makes no mouse events and no click for it, and the click the document was armed against will not
   // come — and note when a TAP ended, for the next touch.
+  // ★ HEARD ON THE TOUCH'S OWN ELEMENT TOO, BECAUSE THE DOCUMENT CANNOT ALWAYS HEAR IT (Round 26
+  // review). A touch's touchend is sent to the element it STARTED on — and a press can take that
+  // element out of the page before the finger lifts: a row of a list, chosen, closes the list. Off
+  // the page, the element's events no longer reach the document, so the touchend went unheard: a
+  // press made here left `cancelTouchEnd` standing, and the NEXT touch's touchend was cancelled in
+  // its place — a quick tap on Begin or New straight after choosing from a list then pressed
+  // nothing at all (its browser click withheld, and no press of this controller's own). So every
+  // touch's element is listened on as well (watchTouchEnd); an end heard at the document first is
+  // not handled twice (`handled`).
+  const handled = new WeakSet<Event>()
   const onTouchEnd = (e: TouchEvent) => {
+    if (!live || handled.has(e)) return
+    handled.add(e)
     if (e.touches.length > 0) return
     withheldEarly = false
     if (cancelTouchEnd) {
@@ -778,10 +792,22 @@ export function installPointerGestures(): () => void {
     }
     if (!touchTaken) lastTapEnd = performance.now()
   }
-  const onTouchCancel = () => {
+  const onTouchCancel = (e: Event) => {
+    if (!live || handled.has(e)) return
+    handled.add(e)
     touchTaken = true
     cancelTouchEnd = false
     withheldEarly = false
+  }
+  // Listen for the end of a touch on the element it began on (onTouchEnd's ★), once per element —
+  // its listeners live as long as it does. An element touched while an earlier install of this
+  // controller was live keeps that install's listeners, which do nothing once it is gone (`live`).
+  const watched = new WeakSet<EventTarget>()
+  const watchTouchEnd = (target: EventTarget | null) => {
+    if (!target || target === document || watched.has(target)) return
+    watched.add(target)
+    target.addEventListener('touchend', onTouchEnd as EventListener, { passive: false })
+    target.addEventListener('touchcancel', onTouchCancel, { passive: true })
   }
   // A SCROLL DURING A PRESS (the header's ★ "a touch that scrolled anything"): a scroll of anything
   // that holds the pressed control — an inner region, or the page (the document holds everything) —
@@ -841,6 +867,7 @@ export function installPointerGestures(): () => void {
   document.addEventListener('mousedown', onMouseDown, true)
   document.addEventListener('scroll', onScroll, passive)
   return () => {
+    live = false
     offAppScroll()
     if (clearTimer) clearTimeout(clearTimer)
     stopAutoScroll()

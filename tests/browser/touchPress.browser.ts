@@ -39,6 +39,7 @@ import {
   settled,
   switchMode,
   topBar,
+  weekdayOf,
 } from './support/app'
 import type { CDPSession, Locator, Page } from '@playwright/test'
 import { presetsNamed } from './support/seeds'
@@ -810,3 +811,60 @@ test.describe('real touches (Chromium): a slide in an open list', () => {
     await expect(topBar(page).preset).toHaveAccessibleName('Preset, Practice 1')
   })
 })
+
+// ★ A QUICK TAP STRAIGHT AFTER CHOOSING FROM A LIST PRESSES (Round 26 review): choose a row of the
+// Mode or Preset list and, within the double-tap window, tap Begin or New — it did nothing. The
+// row's press closed the list, so the row's touchend, sent to the row, never reached the document,
+// and the controller cancelled the NEXT touch's end in its place. Playwright's taps are
+// whole real touches in both engines (Chromium's input pipeline; WebKit's touch emulation); the
+// holds between them are the finger's pace (the header's ⚠), each tap inside the double-tap window
+// of the one before.
+test('a quick tap on Begin straight after choosing from the Mode list begins', async ({ page }) => {
+  await openApp(page)
+  await topBar(page).mode.tap()
+  await hold(page, 300)
+  await page.getByRole('option', { name: 'Flash' }).tap()
+  await hold(page, 100)
+  await page.getByRole('button', { name: 'Begin', exact: true }).tap()
+  await expect(page.locator('button[data-key="N"]:visible')).toHaveText('Reset')
+})
+
+test('a quick tap on New straight after choosing from the Preset list draws a new date', async ({
+  page,
+}) => {
+  await openApp(page, { seed: { presets: presetsNamed('One', 'Two') } })
+  await topBar(page).preset.tap()
+  await hold(page, 300)
+  await page.getByRole('option', { name: 'Two' }).tap()
+  await hold(page, 100)
+  await expect(topBar(page).preset).toHaveAccessibleName('Preset, Two')
+  const date = page.locator('.date-line:visible')
+  const before = await date.textContent()
+  const fresh = page.locator('button[data-key="N"]:visible')
+  await countClicks(fresh)
+  await fresh.tap()
+  await expect.poll(() => clicksSeen(fresh)).toBe(1)
+  await expect.poll(() => date.textContent()).not.toBe(before)
+})
+
+test('two quick taps on the same control press it twice; so do two quick answers', async ({
+  page,
+}) => {
+  await openApp(page)
+  const fresh = page.locator('button[data-key="N"]:visible')
+  await countClicks(fresh)
+  await fresh.tap()
+  await fresh.tap()
+  await expect.poll(() => clicksSeen(fresh)).toBe(2)
+  // Two answers in a row, each a quick tap on the right weekday: two cards answered.
+  await answerByTap(page)
+  await answerByTap(page)
+  await expect(page.locator('[data-statval]:visible').first()).toHaveText('2/2')
+})
+async function answerByTap(page: Page) {
+  const shown = await page.locator('.date-line:visible').textContent()
+  await page
+    .locator('[data-answer-grid]:visible')
+    .getByRole('button', { name: weekdayOf(shown) })
+    .tap()
+}
