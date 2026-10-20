@@ -446,6 +446,16 @@ export class CountsBook {
     const state = doc ? doc.state : {}
     const g = sync?.g ?? S?.g ?? null
     const Sg = S && S.g === g ? S : null
+    // (v5) does an OLDER page's own write carry a tag of this generation in ANY mode? None: that page
+    // loaded before the first new save (only an older page's own write - no envelope - speaks for when the
+    // page loaded; a new window's write may carry older bytes it passed through beside its own tagged modes)
+    const olderTagged =
+      !sync &&
+      this.SL.some((y) => {
+        if (!this.isSilo(y) || state[y] === undefined || state[y] === null) return false
+        const t = this.shape.silo(state[y]).tag
+        return !!t && t.g === g
+      })
     const out: Record<string, DevSlice> = {}
     for (const x of this.SL) {
       const disk = doc ? state[x] : undefined
@@ -486,7 +496,7 @@ export class CountsBook {
       // since the update: the device's value is its value
       else if (!this.isSilo(x) && Sg && !sAt && !rec) c = { kind: 'boot', st: BOOT }
       else if (!this.isSilo(x)) c = this.classifyReg(x, v, sAt)
-      else c = this.classifySilo(x, disk, v as Silo, newest, Sg, g)
+      else c = this.classifySilo(x, disk, v as Silo, newest, Sg, g, olderTagged)
       if (this.isSilo(x) && c.kind !== 'stamped' && c.kind !== 'boot')
         c.newestOld =
           Sg && newest && Sg.at?.[x] && cmp(Sg.at[x].st, newest.st) === 0 ? (Sg.old?.[x] ?? {}) : {}
@@ -559,6 +569,7 @@ export class CountsBook {
     newest: { st: Stamp; fp: string | null } | null,
     S: SyncKey | null,
     g: string | null,
+    olderTagged = true,
   ): Classified {
     const t0 = disk === undefined || disk === null ? null : this.shape.silo(disk).tag
     const tag = t0 && t0.g === g ? t0 : null
@@ -583,12 +594,37 @@ export class CountsBook {
       // never a whole-copy CHANGE
       return { kind: 'block', base: tb, sum: tag, odd: true }
     }
+    // (v5, the review lane's (b): R4 in its commonest form) A BLANK copy of a mode that was BLANK AT THE
+    // BOOTSTRAP, in an older page's own write with no tag of this generation in ANY mode (it reads as a
+    // page from before the first new save, which never saw the new answers there), is that page's stale
+    // copy of the bootstrap - a carry - unless older cards were already folded into this mode (the SYNC
+    // KEY's fold records: every window reads the same, so all decide alike); then a blank copy may be that
+    // page's Reset, read as before. (An older page's whole copy adopted as a change retires the bootstrap
+    // record - retireBoot - so a mode that had one never reaches here. An older tab answering the blank
+    // mode ITSELF stays R4: its untagged copy cannot be placed, design 2.8; its Reset of such a mode, in a
+    // copy with no tag anywhere, is R4b.) The bootstrap is read as the KEY records it: a window's own
+    // retirement still unsaved is knowledge the device refused, and a carry folds nothing.
+    const bootKey = S?.boot?.[x] ?? null
+    if (v.pl === 0 && !olderTagged && bootKey && bootKey.pl === 0) {
+      const folded = Object.values(S?.old?.[x] ?? {}).some((q) => (q?.k ?? 0) > 0)
+      if (!folded) return newest ? { kind: 'carry', base: 'BOOT' } : { kind: 'current', st: BOOT }
+    }
     if (v.pl === 0) return { kind: 'change' } // untagged and empty: a reset (or older than any new write)
     if (boot && boot.pl > 0 && isVersion(v, boot))
       return newest ? { kind: 'carry', base: 'BOOT' } : { kind: 'current', st: BOOT }
     if (boot && boot.pl > 0 && boot.n > 0 && extendsSum(v, boot))
       return { kind: 'block', base: 'BOOT', sum: boot }
     return { kind: 'change' }
+  }
+
+  // A CHANGE adopted (an older page's whole copy): from now on no copy can be trusted to extend the
+  // bootstrap bytes, and (v5) a blank copy can no longer read as an older page's stale copy of a blank
+  // bootstrap - the mode's bootstrap record retires.
+  retireBoot(x: string): void {
+    if (this.isSilo(x) && this.boot?.[x]) {
+      this.boot[x] = null
+      this.bootPend[x] = null
+    }
   }
 
   // ── FOLDING an older page's block, from counts alone (2.5.4) ──
@@ -755,11 +791,7 @@ export class CountsBook {
       // a setting's stale copy: the newest value comes back (its value is in the sync key)
       this.mem[x] = { v: d.val, st: d.st! }
     } else if (d.kind === 'change') {
-      // (a CHANGE adopted: from now on no copy can be trusted to extend the boot bytes)
-      if (this.isSilo(x) && this.boot?.[x]) {
-        this.boot[x] = null
-        this.bootPend[x] = null
-      }
+      this.retireBoot(x)
       this.parent[x] = d.newest?.st ?? null
       this.mem[x] = { v: d.v, st: { ...(d.newest?.st ?? ZERO), d: 1 } }
       this.prov[x] = true
@@ -1078,6 +1110,10 @@ export class CountsBook {
         )
           this.mem[x] = { v: d.v, st: this.mem[x].st }
         if (d.kind === 'change') {
+          // (v5, 2.4) a change on content equal to what this window holds is still a change adopted:
+          // the bootstrap record retires on EVERY path (the model skipped this one: an older tab's Reset
+          // of its own adopted answers then read as a stale blank copy - Amnesic run 24/520)
+          this.retireBoot(x)
           const above = { ...(d.newest?.st ?? ZERO), d: 1 }
           if (cmp(above, this.mem[x].st) > 0) this.mem[x] = { v: this.mem[x].v, st: above }
           this.prov[x] = true
@@ -1243,8 +1279,13 @@ export class CountsBook {
             }
           : { st: m.st, fp: this.fpOf(x, m.v) }
       }
-      // (2.2 compact) a setting still at its value from before the update carries no entry anywhere
-      if (!this.isSilo(x) && !this.unres[x] && cmp(m.st, BOOT) === 0) delete at[x]
+      // (2.2 compact) a setting still at its value from before the update carries no entry anywhere -
+      // nor one this window knows nothing of (stamp ZERO: a slice it has just begun to name, as the
+      // preset list's do as presets come and go). An entry at ZERO is no version: written, it read as
+      // older than "no entry" to one window and newer to another, and the two wrote it in and out
+      // for ever (tests/syncedDoc.registry.fuzz found the loop).
+      if (!this.isSilo(x) && !this.unres[x] && (cmp(m.st, BOOT) === 0 || cmp(m.st, ZERO) === 0))
+        delete at[x]
     }
     // (2.2 compact) THE ENVELOPE CARRIES ONLY WHAT THE SYNC KEY DOES NOT ALREADY SAY
     const keyEntry = (x: string) =>

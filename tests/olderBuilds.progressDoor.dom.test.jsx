@@ -9,9 +9,11 @@
 // Here the device starts as that build left it at its boot (its own save, no envelope - the bytes of
 // before any new save), this window loads it and plays, and the older tab - open since before, on the
 // copy it loaded - then writes exactly what it wrote. Its change is taken; this window's stands.
-// (Not here: a mode that was BLANK at the bootstrap, played in this window and then written again by an
-// older tab opened before the first new save - its blank copy stands, design R4: nothing can tell its
-// untouched blank from a Reset. part2-issues #10.)
+// A mode that was BLANK at the bootstrap, played in this window, then written again blank by an older tab
+// opened before the first new save as it answers ANOTHER mode: its blank is that tab's stale copy of the
+// bootstrap, and this window's answers stand (design v5, 2.4 - R4 in its commonest form, closed;
+// part2-issues #10). (Still R4: that tab answering the blank mode itself - its untagged copy cannot be
+// placed.)
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -97,6 +99,19 @@ describe.each(BUILDS)('%s’s own saves of the progress doc, over this window’
     relaunch()
     expect(live().stats.classic).toEqual(both)
     expect(live().stats.dedDay.played).toBe(1)
+  })
+
+  // ★ R4 IN ITS COMMONEST FORM, CLOSED (design v5, 2.4; the review lane's (b)): Flash was blank at the
+  // bootstrap; this window plays it; the older tab - opened before the first new save - answers Classic,
+  // and its whole copy carries Flash blank. That is its stale copy of the bootstrap, not a Reset.
+  it('its Classic answers leave this window’s answers in a mode that was blank at the update as they are', () => {
+    start()
+    live().setModeStats('flash', { played: 2, good: 1, streak: 1, best: 1, times: [0.9] })
+    olderWrites(progressWrites('answers'))
+    expect(live().stats.flash).toMatchObject({ played: 2, good: 1, times: [0.9] })
+    live().setModeStats('dedDay', { played: 1, good: 0, streak: 0, best: 0, times: [] })
+    relaunch()
+    expect(live().stats.flash).toMatchObject({ played: 2, good: 1, times: [0.9] })
   })
 
   it('its Reset of Classic, made after this window’s answer, is taken: Classic is blank', () => {

@@ -740,13 +740,23 @@ export function makeWorld(opt = {}) {
     reset(w, s) {
       if (w.kind === 'O') {
         const killed = new Set(oldSilo(w, s)._a.map((q) => q.id))
+        // (oracle, v5) the copy this Reset writes reads like a page from before the first new save - no tag of
+        // any mode, the reset mode blank - in a mode blank at the update: nothing can tell it from that page's
+        // stale copy (R4b)
+        const key0 = W.dev.get('side') ? unpackSync(W.dev.get('side')) : null
+        const gOf = (d) => (d?.w ? decodeTag(d.w.s)?.g : null)
+        const viewBlank =
+          !!key0 &&
+          !SILOS.some((y) => y !== s && gOf(w.sbase[y]) === key0.g) &&
+          key0.boot?.[s]?.pl === 0 &&
+          !Object.values(key0.old?.[s] ?? {}).some((q) => (q?.k ?? 0) > 0)
         for (const id of idsOf(stateOf(W.dev.get('doc') ?? null)[s])) killed.add(id)
         w.sbase[s] = BLANK() // a literal: the tag goes
         ;(w.resetSince ??= {})[s] = true
         w.shist[s] = []
         const n0 = W.ev.length
         oldWrite(w, 'old-reset', { genuine: [s] })
-        W.kills.push({ at: n0, by: w.name, ids: killed })
+        W.kills.push({ at: n0, by: w.name, ids: killed, blankView: viewBlank, s })
       } else
         act(
           w,
