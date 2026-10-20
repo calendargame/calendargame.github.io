@@ -135,7 +135,28 @@ interface PanelPos {
   // The trigger's left edge. Only consumed by a 'match-trigger' list that has to be WIDER than its
   // trigger (`leastRowLabel`), which grows from this edge.
   left: number
+  // The viewport's width (the panel's containing block — measurePanel says why clientWidth) and the
+  // app's side gutter in px (1rem, the top bar's own inset, which follows the fluid root font). Only
+  // consumed by a 'content' list, which is kept inside that gutter (LIST_GUTTER_REM, below).
+  viewport: number
+  gutter: number
 }
+// ★ EVERY LIST STAYS INSIDE THE APP'S SIDE GUTTER — 1rem from each edge of the screen, the inset the
+// top bar keeps — in any font and at any width. A 'content' list is as wide as its widest option,
+// and it hangs from its trigger's RIGHT edge; a trigger that sits mid-row (Manage Presets'
+// Duplicate, the right half of its row) with a long name in its list used to send the list off the
+// LEFT edge of the screen (21px at 320 wide; 8px at 360 in a wide font). So the list is never wider
+// than the screen less two gutters (LIST_MAX_WIDTH; past that its names are cut, like any row's),
+// and where hanging from the trigger would take it past the left gutter it moves right just far
+// enough to clear it (`contentRight`, at the panel). A 'match-trigger' list keeps its own rule (the
+// ★ at `listRight`), which already keeps it as far in as its trigger stands — the top bar's preset
+// button stands exactly one gutter in, and "Open in" further.
+// ⚠ 100vw IS THE PANEL'S CONTAINING BLOCK HERE, NOT AN APPROXIMATION OF IT: the document never
+// scrolls (html and body are overflow:hidden, index.css), so no document scrollbar takes from the
+// viewport. The hidden width-mirror below wears the same cap, so the trigger it sizes and the list
+// it copies agree.
+const LIST_GUTTER_REM = 1
+const LIST_MAX_WIDTH = `calc(100vw - ${2 * LIST_GUTTER_REM}rem)`
 // The box metrics of ONE dropdown option row — the same row in every list this component draws
 // (the mode selector's, the top bar's preset list, the ⚙ menu's "Open in"). Everything about a row's
 // box that takes WIDTH lives in this string, because four things draw a row and must agree to the
@@ -196,7 +217,8 @@ function OptionRowCells({ checked, children }: { checked: boolean; children: Rea
 // and grep treat the whole file as binary.
 const OPTION_VALUE_SEPARATOR = '\u001f'
 // The rendered outer width of a hidden mirror — an out-of-flow copy of something this component
-// draws, laid out at its natural width so that width can be read — kept current. Returns the ref
+// draws, laid out at its natural width so that width can be read — or of the open 'content' list
+// itself, whose width is likewise its natural one — kept current. Returns the ref
 // to put on the mirror and the width, which is null until a layout engine has measured it (jsdom
 // reports 0 for every box, and never does).
 // The mirror's own box changes size when the fluid root font-size does (index.css's clamp, on any
@@ -345,8 +367,16 @@ export default function CustomSelect({
   // treat taps inside it as "inside" (the panel is no longer a DOM descendant
   // of the wrapper). panelPos holds the measured viewport coordinates for the
   // portal.
-  const panelRef = useRef<HTMLDivElement>(null)
+  // It is also measured, while a 'content' list is open: its rendered width is what decides how far
+  // it has to move to stay inside the gutter (LIST_GUTTER_REM). A layout effect, so the list's first
+  // painted frame is already in place; and an observer, so a font arriving or a label changing
+  // under an open list moves it too. (Its width does not depend on where it is placed — it is
+  // max-content, capped by LIST_MAX_WIDTH — so placing it cannot change what was measured.)
   const [panelPos, setPanelPos] = useState<PanelPos | null>(null)
+  const [panelRef, panelWidth] = useMirrorWidth(
+    open && panelPos !== null && dropdownWidth === 'content',
+    '',
+  )
   // triggerMatchesDropdown only: measureRef points at the hidden panel-mirror rendered below;
   // triggerWidth is its measured outer width, applied as the trigger's width so the trigger
   // ends up exactly as wide as the real dropdown. null until measured (and in jsdom, which reports
@@ -402,13 +432,22 @@ export default function CustomSelect({
     // holds its exact 6px gap at every offset with ZERO reposition calls — and app mode is
     // pixel-identical either way, since scrollY was always 0 there.
     // (The same answer is the same object: a measurement that changed nothing renders nothing.)
-    const next = { right, top: rect.bottom + 6, width: rect.width, left: rect.left }
+    const next = {
+      right,
+      top: rect.bottom + 6,
+      width: rect.width,
+      left: rect.left,
+      viewport: document.documentElement.clientWidth,
+      gutter: LIST_GUTTER_REM * parseFloat(getComputedStyle(document.documentElement).fontSize),
+    }
     setPanelPos((prev) =>
       prev &&
       prev.right === next.right &&
       prev.top === next.top &&
       prev.width === next.width &&
-      prev.left === next.left
+      prev.left === next.left &&
+      prev.viewport === next.viewport &&
+      prev.gutter === next.gutter
         ? prev
         : next,
     )
@@ -665,6 +704,20 @@ export default function CustomSelect({
           panelPos.right - (listWidth - panelPos.width),
           Math.min(panelPos.right, panelPos.left),
         )
+  // A 'content' list's right edge: its trigger's, unless that would take the list past the left
+  // gutter — then just far enough right to clear it — and never inside the right gutter either (the
+  // ★ at LIST_GUTTER_REM). Before its width has been measured (the render that first draws it), and
+  // where nothing is laid out at all (jsdom: no viewport width, no font size), it hangs from the
+  // trigger.
+  const contentRight =
+    panelPos === null
+      ? 0
+      : panelWidth === null || panelPos.viewport === 0
+        ? panelPos.right
+        : Math.max(
+            panelPos.gutter,
+            Math.min(panelPos.right, panelPos.viewport - panelPos.gutter - panelWidth),
+          )
   const { scrolledFromTop, atBottom } = useScrollEdgeState(listRef, panelShown)
   useLayoutEffect(() => {
     if (!panelShown) return
@@ -759,7 +812,7 @@ export default function CustomSelect({
       </button>
       {/* The hidden width-mirror (triggerMatchesDropdown only). A faithful, out-of-flow copy
           of the portaled panel — same p-1, same OPTION_ROW_BOX rows, same width:max-content /
-          maxWidth:90vw — so its rendered outer width equals the real dropdown's. It carries no
+          maxWidth (LIST_MAX_WIDTH) — so its rendered outer width equals the real dropdown's. It carries no
           role and is aria-hidden + visibility:hidden + pointer-events:none, so it is invisible to
           the user, to assistive tech, and to the suite's role queries (closed === zero options
           stays true). position:absolute keeps it out of the row's flex flow and off --bar-h. */}
@@ -776,7 +829,7 @@ export default function CustomSelect({
             pointerEvents: 'none',
             zIndex: -1,
             width: 'max-content',
-            maxWidth: '90vw',
+            maxWidth: LIST_MAX_WIDTH,
           }}
         >
           {options.map((opt) => (
@@ -891,19 +944,19 @@ export default function CustomSelect({
             // is above #root) — harmless here, since the panel is sized to sit on screen.
             style={{
               position: 'fixed',
-              right: dropdownWidth === 'match-trigger' ? listRight : panelPos.right,
+              right: dropdownWidth === 'match-trigger' ? listRight : contentRight,
               top: panelPos.top,
               zIndex: 60,
               background: 'rgba(245,245,247,0.50)',
               WebkitBackdropFilter: 'blur(28px) saturate(120%)',
               backdropFilter: 'blur(28px) saturate(120%)',
-              // 'content' (the mode selector, default) keeps its max-content sizing, clamped to
-              // 90vw; 'match-trigger' (the preset lists) is the trigger wrapper's live width from
+              // 'content' (the mode selector and Duplicate) keeps its max-content sizing, clamped
+              // to the screen less its two gutters (LIST_MAX_WIDTH); 'match-trigger' (the preset lists) is the trigger wrapper's live width from
               // measurePanel, to the pixel — the same column as the button it hangs from — unless
               // a row that narrow could not show `leastRowLabel` (listWidth, above).
               ...(dropdownWidth === 'match-trigger'
                 ? { width: `${listWidth}px` }
-                : { width: 'max-content', maxWidth: '90vw' }),
+                : { width: 'max-content', maxWidth: LIST_MAX_WIDTH }),
               // Round 23: never taller than the room between the panel's top and the bottom of
               // the viewable area, less the same 1rem cushion (and bottom safe area) the ⚙ panel
               // keeps — a longer list scrolls inside (listRef, above). CSS rather than a measured

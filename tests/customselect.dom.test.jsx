@@ -474,7 +474,8 @@ describe('CustomSelect — width props', () => {
     mountBare({})
     fireEvent.click(screen.getByRole('button', { name: /^Test,/ }))
     expect(panel().style.width).toBe('max-content')
-    expect(panel().style.maxWidth).toBe('90vw')
+    // …never wider than the screen less the app's two side gutters (CustomSelect's LIST_MAX_WIDTH).
+    expect(panel().style.maxWidth).toBe('calc(100vw - 2rem)')
     // …hung from the trigger's RIGHT edge.
     expect(panel().style.right).not.toBe('')
   })
