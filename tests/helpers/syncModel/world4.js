@@ -33,6 +33,11 @@
 // New windows read the device ONE WRITE AT A TIME (each `storage` notice is handled against the
 // window's own copy, which advances one message at a time - reviewer A's E1), so intermediate states
 // of an older page's two-write sequence are seen.
+//
+// (Amnesic, design-amnesic-close.md) the world also holds the app SESSION (every new window closed ends
+// it; the next cold open begins the next), the one preset's Amnesic value and its switch-on count, and the
+// FORGET a cold open runs first: the real door's CountsBook.forgetWindow, its anchors taken by the door's
+// own copy-on-write (`win`: the window the world says play is in now).
 
 import {
   CountsBook,
@@ -104,6 +109,27 @@ export function countsDelta(o, L) {
   ])
 }
 
+// (Amnesic) a silo's anchor as the world's doc spells it: the door's anchor, its ledger beside it
+const anchorOfDisk = (a) =>
+  a
+    ? {
+        e: a.e,
+        st: a.st ?? null,
+        pl: a.pl,
+        gd: a.gd,
+        sk: a.sk,
+        bs: a.bs,
+        n: a.n,
+        h: a.h,
+        tl: a.tl ?? 0,
+        x: { _a: clone(a._a ?? []), _q: { ...(a._q ?? {}) } },
+      }
+    : null
+const anchorToDisk = (a) => {
+  const { x, ...rest } = a
+  return { ...rest, _a: x?._a ?? [], _q: x?._q ?? {} }
+}
+
 export function makeWorld(opt = {}) {
   const O = {
     lag: false,
@@ -139,7 +165,25 @@ export function makeWorld(opt = {}) {
     droppedAnswers: 0,
     carried: 0,
     O,
+    // (Amnesic) the app session (every NEW window closed ends it), the one preset's Amnesic value, and the
+    // switch-on count (a change away from Off starts a new window)
+    sid: 1,
+    am: { v: 'off', since: 0 },
+    forgets: [],
+    winStartId: 0,
   }
+  // the Amnesic window answers are anchored in: 'switch' (owner's rule) = since the last switch-on from Off or the
+  // app's open, whichever is later; 'open' = since the app opened (then every session is anchored, Off included)
+  const curE = () =>
+    O.amAnchors === false
+      ? null
+      : O.amRule === 'open'
+        ? 's' + W.sid
+        : W.am.v !== 'off'
+          ? W.sid + ':' + W.am.since
+          : null
+  const MUT_COUNTS = ['drop', 'dropOne', 'double']
+  const MUT_AM = ['amNoForget', 'amAnchorLate']
   const devState = () => ({ doc: W.dev.get('doc') ?? null, side: W.dev.get('side') ?? null })
   const stateOf = (text) => {
     if (text == null) return Object.fromEntries(SL.map((x) => [x, isSilo(x) ? BLANK() : 0]))
@@ -316,6 +360,12 @@ export function makeWorld(opt = {}) {
       _q: qSub(X(resolved)._q, X(held)._q),
       fullA: flipsSince(X(B), X(heldRec ?? {})),
     }),
+    anchor: (s) => ({ _a: clone(X(s)._a ?? []), _q: { ...(X(s)._q ?? {}) } }),
+    anchorSum: (v, sum) => ({
+      _a: clone((X(v)._a ?? []).slice(0, sum.pl)),
+      _q: { ...(X(sum)._q ?? {}) },
+    }),
+    restore: (a) => ({ _a: clone(X(a)._a ?? []), _q: { ...(X(a)._q ?? {}) } }),
   }
   // the model's doc as the door reads and writes it: silos in the model's own stored form, the tag inside them
   // as the app spells it (with the oracle's ledger beside it), the envelope and the key as the app packs them
@@ -336,8 +386,18 @@ export function makeWorld(opt = {}) {
         ...(disk._mut ? { _mut: true } : {}),
       }
       const t = disk.w ? decodeTag(disk.w.s) : null
+      const a = anchorOfDisk(disk.a)
       return {
-        v: { pl: disk.pl, gd: disk.gd, sk: disk.sk, bs: disk.bs, t: [...disk.t], tl: 0, x },
+        v: {
+          pl: disk.pl,
+          gd: disk.gd,
+          sk: disk.sk,
+          bs: disk.bs,
+          t: [...disk.t],
+          tl: 0,
+          x,
+          ...(a ? { a } : {}),
+        },
         tag: t ? { ...t, x: { _q: { ...(disk.w._q ?? {}) } } } : null,
       }
     },
@@ -351,6 +411,7 @@ export function makeWorld(opt = {}) {
         w: { s: encodeTag(tag), _q: X(tag)._q ?? {} },
         _a: X(v)._a ?? [],
         _q: X(v)._q ?? {},
+        ...(v.a ? { a: anchorToDisk(v.a) } : {}),
         ...(X(v)._mut ? { _mut: true } : {}),
       }
     },
@@ -409,13 +470,14 @@ export function makeWorld(opt = {}) {
           ;(W.refusedBy ??= []).push({ who: w.name, at: W.ev.length })
           return false
         }
-        const resets = SILOS.filter((x) => w.book.dirty[x]?.reset)
+        const resets = SILOS.filter((x) => w.book.dirty[x]?.reset && !w.book.dirty[x].forget)
+        const forgets = SILOS.filter((x) => w.book.dirty[x]?.forget)
         const before = stateOf(W.dev.get('doc') ?? null)
         const n0 = W.ev.length
         // (a doc text a later write repeats exactly - the door does not write it again - can stand for more than
         // one full envelope: each is what that text means beside the key of its own write)
         ;(fullOf.get(docText) ?? fullOf.set(docText, new Set()).get(docText)).add(canonEnv(full))
-        commit(w, 'doc', docText, resets.length ? 'reset' : w.why, {
+        commit(w, 'doc', docText, forgets.length ? 'forget' : resets.length ? 'reset' : w.why, {
           heldSet: REGS.filter((r) => w.book.dirty[r]?.set),
           full,
         })
@@ -437,9 +499,18 @@ export function makeWorld(opt = {}) {
         return true
       },
     }
+    // (v4 Amnesic round: an answer came by ANOTHER older lineage when an older write of another lineage carried
+    // it - read from the WORLD, not from this window's memory, which a window opened later, a cold opener above
+    // all, never had)
+    const viaWorld = (x, id) =>
+      W.ev.some(
+        (q) =>
+          q.kind === 'O' && q.page !== W.born.get(id)?.lineage && (q.after[x] ?? []).includes(id),
+      )
     const hooks = {
       ledger,
-      mut: O.mut ?? null,
+      mut: MUT_COUNTS.includes(O.mut) ? O.mut : null,
+      mutAm: MUT_AM.includes(O.mut) ? O.mut : null,
       onWeigh(book, x, B, done) {
         const linOf = (q) => [
           ...new Set(
@@ -465,13 +536,35 @@ export function makeWorld(opt = {}) {
             .map((id) => W.born.get(+id)?.lineage)
             .filter(Boolean),
         )
-        const via = (id) => (w.viaOther?.[x] ?? new Set()).has(id)
+        const via = (id) => (w.viaOther?.[x] ?? new Set()).has(id) || viaWorld(x, id)
         ;(W.foldLog ??= []).push({
           at: W.ev.length,
           by: w.name,
           s: x,
           ids: bad,
           r6: (lin.size >= 2 || bad.every(via)) && bad.every((id) => W.born.get(id)?.kind === 'O'),
+        })
+      },
+      // (oracle) a replayed fold segment whose part the multiset shows wrong is logged like a fold's (R6 when two
+      // older lineages are in play or the ids came through another lineage - Amnesic round, config 27, run 1930)
+      onSegFold(book, x, part, held) {
+        const bad = Object.entries(X(part)._q ?? {})
+          .filter(([id, n]) => n < 0 || (X(held)._q?.[id] ?? 0) > 0)
+          .map(([id]) => +id)
+        if (!bad.length) return
+        const lin = new Set(
+          [...Object.keys(X(part)._q ?? {}), ...Object.keys(X(held)._q ?? {})]
+            .map((id) => W.born.get(+id)?.lineage)
+            .filter(Boolean),
+        )
+        ;(W.foldLog ??= []).push({
+          at: W.ev.length,
+          by: w.name,
+          s: x,
+          ids: bad,
+          r6:
+            (lin.size >= 2 || bad.every((id) => viaWorld(x, id))) &&
+            bad.every((id) => W.born.get(id)?.kind === 'O'),
         })
       },
       onMutFired() {
@@ -515,7 +608,7 @@ export function makeWorld(opt = {}) {
         W[name] = (W[name] ?? 0) + n
       },
     }
-    return new CountsBook({ shape: SHAPE, io, tag: w.name, name: w.name, hooks })
+    return new CountsBook({ shape: SHAPE, io, tag: w.name, name: w.name, hooks, win: curE })
   }
   // Each notice is handled against the window's copy, which advances ONE write at a time (the model's step).
   function step(w, toEnd) {
@@ -598,6 +691,7 @@ export function makeWorld(opt = {}) {
       _q: qAdd(b._q, Object.fromEntries(H.map((c) => [c.id, 1]))),
     }
     if (b.w) o.w = b.w
+    if (b.a) o.a = b.a
     return o
   }
   function oldState(w) {
@@ -689,6 +783,7 @@ export function makeWorld(opt = {}) {
         _a: clone(d._a ?? []),
         _q: { ...(d._q ?? {}) },
         ...(d.w ? { w: clone(d.w) } : {}),
+        ...(d.a ? { a: clone(d.a) } : {}),
       }
       w.shist[s] = []
     }
@@ -705,10 +800,90 @@ export function makeWorld(opt = {}) {
     return w
   }
   const newTime = () => ++W.times / 10
+  // (oracle) an Amnesic window starts: the newest answer id before it, and what the device held then
+  function startWindow() {
+    W.winStartId = W.ids
+    const st = stateOf(W.dev.get('doc') ?? null)
+    ;(W.winStarts ??= []).push({
+      id: W.ids,
+      at: W.ev.length,
+      onDev: Object.fromEntries(SILOS.map((x) => [x, idsOf(st[x])])),
+    })
+  }
   const api = {
     W,
     newWin,
     oldWin,
+    // -- AMNESIC (design-amnesic-close.md) --
+    // the preset's value, changed in a NEW window (every window follows a setting; its sync is gated apart)
+    setAmnesic(v) {
+      if (O.amRule !== 'open' && W.am.v === 'off' && v !== 'off') {
+        W.am.since++
+        startWindow()
+      }
+      W.am.v = v
+    },
+    // the app CLOSES: every new window closed (an older page, if open, is not seen: it holds no lock)
+    closeAll() {
+      for (const y of W.wins) if (y.kind === 'N') y.closed = true
+      W.closing = {
+        v: W.am.v,
+        E: curE(),
+        startId: W.winStartId,
+        endId: W.ids,
+        sid: W.sid,
+        at: W.ev.length,
+        sessAt: W.sessAt ?? 0,
+      }
+    },
+    // the next COLD OPEN with no other window alive: a new session; the closed one's forget runs first - the
+    // real door's (CountsBook.forgetWindow), in the opener's book, landed as a write like any other
+    coldOpen(name) {
+      if (W.wins.some((y) => y.kind === 'N' && !y.closed))
+        throw new Error('coldOpen with a live window')
+      const c = W.closing
+      W.closing = null
+      // THE FORGET RUNS FIRST, still in the closed session: what the opener finds on the device (an older page's
+      // cards no window folded before the close included) belongs to it; only then does the new session begin
+      const w = newWin(name)
+      const begin = () => {
+        W.sid++
+        W.sessAt = W.ev.length
+        if (W.am.v !== 'off' || O.amRule === 'open') startWindow()
+      }
+      if (!c || c.v === 'off' || !c.E) {
+        begin()
+        return w
+      }
+      // (oracle) WHAT MUST GO, from the driver's own record: every answer given inside the window, by any page
+      const F = new Set(
+        [...W.born].filter(([id]) => id > c.startId && id <= c.endId).map(([id]) => id),
+      )
+      step(w, true)
+      const n0 = W.ev.length
+      const { restored, skipped } = w.book.forgetWindow(c.E)
+      const any = restored.length > 0
+      w.why = 'forget'
+      if (any && !w.book.land()) throw new Error('forget refused (the world opens it with room)')
+      // (oracle) the kill takes effect at the forget's write - or, when it had nothing to write, between the write
+      // before it and the next one
+      W.kills.push({ at: any ? n0 : n0 - 0.5, by: name, ids: F, forget: true })
+      W.forgets.push({
+        at: any ? W.ev.length - 1 : null,
+        from: n0,
+        F,
+        E: c.E,
+        skipped,
+        startId: c.startId,
+        endId: c.endId,
+        closeAt: c.at,
+        sessAt: c.sessAt,
+        restored,
+        startAt: (W.winStarts ?? []).filter((st) => st.id === c.startId).pop()?.at ?? 0,
+      })
+      begin()
+      return w
+    },
     deliver(w) {
       if (w.kind === 'O' || w.closed || w.frozen) return
       step(w, !O.lag)
@@ -730,11 +905,20 @@ export function makeWorld(opt = {}) {
         landed: false,
         lineage: w.kind === 'O' ? w.name + '#' + w.lineage : null,
         basis: w.kind === 'O' ? oracleView(w).basis[s] : null,
+        at: W.ev.length,
       })
       if (w.kind === 'O') {
         w.shist[s].push({ id, r: a.r, tm: tmOld })
         oldWrite(w, 'old-answer', { genuine: [s] })
-      } else act(w, s, () => w.book.answer(s, { kind: 'a', id, r: a.r, tm: a.tm }), 'answer')
+      } else {
+        const E = curE()
+        act(
+          w,
+          s,
+          () => w.book.answer(s, { kind: 'a', id, r: a.r, tm: a.tm, ...(E ? { e: E } : {}) }),
+          'answer',
+        )
+      }
       return id
     },
     reset(w, s) {

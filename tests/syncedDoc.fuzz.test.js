@@ -6,7 +6,11 @@
 // OLDER pages as v2.27-v2.29 behave (tests/syncedDoc.olderBuilds holds those facts to what the real builds
 // did) - answers, Overrides of their own cards at any depth, Resets as literals, reloads, the boot rewrite,
 // a Full Reset in two writes - and dropping Q21's Amnesic field; the device clock jumping by years; cleared
-// storage. 22 configurations (tests/helpers/syncModel/fuzz4.js), 300 steps a run.
+// storage. 31 configurations (tests/helpers/syncModel/fuzz4.js), 300 steps a run: the 22 of the sync gate,
+// and the 9 of AMNESIC DECIDED AT CLOSE (design-amnesic-close.md 4) - the preset's value changes, the app
+// closes (every new window) and opens cold, and the real door's forget (CountsBook.forgetWindow) runs first;
+// G12 requires every answer given inside the closed window gone from the device, G1 every other answer kept,
+// each loss or return beyond those a named residual (R16-R19, R6 at the forget, R1 in the lag).
 // THE ORACLE (tests/helpers/syncModel/judge4.js, the model's own): knows nothing of stamps, tags, books or
 // the sync key - only who did what, and the DRIVER's log of every answer ever made. At every new window's
 // write it decodes the silo against that log (an answer counted twice, a part no answer accounts for); at the
@@ -16,7 +20,9 @@
 // THE ORACLE'S OWN TEST: the model's three planted merge bugs, put into the real door's fold behind its test
 // switch (hooks.mut): a one-answer block added twice must turn the gate red in EVERY run where the bad value
 // was written; a dropped block, and a dropped single right answer, in almost every run outside the places a
-// named residual covers that very loss (LAG: R1; "never reloads": R4).
+// named residual covers that very loss (LAG: R1; "never reloads": R4). And the Amnesic oracle's two
+// (mutam.mjs, behind hooks.mutAm): no forget at all, and an anchor taken one answer late - each caught in
+// almost every run where it changed what a forget restores, outside the lag (R1 excuses both there).
 // PARITY: before this suite was written the door was run beside the model's own new windows on the same seeds
 // (100 per configuration): every count the oracle keeps was identical in every run.
 //
@@ -29,7 +35,7 @@ const SCALE = Math.max(1, Number(process.env.FUZZ_SCALE ?? 1))
 const SEEDS = Math.round(Number(process.env.FUZZ_SEEDS ?? 12) * SCALE)
 const STEPS = 300
 // The two places a planted DROP is excused by the very residual that excuses the real loss (design 3).
-const DROP_EXCUSED = new Set([4, 5, 20, 21])
+const DROP_EXCUSED = new Set([4, 5, 20, 21, 29])
 
 // What a real browser hands a window that slept (frozen, discarded, bfcache): the device as it is, and no
 // old value - so nothing it reads then is contiguous (design 2.5.8). The model's world handed it the doc
@@ -86,6 +92,33 @@ describe('reach: the paths the gate is about were taken', () => {
     ])
       expect(totals[k] ?? 0, k).toBeGreaterThan(0)
   })
+  it('Amnesic: forgets ran, answers were forgotten, and the named residuals were met', () => {
+    for (const k of ['forgets', 'forgotten', 'amLate', 'olderCopyStands'])
+      expect(totals[k] ?? 0, k).toBeGreaterThan(0)
+  })
+})
+
+describe("the Amnesic oracle catches its planted bugs in the real door's forget", () => {
+  // (the model's own test ran 300 seeds a configuration: 93.5% of the late anchors caught, the misses runs where
+  // that answer was later Reset or lost anyway - a rate the first few seeds of a configuration do not show)
+  const AM_SEEDS = Math.max(20, SEEDS)
+  for (const mut of ['amNoForget', 'amAnchorLate'])
+    it(`${mut}: caught in almost every run where it changed what a forget restores (outside the lag)`, () => {
+      let fired = 0
+      let caught = 0
+      for (const [, cfg] of cfgs) {
+        if (!cfg.amnesic || cfg.lag) continue
+        for (let seed = 1; seed <= AM_SEEDS; seed++) {
+          const j = run(seed, { ...cfg, mut }, STEPS)
+          // (a late anchor matters only where a forget then restored something)
+          if (!(j.mutFired > 0 && (mut === 'amNoForget' || j.forgotten > 0))) continue
+          fired++
+          if (j.bad) caught++
+        }
+      }
+      expect(fired).toBeGreaterThan(10)
+      expect(caught / fired).toBeGreaterThan(0.85)
+    }, 900_000)
 })
 
 describe('the oracle catches the planted merge bugs in the real door', () => {

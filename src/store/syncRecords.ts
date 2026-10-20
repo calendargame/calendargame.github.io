@@ -27,11 +27,18 @@
 // resetting window would have drawn at its press), `deadIds` (every round it knew then), the Reset
 // waiting for room, `gone` — are the book's, and every record reads them.
 //
+// ★ AMNESIC'S ANCHOR (design-amnesic-close.md 1, 4): when play first changes a record inside an Amnesic
+// window (`win`, as store/syncCounts' anchors), the record's version gets an ANCHOR - the whole record as it
+// stood just before, holders and runner-ups exactly - kept in the version (the records' key; the doc holds
+// values only). A forget under Full at the next cold open (`forgetWindow`) puts the record back to it and
+// names the window's rounds dead. A new window's correction (an Override) of a round FILED BEFORE the window
+// is made on the anchor too, so the forget keeps it.
 // ⚠ THE ORACLE'S HOOKS ARE THE TEST'S, NEVER THE APP'S (`hooks`): the app passes none, and no decision
 // here reads anything a hook supplies.
 
 import { type Stamp, type Clock, cmpStamp, mint, see, cyrb53, canonicalJson } from './syncStamp.js'
 import { COUNTER_ROUND_ID, SCOPED_ROUND_ID, clockRoundId } from '../engine/roundId.js'
+import { eAfter } from './syncCounts.js'
 
 // ── Shapes ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -44,13 +51,18 @@ export type Rec = {
   hn?: Record<string, number[]>
   ol?: Record<string, number | null>
   olLoad?: Record<string, string>
+  /** (Amnesic) the record as it stood before the first change by play in window `e` (★ above). */
+  an?: { e: string; rec: Rec | null }
 }
 /** A new window's op on a record: a round's values (an Override of it: `ov`; a value no record keeps,
- *  `null` or the empty value, takes the round out of that field). */
+ *  `null` or the empty value, takes the round out of that field). `e`: the Amnesic window it is play in;
+ *  `re`: for an Override, the window the round was first FILED in (null: none). */
 export type RecOp = {
   id: number
   v: Record<string, { v: number | null; c?: number | null }>
   ov?: true
+  e?: string
+  re?: string | null
 }
 
 /** What a record's field values mean (the app: per Best map; the fuzz: the model's two counts). */
@@ -130,6 +142,9 @@ export interface RecordsHooks {
   counter?(name: 'resetKept' | 'xPruned'): void
   /** The model's ablations, for the judge's own test: a rule turned off must be caught. */
   without?: { takeBack?: boolean; alts?: boolean }
+  /** The Amnesic oracle's planted bug (mutam5.mjs): no restore at the forget. */
+  mutAm?: 'amNoForget' | null
+  onMutFired?(): void
 }
 
 /** The window's round-id clock (engine/roundId): the highest id it has seen, and the id it would draw. */
@@ -158,6 +173,16 @@ export const loadKeyOf = (stTag: Stamp | null, stBoot: boolean): string =>
   stTag ? `${stTag.m}.${stTag.c}.${stTag.t}` : stBoot ? 'boot' : 'fresh'
 const clone = <T>(o: T): T => (o === undefined ? o : (JSON.parse(JSON.stringify(o)) as T))
 const cmpSt = cmpStamp
+// (Amnesic) a record with its own anchor taken off, and the anchor of a record in window `e` (★ above)
+const strip = (r: Rec | null | undefined): Rec | null => {
+  if (!r) return null
+  const { an: _an, ...rest } = clone(r)
+  return rest
+}
+const anchorRec = (r: Rec | null | undefined, e: string): { e: string; rec: Rec | null } => ({
+  e,
+  rec: strip(r),
+})
 
 /** A record's fingerprint: every field's value, companion and holder. */
 export function fpRec(spec: RecordSpec, r: Rec | null | undefined): string {
@@ -218,6 +243,8 @@ export class RecordsBook {
   goneSeen = 0
   lastRound: number | null = null
   private preHlc: Clock | null = null
+  /** The Amnesic window play is anchored in now - null when none (★ above). */
+  readonly win: () => string | null
 
   constructor(o: {
     spec: RecordSpec
@@ -228,6 +255,7 @@ export class RecordsBook {
      *  Best maps of one progress doc - so every stamp of one window's writes to the doc is ordered). */
     hlc?: Clock
     hooks?: RecordsHooks
+    win?: () => string | null
   }) {
     this.spec = o.spec
     this.io = o.io
@@ -235,6 +263,7 @@ export class RecordsBook {
     this.clock = o.clock
     if (o.hlc) this.hlc = o.hlc
     this.hooks = o.hooks ?? {}
+    this.win = o.win ?? (() => null)
   }
 
   // ── field arithmetic ──
@@ -286,6 +315,12 @@ export class RecordsBook {
           x: Object.fromEntries(F.map((f) => [f, [] as FV[]])),
         }
     r.x ??= Object.fromEntries(F.map((f) => [f, [] as FV[]]))
+    // (Amnesic) copy-on-write: the first change by play in a window anchors the record as it stood before it
+    if (op.e && eAfter(op.e, rec?.an?.e) > 0) r.an = anchorRec(rec, op.e)
+    // a CORRECTION inside the window of a round from before it (an Override of a round the window did not
+    // file) is not play in the window: it is made on the anchor too, so the forget keeps it
+    if (op.ov && op.e && r.an?.e === op.e && op.re !== op.e)
+      r.an = { e: op.e, rec: strip(this.applyOp(r.an.rec, { id: op.id, v: op.v, ov: true })) }
     for (const f of F) {
       const val = op.v[f] ?? { v: this.spec.empty }
       r.x[f] ??= []
@@ -396,6 +431,7 @@ export class RecordsBook {
     if (from?.hn) r.hn = clone(from.hn)
     if (from?.ol) r.ol = clone(from.ol)
     if (from?.olLoad) r.olLoad = clone(from.olLoad)
+    if (from?.an) r.an = clone(from.an)
     return r
   }
   // a window holds the newest version when it holds that version - or when it saw an older page's Full
@@ -502,6 +538,10 @@ export class RecordsBook {
         out.x[f] = nx.alts.slice(0, ALT)
       }
     }
+    // (Amnesic) an older page's round the record took inside an Amnesic window is play in it: copy-on-write
+    const E = this.win()
+    if (E && fpRec(this.spec, out) !== fpRec(this.spec, h) && eAfter(E, h?.an?.e) > 0)
+      out.an = anchorRec(h, E)
     // a new window's pass-through literal carries its own rounds as ops: applied exactly
     const res = F.every((f) => out.f[f].id === null) ? null : out
     return (L.ops ?? [])
@@ -900,6 +940,11 @@ export class RecordsBook {
   // ── the window's own acts ──
   /** A round of this window's ended (or an Override changed it: `ov`). */
   op(k: string, op: RecOp): void {
+    // (a round is play in the Amnesic window it is filed in - the op carries it)
+    if (op.e === undefined) {
+      const e = this.win()
+      if (e) op.e = e
+    }
     const r = this.rec(k)
     // (the round on this window's results screen - its own, and the one it names `open` - whether it ended
     // now or was filed before: a round restored with its screen after a reload is this window's too, and
@@ -909,6 +954,29 @@ export class RecordsBook {
     this.lastRound = op.id
     r.dirty.push(op)
     r.mem = this.applyOp(r.mem, op)
+  }
+  /**
+   * THE FORGET UNDER FULL (design-amnesic-close.md 1): every record whose anchor names window `e` goes back to
+   * it - holders and runner-ups exactly - and every round it holds now that the anchor does not is named dead
+   * (an older copy naming one never brings it back). Written at the next landing. Returns the records restored.
+   */
+  forgetWindow(e: string): string[] {
+    const restored: string[] = []
+    for (const [k, r] of Object.entries(this.recs)) {
+      const an = r.mem?.an
+      if (!an || an.e !== e) continue
+      if (this.hooks.mutAm === 'amNoForget') {
+        this.hooks.onMutFired?.()
+        continue
+      }
+      const back = clone(an.rec)
+      const keep = new Set(this.knownIdsOf(back))
+      this.addDead(this.knownIdsOf(r.mem).filter((id) => !keep.has(id)))
+      r.mem = back && this.spec.fields.some((f) => back.f[f].id !== null) ? back : null
+      r.prov = true
+      restored.push(k)
+    }
+    return restored
   }
   /** Has a Reset since removed the round `id` (nothing left to Override)? */
   roundDead(id: number): boolean {

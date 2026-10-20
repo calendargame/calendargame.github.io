@@ -7,13 +7,17 @@
 // rounds, take them back with Overrides on their results screens, save through writeKept, save whole, reload,
 // and Full Reset under Stats Only in two writes; the device clock set back and forward. Plus what the model did
 // not have (part2-issues #1, #5, #6): a v2.26.0 page that SPREADS the record it changes (the tag kept), keeps
-// a taken-back field with its own round, and numbers its rounds with a counter from 1 per load.
+// a taken-back field with its own round, and numbers its rounds with a counter from 1 per load. And the model's
+// AMNESIC configurations (design-amnesic-close.md 4): the preset's value changes, the app closes and opens cold,
+// and the real book's forget under Full (RecordsBook.forgetWindow) puts each record back to its anchor - the
+// judge runs right after every forget as well as at the end, with the model's named cases (R16, R17, R19).
 // THE JUDGE (tests/helpers/syncModel/fuzz5.js, the model's own): knows nothing of stamps, tags or books - only
 // every round's values and when the device first showed each: the record must be the best of the live rounds
 // the device ever showed, held by the first round to reach it; every open new window must hold what the
 // device holds. Every difference is a gate failure or a NAMED residual (design 2.8), counted.
 // THE JUDGE'S OWN TEST: the model's rules turned off one at a time - the take-back rule, the runner-ups - and
-// the v2.26.0 page read with the model's bare tag (part2-issues #1) must each turn it red.
+// the v2.26.0 page read with the model's bare tag (part2-issues #1) must each turn it red; and the forget
+// planted away (mutam5.mjs: no restore) must be caught where a restore would have changed the record.
 // PARITY: before this suite was written the book was run beside the model's own new windows on the same seeds
 // (40 per configuration, 0 to 3), stamping every record on every write as the model does: every judge figure
 // was identical in every run. The book stamps a record only when it changes (2.2's compact form: the records'
@@ -56,6 +60,10 @@ describe('the records book in model5’s world', () => {
     ])
       expect(totals[k], k).toBeGreaterThan(0)
   })
+  it('reach, Amnesic: forgets under Full ran, records were put back, rounds were forgotten', () => {
+    for (const k of ['forgets', 'restored', 'restoreChanges', 'roundsForgotten'])
+      expect(totals[k], k).toBeGreaterThan(0)
+  })
 })
 
 describe('the judge catches the rules turned off', () => {
@@ -66,4 +74,21 @@ describe('the judge catches the rules turned off', () => {
       for (let seed = 1; seed <= 60 && !bad; seed++) if (run(seed, cfg, STEPS).bad) bad++
       expect(bad).toBeGreaterThan(0)
     })
+  // (the model's own test: 99.1% caught with new windows only, 86% with older tabs - the misses runs where an
+  // older tab's own rounds, or an older Full Reset no window saw, stand where the forgotten rounds were)
+  it('the forget under Full planted away (no restore): caught where a restore would change the record', () => {
+    let fired = 0
+    let caught = 0
+    for (const [, cfg] of cfgs) {
+      if (!cfg.amnesic) continue
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        const j = run(seed, { ...cfg, mut: 'amNoForget' }, STEPS)
+        if (!j.restoreChanges) continue
+        fired++
+        if (j.bad) caught++
+      }
+    }
+    expect(fired).toBeGreaterThan(20)
+    expect(caught / fired).toBeGreaterThan(0.8)
+  }, 600_000)
 })

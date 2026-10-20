@@ -31,6 +31,14 @@
 // (every slice's newest version; the bootstrap summaries; the fold records), and a TAG `w` inside every
 // silo a new window writes. The doc lands first and the key second, or neither (the caller's `io`).
 //
+// ★ AMNESIC'S ANCHOR (design-amnesic-close.md 1). When play first changes a silo inside an Amnesic WINDOW
+// (`win`: the app session and the preset's switch-on from Off, store/amnesicClose), the silo's version
+// gets an ANCHOR: the counts as they stood just before. It is part of the version - in the silo the doc
+// holds (`a`, which older builds carry with the silo as they carry the tag) and in the version's entry in
+// the envelope and the sync key (`an`, which they never touch) - so every merge below carries it with the
+// content it describes; a Reset drops it; the forget at the next cold open (`forgetWindow`) restores it.
+// Copy-on-write: a later answer in the same window leaves it; an answer of a LATER window replaces it;
+// windows are ordered (eAfter), so an answer of an earlier window that lands late never moves it.
 // ⚠ THE LEDGER AND THE OBSERVER ARE THE TEST'S, NEVER THE APP'S. The fuzz's oracle keeps, inside every
 // silo, a ledger of the answers it counts (`x`), updated by exact arithmetic on the same operands the
 // counts use — and logs what each window weighed and read. Both are optional hooks here (`hooks`); the
@@ -54,7 +62,8 @@ import { timesHash, timesHashAppended, prefixHash, appended } from '../engine/ti
 
 // ── Shapes ────────────────────────────────────────────────────────────────────────────────────────
 
-/** A silo in count form. `x` is the fuzz oracle's ledger (never read by a decision). */
+/** A silo in count form. `x` is the fuzz oracle's ledger (never read by a decision); `a` its Amnesic
+ *  anchor (★ above). */
 export type Silo = {
   pl: number
   gd: number
@@ -62,7 +71,31 @@ export type Silo = {
   bs: number
   t: number[]
   tl: number
+  a?: Anchor
   x?: unknown
+}
+/** A silo's AMNESIC ANCHOR (★ above): the window `e` it was taken in, the version it describes (`st`; null
+ *  when no version did), and the counts as they stood - its first `n` solve times, their hash `h`. */
+export type Anchor = {
+  e: string
+  st: Stamp | null
+  pl: number
+  gd: number
+  sk: number
+  bs: number
+  n: number
+  h: string
+  tl: number
+  x?: unknown
+}
+// THE WINDOWS ARE ORDERED: `<session>:<switch-on>` (the model's other reading, "since the app opened", is
+// `s<session>`). Positive when window x is after y (any window is after none).
+const eNum = (e: string): number[] => e.replace(/^s/, '').split(':').map(Number)
+export const eAfter = (x: string, y: string | null | undefined): number => {
+  if (!y) return 1
+  const a = eNum(x)
+  const b = eNum(y)
+  return a[0] - b[0] || (a[1] ?? 0) - (b[1] ?? 0)
 }
 /** The tag inside a silo a new window wrote: which version, and the counts it had then. */
 export type Tag = {
@@ -106,9 +139,19 @@ export type FoldRec = {
 type Part = { k: number; g: number; t: number[]; sk: number; x?: unknown }
 /** One un-landed action on a silo: an answer, or a whole-slice replacement (an Override). */
 export type Op =
-  | { kind: 'a'; r: boolean; tm: number | null; id?: number }
-  | { kind: 'rep'; from: Silo; to: Silo }
-type Dirty = { reset: boolean; ops: Op[]; set?: boolean }
+  | { kind: 'a'; r: boolean; tm: number | null; id?: number; e?: string }
+  // (`ca`: an Override of a card from BEFORE the anchor's window - the anchor as the same toggle leaves it,
+  // so the forget keeps the correction: design-amnesic-close.md 1)
+  | { kind: 'rep'; from: Silo; to: Silo; ca?: Anchor }
+// (a FORGET is a Reset to the anchor: `to` the restored value, `keepSt` the version the anchor describes)
+type Dirty = {
+  reset: boolean
+  ops: Op[]
+  set?: boolean
+  forget?: boolean
+  keepSt?: Stamp | null
+  to?: Silo
+}
 type Seg =
   | { own: Op[] }
   | { base: string; from: number; to: number; part: Part; rec: FoldRec; own?: undefined }
@@ -120,6 +163,7 @@ export type SiloEntry = {
   p?: ParentSum | null
   old?: Record<string, FoldRec>
   ps?: Stamp | null
+  an?: Anchor | null
   unres?: Stamp
 }
 export type RegEntry = { st: Stamp; fp: string; unres?: Stamp }
@@ -129,6 +173,7 @@ export type KeyEntry = {
   fp: string | null
   ps?: Stamp | null
   p?: ParentSum | null
+  an?: Anchor | null
   v?: unknown
   prev?: { fp: string } | null
   seen?: boolean
@@ -186,11 +231,20 @@ export interface CountsHooks {
     summary(s: Silo): unknown
     tag(s: Silo): unknown
     segPart(resolved: Silo, held: Silo, B: Block, heldRec: FoldRec | undefined): unknown
+    /** (Amnesic) a silo's ledger as an anchor keeps it; the ledger of the counts a summary names; and
+     *  the ledger of a silo restored to an anchor. */
+    anchor(s: Silo): unknown
+    anchorSum(v: Silo, sum: Summary | Tag): unknown
+    restore(a: Anchor): unknown
   }
   /** The model's planted merge bugs (mut4.mjs), for the oracle's own test. Never set by the app. */
   mut?: 'drop' | 'dropOne' | 'double' | null
+  /** The Amnesic oracle's planted bugs (mutam.mjs): no forget at all, or an anchor taken one answer late. */
+  mutAm?: 'amNoForget' | 'amAnchorLate' | null
   onWeigh?(book: CountsBook, x: string, B: Block, done: FoldRec): void
   onFoldBad?(book: CountsBook, x: string, B: Block, done: FoldRec, part: Part, held: Silo): void
+  /** A fold segment the sibling rule replays (the oracle logs it as it logs a fold). */
+  onSegFold?(book: CountsBook, x: string, part: Part, held: Silo): void
   onMutFired?(): void
   onRead?(book: CountsBook, dev: Dev): void
   onDecode?(docText: string, decoded: Envelope): void
@@ -199,7 +253,7 @@ export interface CountsHooks {
   onRefused?(book: CountsBook): void
   onLanded?(book: CountsBook, full: Envelope): void
   counter?(
-    name: 'inexact' | 'dropped' | 'droppedAnswers' | 'carried' | 'resetKept',
+    name: 'inexact' | 'dropped' | 'droppedAnswers' | 'carried' | 'resetKept' | 'forgetSkipped',
     n?: number,
   ): void
 }
@@ -234,7 +288,7 @@ type Classified = {
 type DevSlice = Classified & {
   v: unknown
   disk: unknown
-  newest: { st: Stamp; fp: string | null } | null
+  newest: { st: Stamp; fp: string | null; an?: Anchor | null } | null
 }
 export type Dev = {
   out: Record<string, DevSlice>
@@ -358,6 +412,8 @@ export class CountsBook {
   seen: { doc: string | null; side: string | null } = { doc: null, side: null }
   /** Set by the io when this window wrote while writes it had not handled were still queued for it. */
   blind = false
+  /** The Amnesic window play is anchored in now - null when none (★ above). */
+  readonly win: () => string | null
 
   constructor(o: {
     shape: CountsShape
@@ -365,12 +421,14 @@ export class CountsBook {
     tag: string
     name?: string
     hooks?: CountsHooks
+    win?: () => string | null
   }) {
     this.shape = o.shape
     this.io = o.io
     this.tag = o.tag
     this.name = o.name ?? o.tag
     this.hooks = o.hooks ?? {}
+    this.win = o.win ?? (() => null)
   }
   // THE SLICES, as the shape names them NOW: a doc whose slices come and go (the preset registry - one
   // name per preset) names a new one the moment it appears; it starts as "nothing known" (stamp ZERO),
@@ -402,16 +460,25 @@ export class CountsBook {
   // ⚠ SILO VALUES ARE NEVER CHANGED IN PLACE, here or anywhere in this file: every change makes a new
   // object (and a new times array, through engine/timesPool, which keeps the hash beside it) - so the
   // book can hold the same value in `mem`, `base` and what it read, with no copies of a long history.
-  applyOps(s: Silo, ops: readonly Op[]): Silo {
+  // (`st`: the version `s` is - the anchor an answer takes on it describes that version)
+  applyOps(s: Silo, ops: readonly Op[], st: Stamp | null = null): Silo {
     let o: Silo = s
     for (const a of ops) {
       if (a.kind === 'rep') {
         // A whole-slice change (an Override): it lands only on exactly the value it was made on — on
         // anything else it is a true conflict (another window built on the answer since), dropped.
-        if (siloFp(o) === siloFp(a.from)) o = a.to
+        // The silo's anchor stays - corrected, for an Override of a card from before its window (`ca`).
+        if (siloFp(o) === siloFp(a.from)) {
+          const an = o.a && a.ca && a.ca.e === o.a.e ? { ...a.ca, st: o.a.st } : o.a
+          o = an ? { ...a.to, a: an } : a.to
+        }
         continue
       }
+      // copy-on-write: the first answer of an Amnesic window anchors the silo at what it held before it
+      const anchors = !!a.e && eAfter(a.e, o.a?.e) > 0
+      const late = anchors && this.hooks.mutAm === 'amAnchorLate'
       const n: Silo = { ...o }
+      if (anchors && !late) n.a = this.anchorOf(o, a.e!, o.pl === s.pl ? st : null)
       if (this.hooks.ledger) n.x = this.hooks.ledger.apply(o.x, a)
       n.pl++
       if (a.r) {
@@ -420,9 +487,29 @@ export class CountsBook {
         if (n.sk > n.bs) n.bs = n.sk
         if (a.tm !== null) n.t = timesOfOp(a, o.t)
       } else n.sk = 0
+      if (late) {
+        n.a = this.anchorOf(n, a.e!, null)
+        this.hooks.onMutFired?.()
+      }
       o = n
     }
     return o
+  }
+  /** The anchor of silo `s` in window `e` (★ above), describing version `st`. */
+  anchorOf(s: Silo, e: string, st: Stamp | null): Anchor {
+    const a: Anchor = {
+      e,
+      st: st ? { m: st.m, c: st.c, t: st.t, d: st.d } : null,
+      pl: s.pl,
+      gd: s.gd,
+      sk: s.sk,
+      bs: s.bs,
+      n: s.t.length,
+      h: timesHash(s.t),
+      tl: s.tl,
+    }
+    if (this.hooks.ledger) a.x = this.hooks.ledger.anchor(s)
+    return a
   }
   tagOf(st: Stamp, s: Silo): Tag {
     const tg: Tag = {
@@ -492,12 +579,12 @@ export class CountsBook {
     const out: Record<string, DevSlice> = {}
     for (const x of this.SL) {
       const disk = doc ? state[x] : undefined
-      const v = this.memOfDisk(x, disk)
+      let v = this.memOfDisk(x, disk)
       const rec = (sync?.at?.[x] as SiloEntry | RegEntry | undefined) ?? null
       const sAt = Sg ? (Sg.at?.[x] ?? null) : null
-      let newest: { st: Stamp; fp: string | null } | null = sAt ? { st: sAt.st, fp: sAt.fp } : null
+      let newest: DevSlice['newest'] = sAt ? { st: sAt.st, fp: sAt.fp, an: sAt.an ?? null } : null
       if (rec && !rec.unres && (!newest || cmp(rec.st, newest.st) > 0))
-        newest = { st: rec.st, fp: rec.fp }
+        newest = { st: rec.st, fp: rec.fp, an: (rec as SiloEntry).an ?? null }
       // (every version's fold records this window reads are kept by stamp: a version written later on top
       // of an older page's copy of one of them inherits that version's history)
       if (this.isSilo(x) && rec && !rec.unres && (rec as SiloEntry).old)
@@ -541,6 +628,19 @@ export class CountsBook {
           (sAt && (c.kind === 'stamped' || c.kind === 'current') ? sAt.ps : null) ??
           null
         c.newestPs = sAt?.ps ?? null
+        // (Amnesic) a version's ANCHOR is its entry's (older builds never touch the key): bytes read as the
+        // newest version - its own (stamped), an older page's copy of it (current), that copy plus the
+        // page's own cards (a block on it) - stand on that version's anchor; any other bytes keep the one
+        // their silo carries
+        const onNewest =
+          c.kind === 'current' ||
+          (c.kind === 'block' && !!newest && isStampBase(c.base) && cmp(c.base, newest.st) === 0)
+        const an = c.kind === 'stamped' ? (rec as SiloEntry).an : onNewest ? newest?.an : null
+        if (an) v = { ...(v as Silo), a: an }
+        else if (c.kind === 'stamped' || onNewest) {
+          const { a: _a, ...rest } = v as Silo
+          v = rest
+        }
       }
       out[x] = { v, disk, newest, ...c }
     }
@@ -555,6 +655,7 @@ export class CountsBook {
           p: (e as SiloEntry).p ?? null,
           old: (e as SiloEntry).old ?? {},
           ps: (e as SiloEntry).ps ?? null,
+          an: (e as SiloEntry).an ?? null,
           ...(e.unres ? { unres: e.unres } : {}),
         }
       : { st: e.st, fp: e.fp, ...(e.unres ? { unres: e.unres } : {}) }
@@ -562,7 +663,14 @@ export class CountsBook {
   fullEntry(x: string, S: SyncKey): SiloEntry | RegEntry {
     const a = S.at[x]
     return this.isSilo(x)
-      ? { st: a.st, fp: a.fp as string, p: a.p ?? null, old: S.old?.[x] ?? {}, ps: a.ps ?? null }
+      ? {
+          st: a.st,
+          fp: a.fp as string,
+          p: a.p ?? null,
+          old: S.old?.[x] ?? {},
+          ps: a.ps ?? null,
+          an: a.an ?? null,
+        }
       : { st: a.st, fp: a.fp as string }
   }
   // A SETTING written by an older page (no tag can ride inside a setting).
@@ -703,7 +811,14 @@ export class CountsBook {
         B.bs !== done.b
       )
         this.hooks.counter?.('carried')
-      return { v: dv, rec: { ...this.recOf(B, 'land'), ih: true }, exactOld: true }
+      // (Amnesic) the page's own cards on the version held: that version's anchor rides with them, and
+      // cards they add inside an Amnesic window are play in it (anchored at the version held)
+      const { a: _a, ...own } = dv
+      let v: Silo = hv.a ? { ...own, a: hv.a } : own
+      const E = this.win()
+      if (E && dv.pl > hv.pl && eAfter(E, v.a?.e) > 0)
+        v = { ...v, a: this.anchorOf(hv, E, held.st) }
+      return { v, rec: { ...this.recOf(B, 'land'), ih: true }, exactOld: true }
     }
     const dk = B.k - done.k
     const okPrefix = B.t.length >= done.n && startsWith(B.t, done.t)
@@ -732,7 +847,7 @@ export class CountsBook {
         this.hooks.onMutFired?.()
         return { v: { ...hv, x: markMut(hv.x) }, rec: { ...this.recOf(B, 'land'), ih: true } }
       }
-      const v = this.foldPart(hv, part)
+      const v = this.foldPart(hv, part, held.st)
       if (MUT === 'double' && part.k === 1) {
         this.hooks.onMutFired?.()
         const v2 = this.foldPart(v, part)
@@ -749,8 +864,8 @@ export class CountsBook {
       dropped: true,
     }
   }
-  // the part appended to the held counts
-  foldPart(h: Silo, part: Part): Silo {
+  // the part appended to the held counts (`st`: the version `h` is, for the anchor)
+  foldPart(h: Silo, part: Part, st: Stamp | null = null): Silo {
     const o: Silo = {
       pl: h.pl + part.k,
       gd: h.gd + part.g,
@@ -758,8 +873,12 @@ export class CountsBook {
       bs: h.bs,
       t: [...h.t, ...part.t],
       tl: h.tl,
+      ...(h.a ? { a: h.a } : {}),
     }
     if (this.hooks.ledger) o.x = this.hooks.ledger.fold(h, part)
+    // (Amnesic) an older page's answers folded inside an Amnesic window are play in it: copy-on-write
+    const E = this.win()
+    if (E && part.k > 0 && eAfter(E, h.a?.e) > 0) o.a = this.anchorOf(h, E, st)
     if (part.g === part.k) {
       o.sk = h.sk + part.k
       o.bs = Math.max(h.bs, o.sk)
@@ -841,9 +960,30 @@ export class CountsBook {
         ...this.recOf(this.blockOf(d.v as Silo, d.sum!), 'land'),
         asOld: true,
       })
-      this.mem[x] = { v: d.v, st: { ...d.newest.st, d: 1 } }
+      // (Amnesic) the page's cards added inside an Amnesic window are play in it: anchored at the version
+      // its tag names
+      const dv = d.v as Silo
+      const sum = d.sum!
+      const E = this.win()
+      let v = dv
+      if (E && dv.pl > sum.pl && eAfter(E, dv.a?.e) > 0) {
+        const a: Anchor = {
+          e: E,
+          st: { ...d.newest.st },
+          pl: sum.pl,
+          gd: sum.gd,
+          sk: sum.sk,
+          bs: sum.bs,
+          n: sum.n,
+          h: sum.h,
+          tl: sum.tl,
+        }
+        if (this.hooks.ledger) a.x = this.hooks.ledger.anchorSum(dv, sum)
+        v = { ...dv, a }
+      }
+      this.mem[x] = { v, st: { ...d.newest.st, d: 1 } }
       this.prov[x] = true
-      this.landPend[x] = { b: key(d.base), fp: this.fpOf(x, d.v), asOld: true }
+      this.landPend[x] = { b: key(d.base), fp: this.fpOf(x, v), asOld: true }
     } else {
       // a proven carry, or a block on an older base: only a holder of the newest version may resolve it
       const nst = d.newest?.st ?? ZERO
@@ -910,14 +1050,15 @@ export class CountsBook {
     const old = clone(mineOld)
     for (const seg of d.p.ext) {
       if (seg.own) {
-        v = this.applyOps(v, seg.own)
+        v = this.applyOps(v, seg.own, v === held.v ? held.st : null)
         continue
       }
       // a fold segment: only the part of it this version lacks
       const have = old[seg.base]?.k ?? seg.from
       if (have >= seg.to) continue
       if (have > seg.from) return null // partly overlapping folds cannot be separated: the sibling stands
-      v = this.foldPart(v, seg.part)
+      this.hooks.onSegFold?.(this, x, seg.part, v)
+      v = this.foldPart(v, seg.part, v === held.v ? held.st : null)
       old[seg.base] = { ...seg.rec, st: null }
     }
     return { v, old }
@@ -1060,7 +1201,10 @@ export class CountsBook {
               this.oldApplied[x] = clone(d.old)
             this.base[x] = { v: d.v, st: this.base[x].st }
             if (!dirty.reset)
-              this.mem[x] = { v: this.applyOps(d.v as Silo, dirty.ops), st: this.mem[x].st }
+              this.mem[x] = {
+                v: this.applyOps(d.v as Silo, dirty.ops, d.st ?? null),
+                st: this.mem[x].st,
+              }
             if (d.kind === 'stamped' && d.st!.d === 0 && cmp(d.st!, this.base[x].st) !== 0)
               this.rebased[x] = { st: d.st!, v: d.v as Silo }
           }
@@ -1137,11 +1281,16 @@ export class CountsBook {
       }
       if (this.fpOf(x, mine.v) === this.fpOf(x, d.v) && d.kind !== 'block' && d.kind !== 'carry') {
         // (equal counts are the same value to the app; the oracle's ledger follows the newer version only)
+        // (Amnesic: equal counts are the same content, so the same anchor - an older page's copy carries
+        // none of its own)
         if (
           this.isSilo(x) &&
           !((d.kind === 'stamped' || d.kind === 'current') && cmp(d.st!, mine.st) < 0)
-        )
-          this.mem[x] = { v: d.v, st: this.mem[x].st }
+        ) {
+          const dv = d.v as Silo
+          const ma = (mine.v as Silo).a
+          this.mem[x] = { v: !dv.a && ma ? { ...dv, a: ma } : dv, st: this.mem[x].st }
+        }
         if (d.kind === 'change') {
           // (v5, 2.4) a change on content equal to what this window holds is still a change adopted:
           // the bootstrap record retires on EVERY path (the model skipped this one: an older tab's Reset
@@ -1183,7 +1332,8 @@ export class CountsBook {
       if (dirty.reset && !play) {
         this.hooks.counter?.('resetKept')
         this.takeDevice(x, d)
-        this.mem[x] = { v: this.applyOps(this.blank(), dirty.ops), st: this.mem[x].st }
+        // (a held forget waits on the value it restores, as a held Reset waits on the blank)
+        this.mem[x] = { v: this.applyOps(dirty.to ?? this.blank(), dirty.ops), st: this.mem[x].st }
         this.base[x] = { v: d.v, st: this.base[x].st }
         return
       }
@@ -1191,7 +1341,10 @@ export class CountsBook {
       this.takeDevice(x, d)
       if (dirty.ops.length === 0) delete this.dirty[x]
       else {
-        this.mem[x] = { v: this.applyOps(d.v as Silo, dirty.ops), st: this.mem[x].st }
+        this.mem[x] = {
+          v: this.applyOps(d.v as Silo, dirty.ops, this.base[x].st),
+          st: this.mem[x].st,
+        }
         this.base[x] = { v: d.v, st: this.base[x].st }
         this.rebased[x] = {
           st: d.kind === 'stamped' && d.st!.d === 0 ? d.st! : null,
@@ -1264,10 +1417,17 @@ export class CountsBook {
         if (p.asOld && a.st) a.asOld = true
       }
     }
-    // a Reset written now: the cards every fold record of that mode counts are gone from the version
-    for (const x of this.shape.silos)
-      if (this.dirty[x]?.reset)
-        for (const r of Object.values(this.oldApplied[x] ?? {})) r.ih = false
+    // a Reset written now: the cards every fold record of that mode counts are gone from the version -
+    // (Amnesic) but a FORGET is a Reset to the anchor: only a record folded AFTER the anchored version stands
+    // for cards it no longer holds; one folded into that version or before it still describes cards the
+    // restored version holds
+    for (const x of this.shape.silos) {
+      const dirty = this.dirty[x]
+      if (dirty?.reset)
+        for (const r of Object.values(this.oldApplied[x] ?? {}))
+          if (!(dirty.keepSt && r.st && r.st !== 'land' && cmp(r.st, dirty.keepSt) <= 0))
+            r.ih = false
+    }
     // (v4) each mode's play stamp: this write's stamp if it adds answers, else the held version's
     const ps: Record<string, Stamp | null> = {}
     const keyText = this.io.deviceKey()
@@ -1309,6 +1469,7 @@ export class CountsBook {
               p: parentSum[x] ?? null,
               old: this.oldApplied[x] ?? {},
               ps: ps[x],
+              an: (m.v as Silo).a ?? null,
             }
           : { st: m.st, fp: this.fpOf(x, m.v) }
       }
@@ -1332,7 +1493,7 @@ export class CountsBook {
     )
     for (const x of this.SL) if (!at[x] && keyEntry(x)) atC[x] = 0
     const docText = this.shape.write(state, { g: this.g!, at: atC }, { g: this.g!, at })
-    const resets = this.shape.silos.filter((x) => this.dirty[x]?.reset)
+    const resets = this.shape.silos.filter((x) => this.dirty[x]?.reset && !this.dirty[x].forget)
     // the sync key: the newest version of every slice, a setting's value and the value before it
     const prevS = prevKey
     const sAt: Record<string, KeyEntry> = {}
@@ -1347,7 +1508,11 @@ export class CountsBook {
         st: at[x].st,
         fp: at[x].fp,
         ...(this.isSilo(x)
-          ? { ps: (at[x] as SiloEntry).ps ?? null, p: (at[x] as SiloEntry).p ?? null }
+          ? {
+              ps: (at[x] as SiloEntry).ps ?? null,
+              p: (at[x] as SiloEntry).p ?? null,
+              an: (at[x] as SiloEntry).an ?? null,
+            }
           : {}),
       }
       if (!this.isSilo(x)) {
@@ -1474,7 +1639,16 @@ export class CountsBook {
 
   // ── a player's actions ──
   answer(x: string, op: Op): void {
-    this.mem[x] = { v: this.applyOps(this.mem[x].v as Silo, [op]), st: this.mem[x].st }
+    // (an answer is play in the Amnesic window it is given in - the op carries it: a held op re-applied
+    // later is still that window's)
+    if (op.kind === 'a' && op.e === undefined) {
+      const e = this.win()
+      if (e) op.e = e
+    }
+    this.mem[x] = {
+      v: this.applyOps(this.mem[x].v as Silo, [op], this.mem[x].st),
+      st: this.mem[x].st,
+    }
     ;(this.dirty[x] ??= { reset: false, ops: [] }).ops.push(op)
   }
   reset(x: string): void {
@@ -1491,6 +1665,50 @@ export class CountsBook {
     this.mem[x] = { v, st: this.mem[x]?.st ?? ZERO }
     this.base[x] ??= { v: this.absent(x), st: ZERO }
     this.dirty[x] = { reset: false, ops: [], set: true }
+  }
+  /**
+   * THE FORGET (design-amnesic-close.md 1): every silo whose anchor names window `e` goes back to it - its
+   * counts, and its first `n` solve times - written as a Reset to the anchor at the next land. A silo whose
+   * times before the anchor are no longer the anchor's (an older page Overrode a card from before the
+   * window: residual R17) is left as it is (`skipped`).
+   */
+  forgetWindow(e: string): { restored: string[]; skipped: string[] } {
+    const restored: string[] = []
+    const skipped: string[] = []
+    for (const x of this.shape.silos) {
+      const v = this.mem[x].v as Silo
+      const a = v.a
+      if (!a || a.e !== e) continue
+      if (prefixHash(v.t, a.n) !== a.h) {
+        skipped.push(x)
+        this.hooks.counter?.('forgetSkipped')
+        continue
+      }
+      if (this.hooks.mutAm === 'amNoForget') {
+        this.hooks.onMutFired?.()
+        continue
+      }
+      const back: Silo = {
+        pl: a.pl,
+        gd: a.gd,
+        sk: a.sk,
+        bs: a.bs,
+        t: v.t.slice(0, a.n),
+        tl: a.tl,
+      }
+      if (this.hooks.ledger) back.x = this.hooks.ledger.restore(a)
+      delete this.unres[x]
+      delete this.raw[x]
+      delete this.unresBlock[x]
+      if (!this.dirty[x]?.reset) {
+        this.resetBase[x] = this.mem[x].st
+        this.pressPs[x] = this.knownPs[x] ?? null
+      }
+      this.mem[x] = { v: back, st: this.mem[x].st }
+      this.dirty[x] = { reset: true, forget: true, ops: [], keepSt: a.st, to: back }
+      restored.push(x)
+    }
+    return { restored, skipped }
   }
   /** Whether a held Reset of this slice is pressed and waiting (for the oracle's kills). */
   resetPending(x: string): boolean {

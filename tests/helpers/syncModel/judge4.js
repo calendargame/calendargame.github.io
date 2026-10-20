@@ -768,9 +768,14 @@ export function crossCheck(mine, A, { lag = false } = {}) {
   const by = {}
   let unexplained = 0
   for (const f of A.flags) {
+    // (an answer a FORGET could not remove - filed under a named case at the forget, `F<id>` - stays on the
+    // device, and the next new write carries it: reviewer A's oracle, which counts the forget as a kill of
+    // every answer of the window, reads that as a return. It is the case filed at the forget - found porting
+    // the Amnesic gate into the suite: the model's own run of config 27 left those flags unexplained)
+    const forgetCase = f.key.startsWith('R') ? mine.named.get('F' + f.key.slice(1)) : undefined
     const k = f.afterReset
       ? 'removedAfterReset'
-      : (mine.named.get(f.key) ?? (lag ? 'R1 lag' : null))
+      : (mine.named.get(f.key) ?? forgetCase ?? (lag ? 'R1 lag' : null))
     if (k) by[k] = (by[k] ?? 0) + 1
     else {
       unexplained++

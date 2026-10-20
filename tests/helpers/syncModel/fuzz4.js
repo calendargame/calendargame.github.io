@@ -1,5 +1,6 @@
-// tests/helpers/syncModel/fuzz4.js — design-q2-model/fuzz4.mjs VERBATIM (its driver and its 22
-// configurations), driving the world in which the REAL door plays every new window.
+// tests/helpers/syncModel/fuzz4.js — design-q2-model/fuzz4.mjs VERBATIM (its driver and its 31
+// configurations: the 22 of the sync gate and the 9 of the Amnesic one, design-amnesic-close.md 4), driving
+// the world in which the REAL door plays every new window.
 //
 // The model's header: node fuzz4.mjs [seeds] [steps] [configs] - random search over model4.mjs (the v3 merge rule in the
 // app's count form), judged by BOTH oracles: mine (judge) and reviewer A's original one (judgeA).
@@ -83,6 +84,9 @@ export function run(seed, cfg, steps = 300) {
       'jumpClock',
       'newWin',
       'oldWin',
+      'setAmnesic',
+      'closeAll',
+      'coldOpen',
     ]) {
       const orig = w[fn]
       w[fn] = (...args) => {
@@ -137,6 +141,16 @@ export function run(seed, cfg, steps = 300) {
   w.deliverAll()
   const ov = cfg.overrides ?? 0.03
   for (let i = 0; i < steps; i++) {
+    // (Amnesic, design-amnesic-close.md) the preset's value changes; the app closes and opens cold (an extra draw
+    // only in these configurations, so every other configuration plays exactly as before)
+    if (cfg.amnesic) {
+      const z = r()
+      if (z < 0.04) w.setAmnesic(pick(['off', 'stats', 'full']))
+      else if (z < 0.055 && !anchor) {
+        w.closeAll()
+        news.push(w.coldOpen('n' + n++))
+      }
+    }
     const live = news.filter((y) => !y.closed)
     const awake = live.filter((y) => !y.frozen)
     const free = live.filter((y) => y !== anchor)
@@ -217,7 +231,7 @@ export function run(seed, cfg, steps = 300) {
   j.resetKept = w.W.resetKept ?? 0
   j.envMismatch = w.W.envMismatch ?? 0
   Object.defineProperty(j, 'world', { value: w, enumerable: false })
-  // LAG gates G4, G5 and G8 - and G5 is now judged at every write
+  // LAG gates G4, G5 and G8 - and G5 is now judged at every write; a forget that misses (a return, G2-like) is R1 there
   if (cfg.lag) j.bad = j.diverged + j.doubled + j.aggBad + j.writeDouble + j.writeOdd
   return j
 }
@@ -260,8 +274,39 @@ export const cfgs = [
     'LAG + 1 old page + removed + cleared',
     { ...base, lag: true, olds: 1, clear: true, remove: true },
   ],
+  // (Amnesic, design-amnesic-close.md) the value changes, the app closes and opens cold, the forget runs
+  ['AMNESIC: new windows only', { ...base, amnesic: true }],
+  ['AMNESIC: + storage cleared', { ...base, amnesic: true, clear: true }],
+  ['AMNESIC: 1 old page', { ...base, amnesic: true, olds: 1 }],
+  [
+    'AMNESIC: 1 old page, Overrides at depth (x5)',
+    { ...base, amnesic: true, olds: 1, overrides: 0.15 },
+  ],
+  [
+    'AMNESIC: 1 old page + doc removed + cleared',
+    { ...base, amnesic: true, olds: 1, clear: true, remove: true },
+  ],
+  ['AMNESIC: 2 old pages', { ...base, amnesic: true, olds: 2 }],
+  [
+    'AMNESIC: sync key refused + later',
+    { ...base, amnesic: true, olds: 1, sideFullFirst: true, sideFull: true },
+  ],
+  ['AMNESIC: LAG + 1 old page', { ...base, amnesic: true, lag: true, olds: 1 }],
+  [
+    'AMNESIC, the other switch (since the app opened), 1 old page',
+    { ...base, amnesic: true, olds: 1, opt: { amRule: 'open' } },
+  ],
 ]
 const keys = [
+  'oldResetOfBlankView',
+  'forgets',
+  'forgotten',
+  'forgetMissed',
+  'forgetSkipped',
+  'amLate',
+  'oldWhileClosed',
+  'olderCopyStands',
+  'amTwoLineages',
   'envMismatch',
   'resetKept',
   'writeDouble',

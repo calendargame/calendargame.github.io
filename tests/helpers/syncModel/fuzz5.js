@@ -2,6 +2,9 @@
 // configurations), driving the world in which the REAL records book plays every new window (world5.js) -
 // plus the configurations for the two things the model did not have: an older page that SPREADS the record it
 // changes (v2.26.0), with the model's bare tag (its hole, part2-issues #1) and with the app's self-verifying one.
+// (Amnesic, design-amnesic-close.md 4) the model's three Amnesic configurations: the preset's value changes,
+// the app closes and opens cold, the forget under Full runs first; G9 is judged right after every forget as
+// well as at the end, with the model's named cases.
 //
 // The model's header: node fuzz5.mjs [seeds] [steps] [configs] - random search over model5.mjs (one Best
 // record, two fields), judged against the rounds themselves: the record must be the best of the live rounds
@@ -25,10 +28,42 @@ export function judge5(w) {
     unseenFullReset: 0,
     staleSecondPage: 0,
   }
+  // (An older page's Full Reset that no new window turned into a version before that page wrote again - every
+  // new window asleep, or refused by a full device: the sync key still names the record it destroyed, R10/R2 -
+  // is judged in checkFields)
+  const f = w.final()
+  checkFields(w, r, f)
+  for (const y of w.W.wins)
+    if (y.kind === 'N' && !y.closed && w.fpRec(y.mem()) !== w.fpRec(f)) r.diverged++
+  // (v5) G13: a field's COMPANION is its holder's - one of the values that round's other field ever had -
+  // or unknown (null); never another round's
+  if (f)
+    for (const fl of FIELDS) {
+      const e = f.f[fl]
+      if (e.id === null || e.c === undefined || e.c === null) {
+        if (e.id !== null && e.c === null) r.companionUnknown = (r.companionUnknown ?? 0) + 1
+        continue
+      }
+      const Rr = w.W.rounds.get(e.id)
+      const ok =
+        !!Rr && [...(Rr.vals ?? []), Rr.v, Rr.saved ?? Rr.v].some((v) => v && v[OTHER[fl]] === e.c)
+      if (!ok) {
+        r.wrongCompanion = (r.wrongCompanion ?? 0) + 1
+        if (process.env.WHY) console.log('BAD companion', fl, JSON.stringify(e))
+      }
+    }
+  // (Amnesic) G9 judged also at every FORGET, on the device right after it (taken by the driver's hook)
+  for (const k of w.W.forgetChecks ?? [])
+    for (const [key, n] of Object.entries(k)) if (n) r[key] = (r[key] ?? 0) + n
+  r.bad = r.wrongValue + r.wrongHolder + r.deadHolder + r.diverged + (r.wrongCompanion ?? 0)
+  return r
+}
+// G9 on one device state: per field, the best of the live rounds whose value a record ever showed, held by
+// the first to reach it; every difference filed under a named case or counted bad
+export function checkFields(w, r, f, atForget = null) {
   const { rounds, ev } = w.W
-  // An older page's Full Reset that no new window turned into a version before that page wrote again (every
-  // new window asleep, or refused by a full device): the sync key still names the record it destroyed (R10/R2)
   let unseenFR = false
+  let unseenFRany = false
   for (const e of ev) {
     if (e.why !== 'old-fullreset-remove') continue
     const next = ev.find(
@@ -38,10 +73,14 @@ export function judge5(w) {
         q.why !== 'old-fullreset-middle' &&
         q.why !== 'old-fullreset-remove',
     )
-    const covered = ev.some((q) => q.i > e.i && (!next || q.i < next.i) && q.kind === 'N')
-    if (!covered && next) unseenFR = true
+    // (v5: "turned into a VERSION" - a pass-through literal a window that holds no version writes is not one;
+    // Best model, config 9, run 132: the one holder was refused from before the Full Reset until it closed)
+    const covered = ev.some((q) => q.i > e.i && (!next || q.i < next.i) && q.kind === 'N' && !!q.st)
+    if (!covered && next) {
+      unseenFRany = true
+      if (!atForget || e.i >= atForget.startEv) unseenFR = true
+    }
   }
-  const f = w.final()
   for (const fl of FIELDS) {
     // a new window's round counts as last SAVED (a window closed on a full device loses what it never saved)
     const live = [...rounds.values()].filter(
@@ -56,7 +95,20 @@ export function judge5(w) {
       if (val(q) > best.v) best = { v: val(q), id: q.id }
     const got = f ? f.f[fl] : { v: 0, id: null }
     if (got.v === best.v && got.id === best.id) continue
-    if (unseenFR && (got.v > best.v || (got.id !== null && rounds.get(got.id)?.dead))) {
+    // (...then the doc that page REBUILT stands, and its literal settles a tie as that page did)
+    if (unseenFR && (got.v >= best.v || (got.id !== null && rounds.get(got.id)?.dead))) {
+      r.unseenFullReset++
+      continue
+    }
+    // (at a forget, an unseen older Full Reset from BEFORE the window counts only for a holder that Full Reset
+    // killed: the record the window anchored on still named it - R10 carried into the window, never the forget's)
+    if (
+      atForget &&
+      unseenFRany &&
+      got.id !== null &&
+      rounds.get(got.id)?.dead &&
+      rounds.get(got.id)?.killedBy?.page
+    ) {
       r.unseenFullReset++
       continue
     }
@@ -76,11 +128,26 @@ export function judge5(w) {
     if (
       G?.dead &&
       G.kind === 'O' &&
-      G.killedBy &&
+      G.killedBy?.page &&
       G.killedBy.page !== G.page &&
       G.freshAt !== null &&
       G.freshAt !== undefined &&
       G.freshAt < G.killedBy.at
+    ) {
+      r.twoFullResets = (r.twoFullResets ?? 0) + 1
+      continue
+    }
+    // (v5) ...or after a NEW window's Reset killed it, when an older Full Reset seen since cleared every window's
+    // record of that Reset's bound: the rebuilt doc reads as loaded after the Full Reset, and nothing can date it
+    // (Best model, config 10, run 2954)
+    if (
+      G?.dead &&
+      G.kind === 'O' &&
+      G.killedBy?.reset &&
+      G.freshAt !== null &&
+      G.freshAt !== undefined &&
+      G.freshAt < G.killedBy.at &&
+      ev.some((q) => q.why === 'old-fullreset-remove' && q.i > G.killedBy.at)
     ) {
       r.twoFullResets = (r.twoFullResets ?? 0) + 1
       continue
@@ -109,6 +176,84 @@ export function judge5(w) {
     }
     if (misSided(G) || misSided(best.id !== null ? rounds.get(best.id) : null)) {
       r.idOrder = (r.idOrder ?? 0) + 1
+      continue
+    }
+    // (Amnesic, design-amnesic-close.md) the forget under Full: named cases, from the world
+    const B = best.id !== null ? rounds.get(best.id) : null
+    const fg = w.W.forgets ?? []
+    // R19 (Best): an older tab's round inside the window that the record took before the anchor was made, or
+    // that an older tab's copy brings back after the forget (no window ever named it to the opener) - kept
+    // (precisely: no NEW window's play in the window had landed in a VERSION before that round - so the anchor was
+    // made after it - or it reached the device again after the forget, in an older page's copy)
+    const firstNew = (fo) =>
+      Math.min(
+        ...[...rounds.values()]
+          .filter(
+            (q) =>
+              q.kind === 'N' &&
+              q.seq > fo.startSeq &&
+              q.seq <= fo.endSeq &&
+              q.versionAt !== undefined,
+          )
+          .map((q) => q.versionAt),
+        ...[...rounds.values()]
+          .filter((q) => q.kind === 'N')
+          .flatMap((q) => (q.ovLanded ?? []).filter((x) => x >= fo.startEv && x <= fo.at)),
+      )
+    const fk = G?.killedBy?.forget ? fg.find((fo) => fo.at === G.killedBy.at) : null
+    if (
+      G?.dead &&
+      G.kind === 'O' &&
+      fk &&
+      (G.at < firstNew(fk) || (G.reach?.[fl]?.at ?? -1) >= fk.at)
+    ) {
+      r.amOldRoundKept = (r.amOldRoundKept ?? 0) + 1
+      continue
+    }
+    // (at a forget) the field is exactly as the window FOUND it: the forget did its whole job, and what differs
+    // is the record as it then stood - judged where it stands at the end like any record
+    if (
+      atForget &&
+      atForget.startRec !== undefined &&
+      JSON.stringify(got) === JSON.stringify(atForget.startRec?.f?.[fl] ?? { v: 0, id: null })
+    ) {
+      r.amAsFound = (r.amAsFound ?? 0) + 1
+      continue
+    }
+    // R17 (Best): an OLDER tab corrected (Overrode) inside the window a round from before it; the forget puts the
+    // record back as the window found it, so the correction is undone (a new window's is carried onto the anchor)
+    const ovIn = (q, fo) =>
+      !!q &&
+      q.kind === 'O' &&
+      q.seq <= fo.startSeq &&
+      (q.ovAt ?? []).some((a) => a >= fo.startEv && a <= fo.at)
+    if (fg.some((fo) => ovIn(G, fo) || ovIn(B, fo))) {
+      r.amOldCorrectionUndone = (r.amOldCorrectionUndone ?? 0) + 1
+      continue
+    }
+    // R19 (Best, new windows' rounds): at the forget the device holds a PASS-THROUGH literal - a window that held no
+    // newest version put its rounds on top as ops - and the opener holds no newest version either: it cannot take
+    // the literal apart, and keeps it
+    if (atForget && G?.dead && G.killedBy?.forget) {
+      const db = w.W.dev.get('doc') ? JSON.parse(w.W.dev.get('doc')).b : null
+      if (G.kind === 'N' && Array.isArray(db?.nr)) {
+        r.amPassThroughKept = (r.amPassThroughKept ?? 0) + 1
+        continue
+      }
+    }
+    // R16 (Best): a round begun before the window whose value reached the record only after the window began (a
+    // full device held a new window's round; an older tab's literal no window had read) - forgotten with it
+    if (
+      B &&
+      fg.some(
+        (fo) =>
+          B.seq <= fo.startSeq &&
+          (B.kind === 'N'
+            ? (B.savedSeq ?? Infinity) > fo.startSeq
+            : (B.reach?.[fl]?.at ?? Infinity) >= fo.startEv),
+      )
+    ) {
+      r.amLateRound = (r.amLateRound ?? 0) + 1
       continue
     }
     if (got.id !== null && rounds.get(got.id)?.dead) {
@@ -140,31 +285,23 @@ export function judge5(w) {
         console.log('BAD holder', fl, JSON.stringify(got), 'truth', JSON.stringify(best))
     }
   }
-  for (const y of w.W.wins)
-    if (y.kind === 'N' && !y.closed && w.fpRec(y.mem()) !== w.fpRec(f)) r.diverged++
-  // (v5) G13: a field's COMPANION is its holder's - one of the values that round's other field ever had -
-  // or unknown (null); never another round's
-  if (f)
-    for (const fl of FIELDS) {
-      const e = f.f[fl]
-      if (e.id === null || e.c === undefined || e.c === null) {
-        if (e.id !== null && e.c === null) r.companionUnknown = (r.companionUnknown ?? 0) + 1
-        continue
-      }
-      const Rr = rounds.get(e.id)
-      const ok =
-        !!Rr && [...(Rr.vals ?? []), Rr.v, Rr.saved ?? Rr.v].some((v) => v && v[OTHER[fl]] === e.c)
-      if (!ok) {
-        r.wrongCompanion = (r.wrongCompanion ?? 0) + 1
-        if (process.env.WHY) console.log('BAD companion', fl, JSON.stringify(e))
-      }
-    }
-  r.bad = r.wrongValue + r.wrongHolder + r.deadHolder + r.diverged + (r.wrongCompanion ?? 0)
-  return r
 }
 export function run(seed, cfg, steps = 300) {
   const R = rng(seed)
-  const w = makeWorld(cfg.opt ?? {})
+  const w = makeWorld({ ...(cfg.opt ?? {}), ...(cfg.mut ? { mut: cfg.mut } : {}) })
+  // (Amnesic) G9 at every forget: the device right after it, judged like the end
+  w.W.onForget = (c) => {
+    const k = {
+      wrongValue: 0,
+      wrongHolder: 0,
+      deadHolder: 0,
+      diverged: 0,
+      unseenFullReset: 0,
+      staleSecondPage: 0,
+    }
+    checkFields(w, k, w.final(), c)
+    ;(w.W.forgetChecks ??= []).push(k)
+  }
   const pick = (a) => a[Math.floor(R() * a.length)]
   const val = () => Math.floor(R() * 8)
   const news = [w.newWin('n0'), w.newWin('n1')]
@@ -172,6 +309,15 @@ export function run(seed, cfg, steps = 300) {
   const olds = []
   for (let i = 0; i < (cfg.olds ?? 1); i++) olds.push(w.oldWin('old' + i))
   for (let i = 0; i < steps; i++) {
+    // (Amnesic) the value changes; the app closes and opens cold (an extra draw only in these configurations)
+    if (cfg.amnesic) {
+      const z = R()
+      if (z < 0.04) w.setAmnesic(pick(['off', 'stats', 'full']))
+      else if (z < 0.055) {
+        w.closeAll()
+        news.push(w.coldOpen('n' + n++))
+      }
+    }
     const live = news.filter((y) => !y.closed)
     const awake = live.filter((y) => !y.frozen)
     const x = R()
@@ -214,6 +360,11 @@ export function run(seed, cfg, steps = 300) {
   for (let i = 0; i < 3; i++) w.deliverAll()
   if (cfg.dump) cfg.dump(w)
   const j = judge5(w)
+  j.forgets = (w.W.forgets ?? []).length // (reach, Amnesic: closes under Full, and records put back by them)
+  j.restored = w.W.restored ?? 0
+  j.restoreChanges = w.W.restoreChanges ?? 0
+  j.roundsForgotten = [...w.W.rounds.values()].filter((q) => q.killedBy?.forget).length
+  j.mutFired = w.W.mutFired ?? 0
   j.runnerUpsDropped = w.W.xPruned ?? 0 // (reach: the compact form's runner-up rule acted)
   j.resetKept = w.W.resetKept ?? 0 // (reach: a held Reset left waiting by a newer version that added no play)
   return j
@@ -257,6 +408,27 @@ export const cfgs = [
       olds: 2,
       resets: true,
       fullReset: true,
+      opt: { spreadOld: 'one', counterIds: 'one', selfTag: true },
+    },
+  ],
+  // (Amnesic, design-amnesic-close.md) the value changes, the app closes and opens cold, the forget under Full
+  ['AMNESIC: new windows only, Resets', { ...base, olds: 0, resets: true, amnesic: true }],
+  [
+    'AMNESIC: 1 old page, Resets, Full Reset',
+    { ...base, olds: 1, resets: true, fullReset: true, amnesic: true },
+  ],
+  [
+    'AMNESIC: 2 old pages, all of the above',
+    { ...base, olds: 2, resets: true, fullReset: true, amnesic: true },
+  ],
+  [
+    'AMNESIC: a v2.26.0 page and a v2.29.0 page, the self-verifying tag, all of the above',
+    {
+      ...base,
+      olds: 2,
+      resets: true,
+      fullReset: true,
+      amnesic: true,
       opt: { spreadOld: 'one', counterIds: 'one', selfTag: true },
     },
   ],

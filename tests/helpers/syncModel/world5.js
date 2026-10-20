@@ -22,6 +22,10 @@
 // (`cid`, store/bestRecords' `…Of`); a reader believes a companion only when that id is the holder's. A
 // spreading page (v2.26.0) keeps the old holder's companion - and its id - beside a new holder; the other
 // older builds write no companion at all. `cid: false` writes none (the v4 form: the judge must catch it).
+// (Amnesic, design-amnesic-close.md) the world holds the app SESSION, the record's preset's Amnesic value and
+// its switch-on count; a cold open runs the forget under Full first - the real book's forgetWindow, its anchors
+// taken by the book's own copy-on-write (`win`: the window the world says play is in now). `mut:
+// 'amNoForget'` plants the oracle's own test: no restore.
 //
 // The model's own header:
 //
@@ -78,7 +82,13 @@ export function makeWorld(opt = {}) {
     readsBy: [],
     nid: 0,
     seq: 0,
+    // (Amnesic, design-amnesic-close.md) the app session, the record's preset's Amnesic value and switch-on count
+    sid: 1,
+    am: { v: 'off', since: 0 },
+    winStartSeq: 0,
   }
+  const curE = () =>
+    O.amAnchors === false ? null : W.am.v !== 'off' ? W.sid + ':' + W.am.since : null
   const tick = () => ++W.wall
   const devState = () => ({ doc: W.dev.get('doc') ?? null, side: W.dev.get('side') ?? null })
   // (oracle) a round's value changes (its arrival on the device is noted when the device shows it - reachOf)
@@ -336,18 +346,26 @@ export function makeWorld(opt = {}) {
         view: () => devOf(w.view),
         deviceKey: () => (W.dev.get('side') ? JSON.parse(W.dev.get('side')) : null),
       },
+      win: curE,
       hooks: {
         onMint: () => tick(),
         onLanded: (_b, ops, resets) => {
           // (oracle) a Reset that LANDS kills every round begun before it was PRESSED, in the driver's real order
           if (resets) {
-            for (const Rr of W.rounds.values()) if (Rr.seq < w.resetPressSeq) Rr.dead = true
+            for (const Rr of W.rounds.values())
+              if (Rr.seq < w.resetPressSeq && !Rr.dead) {
+                Rr.dead = true
+                Rr.killedBy = { reset: w.name, at: W.ev.length - 1 }
+              }
             ;(W.resetLog ??= []).push({ seq: w.resetPressSeq, bound: resets })
           }
           for (const op of ops) {
             const Rr = W.rounds.get(op.id)
             Rr.saved = valOf(op)
             Rr.savedSeq ??= ++W.seq
+            // (oracle: when it first landed IN A VERSION - the write's event index - and a correction's landings)
+            Rr.versionAt ??= W.ev.length
+            if (op.ov && op.e) (Rr.ovLanded ??= []).push(W.ev.length)
           }
         },
         onPassThrough: (_b, ops) => {
@@ -365,6 +383,10 @@ export function makeWorld(opt = {}) {
           else W.xPruned = (W.xPruned ?? 0) + 1
         },
         ...(O.without ? { without: O.without } : {}),
+        mutAm: O.mut === 'amNoForget' ? 'amNoForget' : null,
+        onMutFired: () => {
+          W.mutFired = (W.mutFired ?? 0) + 1
+        },
       },
     })
     w.pos = W.hist.length - 1
@@ -475,7 +497,9 @@ export function makeWorld(opt = {}) {
       step(w)
       const id = newRound(w)
       setVal(W.rounds.get(id), { s, k })
-      w.book.op(R, asOp(id, { s, k }))
+      const E = curE()
+      W.rounds.get(id).e = E // (the window the round was filed in: the app keeps it with the round on its screen)
+      w.book.op(R, { ...asOp(id, { s, k }), ...(E ? { e: E } : {}) })
       w.owes = !land(w, 'round')
       return id
     },
@@ -484,6 +508,7 @@ export function makeWorld(opt = {}) {
       if (w.kind === 'O') {
         if (!w.round) return false
         const { id, pre } = w.round
+        ;(W.rounds.get(id).ovAt ??= []).push(W.ev.length) // (oracle) when it was Overridden
         const lit = rebuild(pre, diskId(w, id), { s, k }, w)
         setVal(W.rounds.get(id), claimed(w, lit, diskId(w, id), { s, k }))
         // (oracle) a round taken back below the record the page began it on is no longer shown by ANY record
@@ -505,7 +530,13 @@ export function makeWorld(opt = {}) {
       }
       const id = w.book.lastRound
       setVal(W.rounds.get(id), { s, k })
-      w.book.op(R, asOp(id, { s, k }, true))
+      const E = curE()
+      w.book.op(R, {
+        ...asOp(id, { s, k }, true),
+        re: W.rounds.get(id).e ?? null,
+        ...(E ? { e: E } : {}),
+      })
+      ;(W.rounds.get(id).ovAt ??= []).push(W.ev.length) // (oracle) when it was Overridden
       w.owes = !land(w, 'override')
       return true
     },
@@ -582,6 +613,73 @@ export function makeWorld(opt = {}) {
     },
     setFull(w, on) {
       w.full = on
+    },
+    // -- AMNESIC (design-amnesic-close.md) --
+    setAmnesic(v) {
+      if (W.am.v === 'off' && v !== 'off') {
+        W.am.since++
+        W.winStartSeq = W.seq
+        W.winStartEv = W.ev.length
+        W.winStartRec = api.final()
+      }
+      W.am.v = v
+    },
+    closeAll() {
+      for (const y of W.wins) if (y.kind === 'N') y.closed = true
+      W.closing = {
+        v: W.am.v,
+        E: curE(),
+        startSeq: W.winStartSeq,
+        startEv: W.winStartEv ?? 0,
+        endSeq: W.seq,
+        startRec: W.winStartRec ?? null,
+      }
+    },
+    // the next cold open: the forget runs first, in the closed session; under FULL a record whose anchor names the
+    // closed window goes back to it - holders and runner-ups exactly - and the window's rounds it names are dead
+    // (the real book's forgetWindow, landed as a write like any other)
+    coldOpen(name) {
+      if (W.wins.some((y) => y.kind === 'N' && !y.closed))
+        throw new Error('coldOpen with a live window')
+      const c = W.closing
+      W.closing = null
+      const w = newWin(name)
+      if (c && c.v === 'full' && c.E) {
+        // (oracle) every round begun inside the closed window - by any page - is gone
+        for (const Rr of W.rounds.values())
+          if (Rr.seq > c.startSeq && Rr.seq <= c.endSeq && !Rr.dead) {
+            Rr.dead = true
+            Rr.killedBy = {
+              forget: true,
+              at: W.ev.length,
+              startSeq: c.startSeq,
+              startEv: c.startEv,
+            }
+          }
+        ;(W.forgets ??= []).push({
+          at: W.ev.length,
+          startSeq: c.startSeq,
+          startEv: c.startEv,
+          endSeq: c.endSeq,
+        })
+        // (`restoreChanges`: forgets whose restore changes what the record shows - the ones the planted bug
+        // could be seen by)
+        const mem = w.mem()
+        if (mem?.an?.e === c.E && fpRec(mem.an.rec) !== fpRec(mem))
+          W.restoreChanges = (W.restoreChanges ?? 0) + 1
+        if (w.book.forgetWindow(c.E).length) {
+          W.restored = (W.restored ?? 0) + 1
+          if (!land(w, 'forget')) throw new Error('forget refused (the world opens it with room)')
+        }
+        W.onForget?.(c)
+      }
+      W.sid++
+      if (W.am.v !== 'off') {
+        W.winStartSeq = W.seq
+        W.winStartEv = W.ev.length
+        W.winStartRec = api.final()
+      }
+      return w
     },
     final: () => {
       const doc = W.dev.get('doc') ? JSON.parse(W.dev.get('doc')) : null
