@@ -17,7 +17,8 @@ import { DAY } from '../src/lib/format.js'
 import {
   mountApp,
   openSettings,
-  pickerLockState,
+  isOffered,
+  picker,
   expectNotInEffect,
   resetAppState,
 } from './helpers/settingsPanel.jsx'
@@ -135,7 +136,7 @@ describe('Settings → Input toggle', () => {
     expect(useSettings.getState().inputStyle).toBe('dots')
     fireEvent.click(screen.getByRole('radio', { name: 'Buttons' }))
     expect(useSettings.getState().inputStyle).toBe('buttons')
-    expect(pickerLockState('Input').offered).toBe(true)
+    expect(isOffered(picker('Input'))).toBe(true)
     expect(screen.getByRole('radio', { name: 'Buttons' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('radio', { name: 'Dots' }).getAttribute('aria-checked')).toBe('false')
   })

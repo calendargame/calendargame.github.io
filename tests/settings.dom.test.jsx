@@ -10,17 +10,14 @@
 //     and Theme in round-9, so the housing finally MEANS "these options are mutually exclusive"
 //     instead of being a per-group decoration. Both halves are pinned: every picker is a tray,
 //     every switch is not, and no role="radio" exists anywhere outside a tray.
-//   • The conditionally-locked pickers keep their exact lock conditions through the conversion —
-//     Input in Deduction, Julian Chance unless the range straddles 1582, Leap Year Chance unless a
-//     leap year is reachable — with the dim on the GROUP, aria-disabled on every segment, the
-//     onChange guard behind it, and the selected value preserved for when the lock clears. Jan/Feb
-//     Chance is the control case: it has no lock branch at all.
+//   • The pickers that go out of effect keep their exact conditions through the conversion — Input
+//     in Deduction, Julian Chance unless the range straddles 1582, Leap Year Chance unless a leap
+//     year is reachable, Amnesic while Save Stats is off — striped, still changeable, and the
+//     selected value kept. (Round 26 left no picker locked.)
 //
-//   • PillTray (components/PillTray) renders every group as role="radio" segments, and ONE
-//     boolean — the enclosing PillGroup's `disabled` — is the whole lock: the dim class on the
-//     group, aria-disabled on each segment, the onChange guard (so a click slipping past
-//     pointer-events-none cannot change the value) and the missing tab stop all come from it.
-//     Each of those four is asserted, and the dim is asserted as an exact class string.
+//   • PillTray (components/PillTray) renders every group as role="radio" segments, and ONE value —
+//     the enclosing PillGroup's `dormant` reason — is the whole not-in-effect state: the striped
+//     trays and every radio's description come from it.
 //   • The five themes are two ALWAYS-PRESENT rows, not the two/three dropdowns they replaced.
 //     The same rows render in both Use-System states — that is what stops the panel reflowing
 //     when the switch is flipped — and only the SELECTION semantics differ: two independent
@@ -29,8 +26,7 @@
 //     the switch never jumps the user to a different look (the round-8 bug).
 //   • THE KEYBOARD CONTRACT that role="radiogroup" promises, added in round 9 and owned by
 //     PillGroup (components/PillGroup): each group is ONE tab stop — the selected pill — with
-//     Right/Down, Left/Up, Home and End moving the choice WITHIN it and wrapping, and a locked
-//     group inert (no tab stop, no arrow handling — pointer-events-none stops only pointers).
+//     Right/Down, Left/Up, Home and End moving the choice WITHIN it and wrapping.
 //     The group, not the tray, has to own it, because two of these groups span two trays: the
 //     arrow walks straight from the last Written format into the first Numeric one, and the five
 //     themes are one tab stop across two rows whenever Use System is off. This is also the layer
@@ -49,7 +45,7 @@
 // ── HOW THIS FILE IS ORGANISED, since the settings-panel extraction ──────────────────────────
 // Everything above the PIXEL GATES divider is BEHAVIOUR, and every one of those tests reaches the
 // panel through tests/helpers/settingsPanel — mounting, opening, finding a switch by its setting's
-// name, asking whether a picker is locked, asking whether a panel button is being offered. None
+// name, asking whether a picker is in effect, asking whether a panel button is being offered. None
 // of them names a DOM position, an element id, or a Tailwind token, so none of them has to change
 // when the panel stops being part of App. That is the point: the extraction's gate is that this
 // net passes with ZERO edits, and a test you have to fix afterwards cannot be part of that gate.
@@ -69,7 +65,6 @@ import {
   panelEl,
   picker,
   pickerPills,
-  pickerLockState,
   row,
   settingSwitch,
   switchRow,
@@ -394,7 +389,7 @@ describe('Settings → Display — date-format trays', () => {
   })
 })
 
-// ── Part G: THE PICKER RULE — one treatment per control kind, and the locks survive it ───────
+// ── Part G: THE PICKER RULE — one treatment per control kind ─────────────────────────────────
 describe('Settings — THE PICKER RULE', () => {
   beforeEach(() => {
     resetAppState()
@@ -441,20 +436,6 @@ describe('Settings — THE PICKER RULE', () => {
       expect(isTraySegment(btns[0])).toBe(false)
     }
   })
-
-  // The lock is published five ways and expectLock (imported from the panel helper) reads all
-  // five: the dim on the GROUP (so the housing greys as one piece rather than five separately-
-  // dimmed buttons, which is what changed in round-9), the GROUP's own aria-disabled, then
-  // aria-disabled on every segment, PillTray's onChange guard behind them, and — the round 9 addition —
-  // no tab stop at all, since pointer-events-none locks out pointers and nothing else. All five
-  // come from ONE `disabled` on the PillGroup, so they cannot drift apart; asserting them together
-  // is what proves that.
-  //
-  // ⚠ IT USED TO BE A PRIVATE FOUR-FACET COPY HERE, written before the group carried its own
-  // aria-disabled, and the behaviour net then grew a five-facet second copy of the same idea. One
-  // definition now, in the helper, and the stronger form won: the facet the local copy was missing
-  // is the one a screen reader meets FIRST — a group announcing itself live while every segment
-  // inside it says otherwise.
 
   it('Input: in effect in a weekday mode, not in effect in Deduction, value kept and changeable', () => {
     mountPanel()
@@ -816,31 +797,6 @@ describe('Settings — the radiogroup keyboard contract', () => {
     return questionText() !== live
   }
 
-  // The dim's pointer-events-none stops POINTERS. Nothing stopped a keyboard, so a locked picker
-  // was still operable by anyone using one — which is exactly the gap the group's inertness fills.
-  // (Since Round 26 the panel's one locked picker is Amnesic while Save Stats is off — every other
-  // picker that does not apply is NOT IN EFFECT instead, an ordinary live group.)
-  it('a locked group has no tab stop, ignores the arrows, and never steps the date behind', () => {
-    const live = mountPanelOverAHistory()
-    clickToggle('Save Stats')
-    pills('Amnesic').forEach((b) => expect(b.tabIndex).toBe(-1))
-    // Focus is forced in — the point is that the HANDLER refuses, not merely that Tab can't get
-    // there. A locked group must not act on a key even when something has parked focus inside it.
-    const pill = pills('Amnesic')[0]
-    pill.focus()
-    for (const key of ['ArrowRight', 'ArrowLeft']) {
-      press(pill, key)
-      expect(document.activeElement).toBe(pill)
-      expect(checked('Amnesic')).toEqual(['Off'])
-      // …and refusing to ACT is only half of inert: the press must not step the date behind the
-      // open panel either.
-      expect(questionText()).toBe(live)
-    }
-    // Unlocking restores the stop with no interaction at all — the effect re-asserts it.
-    clickToggle('Save Stats')
-    expectOneTabStop('Amnesic')
-  })
-
   it('an arrow that moves the pick never steps the date behind the menu', () => {
     const live = mountPanelOverAHistory()
     const pill = pills('Date Format')[1]
@@ -871,27 +827,6 @@ describe('Settings — the radiogroup keyboard contract', () => {
     press(document.activeElement, 'ArrowRight')
     expect(activeName()).toBe('Written DMY')
     expect(st().dateFormat).toBe('written-dmy')
-    // A locked group hands focus to nobody: the click guard returns before the focus, so a
-    // synthetic click past the dim's pointer-events-none cannot park the keyboard inside it.
-    clickToggle('Save Stats')
-    document.activeElement.blur()
-    act(() => {
-      fireEvent.click(pills('Amnesic')[2])
-    })
-    expect(document.activeElement).toBe(document.body)
-    expect(checked('Amnesic')).toEqual(['Off'])
-  })
-
-  // The lock, said once at group scope too. A screen reader entering a locked picker used to be
-  // told it was live and only found out one element in, at the first segment's aria-disabled.
-  it('a locked group announces its own lock, not just its pills', () => {
-    mountPanel()
-    const announced = () => pickerLockState('Amnesic').announced
-    expect(announced()).toBeNull()
-    clickToggle('Save Stats')
-    expect(announced()).toBe('true')
-    clickToggle('Save Stats')
-    expect(announced()).toBeNull()
   })
 
   // The degenerate case no tray can see from inside itself: a value matching no option anywhere
@@ -922,24 +857,6 @@ describe('Settings — the radiogroup keyboard contract', () => {
     expect(radios.filter((b) => b.getAttribute('aria-checked') === 'true')).toHaveLength(0)
     rerender(tray('b'))
     expect(screen.getAllByRole('radio').map((b) => b.tabIndex)).toEqual([-1, 0])
-  })
-
-  // …and it is drawn ONCE. opacity multiplies down the tree, so a nested wrapper that re-applied
-  // the dim would render the group at 0.36 instead of 0.6. Rendered bare because the Theme block
-  // is the app's only nesting and it carries no lock — this is the trap one `disabled=` prop away
-  // from it. An inherited lock still reaches the segments; only the paint stops at the declarer.
-  it('the lock draws its dim once — an inherited lock never re-dims', () => {
-    render(
-      <PillGroup label="Outer" disabled className="space-y-2">
-        <PillGroup className="space-y-1.5">
-          <PillTray value="a" onChange={() => {}} options={[{ value: 'a', label: 'A' }]} />
-        </PillGroup>
-      </PillGroup>,
-    )
-    const outer = screen.getByRole('radiogroup', { name: 'Outer' })
-    expect(outer.className).toBe('space-y-2 opacity-60 pointer-events-none')
-    expect(outer.firstElementChild.className).toBe('space-y-1.5')
-    expect(screen.getByRole('radio').getAttribute('aria-disabled')).toBe('true')
   })
 })
 
@@ -1097,13 +1014,12 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expectUnmovedPixels()
     clickToggle('Random Format') // a group not in effect is outlined by its housing and chosen pill
     expectUnmovedPixels()
-    clickToggle('Save Stats') // a locked group is dimmed by its housing, never by its pills
+    clickToggle('Save Stats') // Amnesic not in effect: outlined like the rest, by its trays
     expectUnmovedPixels()
   })
 
-  // The housings themselves, including the lock's dim — which moved from four hand-written call
-  // sites into PillGroup during the round-9 pass and therefore has to be pinned as an exact string.
-  it('moved no class on any housing, locked or not', () => {
+  // The housings themselves, pinned as exact strings (Round 26 left no lock's dim on any of them).
+  it('moved no class on any housing, in any state', () => {
     mountPanel()
     const cls = (name) => screen.getByRole('radiogroup', { name }).className
     // ⚠ Round-10 retarget, NOT a loosening: round 9's gate was "the keyboard pass moves no pixel", and
@@ -1119,8 +1035,8 @@ describe('Settings — PIXEL GATES (implementation-coupled on purpose)', () => {
     expect(cls('Date Format')).toBe('flex gap-2')
     act(() => setRangeInUse({ min: 1900 })) // all-Gregorian: the Julian row is not in effect, no own class
     expect(cls('Julian Chance')).toBe('')
-    clickToggle('Save Stats') // the one lock left: Amnesic, dimmed on its housing
-    expect(cls('Amnesic')).toBe('opacity-60 pointer-events-none')
+    clickToggle('Save Stats') // Amnesic not in effect: the trays inside go hollow, the housing is unmoved
+    expect(cls('Amnesic')).toBe('')
   })
 
   // ★ THE ⚙ FOOTER'S THREE BUTTONS — NEW IN ROUND 15, and the honest note is that this gate

@@ -60,7 +60,7 @@ import {
   pickPill,
   pickerChosen,
   pickerPills,
-  expectLock,
+  expectNotInEffect,
   offers,
   tap,
   fireFullReset,
@@ -724,21 +724,20 @@ describe('the Amnesic pill in the ⚙ panel', () => {
     expect([switchState('Save Stats'), pickerChosen('Amnesic')]).toEqual(['On', ['Stats Only']])
   })
 
-  // The app's established "dimmed means disabled", asserted as the whole lock every picker has
-  // (drawn unavailable, announced, inert, no tab stop) — and the value is exactly where it was left.
-  it('dims and locks while Save Stats is off, keeping its value', () => {
+  // The owner's rule, "dimmed means not in effect, not locked": with Save Stats off nothing new is
+  // counted, so the picker is NOT IN EFFECT - striped, its reason on every radio - and still changes the
+  // value (which changes nothing on screen).
+  it('is not in effect while Save Stats is off, and still changes the value', () => {
     openPanel()
     pickPill('Amnesic', 'Full')
     toggleSwitch('Save Stats')
-
-    expectLock('Amnesic', true)
-    pickPill('Amnesic', 'Off') // a press behind the dim
-    expect(pickerChosen('Amnesic')).toEqual(['Full'])
-    expect(amnesicModeOf(1)).toBe('full')
-
+    expectNotInEffect('Amnesic', 'Not in use while Save Stats is off.')
+    pickPill('Amnesic', 'Off')
+    expect(pickerChosen('Amnesic')).toEqual(['Off'])
+    expect(amnesicModeOf(1)).toBe('off')
     toggleSwitch('Save Stats')
-    expectLock('Amnesic', false)
-    expect(pickerChosen('Amnesic')).toEqual(['Full'])
+    expectNotInEffect('Amnesic', null)
+    expect(pickerChosen('Amnesic')).toEqual(['Off'])
   })
 
   // ★★ IT LIGHTS THE GEAR. The gear's bar, Reset Settings' dim and Save Defaults' dim are ONE

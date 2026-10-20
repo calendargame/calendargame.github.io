@@ -227,9 +227,9 @@ export const COAST_MS = 50
 // stated once and cannot be undone by a className.
 //
 // ⚠ ENUMERATED BY HAND, because a green suite is not a blast radius. Every OTHER aria-disabled element
-// in src/ still carries pointer-events-none as well and so was already invisible here — the locked ⚙
-// pickers (PillGroup's LOCK_CLASS on the container, PillTray's segments inside it), SliderValueEditor's
-// accented readout, and MethodBreakdown's Show Codes. The ⚙ panel's three buttons were the first
+// in src/ still carries pointer-events-none as well and so was already invisible here —
+// SliderValueEditor's accented readout, and MethodBreakdown's Show Codes. (The locked ⚙ pickers were
+// a third, until Round 26 left no picker locked.) The ⚙ panel's three buttons were the first
 // hit-testable aria-disabled controls in the app, and every one since wears the same
 // NOT_OFFERED_BTN_CLASS (controlClasses); this predicate gives each of them the behaviour the three
 // had before round 15.

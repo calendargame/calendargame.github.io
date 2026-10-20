@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// ⚙ SETTINGS — THE PICKERS: every lock and its exact condition, the theme block's SHAPE change,
-// and the Use-System round trip. Groups 2, 3 and 4 of the behaviour net (_settings_net_spec.md).
+// ⚙ SETTINGS — THE PICKERS: every picker not in effect and its exact condition, the theme block's
+// SHAPE change, and the Use-System round trip. Groups 2, 3 and 4 of the behaviour net (_settings_net_spec.md).
 //
 // WHY THIS FILE EXISTS. The panel is about to be lifted out of App, and the gate on that move is
 // that this net passes with ZERO edits. So every question below is the user's — "is this picker
@@ -12,21 +12,18 @@
 //
 // WHAT THE THREE GROUPS ARE ABOUT, and they are three genuinely different shapes:
 //
-//   • GROUP 2 — FOUR LOCKS, FOUR CONDITIONS. One `disabled` on the PillGroup publishes five
-//     consequences at once (the dim, the group's aria-disabled, every segment's, the onChange
-//     guard, and the tab stop), so they are asserted TOGETHER — a picker locked four ways out of
-//     five is a real bug that a single-facet assertion cannot see. What was missing before this
-//     file was the BOUNDARIES and the NEGATIVE modes: `mode==='deduction'` is the only lock driver
-//     that is neither a store value nor derived from one, and five of the six modes that leave
-//     Input LIVE had never been exercised.
+//   • GROUP 2 — THE PICKERS NOT IN EFFECT, AND THEIR CONDITIONS (Round 26: no picker locks). One
+//     `dormant` on the PillGroup publishes the striped look and the reason on every radio, and leaves
+//     the group an ordinary live one — asserted together (expectNotInEffect). What was missing before
+//     this file was the BOUNDARIES and the NEGATIVE modes: `mode==='deduction'` is the only driver
+//     that is neither a store value nor derived from one.
 //
 //   • GROUP 3 — THE THEME BLOCK IS A SHAPE CHANGE, NOT A LOCK. Three nested PillGroups, and NONE
 //     of them ever takes `disabled`. It LOOKS like a lock and is not: Use System Settings moves
 //     which wrapper is NAMED (hence which one is the radiogroup) and which value each row reads
 //     and writes, and nothing else. The natural "improvement" — dimming or hiding the row that
 //     does not hold the pick — is a behaviour change the owner explicitly rejected, which is why
-//     "neither row is EVER drawn as unavailable" is asserted in both states with a locked picker
-//     alongside it as the control.
+//     "neither row is EVER drawn as unavailable" is asserted in both states.
 //
 //   • GROUP 4 — THE USE-SYSTEM ROUND TRIP, which is one contract in two halves. The OFF flip seeds
 //     the manual theme from what is ALREADY on screen, so the look never jumps; and "modified" is
@@ -52,14 +49,14 @@
 //
 // WHAT WAS DELIBERATELY NOT REMOVED, because it is not a restatement — the near-misses are worth
 // naming so nobody "finishes the job" later: G2.3 is the only case anywhere that asserts the Date
-// Format captions are NOT dimmed while the picker is live (settings.dom asserts only the locked
+// Format captions are NOT dimmed while the picker is live (settings.dom asserts only the other
 // half, so a permanently-dimmed caption would pass it); G2.7 is the only case that touches the
 // 1581/1582/1583 boundary the Julian Chance lock turns on (settings.dom uses 1900 and 1, which a
 // `>` -for- `>=` slip clears); and G2.9 sweeps all four lockable pickers and asserts the arrow is
 // preventDefault-ed, where settings.dom asks one picker and asserts only that it never reaches the
 // window.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { cleanup, act, within } from '@testing-library/react'
+import { cleanup, act } from '@testing-library/react'
 import { useSettings } from '../src/store/settings.js'
 import {
   mountApp,
@@ -73,13 +70,11 @@ import {
   rowPills,
   rowChosen,
   pickerChosen,
-  expectLock,
   tabStopLabel,
   otherPillName,
   drawnUnavailable,
   pickPill,
   arrowPicker,
-  LOCKABLE_PICKERS,
   NOT_IN_EFFECT_PICKERS,
   expectNotInEffect,
   picker,
@@ -103,10 +98,8 @@ const USE_SYSTEM = 'Use System Settings'
 // ── Local compositions. Every one of these is built ONLY out of the panel helper's exports; none
 // reaches past the abstraction. They live here because they are this file's questions.
 //
-// Three that used to live here — expectLock (the whole-lock assertion), tabStopLabel and
-// otherPillName — have been promoted into tests/helpers/settingsPanel.jsx and are imported above.
-// expectLock in particular was the THIRD copy of its idea: tests/settings.dom carried a private
-// four-facet version, and the reconciled export keeps the five-facet form this file had.
+// Two that used to live here — tabStopLabel and otherPillName — have been promoted into
+// tests/helpers/settingsPanel.jsx and are imported above.
 
 // COMMIT a year range through the two boxes, as a user would — type, then Enter.
 //
@@ -158,9 +151,9 @@ const standUp = () => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-// GROUP 2 — every picker lock and its exact condition
+// GROUP 2 — every picker not in effect and its exact condition
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe('⚙ Settings → the pickers not in effect, the one lock, and their exact conditions', () => {
+describe('⚙ Settings → the pickers not in effect, and their exact conditions', () => {
   beforeEach(() => {
     resetAppState()
   })
@@ -304,6 +297,7 @@ describe('⚙ Settings → the pickers not in effect, the one lock, and their ex
   // can sit in): each is outlined AND a press on another pill chooses it, as on any live picker.
   it('every picker not in effect still takes a press, and says why it is outlined', () => {
     standUp()
+    toggleSwitch('Save Stats')
     toggleSwitch('Random Format')
     commitRange(1900, 1900)
     goMode('deduction')
@@ -319,26 +313,13 @@ describe('⚙ Settings → the pickers not in effect, the one lock, and their ex
     expect(pickerChosen('Date Format')).toEqual([other.replace(/^(Written|Numeric) /, '')])
   })
 
-  // G2.8b — THE ONE LOCK. Amnesic while Save Stats is off is the only picker that still LOCKS
-  // (components/SettingsPanel's AMNESIC note). The whole lock, and a refused press.
-  it('Amnesic while Save Stats is off is the one locked picker: the whole lock, and a press refused', () => {
-    standUp()
-    toggleSwitch('Save Stats')
-    for (const name of LOCKABLE_PICKERS) {
-      expectLock(name, true)
-      const before = pickerChosen(name)
-      pickPill(name, otherPillName(name)) // the dim is CSS-only; jsdom does not enforce it
-      expect(pickerChosen(name)).toEqual(before)
-    }
-  })
-
-  // G2.9 — the keyboard. A picker not in effect is an ordinary live group (the arrows choose); the
-  // locked one swallows them (an arrow would otherwise scroll the menu out from under the pills).
+  // G2.9 — the keyboard. A picker not in effect is an ordinary live group: the arrows choose (and the
+  // group takes the key, so it would not scroll the menu out from under the pills).
   // And App's global handler maps ← / → to the game's history buttons, so the page behind the panel
   // is given a history to step and must not move either way: no key acts on the page while the ⚙
   // menu is open (components/overlayStack's isPageCovered — tests/keysUnderMenu holds the whole of
   // it).
-  it('the arrows choose on a picker not in effect, the locked one swallows them, and neither steps the puzzle behind the menu', () => {
+  it('the arrows choose on a picker not in effect, and never step the puzzle behind the menu', () => {
     mountApp()
     // The puzzle on screen: Deduction's partial date, the one visible text with a blank in it.
     const hidden = (el) => {
@@ -363,15 +344,11 @@ describe('⚙ Settings → the pickers not in effect, the one lock, and their ex
     expect(arrowPicker('Input', 'ArrowRight').prevented).toBe(true)
     expect(pickerChosen('Input')).toEqual(['Dots'])
     expect(puzzle()).toBe(live)
-    // Locked: consumed, nothing chosen.
-    for (const name of LOCKABLE_PICKERS) {
-      const before = pickerChosen(name)
-      for (const key of ['ArrowLeft', 'ArrowRight']) {
-        expect(arrowPicker(name, key).prevented).toBe(true)
-        expect(pickerChosen(name)).toEqual(before)
-        expect(puzzle()).toBe(live)
-      }
-    }
+    // …and Amnesic, out of effect with Save Stats off, the same: the arrow chooses.
+    pickPill('Amnesic', 'Off')
+    expect(arrowPicker('Amnesic', 'ArrowRight').prevented).toBe(true)
+    expect(pickerChosen('Amnesic')).toEqual(['Stats Only'])
+    expect(puzzle()).toBe(live)
     // …and the control that makes those assertions mean something: with the menu closed, the same
     // key does step the page.
     closeSettings('escape')
@@ -381,8 +358,7 @@ describe('⚙ Settings → the pickers not in effect, the one lock, and their ex
   })
 
   // G2.10 — a picker going out of effect and back keeps its ONE tab stop on the chosen pill
-  // throughout (it is never withdrawn — the group is live); the locked one appoints nobody while
-  // locked and puts the stop back on the chosen pill when it unlocks. Every pick below is
+  // throughout (it is never withdrawn — the group is live). Every pick below is
   // deliberately NOT the first pill, so the stop cannot pass by landing on the front of the tray.
   const STATE_CASES = [
     {
@@ -422,6 +398,12 @@ describe('⚙ Settings → the pickers not in effect, the one lock, and their ex
       out: () => toggleSwitch(JULIAN_SWITCH),
       back: () => toggleSwitch(JULIAN_SWITCH),
     },
+    {
+      name: 'Amnesic',
+      pick: 'Stats Only',
+      out: () => toggleSwitch('Save Stats'),
+      back: () => toggleSwitch('Save Stats'),
+    },
   ]
   STATE_CASES.forEach(({ name, pick, arrange, out, back }) => {
     it(`${name} out of effect and back keeps its one tab stop on the chosen pill`, () => {
@@ -436,19 +418,6 @@ describe('⚙ Settings → the pickers not in effect, the one lock, and their ex
       expect(pickerChosen(name)).toEqual([pick.replace(/^(Written|Numeric) /, '')])
     })
   })
-  it('unlocking Amnesic puts its one tab stop back on the chosen pill, untouched', () => {
-    standUp()
-    pickPill('Amnesic', 'Stats Only')
-    expect(tabStopLabel('Amnesic')).toBe('Stats Only')
-    toggleSwitch('Save Stats')
-    expectLock('Amnesic', true)
-    expect(tabStopLabel('Amnesic')).toBe(null) // a locked group appoints nobody
-    toggleSwitch('Save Stats')
-    expectLock('Amnesic', false)
-    expect(tabStopLabel('Amnesic')).toBe('Stats Only')
-    expect(pickerChosen('Amnesic')).toEqual(['Stats Only'])
-  })
-
   // G2.11 — the state is LIVE, not read at open time. A store write made from outside the panel
   // (another screen, a restore, a future sync) moves it on the same pass.
   it('a range arriving from a store write outside the panel takes the chance rows out of effect at once', () => {
@@ -498,8 +467,6 @@ describe('⚙ Settings → the theme block changes SHAPE, never availability', (
   // not a predicate that never fires.
   it('neither theme row is ever drawn as unavailable, in either Use-System state', () => {
     standUp()
-    toggleSwitch('Save Stats') // the panel's one genuine lock (Amnesic), as the control
-    expect(drawnUnavailable(within(picker('Amnesic')).getAllByRole('radio')[0])).toBe(true)
     for (const state of ['On', 'Off']) {
       expect(switchState(USE_SYSTEM)).toBe(state)
       expect(drawnUnavailable(caption('Dark'))).toBe(false)

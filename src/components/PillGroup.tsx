@@ -1,9 +1,9 @@
 import { useContext, useId, useLayoutEffect, useRef } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import { PillGroupDormant, PillGroupLock } from './pillGroupLock.js'
+import { PillGroupDormant } from './pillGroupDormant.js'
 
 // PillGroup — the radiogroup HOUSING every ⚙ Settings picker sits in: the role, its accessible
-// name, the lock, and the KEYBOARD CONTRACT that role="radiogroup" promises. Round-8 gave the
+// name, the not-in-effect look, and the KEYBOARD CONTRACT that role="radiogroup" promises. Round-8 gave the
 // trays role="radiogroup" / role="radio" / aria-checked; round 9 added the half that was
 // missing, because announcing a convention the app does not keep is worse than announcing none.
 //
@@ -17,13 +17,10 @@ import { PillGroupDormant, PillGroupLock } from './pillGroupLock.js'
 //     The vertical arrows are not decoration here — Date Format and Theme STACK two trays, so
 //     Down genuinely means "the row below". Space and Enter need no code: a segment is a real
 //     <button>, so the browser already turns both into the click the tray listens for.
-//   • A LOCKED group is INERT: no tab stop at all (tabIndex -1 everywhere, so Tab passes it by)
-//     AND it SWALLOWS the six keys it owns — moving nothing, but consuming them, because
-//     tabIndex -1 still permits programmatic focus. Merely declining to act would be worse than
-//     doing nothing: App's global handler maps ArrowLeft/ArrowRight to the game's history
-//     buttons, so a released arrow steps the puzzle behind the open panel. Inert means the keys
-//     stop here. This is the counterpart of the dim's pointer-events-none, which by itself stops
-//     pointers and nothing else.
+//   • NO PICKER LOCKS (Round 26, the owner: "dimmed means not in effect right now, not locked"). A
+//     setting that has no say right now is NOT IN EFFECT (`dormant`, below): striped, and still an
+//     ordinary live group. Amnesic while Save Stats is off was the last locked one; it went out of
+//     effect once a change to it no longer touched the screen (store/amnesic).
 //
 // WHY THE GROUP OWNS THIS AND NOT THE TRAY: a group is a CHOICE, not a row (THE PICKER RULE,
 // stated at the Display section — which lives in components/SettingsPanel since round 14, not
@@ -59,70 +56,47 @@ const ARROW_STEP: Record<string, number> = {
   ArrowLeft: -1,
   ArrowUp: -1,
 }
-// ★ THREE LOOKS, THREE MEANINGS (Round 26): FILLED = in effect; STRIPED (a hatched housing, its
-// choice ringed — index.css's .tray-dormant) = kept but NOT IN EFFECT
-// right now, and still changeable (`dormant` — a chance setting the year range cannot use, Rotate
-// Dots while Input is Buttons); FADED = cannot be used at all (`disabled` — Amnesic while Save Stats
-// is off, where a change would act at once on what is on screen). A dormant group is an ordinary
-// live group in every way but its look and one sentence: its keys, its tab stop, and a press all
-// work; it carries no aria-disabled (the control works, and lib/pointerGestures skips aria-disabled
-// targets); and each of its radios is described by the reason — on the RADIO, not the group,
-// because VoiceOver's touch navigation lands on a radio and does not read a group's description.
-// The reason's words sit in a `hidden` element: referenced by every radio, drawn by none, and never
-// read a second time on their own.
-// The visible half of the lock, for every picker in the panel. `disabled` is the single source of
-// all of it — this dim, aria-disabled on the group and on each segment, PillTray's onChange guard,
-// and the inertness above — so a locked picker cannot be locked four ways out of five.
-const LOCK_CLASS = 'opacity-60 pointer-events-none'
+// ★ TWO LOOKS, TWO MEANINGS (Round 26): FILLED = in effect; STRIPED (a hatched housing, its choice
+// ringed — index.css's .tray-dormant) = kept but NOT IN EFFECT right now, and still changeable
+// (`dormant` — a chance setting the year range cannot use, Rotate Dots while Input is Buttons, Amnesic
+// while Save Stats is off). A dormant group is an ordinary live group in every way but its look and
+// one sentence: its keys, its tab stop, and a press all work; it carries no aria-disabled (the control
+// works, and lib/pointerGestures skips aria-disabled targets); and each of its radios is described by
+// the reason — on the RADIO, not the group, because VoiceOver's touch navigation lands on a radio and
+// does not read a group's description. The reason's words sit in a `hidden` element: referenced by
+// every radio, drawn by none, and never read a second time on their own.
 
 export function PillGroup({
   label,
-  disabled,
   dormant,
   className,
   children,
 }: {
   // The group's accessible name. OMITTING it is meaningful: a radiogroup must have a name, so a
   // PillGroup without one is not a group at all — just the div that supplies its children's
-  // spacing, with no role, no keyboard handling and no lock of its own. That is exactly what the
-  // Theme block needs, where which wrapper is the real group follows Use System Settings.
+  // spacing, with no role and no keyboard handling of its own. That is exactly what the Theme block
+  // needs, where which wrapper is the real group follows Use System Settings.
   label?: string
-  // Locked. Omitted = INHERIT the enclosing group's lock (components/pillGroupLock), so a plain
-  // unlabelled spacing wrapper — the Theme block has one in both Use-System states — can never
-  // silently unlock the group it sits inside. An inherited lock carries every behaviour of a
-  // declared one but does NOT re-draw its dim (see the render).
-  disabled?: boolean
   // NOT IN EFFECT: the reason, as one sentence ("Not in use while Input is Buttons."), or nothing
   // while the setting is in effect. Only a real (labelled) group can be dormant.
   dormant?: string
-  // The caller's own layout classes. The lock's dim is appended by this component, so no call
-  // site spells it out.
+  // The caller's own layout classes.
   className?: string
   children: ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const reasonId = useId()
   const inheritedDormant = useContext(PillGroupDormant)
-  const inheritedLock = useContext(PillGroupLock)
-  const locked = disabled ?? inheritedLock
-  // The dim is drawn ONCE, by the element the lock was DECLARED on — never by one that merely
-  // inherited it. opacity multiplies through the tree, so a nested wrapper re-applying
-  // opacity-60 inside a locked group would render it at 0.36, and the Theme block already nests
-  // wrappers inside a group: it is one `disabled=` prop away. Declaring covers inheriting by
-  // construction — the element that declares a lock wraps everything the lock applies to.
-  // An unlabelled wrapper is TRANSPARENT — no role, no keys, no lock of its own — so every
-  // behaviour below is gated on the group being real. `locked` gates the second, narrower
-  // question: a locked group is real (it still consumes its keys), it just moves nothing.
+  // An unlabelled wrapper is TRANSPARENT — no role, no keys of its own — so every behaviour below is
+  // gated on the group being real.
   const isGroup = label !== undefined
 
   // THE TAB STOP, appointed here and nowhere else. A segment declares itself permanently
   // un-tabbable (PillTray renders a constant tabIndex -1) and this hands the 0 out, because the
   // question "which pill is the tab stop" is only answerable at group scope: the pill holding the
-  // value, wherever among the group's trays it lives. Two other answers are folded in — a LOCKED
-  // group appoints nobody (nothing else keeps a keyboard out; the dim's pointer-events-none stops
-  // pointers only), and a group whose value matches NO option anywhere in it, which a stale saved
-  // setting could produce, falls back to the first radio rather than dropping out of the tab
-  // order. So: never two stops, never zero.
+  // value, wherever among the group's trays it lives. One other answer is folded in — a group whose
+  // value matches NO option anywhere in it, which a stale saved setting could produce, falls back to
+  // the first radio rather than dropping out of the tab order. So: never two stops, never zero.
   //
   // The single writer is the point, not an implementation detail. React writes a prop only when
   // its VALUE changes, so a tabIndex it thinks is already -1 stays whatever anyone else last set
@@ -136,7 +110,7 @@ export function PillGroup({
     if (!el || !isGroup) return
     const radios = [...el.querySelectorAll<HTMLElement>(RADIO)]
     const selected = radios.findIndex((r) => r.getAttribute('aria-checked') === 'true')
-    const stop = locked ? -1 : selected === -1 ? 0 : selected
+    const stop = selected === -1 ? 0 : selected
     radios.forEach((r, i) => {
       r.tabIndex = i === stop ? 0 : -1
     })
@@ -146,8 +120,7 @@ export function PillGroup({
     const el = ref.current
     if (!el || !isGroup) return
     const step = ARROW_STEP[e.key]
-    // The six keys a radio group OWNS. Recognised before the lock is consulted, because owning a
-    // key and acting on it are different questions: a locked group still has to swallow them.
+    // The six keys a radio group OWNS.
     if (step === undefined && e.key !== 'Home' && e.key !== 'End') return
     const radios = [...el.querySelectorAll<HTMLElement>(RADIO)]
     const from = radios.indexOf(document.activeElement as HTMLElement)
@@ -158,44 +131,35 @@ export function PillGroup({
     // on the page behind it — components/overlayStack's isPageCovered, the one rule. This handler
     // used to stop the press itself, a second gate for the same thing.)
     e.preventDefault()
-    if (locked) return // inert: consumed, but nothing moves and nothing is chosen
     const n = radios.length
     // The modulo IS the wrap, in both directions (+ n keeps a backwards step off the front
     // positive).
     const to = step !== undefined ? (from + step + n) % n : e.key === 'Home' ? 0 : n - 1
     radios[to].focus()
     // Selection follows focus. click() rather than a callback is what lets the group stay
-    // value-agnostic: the tray's own onClick — including its lock guard — is the single path by
+    // value-agnostic: the tray's own onClick is the single path by
     // which a pill is ever chosen, whether the pointer or the keyboard asked for it.
     radios[to].click()
   }
 
-  const dimmedClass = className ? `${className} ${LOCK_CLASS}` : LOCK_CLASS
   // The reason a group declares, or the one it sits inside (an unlabelled spacing wrapper).
   const dormantId = isGroup && dormant ? reasonId : inheritedDormant
   return (
-    <PillGroupLock.Provider value={locked}>
-      <PillGroupDormant.Provider value={dormantId}>
-        <div
-          ref={ref}
-          className={disabled === true ? dimmedClass : className}
-          onKeyDown={onKeyDown}
-          role={isGroup ? 'radiogroup' : undefined}
-          aria-label={label}
-          // The lock, announced at GROUP scope as well as on every segment (PillTray reads the same
-          // boolean through the context). Without it a screen reader enters a locked picker being
-          // told it is live and only discovers otherwise one element in. Only a real group carries
-          // it — an unlabelled wrapper has no role for the state to qualify.
-          aria-disabled={(isGroup && locked) || undefined}
-        >
-          {children}
-          {isGroup && dormant && (
-            <span id={reasonId} hidden>
-              {dormant}
-            </span>
-          )}
-        </div>
-      </PillGroupDormant.Provider>
-    </PillGroupLock.Provider>
+    <PillGroupDormant.Provider value={dormantId}>
+      <div
+        ref={ref}
+        className={className}
+        onKeyDown={onKeyDown}
+        role={isGroup ? 'radiogroup' : undefined}
+        aria-label={label}
+      >
+        {children}
+        {isGroup && dormant && (
+          <span id={reasonId} hidden>
+            {dormant}
+          </span>
+        )}
+      </div>
+    </PillGroupDormant.Provider>
   )
 }

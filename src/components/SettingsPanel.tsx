@@ -147,7 +147,7 @@ export type SettingsPanelProps = {
   onResetSettings: () => void
   /** App's fullReset, with its two load-bearing internal orderings intact. */
   onFullReset: () => void
-  /** The live mode. Read at exactly one place below — the Input picker's lock — and the condition
+  /** The live mode. Read at exactly one place below — whether the Input picker is in effect — and the condition
    *  is `==='deduction'` EXACTLY. Must be the live value, never a memoised one. */
   mode: string
   /** The theme actually on screen, which App derives from an OS signal it owns. The Use-System
@@ -194,6 +194,7 @@ const NOT_IN_EFFECT = {
   julianOff: 'Not in use while Julian Calendar is off.',
   julianOn: 'Not in use while Julian Calendar is on.',
   no1582: 'Not in use: your year range does not include 1582.',
+  saveStatsOff: 'Not in use while Save Stats is off.',
 } as const
 // The pages whose dates Date Format does not set while Random Format is on: the four weekday
 // practice modes. NOT Deduction — its codes panel lays its codes out in Date Format's reading order
@@ -1570,7 +1571,7 @@ export function SettingsPanel({
                 size would be the collision this note exists to prevent.
                 Neither row is marked "in use" — the OS owns that, and a marker would imply the
                 app does. NEITHER ROW IS EVER DIMMED, in either state: none of these three
-                PillGroups ever takes `disabled`. This is a SHAPE change, not a lock, and dimming or
+                PillGroups ever takes `dormant`. This is a SHAPE change, not a lock, and dimming or
                 hiding the inactive row is a change the owner explicitly rejected.
                 No data-drag-stay (round-8, owner's call): a press-drag from the gear that releases
                 on a theme pill DISMISSES the panel, exactly like the date-format pills — "if I want
@@ -1776,12 +1777,11 @@ export function SettingsPanel({
                 above (three values, exactly one of them): caption above, one tray, the group named
                 by the caption VERBATIM. See changeAmnesic for why this one row's value is written
                 apart from the 16, and store/amnesic for what each value forgets at the close.
-                ⚠ THE LOCK. With Save Stats off nothing is being recorded at all, and the tray dims
-                and locks — PillGroup's `disabled`: the housing greys as one piece and the caption
-                stays lit. ⚠ THE VALUE IS PRESERVED WHILE LOCKED — turning Save Stats back on finds
-                the preset on the value it was on. */}
+                ⚠ NOT IN EFFECT WHILE SAVE STATS IS OFF: nothing new is being counted, so it is
+                striped (PillGroup's `dormant`) and still changeable — a change touches nothing on
+                screen (store/amnesic), so there is nothing to lock it against. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Amnesic</div>
-            <PillGroup label="Amnesic" disabled={!saveStats}>
+            <PillGroup label="Amnesic" dormant={saveStats ? undefined : NOT_IN_EFFECT.saveStatsOff}>
               <PillTray value={amnesic} onChange={changeAmnesic} options={AMNESIC_OPTIONS} />
             </PillGroup>
           </div>

@@ -21,7 +21,7 @@ import {
   mountApp,
   openSettings,
   picker,
-  pickerLockState,
+  pickerChosen,
   resetAppState,
 } from './helpers/settingsPanel.jsx'
 
@@ -141,7 +141,7 @@ describe('the trio’s caption fit wiring', () => {
     // poke would only prove App re-rendered, which stops implying the trio did once the panel is
     // a memoisable component of its own. Each tap is CHECKED to have landed, because a stability
     // claim passes trivially when nothing happened.
-    const chosen = () => pickerLockState('Jan/Feb Chance on Leap Years').chosen
+    const chosen = () => pickerChosen('Jan/Feb Chance on Leap Years')
     act(() => {
       fireEvent.click(pill('Jan/Feb Chance on Leap Years', '25%'))
     })

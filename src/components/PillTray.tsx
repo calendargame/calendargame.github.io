@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { usePillGroupDormant, usePillGroupLock } from './pillGroupLock.js'
+import { usePillGroupDormant } from './pillGroupDormant.js'
 
 // PillTray — the ⚙ Settings panel's segmented picker: one "concentric housing" tray of
 // mutually-exclusive pill segments. Extracted from the Date Format groups (Round-3, rebuilt
@@ -89,12 +89,6 @@ export function PillTray<T extends string>({
   onChange: (value: T) => void
   options: PillTrayOption<T>[]
 }) {
-  // The lock is the GROUP's — one boolean on the enclosing PillGroup drives its dim, this
-  // aria-disabled, the onChange guard below and the tab stops, instead of the caller hand-syncing
-  // a class to a prop at every locked picker. The guard matters on its own: a click dispatched
-  // past the dim's pointer-events-none (a synthetic event, a stray AT activation) must not change
-  // the value.
-  const disabled = usePillGroupLock()
   // Not in effect: the id of the group's reason, which every segment is described by (PillGroup).
   const dormant = usePillGroupDormant()
   const onClass = dormant ? SEGMENT_ON_DORMANT_CLASS : SEGMENT_ON_CLASS
@@ -107,7 +101,6 @@ export function PillTray<T extends string>({
           role="radio"
           aria-checked={o.value === value}
           aria-label={o.ariaLabel}
-          aria-disabled={disabled || undefined}
           aria-describedby={dormant ?? undefined}
           // Never a tab stop on its own — a CONSTANT -1, which is also what keeps it constant to
           // React, so React writes it once and never contends with the group that hands out the
@@ -116,7 +109,6 @@ export function PillTray<T extends string>({
           // then on.
           tabIndex={-1}
           onClick={(e) => {
-            if (disabled) return
             // Activating a radio MOVES FOCUS TO IT — the other half of the radio-group pattern,
             // and the group's only working entry path while Tab is bound elsewhere (PillGroup
             // documents both). Explicit because Safari, on macOS and iOS alike, does not focus a

@@ -13,7 +13,7 @@
 // against WHERE the panel lives — its DOM nesting, its harness, the class string that dims a
 // button — is rewritten to ask this file instead. The questions the net asks are the user's:
 // "open the panel", "what is the switch for Save Stats", "is Reset Settings offered", "is this
-// picker locked", "which modal is up". None of them names a component, a parent element, or a
+// picker in effect", "which modal is up". None of them names a component, a parent element, or a
 // Tailwind token. This file answers them, and this file is the only one that may.
 //
 // ⚠ THE RULE FOR THIS FILE IS THAT IT MAY CHANGE AND NOTHING ELSE MAY. If the extraction breaks a
@@ -665,12 +665,9 @@ export const PICKER_NAMES = [
   'Julian Chance',
   'Amnesic',
 ]
-// ★ SINCE ROUND 26 ONE PICKER LOCKS, AND SIX GO OUT OF EFFECT INSTEAD (the owner: "dimmed means not
-// in effect right now, not locked"). A picker NOT IN EFFECT is outlined, still changeable, and says
-// why to a screen reader (components/PillGroup's `dormant`); only Amnesic, while Save Stats is off,
-// is LOCKED — faded and inert — because a change to it would act at once on what is on screen. The
-// theme groups are neither.
-export const LOCKABLE_PICKERS = ['Amnesic']
+// ★ SINCE ROUND 26 NO PICKER LOCKS: seven go out of effect instead (the owner: "dimmed means not in
+// effect right now, not locked"). A picker NOT IN EFFECT is outlined, still changeable, and says why to
+// a screen reader (components/PillGroup's `dormant`). The theme groups never go out of effect.
 export const NOT_IN_EFFECT_PICKERS = [
   'Input',
   'Rotate Dots',
@@ -678,54 +675,10 @@ export const NOT_IN_EFFECT_PICKERS = [
   'Leap Year Chance',
   'Jan/Feb Chance on Leap Years',
   'Julian Chance',
+  'Amnesic',
 ]
 
-// A PICKER'S LOCK, reported as the things the USER meets rather than as the class that happens to
-// draw them. All of them come from ONE `disabled` on the PillGroup, which is exactly why they are
-// read together: asserting them as a set is what proves a locked picker cannot end up locked four
-// ways out of five.
-//
-//   offered   — a press reaches the picker at all.
-//   dimmed    — it is DRAWN as unavailable. Separate from `offered` on purpose: greyed-but-live
-//               and live-but-unpressable are both real bugs, and one boolean cannot tell them apart.
-//   announced — what the GROUP tells assistive tech ('true' | null). A screen reader entering a
-//               locked picker used to be told it was live and only found out one element in.
-//   segments  — what each SEGMENT tells assistive tech, in DOM order. Raw attribute values, not
-//               booleans: "absent" and "false" are different answers and the net must be able to
-//               insist on absent.
-//   tabStops  — how many pills Tab can land on. pointer-events-none stops pointers and nothing
-//               else, so this is the half of the lock a keyboard user meets.
-//   chosen    — the labels currently lit. A lock must PRESERVE the pick, so it is read here too.
-export function pickerLockState(name) {
-  const group = picker(name)
-  const pills = within(group).getAllByRole('radio')
-  return {
-    offered: isOffered(group),
-    dimmed: isDimmed(group),
-    announced: group.getAttribute('aria-disabled'),
-    segments: pills.map((b) => b.getAttribute('aria-disabled')),
-    tabStops: pills.filter((b) => b.tabIndex === 0).length,
-    chosen: litLabels(pills),
-  }
-}
-
-// THE WHOLE LOCK, ASSERTED AS ONE CLAIM. `disabled` on the PillGroup publishes five consequences
-// at once, and the only useful question is whether they agree — a picker locked four ways out of
-// five is a real bug that no per-facet assertion can see. This is the reconciled definition:
-// tests/settings.dom carried a private four-facet copy (it predates the group's own aria-disabled)
-// and the net's picker file carried a five-facet one. The FIVE-facet form wins, because the
-// missing facet is the one a screen reader meets first — a group announcing itself live while
-// every segment inside it says otherwise.
-export function expectLock(name, locked) {
-  const s = pickerLockState(name)
-  expect(s.offered).toBe(!locked)
-  expect(s.dimmed).toBe(locked)
-  expect(s.announced).toBe(locked ? 'true' : null)
-  s.segments.forEach((v) => expect(v).toBe(locked ? 'true' : null))
-  expect(s.tabStops).toBe(locked ? 0 : 1)
-}
-
-// A PICKER NOT IN EFFECT, asserted as one claim, like the lock above — every facet a user meets:
+// A PICKER NOT IN EFFECT, asserted as one claim — every facet a user meets:
 // OUTLINED (every tray in the group drawn hollow) and DESCRIBED (each radio's aria-describedby names
 // the reason, on the radio itself — VoiceOver lands on the radio), and otherwise an ordinary live
 // group: offered, not faded, not announced unavailable on the group or any radio, one tab stop.
@@ -753,9 +706,8 @@ export const pickerInEffect = (name) =>
     .getAllByRole('radio')
     .some((b) => isOutlined(b.parentElement))
 
-// WHICH pill the keyboard would land on, by name. pickerLockState reports how MANY tab stops a
-// picker has, which is the whole answer for a locked group (zero) and only half of it for an
-// unlocked one: "the stop came back on the CHOSEN pill, untouched" needs the identity.
+// WHICH pill the keyboard would land on, by name: "the stop stays on the CHOSEN pill, untouched"
+// needs the identity, not only the count.
 export function tabStopLabel(name) {
   const stop = pickerPills(name).find((b) => b.tabIndex === 0)
   return stop ? (stop.getAttribute('aria-label') ?? stop.textContent.trim()) : null
@@ -899,7 +851,7 @@ export function offers() {
 }
 
 // THE WHOLE "NOT OFFERED" TREATMENT ON A FOOTER BUTTON, ASSERTED AS ONE CLAIM — the same shape as
-// expectLock above, and for the same reason. Round 15 made withholding a THREE-part statement
+// expectNotInEffect above, and for the same reason. Round 15 made withholding a THREE-part statement
 // and the only useful question is whether the parts agree: the class DRAWS it unavailable, the
 // aria-disabled ANNOUNCES it unavailable, and the handler guard makes it INERT. Asked one facet at
 // a time, "greyed and unpressable but announced to a screen reader as an ordinary live button"

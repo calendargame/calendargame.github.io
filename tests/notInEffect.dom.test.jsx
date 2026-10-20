@@ -22,7 +22,6 @@ import {
   otherPillName,
   arrowPicker,
   expectNotInEffect,
-  expectLock,
   pressDragFromGear,
   offers,
   typeYear,
@@ -239,8 +238,8 @@ describe('Input and Rotate Dots in Deduction', () => {
   })
 })
 
-describe('the one lock that stays: Amnesic while Save Stats is off', () => {
-  it('faded and refused, with a MoX run under way — nothing happens', () => {
+describe('Amnesic while Save Stats is off: not in effect, like the rest', () => {
+  it('striped and still changeable, with a MoX run under way — the run goes on', () => {
     useJulianRange.getState().applyJulianRange({ julianMinY: 1583, julianMaxY: 10000 })
     mountApp()
     mode('A')
@@ -248,9 +247,9 @@ describe('the one lock that stays: Amnesic while Save Stats is off', () => {
     answerRight()
     openSettings()
     toggleSwitch('Save Stats')
-    expectLock('Amnesic', true)
+    expectNotInEffect('Amnesic', 'Not in use while Save Stats is off.')
     pickPill('Amnesic', 'Full')
-    expect(pickerChosen('Amnesic')).toEqual(['Off'])
+    expect(pickerChosen('Amnesic')).toEqual(['Full'])
     closeSettings()
     expect(roundGoing()).toBe(true)
   })

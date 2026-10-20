@@ -2476,10 +2476,9 @@ export default function GuidePage({
             and the ends wrap around). What counts as one setting is the choice, not the row: Date
             Format is a single five-way choice, so the arrows carry straight from the Written row
             into the Numeric one — and Theme does the same across Dark and Light whenever Use System
-            Settings is off, since that's when the five themes are one pick. A locked (faded)
-            setting ignores the keys; a striped one takes them as usual. No key reaches past the
-            open menu, so these never step the date behind it — and inside the menu <Kbd>Esc</Kbd>{' '}
-            and typing in its boxes work as they do everywhere.
+            Settings is off, since that's when the five themes are one pick. A striped setting takes
+            them as usual. No key reaches past the open menu, so these never step the date behind it
+            — and inside the menu <Kbd>Esc</Kbd> and typing in its boxes work as they do everywhere.
           </li>
           <li>
             Reset Stats (<Kbd>S</Kbd>) only applies to the casual modes (
@@ -2560,11 +2559,10 @@ export default function GuidePage({
           they are no longer a gap); and the
           GAME SCREENS' dimmed buttons are opacity-60 + pointer-events-none and announce nothing.
           ⚠ THAT LAST ONE IS ABOUT THE GAME SCREENS, NOT ABOUT aria-disabled BEING RARE — the
-          attribute appears in five places (the ⚙ panel's three buttons and Clear Saved Defaults,
-          MethodBreakdown's Show Codes, the locked ⚙ pickers via PillGroup/PillTray, and
-          SliderValueEditor's accented readout). The ⚙ panel's buttons and Show Codes are the two
-          the prose names as announced; the
-          pickers and the readout are announced too but are also pointer-blocked, which is why the
+          attribute appears in four places (the ⚙ panel's three buttons and Clear Saved Defaults,
+          MethodBreakdown's Show Codes, and SliderValueEditor's accented readout). The ⚙ panel's
+          buttons and Show Codes are the two the prose names as announced; the readout is
+          announced too but is also pointer-blocked, which is why the
           bullet is about the game's Reveal/Override/history buttons specifically. An earlier draft
           of this note claimed the ⚙ buttons were aria-disabled's only site, which the section's own
           Show Codes sentence — and GAP 4's exemption for it — already contradicted.
@@ -2815,12 +2813,12 @@ export default function GuidePage({
             the reason it is not in effect (for example, &quot;Not in use while Input is
             Buttons.&quot;). Two kinds of greying out, not one. Marked unavailable while
             they&apos;re greyed: Save Defaults, Reset Settings, Full Reset, and Clear Saved Defaults
-            (at the top of the ⚙ menu&apos;s Per-preset section), Show Codes, the one locked picker
-            (Amnesic while Save Stats is off), a timer value you can&apos;t type into right now, and
-            — in Manage Presets — <b>✕</b> when only one preset is left. The reorder grip at the end
-            of each row never greys out; it has no end it cannot move toward. The rest of the
-            game&apos;s buttons — Reveal, Override / Undo, <b>&lt;</b>, and <b>&gt;</b> — are only
-            dimmed, so they still read as ordinary buttons even when pressing one would do nothing.
+            (at the top of the ⚙ menu&apos;s Per-preset section), Show Codes, a timer value you
+            can&apos;t type into right now, and — in Manage Presets — <b>✕</b> when only one preset
+            is left. The reorder grip at the end of each row never greys out; it has no end it
+            cannot move toward. The rest of the game&apos;s buttons — Reveal, Override / Undo,{' '}
+            <b>&lt;</b>, and <b>&gt;</b> — are only dimmed, so they still read as ordinary buttons
+            even when pressing one would do nothing.
           </li>
         </UL>
       </GuideSection>
@@ -2894,7 +2892,7 @@ export default function GuidePage({
           on a computer the pointer shows the not-allowed cursor over it. (See Accessibility.)
         </p>
         <p>
-          A setting can be in one of three looks. <b>Filled</b> — it is in effect. <b>Striped</b> —
+          A setting can be in one of two looks. <b>Filled</b> — it is in effect. <b>Striped</b> —
           its box is striped instead of filled and its choice is ringed: it is kept, but it is not
           in effect right now, and you can still change it. Changing a striped setting never
           restarts a MoX run or a Blitz round, never redraws a date, and never changes which Bests
@@ -2902,9 +2900,8 @@ export default function GuidePage({
           Random Format is on, in Classic, Flash, MoX, and Blitz; Input and Rotate Dots in
           Deduction, and Rotate Dots while Input is Buttons; Leap Year Chance and Jan/Feb Chance on
           Leap Years when your year range cannot use them; Julian Chance while Julian Calendar is
-          off, when your range does not include 1582, and in Deduction; and the Year Range pair that
-          is not in use. <b>Faded</b> — it cannot be used right now (Amnesic while Save Stats is
-          off).
+          off, when your range does not include 1582, and in Deduction; the Year Range pair that is
+          not in use; and Amnesic while Save Stats is off.
         </p>
         <p className="text-(--tx-300-70) text-[calc(12rem/16.458)]">
           Settings changes apply when you <b>close</b> the ⚙ menu, not on each adjustment — so
@@ -3480,9 +3477,9 @@ export default function GuidePage({
           <li>
             <b>It is not Save Stats.</b> The switch above decides whether a question counts at all;
             this one decides whether what was counted is still there after you close. They are
-            independent. With Save Stats off this row fades and locks, keeping its value, and comes
-            back the moment you turn Save Stats on. Save Stats has no middle value of its own: Stats
-            Only is the way to keep Bests without keeping stats.
+            independent. With Save Stats off this row is striped — nothing new is being counted —
+            and you can still change it. Save Stats has no middle value of its own: Stats Only is
+            the way to keep Bests without keeping stats.
           </li>
           <li>
             <b>It is not a setting for one visit.</b> It is saved with this preset&apos;s other ⚙
