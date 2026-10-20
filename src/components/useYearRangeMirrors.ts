@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 
 // components/useYearRangeMirrors.ts — ONE PAIR of the ⚙ panel's Year Range TEXT BOXES, as state.
@@ -92,6 +92,14 @@ export function useYearRangeMirrors(
   // one per render, and it CANNOT drift from the effects below — both spell String(minY).
   const [minInputVal, setMinInputVal] = useState(() => String(minY))
   const [maxInputVal, setMaxInputVal] = useState(() => String(maxY))
+  // ★ WHETHER THE PLAYER HAS TYPED in a box since its text last showed the setting (Round 26, windows in
+  // sync). A box the player only focused holds nothing of theirs: its blur must not write it back, and
+  // a change from another window must reach it - else a tap on the box, a change of the range in
+  // another window, and a tap away would put the old year back over the other window's choice. Only
+  // typed text is protected from the store, and only typed text is committed.
+  // (refs: nothing is drawn from them - a commit and the two sync effects read them)
+  const minTyped = useRef(false)
+  const maxTyped = useRef(false)
   function applyMinValue(val: number) {
     if (val !== minY) setMinY(val)
   }
@@ -99,6 +107,12 @@ export function useYearRangeMirrors(
     if (val !== maxY) setMaxY(val)
   }
   const commitMin = () => {
+    const typed = minTyped.current
+    minTyped.current = false
+    if (!typed) {
+      setMinInputVal(String(minY))
+      return
+    }
     const p = parseInt(minInputVal)
     if (isNaN(p)) {
       setMinInputVal(String(minY))
@@ -109,6 +123,12 @@ export function useYearRangeMirrors(
     setMinInputVal(String(v))
   }
   const commitMax = () => {
+    const typed = maxTyped.current
+    maxTyped.current = false
+    if (!typed) {
+      setMaxInputVal(String(maxY))
+      return
+    }
     const p = parseInt(maxInputVal)
     if (isNaN(p)) {
       setMaxInputVal(String(maxY))
@@ -119,26 +139,45 @@ export function useYearRangeMirrors(
     setMaxInputVal(String(v))
   }
   // Store → text. FOCUS-GUARDED: a store write from anywhere else must not overwrite what the user
-  // is currently typing. The guard is why these two effects and the two refs belong together.
+  // is currently typing - and only that: a focused box holding nothing typed follows the store like any
+  // other (another window's change). The guard is why these two effects and the two refs belong together.
   //
   // The ref is IN the dependency array, which it was not when these lines lived in App: there the
   // ref came from a local useRef and exhaustive-deps knew it was stable, here it arrives as a
   // parameter and cannot be assumed. Listing it is the honest fix and costs nothing — a ref object
   // keeps its identity for the life of the component, so this still re-runs on a minY change only.
   useEffect(() => {
-    if (document.activeElement === minInputRef.current) return
+    if (minTyped.current && document.activeElement === minInputRef.current) return
+    minTyped.current = false
     setMinInputVal(String(minY))
   }, [minY, minInputRef])
   useEffect(() => {
-    if (document.activeElement === maxInputRef.current) return
+    if (maxTyped.current && document.activeElement === maxInputRef.current) return
+    maxTyped.current = false
     setMaxInputVal(String(maxY))
   }, [maxY, maxInputRef])
   return {
-    min: { value: minInputVal, setValue: setMinInputVal, commit: commitMin },
-    max: { value: maxInputVal, setValue: setMaxInputVal, commit: commitMax },
+    min: {
+      value: minInputVal,
+      setValue: (v) => {
+        setMinInputVal(v)
+        minTyped.current = true
+      },
+      commit: commitMin,
+    },
+    max: {
+      value: maxInputVal,
+      setValue: (v) => {
+        setMaxInputVal(v)
+        maxTyped.current = true
+      },
+      commit: commitMax,
+    },
     resetTo: (min, max) => {
       setMinInputVal(String(min))
       setMaxInputVal(String(max))
+      minTyped.current = false
+      maxTyped.current = false
     },
   }
 }

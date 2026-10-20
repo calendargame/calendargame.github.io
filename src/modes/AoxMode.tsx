@@ -136,6 +136,16 @@ function AoxMode({
   // focus and read on one keypress, and re-rendering the screen for it would be pure cost. See the
   // long note at the input for why the value has to be remembered at all.
   const aoxNAtFocusRef = useRef(aoxN)
+  // …and what the player has TYPED since (null: nothing). The box shows the store's value, so another
+  // window's change of the run length reaches it while it has the keyboard: that change - anything
+  // not the player's own keystroke - becomes what Escape returns to, and nothing typed is left to
+  // throw away (Round 26, windows in sync: Escape used to write the value from before it back).
+  const aoxNTypedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (aoxN === aoxNTypedRef.current) return
+    aoxNAtFocusRef.current = aoxN
+    aoxNTypedRef.current = null
+  }, [aoxN])
   const allowMistakes = useModePrefs((s) => s.aoxAllowMistakes),
     setAllowMistakes = useModePrefs((s) => s.setAoxAllowMistakes) // persisted (mode-prefs store)
   const oneByOne = useModePrefs((s) => s.aoxOneByOne),
@@ -869,10 +879,14 @@ function AoxMode({
             value={aoxN}
             onChange={(e) => {
               const v = e.target.value
-              if (runPhase === 'idle' && (v === '' || /^\d*$/.test(v))) setAoxN(v)
+              if (runPhase === 'idle' && (v === '' || /^\d*$/.test(v))) {
+                aoxNTypedRef.current = v
+                setAoxN(v)
+              }
             }}
             onFocus={() => {
               aoxNAtFocusRef.current = aoxN
+              aoxNTypedRef.current = null
             }}
             // ⚠ FUNCTIONAL UPDATERS, and that is what makes Escape work rather than a style choice.
             // These two commits used to close over the render's `aoxN`. Escape's revert writes the
@@ -889,7 +903,9 @@ function AoxMode({
                 setAoxN((v) => normalizeAoxN(v))
                 e.currentTarget.blur()
               } else if (e.key === 'Escape') {
-                setAoxN(aoxNAtFocusRef.current)
+                // (only what was TYPED is thrown away: with nothing typed there is nothing to undo,
+                // and the value showing may be another window's - aoxNTypedRef, above)
+                if (aoxNTypedRef.current !== null) setAoxN(aoxNAtFocusRef.current)
                 e.currentTarget.blur()
               }
             }}

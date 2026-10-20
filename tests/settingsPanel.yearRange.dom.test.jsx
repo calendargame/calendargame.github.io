@@ -296,22 +296,20 @@ describe('Year Range — commit, revert, clamp, and what half-typed text does NO
 
   // ── Focus wins while it is held ─────────────────────────────────────────────
 
-  it('a year box with the keyboard in it is never overwritten from elsewhere, and mirrors the range again once the keyboard leaves', () => {
+  // ★ RE-BLESSED (Round 26, windows in sync). This case used to PIN the box winning: its untouched '1'
+  // committed back on blur over a 1700 that arrived while it held the keyboard. With windows in sync
+  // that change is another window's choice, and putting the old year back over it is the defect the
+  // review lane found. Only TYPED text is the player's: it is kept from the store and committed; a
+  // box that merely has the keyboard follows the range, and leaving it writes nothing.
+  it('a year box with the keyboard in it keeps what is TYPED there; with nothing typed it follows the range, and leaving it writes nothing', () => {
     openPanel()
     focusYear('min')
-    // A range change made from outside the panel entirely — the case this guard exists for is a
-    // sync effect landing mid-keystroke and clobbering what is being typed.
-    write(() => useJulianRange.getState().setJulianMinY(1700))
-    expect(yearValue('min')).toBe('1')
-    // PINS TODAY: and when the keyboard leaves, the BOX wins — its untouched '1' is committed back
-    // over the 1700 that arrived while it held focus. That is the same commit-on-blur that makes
-    // typing work, applied to text the user never changed.
-    commitYear('min', 'blur')
-    expect(yearValue('min')).toBe('1')
-    expect(inUse().minY).toBe(1)
-    // With the keyboard gone the box tracks the range again.
+    // A range change made from outside the panel entirely (another window's)
     write(() => useJulianRange.getState().setJulianMinY(1700))
     expect(yearValue('min')).toBe('1700')
+    commitYear('min', 'blur')
+    expect(yearValue('min')).toBe('1700')
+    expect(inUse().minY).toBe(1700)
   })
 
   // ── The four offers agree about half-typed text (was the D1 disagreement) ────
