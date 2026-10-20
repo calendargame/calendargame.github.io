@@ -13,6 +13,12 @@
 // Both are pure, cost the same for a name of a million characters as for one of a thousand (they
 // look at its start and at nothing else), and never change what is stored.
 //
+// ★ AND BOTH CUT A NAME BEFORE ITS COPY NUMBER, NEVER THROUGH IT (Round 26). A copy is named after its
+// original with " (2)" on the end (store/presets' copyName), so cutting a long name at its end cut
+// away exactly the part that tells the copy from its original. Both keep the number (copyNumberOf)
+// and cut what comes before it — and components/PresetSwitcher's PresetOptionLabel draws a name the
+// same way where the SCREEN cuts it: "A rather long preset na… (2)".
+//
 // ★ BOTH CUT BETWEEN THE CHARACTERS A PLAYER SEES, NEVER BETWEEN THE UNITS A STRING IS COUNTED IN.
 // An emoji is two units, a flag is two emoji-sized letters, a family is several people held together
 // by invisible joiners, and an accent rides behind the letter it changes; half of one has no picture.
@@ -67,25 +73,63 @@ function wholeCharactersWithin(name: string, units: number): string[] {
 const charactersOf = (text: string): string[] =>
   Array.from(characterSegmenter.segment(text), ({ segment }) => segment)
 
+// ── A copy's number ───────────────────────────────────────────────────────────────────────────
+// The longest copy number that is kept whole where a name is cut, in units (" (" and ")" included).
+// A copy's number counts up from 2, so a real one is a few digits; a name the player typed to end
+// in a number hundreds of digits long is no copy anyone made, and keeping all of it would defeat
+// the very cut it rides on — so a number longer than this is cut with the rest of the name.
+const COPY_NUMBER_KEPT_UNITS = 16
+
+/**
+ * Where `name`'s copy number starts — the " (<number>)" on its end that store/presets' copyName
+ * writes and counts on from — or -1 for a name that does not end in one. A number is 1 or more,
+ * with no leading 0. ★ Only the END of the name is read (the digits, back to their bracket), so a
+ * pasted book costs what a word does.
+ */
+export function copyNumberAt(name: string): number {
+  const close = name.length - 1
+  if (name[close] !== ')') return -1
+  let open = close - 1
+  while (open >= 0 && name[open] >= '0' && name[open] <= '9') open--
+  const hasDigits = open < close - 1
+  return hasDigits && name[open] === '(' && name[open - 1] === ' ' && name[open + 1] !== '0'
+    ? open - 1
+    : -1
+}
+
+/** The copy number a cut keeps on the end of `name` (" (2)"), or '' — see COPY_NUMBER_KEPT_UNITS. */
+export function copyNumberOf(name: string): string {
+  const at = copyNumberAt(name)
+  return at >= 0 && name.length - at <= COPY_NUMBER_KEPT_UNITS ? name.slice(at) : ''
+}
+
 /** Is the whole of `name` drawn where a name is shown — i.e. is it within NAME_DRAWN_UNITS? */
 export const isDrawnWhole = (name: string): boolean => name.length <= NAME_DRAWN_UNITS
 
-/** `name` as a name slot draws it: all of it, or its start and an ellipsis (NAME_DRAWN_UNITS). */
-export const nameAsDrawn = (name: string): string =>
-  isDrawnWhole(name) ? name : wholeCharactersWithin(name, NAME_DRAWN_UNITS).join('') + ELLIPSIS
+/**
+ * `name` as a name slot draws it: all of it, or its start, an ellipsis, and its copy number
+ * (NAME_DRAWN_UNITS; copyNumberOf). The start is read from `name` itself, never a copy of it cut
+ * off before the number: a name this long reaches the number only far past what is read.
+ */
+export function nameAsDrawn(name: string): string {
+  if (isDrawnWhole(name)) return name
+  const number = copyNumberOf(name)
+  return wholeCharactersWithin(name, NAME_DRAWN_UNITS - number.length).join('') + ELLIPSIS + number
+}
 
 /**
- * `name` as a sentence quotes it: all of it, or its first NAME_QUOTED_CHARACTERS characters and an
- * ellipsis.
+ * `name` as a sentence quotes it: all of it, or its first characters, an ellipsis, and its copy
+ * number (copyNumberOf) — NAME_QUOTED_CHARACTERS characters in all, the number's included (each of
+ * its characters is one unit).
  */
 export function nameAsQuoted(name: string): string {
   // A character is at least one unit, so a name of no more units than the limit is within it.
   if (name.length <= NAME_QUOTED_CHARACTERS) return name
   const read = NAME_QUOTED_CHARACTERS * UNITS_READ_PER_QUOTED_CHARACTER
   const characters = wholeCharactersWithin(name, read)
-  return name.length <= read && characters.length <= NAME_QUOTED_CHARACTERS
-    ? name
-    : characters.slice(0, NAME_QUOTED_CHARACTERS).join('') + ELLIPSIS
+  if (name.length <= read && characters.length <= NAME_QUOTED_CHARACTERS) return name
+  const number = copyNumberOf(name)
+  return characters.slice(0, NAME_QUOTED_CHARACTERS - number.length).join('') + ELLIPSIS + number
 }
 
 // ── A quoted name, as the pieces it is drawn in ───────────────────────────────────────────────

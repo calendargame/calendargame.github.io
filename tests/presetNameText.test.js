@@ -5,6 +5,8 @@ import { describe, it, expect } from 'vitest'
 import {
   NAME_DRAWN_UNITS,
   NAME_QUOTED_CHARACTERS,
+  copyNumberAt,
+  copyNumberOf,
   isDrawnWhole,
   nameAsDrawn,
   nameAsQuoted,
@@ -193,5 +195,43 @@ describe('quotedNameParts — a quoted name, as the pieces it is drawn in', () =
       expect(texts(name).join('')).toBe(nameAsQuoted(name))
     }
     expect(texts(book).at(-1).endsWith('…')).toBe(true)
+  })
+})
+
+describe("a copy's number survives every cut (Round 26)", () => {
+  it('copyNumberAt finds the " (<number>)" copyName writes, and nothing else', () => {
+    expect(copyNumberAt('Speed (2)')).toBe(5)
+    expect(copyNumberAt('Speed (12)')).toBe(5)
+    expect(copyNumberAt('a (1 (2)')).toBe(4)
+    for (const name of [
+      'Speed',
+      'Speed (0)',
+      'Speed (02)',
+      'Speed(2)',
+      'Speed ()',
+      '(2)',
+      'Speed (2x)',
+      'Speed (2) ',
+      '',
+    ])
+      expect(copyNumberAt(name), name).toBe(-1)
+    expect(copyNumberOf('Speed (2)')).toBe(' (2)')
+    // A "number" far longer than any copy count is not kept whole by a cut.
+    expect(copyNumberOf(`Speed (${'9'.repeat(40)})`)).toBe('')
+  })
+
+  it('nameAsDrawn cuts a long name before its number, and keeps the number whole', () => {
+    const copy = `${'x'.repeat(NAME_DRAWN_UNITS)} (2)`
+    const drawn = nameAsDrawn(copy)
+    expect(drawn.endsWith('… (2)')).toBe(true)
+    expect(drawn.length).toBeLessThanOrEqual(NAME_DRAWN_UNITS + 1)
+    // …and a name with no number is cut as before.
+    expect(nameAsDrawn('x'.repeat(NAME_DRAWN_UNITS + 4)).endsWith('x…')).toBe(true)
+  })
+
+  it('nameAsQuoted does the same, in characters', () => {
+    const copy = `${'y'.repeat(NAME_QUOTED_CHARACTERS)} (3)`
+    const quoted = nameAsQuoted(copy)
+    expect(quoted).toBe(`${'y'.repeat(NAME_QUOTED_CHARACTERS - 4)}… (3)`)
   })
 })

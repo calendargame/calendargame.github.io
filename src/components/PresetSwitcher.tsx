@@ -6,7 +6,7 @@ import { switchPreset } from '../store/presetControl.js'
 import { useAmnesicModeOf } from '../store/amnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
 import { stockNameForm, useNameRooms, watchNameCell } from '../lib/presetNameWidth.js'
-import { nameAsDrawn } from '../lib/presetNameText.js'
+import { copyNumberOf, nameAsDrawn } from '../lib/presetNameText.js'
 
 // PresetSwitcher — the control that says which preset you are on and moves you to another one.
 //
@@ -202,9 +202,14 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
   // The stored name, as much of it as is ever drawn or said (lib/presetNameText).
   const full = nameAsDrawn(p.name)
   const drawn = short === null ? full : nameAsDrawn(short)
+  // A copy's number (" (2)"), kept whole where the cell cuts the name (the ★ below). A stock name
+  // drawn short has none: "Preset 1 (2)" is not a stock name.
+  const number = short === null ? copyNumberOf(p.name) : ''
   // What a screen reader is given IN PLACE OF what is drawn — only when the two differ: an amnesic
-  // preset has its words after its name, and a stock name drawn short is said in full.
-  const spoken = amnesic ? `${full}, ${amnesic}` : short !== null ? full : null
+  // preset has its words after its name, a stock name drawn short is said in full, and a copy's
+  // name drawn in two pieces is said as the one name it is (pieces of a name are joined by rules
+  // that differ by engine — the ⚠ "one whole phrase" note above).
+  const spoken = amnesic ? `${full}, ${amnesic}` : short !== null || number !== '' ? full : null
   return (
     // The name cell. `flex` makes it a block-level flex container, so inside the trigger's grid
     // cell AND inside a dropdown row it is the same box with the same rules — one structure
@@ -221,9 +226,26 @@ export function PresetOptionLabel({ preset: p }: { preset: Preset }) {
           ⚠ WHAT IS DRAWN IS nameAsDrawn, NOT THE RAW NAME: all of it for any name a slot could
           show, and only the start of a pasted book (lib/presetNameText says why a browser must
           never be handed the whole of one to lay out). */}
-      <span className="truncate" aria-hidden={spoken !== null ? true : undefined}>
-        {drawn}
-      </span>
+      {number === '' ? (
+        <span className="truncate" aria-hidden={spoken !== null ? true : undefined}>
+          {drawn}
+        </span>
+      ) : (
+        // ★ A COPY'S NAME IS CUT BEFORE ITS NUMBER, NEVER THROUGH IT (Round 26): "A rather long
+        // preset na… (2)", so a copy of a long name can still be told from its original. Two
+        // pieces in one line: the name, which gives way and is cut with "…" exactly as any name
+        // is, and the number, which keeps its size — `whitespace-pre` keeps the space before its
+        // bracket, which a flex item would otherwise drop from the start of its line. On a cell
+        // too narrow for the number and an ellipsis together, the number is cut too, after
+        // leaving the name an em — about an ellipsis' width — so a cut there still shows "…".
+        // `min-w-0`: the pair shrinks with the cell instead of holding it open.
+        <span className="flex min-w-0" aria-hidden="true">
+          <span className="truncate">{drawn.slice(0, drawn.length - number.length)}</span>
+          <span className="shrink-0 overflow-hidden text-ellipsis whitespace-pre max-w-[calc(100%-1em)]">
+            {number}
+          </span>
+        </span>
+      )}
       {spoken !== null && <span className="sr-only">{spoken}</span>}
     </span>
   )

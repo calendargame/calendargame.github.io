@@ -5,6 +5,7 @@ import { door, type CountsSpec, type CountsStorage } from './syncedDoc.js'
 import { browsingSessionOpen } from './browsingSession.js'
 import { sessionPresetId, recordSessionPreset } from './sessionPreset.js'
 import { nameHasInk } from '../lib/presetNameInk.js'
+import { copyNumberAt } from '../lib/presetNameText.js'
 import { reportedHydration } from './hydrationReport.js'
 
 // store/presets.ts — THE PRESET REGISTRY, and the storage layer every per-preset store sits on.
@@ -183,15 +184,14 @@ export const shortStockName = (name: string): string | null => {
 // from there that no preset in `taken` is already called, so a copy of "Speed" beside "Speed (2)"
 // is "Speed (3)". (Names may repeat — nothing depends on their differing — but a copy that read the
 // same as a preset already in the list would be no help to anyone.)
-// ★ ONLY THE END OF A NAME IS READ, so a pasted book costs no more than a word; and the number is
-// counted as a BigInt, so a name ending in a number too big for an ordinary one still counts on
-// by exactly one.
+// ★ ONLY THE END OF A NAME IS READ (lib/presetNameText's copyNumberAt — the one reading of " (#)",
+// which every cut of a name also keeps whole), so a pasted book costs no more than a word; and the
+// number is counted as a BigInt, so a name ending in a number too big for an ordinary one still
+// counts on by exactly one.
 export function copyName(name: string, taken: ReadonlySet<string>): string {
-  const open = name.lastIndexOf(' (')
-  const digits = name.endsWith(')') && open >= 0 ? name.slice(open + 2, -1) : ''
-  const counted = /^[1-9][0-9]*$/.test(digits)
-  const base = counted ? name.slice(0, open) : name
-  let n = counted ? BigInt(digits) + 1n : 2n
+  const at = copyNumberAt(name)
+  const base = at >= 0 ? name.slice(0, at) : name
+  let n = at >= 0 ? BigInt(name.slice(at + 2, -1)) + 1n : 2n
   while (taken.has(`${base} (${n})`)) n++
   return `${base} (${n})`
 }

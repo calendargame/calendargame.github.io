@@ -1840,9 +1840,12 @@ export default function GuidePage({
             than the control: it starts at the control&apos;s left edge and reaches part of the way
             over the mode selector. A name can be any length (see <b>Rename</b> below), so it does
             not always fit: where it does not, it is shown on one line, cut short with an …, and
-            nothing gets wider to make room for it. A row of the list is where a name has the least
-            room — the row keeps its ✓ column and its own spacing, like every list here — so a name
-            can be whole on the control and cut short in the list under it.
+            nothing gets wider to make room for it. A copy&apos;s number in brackets (see{' '}
+            <b>Duplicate</b> below) is never what is cut: the name is cut before it, so a long name
+            and its copy still read differently — &quot;Speed drills for… (2)&quot;. A row of the
+            list is where a name has the least room — the row keeps its ✓ column and its own
+            spacing, like every list here — so a name can be whole on the control and cut short in
+            the list under it.
           </li>
           <li>
             A ready-made name — &quot;Preset 1&quot;, &quot;Preset 2&quot;, and so on, or a name you
@@ -1882,7 +1885,8 @@ export default function GuidePage({
             its stats, all-time bests, or times: it starts fresh, to be tracked on its own. It is
             named after the original with &quot;(2)&quot; on the end — a copy of a name that already
             ends in a number in brackets counts on, so a copy of &quot;Speed (2)&quot; is
-            &quot;Speed (3)&quot; — taking the first number no preset has yet. It goes directly
+            &quot;Speed (3)&quot; — taking the first number no preset has yet. Wherever a long name
+            has to be cut short, it is cut before that number, which always shows. It goes directly
             under its original, the list scrolls to show it, and like <b>New Preset</b> it does not
             switch you into it. If the device has no room to save the copy, none is made, and a note
             under the two buttons says &quot;This device has no room to save a copy of that preset,
