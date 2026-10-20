@@ -9,6 +9,13 @@
 // deploy B. A is `dist` with its build id changed (index.html's, build-id.txt's, and the worker's
 // precache revision of index.html - so B's worker is a new worker to the browser, as a real deploy's
 // is); B is `dist` as built.
+// ⚠ NOTHING LEAVES THE MACHINE - AND HERE THE ROUTE CANNOT SAY SO ALONE. A page a service worker controls
+// makes its requests through the worker, and WebKit's Playwright build routes none of them (Chromium's
+// does): the live site's build carries the Cloudflare analytics beacon (vite.config's cfWebAnalytics, on
+// the live repo's CI only), and under the worker WebKit fetched the real script, which then reported to
+// Cloudflare from 127.0.0.1 and was refused - twenty console errors, a run the test site's CI never saw
+// because its build has no beacon. So this server serves index.html without the beacon's tag, for both
+// deploys: what is under test is the worker, and an analytics visit from a test run is not a visit.
 // ⚠ HEADLESS WINDOWS ARE ALWAYS ON SCREEN. Both engines report every headless window visible and
 // focused, whatever is done to it (tried: another page in front, the page frozen, focus emulation, the
 // window minimised) - so "a window in the background is reloaded at once, one on screen at its next
@@ -43,6 +50,9 @@ const TYPES: Record<string, string> = {
 async function serveDeploys() {
   let deployed: 'A' | 'B' = 'A'
   const base = builtBase()
+  const BEACON = /\s*<script [^>]*static\.cloudflareinsights\.com[^>]*><\/script>/
+  const served = (file: string, body: Buffer) =>
+    file.endsWith('index.html') ? Buffer.from(body.toString('utf8').replace(BEACON, '')) : body
   const asA = (file: string, body: Buffer) => {
     if (file.endsWith('index.html'))
       return body.toString('utf8').replace(/(name="cg-build" content=")[^"]*/, `$1${A}`)
@@ -64,7 +74,7 @@ async function serveDeploys() {
       return res.end()
     }
     try {
-      const body = readFileSync(file)
+      const body = served(file, readFileSync(file))
       res.setHeader('Content-Type', TYPES[extname(file)] ?? 'application/octet-stream')
       // (every request reaches the server, so a deploy is seen as soon as it is made)
       res.setHeader('Cache-Control', 'no-cache')
