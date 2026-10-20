@@ -81,7 +81,14 @@ test('the Show Codes box, closed, gives nothing away to a screen reader', async 
   const toggle = page.locator('button[data-key="C"]:visible')
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   const codes = page.locator(`#${await toggle.getAttribute('aria-controls')}`)
-  const words = 'Gregorian Calendar'
+  // The box's calendar line, as the date on screen has it: "Gregorian Calendar", or "Julian Calendar"
+  // for a date before the 1582 changeover - about one in seven of the default range's dates, which is
+  // what made a fixed "Gregorian Calendar" fail now and then. Read from the box itself (its words are in
+  // the page while it is closed; only a screen reader is kept from them).
+  const words = await codes.evaluate(
+    (el) =>
+      /(?:Julian|Gregorian)(?:\/(?:Julian|Gregorian))? Calendar/.exec(el.textContent ?? '')![0],
+  )
   await expectClosedPanelsInert(page, 'the codes box')
   if (browserName === 'chromium') expect(await spoken(page, words), 'closed').toBe(0)
   await toggle.click()
