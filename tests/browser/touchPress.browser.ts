@@ -638,3 +638,83 @@ test.describe('with a mouse', () => {
     expect(await words.evaluate(selectability)).toBe('text')
   })
 })
+
+// ★ A TOUCH THAT STOPS A COASTING SCROLL IS NOT A PRESS (Round 26 review): flick the ⚙ menu and put
+// a finger down to stop it, and that touch stops the glide and presses nothing — even held, which the
+// controller used to press on release, on whatever button had coasted under the finger. The glide
+// is the page's own scroll, moved a frame at a time by the test (not by the app), and the touch goes
+// down in the very frame of its last step, click-less, held: what an iPhone sends for it.
+test('click-less: a touch held on a button while its ⚙ menu is still gliding presses nothing', async ({
+  page,
+}) => {
+  await openApp(page)
+  const panel = await openSettings(page)
+  const scroller = panel.locator('[data-drag-scroll]').first()
+  const result = await scroller.evaluate(async (box, holdMs) => {
+    const view = box.getBoundingClientRect()
+    const mid = (view.top + view.bottom) / 2
+    const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()))
+    // Four frames of glide: each moves the menu and is reported as a scroll, as a coast is.
+    for (let i = 0; i < 4; i++) {
+      box.scrollTop += 6
+      await new Promise<void>((done) =>
+        box.addEventListener('scroll', () => done(), { once: true }),
+      )
+      await frame()
+    }
+    // The finger lands on the button nearest the middle of the menu, where it is now.
+    const button = [...box.querySelectorAll('button')]
+      .map((b) => ({ b, r: b.getBoundingClientRect() }))
+      .filter(
+        ({ b, r }) =>
+          r.height > 0 &&
+          r.top > view.top &&
+          r.bottom < view.bottom &&
+          b.getAttribute('aria-disabled') !== 'true',
+      )
+      .sort((p, q) => Math.abs(p.r.top - mid) - Math.abs(q.r.top - mid))[0].b
+    const at = button.getBoundingClientRect()
+    const [x, y] = [(at.left + at.right) / 2, (at.top + at.bottom) / 2]
+    const el = document.elementFromPoint(x, y)!
+    const clicks: string[] = []
+    button.addEventListener('click', () => clicks.push('click'))
+    const pressedBefore = button.getAttribute('aria-pressed') ?? button.getAttribute('aria-checked')
+    const pointer = (type: string) =>
+      el.dispatchEvent(
+        new PointerEvent(type, {
+          pointerId: 52,
+          pointerType: 'touch',
+          isPrimary: true,
+          clientX: x,
+          clientY: y,
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+    const touch = (type: string, down: boolean) => {
+      const e = new Event(type, { bubbles: true, cancelable: true })
+      Object.defineProperty(e, 'touches', { value: { length: down ? 1 : 0 } })
+      el.dispatchEvent(e)
+      return e.defaultPrevented
+    }
+    pointer('pointerdown')
+    touch('touchstart', true)
+    await new Promise((r) => setTimeout(r, holdMs))
+    pointer('pointerup')
+    const endCancelled = touch('touchend', false)
+    await frame()
+    return {
+      clicks,
+      endCancelled,
+      label: button.textContent,
+      same:
+        (button.getAttribute('aria-pressed') ?? button.getAttribute('aria-checked')) ===
+        pressedBefore,
+    }
+  }, HOLD_MS)
+  expect(result.clicks, `"${result.label}" was pressed`).toEqual([])
+  expect(result.endCancelled, 'nothing pressed here, so no tap to withhold').toBe(false)
+  expect(result.same).toBe(true)
+  await expect(page.locator('#settings-popover')).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0) // no popup a button would have opened
+})

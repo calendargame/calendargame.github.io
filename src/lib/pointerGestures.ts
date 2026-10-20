@@ -136,6 +136,17 @@
 //     the LIST, which does not hold the trigger, so the edge auto-scroll below is not a scroll of
 //     the press.) A MOUSE press is never a scroll: like every other touch rule here it is left
 //     alone, so a wheel turned while the button is held down costs it nothing.
+//   • ★ A TOUCH THAT STOPS A COASTING SCROLL IS NOT A PRESS (Round 26 review). Fling a list, the ⚙
+//     menu, or How to Play, and put a finger down to stop it: on an iPhone that touch stops the
+//     scroll and is no tap — no click follows it, however short — which is the platform's own
+//     convention (the first touch stops, the next one presses). A finger held there 0.3 s or more
+//     was nonetheless pressed HERE on release, as a long press, on whatever button had coasted
+//     under it. So a touch (or pen) that goes down while something holding the control is still
+//     moving by itself — scrolled by the person, not by the app (lib/appScroll), within COAST_MS
+//     of the press (a coasting box reports a scroll every frame) — is treated as a scroll from its
+//     first moment (onDown: wasCoasting): it presses nothing on release, a click a browser might
+//     still send for it is swallowed, and in an answer grid it draws no ring. A mouse is never
+//     touched by this, as by every touch rule here.
 //   • NOT CONTROLS OF THIS FILE: links (two mailto addresses — a long press on a link is the
 //     platform's own preview, never a press), the preset reorder grip (it owns its own drag), and the
 //     sliders. Those keep the browser's behaviour.
@@ -192,6 +203,11 @@ const KEEP_FOCUS_SELECTOR = '[data-keep-focus]'
 export const TAP_MS = 300
 export const TAP_SLOP_PX = 6
 export const DOUBLE_TAP_MS = 400
+//   • COAST_MS — a box that the person scrolled this recently is still coasting (the header's ★ "a
+//     touch that stops a coasting scroll"): a gliding box reports a scroll each frame drawn (16.7 ms
+//     at 60 Hz, 8.3 at 120), so three frames of a 60 Hz screen are well inside it — and a finger
+//     put down to tap something cannot follow the end of a glide it has seen stop within it.
+export const COAST_MS = 50
 
 // ★ ANNOUNCED-UNAVAILABLE CONTROLS ARE NOT GESTURE TARGETS (round 15). Every element this controller
 // treats as a target — the press it latches onto, the member it rings under the finger, the member a
@@ -370,11 +386,13 @@ export function scrollPlaces(el: Element): ScrollPlace[] {
     places.push({ box: page, top: page.scrollTop, left: page.scrollLeft })
   return places
 }
+// The box a scroll event names: an element, or — `document` — the page's own scroller.
+const scrolledBox = (target: Node): Node => (target === document ? pageScroller() : target)
 // Whether the box a scroll event names (`target`: an element, or the document for the page) now
 // stands somewhere other than it did at the press. A box with no place recorded — it did not hold
 // the control when it was pressed — counts as moved, as every reported scroll did before.
 export function movedSince(places: readonly ScrollPlace[], target: Node): boolean {
-  const box = target === document ? pageScroller() : target
+  const box = scrolledBox(target)
   const at = places.find((p) => p.box === box)
   return !at || !(box instanceof Element) || box.scrollTop !== at.top || box.scrollLeft !== at.left
 }
@@ -409,13 +427,20 @@ export function installPointerGestures(): () => void {
   // Shift+Tab rest, a list keeping its row in view, a screen sent to its top) stands, from then on,
   // where the app put it — so the move is never read as the finger's (onScroll). Told synchronously,
   // inside the write, so no frame can show the app's move as a move.
+  // …and, whether or not a press is down, where the app last put each box it moved: a scroll that
+  // finds a box there is the app's, and starts no coast (onAnyScroll).
+  const appPut = new WeakMap<Node, { top: number; left: number }>()
   const offAppScroll = onAppScroll((box) => {
+    appPut.set(box, { top: box.scrollTop, left: box.scrollLeft })
     for (const place of heldAt)
       if (place.box === box) {
         place.top = box.scrollTop
         place.left = box.scrollLeft
       }
   })
+  // When the PERSON last scrolled each box — the finger, or the glide it left behind (the header's
+  // ★ "a touch that stops a coasting scroll"). Kept for every scroll in the page, press or no press.
+  const personScrolledAt = new WeakMap<Node, number>()
   // …and across touches: when the last TAP ended (a touch the browser did not take for a scroll), whether
   // the touch now down has been taken for one, a touchstart withheld before its pointerdown arrived
   // (no engine checked orders them that way, but the rule must not depend on it), and whether the
@@ -596,6 +621,8 @@ export function installPointerGestures(): () => void {
     heldAt = scrollPlaces(el)
     withheld = withheldEarly
     withheldEarly = false
+    // A touch that went down on a box still coasting stops it — and is a scroll, never a press.
+    scrolled = e.pointerType !== 'mouse' && wasCoasting(heldAt, downAt)
     // Deliberately NO hilite on press: in a group the ring appears only after the pointer LEAVES the
     // pressed option (nextHilite, applied in onMove) — a plain tap never flashes it.
   }
@@ -772,7 +799,22 @@ export function installPointerGestures(): () => void {
   // somewhere other than where it stood at the press (movedSince) — or since the APP last put it
   // somewhere (offAppScroll, above): a scroll the app made is never the person's.
   // A MOUSE press is exempt, like every touch rule in this file: a mouse always gets its click.
+  // Was any box holding the pressed control moving by itself — scrolled by the person within COAST_MS
+  // of `at` (the header's ★ "a touch that stops a coasting scroll")?
+  const wasCoasting = (places: readonly ScrollPlace[], at: number) =>
+    places.some(({ box }) => at - (personScrolledAt.get(box) ?? -Infinity) < COAST_MS)
+  // Every scroll in the page, press or no press: when the person last moved its box — unless the box
+  // stands exactly where the app put it, which makes the scroll the app's own (offAppScroll above).
+  const onAnyScroll = (e: Event) => {
+    if (!(e.target instanceof Node)) return
+    const box = scrolledBox(e.target)
+    const put = appPut.get(box)
+    if (put && box instanceof Element && box.scrollTop === put.top && box.scrollLeft === put.left)
+      return
+    personScrolledAt.set(box, performance.now())
+  }
   const onScroll = (e: Event) => {
+    onAnyScroll(e)
     if (!startEl || trigger || scrolled || pointerKind === 'mouse') return
     const scroller = e.target
     if (!(scroller instanceof Node) || !scroller.contains(startEl)) return

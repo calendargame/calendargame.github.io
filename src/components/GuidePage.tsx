@@ -1331,8 +1331,10 @@ export default function GuidePage({
             long page moves that part and presses nothing. A scroll that had already stopped when
             you pressed doesn&apos;t count, and neither does one the app makes itself, such as How
             to Play gliding to a section you just opened: that press works. With a mouse, turning
-            the wheel while you hold a button down doesn&apos;t cancel it either. The dimmed area
-            around a popup works the same way: hold it as long as you like, and the popup still
+            the wheel while you hold a button down doesn&apos;t cancel it either. A touch that stops
+            a list or a page still gliding after a flick only stops it, however long you rest your
+            finger there: it presses nothing, and your next touch does. The dimmed area around a
+            popup works the same way as a button: hold it as long as you like, and the popup still
             closes when you lift.
           </li>
           <li>

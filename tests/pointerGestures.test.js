@@ -27,6 +27,7 @@ import {
   TAP_MS,
   TAP_SLOP_PX,
   DOUBLE_TAP_MS,
+  COAST_MS,
   FINE_POINTER_QUERY,
   onSelectableText,
   installPointerGestures,
@@ -1225,6 +1226,66 @@ describe('pointerGestures controller — touches that are not quick taps, and th
     // The app's scroll of a box that does not hold the control changes nothing either way.
     const elsewhere = domEl('div', {}, document.body)
     press(pill, { held: 600, during: () => scrollBoxTo(elsewhere, 10) })
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+
+  // ★ A TOUCH THAT STOPS A COASTING SCROLL IS NOT A PRESS (Round 26 review): a finger put down on a
+  // list still gliding from a flick stops it — the platform's own rule, the first touch stops and the
+  // next one presses — and was then pressed here, as a long press, if it rested 0.3 s.
+  it('a touch that goes down on a region still coasting presses nothing — held or quick — and swallows any click', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    // The glide: the region moving by itself, a frame at a time, the last frame just now.
+    for (let frame = 0; frame < 4; frame++) {
+      scrolls(region)
+      now += 16
+    }
+    const { end } = press(pill, { held: 600 })
+    expect(clicks).not.toHaveBeenCalled()
+    expect(end.defaultPrevented).toBe(false) // nothing pressed here, so no tap of the browser's to withhold
+    // A quick one, the same.
+    scrolls(region)
+    now += 16
+    press(pill)
+    pill.click() // a click a browser might send for it
+    expect(clicks).not.toHaveBeenCalled()
+  })
+  it('…once the glide has stopped, the next touch is a press again', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    scrolls(region)
+    now += COAST_MS
+    press(pill, { held: 600 })
+    expect(clicks).toHaveBeenCalledTimes(1)
+  })
+  it('…and a glide the APP made (lib/appScroll: How to Play sliding to a section) is no coast', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    for (let frame = 1; frame <= 3; frame++) {
+      scrollBoxTo(region, frame * 30)
+      region.dispatchEvent(new Event('scroll'))
+      now += 16
+    }
+    press(pill, { held: 600 })
+    expect(clicks).toHaveBeenCalledTimes(1)
+    // …nor does a coast of a box that does not hold the button stop it.
+    const elsewhere = domEl('div', {}, document.body)
+    scrolls(elsewhere)
+    press(pill, { held: 600 })
+    expect(clicks).toHaveBeenCalledTimes(2)
+  })
+  it('…and a MOUSE press on a gliding region is the mouse’s, as every mouse press is', () => {
+    const region = domEl('div', {}, document.body)
+    const pill = domEl('button', {}, region)
+    const clicks = counted(pill)
+    scrolls(region)
+    hit = pill
+    pill.dispatchEvent(ptr('pointerdown', { pointerType: 'mouse' }))
+    document.dispatchEvent(ptr('pointerup', { pointerType: 'mouse' }))
+    pill.click()
     expect(clicks).toHaveBeenCalledTimes(1)
   })
 
