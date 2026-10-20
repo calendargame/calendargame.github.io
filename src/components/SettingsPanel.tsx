@@ -23,7 +23,7 @@ import {
 import { fmt, numericFormatOf } from '../lib/format.js'
 import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from '../lib/calendar.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
-import { largestFit } from '../lib/textFit.js'
+import { largestFit, makeRuler, setRows, widestRow } from '../lib/textFit.js'
 import { UPDATE_CHECK_LABEL } from '../lib/updateCheck.js'
 import type { UpdateCheckState } from '../lib/updateCheck.js'
 import { GroupLabel, SectionLabel } from './primitives.jsx'
@@ -184,6 +184,8 @@ export type SettingsPanelProps = {
 // of the panel's text tier — 11px beside 12px, the floor they have always had — before they take two
 // lines instead (fitTrioCaptions).
 const TRIO_FLOOR = 11 / 12
+// The hidden copy the trio's captions are measured in (fitTrioCaptions), made the first time.
+let trioRuler: HTMLElement | null = null
 
 const NOT_IN_EFFECT = {
   randomFormat: 'Practice dates ignore this while Random Format is on.',
@@ -574,8 +576,8 @@ export function SettingsPanel({
   //      each caption's longest word fits.
   //   (A font so wide that even a word does not fit at the floor shrinks further than it: whole
   //   words, never cut.)
-  // ★ MEASURED AS LAID-OUT TEXT (a Range over the caption), at each size tried (lib/textFit's
-  // largestFit: a font is not trusted to scale evenly). The fit used to read each caption span's
+  // ★ MEASURED AS LAID-OUT TEXT, at each size tried (lib/textFit's largestFit: a font is not trusted
+  // to scale evenly), in a ruler (the ★ inside). The fit used to read each caption span's
   // scrollWidth — which an inline span does not have (it is 0), so the fit never once shrank
   // anything and the clip went unseen. Applied to the BUTTON, not the caption: the caption
   // inherits it, so the button's line-box strut shrinks WITH the text and the label stays
@@ -588,11 +590,9 @@ export function SettingsPanel({
     const labels = Array.from(row.querySelectorAll<HTMLElement>('[data-fitlabel]'))
     const buttons = labels.map((l) => l.parentElement!)
     if (labels.length === 0) return
-    // Back to the resting size and one line before anything is measured, so a re-run measures the
-    // captions as they are, not as the last fit left them (StatPanel's feedback-loop rule).
-    buttons.forEach((b) => (b.style.fontSize = ''))
-    labels.forEach((l) => (l.style.whiteSpace = ''))
-    // The room inside the narrowest button (they are equal, but nothing here depends on that).
+    // The room inside the narrowest button (they are equal, but nothing here depends on that). A
+    // button's width is its share of the row (flex-1), never its caption's, so what the fit sets
+    // cannot change the room it is measured against.
     const room = Math.min(
       ...buttons.map((b) => {
         const cs = getComputedStyle(b)
@@ -608,34 +608,37 @@ export function SettingsPanel({
       }),
     )
     if (!(room > 0)) return
-    const base = parseFloat(getComputedStyle(buttons[0]).fontSize)
-    const sizeAt = (scale: number) =>
-      buttons.forEach((b) => (b.style.fontSize = scale < 1 ? `${base * scale}px` : ''))
+    // ★ MEASURED IN A RULER, NOT IN THE BUTTONS (Round 26 review): the captions are laid out again,
+    // at every size tried, in a hidden copy wearing the buttons' own type (lib/textFit's
+    // makeRuler), and the buttons are touched once, with the answer. Trying each size in the real
+    // buttons — laying the menu out again and again within one frame — left WebKit's scroll range
+    // for the ⚙ menu at what the captions measured at one of the passes in between, not at what
+    // they ended as: with the captions on two lines the menu's foot could not be scrolled to, 15
+    // to 22px short, and the Amnesic picker stayed out of sight.
+    trioRuler ??= makeRuler()
+    trioRuler.className = buttons[0].className
+    trioRuler.style.fontSize = ''
+    const base = parseFloat(getComputedStyle(trioRuler).fontSize)
+    const captions = labels.map((l) => l.textContent ?? '')
     // The widest caption — or, `byWord`, the widest single word of any — at `scale` of the tier.
-    const widestAt = (byWord: boolean) => (scale: number) => {
-      sizeAt(scale)
-      return Math.max(
-        ...labels.map((l) => {
-          const text = l.firstChild
-          if (!(text instanceof Text)) return 0
-          const pieces = byWord ? text.data.split(' ') : [text.data]
-          let at = 0
-          return Math.max(
-            ...pieces.map((piece) => {
-              const range = document.createRange()
-              range.setStart(text, at)
-              range.setEnd(text, at + piece.length)
-              at += piece.length + 1
-              return range.getBoundingClientRect().width
-            }),
-          )
-        }),
-      )
+    const widestAt = (scale: number) => {
+      trioRuler!.style.fontSize = scale < 1 ? `${base * scale}px` : ''
+      return widestRow(trioRuler!)
     }
-    const oneLine = largestFit(room, widestAt(false))
-    if (oneLine >= TRIO_FLOOR) return sizeAt(oneLine)
-    labels.forEach((l) => (l.style.whiteSpace = 'normal'))
-    sizeAt(largestFit(room, widestAt(true)))
+    setRows(trioRuler, captions)
+    let scale = largestFit(room, widestAt)
+    const twoLines = scale < TRIO_FLOOR
+    if (twoLines) {
+      setRows(
+        trioRuler,
+        captions.flatMap((c) => c.split(' ')),
+      )
+      scale = largestFit(room, widestAt)
+    }
+    const size = scale < 1 ? `${base * scale}px` : ''
+    for (const b of buttons) if (b.style.fontSize !== size) b.style.fontSize = size
+    const wrap = twoLines ? 'normal' : ''
+    for (const l of labels) if (l.style.whiteSpace !== wrap) l.style.whiteSpace = wrap
   }
   // Dep-less like StatPanel's: cheap (3 spans), and this component only exists while the panel is
   // open, so there is no closed state to bail out of. It re-reads on EVERY render pass on purpose —

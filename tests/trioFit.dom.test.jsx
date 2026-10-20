@@ -4,17 +4,16 @@
 // fitTrioCaptions): one shared size, shrunk no further than eleven twelfths of the panel's text tier;
 // past that, a caption too wide for one line takes two, broken at its space. Never cut.
 //
-// ★ IT IS MEASURED AS LAID-OUT TEXT — a Range over each caption — and the Round 26 review is why: it
-// used to read each caption span's scrollWidth, which an inline span does not have (it is 0 in every
-// browser), and this file mocked a scrollWidth into existence, so the suite proved a fit that never
-// once ran on a real screen. The browser lane (settingsTrio) now holds the real geometry, in three
-// fonts and both engines; this file pins the WIRING with a model of text in jsdom, which lays nothing
-// out:
-//   • a Range's width is its text's length × half the font size of the button the caption is in
-//     (its inline size, or the resting 12px of text-xs) — so a measurement follows the size tried;
-//   • a trio button is `btnWidth` wide, with no padding or border;
-//   • a button's computed font size is its inline size, or 12px — the channel a compounding shrink
-//     would travel, so the stability case is a real test of the reset-before-measure guard.
+// ★ IT IS MEASURED AS LAID-OUT TEXT, IN A RULER — a hidden copy wearing the buttons' type — and the
+// buttons are touched once, with the answer. It used to read each caption span's scrollWidth, which
+// an inline span does not have (0 in every browser), and this file mocked a scrollWidth into
+// existence, so the suite proved a fit that never once ran on a real screen; and measuring in the
+// real buttons, size after size, left WebKit's scroll range for the ⚙ menu stale (the Round 26
+// review). The browser lane (settingsTrio, settingsScrollEnd) holds the real geometry; this file
+// pins the WIRING with a model of text in jsdom, which lays nothing out:
+//   • a ruler row's width is its text's length × half the ruler's font size (its inline size, or
+//     the resting 12px of text-xs);
+//   • a trio button is `btnWidth` wide, with no padding or border.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { within, cleanup, fireEvent, act } from '@testing-library/react'
 import {
@@ -26,7 +25,6 @@ import {
 } from './helpers/settingsPanel.jsx'
 
 const rectDesc = Object.getOwnPropertyDescriptor(Element.prototype, 'getBoundingClientRect')
-const rangeRect = Range.prototype.getBoundingClientRect
 const origGetComputedStyle = window.getComputedStyle
 
 let btnWidth = 80 // trio-button content width the mocks report; tests vary it to steer the fit
@@ -35,7 +33,13 @@ let btnWidth = 80 // trio-button content width the mocks report; tests vary it t
 // needs. See the comment there for why a store poke will not do.
 const pill = (group, label) => within(picker(group)).getByRole('radio', { name: label })
 const isTrioButton = (el) => el?.matches?.('button') && el.querySelector('[data-fitlabel]')
-const sizeOf = (button) => parseFloat(button.style.fontSize || '12')
+// The ruler: the hidden copy (lib/textFit's makeRuler) inside its fixed, sizeless box, wearing the
+// trio buttons' classes.
+const isRuler = (el) =>
+  el?.tagName === 'DIV' &&
+  el.parentElement?.style.position === 'fixed' &&
+  (el.className ?? '').includes('text-xs')
+const sizeOf = (el) => parseFloat(el.style.fontSize || '12')
 const sizes = () =>
   Array.from(document.querySelectorAll('[data-fitlabel]')).map(
     (l) => l.parentElement.style.fontSize,
@@ -50,14 +54,14 @@ describe('the trio’s caption fit wiring', () => {
     Element.prototype.getBoundingClientRect = function () {
       if (isTrioButton(this))
         return { width: btnWidth, height: 20, left: 0, top: 0, right: btnWidth, bottom: 20 }
+      if (isRuler(this.parentElement)) {
+        const width = this.textContent.length * sizeOf(this.parentElement) * 0.5
+        return { width, height: 14, left: 0, top: 0, right: width, bottom: 14 }
+      }
       return rectDesc.value.call(this)
     }
-    Range.prototype.getBoundingClientRect = function () {
-      const button = this.startContainer.parentElement?.parentElement
-      const width = this.toString().length * sizeOf(button) * 0.5
-      return { width, height: 14, left: 0, top: 0, right: width, bottom: 14 }
-    }
     window.getComputedStyle = (el, pseudo) => {
+      if (isRuler(el)) return { fontSize: `${sizeOf(el)}px`, fontWeight: '500' }
       if (isTrioButton(el))
         return {
           fontSize: `${sizeOf(el)}px`,
@@ -73,7 +77,6 @@ describe('the trio’s caption fit wiring', () => {
     cleanup()
     document.getElementById('root')?.remove()
     Object.defineProperty(Element.prototype, 'getBoundingClientRect', rectDesc)
-    Range.prototype.getBoundingClientRect = rangeRect
     window.getComputedStyle = origGetComputedStyle
   })
 
@@ -132,8 +135,8 @@ describe('the trio’s caption fit wiring', () => {
     openSettings()
     const expected = sizes()
     expect(parseFloat(expected[0])).toBeLessThan(12)
-    // Any settings interaction re-runs the dep-less fit effect. The reset-before-measure step is
-    // what keeps this stable: a version that measured the captions at the size the last pass left
+    // Any settings interaction re-runs the dep-less fit effect. Measuring in a ruler at the resting
+    // size is what keeps this stable: a version that measured the captions at the size the last pass left
     // would shrink again on every pass.
     //
     // ⚠ THE RE-RENDER IS DRIVEN THROUGH THE PANEL'S OWN CONTROLS. A tap on a pill inside the panel

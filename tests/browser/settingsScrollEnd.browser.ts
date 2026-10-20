@@ -129,3 +129,41 @@ test('Lookup: scrolled to the end, the last history row is drawn whole, with a r
       ).toBeLessThanOrEqual(SAME_PX)
     }
 })
+
+// ★ THE END OF THE MENU CAN BE REACHED AT EVERY PHONE SIZE (Round 26 review: in WebKit, at 320×700,
+// 344×800, 360×800, 360×900, 375×900, and 390×900, scrolling stopped 15 to 22px short and the
+// Amnesic picker stayed out of sight — the trio's caption fit, measuring in the real buttons size
+// after size, left WebKit's scroll range at an in-between height; components/SettingsPanel now
+// measures in a ruler). Opened fresh at each size, as a player opens it, and scrolled as far as the
+// browser will go.
+for (const [width, height] of [
+  [320, 700],
+  [344, 800],
+  [360, 800],
+  [360, 900],
+  [375, 900],
+  [390, 900],
+  [390, 844],
+  [430, 932],
+] as const)
+  test(`at ${width}×${height}: the menu scrolls all the way to its last control`, async ({
+    page,
+  }) => {
+    await openApp(page, { viewport: { width, height } })
+    const panel = await openSettings(page)
+    const scroller = panel.locator('[data-drag-scroll]')
+    await scroller.evaluate((el) => (el.scrollTop = el.scrollHeight))
+    await settled(page)
+    const r = await scroller.evaluate((sc) => {
+      const tray = sc.querySelector('[role="radiogroup"][aria-label="Amnesic"]')!.lastElementChild!
+      return {
+        short: sc.scrollHeight - sc.clientHeight - sc.scrollTop,
+        last: tray.getBoundingClientRect().bottom,
+        bottom: sc.getBoundingClientRect().bottom,
+      }
+    })
+    expect(r.short, 'scrolled to the end of what the menu holds').toBeLessThan(1)
+    expect(r.last, "the last control's bottom edge against the scroll area's").toBeLessThanOrEqual(
+      r.bottom,
+    )
+  })
