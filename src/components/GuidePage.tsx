@@ -1383,9 +1383,11 @@ export default function GuidePage({
             menu&apos;s <b>Open in</b>, and <b>Duplicate</b> in Manage Presets — works the same way
             once it is open: touch an option and nothing is highlighted yet; slide your finger onto
             another and that one is highlighted as you go; lift on an option to choose it, or off
-            the list to choose nothing. A slide that scrolls the list chooses nothing. Only the two
-            in the top bar can also be pressed and dragged straight into in one go; the others open
-            when you lift your finger on them.
+            the list to choose nothing. That is so on every phone wherever a list has all its
+            options on screen. A list long enough to scroll scrolls instead when you slide in it,
+            and a slide that scrolls the list chooses nothing: there, tap the option you want. Only
+            the two in the top bar can also be pressed and dragged straight into in one go; the
+            others open when you lift your finger on them.
           </li>
           <li>
             So does the preset control on the other side of the bar, which is the same kind of list

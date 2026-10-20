@@ -41,6 +41,7 @@ import {
   topBar,
 } from './support/app'
 import type { CDPSession, Locator, Page } from '@playwright/test'
+import { presetsNamed } from './support/seeds'
 
 test.use({ hasTouch: true })
 
@@ -717,4 +718,95 @@ test('click-less: a touch held on a button while its ⚙ menu is still gliding p
   expect(result.same).toBe(true)
   await expect(page.locator('#settings-popover')).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0) // no popup a button would have opened
+})
+
+// ★ A SLIDE INSIDE AN OPEN LIST (Round 26): in a list that fits, press an option, slide to another,
+// lift — that one is picked. Chromium took the slide as a pan (any box that allows panning, even
+// with nothing to pan) and cancelled the press, so it picked nothing; an iPhone let it through. A
+// list that fits is `touch-none` now (components/CustomSelect); one long enough to scroll keeps its
+// scrolling, so a slide there scrolls it and picks nothing — on every engine.
+const presetsOf = (count: number) =>
+  presetsNamed(...Array.from({ length: count }, (_, i) => `Practice ${i + 1}`))
+async function openPresetList(page: Page, count: number) {
+  await openApp(page, { seed: { presets: presetsOf(count) } })
+  await topBar(page).preset.click()
+  const list = page.getByRole('listbox', { name: 'Preset' })
+  await expect(list).toBeVisible()
+  await settled(page)
+  const scroller = list.locator('[data-drag-scroll]')
+  const scrolls = await scroller.evaluate((el) => el.scrollHeight > el.clientHeight)
+  return { list, scroller, scrolls }
+}
+const touchActionOf = (scroller: Locator) =>
+  scroller.evaluate((el) => getComputedStyle(el).touchAction)
+
+test('a list that fits takes no pan (touch-none); a list that scrolls keeps its scrolling', async ({
+  page,
+}) => {
+  const short = await openPresetList(page, 3)
+  expect(short.scrolls).toBe(false)
+  expect(await touchActionOf(short.scroller)).toBe('none')
+  const long = await openPresetList(page, 40)
+  expect(long.scrolls).toBe(true)
+  expect(await touchActionOf(long.scroller)).toBe('auto')
+})
+
+test('click-less: a slide from one option to another in a list that fits picks the one it lifts on', async ({
+  page,
+}) => {
+  const { list } = await openPresetList(page, 3)
+  const [from, to] = [list.getByRole('option').nth(0), list.getByRole('option').nth(2)]
+  const [a, b] = [await centre(from), await centre(to)]
+  await page.evaluate(
+    ({ a, b }) => {
+      const pointer = (type: string, at: { x: number; y: number }) =>
+        document.elementFromPoint(at.x, at.y)!.dispatchEvent(
+          new PointerEvent(type, {
+            pointerId: 63,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: at.x,
+            clientY: at.y,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      pointer('pointerdown', a)
+      for (let i = 1; i <= 5; i++)
+        pointer('pointermove', { x: a.x, y: a.y + ((b.y - a.y) * i) / 5 })
+      pointer('pointerup', b)
+    },
+    { a, b },
+  )
+  await expect(list).toHaveCount(0)
+  await expect(topBar(page).preset).toHaveAccessibleName('Preset, Practice 3')
+})
+
+test.describe('real touches (Chromium): a slide in an open list', () => {
+  test.skip(({ browserName }) => browserName !== 'chromium', 'DevTools input is Chromium’s')
+  async function slide(page: Page, from: Locator, to: Locator) {
+    const finger = await touchscreen(page)
+    const [a, b] = [await centre(from), await centre(to)]
+    await finger.down(a)
+    for (let i = 1; i <= 10; i++) {
+      await finger.move({ x: a.x, y: a.y + ((b.y - a.y) * i) / 10 })
+      await hold(page, 16) // a finger's pace: a frame a step
+    }
+    await finger.up()
+    await settled(page)
+  }
+  test('in a list that fits, the slide picks the option it lifts on', async ({ page }) => {
+    const { list } = await openPresetList(page, 3)
+    await slide(page, list.getByRole('option').nth(0), list.getByRole('option').nth(2))
+    await expect(list).toHaveCount(0)
+    await expect(topBar(page).preset).toHaveAccessibleName('Preset, Practice 3')
+  })
+  test('in a list that scrolls, an upward slide scrolls it and picks nothing', async ({ page }) => {
+    const { list, scroller } = await openPresetList(page, 40)
+    const before = await scroller.evaluate((el) => el.scrollTop)
+    await slide(page, list.getByRole('option').nth(8), list.getByRole('option').nth(1))
+    await expect(list).toBeVisible()
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(before)
+    await expect(topBar(page).preset).toHaveAccessibleName('Preset, Practice 1')
+  })
 })

@@ -743,11 +743,27 @@ export default function CustomSelect({
   // a layout effect, so the first painted frame already has it — whenever the number of options
   // changes under an open list, and whenever the window changes size, which is what moves the cap
   // on the panel's height and so decides whether the list scrolls at all.
+  // ★ …AND WHETHER THE LIST CAN SCROLL AT ALL, which decides what a slide inside it is (Round 26):
+  //   • A LIST THAT FITS — every option on screen — has nothing to scroll, so a finger sliding in
+  //     it is choosing: press an option, slide to another, lift, and that one is picked
+  //     (lib/pointerGestures' selection group). It is `touch-none`. Without that, Chromium (an
+  //     Android phone's browser, and its touch emulation) takes any slide on a box that allows
+  //     panning as a pan — even one with nothing to pan — and cancels the press, so the slide picked
+  //     nothing; an iPhone already let the slide through, there being nothing to scroll.
+  //   • A LIST LONG ENOUGH TO SCROLL keeps the browser's own scrolling: a vertical slide in it
+  //     scrolls it, with the platform's momentum, and picks nothing — on every engine, as the
+  //     controller rules for every scroll ("a touch that scrolled anything is a scroll"). Picking in
+  //     a long list is a tap, or a press-drag from its button, whose edge auto-scroll carries the
+  //     list (the trigger's own rule, unchanged).
+  const [listScrolls, setListScrolls] = useState(true)
   const optionCount = options.length
   useLayoutEffect(() => {
     const list = listRef.current
     if (!panelShown || !list) return
-    const measure = () => writeScrollbarWidth(list)
+    const measure = () => {
+      writeScrollbarWidth(list)
+      setListScrolls(list.scrollHeight > list.clientHeight)
+    }
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
@@ -984,7 +1000,7 @@ export default function CustomSelect({
             <div
               ref={listRef}
               data-drag-scroll
-              className={`relative min-h-0 ${ROW_LANE_SCROLLER_CLASS} p-1 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
+              className={`relative min-h-0 ${ROW_LANE_SCROLLER_CLASS} p-1 ${scrollFadeClass(scrolledFromTop, atBottom)}${listScrolls ? '' : ' touch-none'}`}
             >
               {options.map((opt, i) => (
                 <button
