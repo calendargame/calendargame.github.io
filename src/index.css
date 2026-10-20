@@ -675,15 +675,20 @@ input,textarea{user-select:text;-webkit-user-select:text}
    hover (hover:bg-(--stgl-hov)) instead. */
 .surface-tray{background:var(--stgl-bg);border-color:var(--sbtn-bd)}
 /* ★ NOT IN EFFECT — the third look (Round 26; components/PillGroup says what each of the three looks
-   means). A setting kept but not acting right now, and still changeable: its housing goes HOLLOW (no
-   fill, the weaker thin border) and its text keeps full strength, so it reads at a live control's
-   contrast — the faded look (opacity .6) stays for what cannot be used at all. A ⚙ picker's tray and
-   a Year Range box wear .tray-dormant in place of .surface-tray; the picker's chosen segment wears
+   means). A setting kept but not acting right now, and still changeable: its housing loses its fill
+   and is HATCHED instead — fine diagonal lines in the theme's panel-border colour (--dormant-hatch),
+   inside that same border — and its text keeps full strength, so it reads at a live control's
+   contrast — the faded look (opacity .6) stays for what cannot be used at all. (Round 26 review: it
+   was only hollow, with a weaker border, and the two pairs of Year Range boxes barely differed — in
+   the light themes a hollow box reads as an ordinary one. Hatching is the usual mark of "here, but
+   not in play", and nothing else in the app draws it; a dashed line is taken, by the one
+   session-only frame.) A ⚙ picker's tray and a Year Range box wear .tray-dormant in place of
+   .surface-tray; the picker's chosen segment wears
    .pill-dormant-on in place of .btn-solid: a quarter-strength accent tint ringed in the accent, its
    label in the ordinary text colour. The ring is an OUTLINE so the segment keeps its exact size
    (it is borderless — components/PillTray's concentric housing), and while the segment has the
    keyboard the keyboard ring, also an outline, takes its place. tests/browser/notInEffect measures
-   the text's contrast in all five themes. */
+   the text's contrast in all five themes, over a hatch line as well as between them. */
 /* ★ THE DATE LINE (Round 26, Q7) — the big date on every mode's card, ONE LINE AT ONE SIZE PER
    CARD. 1.875rem is its full size, and the size it has wherever the widest date the card can show
    fits at it. Where that date would not fit (five-digit years made "September 10, 10000" too long
@@ -694,7 +699,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
    (the first cut, "the card's width over 10.97em", ran 24px out of the card in DejaVu Sans).
    tests/browser/dateLine holds it in every date format, in three fonts. */
 .date-line{font-size:1.875rem;line-height:2.25rem;white-space:nowrap}
-.tray-dormant{background:transparent;border-color:var(--thin-bd)}
+.tray-dormant{--dormant-hatch:color-mix(in oklab,var(--panel-bd) 60%,transparent);background:repeating-linear-gradient(135deg,var(--dormant-hatch) 0 .1rem,transparent .1rem .375rem);border-color:var(--panel-bd)}
 .pill-dormant-on{background:color-mix(in oklab,var(--acc) 25%,transparent);color:var(--tx-100-80);outline:1px solid var(--acc);outline-offset:-1px;transition:background-color calc(.2s * var(--motion-scale))}
 /* THE ROW IN THE HAND — the Presets popup's row while it is being dragged by its grip
    (components/PresetManager, which says what the row looks like and why; these are the three rules

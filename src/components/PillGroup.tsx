@@ -59,7 +59,8 @@ const ARROW_STEP: Record<string, number> = {
   ArrowLeft: -1,
   ArrowUp: -1,
 }
-// ★ THREE LOOKS, THREE MEANINGS (Round 26): FILLED = in effect; OUTLINED = kept but NOT IN EFFECT
+// ★ THREE LOOKS, THREE MEANINGS (Round 26): FILLED = in effect; STRIPED (a hatched housing, its
+// choice ringed — index.css's .tray-dormant) = kept but NOT IN EFFECT
 // right now, and still changeable (`dormant` — a chance setting the year range cannot use, Rotate
 // Dots while Input is Buttons); FADED = cannot be used at all (`disabled` — Amnesic while Save Stats
 // is off, where a change would act at once on what is on screen). A dormant group is an ordinary

@@ -177,7 +177,7 @@ export type SettingsPanelProps = {
 
 // ★ WHY A SETTING IS NOT IN EFFECT (Round 26) — one sentence each, given to a screen reader on every
 // option of the setting (components/PillGroup's `dormant`, and the Year Range boxes'), never drawn:
-// the outlined look is what a sighted player is shown. A setting that is not in effect is still
+// the striped look is what a sighted player is shown. A setting that is not in effect is still
 // changeable, and changing it changes nothing until it is in effect again (lib/dateConfig: the
 // generator, the resets, and the Best keys all read only the settings in effect).
 // The least the Save Defaults / Reset Settings / Full Reset captions shrink to on one line, as a share
@@ -263,7 +263,7 @@ function YearBox({
           blockMinus(e)
         }}
         onBeforeInput={blockMinusBI}
-        // Not in effect: the same box, hollow (index.css's .tray-dormant in place of .surface-tray).
+        // Not in effect: the same box, striped (index.css's .tray-dormant in place of .surface-tray).
         // w-0 min-w-full: the box gives the cell no width of its own, and fills the one it is given.
         className={`${reasonId ? YEAR_INPUT_DORMANT_CLASS : YEAR_INPUT_CLASS} py-1.5 col-start-1 row-start-1 w-0 min-w-full`}
       />
@@ -277,7 +277,7 @@ function YearBox({
   )
 }
 // ONE PAIR — its caption over its two boxes, the "→" between them. The pair not in use is drawn not
-// in effect (`dormant`, its reason): outlined, still typed into and saved.
+// in effect (`dormant`, its reason): striped, still typed into and saved.
 function YearPair({
   caption,
   mirrors,
@@ -1444,7 +1444,7 @@ export function SettingsPanel({
                 wrapper is also the dim, so the lock provably covers the captions. Written / Numeric
                 stay plain captions — the halves ride in the pills' accessible names
                 (WRITTEN_FORMATS/NUMERIC_FORMATS), which keeps the two 'MDY's apart. Every picker
-                below states its state ONCE, on its PillGroup: `dormant` (not in effect — outlined,
+                below states its state ONCE, on its PillGroup: `dormant` (not in effect — striped,
                 still changeable, its reason read to a screen reader) or `disabled` (cannot be used —
                 faded, locked). Round 26 made the first of those the rule for everything kept but
                 idle (the owner: "dimmed means not in effect right now, not locked").
@@ -1472,7 +1472,7 @@ export function SettingsPanel({
             {/* Input — Buttons / Dots (the logo's 7-dot answer layout). A picker with no families,
                 so: one tray, no captions. Not in effect in Deduction (answers aren't weekdays; the
                 value is kept and still changeable), like Julian/Leap-Year Chance when they don't
-                apply — the state sits on the GROUP, so the housing goes hollow as one piece. The
+                apply — the state sits on the GROUP, so the housing is striped as one piece. The
                 condition is `==='deduction'` EXACTLY, and it is LIVE: every other mode has Input in
                 effect. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Input</div>
@@ -1494,7 +1494,7 @@ export function SettingsPanel({
                 turn-your-device screen): the direction now rides in the pills themselves, so
                 saying it twice would only crowd the row.
                 ★ IT IS NOT IN EFFECT WHENEVER THERE ARE NO DOTS ON SCREEN TO TURN (round 26: drawn
-                outlined and still changeable — it used to lock), which is two conditions and
+                striped and still changeable — it used to lock), which is two conditions and
                 not one: Deduction (whose answers are not weekdays at all — the same
                 `mode === 'deduction'` the Input picker above uses, shared on purpose, because a
                 live control sitting directly beneath a dead one, both about dots, would read as a
@@ -1510,7 +1510,7 @@ export function SettingsPanel({
                 reported as a bug: this picker idles on Deduction OR Input-on-Buttons, while the
                 title-bar mark is gated on Input alone (main.tsx passes `<W5Logo>` the setting only
                 while `inputStyle==='dots'`). So on Buttons the mark is upright in every mode; and
-                in Deduction with Input on Dots the picker is outlined but the mark still shows the
+                in Deduction with Input on Dots the picker is striped but the mark still shows the
                 rotation chosen. How to Play says exactly this. */}
             <div className="text-xs text-(--tx-200-80) pt-1">Rotate Dots</div>
             <PillGroup
@@ -1696,7 +1696,7 @@ export function SettingsPanel({
                 ★ ALL THREE ARE NOT IN EFFECT EXACTLY WHEN lib/dateConfig SAYS — the same three
                 questions (leapChanceApplies, janFebChanceApplies, julianChanceApplies) the settings
                 in effect are built from, asked of the Year Range in use — so what the panel draws
-                as idle is what the generator, the resets, and the Best keys leave out. Outlined,
+                as idle is what the generator, the resets, and the Best keys leave out. Striped,
                 never locked (round 26): the value is kept and can be changed, and comes back into
                 effect with a range it can apply to.
                 Leap Year Chance: not in effect when the range in use has no leap year, or is a

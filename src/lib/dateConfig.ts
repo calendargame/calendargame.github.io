@@ -2,7 +2,7 @@
 // lib/dateConfig.ts — WHICH DATE SETTINGS ARE IN EFFECT, and what that means for the Bests.
 //
 // ★ ONE DEFINITION OF "IN EFFECT". A date setting is in effect when it can change which dates are
-// drawn; one that cannot is drawn "not in effect" in the ⚙ panel (outlined, still changeable). The
+// drawn; one that cannot is drawn "not in effect" in the ⚙ panel (striped, still changeable). The
 // rule lives here and nowhere else, and everything downstream of the stored settings reads its
 // output, never the stored values:
 //   1. the generator (App's genDate, and Deduction's puzzles) is handed the settings in effect;

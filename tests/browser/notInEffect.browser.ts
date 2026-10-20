@@ -38,8 +38,14 @@ const contrastOf = (target: Locator) =>
       ctx.fillRect(0, 0, 1, 1)
       return ctx.getImageData(0, 0, 1, 1).data[3]
     }
+    // A not-in-effect housing is hatched (index.css's .tray-dormant): text that crosses a hatch line
+    // has that line behind it, so the line is counted as a layer too — the harder of the two cases.
     const layers: string[] = []
     for (let n: Element | null = el; n; n = n.parentElement) {
+      const hatch = n.classList.contains('tray-dormant')
+        ? getComputedStyle(n).getPropertyValue('--dormant-hatch').trim()
+        : ''
+      if (hatch) layers.unshift(hatch)
       const bg = getComputedStyle(n).backgroundColor
       if (alphaOf(bg) === 0) continue
       layers.unshift(bg)
@@ -88,6 +94,12 @@ for (const theme of THEMES)
     })
     for (const [what, ratio] of Object.entries(figures))
       expect(ratio, `${theme}: ${what}`).toBeGreaterThanOrEqual(4.5)
+    // ★ AND IT LOOKS NOT IN EFFECT (Round 26 review: the two Year Range pairs barely differed): the
+    // pair not in use is hatched, the pair in use is not, and nothing hatches a live box.
+    const live = panel.getByRole('textbox', { name: 'Latest Year, Julian On' })
+    const hatched = (l: Locator) => l.evaluate((el) => getComputedStyle(el).backgroundImage)
+    expect(await hatched(box), `${theme}: the pair not in use`).toMatch(/repeating-linear-gradient/)
+    expect(await hatched(live), `${theme}: the pair in use`).toBe('none')
   })
 
 const ROW_SIZES: [number, number][] = [

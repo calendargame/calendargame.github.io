@@ -59,8 +59,8 @@ import { usePillGroupDormant, usePillGroupLock } from './pillGroupLock.js'
 // The bordered housing. No padding and no overflow-hidden — both would break the flush fill
 // and the press-drag ring (see the idiom note above).
 const TRAY_CLASS = 'flex gap-0.5 border surface-tray rounded-xl'
-// …and NOT IN EFFECT (the group's `dormant`, components/PillGroup): the same housing, hollow — no
-// fill, the weaker thin border (index.css's .tray-dormant) — and the chosen segment outlined instead
+// …and NOT IN EFFECT (the group's `dormant`, components/PillGroup): the same housing, striped — no
+// fill, a hatch instead (index.css's .tray-dormant) — and the chosen segment ringed instead
 // of filled (.pill-dormant-on), its label in the ordinary text colour. Same box, same size: only the
 // paint differs, so a setting going in and out of effect moves no pixel.
 const TRAY_DORMANT_CLASS = 'flex gap-0.5 border tray-dormant rounded-xl'

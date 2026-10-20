@@ -2476,7 +2476,7 @@ export default function GuidePage({
             Format is a single five-way choice, so the arrows carry straight from the Written row
             into the Numeric one — and Theme does the same across Dark and Light whenever Use System
             Settings is off, since that's when the five themes are one pick. A locked (faded)
-            setting ignores the keys; an outlined one takes them as usual. No key reaches past the
+            setting ignores the keys; an striped one takes them as usual. No key reaches past the
             open menu, so these never step the date behind it — and inside the menu <Kbd>Esc</Kbd>{' '}
             and typing in its boxes work as they do everywhere.
           </li>
@@ -2806,9 +2806,9 @@ export default function GuidePage({
             Blitz&apos;s as its round or question timer and, during a round, as the time left.)
           </li>
           <li>
-            An outlined setting in the ⚙ menu — kept, but not in effect right now — is not greyed
-            out and not marked unavailable: it works as usual, and each of its options is described
-            with the reason it is not in effect (for example, &quot;Not in use while Input is
+            An striped setting in the ⚙ menu — kept, but not in effect right now — is not greyed out
+            and not marked unavailable: it works as usual, and each of its options is described with
+            the reason it is not in effect (for example, &quot;Not in use while Input is
             Buttons.&quot;). Two kinds of greying out, not one. Marked unavailable while
             they&apos;re greyed: Save Defaults, Reset Settings, Full Reset, and Clear Saved Defaults
             (at the top of the ⚙ menu&apos;s Per-preset section), Show Codes, the one locked picker
@@ -2890,17 +2890,17 @@ export default function GuidePage({
           on a computer the pointer shows the not-allowed cursor over it. (See Accessibility.)
         </p>
         <p>
-          A setting can be in one of three looks. <b>Filled</b> — it is in effect. <b>Outlined</b> —
-          its box is hollow and its choice is ringed instead of filled: it is kept, but it is not in
-          effect right now, and you can still change it. Changing an outlined setting never restarts
-          a MoX run or a Blitz round, never redraws a date, and never changes which Bests show; it
-          takes effect when the setting is in effect again. Outlined are: Date Format while Random
-          Format is on, in Classic, Flash, MoX, and Blitz; Input and Rotate Dots in Deduction, and
-          Rotate Dots while Input is Buttons; Leap Year Chance and Jan/Feb Chance on Leap Years when
-          your year range cannot use them; Julian Chance while Julian Calendar is off, when your
-          range does not include 1582, and in Deduction; and the Year Range pair that is not in use.{' '}
-          <b>Faded</b> — it cannot be used right now (Amnesic while Save Stats is off, where a
-          change would act at once on what is on screen).
+          A setting can be in one of three looks. <b>Filled</b> — it is in effect. <b>Striped</b> —
+          its box is striped instead of filled and its choice is ringed: it is kept, but it is not
+          in effect right now, and you can still change it. Changing an striped setting never
+          restarts a MoX run or a Blitz round, never redraws a date, and never changes which Bests
+          show; it takes effect when the setting is in effect again. Striped are: Date Format while
+          Random Format is on, in Classic, Flash, MoX, and Blitz; Input and Rotate Dots in
+          Deduction, and Rotate Dots while Input is Buttons; Leap Year Chance and Jan/Feb Chance on
+          Leap Years when your year range cannot use them; Julian Chance while Julian Calendar is
+          off, when your range does not include 1582, and in Deduction; and the Year Range pair that
+          is not in use. <b>Faded</b> — it cannot be used right now (Amnesic while Save Stats is
+          off, where a change would act at once on what is on screen).
         </p>
         <p className="text-(--tx-300-70) text-[calc(12rem/16.458)]">
           Settings changes apply when you <b>close</b> the ⚙ menu, not on each adjustment — so
@@ -2946,7 +2946,7 @@ export default function GuidePage({
         <p>
           When on, it rolls one of the five formats per date in game modes only — your selected
           format is preserved underneath, and still changeable: on Classic, Flash, MoX, and Blitz
-          the Date Format row is outlined (not in effect there), and a change to it redraws nothing.
+          the Date Format row is striped (not in effect there), and a change to it redraws nothing.
           In Deduction it still sets the order of the codes in Show Codes, so it is drawn as usual
           there. Lookup and the Last Updated timestamp ignore Random and always use the selected
           format; the timestamp uses the numeric version of whichever format you've selected.
@@ -2997,8 +2997,8 @@ export default function GuidePage({
         <p>
           Tap a dot, or press and slide to the one you want and release — exactly like the buttons.
           The setting applies to the weekday modes ({modeList('classic', 'flash', 'aox', 'blitz')}).
-          In Deduction the answers aren't weekdays, so the setting is outlined there — not in
-          effect, and still changeable — and applies again in the weekday modes.
+          In Deduction the answers aren't weekdays, so the setting is striped there — not in effect,
+          and still changeable — and applies again in the weekday modes.
         </p>
         <Subhead>Which dot is which</Subhead>
         <div className="flex justify-center">
@@ -3034,7 +3034,7 @@ export default function GuidePage({
           and their keyboard numbers unchanged — only where each one sits on screen moves. Each dot
           still answers to a touch anywhere in its own share of the space, up to halfway to its
           neighbours; the two empty gaps and the space around the pattern stay dead, so sliding off
-          onto them still cancels a press. Rotate Dots is outlined — not in effect, and still
+          onto them still cancels a press. Rotate Dots is striped — not in effect, and still
           changeable — whenever there are no dots to turn: in Deduction, alongside Input and for the
           same reason, and in every mode while Input is set to Buttons. It keeps whatever you last
           chose. Your choice doesn&apos;t affect your stats: bests and history are shared across all
@@ -3045,7 +3045,7 @@ export default function GuidePage({
           left of every screen <i>is</i> this seven-dot layout, so turning the dots turns that mark
           too (by the same amount, and at 45° shrunk the same way), whenever Input is set to Dots —
           on every page, including the ones with no weekday dots of their own (Deduction, Lookup,
-          and this guide), where Rotate Dots is outlined but the mark still shows the rotation you
+          and this guide), where Rotate Dots is striped but the mark still shows the rotation you
           chose. While Input is set to Buttons the mark stays upright on every page: with Buttons
           there are no dots anywhere in the app for a turned mark to correspond to. What can&apos;t
           follow even when Dots is your Input are the pictures your device saved earlier: the
@@ -3108,7 +3108,7 @@ export default function GuidePage({
         <UL>
           <li>
             Only the pair for the Julian Calendar setting as it stands is used; the other is
-            outlined. You can still type into it, and it is saved with your settings: changing it
+            striped. You can still type into it, and it is saved with your settings: changing it
             lights the ⚙ button&apos;s violet bar like any other change, and nothing else happens:
             no date is redrawn, no Best moves, and no run in MoX or round in Blitz starts over.
             Switching the Julian Calendar setting swaps which pair is used — so if the two pairs
@@ -3202,13 +3202,13 @@ export default function GuidePage({
         <UL>
           <li>
             If the year range in use contains no leap years (under the active calendar), Leap Year
-            Chance and Jan/Feb Chance are both outlined: kept, not in effect, and still changeable.
-            Leap Year Chance is also outlined on a range of a single leap year, where every date is
+            Chance and Jan/Feb Chance are both striped: kept, not in effect, and still changeable.
+            Leap Year Chance is also striped on a range of a single leap year, where every date is
             in a leap year whatever it says.
           </li>
           <li>
-            A change to an outlined chance setting regenerates nothing and restarts nothing; it
-            takes effect when your range lets the setting apply again.
+            A change to an striped chance setting regenerates nothing and restarts nothing; it takes
+            effect when your range lets the setting apply again.
           </li>
         </UL>
       </GuideSection>
@@ -3292,7 +3292,7 @@ export default function GuidePage({
           date; burned dates defer like every other setting.
         </p>
         <p>
-          The row is outlined — kept, not in effect, and still changeable, with nothing redrawn or
+          The row is striped — kept, not in effect, and still changeable, with nothing redrawn or
           restarted by a change — in these cases:
         </p>
         <UL>
@@ -3310,7 +3310,7 @@ export default function GuidePage({
         <p>
           Year 1582 itself contains both Julian (Jan–Sep + Oct 1–4) and Gregorian (Oct 15+ + Nov +
           Dec) dates, so any range that includes 1582 counts as mixed and the row is in effect. The
-          value you chose stays chosen while the row is outlined, and applies again as soon as it
+          value you chose stays chosen while the row is striped, and applies again as soon as it
           can.
         </p>
       </GuideSection>
@@ -4215,7 +4215,7 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
         and Leap Year Chance, Jan/Feb Chance on Leap Years, and Julian Chance — each of those three
         only while it applies to your range. Changing any of these creates a separate bucket — your
         previous bests remain stored and reappear when you switch back to that exact config. A
-        chance setting that cannot apply (outlined in the ⚙ menu) does not split them: changing it
+        chance setting that cannot apply (striped in the ⚙ menu) does not split them: changing it
         leaves the Best shown exactly where it is. Everything else leaves your bests where they are:
         the mode&apos;s name (so the AoX &rarr; MoX rename kept everyone&apos;s), your answer input
         style, Rotate Dots (all three rotations share one set of bests), and the theme.
@@ -4472,9 +4472,9 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
           use, Calendar System (Julian on/off), and Leap Year Chance, Jan/Feb Chance on Leap Years,
           and Julian Chance — each of those three only while it applies to your range. Changing any
           of these creates a separate bucket — your previous bests remain stored and reappear when
-          you switch back. A chance setting that cannot apply (outlined in the ⚙ menu) does not
-          split them. Everything else leaves your bests untouched: the mode&apos;s name, your answer
-          input style, Rotate Dots (all three rotations share one set of bests), and the theme.
+          you switch back. A chance setting that cannot apply (striped in the ⚙ menu) does not split
+          them. Everything else leaves your bests untouched: the mode&apos;s name, your answer input
+          style, Rotate Dots (all three rotations share one set of bests), and the theme.
         </li>
         <li>
           Best score and best streak are tracked independently in Per Round and in Per Question with
