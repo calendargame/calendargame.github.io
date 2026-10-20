@@ -142,12 +142,18 @@ export type CountsSpec = {
    *  window whose preset was deleted elsewhere moves off it, store/presetControl's adoptRegistry). */
   apply?(patch: Record<string, unknown>): void
   /** This doc's own rules after a merge (the preset registry's membership, design 8.1): slice values to
-   *  set, as the store would hold them - or null. */
+   *  set, as the store would hold them - or null. `device`: the doc on the device as slices (null: none);
+   *  `olderCopy`: it is an older build's whole copy (no envelope). */
   reconcile?(
     before: Record<string, unknown>,
     now: Record<string, unknown>,
     device: Record<string, unknown> | null,
+    olderCopy: boolean,
   ): Record<string, unknown> | null
+  /** Slices a change made IN THIS WINDOW implies beyond the store's own (the preset registry's record
+   *  of the presets this window made and deleted, design 8.1): from the store's previous slices and
+   *  its new ones. */
+  implied?(prev: Record<string, unknown>, next: Record<string, unknown>): Record<string, unknown>
   /** May this doc be written now (design 8.2: a per-preset doc only while its preset is listed)? A doc
    *  that may not is not written, and what this window had not landed of it is dropped. */
   gate?(key: string): boolean
@@ -441,6 +447,11 @@ export function createDoor(env: DoorEnv) {
       v === undefined ? spec.defaultOf(x, key) : v
     const valuesOf = (e: CountsEntry): Record<string, unknown> =>
       Object.fromEntries(e.book.SL.map((x) => [x, asStored(x, e.book.mem[x].v, e.key)]))
+    // the doc on the device, as its slices, and whether it is an older build's whole copy (reconcile)
+    const deviceOf = (e: CountsEntry): [Record<string, unknown> | null, boolean] => {
+      const d = e.shape.parse(area()?.getItem(e.key) ?? null)
+      return d ? [d.state, !d.sync] : [null, false]
+    }
     const make = (key: string): CountsEntry => {
       const syncKey = syncKeyOf(key)
       const e = {
@@ -537,11 +548,7 @@ export function createDoor(env: DoorEnv) {
       // This doc's own rules apply to what a window opens on as well (an older tab's delete of a preset
       // is read at a load) - as an action this window will land with its next write, never at the load
       // itself (G7).
-      const fix = spec.reconcile?.(
-        valuesOf(e),
-        valuesOf(e),
-        shape.parse(area()?.getItem(key) ?? null)?.state ?? null,
-      )
+      const fix = spec.reconcile?.(valuesOf(e), valuesOf(e), ...deviceOf(e))
       if (fix) for (const [x, v] of Object.entries(fix)) e.book.setReg(x, v)
       return e
     }
@@ -562,11 +569,7 @@ export function createDoor(env: DoorEnv) {
     const settle = (e: CountsEntry, mayLand: boolean, keptBefore = false): boolean => {
       const before = valuesOf(e)
       let kept = e.book.handle(false, keptBefore)
-      const fix = spec.reconcile?.(
-        before,
-        valuesOf(e),
-        e.shape.parse(area()?.getItem(e.key) ?? null)?.state ?? null,
-      )
+      const fix = spec.reconcile?.(before, valuesOf(e), ...deviceOf(e))
       if (fix)
         for (const [x, v] of Object.entries(fix))
           if (!sameJson(asStored(x, e.book.mem[x]?.v, e.key), v)) {
@@ -660,14 +663,20 @@ export function createDoor(env: DoorEnv) {
     }
     bindings.push(binding)
     // what the store's change WAS: the slices whose values moved since the store's previous value
+    // (and the slices that change implies, spec.implied - set beside it as this window's own)
     const changesOf = (e: CountsEntry, value: StorageValue<S>): string[] => {
       const next = spec.toSlices(value.state as Record<string, unknown>)
       const prev = e.last ?? valuesOf(e)
       e.last = next
-      return [...new Set([...Object.keys(prev), ...Object.keys(next)])].filter(
+      const changed = [...new Set([...Object.keys(prev), ...Object.keys(next)])].filter(
         (x) => (spec.owned?.(x) ?? true) && !sameJson(prev[x], next[x]),
       )
+      implied = spec.implied?.(prev, next) ?? {}
+      return [...changed, ...Object.keys(implied)]
     }
+    let implied: Record<string, unknown> = {}
+    // the value a changed slice takes: the store's, or the one the change implies
+    const valueOfChange = (e: CountsEntry, x: string) => (x in implied ? implied[x] : e.last![x])
     return {
       attach(s) {
         store = s
@@ -700,7 +709,7 @@ export function createDoor(env: DoorEnv) {
         settle(e, false) // catch up with the device first (a notice may not have come yet)
         const next = e.last!
         e.refresh()
-        for (const x of changed) e.book.setReg(x, next[x])
+        for (const x of changed) e.book.setReg(x, valueOfChange(e, x))
         settle(e, true)
         const now = valuesOf(e)
         if (Object.keys(now).some((x) => !sameJson(now[x], next[x]))) later(() => adopt(e))
@@ -747,11 +756,10 @@ export function createDoor(env: DoorEnv) {
         const changed = changesOf(e, value)
         if (!changed.length) return true
         settle(e, false)
-        const next = e.last!
         e.refresh()
         const memBefore = { ...e.book.mem }
         const dirtyBefore = { ...e.book.dirty }
-        for (const x of changed) e.book.setReg(x, next[x])
+        for (const x of changed) e.book.setReg(x, valueOfChange(e, x))
         if (spec.gate && !spec.gate(e.key)) {
           entries.delete(e.key) // (8.2: nothing is written for a preset that is gone)
           return false

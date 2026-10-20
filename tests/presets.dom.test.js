@@ -662,12 +662,15 @@ describe('the "open in" pin', () => {
   it('a record that names a preset deleted since falls back to the saved activeId', async () => {
     createPreset('B')
     createPreset('C')
+    createPreset('D')
     switchPreset(3)
     openBrowsingSession()
-    // Another tab deletes preset 3 and lands on 2.
+    // An older tab, which had loaded all four, deletes preset 3 and lands on 2 (its whole copy, no
+    // envelope; it lists D, made after C, so the delete is proven - design 8.1).
     const saved = JSON.parse(localStorage.getItem('cg-presets-v1'))
     saved.state.presets = saved.state.presets.filter((p) => p.id !== 3)
     saved.state.activeId = 2
+    delete saved.sync
     localStorage.setItem('cg-presets-v1', JSON.stringify(saved))
     const reloaded = await reopenApp()
     expect(reloaded.usePresets.getState().activeId).toBe(2)

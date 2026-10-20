@@ -4,121 +4,9 @@
 // registrySpec - the very one the app's registry goes through), and the storage events a browser would send each
 // other window delivered by hand. An OLDER build's save is its whole registry with no envelope.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { createDoor } from '../src/store/syncedDoc.js'
-import { registrySpec } from '../src/store/presets.js'
+import { world, DEFAULTS, KEY } from './helpers/registryWorld.js'
 import { forgetStorageHealth } from '../src/store/storageHealth.js'
 import { KEY_VALUE_MAX } from '../src/store/syncCounts.js'
-
-const KEY = 'cg-presets-v1'
-class MemoryStorage {
-  items = new Map()
-  writer = null
-  get length() {
-    return this.items.size
-  }
-  key(i) {
-    return [...this.items.keys()][i] ?? null
-  }
-  getItem(k) {
-    return this.items.has(k) ? this.items.get(k) : null
-  }
-  setItem(k, v) {
-    const old = this.getItem(k)
-    this.items.set(k, String(v))
-    this.onChange?.(this.writer, k, old, String(v))
-  }
-  removeItem(k) {
-    const old = this.getItem(k)
-    this.items.delete(k)
-    this.onChange?.(this.writer, k, old, null)
-  }
-}
-const DEFAULTS = {
-  presets: [{ id: 1, name: 'Preset 1', amnesic: false }],
-  activeId: 1,
-  nextId: 2,
-  openInPreset: 'last',
-}
-function world() {
-  const storage = new MemoryStorage()
-  const windows = []
-  const pending = []
-  storage.onChange = (who, key, old, now) => {
-    for (const w of windows) if (w.name !== who) pending.push(() => w.door.notice(key, old, now))
-  }
-  const deliver = () => {
-    while (pending.length || vi.getTimerCount()) {
-      while (pending.length) pending.shift()()
-      vi.runAllTimers()
-    }
-  }
-  const open = (name) => {
-    const door = createDoor({ storage: () => storage, tag: name, later: (fn) => fn() })
-    const adapter = door.countsStorage(registrySpec(null))
-    const wrapped = {
-      getItem: (n) => adapter.getItem(n),
-      setItem: (n, v) => {
-        storage.writer = name
-        try {
-          adapter.setItem(n, v)
-        } finally {
-          storage.writer = null
-        }
-      },
-      removeItem: () => {},
-    }
-    const store = create(
-      persist(() => ({ ...DEFAULTS }), {
-        name: KEY,
-        version: 1,
-        storage: wrapped,
-        partialize: ({ presets, activeId, nextId, openInPreset }) => ({
-          presets,
-          activeId,
-          nextId,
-          openInPreset,
-        }),
-      }),
-    )
-    adapter.attach(store)
-    const w = {
-      name,
-      door,
-      store,
-      ids: () => store.getState().presets.map((p) => p.id),
-      names: () => store.getState().presets.map((p) => p.name),
-      create(label) {
-        adapter.syncNow() // (store/presetControl: the registry is merged first, 8.5)
-        const s = store.getState()
-        const id = s.nextId
-        store.setState({
-          presets: [...s.presets, { id, name: label, amnesic: false }],
-          nextId: id + 1,
-        })
-        return id
-      },
-      rename: (id, label) =>
-        store.setState({
-          presets: store.getState().presets.map((p) => (p.id === id ? { ...p, name: label } : p)),
-        }),
-      remove: (id) =>
-        store.setState({ presets: store.getState().presets.filter((p) => p.id !== id) }),
-      switchTo: (id) => store.setState({ activeId: id }),
-    }
-    windows.push(w)
-    return w
-  }
-  const device = () => JSON.parse(storage.getItem(KEY)).state
-  // An OLDER build's whole-registry save: what it loaded with its change, no envelope.
-  const olderSave = (state) => {
-    storage.writer = 'old'
-    storage.setItem(KEY, JSON.stringify({ state, version: 1 }))
-    storage.writer = null
-  }
-  return { storage, open, deliver, device, olderSave }
-}
 
 describe('the preset list in two windows (the real door)', () => {
   afterEach(() => {
@@ -169,19 +57,65 @@ describe('the preset list in two windows (the real door)', () => {
     expect(W.device().nextId).toBe(p3 + 1)
   })
 
-  it('a preset an OLDER tab deleted - one it knew of - leaves every new window', () => {
+  // ★ AN OLDER TAB'S DELETE STICKS WHEN ITS COPY PROVES IT KNEW THE PRESET (design 8.1, v5): it lists a
+  // preset a NEW window made after the deleted one, so the tab loaded the list after that preset existed.
+  it('a preset an OLDER tab deleted - one its copy proves it knew of - leaves every new window', () => {
     vi.useFakeTimers()
     const W = world()
     const a = W.open('a')
     const b = W.open('b')
+    const p2 = a.create('Timed')
+    const p3 = a.create('Guest')
+    W.deliver()
+    const loaded = W.device()
+    W.olderSave({ ...loaded, presets: loaded.presets.filter((p) => p.id !== p2) })
+    W.deliver()
+    expect(a.ids()).toEqual([1, p3])
+    expect(b.ids()).toEqual([1, p3])
+    // …and it stays deleted: a later older copy that still lists it (another tab's) does not bring it
+    // back, now that a new window has made the delete its record.
+    W.olderSave(loaded)
+    W.deliver()
+    expect(a.ids()).toEqual([1, p3])
+  })
+
+  // R16-registry (design 2.8): a delete nothing proves - the newest preset, with none made after it by a
+  // new window - may be a tab that never loaded it, so it does not stick.
+  it('an OLDER tab’s delete of the newest preset, which nothing proves it knew, does not stick (R16-registry)', () => {
+    vi.useFakeTimers()
+    const W = world()
+    const a = W.open('a')
     a.create('Timed')
     const p3 = a.create('Guest')
     W.deliver()
     const loaded = W.device()
     W.olderSave({ ...loaded, presets: loaded.presets.filter((p) => p.id !== p3) })
     W.deliver()
-    expect(a.ids()).toEqual([1, 2])
-    expect(b.ids()).toEqual([1, 2])
+    expect(a.ids()).toEqual([1, 2, p3])
+  })
+
+  // ★ THE REVIEW LANE'S FINDING (a), design v5: an older build's New Preset takes max(its own next id,
+  // the STORED one) and writes its own stale list plus the new preset - so its copy's next id is above a
+  // preset a new window made after the tab loaded, which v4 read as "that side knew it: deleted there".
+  it('an OLDER tab’s New Preset never makes a preset a new window made after it loaded vanish', () => {
+    vi.useFakeTimers()
+    const W = world()
+    const a = W.open('a')
+    const b = W.open('b')
+    const stale = { ...DEFAULTS } // the older tab loads: [1] (nothing saved yet)
+    const p2 = a.create('Timed') // a new window makes a preset after
+    W.deliver()
+    // the older tab's New Preset: id = max(its own next 2, the stored next 3) = 3, its list + it
+    const next = W.device().nextId
+    W.olderSave({
+      ...stale,
+      presets: [...stale.presets, { id: next, name: 'Old tab’s', amnesic: false }],
+      nextId: next + 1,
+    })
+    W.deliver()
+    expect(a.ids()).toEqual([1, p2, next])
+    expect(b.ids()).toEqual([1, p2, next])
+    expect(W.device().presets.map((p) => p.id)).toEqual([1, p2, next])
   })
 
   // ★ A NAME TOO LONG TO COPY INTO THE SYNC KEY (store/syncCounts' KEY_VALUE_MAX - a preset name has no

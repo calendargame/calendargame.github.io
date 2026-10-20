@@ -174,12 +174,13 @@ describe('fields and versions only a build that knows them reads', () => {
 describe('a preset another window deleted (8.2)', () => {
   it('gets nothing written for it here, and this window moves off it', async () => {
     const p2 = createPreset('Guest')
+    const p3 = createPreset('Later') // (made after it: an older tab's copy listing this one proves it knew Guest - 8.1)
     act(() => switchPreset(p2.id))
     const key = `${PRESET_STORE_KEYS.settings}~p${p2.id}`
     act(() => useSettings.getState().setMaxY(7000))
     expect(localStorage.getItem(key)).not.toBeNull()
-    // Another window deletes it: the list without it, and its keys removed - and this window has not
-    // been told yet (the read lag).
+    // Another window - an older tab that had loaded both - deletes it: the list without it, and its keys
+    // removed - and this window has not been told yet (the read lag).
     const W = otherWindow()
     W.olderSave(PRESET_REGISTRY_KEY, (s) => ({
       ...s,
@@ -192,6 +193,6 @@ describe('a preset another window deleted (8.2)', () => {
     await act(async () => {
       await Promise.resolve()
     })
-    expect(usePresets.getState().activeId).toBe(1) // …and the list's merge moved this window off it
+    expect(usePresets.getState().activeId).toBe(p3.id) // …and the list's merge moved this window off it
   })
 })

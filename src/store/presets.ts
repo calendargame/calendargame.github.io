@@ -422,22 +422,33 @@ const PERSISTED_KEYS = Object.keys(makePresetRegistryDefaults()) as (keyof Prese
 const savedPart = (state: PresetRegistryValues): PresetRegistryValues =>
   Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as PresetRegistryValues
 
-// ── THE REGISTRY THROUGH THE WINDOWS-IN-SYNC DOOR (Round 26, Q2; design-q1-q2.md v4, 8) ─────────────
+// ── THE REGISTRY THROUGH THE WINDOWS-IN-SYNC DOOR (Round 26, Q2; design-q1-q2.md v5, 8) ─────────────
 // Every window of the app now shows one preset list: a preset made, renamed, moved, or deleted in one is
 // in the others at once. The registry is SLICES, each merged on its own (store/syncCounts' settings
 // rule, design 2.4): the ORDER of the ids; each preset's NAME (`name:<id>`) and its older builds' Amnesic
-// flag (`amn:<id>`, carried as stored, never read); the "Open in" PIN; `next`, the next id; and
-// `active`, the preset that was active last (what a fresh open with no pin lands in). Two rules sit on
-// top (registryRules, below):
-//   • MEMBERSHIP (8.1): a preset one side lists and the other does not is kept, unless the other side's
-//     next id is above its id — that side knew it and does not list it: it was deleted there. So an
-//     older tab's stale whole list never drops a preset a new window made after that tab loaded, and a
-//     delete in one window reaches the others.
+// flag (`amn:<id>`, carried as stored, never read); the "Open in" PIN; `next`, the next id; `active`, the
+// preset that was active last (what a fresh open with no pin lands in); and two records only new builds
+// keep, in the sync key (the doc's text never shows them, so older builds never see them): `by:<id>`, a
+// preset a NEW window made, and `gone:<id>`, a preset a new window deleted. Both are written once and
+// never taken back (an id is never reused). Two rules sit on top (reconcileRegistry, below):
+//   • MEMBERSHIP (8.1, v5): a preset listed and unknown here is another window's - or an older tab's -
+//     creation, and is added, unless a new window deleted it (`gone`). A preset missing from an OLDER
+//     tab's whole copy was deleted there ONLY IF that copy lists a preset a new window made after it
+//     (the tab had loaded the list after this preset existed); otherwise the tab never knew it, and it
+//     is kept. (v4 read "a higher next id: that side knew it", which every older build's New Preset
+//     breaks: it takes max(its own next id, the STORED one), so its copy's next id is above presets it
+//     never loaded - one New Preset in an older tab made every preset a new window had made since
+//     vanish everywhere. design-q2-model/model7.mjs gates v5's rule: 0 presets lost in 3,000 runs; v4's
+//     lost presets in every one.) An older tab's delete nothing proves does not stick - the preset comes
+//     back (R16-registry, 2.8). A new window's delete is its `gone` record.
 //   • `next` never goes down: the higher of the two, and above every listed id.
+// A deleted preset's name and older-build Amnesic flag are dropped from the doc with it (only its
+// `by`/`gone` records stay).
 // ★ WHICH PRESET A WINDOW IS ON IS ITS OWN: another window's `active` is saved (it is what a fresh open
 // lands in) but never moves this one. A window whose preset is deleted elsewhere moves to its neighbour
 // (store/presetControl's adoptRegistry, handed the door's patch).
 const isPresetSlice = (x: string) => /^(name|amn):\d+$/.test(x)
+const isRecordSlice = (x: string) => /^(by|gone):\d+$/.test(x)
 const idOfSlice = (x: string) => Number(x.slice(x.indexOf(':') + 1))
 export function registrySlices(state: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -476,24 +487,29 @@ export function registryState(sl: Record<string, unknown>): Record<string, unkno
     ...(sl.pin !== undefined ? { openInPreset: sl.pin } : {}),
   }
 }
-// MEMBERSHIP (8.1), after every merge: `before` is what this window held, `device` what the doc on the
-// device says, `now` what the merge left.
+// MEMBERSHIP (8.1, v5), after every merge: `before` is what this window held, `now` what the merge left
+// (the records of who made and who deleted each preset among it), `device` what the doc on the device
+// lists, and `olderCopy` whether that doc is an older build's whole copy.
 export function reconcileRegistry(
   before: Record<string, unknown>,
   now: Record<string, unknown>,
   device: Record<string, unknown> | null,
+  olderCopy: boolean,
 ): Record<string, unknown> | null {
   const ids = (v: unknown) => (Array.isArray(v) ? (v as number[]) : [])
   const mine = ids(before.order)
   const theirs = device ? ids(device.order) : []
   const myNext = typeof before.next === 'number' ? before.next : 0
   const theirNext = device && typeof device.next === 'number' ? device.next : 0
-  const kept = (id: number) =>
-    mine.includes(id) && theirs.includes(id)
-      ? true
-      : mine.includes(id)
-        ? !(device && theirNext > id) // the device knew it and does not list it: deleted there
-        : !(myNext > id) // this window knew it and does not list it: deleted here
+  const gone = (id: number) => now[`gone:${id}`] === true
+  const madeNew = (id: number) => now[`by:${id}`] === 'N'
+  const fix: Record<string, unknown> = {}
+  // an older tab's delete, proven: its copy lists a preset a new window made after this one (and this
+  // window turns it into a record, so every window reads it alike from here on)
+  for (const id of mine)
+    if (!gone(id) && olderCopy && !theirs.includes(id) && theirs.some((q) => q > id && madeNew(q)))
+      fix[`gone:${id}`] = true
+  const kept = (id: number) => !gone(id) && !(`gone:${id}` in fix)
   const order = ids(now.order).filter(kept)
   // a member the merge's order left out goes back after the neighbour it followed in its own list
   for (const source of [mine, theirs])
@@ -507,7 +523,6 @@ export function reconcileRegistry(
     })
   const top = order.reduce((m, id) => Math.max(m, id), FIRST_PRESET_ID)
   const next = Math.max(myNext, theirNext, typeof now.next === 'number' ? now.next : 0, top + 1)
-  const fix: Record<string, unknown> = {}
   if (JSON.stringify(order) !== JSON.stringify(ids(now.order))) fix.order = order
   if (next !== now.next) fix.next = next
   return Object.keys(fix).length ? fix : null
@@ -530,7 +545,17 @@ export const registrySpec = (
   kind: 'registry',
   key: () => PRESET_REGISTRY_KEY,
   version: REGISTRY_VERSION,
-  regs: (seen) => [...new Set(['order', 'pin', 'active', 'next', ...seen.filter(isPresetSlice)])],
+  // (a deleted preset's name and flag go with it: a `gone` record drops them from the doc)
+  regs: (seen) => [
+    ...new Set([
+      'order',
+      'pin',
+      'active',
+      'next',
+      ...seen.filter(isRecordSlice),
+      ...seen.filter((x) => isPresetSlice(x) && !seen.includes(`gone:${idOfSlice(x)}`)),
+    ]),
+  ],
   // (what the registry holds where nothing is saved: the one preset of a device that never made another)
   defaultOf: (x) =>
     x === 'order'
@@ -551,8 +576,18 @@ export const registrySpec = (
   sliceState: registrySlices,
   docState: registryState,
   reconcile: reconcileRegistry,
+  // (the `by`/`gone` records are the door's, never the store's: a save of the store never changes them)
+  owned: (x) => !isRecordSlice(x),
+  // A change made here: a preset this window made gets its `by` record, one it deleted its `gone`.
+  implied(prev, next) {
+    const ids = (v: unknown) => (Array.isArray(v) ? (v as number[]) : [])
+    const out: Record<string, unknown> = {}
+    for (const id of ids(next.order)) if (!ids(prev.order).includes(id)) out[`by:${id}`] = 'N'
+    for (const id of ids(prev.order)) if (!ids(next.order).includes(id)) out[`gone:${id}`] = true
+    return out
+  },
   patchOf(now, changed) {
-    if (changed.every((x) => x === 'active')) return null
+    if (changed.every((x) => x === 'active' || isRecordSlice(x))) return null
     const listed = new Set(Array.isArray(now.order) ? (now.order as number[]) : [])
     const shown = registryState(
       Object.fromEntries(
