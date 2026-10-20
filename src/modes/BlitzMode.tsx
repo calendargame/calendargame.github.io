@@ -379,10 +379,15 @@ function BlitzMode({
     if (clockBarRef.current) clockBarRef.current.style.transform = 'scaleX(' + sx + ')'
     drawReadout(r)
   }
-  // The time left, in words — the readout half of drawClock.
+  // The time left, in words — the readout half of drawClock. Whole seconds, rounded up, as a countdown
+  // reads — but NEVER MORE THAN THE LIMIT (Round 26 review): a Per Question limit can be a half second
+  // (the slider's step), and 7.5 rounded up read "8s" at Begin, a second above what the slider had
+  // just said. So the readout starts on the limit itself ("7.5s", the slider's own value in its own
+  // place) and is whole seconds from the moment that is the larger. (A Per Round limit is a multiple
+  // of five seconds: rounding it up never passes it.)
   const drawReadout = (r: number) => {
     if (clockTimeRef.current)
-      clockTimeRef.current.textContent = perQ ? Math.ceil(r) + 's' : fmtBlitzT(r)
+      clockTimeRef.current.textContent = perQ ? Math.min(Math.ceil(r), qSec) + 's' : fmtBlitzT(r)
   }
   // …and the same draw that also records `r` as the round's remaining. Everything that CHANGES the
   // clock goes through here; only the derived drain loop uses drawClock directly.

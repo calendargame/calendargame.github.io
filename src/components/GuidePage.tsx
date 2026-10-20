@@ -4388,10 +4388,11 @@ const MODE_SECTION_BODY: Record<PracticeModeId, ReactNode> = {
         <li>
           <b>The slider is the countdown.</b> When you press Begin, the time slider becomes the
           round&apos;s countdown in the same place. Its handle fades away and the bar, now full,
-          starts to run down; where the slider&apos;s value was, the time left counts down. When a
-          round ends, its countdown stays on screen until you press Reset, which brings the slider
-          back. You can&apos;t move the slider or type a time while a round is up — the settings for
-          the round are locked until Reset, as before.
+          starts to run down; where the slider&apos;s value was, the time left counts down, in whole
+          seconds rounded up — never more than the limit, so a 7.5-second question timer starts at
+          7.5s, then reads 7s. When a round ends, its countdown stays on screen until you press
+          Reset, which brings the slider back. You can&apos;t move the slider or type a time while a
+          round is up — the settings for the round are locked until Reset, as before.
         </li>
       </UL>
       <Subhead>Ending a round and Override</Subhead>

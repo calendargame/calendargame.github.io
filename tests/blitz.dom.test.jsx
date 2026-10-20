@@ -2027,6 +2027,39 @@ describe('Blitz — a reset round always shows a reset countdown (Q11)', () => {
   })
 })
 
+// ★ THE TIME LEFT NEVER READS MORE THAN THE LIMIT (Round 26 review): a Per Question limit can be a
+// half second, and rounding 7.5 up read "8s" at Begin.
+describe('Blitz — the Per Question time left never reads above its limit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    useSettings.getState().resetToFactory()
+    useModePrefs.getState().resetModePrefs()
+    useProgress.getState().resetProgress()
+    useModePrefs.getState().setBlitzQSec(7.5)
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    cleanup()
+    document.getElementById('root')?.remove()
+  })
+
+  it('a 7.5 s limit reads 7.5s at Begin, then whole seconds, rounded up', () => {
+    mountApp()
+    switchToBlitz()
+    clickText('Per Round') // → Per Question
+    begin()
+    expect(clockText()).toBe('7.5s')
+    tick(300)
+    expect(clockText()).toBe('7.5s') // 7.2 left: rounded up, it would be 8
+    tick(400)
+    expect(clockText()).toBe('7s') // 6.8 left
+    tick(2000)
+    expect(clockText()).toBe('5s')
+  })
+})
+
 // ★ Q10 (Round 26): THE SMALL LINES UNDER EACH BEST, like MoX's — under Best Score that round's best
 // streak, under Best Streak that round's score — so whether one round set both can be read on a
 // screen too narrow for the Same Round / Different Rounds tag. A Best from before this release has
