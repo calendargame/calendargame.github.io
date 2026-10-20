@@ -689,6 +689,8 @@ input,textarea{user-select:text;-webkit-user-select:text}
    (it is borderless — components/PillTray's concentric housing), and while the segment has the
    keyboard the keyboard ring, also an outline, takes its place. tests/browser/notInEffect measures
    the text's contrast in all five themes, over a hatch line as well as between them. */
+.tray-dormant{--dormant-hatch:color-mix(in oklab,var(--panel-bd) 60%,transparent);background:repeating-linear-gradient(135deg,var(--dormant-hatch) 0 .1rem,transparent .1rem .375rem);border-color:var(--panel-bd)}
+.pill-dormant-on{background:color-mix(in oklab,var(--acc) 25%,transparent);color:var(--tx-100-80);outline:1px solid var(--acc);outline-offset:-1px;transition:background-color calc(.2s * var(--motion-scale))}
 /* ★ THE DATE LINE (Round 26, Q7) — the big date on every mode's card, ONE LINE AT ONE SIZE PER
    CARD. 1.875rem is its full size, and the size it has wherever the widest date the card can show
    fits at it. Where that date would not fit (five-digit years made "September 10, 10000" too long
@@ -699,8 +701,6 @@ input,textarea{user-select:text;-webkit-user-select:text}
    (the first cut, "the card's width over 10.97em", ran 24px out of the card in DejaVu Sans).
    tests/browser/dateLine holds it in every date format, in three fonts. */
 .date-line{font-size:1.875rem;line-height:2.25rem;white-space:nowrap}
-.tray-dormant{--dormant-hatch:color-mix(in oklab,var(--panel-bd) 60%,transparent);background:repeating-linear-gradient(135deg,var(--dormant-hatch) 0 .1rem,transparent .1rem .375rem);border-color:var(--panel-bd)}
-.pill-dormant-on{background:color-mix(in oklab,var(--acc) 25%,transparent);color:var(--tx-100-80);outline:1px solid var(--acc);outline-offset:-1px;transition:background-color calc(.2s * var(--motion-scale))}
 /* THE ROW IN THE HAND — the Presets popup's row while it is being dragged by its grip
    (components/PresetManager, which says what the row looks like and why; these are the three rules
    that draw it). They come AFTER the two surface rules above on purpose: .held-piece is worn
@@ -1228,7 +1228,8 @@ html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
    animations should multiply their duration by var(--motion-scale) to respect the setting for free.
    ★ THE CONSUMER LIST IS NOW COMPLETE (round 16), and it was not before: the token first shipped with
    only TWO readers, so four decorative animations quietly ignored the setting for four rounds. All
-   eight are now here (Round 26 added Blitz's slot, the last two), and this is the whole list — the guide's Accessibility section states it in
+   ten are now here (Round 26 added the last four: Blitz's slot, the not-in-effect choice's fill fade,
+   and the void-press cue), and this is the whole list — the guide's Accessibility section states it in
    plain words, so a new consumer (or a lost one) means editing that prose in the same change:
      • .expander        — the accordion slide, below
      • GuidePage        — its inline transitionDuration + the scroll-glide writer (JS, reads the
@@ -1239,6 +1240,8 @@ html{font-size:clamp(0.75rem, min(0.95rem + 0.4vw, 1.95vh), 1.1875rem)}
      • .range-slot  ⎫ Blitz's time-limit slider and its countdown cross-fading in one slot (Q12),
      • .range-clock ⎭ beside the range rules at the foot of this file
      • .boot-d          — the Updating screen's three-dot pulse, ~line 590 (duration + both delays)
+     • .pill-dormant-on — a not-in-effect choice's .2s fill fade, with the not-in-effect rules
+     • .press-void-fade — the ring that says a press did not count, fading out (lib/unaskedSwap)
    ⚠ THE BOOT SPLASH IN index.html IS NOT ON THIS LIST AND DOES NOT NEED TO BE: that separate
    body-level #boot markup is inline-styled and fully STATIC (no animation at all), and it paints
    before this stylesheet exists, so the token could not reach it anyway. */

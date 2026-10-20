@@ -1862,7 +1862,7 @@ export function SettingsPanel({
               )}
               {storageWarning && <span className="sr-only">, almost full</span>}
             </button>
-            {/* Changelog wears the INLINE UpdateDot until its first tap after a build change — the
+            {/* Changelog wears the TRAILING UpdateDot (`trailing`) until its first tap after a build change — the
                 second stage of the breadcrumb the gear's dot starts. ⚠ Since 2026-08-10 that dot
                 appears only when the changelog actually GAINED something, so an internal deploy
                 lights the gear and leaves this one dark.

@@ -2476,7 +2476,7 @@ export default function GuidePage({
             Format is a single five-way choice, so the arrows carry straight from the Written row
             into the Numeric one — and Theme does the same across Dark and Light whenever Use System
             Settings is off, since that's when the five themes are one pick. A locked (faded)
-            setting ignores the keys; an striped one takes them as usual. No key reaches past the
+            setting ignores the keys; a striped one takes them as usual. No key reaches past the
             open menu, so these never step the date behind it — and inside the menu <Kbd>Esc</Kbd>{' '}
             and typing in its boxes work as they do everywhere.
           </li>
@@ -2530,11 +2530,13 @@ export default function GuidePage({
           the ⚙ menu holding the keyboard = the `reach` src/main.tsx registers for it; the accordions =
           aria-expanded/aria-controls here and in MethodBreakdown; the mode list = CustomSelect's
           open-state key handler; the motion paragraph = a full grep of --motion-scale, which now
-          has EIGHT consumers — index.css's .expander rule, this file's own inline transitionDuration
+          has TEN consumers — index.css's .expander rule, this file's own inline transitionDuration
           + scroll glide (and, on that same read, a closing header's shadow hand-back and a header
           tapped above the line being brought down to it), the three
           `transition:background-color` surface fades, .boot-d's bootPulse, and Blitz's slider and
-          countdown cross-fading in one slot (.range-slot, .range-clock) — so those are the only things the paragraph may claim, and index.css's own
+          countdown cross-fading in one slot (.range-slot, .range-clock), a not-in-effect choice's
+          fill fade (.pill-dormant-on), and the ring that says a press did not count
+          (.press-void-fade) — so those are the only things the paragraph may claim, and index.css's own
           words for the rest are "Functional motion — the .bar countdown and the color flashes — is
           deliberately NOT scaled". ⚠ THE PARAGRAPH IS NOW A COMPLETE ACCOUNT, WHICH IT WAS NOT
           BEFORE, and that is exactly what makes it fragile: round 15 had to add a sentence naming
@@ -2552,8 +2554,9 @@ export default function GuidePage({
           (the focus ring is NOT one of the gaps any more: index.css's "THE KEYBOARD FOCUS RING"
           draws it wherever the keyboard is, and lib/keyboardFocus says which keys count);
           index.html
-          sets user-scalable=no on purpose; the < and > history buttons carry only their glyph and
-          the mode-screen range inputs carry no aria-label (the DefaultsCard copies do); and the
+          sets user-scalable=no on purpose; the < and > history buttons carry only their glyph (the
+          mode-screen range inputs are named now — Flash's "Flash speed", Blitz's its timer — so
+          they are no longer a gap); and the
           GAME SCREENS' dimmed buttons are opacity-60 + pointer-events-none and announce nothing.
           ⚠ THAT LAST ONE IS ABOUT THE GAME SCREENS, NOT ABOUT aria-disabled BEING RARE — the
           attribute appears in five places (the ⚙ panel's three buttons and Clear Saved Defaults,
@@ -2780,9 +2783,9 @@ export default function GuidePage({
           open — the sections of this guide, and Show Codes — open instantly instead, this guide
           stops gliding when it scrolls itself, the short colour fade a button does under your
           finger arrives at once, Blitz&apos;s time slider turns into its countdown (and back) at
-          once, and the three dots on the updating screen stop pulsing. Countdown bars and the
-          right/wrong colour flashes are unchanged, because those are telling you something rather
-          than decorating.
+          once, the ring that marks a press that did not count goes at once, and the three dots on
+          the updating screen stop pulsing. Countdown bars and the right/wrong colour flashes are
+          unchanged, because those are telling you something rather than decorating.
         </p>
         <Subhead>Where it falls short</Subhead>
         <p>Stated plainly, so you know before you try:</p>
@@ -2806,7 +2809,7 @@ export default function GuidePage({
             Blitz&apos;s as its round or question timer and, during a round, as the time left.)
           </li>
           <li>
-            An striped setting in the ⚙ menu — kept, but not in effect right now — is not greyed out
+            A striped setting in the ⚙ menu — kept, but not in effect right now — is not greyed out
             and not marked unavailable: it works as usual, and each of its options is described with
             the reason it is not in effect (for example, &quot;Not in use while Input is
             Buttons.&quot;). Two kinds of greying out, not one. Marked unavailable while
@@ -2892,7 +2895,7 @@ export default function GuidePage({
         <p>
           A setting can be in one of three looks. <b>Filled</b> — it is in effect. <b>Striped</b> —
           its box is striped instead of filled and its choice is ringed: it is kept, but it is not
-          in effect right now, and you can still change it. Changing an striped setting never
+          in effect right now, and you can still change it. Changing a striped setting never
           restarts a MoX run or a Blitz round, never redraws a date, and never changes which Bests
           show; it takes effect when the setting is in effect again. Striped are: Date Format while
           Random Format is on, in Classic, Flash, MoX, and Blitz; Input and Rotate Dots in
@@ -3207,7 +3210,7 @@ export default function GuidePage({
             in a leap year whatever it says.
           </li>
           <li>
-            A change to an striped chance setting regenerates nothing and restarts nothing; it takes
+            A change to a striped chance setting regenerates nothing and restarts nothing; it takes
             effect when your range lets the setting apply again.
           </li>
         </UL>
