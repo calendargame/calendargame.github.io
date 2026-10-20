@@ -34,13 +34,16 @@ import { amnesicLabel } from './settingsOptions.js'
 //     survives switching presets and back and changing Amnesic and back. It is lost only when the
 //     page goes away: closing the window, or RELOADING it (a browser reload, the error card's
 //     Reload). Check for updates declines to reload while anything is unsaved.
-//   • "saved by itself — added to whatever another window saved meanwhile" — a held save is retried
-//     as soon as a save fits, or the moment a deleted preset frees room, and a retry is the
+//   • "saved by itself — your answers added to whatever another window saved meanwhile" — a held save
+//     is retried as soon as a save fits, or the moment a deleted preset frees room, and a retry is the
 //     windows-in-sync door's merge with the device as it is NOW (store/syncedDoc): a held answer is
 //     added onto another window's, never written over it.
-//   • "a Reset or Clear made here … is cancelled if another window has played since; a setting
-//     changed here yields to one changed in another window since" — the door's rules for a held
-//     Reset, Clear History, and setting (design-q1-q2.md v4, sections 5 and 16).
+//   • "a Reset or Clear made here … is cancelled if another window has played since, an Override made
+//     here gives way if another window has answered in that mode since, and a setting changed here
+//     yields to one changed in another window since" — the door's rules for a held Reset, Clear
+//     History, Override, and setting (design-q1-q2.md v4, sections 5 and 16; an Override is a
+//     whole-mode change made on exactly the mode as it stood, store/syncCounts' `rep`, so it lands only
+//     on that - Round 26's review lane found the notice promising it would be added, like an answer).
 //   • SHORTENING PRESET NAMES — suggested exactly when the breakdown popup suggests it, by the same
 //     rule (store/storageUsage's suggestShorterNames), over the device as it was when the notice
 //     opened: only when that alone would be enough. On a device filled by solve times it would be
@@ -82,10 +85,11 @@ function StorageFullCard() {
             This device is out of room for Calendar Game&apos;s saved data. Everything saved before
             now is safe, and you can keep playing. What you&apos;ve done in this window since is
             being kept here until there&apos;s room. As soon as there is, it&apos;s saved by itself
-            — added to whatever another window saved meanwhile. A Reset or Clear made here while the
-            device was full is cancelled if another window has played since, and a setting changed
-            here yields to one changed in another window since. Closing or reloading this window
-            before then loses it.
+            — your answers added to whatever another window saved meanwhile. A Reset or Clear made
+            here while the device was full is cancelled if another window has played since, an
+            Override made here gives way if another window has answered in that mode since, and a
+            setting changed here yields to one changed in another window since. Closing or reloading
+            this window before then loses it.
           </p>
           {suggestShorterNames(warning, rows, limit) && (
             <p>

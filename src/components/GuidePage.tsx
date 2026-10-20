@@ -3677,11 +3677,12 @@ export default function GuidePage({
           Only or Full the popup names <b>Clear History</b> instead, for the reason above. When
           shortening your preset names alone would be enough, the popup says that first — the same
           rule as the breakdown above. Everything that couldn&apos;t be saved is then saved by
-          itself, added to whatever another window of the app saved meanwhile; a Reset or a Clear
-          History made while the device was full is cancelled if another window has played since,
-          and a setting changed meanwhile gives way to one changed in another window since. While
-          anything is waiting like that, <b>Check for updates</b> won&apos;t reload the app, because
-          a reload would lose it.
+          itself, your answers added to whatever another window of the app saved meanwhile; a Reset
+          or a Clear History made while the device was full is cancelled if another window has
+          played since, an Override made then gives way if another window has answered in that mode
+          since, and a setting changed meanwhile gives way to one changed in another window since.
+          While anything is waiting like that, <b>Check for updates</b> won&apos;t reload the app,
+          because a reload would lose it.
         </p>
         <p>
           <b>Lookup history</b> — the dates you&apos;ve looked up — is saved on this device too, the

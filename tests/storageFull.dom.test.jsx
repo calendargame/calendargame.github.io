@@ -83,7 +83,12 @@ describe('storage full — play goes on, and the player is told', () => {
     expect(notice().textContent).toMatch(/being kept here until there.s room/)
     expect(notice().textContent).toMatch(/Closing or reloading this window before then loses it/)
     expect(notice().textContent).toMatch(
-      /saved by itself — added to whatever another window saved meanwhile/,
+      /saved by itself — your answers added to whatever another window saved meanwhile/,
+    )
+    // (an Override is not added like an answer: made on the mode exactly as it stood, it lands only on
+    // that - another window's answers there since, and it gives way; store/syncCounts' `rep`)
+    expect(notice().textContent).toMatch(
+      /an\s+Override made here gives way if another window has answered in that mode since/,
     )
     expect(notice().textContent).toMatch(/⚙ → Global → Manage Presets/)
     // Dismissed the way every info popup here is: a tap on the scrim.
