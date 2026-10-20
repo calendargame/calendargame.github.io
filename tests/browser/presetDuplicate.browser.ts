@@ -103,74 +103,95 @@ for (const font of [null, 'serif', 'monospace'] as const) {
   })
 }
 
-// ★ A COPY OF A LONG NAME CAN BE TOLD FROM ITS ORIGINAL: where a cell cuts the name, it is cut
-// BEFORE its copy number, which stays on screen whole — in the top bar's button and in every row of
-// the lists (the top bar's and Duplicate's) — and a screen reader still hears the whole name
-// (components/PresetSwitcher's PresetOptionLabel, lib/presetNameText's copyNumberOf).
-test('a long name is cut before its copy number, never through it', async ({ page }) => {
-  const long = 'A rather long preset name for practising the hardest dates of all'
-  const copy = `${long} (2)`
-  await openApp(page, {
-    seed: { presets: { ...presetsNamed('Preset 1', long, copy), activeId: 3 } },
-  })
-  // Every laid-out name cell showing the copy: its last characters, "(2)", lie inside the cell
-  // (not past its clipped edge), and the name before them is cut.
-  const copyCells = () =>
-    page.evaluate((copy) => {
-      return [...document.querySelectorAll('[data-preset-name-cell]')]
-        .filter((cell) => cell.getClientRects().length > 0)
-        .map((cell) => {
-          const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT)
-          const drawn: Text[] = []
-          for (let n = walker.nextNode(); n; n = walker.nextNode())
-            if (!n.parentElement!.closest('.sr-only')) drawn.push(n as Text)
-          return { cell, drawn }
-        })
-        .filter(({ drawn }) => drawn.map((t) => t.data).join('') === copy)
-        .map(({ cell, drawn }) => {
-          const box = cell.getBoundingClientRect()
-          const last = drawn.at(-1)!
-          const end = document.createRange()
-          end.setStart(last, last.length - 3)
-          end.setEnd(last, last.length)
-          const all = document.createRange()
-          all.setStart(drawn[0], 0)
-          all.setEnd(last, last.length)
-          return {
-            drawn: drawn.map((t) => t.data).join(''),
-            numberLeft: end.getBoundingClientRect().left - box.left,
-            numberRight: end.getBoundingClientRect().right - box.right,
-            // (WebKit lays a cut name out short, and gives its hidden end a box of no width.)
-            numberWidth: end.getBoundingClientRect().width,
-            cut: all.getBoundingClientRect().width - box.width,
-          }
-        })
-    }, copy)
-  for (const [width, height] of [
-    [390, 844],
-    [320, 568],
-  ]) {
-    await resizeTo(page, width, height)
-    await expect(topBar(page).preset).toHaveAccessibleName(`Preset, ${copy}`)
-    await topBar(page).preset.click()
-    await expect(page.getByRole('listbox', { name: 'Preset' })).toBeVisible()
-    await expect(
-      page.getByRole('listbox', { name: 'Preset' }).getByRole('option', { name: copy }),
-    ).toBeVisible()
-    await settled(page)
-    const cells = await copyCells()
-    // The button, its list's row, and the hidden copy of the list the app measures by.
-    expect(cells.length, `${width}: the copy's name cells`).toBeGreaterThanOrEqual(2)
-    for (const cell of cells) {
-      expect(cell.drawn, `${width}: the copy's drawn name`).toBe(copy)
-      expect(cell.cut, `${width}: the name is too long for the cell`).toBeGreaterThan(0)
-      expect(cell.numberRight, `${width}: "(2)" ends inside the cell`).toBeLessThanOrEqual(SAME_PX)
-      expect(cell.numberLeft, `${width}: "(2)" starts inside the cell`).toBeGreaterThan(0)
-      expect(cell.numberWidth, `${width}: "(2)" is drawn`).toBeGreaterThan(1)
+// ★ A COPY OF A LONG NAME CAN BE TOLD FROM ITS ORIGINAL: where a cell cuts the name and has room for
+// "…" and the copy number, the name is cut BEFORE its number, which stays on screen whole — in the
+// top bar's button and in every row of the lists (the top bar's and Duplicate's) — and where a cell
+// is too narrow even for that, the name is cut at its end as any name is: never a number cut
+// part-way. A screen reader hears the whole name either way (components/PresetSwitcher's
+// NameCutBeforeNumber says the rule). Held as the RULE, in each cell's own font, in three fonts (the
+// machine's, its serif, and its monospace — wider than any system font, as the Linux runner's are
+// wider than Windows'), so which of the two a cell draws is the font's to decide, not the test's.
+for (const font of [null, 'serif', 'monospace'] as const)
+  test(`a long name is cut before its copy number, never through it (${font ?? 'the app font'})`, async ({
+    page,
+  }) => {
+    const long = 'A rather long preset name for practising the hardest dates of all'
+    const copy = `${long} (2)`
+    await openApp(page, {
+      seed: { presets: { ...presetsNamed('Preset 1', long, copy), activeId: 3 } },
+    })
+    if (font) await page.addStyleTag({ content: `html{font-family:${font} !important}` })
+    // Every laid-out name cell drawing the copy, and what the rule asks of it.
+    const copyCells = () =>
+      page.evaluate((copy) => {
+        const ctx = document.createElement('canvas').getContext('2d')!
+        const widthIn = (font: string, text: string) => {
+          ctx.font = font
+          return ctx.measureText(text).width
+        }
+        return [...document.querySelectorAll('[data-preset-name-cell]')]
+          .filter((cell) => cell.getClientRects().length > 0)
+          .map((cell) => {
+            const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT)
+            const drawn: Text[] = []
+            for (let n = walker.nextNode(); n; n = walker.nextNode())
+              if (!n.parentElement!.closest('.sr-only')) drawn.push(n as Text)
+            return { cell, drawn }
+          })
+          .filter(({ drawn }) => drawn.map((t) => t.data).join('') === copy)
+          .map(({ cell, drawn }) => {
+            const box = cell.getBoundingClientRect()
+            const font = getComputedStyle(cell).font
+            const last = drawn.at(-1)!
+            const end = document.createRange()
+            end.setStart(last, last.length - 3)
+            end.setEnd(last, last.length)
+            const n = end.getBoundingClientRect()
+            return {
+              // What the rule needs to know, in this cell's font.
+              fitsWhole: widthIn(font, copy) <= box.width,
+              roomForNumber: widthIn(font, '… (2)') + 1 <= box.width,
+              // What is drawn: two pieces (the number its own), or one.
+              pieces: drawn.length,
+              // The number's three characters against the cell, as laid out.
+              numberLeft: n.left - box.left,
+              numberRight: n.right - box.right,
+              // (WebKit lays a cut name out short, and gives its hidden end a box of no width.)
+              numberWidth: n.width,
+            }
+          })
+      }, copy)
+    for (const [width, height] of [
+      [390, 844],
+      [320, 568],
+    ]) {
+      await resizeTo(page, width, height)
+      await expect(topBar(page).preset).toHaveAccessibleName(`Preset, ${copy}`)
+      await topBar(page).preset.click()
+      await expect(
+        page.getByRole('listbox', { name: 'Preset' }).getByRole('option', { name: copy }),
+      ).toBeVisible()
+      await settled(page)
+      const cells = await copyCells()
+      // The button, its list's row, and the hidden copy of the list the app measures by.
+      expect(cells.length, `${width}: the copy's name cells`).toBeGreaterThanOrEqual(2)
+      for (const [i, c] of cells.entries()) {
+        const at = `${width}, cell ${i + 1}`
+        expect(c.fitsWhole, `${at}: the name is too long for the cell`).toBe(false)
+        if (c.roomForNumber) {
+          // Room for "…" and the number: the number is its own piece, whole, inside the cell.
+          expect(c.pieces, `${at}: the name and its number, two pieces`).toBe(2)
+          expect(c.numberRight, `${at}: "(2)" ends inside the cell`).toBeLessThanOrEqual(SAME_PX)
+          expect(c.numberLeft, `${at}: "(2)" starts inside the cell`).toBeGreaterThan(0)
+          expect(c.numberWidth, `${at}: "(2)" is drawn`).toBeGreaterThan(1)
+        } else {
+          // Too narrow: the name cut at its end, as any name — one piece, never a number cut part-way.
+          expect(c.pieces, `${at}: the name in one piece, cut at its end`).toBe(1)
+        }
+      }
+      await page.keyboard.press('Escape')
     }
-    await page.keyboard.press('Escape')
-  }
-})
+  })
 
 // ★ THE DUPLICATE LIST IS ONE OF THE PLACES A NAME IS SHOWN, and takes the app's one answer for a
 // ready-made name ("Preset 1", "P1", or "1" — components/PresetSwitcher's ★★ "drawn short"): where

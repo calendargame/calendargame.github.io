@@ -1,11 +1,16 @@
-import type { RefObject } from 'react'
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import CustomSelect from './CustomSelect.jsx'
 import { usePresets, shortStockName, stockNumber, defaultPresetName } from '../store/presets.js'
 import type { Preset } from '../store/presets.js'
 import { switchPreset } from '../store/presetControl.js'
 import { useAmnesicModeOf } from '../store/amnesic.js'
 import { AMNESIC_SPOKEN } from '../store/amnesicMode.js'
-import { stockNameForm, useNameRooms, watchNameCell } from '../lib/presetNameWidth.js'
+import {
+  measureTextWidthPx,
+  stockNameForm,
+  useNameRooms,
+  watchNameCell,
+} from '../lib/presetNameWidth.js'
 import { copyNumberOf, nameAsDrawn } from '../lib/presetNameText.js'
 
 // PresetSwitcher — the control that says which preset you are on and moves you to another one.
@@ -193,20 +198,65 @@ export function ShortStockNameRoom() {
 // ★ A COPY'S NAME IS CUT BEFORE ITS NUMBER, NEVER THROUGH IT (Round 26): "A rather long preset na…
 // (2)", so a copy of a long name can still be told from its original. Drawn here for every preset
 // list and the top bar (PresetOptionLabel, below) and for Manage Presets' rename box while it is not
-// being typed in. Two pieces in one line: the name, which gives way and is cut with "…" exactly as
-// any name is, and the number, which keeps its size — `whitespace-pre` keeps the space before its
-// bracket, which a flex item would otherwise drop from the start of its line. On a box too narrow
-// for the number and an ellipsis together, the number is cut too, after leaving the name an em —
-// about an ellipsis' width — so a cut there still shows "…". `min-w-0`: the pair shrinks with its
-// box instead of holding it open. Drawn only — aria-hidden: whoever draws it says the whole name.
-// `name` is the whole name as drawn, `number` its copy number (lib/presetNameText's copyNumberOf).
+// being typed in. `name` is the whole name as drawn, `number` its copy number (lib/presetNameText's
+// copyNumberOf). Drawn only — aria-hidden: whoever draws it says the whole name.
+// THE RULE, measured in the box it is drawn in (its parent: the name cell, or the rename box's
+// drawing), in that box's own font:
+//   • A NAME THAT FITS is drawn whole, as any name is.
+//   • A NAME THAT DOES NOT FIT, IN A BOX WITH ROOM FOR "…" AND THE NUMBER, is drawn in two pieces on
+//     one line: the name before the number, which gives way and is cut with "…", and the number,
+//     whole — `shrink-0`, and `whitespace-pre`, which keeps the space before its bracket (a flex
+//     item would otherwise drop it from the start of its line).
+//   • IN A BOX TOO NARROW FOR "…" AND THE NUMBER TOGETHER, the name is cut at its end, as any name
+//     is — the owner's "no reason to optimize past that" for the narrowest places. Never a number
+//     cut part-way.
+// ⚠ THE ROOM IS MEASURED WITH A PIXEL TO SPARE (CUT_SPARE_PX): the text is measured on a canvas and
+// laid out by the page, which can disagree by a fraction of a pixel — the Linux test runner's wider
+// fonts showed it, a number clipped by half a pixel where the canvas said it fitted. The box's
+// width never depends on what is drawn in it (a name cell fills its control; the rename box's
+// drawing fills its grid cell), so the choice cannot feed back into the measurement. Before the
+// first measurement, and wherever nothing is laid out (jsdom), the two pieces are drawn.
+const CUT_SPARE_PX = 1
+const ELLIPSIS = '…'
 export function NameCutBeforeNumber({ name, number }: { name: string; number: string }) {
-  return (
-    <span className="flex min-w-0" aria-hidden="true">
+  const piece = useRef<HTMLSpanElement | null>(null)
+  const [room, setRoom] = useState<{ width: number; font: string } | null>(null)
+  useLayoutEffect(() => {
+    const el = piece.current
+    const box = el?.parentElement
+    if (!el || !box) return
+    const measure = () => {
+      const cs = getComputedStyle(box)
+      const width =
+        box.getBoundingClientRect().width -
+        parseFloat(cs.paddingLeft) -
+        parseFloat(cs.paddingRight) -
+        parseFloat(cs.borderLeftWidth) -
+        parseFloat(cs.borderRightWidth)
+      // (The box's font is the pieces' — they set none of their own — and the box stays the same
+      // element whichever form is drawn in it.)
+      const font = cs.font
+      setRoom((was) => (was?.width === width && was.font === font ? was : { width, font }))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [])
+  const measured = room !== null && room.width > 0 && measureTextWidthPx(name, room.font) > 0
+  const twoPieces =
+    !measured ||
+    (measureTextWidthPx(name, room.font) > room.width &&
+      measureTextWidthPx(ELLIPSIS + number, room.font) + CUT_SPARE_PX <= room.width)
+  return twoPieces ? (
+    <span ref={piece} className="flex min-w-0" aria-hidden="true">
       <span className="truncate">{name.slice(0, name.length - number.length)}</span>
-      <span className="shrink-0 overflow-hidden text-ellipsis whitespace-pre max-w-[calc(100%-1em)]">
-        {number}
-      </span>
+      <span className="shrink-0 whitespace-pre">{number}</span>
+    </span>
+  ) : (
+    <span ref={piece} className="truncate" aria-hidden="true">
+      {name}
     </span>
   )
 }
