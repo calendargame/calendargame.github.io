@@ -23,7 +23,7 @@ import {
 import { fmt, numericFormatOf } from '../lib/format.js'
 import { YEAR_MAX_GREGORIAN, YEAR_MAX_JULIAN } from '../lib/calendar.js'
 import { blockMinus, blockMinusBI } from '../lib/modeFormat.js'
-import { largestFit, makeRuler, setRows, widestRow } from '../lib/textFit.js'
+import { largestFit, makeRuler, setRows, watchTextRoom, widestRow } from '../lib/textFit.js'
 import { UPDATE_CHECK_LABEL } from '../lib/updateCheck.js'
 import type { UpdateCheckState } from '../lib/updateCheck.js'
 import { GroupLabel, SectionLabel } from './primitives.jsx'
@@ -186,6 +186,10 @@ export type SettingsPanelProps = {
 const TRIO_FLOOR = 11 / 12
 // The hidden copy the trio's captions are measured in (fitTrioCaptions), made the first time.
 let trioRuler: HTMLElement | null = null
+// The room the ⚙ foot's Contact line must have left over for the Changelog link to join it (the
+// changelogOnContact fit): one whole pixel, so a line that fits only to a fraction of a pixel —
+// which two engines, or two sizes of one font, can round either way — is never the line it joins.
+const FOOT_FIT_SAFETY_PX = 1
 
 const NOT_IN_EFFECT = {
   randomFormat: 'Practice dates ignore this while Random Format is on.',
@@ -663,6 +667,62 @@ export function SettingsPanel({
       ro.disconnect()
     }
   }, [])
+  // ★ WHERE THE CHANGELOG LINK SITS IN THE PINNED FOOT (after v2.30.2, the owner's ruling: "if
+  // there's room put it inline with the contact, otherwise put it where it's currently at"). At the
+  // right end of the CONTACT line when that whole line — "Contact: <address>", the row's gap, and
+  // the link — fits the foot's width with FOOT_FIT_SAFETY_PX to spare; otherwise at the right
+  // end of the Storage used line, where it was. Never decided by the window's size: the address is
+  // long, and whether it fits beside Changelog depends on the device's font (it does not, at an
+  // iPhone's width of font, on the 375-to-414-wide iPhones; it does on the 430s).
+  //   • MEASURED in the real foot, in the device's own font, at the foot's real width. Each width
+  //     measured is the same in both arrangements — the Contact item is its whole one-line width
+  //     whenever it fits a line on its own (a flex line breaks between items before it shrinks
+  //     one), and the link is its own box — so the answer cannot depend on itself, and it never
+  //     flips back and forth.
+  //   • THE UPDATE DOT costs the line nothing in either place: it hangs past the word, out of flow,
+  //     in the foot's own side padding (UpdateDot's `trailing`), the same padding on every line.
+  //   • DECIDED BEFORE PAINT, and again only when the foot's width or the font changes (lib/textFit's
+  //     watchTextRoom: a ResizeObserver, which calls back after layout and before the frame is
+  //     drawn, and its font sentinel). flushSync puts the answer on screen inside that callback, so
+  //     no frame shows the link in the place it is about to leave.
+  //   • THE ROOM WATCHED IS THE LAST UPDATED LINE, not the foot: it is exactly as wide as the foot's
+  //     content and holds nothing that moves, so the move cannot resize it. The foot itself can
+  //     change height when the link moves (an answer that is out of date for one layout — the font
+  //     just grew — has the Contact line broken in two), and a room resized from its own fit is a
+  //     ResizeObserver loop (lib/textFit's ⚠).
+  //   • THE KEYBOARD STAYS ON IT: the link is a new element in its new line, so if it had focus
+  //     when it moved, focus is put back on it.
+  const contactLineRef = useRef<HTMLDivElement | null>(null)
+  const stampLineRef = useRef<HTMLDivElement | null>(null)
+  const changelogButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [changelogOnContact, setChangelogOnContact] = useState(false)
+  const changelogOnContactRef = useRef(false)
+  useLayoutEffect(
+    () =>
+      watchTextRoom(stampLineRef.current, (room) => {
+        const stamp = stampLineRef.current
+        const contact = contactLineRef.current?.firstElementChild
+        const link = changelogButtonRef.current
+        if (!stamp || !contact || !link) return
+        // What the line lays out: the Contact item, the two-item lines' gap — read off the stamp's
+        // line, which always is one (the Contact line is one only while the link is in it, and an
+        // answer read off it would flip-flop) — and the link as the LAST item of a line, whose
+        // left margin is the line's auto margin (FOOTER_META_ROW_CLASS) rather than its -mx-1: its
+        // box, with its press-drag padding, less only its right margin.
+        const need =
+          contact.getBoundingClientRect().width +
+          parseFloat(getComputedStyle(stamp).columnGap) +
+          link.getBoundingClientRect().width +
+          parseFloat(getComputedStyle(link).marginRight)
+        const onContact = need <= room - FOOT_FIT_SAFETY_PX
+        if (onContact === changelogOnContactRef.current) return
+        changelogOnContactRef.current = onContact
+        const hadFocus = document.activeElement === changelogButtonRef.current
+        flushSync(() => setChangelogOnContact(onContact))
+        if (hadFocus) changelogButtonRef.current?.focus({ preventScroll: true })
+      }),
+    [],
+  )
 
   // Every popup below is a card inside components/Popup, which owns the whole popup contract
   // (components/modalContract): the scrim, focus into the dialog on open and back out on close,
@@ -919,6 +979,40 @@ export function SettingsPanel({
   // callbacks. (The cancel callbacks outlived the Cancel BUTTON: they are what the scrim tap, Escape
   // and Android Back call.)
 
+  // THE CHANGELOG LINK, drawn in whichever foot line changelogOnContact (above) puts it in.
+  // Changelog wears the TRAILING UpdateDot (`trailing`) until its first tap after a build change — the
+  // second stage of the breadcrumb the gear's dot starts. ⚠ Since 2026-08-10 that dot
+  // appears only when the changelog actually GAINED something, so an internal deploy
+  // lights the gear and leaves this one dark.
+  // ⚠ ITS BOX IS ITS TEXT (Round 26): the dot HANGS past the end of the word, out of flow
+  // (UpdateDot's `trailing`, index.css), so the link's right edge — the edge the line
+  // anchors at the right — is the word's, level with Check for updates' at the foot of the menu, and
+  // lighting the dot cannot shift the line. It used to keep a slot in flow for the dot,
+  // which stood the word ~6px left of the line below.
+  // Round 8 rebuilt that marker: a text link reserves no room for the gear's corner
+  // badge, so the round-6 shared recipe put the dot on top of the word. The link is an
+  // inline-flex row now — the text in its own span, with the underline ON that span,
+  // and the marker hanging from it out of flow, where no underline reaches. Being
+  // aria-hidden, the marker needs the sr-only word beside it to reach a screen reader,
+  // which is also the only update signal left once the gear's dot has been retired.
+  // ⚠ That word carries its own COMMA rather than the gear's "(update)" parenthetical:
+  // the name-from-content algorithm trims each child's text before joining them, so a
+  // leading space is dropped and the two would run together ("Changelog(update)"). A
+  // printing separator is the only one that survives the join.
+  const changelogLink = (
+    <button
+      ref={changelogButtonRef}
+      type="button"
+      onClick={openChangelog}
+      className="inline-flex items-center select-none rounded-md px-1 -mx-1"
+    >
+      <span className="underline relative">
+        Changelog
+        <UpdateDot placement="trailing" lit={changelogDot} />
+      </span>
+      {changelogDot && <span className="sr-only">, update</span>}
+    </button>
+  )
   // Changelog popup: the plain-words what-changed list (src/changelog, newest day first),
   // opened from the pinned foot's Changelog link — the same shared popup shell and card recipes as the
   // popups above. It carries NO dismiss control at all: the scrim tap, Escape and Android Back
@@ -1793,8 +1887,9 @@ export function SettingsPanel({
         {/* ── THE PINNED FOOT — the information lines, and nothing else (Round 26, the owner's
             call: the five buttons moved up to head the Per-preset section, so the foot that once
             took ~217 of a 390×844 phone's 760px panel is three short lines). Contact; then
-            Storage used, with Changelog at the right; then Last Updated, with Check for updates at
-            the right. It stays pinned because each line is something to SEE at any scroll
+            Storage used; then Last Updated, with Check for updates at the right — and Changelog at
+            the right end of the Contact line, or of the Storage used line when the Contact line has
+            no room for it (changelogOnContact, which measures it). It stays pinned because each line is something to SEE at any scroll
             position — the Changelog dot above all, the second stage of the update breadcrumb the
             gear's dot starts, and Storage used, which the owner asked to be always visible
             (Round 24).
@@ -1823,14 +1918,21 @@ export function SettingsPanel({
           data-drag-stay
           className="popover-sticky-footer elev-shadow-up pt-3 px-4 border-t border-(--bd-500-20) text-[0.6875rem] text-(--tx-300-60) space-y-0.5"
         >
-          <div>
-            Contact:{' '}
-            <a
-              href="mailto:dayoftheweekcalculation@gmail.com"
-              className="underline break-all select-text rounded-md px-1 -mx-1"
-            >
-              dayoftheweekcalculation@gmail.com
-            </a>
+          {/* CONTACT — with Changelog at the line's right end when the whole line fits
+              (changelogOnContact). Alone, it is a flex row like the others, so every line is exactly
+              as tall as its items and the gaps between the lines stay equal. The address breaks
+              anywhere (break-all) only in a window too narrow for it alone. */}
+          <div ref={contactLineRef} className={changelogOnContact ? FOOTER_META_ROW_CLASS : 'flex'}>
+            <span>
+              Contact:{' '}
+              <a
+                href="mailto:dayoftheweekcalculation@gmail.com"
+                className="underline break-all select-text rounded-md px-1 -mx-1"
+              >
+                dayoftheweekcalculation@gmail.com
+              </a>
+            </span>
+            {changelogOnContact && changelogLink}
           </div>
           {/* HOW FULL THE DEVICE'S ROOM FOR THE APP IS (store/storageUsage) — always shown, and a
               tap opens the breakdown (components/StorageUsagePopup, App's). The figure is the
@@ -1841,8 +1943,9 @@ export function SettingsPanel({
               not be measured — there is no honest percentage without one. From the warning line up
               it wears the warning colour (index.css's .storage-warn), with the words for it for a
               screen reader — colour alone says nothing to one.
-              It shares its line with Changelog, which FOOTER_META_ROW_CLASS anchors at the right. */}
-          <div className={FOOTER_META_ROW_CLASS}>
+              Changelog shares its line, at the right, whenever the Contact line has no room for it
+              (changelogOnContact); alone, it is a flex row like the others. */}
+          <div className={changelogOnContact ? 'flex' : FOOTER_META_ROW_CLASS}>
             <button
               type="button"
               onClick={openStorageUsage}
@@ -1859,42 +1962,14 @@ export function SettingsPanel({
               )}
               {storageWarning && <span className="sr-only">, almost full</span>}
             </button>
-            {/* Changelog wears the TRAILING UpdateDot (`trailing`) until its first tap after a build change — the
-                second stage of the breadcrumb the gear's dot starts. ⚠ Since 2026-08-10 that dot
-                appears only when the changelog actually GAINED something, so an internal deploy
-                lights the gear and leaves this one dark.
-                ⚠ ITS BOX IS ITS TEXT (Round 26): the dot HANGS past the end of the word, out of flow
-                (UpdateDot's `trailing`, index.css), so the link's right edge — the edge the line
-                anchors at the right — is the word's, level with Check for updates' below it, and
-                lighting the dot cannot shift the line. It used to keep a slot in flow for the dot,
-                which stood the word ~6px left of the line below.
-                Round 8 rebuilt that marker: a text link reserves no room for the gear's corner
-                badge, so the round-6 shared recipe put the dot on top of the word. The link is an
-                inline-flex row now — the text in its own span, with the underline ON that span,
-                and the marker hanging from it out of flow, where no underline reaches. Being
-                aria-hidden, the marker needs the sr-only word beside it to reach a screen reader,
-                which is also the only update signal left once the gear's dot has been retired.
-                ⚠ That word carries its own COMMA rather than the gear's "(update)" parenthetical:
-                the name-from-content algorithm trims each child's text before joining them, so a
-                leading space is dropped and the two would run together ("Changelog(update)"). A
-                printing separator is the only one that survives the join. */}
-            <button
-              type="button"
-              onClick={openChangelog}
-              className="inline-flex items-center select-none rounded-md px-1 -mx-1"
-            >
-              <span className="underline relative">
-                Changelog
-                <UpdateDot placement="trailing" lit={changelogDot} />
-              </span>
-              {changelogDot && <span className="sr-only">, update</span>}
-            </button>
+            {!changelogOnContact && changelogLink}
           </div>
           {/* THE BUILD STAMP, with Check for updates at the line's right end — the stamp says
               which copy you have, the button asks whether there is a newer one. The stamp is the
-              widest of the four items and the only one whose width changes (a different date, a
-              different Date Format); it grows from the left edge it is anchored to. */}
-          <div className={FOOTER_META_ROW_CLASS}>
+              only item in the foot whose width changes (a different date, a different Date
+              Format); it grows from the left edge it is anchored to. Its width is the foot's, and
+              nothing in it moves, so it is the room changelogOnContact watches. */}
+          <div ref={stampLineRef} className={FOOTER_META_ROW_CLASS}>
             <span>
               Last Updated:{' '}
               {(() => {

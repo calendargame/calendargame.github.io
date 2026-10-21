@@ -73,16 +73,20 @@ export const NOT_OFFERED_BTN_CLASS = 'opacity-60 cursor-not-allowed'
 export const RESET_STATS_BTN_CLASS =
   'w-full px-3 py-1.5 rounded-xl btn-solid border border-transparent text-sm font-medium'
 // ── THE ⚙ FOOT'S TWO-ITEM LINES ─────────────────────────────────────────────────────────────
-// The pinned foot of the ⚙ panel is three information lines (Round 26): Contact; Storage used with
-// Changelog at the right; Last Updated with Check for updates at the right. The last two are this
-// token, and it is a named token because it carries an argument.
+// The pinned foot of the ⚙ panel is three information lines (Round 26): Contact; Storage used; Last
+// Updated with Check for updates at the right — and Changelog at the right end of the Contact line
+// when that whole line fits, else of the Storage used line (components/SettingsPanel's
+// changelogOnContact measures it, in the device's font). Every line with two items is this token
+// (a line with one is a plain flex row), and it is a named token because it carries an argument.
 //
 // ⚠ THE ~4px RING-CLEARANCE RULE: every foot text link wears `rounded-md px-1 -mx-1` — the
 // padding gives the press-drag ring 4px of breathing room around the glyphs, and the equal
-// negative margin cancels it so the TEXT keeps its exact flow position. So a row's margin boxes
-// ARE its text boxes, and a 12px gap between them leaves 12 − 4 − 4 = 4px between the rings the
-// padding draws. gap-x-3 is that 12px, and it is the FLOOR between the two items — the free space
-// only ever widens it.
+// negative margin cancels it so the TEXT keeps its exact flow position. Except on one side: a
+// line's LAST item has the auto left margin below in place of its -mx-1, so its left padding stays
+// in flow — at the floor, its text starts 12 + 4 = 16px after the first item's, and the two rings
+// the padding draws are 12 − 4 = 8px apart. gap-x-3 is that 12px, and it is the FLOOR between the
+// two items — the free space only ever widens it. (SettingsPanel's changelogOnContact counts the
+// link's width the same way.)
 //
 // THE RIGHT ANCHOR is the last child's auto left margin (`[&>:last-child]:ml-auto`), written here
 // so the rule lives once and no item has to carry it: the first item sits hard left, the second
@@ -91,9 +95,10 @@ export const RESET_STATS_BTN_CLASS =
 //
 // ⚠ THE ONE CASE: A LINE TOO NARROW FOR ITS PAIR. At every phone size both lines hold their pair
 // on one line (tests/browser/settingsFoot sweeps it, with the text made a tenth wider to stand for
-// the iPhone's wider font), but a window narrower than any phone and as tall as one — an iPad's
-// 320px-wide Slide Over — cannot fit "Last Updated: …" beside "Check for updates" at the root size
-// that height gives. Dropping flex-wrap would make that line run out of the card;
+// the iPhone's wider font, and in a wide font) — Changelog only ever joins the line it fits, and
+// the Contact line is the one that lets it go — but a window narrower than any phone and as tall
+// as one (an iPad's 320px-wide Slide Over) cannot fit "Last Updated: …" beside "Check for updates"
+// at the root size that height gives. Dropping flex-wrap would make that line run out of the card;
 // wrapping is the honest answer, and three things keep it looking like the rest of the foot:
 //   • gap-y-0.5 — the wrapped line sits the foot's own line spacing (its space-y-0.5) below the
 //     first, not the 12px the column gap would give it. Round 25's foot wore a single gap-3, and

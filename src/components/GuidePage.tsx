@@ -1281,25 +1281,25 @@ export default function GuidePage({
           little later finds it.
         </p>
         <p>
-          To see what an update actually changed, the <b>Changelog</b> link — at the right-hand end
-          of the <b>Storage used</b> line at the foot of the ⚙ panel, with Check for updates under
-          it — opens a plain-words list of what recent updates changed, each entry dated and listed
-          newest first — the dates use the numeric form of your selected format, and the list
-          scrolls within the popup once it grows long. Its heading also carries the app&apos;s{' '}
-          <b>version number</b>, dimmed in the top-right corner — that is the one to quote if you
-          ever need to say exactly which copy of the app you have. Each dated entry covers a whole
-          day: if a day brought more than one update, that day's changes are gathered under the one
-          date. The list shows the ten most recent days that had an update — anything older than
-          that is no longer listed. After an update, a small <b>light-blue dot</b> points the way
-          there: it appears in the top-right corner of the gear button (⚙) until you open the menu,
-          and just after the Changelog link's own text until the first time you open the changelog.
-          The one beside Changelog appears only when this list has actually gained something since
-          you last saw it, so it never sends you to something you have already read; the gear's dot
-          marks every update either way. The gear's dot is separate from the small violet bar that
-          marks modified settings (see the Save Defaults section), and the two can show at once. The
-          gear&apos;s dot has one other colour: <b>amber</b> means this device is running short of
-          room for the app (see Saved Progress), not an update — and if both are true at once, it is
-          amber.
+          To see what an update actually changed, the <b>Changelog</b> link at the foot of the ⚙
+          panel — at the right end of the Contact line, or of the <b>Storage used</b> line when the
+          Contact line has no room — opens a plain-words list of what recent updates changed, each
+          entry dated and listed newest first — the dates use the numeric form of your selected
+          format, and the list scrolls within the popup once it grows long. Its heading also carries
+          the app&apos;s <b>version number</b>, dimmed in the top-right corner — that is the one to
+          quote if you ever need to say exactly which copy of the app you have. Each dated entry
+          covers a whole day: if a day brought more than one update, that day's changes are gathered
+          under the one date. The list shows the ten most recent days that had an update — anything
+          older than that is no longer listed. After an update, a small <b>light-blue dot</b> points
+          the way there: it appears in the top-right corner of the gear button (⚙) until you open
+          the menu, and just after the Changelog link's own text until the first time you open the
+          changelog. The one beside Changelog appears only when this list has actually gained
+          something since you last saw it, so it never sends you to something you have already read;
+          the gear's dot marks every update either way. The gear's dot is separate from the small
+          violet bar that marks modified settings (see the Save Defaults section), and the two can
+          show at once. The gear&apos;s dot has one other colour: <b>amber</b> means this device is
+          running short of room for the app (see Saved Progress), not an update — and if both are
+          true at once, it is amber.
         </p>
         <Subhead>The book and contact</Subhead>
         <p>
@@ -2881,9 +2881,10 @@ export default function GuidePage({
           above it do. They scroll with the list. The foot of the menu stays put, in three short
           lines: your Contact email; then <b>Storage used</b> — how much of this device&apos;s room
           for the app is in use, as a percentage to one decimal place (a dash if the app could not
-          measure the device), and a tap on it opens the breakdown (see Saved Progress) — with the{' '}
-          <b>Changelog</b> link at the right; then the Last Updated timestamp, with{' '}
-          <b>Check for updates</b> at the right.
+          measure the device), and a tap on it opens the breakdown (see Saved Progress); then the
+          Last Updated timestamp, with <b>Check for updates</b> at the right. The <b>Changelog</b>{' '}
+          link is at the right end of the Contact line, or of the Storage used line when the Contact
+          line has no room.
         </p>
         <p>
           Each of those three buttons greys out whenever pressing it would do nothing — there is
