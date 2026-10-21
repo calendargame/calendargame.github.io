@@ -4,8 +4,9 @@
 // the test site's address (and a dev server), so even a build of it served anywhere else is today's
 // app. Once he has picked, the pick is built in for good and ALL of this goes: this file, its section
 // in components/SettingsPanel, the DESIGN TRIALS block in index.css, the trial class on the
-// manager's ✕, tests/designTrials.dom.test.jsx, and the saved key on test-site devices (a one-line
-// removal in the cleanup, which reads it once and deletes it).
+// manager's ✕, tests/designTrials.dom.test.jsx, the trial filter in tests/sessionOnlyOutline.dom,
+// and the saved key on test-site devices (a one-line removal in the cleanup, which reads it once
+// and deletes it).
 //
 // Each trial is a value on <html> (data-trial-*), which index.css keys the alternatives to, so a
 // switch repaints at once with no component knowing which look is on.

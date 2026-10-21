@@ -360,7 +360,12 @@ describe('the outline costs no layout', () => {
     expect(frame.border).toMatch(/dashed/) // dashed — the keyboard's focus ring is solid
     expect(frame['border-radius']).toBe('inherit')
     // …and every rule with the class in its selector is one of the three above: ONE frame shape.
-    const selectors = [...css.matchAll(/\n([^\n{}]*session-only[^\n{}]*)\{/g)].map((m) => m[1])
+    // (⚠ TEMPORARY: the test site's stats-frame trial, lib/designTrials, keyed to a value on <html>
+    // that only the test site and a dev server ever set. It goes, with this filter, once the owner
+    // has picked.)
+    const selectors = [...css.matchAll(/\n([^\n{}]*session-only[^\n{}]*)\{/g)]
+      .map((m) => m[1])
+      .filter((s) => !s.startsWith(':root[data-trial-stats='))
     expect(selectors.sort()).toEqual(
       ['.panel.session-only,.session-only>.panel', '.session-only', '.session-only::after'].sort(),
     )
