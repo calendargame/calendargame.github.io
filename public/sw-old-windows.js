@@ -19,12 +19,11 @@
 // list is written there; the reloads come from the 'activated' state change and from the windows' asks.
 // ★ THE LIST IS KEPT IN IndexedDB, not in memory: the browser stops an idle worker whenever it likes, and
 // the windows still on the list must be found by whichever start of the worker hears the next ask.
-// ⚠ IT REACHES ONLY THIS WORKER'S OWN WINDOWS. The live site and the test site share one origin (one
-// IndexedDB) but not one scope: each looks only at the windows it controls, and keeps its list under its
-// own scope. One crossing, harmless: the live site's scope (`/`) holds the test site's address too, so a
-// test-site page loaded before its own worker was active is controlled by the live worker - and a live
-// update reloads it, once. There is no loop: the list is written only at a takeover, and a window
-// reloaded is a new window, off it (the test site's own worker controls it from then on).
+// ⚠ IT REACHES ONLY THIS WORKER'S OWN WINDOWS: it looks only at the windows it controls, and keeps its
+// list under its own scope - so two workers on one origin (one IndexedDB) never touch each other's. (The
+// live site and the test site were two such workers on calendargame.app until Round 27, when the test
+// site moved to a domain of its own; src/lib/oldTestSite.ts removes the old one's list by this key.)
+// There is no loop: the list is written only at a takeover, and a window reloaded is a new window, off it.
 // ⚠ WHAT A RELOAD CANNOT KEEP: changes a full device refused, which that window was holding in memory to
 // save when there is room (store/storageHealth). The worker cannot see them, and a window of the version
 // before cannot be asked; the text that promises the reload (How to Play, the changelog) says so.

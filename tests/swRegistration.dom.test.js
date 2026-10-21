@@ -31,11 +31,13 @@ let register
 // copy of sw.ts — the module registers at import time, so each case needs its own copy
 // (vi.resetModules, the observabilityGate.dom pattern). Awaiting the import is not enough: the
 // reporting happens in a .then/.catch off the register() promise, so let the microtasks drain too.
-const loadSwWith = async (impl, controller = null) => {
+// `registrations` is what getRegistrations() finds: the test site's old worker is cleared from it
+// (lib/oldTestSite.ts) at the same import.
+const loadSwWith = async (impl, controller = null, registrations = []) => {
   register = vi.fn(impl)
   Object.defineProperty(navigator, 'serviceWorker', {
     configurable: true,
-    value: { register, controller },
+    value: { register, controller, getRegistrations: vi.fn(async () => registrations) },
   })
   vi.resetModules()
   await import('../src/sw.js')
@@ -155,6 +157,34 @@ describe('the asks to reload the windows of the version before', () => {
   it('asks nothing of a window no worker controls yet - and does not throw', async () => {
     await loadSwWith(async () => ({ update: vi.fn().mockResolvedValue(undefined) }))
     window.dispatchEvent(new Event('focus'))
+    expect(reports()).toEqual([])
+  })
+})
+
+// Round 27: the test site's OLD address (calendargame.app/test_version/) — its worker is cleared from the
+// device at every open. What is cleared, and what never is, is tests/oldTestSite.test.js's; this is
+// that sw.ts does it, alongside registering, and quietly.
+describe('the test site’s old worker', () => {
+  const ok = async () => ({ update: vi.fn().mockResolvedValue(undefined) })
+
+  it('is unregistered at the same import — and the live worker beside it is not', async () => {
+    // (this page's own origin, as on the live site: the old address is a path of it)
+    const live = { scope: new URL('/', location.origin).href, unregister: vi.fn() }
+    const old = { scope: new URL('/test_version/', location.origin).href, unregister: vi.fn() }
+    await loadSwWith(ok, null, [live, old])
+    expect(old.unregister).toHaveBeenCalledTimes(1)
+    expect(live.unregister).not.toHaveBeenCalled()
+    expect(register).toHaveBeenCalledTimes(1)
+    expect(reports()).toEqual([])
+  })
+
+  it('is cleared quietly: a failure is neither reported nor thrown (the next open finishes it)', async () => {
+    const old = {
+      scope: new URL('/test_version/', location.origin).href,
+      unregister: vi.fn().mockRejectedValue(new Error('busy')),
+    }
+    await loadSwWith(ok, null, [old])
+    expect(old.unregister).toHaveBeenCalledTimes(1)
     expect(reports()).toEqual([])
   })
 })

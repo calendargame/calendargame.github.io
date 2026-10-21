@@ -1,4 +1,5 @@
 import { captureError } from './observability/sentry'
+import { removeOldTestSite } from './lib/oldTestSite'
 
 // sw.ts — PWA service-worker registration (auto-update-on-open).
 //
@@ -117,6 +118,18 @@ navigator.serviceWorker
   .catch((error) => {
     captureError(error, { where: 'sw-register' })
   })
+
+// The test site's OLD address (calendargame.app/test_version/, until Round 27): its worker and caches,
+// cleared from this device if it ever had them (lib/oldTestSite.ts says why, and what is left alone).
+// Quietly: nothing here is the player's, and a failure is finished by the next open, which looks again.
+// (Caches and IndexedDB can be missing where workers are not — an insecure context, a locked-down
+// browser — and then there is nothing of theirs to clear.)
+removeOldTestSite({
+  origin: location.origin,
+  serviceWorker: navigator.serviceWorker,
+  caches: typeof caches === 'undefined' ? undefined : caches,
+  indexedDB: typeof indexedDB === 'undefined' ? undefined : indexedDB,
+}).catch(() => {})
 
 // The asks (see the bullet above). Sent to the worker controlling this window - the new version's, once
 // it has taken over; before then, a worker without the handler drops the message. Nothing comes back.

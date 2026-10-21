@@ -28,6 +28,7 @@ import { CHANGELOG } from './src/changelog.ts'
 import { checkChangelogStamp, describeChangelogStampMismatch } from './scripts/changelogStamp.mjs'
 import { readBuildNumber } from './scripts/buildNumber.mjs'
 import { SITES, TEST_SITE } from './src/sites.ts'
+import { OLD_TEST_SITE_NAVIGATION } from './src/lib/oldTestSite.ts'
 
 // Ceiling on Vitest's worker pool — see the long note at `test.maxWorkers` below for why the
 // uncapped default is dangerous rather than merely slow. Clamped to at most 8 and never above what
@@ -529,6 +530,12 @@ export default defineConfig(({ command, mode }) => ({
         // Round 26: every window of the version before comes onto the new one (public/sw-old-windows.js
         // says how) - a script of the worker's own, loaded with it.
         importScripts: ['sw-old-windows.js'],
+        // The test site's OLD address (calendargame.app/test_version/ until Round 27) is GitHub's
+        // permanent redirect to the test site now. The worker answers every other navigation in its
+        // scope with the app (offline, the point of it), and the live worker's scope '/' holds that
+        // address too — so without this it would answer the old address with the LIVE app from its
+        // cache, and the redirect would never be reached. Permanent; src/lib/oldTestSite.ts says why.
+        navigateFallbackDenylist: [OLD_TEST_SITE_NAVIGATION],
       },
       manifest: webManifest,
       // The SW never runs in dev (keeps HMR clean) — offline is verified against a production

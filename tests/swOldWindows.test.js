@@ -1,94 +1,10 @@
 // swOldWindows — THE WORKER BRINGS EVERY WINDOW OF THE VERSION BEFORE ONTO ITS OWN (public/sw-old-windows.js,
 // Round 26). The file runs inside a service worker, so here it runs in a fresh script context with a
-// fake worker scope around it: the windows (`clients`), its own state, its messages, and an IndexedDB
-// that keeps what is written to it across a "restart" of the worker (a second run of the file). What a
-// real browser does with it - the activation, the reloads - is the browser lane's
-// (tests/browser/oldWindows.browser.ts), in Chromium and WebKit.
+// fake worker scope around it (tests/helpers/oldWindowsWorker.js). What a real browser does with it -
+// the activation, the reloads - is the browser lane's (tests/browser/oldWindows.browser.ts), in
+// Chromium and WebKit.
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { runInNewContext } from 'node:vm'
-
-const SOURCE = readFileSync(join(__dirname, '..', 'public', 'sw-old-windows.js'), 'utf8')
-
-// An IndexedDB of one object store, enough for the file's get and put. Requests and transactions
-// complete in later microtasks, as the real ones do.
-function fakeIndexedDB() {
-  const stores = new Map()
-  return {
-    stores,
-    open() {
-      const open = {}
-      queueMicrotask(() => {
-        const fresh = stores.size === 0
-        open.result = {
-          createObjectStore: (name) => stores.set(name, new Map()),
-          close() {},
-          transaction(name) {
-            const tx = {}
-            tx.objectStore = () => {
-              const store = stores.get(name)
-              return {
-                get: (key) => ({ result: store.get(key) }),
-                put: (value, key) => (store.set(key, structuredClone(value)), { result: key }),
-              }
-            }
-            queueMicrotask(() => queueMicrotask(() => tx.oncomplete?.()))
-            return tx
-          },
-        }
-        if (fresh) open.onupgradeneeded?.()
-        open.onsuccess()
-      })
-      return open
-    },
-  }
-}
-
-const windowOf = (id, visibilityState = 'visible', focused = false) => ({
-  id,
-  url: `https://calendargame.app/#${id}`,
-  visibilityState,
-  focused,
-  navigated: 0,
-  navigate() {
-    this.navigated++
-    return Promise.resolve(this)
-  },
-})
-
-// One start of the worker: the file run against `windows` and `idb`, on `hostname`.
-function startWorker({ windows, idb, hostname = 'calendargame.app', scope = '/' }) {
-  const listeners = {}
-  const own = { state: 'activating', listeners: [] }
-  own.addEventListener = (_type, fn) => own.listeners.push(fn)
-  const self = {
-    location: { hostname },
-    registration: { scope: `https://${hostname}${scope}` },
-    serviceWorker: own,
-    addEventListener: (type, fn) => (listeners[type] ??= []).push(fn),
-    clients: { matchAll: async () => windows.filter((w) => !w.closed) },
-  }
-  runInNewContext(SOURCE, { self, indexedDB: idb, Promise, Set, Array, queueMicrotask })
-  const fire = async (type, data, source) => {
-    const waits = []
-    for (const fn of listeners[type] ?? []) fn({ data, source, waitUntil: (p) => waits.push(p) })
-    await Promise.all(waits)
-  }
-  return {
-    takeOver: () => fire('activate'),
-    activated: async () => {
-      own.state = 'activated'
-      own.listeners.forEach((fn) => fn())
-      for (let i = 0; i < 50; i++) await Promise.resolve() // (the look it starts is not awaited)
-      await fire('message', { type: 'NOTHING' }) // (and a look queued after it has finished)
-    },
-    ask: (source = null, extra = {}) =>
-      fire('message', { type: 'SWEEP_OLD_WINDOWS', ...extra }, source),
-  }
-}
-const listIn = (idb, scope = 'https://calendargame.app/') =>
-  idb.stores.get('kv')?.get(`old-windows ${scope}`)
+import { fakeIndexedDB, windowOf, startWorker, listIn } from './helpers/oldWindowsWorker.js'
 
 describe('the windows of the version before', () => {
   it('are written down at the takeover - every window open then, and only those', async () => {
@@ -128,9 +44,8 @@ describe('the windows of the version before', () => {
     expect(listIn(idb)).toEqual([])
   })
 
-  // ★ NO LOOP - which matters for the one crossing the scopes allow: a test-site page the live worker
-  // controls is reloaded at a live update, once. A window reloaded is off the list, and the list is
-  // written only at a takeover, so however many asks follow, nothing is reloaded twice.
+  // ★ NO LOOP. A window reloaded is off the list, and the list is written only at a takeover, so
+  // however many asks follow, nothing is reloaded twice.
   it('each window is reloaded at most once per takeover, however many asks follow', async () => {
     const idb = fakeIndexedDB()
     const windows = [windowOf('away', 'hidden'), windowOf('later')]
@@ -182,7 +97,9 @@ describe('the windows of the version before', () => {
     }
   })
 
-  // The live site and the test site share one origin, so one IndexedDB: each worker keeps its own list.
+  // One IndexedDB per origin, one list per worker's scope. Until Round 27 the live site's worker and the
+  // test site's ('/test_version/') shared calendargame.app; src/lib/oldTestSite.ts removes the old
+  // one's list by exactly this key (tests/oldTestSite.test.js).
   it('a worker at another scope keeps a list of its own, and never touches this one’s', async () => {
     const idb = fakeIndexedDB()
     const live = [windowOf('live', 'visible', true)]
