@@ -10,7 +10,7 @@ test-results
 # Dependencies
 node_modules
 
-# The ~1,900-line App lives in main.tsx — dense, hand-tuned code (legacy style:
+# The App (a long file) lives in main.tsx — dense, hand-tuned code (legacy style:
 # semicolons + 4-space indent) intentionally NOT auto-formatted: reflowing it would
 # bury its history in a giant diff for no real gain. The extracted modules
 # (src/lib, src/components, src/engine, src/store) + tests + configs ARE formatted.
