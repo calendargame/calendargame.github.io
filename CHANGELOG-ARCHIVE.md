@@ -14,6 +14,10 @@ lives with the data, in the charter comment at the top of `src/changelog.ts`.
 
 ## Retired entries
 
+### 2026-09-05
+
+- Nothing you can see changed this time — just work underneath to keep things running smoothly.
+
 ### 2026-08-10
 
 - This list now shows a version number in its top right corner, next to "What's new" — useful if you are ever asked which copy of the app you have.

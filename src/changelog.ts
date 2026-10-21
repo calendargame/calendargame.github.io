@@ -100,6 +100,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-21',
+    items: [
+      'In How to Play, the title of a section you are reading down now stays pinned under the bar as the top of its card: rounded corners and the whole top edge, all of it showing just under the bar, with nothing showing through beside the corners as the text slides underneath. When you reach the end of the section, the card’s rounded bottom closes up under the title as it slides away.',
+    ],
+  },
+  {
     date: '2026-10-20',
     items: [
       'In the ⚙ menu, Save Defaults, Reset Settings, Full Reset, View Saved Defaults, and Clear Saved Defaults are now the first thing under Per-preset, and scroll with the settings, so the list has much more room. The part that stays put at the bottom is three short lines: your Contact email, then Storage used, then Last Updated with Check for updates. The Changelog is at the right end of the Contact line, or of the Storage used line when the Contact line has no room.',
@@ -299,14 +305,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Fixed: in Blitz, the time boxes stop responding to taps once a round has ended, which is what MoX already did.',
     ],
   },
-  {
-    date: '2026-09-05',
-    items: [
-      'Nothing you can see changed this time — just work underneath to keep things running smoothly.',
-    ],
-  },
   // ★ THE ARRAY IS AT TEN, so every new day retires the oldest into CHANGELOG-ARCHIVE.md (the
-  // ten-entry rule in the charter above). The most recent: adding 2026-10-15 retired 2026-08-10.
+  // ten-entry rule in the charter above). The most recent: adding 2026-10-21 retired 2026-09-05.
 ]
 
 // Who is told which key this file has just written or removed (the header says why).

@@ -436,8 +436,9 @@ input,textarea{user-select:text;-webkit-user-select:text}
    ~0.234px low, leaving a sub-pixel band painted by neither — which is what a hairline of the
    previous panel's border showed through.
    z-index:2 on BOTH says the order out loud, the same in every engine: the strips are over the
-   page, every section header included (.guide-head, below, is 1) — a header that is not docked is
-   page content, and softens at the edges like the text round it. */
+   page, every How to Play card included (.guide-sec, below, is a stacking context of its own, so
+   its header and foot are ordered inside it) — a header that is not docked is page content, and
+   softens at the edges like the text round it. */
 .doc-fade-top{position:fixed;top:var(--bar-h);left:0;right:0;height:var(--fade-h);z-index:2;pointer-events:none;opacity:var(--shade,1);background:linear-gradient(to bottom,var(--bg1),transparent)}
 .doc-fade-bottom{position:fixed;bottom:0;left:0;right:0;height:var(--fade-h);z-index:2;pointer-events:none;opacity:var(--shade,1);background:linear-gradient(to top,var(--bg1),transparent)}
 /* --guide-panel-gap — the vertical gap between How-to-Play accordion panels, and the ONE home
@@ -467,6 +468,34 @@ input,textarea{user-select:text;-webkit-user-select:text}
    The gap was there to hide the bottom edge of the section above, and flush hides it too — it is
    simply further behind the bar. */
 #appScroll{scroll-padding-top:var(--bar-h)}
+/* A HOW TO PLAY SECTION IS A CARD WHOSE TOP TRAVELS WITH ITS HEADER. While you read down an open
+   section its header DOCKS under the fixed bar (components/GuidePage), and the owner's rule for how
+   it looks there: exactly the top of its card, pinned as high as it can go with none of that top
+   cut off — the rounded corners, the whole top border, and nothing showing through the corners —
+   whether it got there by being opened, by scrolling, or by the keyboard, and for as long as the
+   section's text scrolls up beneath it. A top border drawn by the wrapper cannot do that: it
+   scrolls away under the bar with the wrapper, and the docked header is left with a square edge.
+   So the card is drawn by three pieces, each where it has to be:
+     • the WRAPPER (.guide-sec) is the card's middle: its fill and its two side borders, straight,
+       all the way down. The side borders are inset shadows, not borders, so the header can be the
+       wrapper's full width and draw its own sides over them (a border would sit outside the
+       header's box, where nothing the header draws can reach).
+     • the HEADER (.guide-head) is the card's top: its rounded corners, its top border, and its
+       sides, drawn along its own top edge wherever the stick has carried it.
+     • the FOOT (.guide-foot) is the card's bottom: the bottom border and its rounded corners.
+   No piece paints a translucent colour over another's (the themes' border and fill colours are
+   translucent, so a second coat would show as a darker line): wherever two pieces meet, the one on
+   top starts from the page colour and lays the card's own fill and border over it, so every pixel
+   of the card is the same three layers — border over fill over page — whoever drew it.
+   isolation keeps the pieces' order — the text, then the header (1), then the foot (2) — inside the
+   card, so the guide's two fades (.doc-fade-*, above, at 2) stay over the whole card like any
+   other page content. padding-bottom is the bottom border's row, which the foot draws: the header can be
+   carried down as far as the content box reaches, just inside that border, as it could when the
+   wrapper drew it (GuidePage's headerDockGeometry reads it as the section's floor). */
+.guide-sec{position:relative;isolation:isolate;padding-bottom:1px;background:var(--panel-bg);box-shadow:inset 1px 0 var(--panel-bd),inset -1px 0 var(--panel-bd)}
+/* The panel's text: the usual 4 spacing steps in from the card's side borders, which are the
+   wrapper's own outer pixel (not a border it is laid out inside), so one pixel more. */
+.guide-body{padding-inline:calc(var(--spacing) * 4 + 1px)}
 /* .guide-head — a How-to-Play section header, which DOCKS flush under the fixed bar while its own
    section's content scrolls beneath it (components/GuidePage). Every header carries
    it, open or not, so the header is the same element in both states and nothing about it changes
@@ -483,20 +512,36 @@ input,textarea{user-select:text;-webkit-user-select:text}
      • ONE LINE TO REST ON, three ways there. That same line is where a section you OPEN is
        brought to rest (GuidePage glides the header's top onto it) and where a header you Tab to
        from above lands (#appScroll's scroll-padding-top for one partly under the bar, lib/barLine
-       for one wholly above it). So opening a section puts its header exactly where scrolling would
-       have docked it: flush against the bar, the section's own top border tucked behind the bar,
-       and nothing moves when you then start to scroll. It is not the only place a header can rest:
-       a header you Tab to from BELOW the line stays where the browser brings it, and a closed
-       header scrolls away with the page like any other content.
-     • the fill is the panel's own (--panel-bg) composited over the page (--bg1), which is exactly
-       what the wrapper shows behind a transparent header at rest — no visible change there — but
-       OPAQUE, so text scrolling under a docked header cannot show through it.
+       for one wholly above it). The header's top IS its card's top border, so on the line the
+       card's top sits flush under the bar with every pixel of it showing — as high as it can go
+       without any of it cut off — and nothing moves when you then start to scroll. It is not the
+       only place a header can rest: a header you Tab to from BELOW the line stays where the
+       browser brings it, and a closed header scrolls away with the page like any other content.
+     • THE CARD'S TOP, DRAWN BY THE HEADER: the header's own fill is the PAGE colour (--bg1), and
+       on it ::after draws the card's top — the panel's fill, its border along the top and down
+       both sides, and the card's two rounded corners. Outside those corners the page colour shows,
+       exactly as it does above any card, so text scrolling up under a docked header is hidden
+       there too; and the panel's fill over the page is exactly what the wrapper shows below the
+       header — no visible seam — but OPAQUE, so nothing shows through. The button's border-radius
+       is there for the keyboard's ring, below, which follows it; it rounds the button's own fill
+       too, so ::before puts the page colour back in the two corners it cuts away — a strip one
+       radius tall, the page colour over the page colour everywhere but there. ⚠ NOT A STRIP AS
+       TALL AS THE HEADER: one opaque layer covering the whole header made Chromium on Windows
+       draw the title with ClearType (subpixel colour fringes) as soon as the header was opened or
+       docked, while every other line of text on the page stayed greyscale (measured, Round 28). Both
+       pseudo-elements are at z-index -1: over the button's fill, under its title.
+       Its padding is the card's: the usual space (3 and 4 spacing steps) inside the border, plus the
+       border's own pixel at the top and sides, so the title sits exactly where it sat when the
+       wrapper drew the border (the panel's text, .guide-body, likewise).
+     • clip-path KEEPS ITS SHADOW ON THE CARD. The shadow it wears while docked (below) is the
+       app's edge shadow, which spreads a few pixels sideways as well as down; on the bar, which is
+       the screen's width, that goes nowhere, but a docked header is a card's width, and its shadow
+       fell on the page beside the card (measured: up to 4% darker, 4px out, in the light themes).
+       The clip is the header's own sides — and the bottom left open, a screen's height down, more
+       than any shadow reaches. It used to be the wrapper's overflow clip that did this, before
+       the header drew the card's edges itself.
      • z-index:1 PUTS A HEADER OVER ITS OWN SECTION'S CONTENT, whatever that content is — the
-       text that slides under it while it is docked — AND UNDER THE GUIDE'S TWO FADES
-       (.doc-fade-*, above, at 2), open or closed alike. A header that is not docked is page
-       content, and its title softens at the top and bottom edges with the panel border beside
-       it. A DOCKED header is not faded for a different reason altogether: the top fade is off
-       while it is docked (the hand-off above), so there is nothing to lift it over.
+       text that slides under it while it is docked — and under the card's foot (below, at 2).
      • --shade:0 is its resting shadow strength, overriding @property's initial 1 (which is for a
        boundary with no writer at all). GuidePage writes the live value onto the OPEN section's
        header only. ONE SHADOW, UNDER WHICHEVER EDGE THE TEXT IS SLIDING BENEATH: while a header is
@@ -505,27 +550,45 @@ input,textarea{user-select:text;-webkit-user-select:text}
        boundary shadow — and the bar above it wears none, and the page's top fade is off with it;
        with no header docked the bar's shadow and that fade are what the scroll position makes
        them and the header's shadow is 0. lib/guideDock is that rule, and proves the two shadows
-       are never on together. A closed header never has content under it and rests at 0.
-     • A DOCKED HEADER DRAWS ITS SECTION'S TOP BORDER ITSELF (the [data-docked] rule below). That
-       border is the wrapper's, so once the section has scrolled up under the bar it is behind the
-       bar too, and a docked header used to meet the bar with no edge of its own (the owner's
-       report). From the pixel of scroll in which the border goes behind the bar, the header draws
-       a 1px line along its own top in the border's colour — square-cornered, the wrapper's side
-       borders running on down beside it — so the edge stays flush against the bar. It is the same
-       colour on the same ground (--panel-bd over the panel's fill over the page), so it reads as
-       the border itself. Only then: a header any lower still has the real border showing above
-       it, and a second line would double it. GuidePage switches it, on its section's place and
-       never its shadow (lib/guideDock's THE DOCKED HEADER'S OWN TOP LINE): a section just opened
-       is docked with nothing under it yet and wears the line with no shadow.
-   The wrapper's rounded corners still clip it, via overflow:clip there — hidden would make the
-   wrapper a scroll container of its own, and a sticky box sticks to its NEAREST scroll container. */
-.guide-head{position:sticky;top:0;z-index:1;background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1);--shade:0}
-/* The docked header's top line: the panel border's own width (.panel) and colour. */
-.guide-head[data-docked]::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:var(--panel-bd);pointer-events:none}
-/* The keyboard's focus ring on a header (THE KEYBOARD FOCUS RING, below) sits 5px in: the header is a
-   square-cornered button inside a wrapper that clips to rounded corners, and a ring any nearer the
-   edge has its own corners cut off by them. */
-.guide-head{--kbd-ring-offset:-5px}
+       are never on together. A closed header never has content under it and rests at 0. */
+.guide-head{position:sticky;top:0;z-index:1;background:var(--bg1);clip-path:inset(0 0 -100vh 0);padding:calc(var(--spacing) * 3 + 1px) calc(var(--spacing) * 4 + 1px) calc(var(--spacing) * 3);border-radius:var(--radius-2xl) var(--radius-2xl) 0 0;--shade:0}
+.guide-head::before,.guide-head::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none}
+.guide-head::before{bottom:auto;height:var(--radius-2xl);background:var(--bg1)}
+.guide-head::after{background:var(--panel-bg);border:1px solid var(--panel-bd);border-bottom:0;border-radius:inherit}
+/* .guide-foot — THE CARD'S BOTTOM: its bottom border and two rounded corners, drawn over everything
+   else in the card (z-index 2, over the header) because the header can be carried down into them:
+   once a section's end arrives under a docked header, the header rides up under the bar on it, and
+   its square bottom would otherwise be drawn across the card's rounded corners. The foot is the
+   card's last radius-and-a-pixel, rounded like the card. Over its inside it draws nothing — the
+   header's title, its shadow, and the text show there as they would anywhere — and it lays four
+   coats along its edge:
+     • its box-shadow, in the PAGE colour, from the card's outer edge outward: it covers whatever the
+       header or the wrapper put outside the card's curve (the wrapper is square; the card is not).
+       A shadow is never drawn under its own box, and a spread one follows the curve exactly, with
+       no seams. It is pushed DOWN by exactly its spread, so its top edge is the foot's own top:
+       nothing above the foot — the card's side borders, the text — is ever touched, and no clip is
+       needed (one was tried: its edge, at a fraction of a pixel, let a faint line of the shadow
+       through right across the card). Spread s pushed down s still reaches the wrapper's square
+       corner when s is at least a quarter radius; a third is used. Beside and below the card it is
+       page colour on page, and any of it that reaches the next card is under that card, which is
+       drawn after this one. (It was a thick page-coloured border first: a browser joins a border's
+       bottom and side along a diagonal at the corner, and the join showed as a faint hairline.)
+     • its own border, in the page colour: the base under the card's edge, so the two coats on it
+       start from the page whatever is under the foot (the wrapper's side borders run on down
+       beneath it, and a second coat of a see-through border reads as a brighter line);
+     • ::before, the panel's fill, one pixel wide along the card's edge;
+     • ::after, the panel's border on that fill: the card's bottom border, and its corners. */
+.guide-foot{--guide-foot-out:calc(var(--radius-2xl) / 3);position:absolute;z-index:2;pointer-events:none;left:0;right:0;bottom:0;height:calc(var(--radius-2xl) + 1px);border:1px solid var(--bg1);border-top:0;border-radius:0 0 var(--radius-2xl) var(--radius-2xl);box-shadow:0 var(--guide-foot-out) 0 var(--guide-foot-out) var(--bg1)}
+.guide-foot::before,.guide-foot::after{content:"";position:absolute;top:0;left:-1px;right:-1px;bottom:-1px;border:1px solid;border-top:0;border-radius:inherit}
+.guide-foot::before{border-color:var(--panel-bg)}
+.guide-foot::after{border-color:var(--panel-bd)}
+/* The keyboard's focus ring on a header (THE KEYBOARD FOCUS RING, below) sits 6px in from the
+   header's edges — 6px inside the card's top and sides, where it has always sat — and follows the
+   header's rounded top (the button's own border-radius, above) on a curve 6px tighter. On a closed
+   card it is 7px above the card's bottom edge, one more than before: the header now ends just
+   inside the bottom border's row (.guide-sec's padding), where it used to end just inside a border
+   on every side. */
+.guide-head{--kbd-ring-offset:-6px}
 /* --shade — how strongly a boundary asserts itself, 0…1 (round 10 item B). It is the scroller's
    distance from that edge, measured in px and divided by --shade-ramp (the app's one "you are
    near a boundary" distance — the two-names note at --fade-h, above, says why it is not the

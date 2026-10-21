@@ -124,6 +124,16 @@ const OWNER_RULES = [
     why: 'the same ring, in Gecko',
   },
   {
+    selector: '.guide-sec',
+    declares: { 'box-shadow': 'inset 1px 0 var(--panel-bd),inset -1px 0 var(--panel-bd)' },
+    why: 'BORDERS: a How to Play card’s two side borders, drawn inside its box so its header can be the full width and draw its own sides over them',
+  },
+  {
+    selector: '.guide-foot',
+    declares: { 'box-shadow': '0 var(--guide-foot-out) 0 var(--guide-foot-out) var(--bg1)' },
+    why: 'a COAT of page colour outside a How to Play card’s rounded bottom corners, covering what is square beneath them; pushed down by its spread so nothing above the foot is touched',
+  },
+  {
     selector: '.dot-btn.drag-target',
     declares: { 'box-shadow': '0 0 0 2px var(--drag-ring)' },
     why: 'a RING: the press-drag target ring on a round answer dot, which follows the circle where an outline is square',

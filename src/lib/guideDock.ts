@@ -12,10 +12,9 @@
 //   • while no header is docked, the bar's shadow is whatever the page's scroll position makes it,
 //     exactly as on every other screen, and the header wears none.
 //
-// This file is that decision — and the docked header's own top line (THE DOCKED HEADER'S OWN TOP
-// LINE, below), which answers to the same geometry — and nothing else: pure arithmetic over five
-// numbers read off the screen, so the hand-off can be proved for every position without a layout
-// engine (jsdom has none). The component measures and writes; it decides nothing.
+// This file is that decision and nothing else: pure arithmetic over five numbers read off the
+// screen, so the hand-off can be proved for every position without a layout engine (jsdom has
+// none). The component measures and writes; it decides nothing.
 //
 // ── THE THREE DISTANCES ─────────────────────────────────────────────────────────────────────
 // All in px, all in viewport coordinates, all read in the same frame:
@@ -134,30 +133,15 @@ export const DOCK_SETTLE_PX = 1
 // than they can disagree by and far less than anyone can see.
 export const DOCK_LINE_BAND_PX = 0.5
 
-// ── THE DOCKED HEADER'S OWN TOP LINE ────────────────────────────────────────────────────────
-// A section's top border belongs to its wrapper, not to its header, so once the section has scrolled
-// up under the bar that border is behind the bar too — and a docked header showed no top edge at
-// all (the owner's report). So from the pixel of scroll in which the border goes behind the bar, the
-// header draws a line of its own in the border's place (index.css's .guide-head[data-docked]). The
-// border has gone exactly when the header's natural spot — just inside it — is at or above the
-// line; a header any lower is not docked, and the border is still there to see, so drawing a line
-// too would double it. Asked of the header's PLACE, never of its shadow: a section just opened is
-// docked with nothing under it yet, and wears its line with no shadow at all.
-// The allowance is one layout unit (1/64px, the grid both engines lay out on): two fractional
-// rectangles describing one edge can read that far apart.
-export const DOCK_EDGE_PX = 1 / 64
-export const edgeBehindBar = (g: HeaderDockGeometry): boolean =>
-  g.naturalTop <= g.lineY + DOCK_EDGE_PX
-
 export interface HeaderDockGeometry {
   /** The bar's underside — the line a header docks against. */
   lineY: number
   /** The open header's rectangle, top and bottom. */
   headerTop: number
   headerBottom: number
-  /** Where the header's top would be with no stick: its section's top edge, inside the border. */
+  /** Where the header's top would be with no stick: its section's top edge. */
   naturalTop: number
-  /** The lowest the header's bottom can reach: its section's bottom edge, inside the border. */
+  /** The lowest the header's bottom can reach: its section's bottom edge, just inside the bottom border. */
   floorY: number
 }
 

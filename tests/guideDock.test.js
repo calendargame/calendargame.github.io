@@ -18,8 +18,6 @@ import {
   NO_DOCK,
   DOCK_SETTLE_PX,
   DOCK_LINE_BAND_PX,
-  edgeBehindBar,
-  DOCK_EDGE_PX,
 } from '../src/lib/guideDock.js'
 
 const RAMP = 24
@@ -441,41 +439,5 @@ describe('RELEASING — a closed header hands its shadows back in step', () => {
   it('progress outside 0…1 is held at the ends', () => {
     expect(releaseShades(docked, -1)).toEqual(docked)
     expect(releaseShades(docked, 2)).toEqual(NO_DOCK)
-  })
-})
-
-describe('edgeBehindBar — the docked header draws its section’s top border from the pixel it goes', () => {
-  // The line under the bar at 70; the header's natural spot (just inside its section's top border).
-  const at = (naturalTop) => ({
-    lineY: 70,
-    headerTop: 70,
-    headerBottom: 125,
-    naturalTop,
-    floorY: 900,
-  })
-  it('is on from the moment the border is behind the bar: at the line, and above it', () => {
-    expect(edgeBehindBar(at(70))).toBe(true)
-    expect(edgeBehindBar(at(69.6))).toBe(true)
-    expect(edgeBehindBar(at(-400))).toBe(true)
-  })
-  it('is off while any of the border can still be seen — a second line would double it', () => {
-    expect(edgeBehindBar(at(70 + 2 * DOCK_EDGE_PX))).toBe(false)
-    expect(edgeBehindBar(at(70.5))).toBe(false)
-    expect(edgeBehindBar(at(300))).toBe(false)
-  })
-  it('allows one layout unit between two rectangles describing one edge, and no more', () => {
-    expect(edgeBehindBar(at(70 + DOCK_EDGE_PX))).toBe(true)
-  })
-  it('answers to the place, not the shadow: a header just opened, nothing under it, is docked', () => {
-    // headerTop === naturalTop: depth 0, so the header casts no shadow — and still wears its line.
-    expect(
-      edgeBehindBar({
-        lineY: 70,
-        headerTop: 69.8,
-        headerBottom: 124.8,
-        naturalTop: 69.8,
-        floorY: 900,
-      }),
-    ).toBe(true)
   })
 })

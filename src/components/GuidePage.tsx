@@ -32,7 +32,6 @@ import {
   arrivingShades,
   NO_DOCK,
   DOCK_LINE_BAND_PX,
-  edgeBehindBar,
   type Arrival,
   type DockShades,
   type HeaderDockGeometry,
@@ -80,10 +79,10 @@ const headerDomId = (id: string) => `guide-head-${id}`
 // headerDockGeometry — the open header measured against its own section and against the line, in
 // one read: the five numbers lib/guideDock turns into the two shadow strengths. `lineY` is the
 // caller's (the bar's underside, in viewport y); the rest come off two rectangles.
-// The wrapper's border is what separates its edge from where the header can actually be — the
-// header's natural spot is just INSIDE the top border, and the lowest its bottom can reach is just
-// inside the bottom one. clientTop is that border's width; .panel draws the same border on every
-// side, so it is the bottom's width too.
+// The header's natural spot is the wrapper's top (the header draws the card's top border itself),
+// and the lowest its bottom can reach is the bottom of the wrapper's content box: just inside the
+// bottom border's row, which is the wrapper's bottom padding (index.css's .guide-sec). Where no
+// stylesheet is served (jsdom) there is no padding to read, and the floor is the wrapper's bottom.
 function headerDockGeometry(id: string, lineY: number): HeaderDockGeometry | null {
   const wrapper = document.getElementById(sectionDomId(id))
   const header = document.getElementById(headerDomId(id))
@@ -94,8 +93,8 @@ function headerDockGeometry(id: string, lineY: number): HeaderDockGeometry | nul
     lineY,
     headerTop: h.top,
     headerBottom: h.bottom,
-    naturalTop: w.top + wrapper.clientTop,
-    floorY: w.bottom - wrapper.clientTop,
+    naturalTop: w.top,
+    floorY: w.bottom - (parseFloat(getComputedStyle(wrapper).paddingBottom) || 0),
   }
 }
 
@@ -162,17 +161,6 @@ function anyPanelFolding(): boolean {
 function headerPinDepth(id: string): number {
   const g = headerDockGeometry(id, NaN)
   return g ? Math.max(0, g.headerTop - g.naturalTop) : 0
-}
-
-// writeDocked — the docked header's own top line (lib/guideDock's THE DOCKED HEADER'S OWN TOP LINE;
-// index.css's .guide-head[data-docked] draws it), on exactly while `g` says its section's own top
-// border is behind the bar. Two writers, one at a time per header: the dock tracker for the OPEN
-// header, and a header's release while it lets go of its dock — so the line stays where the
-// border is hidden for the length of the fold, under the page's top fade as that comes back, and
-// goes when the release is over (by then the fade is drawn over it in full). Everything that puts
-// a header at rest puts it out.
-const writeDocked = (header: HTMLElement, g: HeaderDockGeometry | null): void => {
-  header.toggleAttribute('data-docked', g !== null && edgeBehindBar(g))
 }
 
 // foldClock — HOW FAR THROUGH ITS MOTION THIS TAP'S FOLD IS, 0…1, asked once a frame by everything
@@ -404,11 +392,12 @@ export function GuideSection({
   const motionVar =
     durationMs == null ? undefined : ({ '--expander-ms': `${durationMs}ms` } as CSSProperties)
   return (
-    // overflow-clip, not overflow-hidden: both round the corners off the header's opaque fill, but
-    // `hidden` would also make this wrapper a scroll container, and the header's sticky pin
-    // (.guide-head, index.css) answers to its NEAREST scroll container — it would pin against this
-    // unscrolling box, i.e. never. `clip` clips without becoming one, so the pin reaches #appScroll.
-    <div id={sectionDomId(id)} className="rounded-2xl panel overflow-clip">
+    // The card is drawn in three pieces (index.css's .guide-sec says why): this wrapper is its
+    // middle, the header its top — which travels with the header when it docks — and the foot,
+    // last, its bottom. Nothing here may clip: `overflow:hidden` would make the wrapper a scroll
+    // container, and the header's sticky pin answers to its NEAREST one — it would pin against
+    // this unscrolling box, i.e. never.
+    <div id={sectionDomId(id)} className="guide-sec">
       <button
         type="button"
         id={headerDomId(id)}
@@ -424,9 +413,10 @@ export function GuideSection({
           if (selectionSuppressesToggle(window.getSelection(), e.currentTarget)) return
           onToggle(id)
         }}
-        // guide-head is the sticky dock and its opaque fill; elev-shadow-down is the docked header's
-        // shadow, held at --shade 0 until GuidePage's dock tracker says text is under it.
-        className="guide-head elev-shadow-down w-full text-left px-4 py-3 flex items-center justify-between"
+        // guide-head is the sticky dock and the card's top, drawn opaque (its padding is in
+        // index.css, which says why); elev-shadow-down is the docked header's shadow, held at
+        // --shade 0 until GuidePage's dock tracker says text is under it.
+        className="guide-head elev-shadow-down w-full text-left flex items-center justify-between"
       >
         <span className="text-sm font-semibold text-(--tx-50) select-text-fine">{title}</span>
         {/* The ▼ and the body below are on the root's scale, pinned to a standard phone: N px at
@@ -455,11 +445,12 @@ export function GuideSection({
       <Expander open={isOpen} durationMs={durationMs ?? undefined}>
         <div
           id={panelDomId(id)}
-          className="px-4 pb-4 pt-1 text-[calc(13rem/16.458)] text-(--tx-100-90) leading-relaxed space-y-2 select-text"
+          className="guide-body pb-4 pt-1 text-[calc(13rem/16.458)] text-(--tx-100-90) leading-relaxed space-y-2 select-text"
         >
           {children}
         </div>
       </Expander>
+      <span aria-hidden="true" className="guide-foot" />
     </div>
   )
 }
@@ -707,7 +698,6 @@ export default function GuidePage({
     for (const [header, release] of releasesRef.current) {
       release.cancel()
       writeShade(header, NO_DOCK.header)
-      writeDocked(header, null)
     }
     releasesRef.current.clear()
     paintBarShare()
@@ -868,8 +858,6 @@ export default function GuidePage({
       const shades = arriving && geometry ? arrivingShades(arriving.arrival, place) : place
       openShadesRef.current = shades
       writeShade(header, shades.header)
-      // The line answers to where the header IS, never to where it will rest.
-      writeDocked(header, geometry)
       share.tracked = shades.barYield
       paintBarShare()
     }
@@ -900,10 +888,7 @@ export default function GuidePage({
       stopExtent()
       trackerRef.current = null
       openShadesRef.current = NO_DOCK
-      if (!releases.has(header)) {
-        writeShade(header, NO_DOCK.header)
-        writeDocked(header, null)
-      }
+      if (!releases.has(header)) writeShade(header, NO_DOCK.header)
       share.tracked = NO_DOCK.barYield
       paintBarShare()
     }
@@ -1018,18 +1003,8 @@ export default function GuidePage({
         // take) so is its last.
         const release = { strength: from.header, share: from.barYield, cancel: () => {} }
         releases.set(closingHeader, release)
-        const closingId = open
         release.cancel = startShadeRelease(from, clock, (shades, done) => {
           writeShade(closingHeader, shades.header)
-          writeDocked(
-            closingHeader,
-            done || !scroller
-              ? null
-              : headerDockGeometry(
-                  closingId,
-                  scroller.getBoundingClientRect().top + readBarHeight(getComputedStyle(scroller)),
-                ),
-          )
           release.strength = shades.header
           release.share = shades.barYield
           if (done) releases.delete(closingHeader)
@@ -1148,16 +1123,15 @@ export default function GuidePage({
         // docH; it was named when the document was the scroller and its test pins the name.)
         docH: scroller.scrollHeight,
         // The tapped HEADER's natural top in the SCROLLER's content space: the wrapper's viewport y
-        // plus its top border (the header sits just inside it), minus the scroller's own viewport
-        // y, plus how far the scroller has already been scrolled. The header's top, not the
-        // wrapper's, is what has to land on the line: that is the edge the stick holds there, so a
-        // section you open comes to rest on the very pixel it docks at — its border tucked behind
+        // (the header is the wrapper's top: it draws the card's top border itself), minus the
+        // scroller's own viewport y, plus how far the scroller has already been scrolled. The
+        // header's top is what has to land on the line: that is the edge the stick holds there, so a
+        // section you open comes to rest on the very pixel it docks at — its card's top flush under
         // the bar, as it is whenever the header is docked. (The scroller's own y was structurally 0
         // while the document scrolled, and #appScroll is `absolute inset-0` so it is 0 today too,
         // but that is a layout choice rather than a definition, and the general form costs one
         // rect read.)
-        headerDocTop:
-          tappedRect.top + tapped.clientTop - scroller.getBoundingClientRect().top + scrollY,
+        headerDocTop: tappedRect.top - scroller.getBoundingClientRect().top + scrollY,
         // EVERY panel still to fold away, this tap's and any an earlier tap left folding
         // (lib/accordionMotion says why both): a panel above the tapped header pulls it up by its
         // collapse, and one below only shortens the page. The tapped section's own panel sits BELOW
@@ -1445,15 +1419,16 @@ export default function GuidePage({
           <li>
             While you read down a long section, its title stays docked right under the bar at the
             top — the same spot a section you open comes to rest in — so you can always see which
-            section you&apos;re in and tap it closed from anywhere in it. A docked title keeps its
-            section&apos;s top edge along its top, flush against the bar, as though that edge had
-            stayed with it. The title picks up a soft shadow only once the text starts scrolling
-            underneath it, and loses it again when you scroll back up; while a title is docked, the
-            bar&apos;s own shadow steps aside for it, so the shadow is always under whichever edge
-            the text is sliding beneath. The soft fade at the top of this page steps aside with it —
-            a docked title is never faded — and returns as the title leaves. Closing a section from
-            its docked title leaves the title right where it is while the section folds away below
-            it.
+            section you&apos;re in and tap it closed from anywhere in it. A docked title is the top
+            of its section&apos;s card, carried along: the rounded corners and the whole top edge,
+            just under the bar with none of it cut off, and nothing showing through beside the
+            corners as the text slides underneath. The title picks up a soft shadow only once the
+            text starts scrolling underneath it, and loses it again when you scroll back up; while a
+            title is docked, the bar&apos;s own shadow steps aside for it, so the shadow is always
+            under whichever edge the text is sliding beneath. The soft fade at the top of this page
+            steps aside with it — a docked title is never faded — and returns as the title leaves.
+            Closing a section from its docked title leaves the title right where it is while the
+            section folds away below it.
           </li>
           <li>
             The guide holds its place while you're in the app: switch to a mode, play, and come back

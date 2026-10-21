@@ -1314,8 +1314,23 @@ describe('index.css — .guide-head', () => {
     expect(rule).toMatch(/(^|;)top:0(;|$)/)
   })
 
-  it('is opaque — the panel’s fill over the page', () => {
-    expect(rule).toContain('background:linear-gradient(var(--panel-bg),var(--panel-bg)) var(--bg1)')
+  // THE CARD'S TOP, DRAWN BY THE HEADER (index.css says why): the page colour, and on it the
+  // panel's fill with the card's border and rounded corners — so a docked header is the top of its
+  // card, opaque, with the page colour in the corners rather than whatever is scrolling beneath.
+  it('is opaque — the card’s top, the panel’s fill over the page, with the page in its corners', () => {
+    expect(rule).toContain('background:var(--bg1)')
+    expect(rule).toContain('border-radius:var(--radius-2xl) var(--radius-2xl) 0 0')
+    const after = cssCode.match(/^\.guide-head::after\{([^}]*)\}/m)?.[1]
+    expect(after).toContain('background:var(--panel-bg)')
+    expect(after).toContain('border:1px solid var(--panel-bd)')
+    expect(after).toContain('border-bottom:0')
+    expect(after).toContain('border-radius:inherit')
+    // The corners the radius cuts out of the header's own fill get the page colour back from a
+    // strip ONE RADIUS TALL — never the header's whole height (that turned the title ClearType in
+    // Chromium on Windows).
+    const before = cssCode.match(/^\.guide-head::before\{([^}]*)\}/m)?.[1]
+    expect(before).toContain('height:var(--radius-2xl)')
+    expect(before).toContain('background:var(--bg1)')
   })
 
   // ★ NO HEADER IS LIFTED OVER A FEATHER, AND THE DOCKED ONE IS NOT SPARED BY STACKING. The order
@@ -1331,29 +1346,59 @@ describe('index.css — .guide-head', () => {
   it('lifts no header over either feather — a docked header is spared by the hand-off, not by stacking', () => {
     expect(rule).toMatch(/(^|;)z-index:1(;|$)/) // over its own section's content, and no higher
     // …and that is the only stacking any header has: nothing keyed to open, docked, or anything.
-    expect(cssCode.match(/\.guide-head[^{}]*\{[^}]*z-index/g)).toHaveLength(1)
+    // (Its two drawing layers sit under its own title, at -1, and lift nothing.)
+    expect(cssCode.match(/\.guide-head[^{}]*\{[^}]*z-index:(?!-1)/g)).toHaveLength(1)
+    expect(cssCode.match(/\.guide-head[^{}]*\{[^}]*z-index:-1/g)).toEqual([
+      expect.stringMatching(/^\.guide-head::before,\.guide-head::after\{/),
+    ])
     for (const strip of ['top', 'bottom'])
       expect(cssCode.match(new RegExp(`\\.doc-fade-${strip}\\{([^}]*)\\}`))?.[1]).toContain(
         'z-index:2',
       )
   })
 
+  // THE CARD'S BOTTOM, DRAWN BY THE FOOT, over the header when the header is carried into it: the
+  // page colour outside the curve, then the panel's fill and its border along the edge — the same
+  // three layers as every other pixel of the card's edge (tests/browser/guideDocking pins the
+  // pictures; this pins that the border is drawn at all, which a picture of the foot against
+  // itself cannot).
+  it('has a foot that draws the card’s rounded bottom, border and all, over the header', () => {
+    const foot = cssCode.match(/^\.guide-foot\{([^}]*)\}/m)?.[1]
+    expect(foot).toMatch(/(^|;)z-index:2(;|$)/)
+    expect(foot).toContain('border-radius:0 0 var(--radius-2xl) var(--radius-2xl)')
+    expect(foot).toContain('border:1px solid var(--bg1)')
+    expect(cssCode.match(/^\.guide-foot::before\{([^}]*)\}/m)?.[1]).toBe(
+      'border-color:var(--panel-bg)',
+    )
+    expect(cssCode.match(/^\.guide-foot::after\{([^}]*)\}/m)?.[1]).toBe(
+      'border-color:var(--panel-bd)',
+    )
+    const coats = cssCode.match(/^\.guide-foot::before,\.guide-foot::after\{([^}]*)\}/m)?.[1]
+    expect(coats).toContain('border:1px solid')
+    expect(coats).toContain('border-top:0')
+    expect(coats).toContain('border-radius:inherit')
+  })
+
   it('rests shadowless — --shade:0 overrides @property’s visible default', () => {
     expect(rule).toContain('--shade:0')
   })
 
-  it('is carried by every header, whose wrapper CLIPS rather than scrolls', () => {
+  it('is carried by every header, in a card of three pieces that clips nothing', () => {
     const { container } = mount()
     const wrappers = [...container.querySelectorAll('[id^="guide-sec-"]')]
     expect(wrappers.length).toBeGreaterThan(10)
     for (const w of wrappers) {
       const classes = w.className.split(' ')
-      // overflow-hidden would make the wrapper a scroll container, and the pin would stick to it.
-      expect(classes).toContain('overflow-clip')
-      expect(classes).not.toContain('overflow-hidden')
-      expect(w.querySelector('button').className.split(' ')).toEqual(
+      expect(classes).toEqual(['guide-sec'])
+      // Nothing may clip: overflow-hidden would make the wrapper a scroll container, and the pin
+      // would stick to it; and the header draws the card's top over the wrapper's own edge.
+      expect(cssCode.match(/\.guide-sec\{([^}]*)\}/)?.[1]).not.toMatch(/overflow|clip-path/)
+      expect(w.firstElementChild.className.split(' ')).toEqual(
         expect.arrayContaining(['guide-head', 'elev-shadow-down']),
       )
+      // The card's bottom, last, over everything else in it.
+      expect(w.lastElementChild.className).toBe('guide-foot')
+      expect(w.lastElementChild.getAttribute('aria-hidden')).toBe('true')
     }
   })
 })

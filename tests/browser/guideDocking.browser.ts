@@ -10,6 +10,7 @@
 // only where the page comes to rest, compared with where the same taps leave it one at a time.
 import { test, expect, openApp, settled, switchMode, SAME_PX } from './support/app'
 import type { Page } from '@playwright/test'
+import { THEMES } from './support/seeds'
 
 const head = (page: Page, i: number) => page.locator('[data-guide] .guide-head').nth(i)
 
@@ -29,8 +30,8 @@ const read = (page: Page, i: number): Promise<HeaderAtRest> =>
     const wrapper = h.parentElement!
     return {
       offLine: h.getBoundingClientRect().top - line,
-      depth:
-        h.getBoundingClientRect().top - wrapper.getBoundingClientRect().top - wrapper.clientTop,
+      // The header's natural spot is its card's top: it draws the card's top border itself.
+      depth: h.getBoundingClientRect().top - wrapper.getBoundingClientRect().top,
       open: h.getAttribute('aria-expanded') === 'true',
     }
   })
@@ -202,131 +203,200 @@ test('Shift+Tab onto a header already below the line moves nothing', async ({ pa
   expect(await scrollTop(page)).toBe(before)
 })
 
-// THE DOCKED HEADER'S OWN TOP LINE (the owner's report: a docked header showed no top border — the
-// border is its section's, and had gone behind the bar). From the pixel of scroll in which that
-// border goes behind the bar, the header draws a 1px line of its own in the border's place; never
-// before, so the border is never doubled.
-interface TopLine {
-  /** Whether the header draws its own top line. */
-  on: boolean
-  /** The line's box, against the header's. */
-  top: number
-  height: number
-  width: number
-  headerWidth: number
-  colour: string
-  /** The wrapper's own top border colour, and where that border's lower edge is against the line. */
-  borderColour: string
-  borderBelowLine: number
-  fade: number
-  offLine: number
-  headerShade: number
-}
-const topLine = (page: Page, i: number): Promise<TopLine> =>
+// A DOCKED HEADER IS THE TOP OF ITS CARD (the owner's rule, Round 28: "as far up as it can go
+// without any of the top border getting cut off" — the card's rounded top edge, full border and
+// corners, resting just under the bar, with nothing showing through the corners, and keeping that
+// look while the section scrolls beneath it). index.css's .guide-sec says how the card is drawn.
+//
+// Asserted as RELATIONS between pictures taken at rest on the one machine:
+//   • THE TOP OF ITS CARD: the header on the line with its section's text scrolled 200px up beneath
+//     it is the very same picture, pixel for pixel, as the same header on the same line with nothing
+//     beneath it at all — the section's own top, just arrived there. A square corner, a border cut
+//     off by the bar, or a missing one makes the two differ. The docked header's SHADOW is the one
+//     thing meant to differ (lib/guideDock's rule: it is on once text is under the header), so for
+//     this picture it is set to nothing, exactly as the header wears it before any text is under it.
+//   • NOTHING SHOWS THROUGH: docked, the header is the same picture whether the text beneath it is
+//     there or not, its shadow and all.
+//   • THE CARD'S BOTTOM CLOSES OVER IT: with the header carried up by its section's end — its
+//     square bottom down in the card's last radius — the card's two bottom corners are the same
+//     pictures as when the header is far up the screen and only the panel's empty foot is there:
+//     rounded, with the page beyond the curve. Each picture is of the corner's own square (a radius
+//     wide, a radius and the border's row tall), and the two are taken at whole-pixel scroll
+//     positions of one layout, so the corner lands on the same fraction of a pixel in both. They
+//     may differ by 2/255 in a channel and no more: Chromium blends the foot's coats over a header
+//     in a layer of its own and over the panel in the page's, and one pixel half outside the card's
+//     edge comes out a level apart between the two. That is a rounding, not a picture.
+// The ▼ turns over when a section opens or closes, so it is masked out of every picture.
+
+// The header's own box on screen, the line under the bar, and its card's bottom.
+const box = (page: Page, i: number) =>
   head(page, i).evaluate((h) => {
     const sc = document.getElementById('appScroll')!
     const line =
       sc.getBoundingClientRect().top + parseFloat(getComputedStyle(sc).getPropertyValue('--bar-h'))
-    const before = getComputedStyle(h, '::before')
-    const wrapper = h.parentElement!
-    return {
-      on: before.content !== 'none' && before.content !== 'normal',
-      top: parseFloat(before.top),
-      height: parseFloat(before.height),
-      width: parseFloat(before.width),
-      headerWidth: h.getBoundingClientRect().width,
-      colour: before.backgroundColor,
-      borderColour: getComputedStyle(wrapper).borderTopColor,
-      borderBelowLine: wrapper.getBoundingClientRect().top + wrapper.clientTop - line,
-      fade: Number(getComputedStyle(document.querySelector('.doc-fade-top')!).opacity),
-      offLine: h.getBoundingClientRect().top - line,
-      headerShade: Number((h as HTMLElement).style.getPropertyValue('--shade')),
-    }
+    const r = h.getBoundingClientRect()
+    const w = h.parentElement!.getBoundingClientRect()
+    return { line, x: r.left, y: r.top, width: r.width, height: r.height, cardBottom: w.bottom }
   })
 
-for (const theme of ['dusk', 'parchment'] as const) {
-  test(`${theme}: a docked header draws its section's top border flush against the bar, and only while docked`, async ({
-    page,
-  }) => {
-    await openApp(page, { theme })
-    await switchMode(page, 'guide')
+type Clip = { x: number; y: number; width: number; height: number }
+type Box = Awaited<ReturnType<typeof box>>
 
-    // Opened a little under the line: it opens where it stands, its own border showing — no line.
-    await place(page, 5, 120)
-    await head(page, 5).click()
-    await atRest(page)
-    const undocked = await topLine(page, 5)
-    expect(undocked.borderBelowLine, 'its section’s border is in view').toBeGreaterThan(100)
-    expect(undocked.on, 'an undocked header draws no line of its own').toBe(false)
-
-    // Docked, with text under it.
-    await place(page, 5, 0)
-    await page.locator('#appScroll').evaluate((sc) => (sc.scrollTop += 200))
-    await atRest(page)
-    const docked = await topLine(page, 5)
-    expect(Math.abs(docked.offLine), 'the header is held on the line').toBeLessThanOrEqual(0.5)
-    expect(docked.on, 'a docked header draws its top line').toBe(true)
-    expect(docked.top, 'at the header’s top').toBe(0)
-    expect(docked.height, 'one pixel tall').toBe(1)
-    expect(Math.abs(docked.width - docked.headerWidth), 'the header’s whole width').toBeLessThan(
-      SAME_PX,
-    )
-    expect(docked.colour, 'in the border’s own colour').toBe(docked.borderColour)
-    expect(docked.fade, 'with the top fade off').toBe(0)
-    expect(docked.headerShade, 'and the header’s shadow on').toBe(1)
-
-    // The pixel of scroll in which the border goes behind the bar: for every position around it, the
-    // line is on exactly when the border is no longer below the line — never both, never neither.
-    const transition = await head(page, 5).evaluate((h) => {
-      const sc = document.getElementById('appScroll')!
-      const line =
-        sc.getBoundingClientRect().top +
-        parseFloat(getComputedStyle(sc).getPropertyValue('--bar-h'))
-      const w = h.parentElement!
-      return sc.scrollTop + (w.getBoundingClientRect().top + w.clientTop - line)
-    })
-    for (const at of [-2, -1, 0, 1, 2].map((d) => Math.round(transition) + d)) {
-      await page.locator('#appScroll').evaluate((sc, at) => (sc.scrollTop = at), at)
-      await atRest(page)
-      const here = await topLine(page, 5)
-      expect(here.on, `scrolled to ${at}: the line is on exactly when the border has gone`).toBe(
-        here.borderBelowLine <= 1 / 64,
-      )
-    }
-  })
+// The card's two bottom corners, each its own square: a radius wide, a radius and a pixel tall.
+const corners = async (page: Page, i: number, b: Box) => {
+  const r = await head(page, i).evaluate((h) => parseFloat(getComputedStyle(h).borderTopLeftRadius))
+  const y = b.cardBottom - r - 1
+  return Promise.all([
+    page.screenshot({ clip: { x: b.x, y, width: r, height: r + 1 } }),
+    page.screenshot({ clip: { x: b.x + b.width - r, y, width: r, height: r + 1 } }),
+  ])
 }
 
-test('a section opened from above the line comes to rest docked, wearing its line with no shadow', async ({
-  page,
-}) => {
-  await openApp(page)
-  await switchMode(page, 'guide')
-  await place(page, 5, -30)
-  await head(page, 5).evaluate((h) => (h as HTMLElement).click())
-  await atRest(page)
-  const opened = await topLine(page, 5)
-  expect(Math.abs(opened.offLine)).toBeLessThanOrEqual(0.5)
-  expect(opened.on).toBe(true)
-  expect(opened.headerShade, 'nothing is under it yet').toBe(0)
-})
+// The page's own colour, and the colour of one pixel of a picture, both as [r, g, b] as drawn.
+const pageColour = (page: Page) =>
+  page.evaluate(() => {
+    const g = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
+    g.fillStyle = getComputedStyle(document.documentElement).backgroundColor
+    g.fillRect(0, 0, 1, 1)
+    return [...g.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+  })
+const pixelOf = (page: Page, png: Buffer, x: number, y: number) =>
+  page.evaluate(
+    async ([base64, x, y]) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      const g = canvas.getContext('2d', { willReadFrequently: true })!
+      g.drawImage(bitmap, 0, 0)
+      return [...g.getImageData(x, y, 1, 1).data.slice(0, 3)]
+    },
+    [png.toString('base64'), x, y] as const,
+  )
 
-test('closed from its docked header, the header is left on the line without a line of its own, under the fade', async ({
-  page,
-}) => {
-  await openApp(page)
-  await switchMode(page, 'guide')
-  await place(page, 5, 120)
-  await head(page, 5).click()
-  await atRest(page)
-  await place(page, 5, 0)
-  await page.locator('#appScroll').evaluate((sc) => (sc.scrollTop += 200))
-  await atRest(page)
-  expect((await topLine(page, 5)).on).toBe(true)
-  await head(page, 5).click()
-  await expect(head(page, 5)).toHaveAttribute('aria-expanded', 'false')
-  await atRest(page)
-  const closed = await topLine(page, 5)
-  expect(Math.abs(closed.offLine), 'left on the line').toBeLessThan(1)
-  expect(closed.on, 'a closed header is page content: no line of its own').toBe(false)
-  expect(closed.fade, 'and the fade is drawn over it').toBe(1)
-})
+// How many pixels of two same-sized pictures differ by more than `over` (0-255) in any channel.
+// Decoded by the page itself, so the lane needs no image library of its own.
+const differingPixels = (page: Page, a: Buffer, b: Buffer, over: number) =>
+  page.evaluate(
+    async ([a, b, over]) => {
+      const pixels = async (base64: string) => {
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+        const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+        const canvas = document.createElement('canvas')
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        const g = canvas.getContext('2d', { willReadFrequently: true })!
+        g.drawImage(bitmap, 0, 0)
+        return g.getImageData(0, 0, bitmap.width, bitmap.height).data
+      }
+      const [p, q] = [await pixels(a), await pixels(b)]
+      if (p.length !== q.length) return Infinity
+      let n = 0
+      for (let k = 0; k < p.length; k += 4)
+        if (Math.max(...[0, 1, 2].map((c) => Math.abs(p[k + c] - q[k + c]))) > over) n++
+      return n
+    },
+    [a.toString('base64'), b.toString('base64'), over] as const,
+  )
+const picture = (page: Page, i: number, clip: Clip) =>
+  page.screenshot({ clip, mask: [head(page, i).locator('[aria-hidden="true"]')] })
+
+// The panel's text, there or not — nothing else on the page moves.
+const showText = (page: Page, i: number, shown: boolean) =>
+  page
+    .locator('[data-guide] .guide-sec')
+    .nth(i)
+    .locator('[id^="guide-panel-"]')
+    .evaluate((p, shown) => ((p as HTMLElement).style.visibility = shown ? '' : 'hidden'), shown)
+
+for (const theme of THEMES)
+  for (const width of [320, 390, 768, 1280])
+    test(`${theme}, ${width}px: docked, a header is the top of its card — and carried out, the card's bottom closes under it`, async ({
+      page,
+    }) => {
+      await openApp(page, { theme, viewport: { width, height: 800 } })
+      await switchMode(page, 'guide')
+      const i = 5
+      await place(page, i, 120)
+      await head(page, i).click()
+      await expect(head(page, i)).toHaveAttribute('aria-expanded', 'true')
+      await atRest(page)
+
+      // Just arrived: the header's natural spot a fraction above the line, so the stick holds it ON
+      // the line with nothing under it (less than a pixel down its section: no shadow either).
+      await place(page, i, -0.5)
+      await atRest(page)
+      const arrived = await box(page, i)
+      expect(Math.abs(arrived.y - arrived.line), 'on the line').toBeLessThanOrEqual(0.5)
+      expect((await read(page, i)).depth, 'nothing under it yet').toBeLessThan(1)
+      const clip = { x: arrived.x, y: arrived.y, width: arrived.width, height: arrived.height }
+      const top = await picture(page, i, clip)
+      // …whose corners, beyond the curve, are the page: a pixel in from each top corner of the
+      // header's box is well outside the card's rounded corner (a radius in, diagonally, is not).
+      const page0 = await pageColour(page)
+      expect(await pixelOf(page, top, 1, 1), 'the page beyond the top-left corner').toEqual(page0)
+      expect(
+        await pixelOf(page, top, Math.floor(clip.width) - 2, 1),
+        'the page beyond the top-right corner',
+      ).toEqual(page0)
+
+      // Docked, with 200px of the section's text scrolled up beneath it.
+      await page.locator('#appScroll').evaluate((sc) => (sc.scrollTop += 200))
+      await atRest(page)
+      const docked = await box(page, i)
+      expect(Math.abs(docked.y - arrived.y), 'held on the line').toBeLessThan(SAME_PX)
+      expect((await read(page, i)).depth, 'text under it').toBeGreaterThan(150)
+      const withText = await picture(page, i, clip)
+      await showText(page, i, false)
+      await settled(page)
+      expect(await picture(page, i, clip), 'nothing shows through it').toEqual(withText)
+      await showText(page, i, true)
+      await head(page, i).evaluate((h) => (h as HTMLElement).style.setProperty('--shade', '0'))
+      await settled(page)
+      expect(await picture(page, i, clip), 'the same picture: the top of its card').toEqual(top)
+
+      // The panel's empty foot, the header far up the screen: the card's bottom 300px under the line.
+      await page
+        .locator('#appScroll')
+        .evaluate(
+          (sc, by) => (sc.scrollTop += Math.round(by)),
+          docked.cardBottom - docked.line - 300,
+        )
+      await atRest(page)
+      const far = await box(page, i)
+      expect(far.cardBottom - (far.y + far.height), 'the header well away').toBeGreaterThan(200)
+      const farCorners = await corners(page, i, far)
+
+      // Carried up by its section's end: scrolled a little past the point where the section's last
+      // pixel arrives under the header, so the stick holds the header at its section's floor.
+      await page
+        .locator('#appScroll')
+        .evaluate(
+          (sc, by) => (sc.scrollTop += Math.round(by) + 2),
+          far.cardBottom - far.y - far.height,
+        )
+      await atRest(page)
+      const carried = await box(page, i)
+      expect(
+        carried.cardBottom - (carried.y + carried.height),
+        'the header at its section’s floor: the border’s row below it, and no more',
+      ).toBeCloseTo(1, 1)
+      const carriedCorners = await corners(page, i, carried)
+      const r = await head(page, i).evaluate((h) =>
+        parseFloat(getComputedStyle(h).borderTopLeftRadius),
+      )
+      expect(
+        await pixelOf(page, carriedCorners[0], 1, Math.floor(r) - 1),
+        'the page beyond the bottom-left corner, the header’s square one under it',
+      ).toEqual(page0)
+      expect(
+        await pixelOf(page, carriedCorners[1], Math.floor(r) - 2, Math.floor(r) - 1),
+        'the page beyond the bottom-right corner',
+      ).toEqual(page0)
+      for (const side of [0, 1] as const)
+        expect(
+          await differingPixels(page, farCorners[side], carriedCorners[side], 2),
+          `the ${side ? 'right' : 'left'} bottom corner: the card's, over the header`,
+        ).toBe(0)
+    })
