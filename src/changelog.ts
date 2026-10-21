@@ -103,6 +103,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-10-21',
     items: [
       'In How to Play, the title of a section you are reading down now stays pinned under the bar as the top of its card: rounded corners and the whole top edge, all of it showing just under the bar, with nothing showing through beside the corners as the text slides underneath. When you reach the end of the section, the card’s rounded bottom closes up under the title as it slides away.',
+      'On the test site only, a Test-site trials section at the top of the ⚙ menu switches between looks still being chosen: the border of the stats inside Amnesic’s dashed frame (Today, A, B, or C), and the ✕ beside each preset in Manage Presets (a button, or the ✕ on its own).',
     ],
   },
   {

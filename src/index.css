@@ -723,6 +723,26 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .session-only{position:relative;--kbd-ring-offset:-5px}
 .session-only::after{content:"";position:absolute;inset:0;border:1.5px dashed color-mix(in oklab,var(--tx-200-80) 70%,transparent);border-radius:inherit;pointer-events:none}
 .panel.session-only,.session-only>.panel{border-color:transparent}
+/* ⚠ DESIGN TRIALS — TEMPORARY (Round 28). The looks the owner is choosing between on the test site,
+   each keyed to a value lib/designTrials puts on <html> (only on the test site and a dev server, so
+   nowhere else does any of this ever match). lib/designTrials lists everything that goes with this
+   block once he has picked.
+   STATS FRAME (Amnesic's dashed frame, .session-only above). "Today" is the rules above, untouched.
+     A — the strip keeps its whole solid border wherever it is inside the frame: under the dashes
+         (round the strip under Stats Only; along the strip's top and sides under Full) and, under
+         Full, along its bottom above the Best lines.
+     B — under Full, a solid border only where the dashes do not run: the strip's bottom edge,
+         above the Best lines. (Under Stats Only the dashes run all the way round: as Today.)
+     C — under Full, no inner border at all, and the strip's tint fills the whole frame, the Best
+         lines and the gap above them included: the group wears the tint and the strip none, so it
+         is one coat, never two. (Under Stats Only the strip IS the frame: as Today.) */
+:root[data-trial-stats="a"] .panel.session-only,:root[data-trial-stats="a"] .session-only>.panel{border-color:var(--panel-bd)}
+:root[data-trial-stats="b"] .session-only>.panel{border-bottom-color:var(--panel-bd)}
+:root[data-trial-stats="c"] .session-only:has(>.panel){background:var(--panel-bg)}
+:root[data-trial-stats="c"] .session-only>.panel{background:transparent}
+/* DELETE ✕ (components/PresetManager). Plain: the ✕ alone — no border and no fill, at rest or under a
+   pointer — in the same place and with the same room to press as the button had. */
+:root[data-trial-x="plain"] .trial-x,:root[data-trial-x="plain"] .trial-x:hover{border-color:transparent;background:transparent}
 /* ★ THE .2s BACKGROUND FADE — the app's three interactive surfaces (these two + .btn-solid below)
    all carry it, and all three multiply by --motion-scale (round 16) so Reduce Motion makes the
    fade instant. It is DECORATIVE, checked rather than assumed, and the check is worth keeping:

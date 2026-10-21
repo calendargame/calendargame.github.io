@@ -43,6 +43,7 @@ import { installWindowSync } from './store/windowSync.js'
 import { installTabLanding } from './lib/barLine.js'
 import { scrollBoxTo, scrollWindowHome } from './lib/appScroll.js'
 import { readBuildStamp, writeBuildStamp, buildChanged } from './lib/buildStamp.js'
+import { startDesignTrials } from './lib/designTrials.js'
 import { useUpdateCheck } from './components/useUpdateCheck.js'
 import { DEPLOY_TS } from './deployStamp.js'
 import { GEAR_DOT_KEY, CHANGELOG_DOT_KEY, readUpdateDot, markUpdateDot, clearUpdateDot, subscribeUpdateDot, CHANGELOG, changelogChanged, readChangelogSeen, writeChangelogSeen } from './changelog.js'
@@ -2716,6 +2717,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
     const rootEl = typeof document !== "undefined" ? document.getElementById("root") : null;
     if (rootEl) {
       measureStorageLimit();
+      // ⚠ TEMPORARY (lib/designTrials): the test site's design trials, on <html> before the first paint.
+      startDesignTrials();
       void joinSession().finally(()=>createRoot(rootEl).render(<ErrorBoundary><App/></ErrorBoundary>));
     }
 

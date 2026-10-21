@@ -1307,7 +1307,8 @@ export default function PresetManager({
                     aria-label={`Delete ${nameAsDrawn(p.name)}`}
                     aria-disabled={!canDelete || undefined}
                     onClick={() => pressDelete(p.id)}
-                    className={`${ROW_COL.delete} ${DELETE_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS} ${held ? HELD_PIECE_CLASS : ''}`}
+                    // trial-x: ⚠ TEMPORARY (lib/designTrials) — the test site's Button / Plain trial.
+                    className={`${ROW_COL.delete} ${DELETE_BTN_CLASS} trial-x ${canDelete ? '' : NOT_OFFERED_BTN_CLASS} ${held ? HELD_PIECE_CLASS : ''}`}
                   >
                     <DeleteIcon />
                   </button>
