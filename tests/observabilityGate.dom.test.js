@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 //
-// Error reporting must never start on a LOCALLY-SERVED build.
+// Error reporting starts on the two sites' own hostnames (src/sites.ts) and NOWHERE ELSE.
 //
-// `vite preview` (and any headless run pointed at it) serves a real production bundle, so
-// import.meta.env.PROD is TRUE there and main.tsx's build-time gate lets it through. It then
-// initialises against the live DSN, and because the environment tag is derived from the URL PATH
-// (staging is the /test_version/ subpath of the same host), a loopback URL matches neither the live
-// root nor staging and files as 'staging' — i.e. local previews land in the very bucket we read to
-// check a deploy. So initObservability() carries the runtime half of the gate.
+// A built copy of the app is import.meta.env.PROD wherever it is served — `vite preview`, the browser
+// lane, a phone on the laptop's LAN address, a tunnel — so main.tsx's build-time gate lets every one
+// of them through, and each would report into the real project as a visitor, into the very data read
+// to check a deploy. So initObservability() carries the runtime half of the gate: an ALLOW-list of the
+// two hostnames (Round 27; it was a deny-list of the three loopback names, which missed every LAN
+// address and tunnel), and the environment each report is filed under comes from the same row.
 //
 // Harness notes: `started` is module scope, so each case imports a FRESH copy (vi.resetModules +
 // dynamic import — the backButton.dom pattern). jsdom's window.location can't be reassigned in
@@ -73,7 +73,16 @@ afterEach(() => {
 })
 
 describe('observability start gate', () => {
-  for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
+  for (const hostname of [
+    'localhost',
+    '127.0.0.1',
+    '[::1]',
+    '192.168.1.20', // a phone on the laptop's LAN address
+    '10.0.0.5',
+    'quiet-river-1234.trycloudflare.com', // a tunnel to a laptop
+    'calendargame.github.io', // GitHub's own name for the live repo (it redirects, but never serves)
+    'calendargame.app.example.com', // a look-alike
+  ]) {
     it(`refuses to start on ${hostname} — no SDK chunk, no global handlers`, async () => {
       await initFreshOn(hostname)
       expect(sentryClient.startSentry).not.toHaveBeenCalled()
@@ -81,9 +90,15 @@ describe('observability start gate', () => {
     })
   }
 
-  it('still starts on the deployed host — the guard is loopback-only, not a kill switch', async () => {
-    await initFreshOn('calendargame.app')
-    expect(sentryClient.startSentry).toHaveBeenCalledTimes(1)
-    expect(installedBufferingEvents()).toEqual(BUFFERING_EVENTS)
-  })
+  for (const [hostname, environment] of [
+    ['calendargame.app', 'production'],
+    ['test.calendargame.app', 'staging'],
+  ]) {
+    it(`starts on ${hostname}, filed under '${environment}'`, async () => {
+      await initFreshOn(hostname)
+      expect(sentryClient.startSentry).toHaveBeenCalledTimes(1)
+      expect(sentryClient.startSentry).toHaveBeenCalledWith(environment)
+      expect(installedBufferingEvents()).toEqual(BUFFERING_EVENTS)
+    })
+  }
 })

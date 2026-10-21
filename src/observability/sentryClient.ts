@@ -11,25 +11,19 @@
 // the Cloudflare analytics token. Optional later hardening: set the project's "Allowed Domains"
 // inbound filter in Sentry so only our own domains can post events.
 import { init, captureException } from '@sentry/react'
+import type { Site } from '../sites'
 
 const DSN =
   'https://b86e091f9d51aefed301827b113a07ab@o4511521335148544.ingest.us.sentry.io/4511521342160896'
 
-// 'production' ONLY at the apex root. Staging is the /test_version/ subpath on the SAME
-// calendargame.app hostname (so the hostname alone can't distinguish them), and local prod-previews
-// run on localhost — both are 'staging'. The tag lets us filter real-user crashes from our own
-// testing in the dashboard. (If the staging URL ever changes, update the path check here.)
-function sentryEnvironment() {
-  const { hostname, pathname } = window.location
-  return hostname === 'calendargame.app' && !pathname.startsWith('/test_version/')
-    ? 'production'
-    : 'staging'
-}
-
-export function startSentry() {
+// `environment` is the site's own (src/sites.ts: 'production' on the live site, 'staging' on the test
+// site), handed in by ./sentry, which starts the SDK only on one of those two hostnames — so a report
+// is always filed under the site it came from, and the dashboard separates real visitors' crashes
+// from our own testing.
+export function startSentry(environment: Site['environment']) {
   init({
     dsn: DSN,
-    environment: sentryEnvironment(),
+    environment,
     // Privacy-first (matches the cookieless analytics choice): never attach IP, cookies, or user
     // identifiers. The app collects no personal data, so reports carry only technical context.
     sendDefaultPii: false,
