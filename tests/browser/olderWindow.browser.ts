@@ -1,7 +1,7 @@
 // olderWindow — A WINDOW OF THE OLDER VERSION BESIDE A WINDOW OF THIS ONE, ON ONE DEVICE (design-q1-q2.md
 // v4, 14.4 (14)). The older build is the one live while this one was made (support/oldSite), served at
-// `old/` on the same origin, so the two share every saved key exactly as a live tab and a test-site tab
-// do. The older build knows nothing of the windows-in-sync door: it writes its whole copy of a doc
+// `old/` on the same origin, so the two share every saved key exactly as a tab left open across an
+// update and a tab of the new version do. The older build knows nothing of the windows-in-sync door: it writes its whole copy of a doc
 // from what it loaded. What this build's window promises in front of one (section 2.1) is what is
 // asserted here:
 //   G6 - with a new window awake and holding the newest version, an older page's stale copy or its

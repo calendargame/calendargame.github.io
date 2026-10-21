@@ -63,7 +63,7 @@ import { captureError } from './observability/sentry'
 //
 // This whole path is service-worker behaviour that only runs in a real browser with a built SW
 // (devOptions.enabled is false, and jsdom has no SW), so the LIVE behaviour is verified ON-DEVICE on
-// staging. What IS testable — what gets registered, and that every failure mode reports exactly once
+// the test site. What IS testable — what gets registered, and that every failure mode reports exactly once
 // instead of crashing — is tests/swRegistration.dom.test.js, which drives this module directly.
 //
 // No 'serviceWorker' in navigator guard here on purpose: main.tsx's auto-update effect is the sole
@@ -76,8 +76,9 @@ import { captureError } from './observability/sentry'
 // built them (dist/index.js, generateRegisterSW) as `options.buildBase + options.filename` and
 // `options.scope || basePath`, where buildBase and basePath are both Vite's resolved `base` and
 // filename is the default 'sw.js' — i.e. precisely `${BASE_URL}sw.js` and `BASE_URL`. Verified
-// against the BUILT bundle for both bases this app ships from: live '/' → ('/sw.js', scope '/'),
-// staging '/test_version/' → ('/test_version/sw.js', scope '/test_version/'). `type` is 'classic'
+// against the BUILT bundle when this replaced the helper, for the two bases the app then shipped
+// from ('/' → ('/sw.js', scope '/'); the test site's old '/test_version/' → ('/test_version/sw.js',
+// scope '/test_version/')). Both sites build for '/' since Round 27 (src/sites.ts). `type` is 'classic'
 // because the plugin's ternary picks it whenever devOptions.enabled is false; it is also
 // register()'s own default, and it is stated explicitly because generateSW emits a classic script
 // and that must never be silently re-derived. All three are pinned by the test file above.

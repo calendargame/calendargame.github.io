@@ -46,7 +46,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     // The trailing slash matters: a test opens './', which is this address whatever base the build
-    // was made for ('/' for the live site, '/<repo>/' for the test site).
+    // was made for (both sites build for '/' since Round 27; the lane reads it off the build).
     baseURL: `http://${HOST}:${PORT}${builtBase()}`,
     trace: CI ? 'on-first-retry' : 'retain-on-failure',
     // ── ONE FIXED WORLD, so a measurement means the same thing on every run and every machine.

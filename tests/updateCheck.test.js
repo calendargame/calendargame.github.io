@@ -58,20 +58,15 @@ describe('the cache-busting parameter (measured against a real Workbox SW)', () 
 })
 
 describe('buildIdUrl — the identity file, under the app base', () => {
-  it('resolves against the LIVE root and the STAGING subpath', () => {
-    // Staging is a subpath of the same host (calendargame.app/test_version/). A root-absolute URL
-    // would read the APEX build's identity and compare two different sites — staging would report
-    // an update forever, or none, depending on which was newer.
+  it('resolves against the base it is given — the root both sites use, and any other', () => {
+    // Both sites are the root of a domain of their own (src/sites.ts). A base-relative URL is what
+    // keeps the check reading the identity of the site the page came from, whatever base it had.
     expect(buildIdUrl('/', 'abc')).toBe(`/${BUILD_ID_FILE}?${CHECK_PARAM}=abc`)
-    expect(buildIdUrl('/test_version/', 'abc')).toBe(
-      `/test_version/${BUILD_ID_FILE}?${CHECK_PARAM}=abc`,
-    )
+    expect(buildIdUrl('/sub/', 'abc')).toBe(`/sub/${BUILD_ID_FILE}?${CHECK_PARAM}=abc`)
   })
 
   it('never welds the filename onto a base that lost its trailing slash', () => {
-    expect(buildIdUrl('/test_version', 'abc')).toBe(
-      `/test_version/${BUILD_ID_FILE}?${CHECK_PARAM}=abc`,
-    )
+    expect(buildIdUrl('/sub', 'abc')).toBe(`/sub/${BUILD_ID_FILE}?${CHECK_PARAM}=abc`)
   })
 })
 

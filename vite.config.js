@@ -27,6 +27,7 @@ import { verifyDistPrecache, describePrecacheProblems } from './scripts/precache
 import { CHANGELOG } from './src/changelog.ts'
 import { checkChangelogStamp, describeChangelogStampMismatch } from './scripts/changelogStamp.mjs'
 import { readBuildNumber } from './scripts/buildNumber.mjs'
+import { SITES, TEST_SITE } from './src/sites.ts'
 
 // Ceiling on Vitest's worker pool — see the long note at `test.maxWorkers` below for why the
 // uncapped default is dangerous rather than merely slow. Clamped to at most 8 and never above what
@@ -39,20 +40,28 @@ import { readBuildNumber } from './scripts/buildNumber.mjs'
 // this from quietly becoming a CI slowdown the day that number moves.
 const MAX_TEST_WORKERS = Math.max(2, Math.min(8, availableParallelism() - 1))
 
-// GitHub Pages serves the org ROOT page `calendargame.github.io` (and its custom domain
-// calendargame.app) from '/', but every PROJECT repo's Pages site from '/<repo>/'. CI sets
-// GITHUB_REPOSITORY="owner/repo", so deriving the base from it lets ONE codebase deploy correctly to
-// BOTH the live repo and the staging repo (currently `test_version`) — and it stays correct even if
-// the staging repo is renamed later, with no code change. Local builds have no GITHUB_REPOSITORY → '/'.
-const pagesBase = (repository) => {
-  const repo = (repository || '').split('/')[1] || ''
-  return repo && repo !== 'calendargame.github.io' ? `/${repo}/` : '/'
+// WHICH SITE THIS BUILD IS FOR (Round 27, Q1). The two sites are rows of src/sites.ts, and CI names the
+// repository it builds in (GITHUB_REPOSITORY="owner/repo"), so a CI build is the build of that row's
+// site. A LOCAL build (no GITHUB_REPOSITORY) is the TEST site's build — gray, no analytics — so nothing
+// built on a laptop can ever pass for the live site. A CI build in any OTHER repository fails here:
+// there is no third site, and guessing one would publish a build whose link card, analytics, and error
+// reports all name somebody else's address.
+// Both sites are served from the ROOT of a domain of their own, so there is no per-site base path any
+// more (until Round 27 the test site was the /test_version/ path of the live domain; the base was
+// derived from the repository name for that). Exported for tests/sites.test.js.
+export const siteBuiltFor = (repository) => {
+  if (!repository) return TEST_SITE
+  const site = SITES.find((s) => s.repository === repository)
+  if (!site)
+    throw new Error(
+      `site: this build runs in the repository ${JSON.stringify(repository)}, which is neither of the ` +
+        `two sites in src/sites.ts (${SITES.map((s) => s.repository).join(', ')}). Add it there, with ` +
+        `its address, before building for it.`,
+    )
+  return site
 }
-
-// True only for the live production repo's CI build. Used to inject the Cloudflare Web Analytics
-// beacon on PRODUCTION ONLY (calendargame.app) — not the staging repo, not local/dev builds — so our
-// own testing never pollutes the real visitor numbers.
-const isLiveRepo = (repository) => (repository || '').endsWith('/calendargame.github.io')
+// Module scope, like the version check below: an unknown repository fails every command, at once.
+const SITE = siteBuiltFor(process.env.GITHUB_REPOSITORY)
 
 // Cloudflare Web Analytics: privacy-first, cookieless page analytics (no consent banner needed).
 // The site is DNS-only (not proxied through Cloudflare), so Cloudflare can't auto-collect — we inject
@@ -75,8 +84,7 @@ const cfWebAnalytics = () => ({
 // stylesheet blocks FIRST PAINT of the entire document — including the fully-inline-styled #boot
 // splash that exists precisely to cover that wait. This transform rewrites the injected link (matched
 // by PATTERN — the hashed filename is never hardcoded; every attribute, incl. crossorigin and the
-// base-prefixed href, is preserved, so it's correct for both the live '/' and staging '/<repo>/'
-// bases) into the standard preload-swap: first paint is unblocked, and once the CSS file has loaded
+// base-prefixed href, is preserved, so it's correct under any base) into the standard preload-swap: first paint is unblocked, and once the CSS file has loaded
 // the link swaps itself into a real stylesheet and signals the app (window.__cssReady + a window
 // 'app-css-ready' event). App's boot effect waits for that signal before removing #boot — the module
 // script precedes the link so it is NOT CSSOM-blocked, meaning on a service-worker-cached load React
@@ -97,10 +105,10 @@ const bootCssPreload = () => ({
   transformIndexHtml: swapBlockingStylesheet,
 })
 
-// Test/staging gets a GRAY visual variant (the live site stays purple) so the two are distinguishable
+// The test site gets a GRAY visual variant (the live site stays purple) so the two are distinguishable
 // at a glance — the installed-app + browser-tab icons, AND the link-preview (OG) card. The gray assets
 // are pre-generated + committed in design/icons/test-build/ (by build-icons.mjs + build-og.mjs) — NOT
-// in public/, so they never ship to live. For non-live builds this plugin, AFTER VitePWA (enforce
+// in public/, so they never ship to live. For the test site's build this plugin, AFTER VitePWA (enforce
 // 'post'), does two things:
 //   (1) copies the gray assets over the build OUTPUT so the site SERVES gray everywhere — favicon,
 //       apple-touch, the PWA manifest icons, and og-image.jpg (same filenames → index.html + the
@@ -108,11 +116,12 @@ const bootCssPreload = () => ({
 //   (2) CORRECTS the service-worker precache revision for each. vite-plugin-pwa hashes the SOURCE
 //       public/ (purple) file for includeAssets/manifest-icon revisions — computed OUTSIDE workbox
 //       manifestTransforms' reach — so a gray asset would otherwise inherit the PURPLE file's md5 as its
-//       revision. Workbox then sees the SAME revision as the previous/live purple SW and treats it as
-//       unchanged → it keeps serving the cached PURPLE asset (the gray never shows). Rewriting the
-//       revision in sw.js to the GRAY file's md5 makes Workbox re-fetch the gray asset.
-// (The og:image / og:url META is rewritten to the staging URL separately — see testOgMeta below.)
-// Build-only; non-live only (staging + local). Live is entirely untouched (normal purple precache).
+//       revision — one that describes bytes the site does not serve, so a client that once cached
+//       the purple file under it would keep it (the gray never shows; round 7 shipped exactly that).
+//       Rewriting the revision in sw.js to the GRAY file's md5 makes Workbox fetch the gray asset.
+// (The og:image / og:url META is pointed at the test site separately — see testOgMeta below.)
+// Build-only; the test site's build (CI's and every local one). Live is entirely untouched (normal
+// purple precache).
 // (Owner: distinguish test from live, 2026-06-13.)
 // The repo root — this config's own directory. Was written out inline at each of the three uses
 // below until the version read (a fourth) made a name worth having.
@@ -167,15 +176,13 @@ const testIconVariant = () => {
     },
   }
 }
-// Non-live builds: point the OG/Twitter card + canonical URL at the STAGING path so a shared staging
-// link previews the GRAY card (testIconVariant serves the gray og-image.jpg there). index.html hard-
-// codes the live apex (https://calendargame.app/...); on staging the page lives under the repo base
-// (e.g. /test_version/), so rewrite https://calendargame.app/ → https://calendargame.app<base>. Base-
-// driven, so it stays correct if the staging repo is renamed. Live build: not applied (purple, apex).
-const testOgMeta = (base) => ({
+// The test site's build: point the OG/Twitter card at the TEST SITE so a shared test link previews the
+// GRAY card (testIconVariant serves the gray og-image.jpg there). index.html hard-codes the live
+// address (https://calendargame.app/...) because OG requires ABSOLUTE URLs; the test site is its own
+// origin (src/sites.ts), so rewrite one origin to the other. Live build: not applied (purple, live).
+const testOgMeta = (origin) => ({
   name: 'test-og-meta',
-  transformIndexHtml: (html) =>
-    html.replaceAll('https://calendargame.app/', `https://calendargame.app${base}`),
+  transformIndexHtml: (html) => html.replaceAll('https://calendargame.app/', `${origin}/`),
 })
 
 // Every file in a finished build, as forward-slash paths relative to it. Sorted + separator-
@@ -227,7 +234,7 @@ const distFiles = (dir, prefix = '') =>
 //
 // enforce:'post' AND last in the plugin array: it must see
 // the FINAL bytes, after VitePWA has written sw.js and after testIconVariant has swapped in the
-// gray staging icons and corrected their revisions.
+// gray test-site icons and corrected their revisions.
 const buildIdentity = () => {
   let outDir = 'dist'
   return {
@@ -450,9 +457,9 @@ export const webManifest = {
 }
 
 export default defineConfig(({ command, mode }) => ({
-  // Dev/preview serve from '/'. A production `vite build` derives its base from the repo it builds
-  // in (see pagesBase above): '/' for the live org page, '/<repo>/' for the staging project repo.
-  base: command === 'build' ? pagesBase(process.env.GITHUB_REPOSITORY) : '/',
+  // Both sites are the root of a domain of their own (src/sites.ts), and so is every dev server and
+  // preview — one base everywhere, stated rather than left to Vite's default.
+  base: '/',
   // Sentry tree-shaking flags: compile OUT debug logging and all performance-
   // tracing code paths from the lazy error-reporting chunk (we use Sentry for errors only — see
   // src/observability/). This + the static named imports in src/observability/sentryClient.ts keep
@@ -464,8 +471,8 @@ export default defineConfig(({ command, mode }) => ({
     // The deploy stamp (round 16 — see BUILD_TIME / DEV_BUILD_TS above). A real `vite build`
     // gets the instant it started; dev and Vitest get the frozen sentinel. JSON.stringify because
     // `define` substitutes RAW EXPRESSION TEXT, so the quotes have to be part of the value.
-    // Base-independent by construction: this is a timestamp, not a URL, so the live '/' build and
-    // the staging '/<repo>/' build stamp identically (each with its own build's clock).
+    // Site-independent by construction: this is a timestamp, not a URL, so the live and test builds
+    // stamp identically (each with its own build's clock).
     __BUILD_TS__: JSON.stringify(command === 'build' ? BUILD_TIME.toISOString() : DEV_BUILD_TS),
     // The semantic version + the silent build number (see both blocks above). Same mechanism as the
     // stamp, one line each, so there is no second way to get a build-time constant into the app.
@@ -502,8 +509,7 @@ export default defineConfig(({ command, mode }) => ({
     // {type:'SKIP_WAITING'} — a handler generateSW ships natively — and reloads once on
     // controllerchange). This makes updates land cleanly + visibly on open instead of a silent reload,
     // and a background registration.update() fetches the next version so it's ready to apply next launch.
-    // start_url/scope are derived from Vite `base`, so this is correct for both the live root (/)
-    // and the staging project base (/<repo>/). Icons live in public/ (generated
+    // start_url/scope are derived from Vite `base` ('/' on both sites). Icons live in public/ (generated
     // from the W5 master by design/icons/build-icons.mjs); apple-touch + favicon are precached
     // via includeAssets and linked (incl. the dark variant) in index.html.
     VitePWA({
@@ -531,18 +537,19 @@ export default defineConfig(({ command, mode }) => ({
     }),
     // Boot-splash first-paint unblock (see swapBlockingStylesheet above): swap the injected
     // render-blocking stylesheet link to a self-applying preload that signals the app when the CSS
-    // is in. Build-only via apply:'build'; all builds (live + staging + local) get it.
+    // is in. Build-only via apply:'build'; all builds (live + test + local) get it.
     bootCssPreload(),
-    // Gray test/staging visual variant — non-live builds only (staging + local); the live build keeps
-    // the purple public/ assets. testIconVariant (enforce:'post', after VitePWA so sw.js exists) swaps
-    // the gray icons + OG card into the output + fixes their precache revisions; testOgMeta points the
-    // OG/canonical meta at the staging URL so a shared staging link previews the gray card.
-    ...(command === 'build' && !isLiveRepo(process.env.GITHUB_REPOSITORY)
-      ? [testIconVariant(), testOgMeta(pagesBase(process.env.GITHUB_REPOSITORY))]
+    // The gray test visual variant — the test site's build (CI's, and every local one: see SITE
+    // above); the live build keeps the purple public/ assets. testIconVariant (enforce:'post', after
+    // VitePWA so sw.js exists) swaps the gray icons + OG card into the output + fixes their precache
+    // revisions; testOgMeta points the OG meta at the test site so a shared test link previews the
+    // gray card.
+    ...(command === 'build' && SITE.name === 'test'
+      ? [testIconVariant(), testOgMeta(SITE.origin)]
       : []),
-    // Cloudflare Web Analytics beacon — PRODUCTION build only (see cfWebAnalytics + isLiveRepo above),
-    // so the staging repo and local/dev builds never report and the real numbers stay clean.
-    ...(command === 'build' && isLiveRepo(process.env.GITHUB_REPOSITORY) ? [cfWebAnalytics()] : []),
+    // Cloudflare Web Analytics beacon — the LIVE site's build only (see cfWebAnalytics above), so the
+    // test site and local/dev builds never report and the real numbers stay clean.
+    ...(command === 'build' && SITE.name === 'live' ? [cfWebAnalytics()] : []),
     // Bundle analysis (Stage E2): `npm run analyze` (= `vite build --mode analyze`) emits an
     // interactive treemap to dist/stats.html so we can see what's in the JS bundle and catch
     // surprise bloat as the app grows. Gated on the 'analyze' mode so it NEVER runs in a normal

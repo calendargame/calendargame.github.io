@@ -14,9 +14,10 @@
 //    fetch still return 200. What defeats a precache route is a URL the route does not match — a
 //    novel QUERY PARAM. It must not match /^utm_/ or /^fbclid$/, which are Workbox's shipped
 //    ignoreURLParametersMatching defaults and are stripped BEFORE the route is matched (CHECK_PARAM
-//    below, pinned by a test). The URL is built from import.meta.env.BASE_URL because staging is a
-//    SUBPATH (/test_version/) — a root-absolute URL would read the apex build and compare two
-//    different sites.
+//    below, pinned by a test). The URL is built from import.meta.env.BASE_URL, the base the page
+//    was built for ('/' on both sites since Round 27, src/sites.ts), so it always reads the identity
+//    of the site this page came from. (Until then the test site was the /test_version/ path of the
+//    live domain, and a root-absolute URL would have compared it with the live build.)
 //  • ⚠ THE NONCE DOES NOT REACH GITHUB. A LAYER THIS LIST ORIGINALLY MISSED, added 2026-08-10 after
 //    it was measured. Everything above is true of the two caches ON THE DEVICE — the service
 //    worker's precache and the browser's HTTP cache — and the nonce defeats both. It does NOT
@@ -133,7 +134,7 @@ export function makeCheckNonce(now: number = Date.now(), rand: number = Math.ran
 }
 
 // The identity file's URL under the app's base. Vite's BASE_URL always ends in '/', but a caller
-// that trims it must not silently produce 'test_versionbuild-id.txt'.
+// that trims it must not silently produce '/subbuild-id.txt'.
 export function buildIdUrl(base: string, nonce: string): string {
   const root = base.endsWith('/') ? base : `${base}/`
   return `${root}${BUILD_ID_FILE}?${CHECK_PARAM}=${nonce}`

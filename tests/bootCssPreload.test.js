@@ -3,7 +3,7 @@
 // the whole document's first paint — including the inline-styled #boot splash built to cover that
 // exact wait. The build transform must rewrite it into a self-swapping preload that signals the app
 // (window.__cssReady + 'app-css-ready') and keep a <noscript> blocking copy, WITHOUT hardcoding the
-// hashed filename and for both deploy bases ('/' live, '/<repo>/' staging). Driven here on
+// hashed filename and under any base (both sites use '/'; nothing in it may assume so). Driven here on
 // representative built HTML (the real dist output shape, hashed names varied).
 import { describe, it, expect } from 'vitest'
 import { swapBlockingStylesheet } from '../vite.config.js'
@@ -44,13 +44,13 @@ describe('swapBlockingStylesheet (vite bootCssPreload transform)', () => {
     expect(outsideNoscript).not.toContain('rel="stylesheet"')
   })
 
-  it('is base-agnostic: the staging /<repo>/ href passes through untouched', () => {
-    const out = swapBlockingStylesheet(built('/test_version/'))
+  it('is base-agnostic: a non-root href passes through untouched', () => {
+    const out = swapBlockingStylesheet(built('/sub/'))
     expect(out).toContain(
-      '<link rel="preload" as="style" crossorigin href="/test_version/assets/index-w_CPcP2Q.css"',
+      '<link rel="preload" as="style" crossorigin href="/sub/assets/index-w_CPcP2Q.css"',
     )
     expect(out).toContain(
-      '<noscript><link rel="stylesheet" crossorigin href="/test_version/assets/index-w_CPcP2Q.css"></noscript>',
+      '<noscript><link rel="stylesheet" crossorigin href="/sub/assets/index-w_CPcP2Q.css"></noscript>',
     )
   })
 

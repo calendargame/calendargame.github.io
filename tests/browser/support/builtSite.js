@@ -60,10 +60,10 @@ export function assertBuildIsCurrent() {
 }
 
 /**
- * The path the build expects to be served under: '/' for the live site and for a local build,
- * '/<repo>/' for the test site's. Read off the build itself (the manifest's `scope`, which
- * vite-plugin-pwa writes from Vite's `base`) rather than worked out again here, so the lane serves
- * whichever site CI has just built without knowing the rule that named it.
+ * The path the build expects to be served under — '/' for both sites since Round 27, when the test
+ * site moved from the live domain's /test_version/ path to a domain of its own. Read off the build
+ * itself (the manifest's `scope`, which vite-plugin-pwa writes from Vite's `base`) rather than
+ * written down again here, so the lane serves whatever the build was made for.
  */
 export function builtBase() {
   try {

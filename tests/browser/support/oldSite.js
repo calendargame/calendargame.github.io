@@ -1,10 +1,10 @@
 // tests/browser/support/oldSite — AN OLDER BUILD OF THE APP, SERVED BESIDE THE ONE UNDER TEST, on the
-// same origin (design-q1-q2.md v4, 14.4 (14)). Live and the test site share one origin, so a player
-// can have a window of each open at once; and every update leaves, for a while, windows of the
-// version before it. What those older windows do to the newer ones' saved data is the windows-in-sync
-// door's hardest case, and a jsdom test can only replay the bytes an older build was READ to write.
-// So the lane keeps a real one: the build that is live while this one is made, at `<base>old/`,
-// opened in a page of the same browser context as the build under test.
+// same origin (design-q1-q2.md v4, 14.4 (14)). Every update leaves, for a while, windows of the
+// version before it open on the same site (a tab, the installed app). What those older windows do
+// to the newer ones' saved data is the windows-in-sync door's hardest case, and a jsdom test can
+// only replay the bytes an older build was READ to write. So the lane keeps a real one: the build
+// that is live while this one is made, at `<base>old/`, opened in a page of the same browser context
+// as the build under test.
 //
 // ★ IT IS BUILT FROM ITS OWN COMMIT, WITH ITS OWN TOOLS. A git worktree of that commit, its own
 // `npm ci`, and its own vite.config.js (support/buildOldSite.mjs) - so what is served is what that

@@ -130,13 +130,13 @@ jobs:
         run: npm run typecheck
       - name: Build the site
         run: npm run build
-      # Custom domain: the LIVE org repo serves at calendargame.app. A CNAME file in the deployed
-      # artifact makes GitHub Pages set + persist that custom domain across every Actions deploy
-      # (so it can't silently reset). Only the live repo gets it — the staging repo (test_version)
-      # keeps its github.io project URL.
-      - name: Add CNAME for the custom domain (live repo only)
-        if: github.repository == 'calendargame/calendargame.github.io'
-        run: echo 'calendargame.app' > dist/CNAME
+      # ⚠ NO CNAME FILE, on either site, and none is needed (Round 27). Each site's address
+      # (calendargame.app for this repo's live build, test.calendargame.app for the test site's — see
+      # src/sites.ts) is the "Custom domain" in that repository's Settings > Pages, and that setting is
+      # what GitHub serves. GitHub's own docs ("Managing a custom domain for your GitHub Pages site"):
+      # when publishing with a custom Actions workflow, "any existing CNAME file is ignored and is not
+      # required". This step used to write one for the live repo, believing it kept the domain set; it
+      # never did anything.
       # Size budget — fails the deploy if the app JS bundle grows past the gzip ceiling in
       # scripts/check-bundle-size.mjs, so accidental bloat (e.g. a large library) can't ship
       # unnoticed. Intentional growth = bump the budget constant deliberately (shows in the diff).
@@ -199,7 +199,8 @@ jobs:
       # window of the version live while this one was made, on the same origin). Built from its own
       # commit the first time - a git worktree of it (which is one more reason fetch-depth must stay
       # 0), its own `npm ci`, its own Vite, a minute or two - and restored from this cache after that.
-      # Keyed on that commit, on how it is built, and on this repository, whose base it is built for.
+      # Keyed on that commit, on how it is built, and on this repository (its own vite.config builds the
+      # live or the test site's variant from the repository's name, as this one's does).
       - name: Read which older build the lane keeps
         id: oldsite
         run: node --input-type=module -e "const m = await import('./tests/browser/support/oldSite.js'); console.log('commit=' + m.OLD_SITE.commit)" >> "$GITHUB_OUTPUT"
