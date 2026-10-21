@@ -29,6 +29,7 @@ import {
   percentSpoken,
   shorterNamesWouldEndWarning,
   suggestShorterNames,
+  usageRowsShown,
   DOCUMENTED_LIMITS,
   MAX_STORAGE_LIMIT,
   STORAGE_WARN_PERCENT,
@@ -299,13 +300,22 @@ describe('what is filling the device', () => {
     localStorage.setItem('cg-sync-v1|cg-settings-v1~p2', '{"g":"g2","at":{}}')
     // (and the progress doc's records' key, beside its sync key: its Bests' newest versions)
     localStorage.setItem('cg-sync-v1|cg-progress-v1~p2|rec', '{"g":"g2","maps":{}}')
+    localStorage.setItem(
+      'cg-lookup-v1',
+      JSON.stringify({ state: { history: [{ id: 'a', y: 2001, m: 1, d: 1 }] }, version: 1 }),
+    )
     localStorage.setItem('cg-sync-v1|cg-lookup-v1', '{"st":"§1.ab","tomb":[]}')
     localStorage.setItem('cg-sync-v1|cg-nothing-v1', '{}')
     const reading = readStorageUsage(localStorage)
     const row = (kind) => reading.rows.find((r) => r.kind === kind)
     // (the name twice, 7 + 7, of which a one-letter name keeps 1 + 1; and its fingerprint in the key,
-    // R"Weekend" written R\"Weekend\" - 12, of which R\"W\" keeps 6)
-    expect(row('names')).toEqual({ kind: 'names', chars: 14 + 12, spare: 12 + 6 })
+    // R"Weekend" written R\"Weekend\" - 12, of which R\"W\" keeps 6 — all of it preset 1's)
+    expect(row('names')).toEqual({
+      kind: 'names',
+      chars: 14 + 12,
+      spare: 12 + 6,
+      perPreset: [{ presetId: 1, chars: 14 + 12 }],
+    })
     expect(row('preset')).toEqual({
       kind: 'preset',
       presetId: 2,
@@ -316,7 +326,10 @@ describe('what is filling the device', () => {
         '{"g":"g2","maps":{}}'.length,
     })
     expect(row('lookup').chars).toBe(
-      'cg-sync-v1|cg-lookup-v1'.length + '{"st":"§1.ab","tomb":[]}'.length,
+      'cg-lookup-v1'.length +
+        localStorage.getItem('cg-lookup-v1').length +
+        'cg-sync-v1|cg-lookup-v1'.length +
+        '{"st":"§1.ab","tomb":[]}'.length,
     )
     expect(row('other').chars).toBe(
       'cg-presets-v1'.length +
@@ -344,6 +357,125 @@ describe('what is filling the device', () => {
       expect(reading.rows.some((r) => r.kind === 'names')).toBe(false)
       expect(reading.rows.reduce((sum, r) => sum + r.chars, 0)).toBe(everything())
     }
+  })
+
+  // ★ NO ROW HOLDS NOTHING THE PLAYER HAS (Round 27, owner): an emptied Lookup history (Clear History
+  // leaves an empty list and the marks of what it cleared) and a mode with no times left (a Reset
+  // Stats) are not rows — their characters are counted with Everything else and with their preset.
+  it('an emptied Lookup history is no row: its leftover is "everything else", the total exact', () => {
+    localStorage.clear()
+    const list = JSON.stringify({ state: { history: [] }, version: 1 })
+    const marks = '{"st":"§1.ab","tomb":["a","b","c"]}'
+    localStorage.setItem('cg-lookup-v1', list)
+    localStorage.setItem('cg-sync-v1|cg-lookup-v1', marks)
+    const reading = readStorageUsage(localStorage)
+    expect(reading.rows.some((r) => r.kind === 'lookup')).toBe(false)
+    expect(reading.rows).toEqual([
+      {
+        kind: 'other',
+        chars:
+          'cg-lookup-v1'.length + list.length + 'cg-sync-v1|cg-lookup-v1'.length + marks.length,
+      },
+    ])
+    expect(reading.used).toBe(everything())
+  })
+
+  it('a mode with no times left is no row: its leftover is its preset’s, the total exact', () => {
+    localStorage.clear()
+    const state = makeProgressDefaults() // (every mode's list empty — as after a Reset Stats)
+    state.stats = { ...state.stats, flash: long(7) }
+    const saved = JSON.stringify({ state, version: 5 })
+    localStorage.setItem('cg-progress-v1~p2', saved)
+    // (and a chunk a Reset left behind for a mode that now holds nothing)
+    localStorage.setItem('cg-times-v1~p2:classic:0.abc', '[1,2]')
+    const reading = readStorageUsage(localStorage)
+    expect(reading.rows.filter((r) => r.kind === 'times')).toEqual([
+      expect.objectContaining({ presetId: 2, silo: 'flash', count: 7 }),
+    ])
+    const flash = reading.rows.find((r) => r.kind === 'times')
+    expect(reading.rows.find((r) => r.kind === 'preset')).toEqual({
+      kind: 'preset',
+      presetId: 2,
+      chars:
+        'cg-progress-v1~p2'.length +
+        saved.length +
+        'cg-times-v1~p2:classic:0.abc'.length +
+        '[1,2]'.length -
+        flash.chars,
+    })
+    expect(reading.rows).toHaveLength(2)
+    expect(reading.rows.reduce((sum, r) => sum + r.chars, 0)).toBe(everything())
+  })
+
+  // ★ THE NAMES' OWN ROW ONLY BESIDE THE ADVICE (Round 27, owner): usageRowsShown puts each preset's
+  // name in that preset's row unless the names are shown apart (the popup's suggestShorterNames).
+  describe('usageRowsShown — where the names are shown', () => {
+    const NAMES = {
+      kind: 'names',
+      chars: 40,
+      spare: 30,
+      perPreset: [
+        { presetId: 1, chars: 25 },
+        { presetId: 3, chars: 10 }, // a preset with nothing else saved
+      ],
+    }
+    const ROWS = [
+      { kind: 'times', presetId: 1, silo: 'classic', chars: 500, count: 20 },
+      { kind: 'preset', presetId: 1, chars: 100 },
+      { kind: 'preset', presetId: 2, chars: 80 },
+      NAMES,
+      { kind: 'other', chars: 30 },
+    ]
+    const total = (rows) => rows.reduce((sum, r) => sum + r.chars, 0)
+
+    it('apart: exactly the rows read, the "Preset names" row among them', () => {
+      expect(usageRowsShown(ROWS, true)).toEqual(ROWS)
+    })
+
+    it('otherwise: each name in its preset’s row, one made where needed, the rest in everything else', () => {
+      const shown = usageRowsShown(ROWS, false)
+      expect(shown).toEqual([
+        { kind: 'times', presetId: 1, silo: 'classic', chars: 500, count: 20 },
+        { kind: 'preset', presetId: 1, chars: 125, withName: true },
+        { kind: 'preset', presetId: 2, chars: 80 },
+        { kind: 'other', chars: 35 }, // (the 5 no preset could be read for)
+        { kind: 'preset', presetId: 3, chars: 10, withName: true },
+      ])
+      expect(total(shown)).toBe(total(ROWS))
+    })
+
+    it('with no names saved there is nothing to move', () => {
+      const rows = ROWS.filter((r) => r.kind !== 'names')
+      expect(usageRowsShown(rows, false)).toEqual(rows)
+    })
+
+    it('on a real device: every row exact, the total unchanged', () => {
+      localStorage.clear()
+      const registry = JSON.stringify({
+        state: {
+          presets: [
+            { id: 1, name: 'Weekend', amnesic: false },
+            { id: 2, name: 'Drills', amnesic: false },
+          ],
+        },
+        version: 1,
+      })
+      localStorage.setItem('cg-presets-v1', registry)
+      localStorage.setItem('cg-settings-v1', '{"state":{"theme":"dusk"},"version":9}')
+      const { rows } = readStorageUsage(localStorage)
+      const shown = usageRowsShown(rows, false)
+      expect(shown).toEqual([
+        { kind: 'other', chars: 'cg-presets-v1'.length + registry.length - 7 - 6 },
+        {
+          kind: 'preset',
+          presetId: 1,
+          chars: 'cg-settings-v1'.length + '{"state":{"theme":"dusk"},"version":9}'.length + 7,
+          withName: true,
+        },
+        { kind: 'preset', presetId: 2, chars: 6, withName: true },
+      ])
+      expect(total(shown)).toBe(everything())
+    })
   })
 
   describe('shorterNamesWouldEndWarning — would shortening names, and nothing else, be enough', () => {
@@ -1490,17 +1622,23 @@ describe('on the mounted app', () => {
       renamePreset(1, 'n'.repeat(chars))
     }
 
-    it('are one row, "Preset names", with their share written like every other', () => {
+    it('with no advice to shorten them, each name is in its own preset’s row, which says so', () => {
       nameOf(600_000)
       openBreakdown()
+      expect(usage().warning).toBe(false)
       const { rows } = readStorageUsage(localStorage)
       const names = rows.find((r) => r.kind === 'names')
       // (the short name twice: in the list, and copied into its sync key — the long one is not copied;
       // and the names' fingerprints beside them, a few characters each)
       expect(names.chars).toBeGreaterThanOrEqual(600_000 + 2 * 'Weekend'.length)
       expect(names.chars).toBeLessThan(600_000 + 200)
-      expect(rowTexts()[0]).toBe(`Preset names${percentText(names.chars, CHROMIUM)}`) // the largest
-      expect(percentText(names.chars, CHROMIUM)).toBe('11.4%')
+      const one = usageRowsShown(rows, false).find((r) => r.kind === 'preset' && r.presetId === 1)
+      expect(one.withName).toBe(true)
+      expect(rowTexts().join('|')).not.toMatch(/Preset names/)
+      // The largest: preset 1's row, its name in it, its share written like every other.
+      expect(rowTexts()[0]).toMatch(/: Name, Bests, settings, and saved defaults/)
+      expect(rowTexts()[0].endsWith(percentText(one.chars, CHROMIUM))).toBe(true)
+      expect(one.chars).toBeGreaterThan(names.chars) // (the name, and the rest of what it holds)
       // The rows still come to the headline or a little under it, never more ("<0.1%" is under a
       // tenth, counted here as nothing).
       const figure = (text) => (/<0\.1%$/.test(text) ? 0 : parseFloat(text.match(/([\d.]+)%$/)[1]))
@@ -1513,10 +1651,22 @@ describe('on the mounted app', () => {
       expect(rowTexts().at(-1)).toMatch(/^Everything else/)
     })
 
-    it('ordinary names are a small owner like any other: listed among the first few, "<0.1%"', () => {
+    it('ordinary names are in their presets’ rows, and no row of their own', () => {
       createPreset('Weekend')
       openBreakdown()
-      expect(rowTexts()).toContain('Preset names<0.1%')
+      expect(rowTexts().join('|')).not.toMatch(/Preset names/)
+      expect(
+        rowTexts().some((t) => /^Weekend: Name, Bests, settings, and saved defaults/.test(t)),
+      ).toBe(true)
+    })
+
+    it('have a row of their own exactly when shortening them is advised — the two together', () => {
+      nameOf(4_300_000)
+      openBreakdown()
+      expect(advice()[0].textContent).toMatch(ADVICE)
+      const names = readStorageUsage(localStorage).rows.find((r) => r.kind === 'names')
+      expect(rowTexts()[0]).toBe(`Preset names${percentText(names.chars, CHROMIUM)}`) // the largest
+      expect(rowTexts().join('|')).not.toMatch(/Name, Bests/)
     })
 
     it('on a device with one untouched preset there is no preset list saved, and no row', () => {

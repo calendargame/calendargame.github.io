@@ -4,6 +4,7 @@ import {
   percentSpoken,
   percentText,
   suggestShorterNames,
+  usageRowsShown,
   useStorageUsage,
 } from '../store/storageUsage.js'
 import type { UsageRow } from '../store/storageUsage.js'
@@ -42,6 +43,8 @@ const count = (n: number): string => n.toLocaleString('en-US')
 // A row's name, in the words the app uses for the thing. A preset is named only when there is more
 // than one to tell apart; one that is no longer in the list is said to be so. The name is QUOTED
 // (components/QuotedName): a very long one is its start and an ellipsis, so a row stays a few lines.
+// A preset's row that holds its name too (store/storageUsage's usageRowsShown, when the names have no
+// row of their own) says so.
 function RowLabel({ row, presets }: { row: UsageRow; presets: Preset[] }) {
   if (row.kind === 'lookup') return `Lookup history (${count(row.count)})`
   if (row.kind === 'names') return 'Preset names'
@@ -49,7 +52,9 @@ function RowLabel({ row, presets }: { row: UsageRow; presets: Preset[] }) {
   const preset = presets.find((p) => p.id === row.presetId)
   const what =
     row.kind === 'preset'
-      ? 'Bests, settings, and saved defaults'
+      ? row.withName
+        ? 'Name, Bests, settings, and saved defaults'
+        : 'Bests, settings, and saved defaults'
       : `${TIMES_OWNER[row.silo] ?? row.silo} solve times (${count(row.count)})`
   if (!preset) return `A deleted preset: ${what}`
   if (presets.length === 1) return what
@@ -72,10 +77,16 @@ function RowLabel({ row, presets }: { row: UsageRow; presets: Preset[] }) {
 //     several presets has (each preset × each mode), and the app's own few keys, which are nobody's
 //     to clear.
 //   • an owner with NOTHING in it is never named: a mode nobody has played keeps an empty list of
-//     solve times, and "Flash solve times (0)" is a line about nothing, with nothing to clear. Its
-//     few characters go with "Everything else".
+//     solve times, and "Flash solve times (0)" is a line about nothing, with nothing to clear.
+//     store/storageUsage makes no such row (its few characters are counted with their preset, or,
+//     for an emptied Lookup history, with "Everything else").
+//   • the preset names have a line of their own only beside the advice to shorten them (see that
+//     note below); otherwise each preset's name is in its own line.
 // Largest first, so the line to act on is the first one read.
 const LISTED_AT_LEAST = 5
+// One row of "What is using it": its name to the left (wrapping as it must), its figure to the right
+// on the FIRST line (items-start), and room above and below for the dividers between rows.
+const USAGE_ROW_CLASS = 'flex items-start justify-between gap-3 py-1'
 
 // ONE PERCENTAGE, AS IT IS SHOWN AND AS IT IS SAID — the ⚙ menu's "Storage used" line, this popup's
 // title, and every row of its breakdown draw their figure through this, so none of them can show
@@ -93,8 +104,6 @@ export function StoragePercent({ written }: { written: string }) {
     </>
   )
 }
-const holdsSomething = (row: UsageRow): boolean => !('count' in row) || row.count > 0
-
 export default function StorageUsagePopup() {
   const open = useStorageUsage((s) => s.popupOpen)
   const close = useStorageUsage((s) => s.closePopup)
@@ -104,6 +113,9 @@ export default function StorageUsagePopup() {
   const limit = useStorageUsage((s) => s.limit)
   const presets = usePresets((s) => s.presets)
   if (!open) return null
+  // The one rule for the names (store/storageUsage's suggestShorterNames): their own row and the
+  // advice to shorten them come together, or not at all.
+  const namesApart = suggestShorterNames(warning, rows, limit)
   // Each owner's share of the WHOLE allowance, written by the rule the headline is written by
   // (store/storageUsage's percentText): each is cut at its last digit, so together they come to the
   // headline or a little under it, and never to more.
@@ -111,11 +123,12 @@ export default function StorageUsagePopup() {
   // a share of: the owners are listed with no figure beside them, and the card says why.
   const measured = limit !== null
   const share = (chars: number) => (measured ? (chars / limit) * 100 : 0)
-  const owners: UsageRow[] = rows
-    .filter((row) => row.kind !== 'other' && holdsSomething(row))
-    .sort((a, b) => b.chars - a.chars)
+  const shownRows = usageRowsShown(rows, namesApart)
+  const owners: UsageRow[] = shownRows.filter((row) => row.kind !== 'other')
   const listed = owners.filter((row, i) => i < LISTED_AT_LEAST || share(row.chars) >= 1)
-  const rest = rows.filter((row) => !listed.includes(row)).reduce((sum, row) => sum + row.chars, 0)
+  const rest = shownRows
+    .filter((row) => !listed.includes(row))
+    .reduce((sum, row) => sum + row.chars, 0)
   const shown = (chars: number) =>
     measured ? <StoragePercent written={percentText(chars, limit)} /> : null
   return (
@@ -144,11 +157,17 @@ export default function StorageUsagePopup() {
             </p>
           )}
           <p className="font-semibold text-(--tx-100-90)">What is using it</p>
-          <ul className="space-y-1">
+          {/* ★ ONE ROW, ONE OWNER, AT A GLANCE (Round 27, owner): a hairline in the panel's thin
+              divider colour (--thin-bd) BETWEEN rows — none above the first or below the last — so a
+              row that wraps still reads as one row; a little padding above and below each row, so
+              no text touches a line; and each figure on its row's FIRST line, at the right. No
+              bullets here (the list below keeps its own). The lane holds all of it
+              (tests/browser/storageBreakdown.browser.ts). */}
+          <ul className="divide-y divide-(--thin-bd)">
             {listed.map((row) => (
               <li
                 key={`${row.kind}:${'presetId' in row ? row.presetId : ''}:${'silo' in row ? row.silo : ''}`}
-                className="flex justify-between gap-3"
+                className={USAGE_ROW_CLASS}
               >
                 <span className="min-w-0 wrap-anywhere">
                   <RowLabel row={row} presets={presets} />
@@ -157,7 +176,7 @@ export default function StorageUsagePopup() {
               </li>
             ))}
             {rest > 0 && (
-              <li className="flex justify-between gap-3">
+              <li className={USAGE_ROW_CLASS}>
                 <span>Everything else</span>
                 <span className="tabular-nums whitespace-nowrap">{shown(rest)}</span>
               </li>
@@ -176,11 +195,12 @@ export default function StorageUsagePopup() {
               characters over the line. So the line makes the one claim the condition proves —
               "would be enough on its own" — and none about the names being large (it once opened
               "Your preset names are taking up much of this room", which was false there). How
-              much they hold is the "Preset names" row above, in its own figure. */}
+              much they hold is the "Preset names" row above, in its own figure — a row shown by the
+              same rule (namesApart), so the two always come together. */}
           {/* (Each works on every Amnesic value alike: nothing is kept anywhere but the saved
               progress and the Lookup history.) */}
           <ul className="space-y-1 list-disc ps-4">
-            {suggestShorterNames(warning, rows, limit) && (
+            {namesApart && (
               <li>
                 <b>Shortening your preset names</b> would be enough on its own to end this warning
                 (⚙ → Global → Manage Presets).

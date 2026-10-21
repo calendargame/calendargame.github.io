@@ -3565,16 +3565,18 @@ export default function GuidePage({
           smaller than a tenth of a percent reads &quot;&lt;0.1%&quot;, never &quot;0.0%&quot;. Tap
           the line to see what is using the room — the solve times of each mode that saves them (
           {modeList('classic', 'deduction', 'flash')}; Deduction&apos;s three puzzle types
-          separately), the Lookup history, each preset&apos;s other data, and the names of your
-          presets together (a name can be any length, so a very long one takes real room) — each
-          with its own share of the room beside it, written the same way. The list is largest first;
-          anything holding 1% or more is named, and so are the largest few however little they hold
-          — though never something with nothing in it, such as a mode you have not played — with
-          whatever is left gathered into one last line, &quot;Everything else&quot;. Under it is
-          what you can clear to get some room back: <b>Clear History</b> in Lookup, deleting a
-          preset you no longer use, and <b>Reset Stats</b> in a mode. Shortening your preset names
-          is suggested there too, first in the list, but only when it would be enough on its own:
-          the warning below is on, and shortening them alone would end it. Otherwise names are not
+          separately), the Lookup history, and each preset&apos;s other data with its name (a name
+          can be any length, so a very long one takes real room) — each with its own share of the
+          room beside it, written the same way. The list is largest first; anything holding 1% or
+          more is named, and so are the largest few however little they hold — though never
+          something with nothing in it, such as a mode you have not played or a Lookup history you
+          have cleared — with whatever is left gathered into one last line, &quot;Everything
+          else&quot;. Under it is what you can clear to get some room back: <b>Clear History</b> in
+          Lookup, deleting a preset you no longer use, and <b>Reset Stats</b> in a mode. Shortening
+          your preset names is suggested there too, first in the list, but only when it would be
+          enough on its own: the warning below is on, and shortening them alone would end it. Only
+          then do the names of all your presets get a line of their own, &quot;Preset names&quot;,
+          instead of each being counted in its preset&apos;s line. Otherwise names are not
           mentioned.
         </p>
         <p>

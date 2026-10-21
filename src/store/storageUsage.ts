@@ -43,14 +43,21 @@ import { captureError } from '../observability/sentry.js'
 //   • a preset's SOLVE TIMES, per mode: the times inside its progress key, and its sealed chunk keys
 //     (store/progressStorage). ⚠ Every chunk key counts toward the SIZE, a superseded one included —
 //     Reset Stats for that mode is what gets the room back — but the COUNT of times is the ones a
-//     save actually names: the sealed count plus the tail.
+//     save actually names: the sealed count plus the tail;
 //   • LOOKUP HISTORY (one list, shared by every preset);
 //   • a preset's OTHER data: its Bests, ⚙ settings, per-mode setup and saved defaults;
-//   • PRESET NAMES, all of them together: a name may be any length, so a pasted book can be the
-//     largest thing on the device. Their text is counted where it sits in the preset list — and in
-//     the list's SYNC KEY, which keeps a copy of each name short enough to copy (store/syncCounts'
-//     KEY_VALUE_MAX) so windows can put a newer name back over an older build's stale one;
+//   • PRESET NAMES: a name may be any length, so a pasted book can be the largest thing on the
+//     device. Their text is counted where it sits in the preset list — and in the list's SYNC KEY,
+//     which keeps a copy of each name short enough to copy (store/syncCounts' KEY_VALUE_MAX) so
+//     windows can put a newer name back over an older build's stale one — and each name is known to
+//     its preset (usageRowsShown says where they are shown);
 //   • everything else (the rest of the preset list, small markers).
+// ★ NO ROW HOLDS NOTHING THE PLAYER HAS (Round 27, owner). A mode nobody has played keeps an empty list
+// of solve times, and Clear History leaves an empty list and the marks of what was cleared — so a
+// solve-times row is made only when it holds at least one time, and a Lookup row only when the
+// history holds at least one lookup. Their leftover bookkeeping is still counted, where its owner is:
+// solve times' with their preset's other data, Lookup's (which belongs to no preset) with everything
+// else — so every row and the total stay exact.
 // ★ A SYNC KEY (store/syncedDoc: what lets windows open side by side merge one doc) belongs to the
 // owner of its doc: a preset's to that preset, Lookup history's to Lookup history, the preset list's
 // to "everything else" less the names in it — so clearing a thing gives back what the breakdown said.
@@ -138,11 +145,17 @@ const WARNED_KEY = 'cg-storage-warned-v1'
 export type UsageRow =
   | { kind: 'times'; presetId: number; silo: string; chars: number; count: number }
   | { kind: 'lookup'; chars: number; count: number }
-  | { kind: 'preset'; presetId: number; chars: number }
+  // (`withName`: its name's text is in `chars` too — usageRowsShown's, when names have no row of their own)
+  | { kind: 'preset'; presetId: number; chars: number; withName?: true }
   // Every preset's name, as saved. `spare` is how much of that shortening the names could give
-  // back: all of each name but one character (a name cannot be empty).
-  | { kind: 'names'; chars: number; spare: number }
+  // back: all of each name but one character (a name cannot be empty). `perPreset` is how much of
+  // `chars` is each preset's own (by the id it is saved under); anything a preset id could not be read
+  // for is the rest.
+  | { kind: 'names'; chars: number; spare: number; perPreset: NameShare[] }
   | { kind: 'other'; chars: number }
+
+/** One preset's own share of the names' text. */
+export type NameShare = { presetId: number; chars: number }
 
 export type UsageReading = { used: number; rows: UsageRow[] }
 
@@ -157,50 +170,74 @@ function parsePresetKey(key: string): { presetId: number; progress: boolean } | 
   return null
 }
 
+// The names' text as it is added up: in all, what shortening could give back, and each preset's own.
+type NameSize = { chars: number; spare: number; perPreset: Map<number, number> }
+const noNames = (): NameSize => ({ chars: 0, spare: 0, perPreset: new Map() })
+// `chars` more of the names' text, and whose (null: a preset id that could not be read).
+function addChars(size: NameSize, chars: number, presetId: number | null): void {
+  size.chars += chars
+  if (presetId !== null) size.perPreset.set(presetId, (size.perPreset.get(presetId) ?? 0) + chars)
+}
+// The preset a sync slice `name:<id>` is for.
+function presetOfSlice(slice: string): number | null {
+  const id = Number(slice.slice('name:'.length))
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
 // How much of the saved preset list is its presets' NAMES, and how much of that could be given
 // back — both nothing for text that is not a preset list. A name is counted as it is written in
 // the save (its quotes left out), which is what the device's allowance counts.
-function namesIn(registryText: string): { chars: number; spare: number } {
-  const size = { chars: 0, spare: 0 }
+function namesIn(registryText: string, size: NameSize): NameSize {
+  const found = noNames()
   try {
     const saved: unknown = JSON.parse(registryText)
     const presets = isRecord(saved) && isRecord(saved.state) ? saved.state.presets : null
     for (const preset of Array.isArray(presets) ? presets : [])
-      if (isRecord(preset)) addName(size, preset.name)
+      if (isRecord(preset))
+        addName(found, preset.name, Number.isSafeInteger(preset.id) ? Number(preset.id) : null)
     // (and the fingerprint of each name the envelope carries: a short name spelled out once more)
     const at =
       isRecord(saved) && isRecord(saved.sync) && isRecord(saved.sync.at) ? saved.sync.at : {}
     for (const [slice, entry] of Object.entries(at))
-      if (slice.startsWith('name:') && isRecord(entry)) addFp(size, entry.fp)
+      if (slice.startsWith('name:') && isRecord(entry)) addFp(found, entry.fp, presetOfSlice(slice))
   } catch {
-    /* unreadable: all of it counts as "everything else" */
+    return size /* unreadable: all of it counts as "everything else" */
   }
-  return size
+  return mergeNames(size, found)
 }
 // …and in the preset list's sync key: the copy of each name it holds (a slice `name:<id>`'s value), and
 // the fingerprints beside it - its own and the one before it - which spell a short name out again.
-function namesInSyncKey(keyText: string): { chars: number; spare: number } {
-  const size = { chars: 0, spare: 0 }
+function namesInSyncKey(keyText: string, size: NameSize): NameSize {
+  const found = noNames()
   try {
     const saved: unknown = JSON.parse(keyText)
     const at = isRecord(saved) && isRecord(saved.at) ? saved.at : {}
     for (const [slice, entry] of Object.entries(at))
       if (slice.startsWith('name:') && isRecord(entry)) {
-        addName(size, entry.v)
-        addFp(size, entry.fp)
-        if (isRecord(entry.prev)) addFp(size, entry.prev.fp)
+        const presetId = presetOfSlice(slice)
+        addName(found, entry.v, presetId)
+        addFp(found, entry.fp, presetId)
+        if (isRecord(entry.prev)) addFp(found, entry.prev.fp, presetId)
       }
   } catch {
-    /* unreadable: all of it counts as "everything else" */
+    return size /* unreadable: all of it counts as "everything else" */
   }
+  return mergeNames(size, found)
+}
+// (what one key was found to hold, added in only once the whole key has been read — a key that turns
+// out unreadable half way adds nothing, and is all "everything else")
+function mergeNames(size: NameSize, found: NameSize): NameSize {
+  size.spare += found.spare
+  addChars(size, found.chars - [...found.perPreset.values()].reduce((a, b) => a + b, 0), null)
+  for (const [presetId, chars] of found.perPreset) addChars(size, chars, presetId)
   return size
 }
 // A setting's fingerprint (store/syncCounts' regFp): `R` and the name as JSON for a short one - which a
 // shorter name shortens - or `H` and a hash for a long one, the same length whatever the name.
-function addFp(size: { chars: number; spare: number }, fp: unknown): void {
+function addFp(size: NameSize, fp: unknown, presetId: number | null): void {
   if (typeof fp !== 'string') return
   const written = JSON.stringify(fp).length - 2
-  size.chars += written
+  addChars(size, written, presetId)
   if (!fp.startsWith('R"')) return
   let name: unknown
   try {
@@ -212,10 +249,10 @@ function addFp(size: { chars: number; spare: number }, fp: unknown): void {
   const first = Array.from(name)[0] ?? ''
   size.spare += written - (JSON.stringify(`R${JSON.stringify(first)}`).length - 2)
 }
-function addName(size: { chars: number; spare: number }, name: unknown): void {
+function addName(size: NameSize, name: unknown, presetId: number | null): void {
   if (typeof name !== 'string') return
   const written = JSON.stringify(name).length - 2
-  size.chars += written
+  addChars(size, written, presetId)
   // …less its first character as written, which is what a one-character name would still take.
   size.spare += written - (JSON.stringify(Array.from(name)[0] ?? '').length - 2)
 }
@@ -233,7 +270,7 @@ export function readStorageUsage(area: Storage): UsageReading {
   const times = new Map<string, { presetId: number; silo: string; chars: number; count: number }>()
   const presets = new Map<number, number>()
   const lookup = { chars: 0, count: 0 }
-  const names = { chars: 0, spare: 0 }
+  const names = noNames()
   let other = 0
   let used = 0
   const timesRow = (presetId: number, silo: string) => {
@@ -255,10 +292,9 @@ export function readStorageUsage(area: Storage): UsageReading {
       continue
     }
     if (ofDoc === PRESET_REGISTRY_KEY) {
-      const inKey = namesInSyncKey(text)
-      names.chars += inKey.chars
-      names.spare += inKey.spare
-      other += chars - inKey.chars
+      const before = names.chars
+      namesInSyncKey(text, names)
+      other += chars - (names.chars - before)
       continue
     }
     if (ofDoc !== null) {
@@ -284,10 +320,9 @@ export function readStorageUsage(area: Storage): UsageReading {
       continue
     }
     if (key === PRESET_REGISTRY_KEY) {
-      const inList = namesIn(text)
-      names.chars += inList.chars
-      names.spare += inList.spare
-      other += chars - inList.chars // the rest of the list is nobody's to clear
+      const before = names.chars
+      namesIn(text, names)
+      other += chars - (names.chars - before) // the rest of the list is nobody's to clear
       continue
     }
     const owner = parsePresetKey(key)
@@ -323,15 +358,55 @@ export function readStorageUsage(area: Storage): UsageReading {
     }
     presets.set(owner.presetId, (presets.get(owner.presetId) ?? 0) + rest)
   }
-  const rows: UsageRow[] = [
-    ...[...times.values()].map((row) => ({ kind: 'times' as const, ...row })),
-    ...[...presets].map(([presetId, chars]) => ({ kind: 'preset' as const, presetId, chars })),
-  ]
-  if (lookup.chars) rows.push({ kind: 'lookup', ...lookup })
-  if (names.chars) rows.push({ kind: 'names', ...names })
+  // (no row that holds nothing the player has — the header says where its characters go instead)
+  const rows: UsageRow[] = []
+  for (const row of times.values())
+    if (row.count > 0) rows.push({ kind: 'times', ...row })
+    else presets.set(row.presetId, (presets.get(row.presetId) ?? 0) + row.chars)
+  for (const [presetId, chars] of presets) rows.push({ kind: 'preset', presetId, chars })
+  if (lookup.count > 0) rows.push({ kind: 'lookup', ...lookup })
+  else other += lookup.chars
+  if (names.chars) {
+    const perPreset = [...names.perPreset].map(([presetId, chars]) => ({ presetId, chars }))
+    rows.push({ kind: 'names', chars: names.chars, spare: names.spare, perPreset })
+  }
   if (other) rows.push({ kind: 'other', chars: other })
   rows.sort((a, b) => b.chars - a.chars)
   return { used, rows }
+}
+
+/**
+ * ★ THE ROWS THE BREAKDOWN SHOWS (Round 27, owner). The names get a row of their own — "Preset
+ * names" — ONLY when `namesApart`, which the popup sets from suggestShorterNames, the one rule that
+ * also decides whether shortening them is advised: so the row and the advice appear together or not
+ * at all, and can never disagree. Otherwise each preset's name is counted in that preset's own row
+ * (one made for a preset that has nothing else saved), and text no preset could be read for in
+ * "everything else" — the total unchanged, every character still in exactly one row.
+ */
+export function usageRowsShown(rows: readonly UsageRow[], namesApart: boolean): UsageRow[] {
+  const names = rows.find((row) => row.kind === 'names')
+  if (namesApart || !names) return [...rows]
+  const presets = new Map<number, number>()
+  let other = names.chars
+  for (const share of names.perPreset) {
+    presets.set(share.presetId, (presets.get(share.presetId) ?? 0) + share.chars)
+    other -= share.chars
+  }
+  const shown: UsageRow[] = []
+  for (const row of rows) {
+    if (row.kind === 'names') continue
+    if (row.kind === 'preset' && presets.has(row.presetId)) {
+      shown.push({ ...row, chars: row.chars + presets.get(row.presetId)!, withName: true })
+      presets.delete(row.presetId)
+    } else if (row.kind === 'other') {
+      shown.push({ kind: 'other', chars: row.chars + other })
+      other = 0
+    } else shown.push(row)
+  }
+  for (const [presetId, chars] of presets)
+    shown.push({ kind: 'preset', presetId, chars, withName: true })
+  if (other) shown.push({ kind: 'other', chars: other })
+  return shown.sort((a, b) => b.chars - a.chars)
 }
 
 /**
