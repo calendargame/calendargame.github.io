@@ -20,3 +20,9 @@ declare const __APP_VERSION__: string
 // the frozen sentinel 0 everywhere else. Renders nowhere today. Read in exactly one place,
 // src/appVersion.ts; derived and guarded by scripts/buildNumber.mjs.
 declare const __BUILD_NUMBER__: number
+
+// __SENTRY_RELEASE__ — the release every error report names: `calendar-game@<version>+<commit>` for a
+// real `vite build`, 'calendar-game@dev' everywhere else. The same value the deploy uploads the source
+// maps under. Read in exactly one place, src/observability/sentryClient.ts; made and explained by
+// scripts/sentryRelease.mjs.
+declare const __SENTRY_RELEASE__: string

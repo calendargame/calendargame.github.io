@@ -128,8 +128,21 @@ jobs:
         run: npm run format:check
       - name: Type-check
         run: npm run typecheck
+      # ★ THE SENTRY TOKEN GOES TO THIS STEP AND NO OTHER (Round 27). The build uploads the site's
+      # source maps to Sentry so error reports read as real files and lines (vite.config.js, the
+      # sentryVitePlugin; scripts/sentryRelease.mjs), and in GitHub Actions it REFUSES to build
+      # without the token rather than ship unreadable reports. Until Round 27 nothing here passed
+      # it — GitHub never hands a secret to a step that does not ask — so the upload never ran once.
+      # ⚠ NOT AT JOB LEVEL: the browser lane below builds an OLDER version of the app from its own
+      # commit with its own vite.config.js, and that config uploads whenever it sees this token — a
+      # job-wide token would publish a release, and maps, for a build that is never deployed.
+      # What a working upload looks like in this step's log: "[sentry-vite-plugin] Info: Successfully
+      # uploaded source maps to Sentry", then "✅ Source maps uploaded for release
+      # calendar-game@<version>+<commit>, none shipped; all N bundled scripts carry a Sentry debug ID."
       - name: Build the site
         run: npm run build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       # ⚠ NO CNAME FILE, on either site, and none is needed (Round 27). Each site's address
       # (calendargame.app for this repo's live build, test.calendargame.app for the test site's — see
       # src/sites.ts) is the "Custom domain" in that repository's Settings > Pages, and that setting is

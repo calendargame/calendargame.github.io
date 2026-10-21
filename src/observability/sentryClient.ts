@@ -20,9 +20,15 @@ const DSN =
 // site), handed in by ./sentry, which starts the SDK only on one of those two hostnames — so a report
 // is always filed under the site it came from, and the dashboard separates real visitors' crashes
 // from our own testing.
+// `release` is this build's (scripts/sentryRelease.mjs, injected at build time) — the name the deploy
+// filed its source maps under, so a report says which build it came from (and which release an issue
+// first appeared in). The maps themselves are matched to a report by the debug ID the build plugin
+// put in every script, not by this name. Set HERE, explicitly — not left to the value that plugin can
+// inject into every chunk, which it is told not to (vite.config.js) — so there is one source.
 export function startSentry(environment: Site['environment']) {
   init({
     dsn: DSN,
+    release: __SENTRY_RELEASE__,
     environment,
     // Privacy-first (matches the cookieless analytics choice): never attach IP, cookies, or user
     // identifiers. The app collects no personal data, so reports carry only technical context.

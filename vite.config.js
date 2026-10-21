@@ -27,6 +27,13 @@ import { verifyDistPrecache, describePrecacheProblems } from './scripts/precache
 import { CHANGELOG } from './src/changelog.ts'
 import { checkChangelogStamp, describeChangelogStampMismatch } from './scripts/changelogStamp.mjs'
 import { readBuildNumber } from './scripts/buildNumber.mjs'
+import {
+  DEV_RELEASE,
+  readCommit,
+  releaseName,
+  sentryUploadPlan,
+  uploadFailure,
+} from './scripts/sentryRelease.mjs'
 import { SITES, TEST_SITE } from './src/sites.ts'
 import { OLD_TEST_SITE_NAVIGATION } from './src/lib/oldTestSite.ts'
 
@@ -201,10 +208,10 @@ const distFiles = (dir, prefix = '') =>
 // the deployed one, which is what makes "Check for updates" a check instead of an unconditional
 // reload. src/lib/updateCheck.ts carries the full reasoning for the design; the mechanics here:
 //
-//   1. HASH the finished build — every file in dist, icons and all. Source maps are excluded (no
-//      build produces one today, and if the Sentry upload below is ever switched on they are
-//      uploaded then deleted, so they are never shipped either way) and the identity file itself
-//      does not exist yet. Path AND bytes go into the hash, so a pure RENAME is a different build too.
+//   1. HASH the finished build — every file in dist, icons and all (a source map is never among
+//      them: a deploy build's are uploaded and deleted before this runs, and noShippedSourceMaps
+//      fails the build on one left behind), and the identity file itself does not exist yet. Path
+//      AND bytes go into the hash, so a pure RENAME is a different build too.
 //   2. INJECT <meta name="cg-build"> into dist/index.html. That is how the running app knows which
 //      build it is: the document it was parsed from says so. Nothing is written into the hashed
 //      JS/CSS assets — those carry their content hash in their FILENAME and are precached with
@@ -233,7 +240,7 @@ const distFiles = (dir, prefix = '') =>
 // so reporting it as an update is true rather than a false positive. What is gone is the old
 // coincidence that a no-op re-deploy reported nothing. Nothing depends on that coincidence.
 //
-// enforce:'post' AND last in the plugin array: it must see
+// enforce:'post' AND after noShippedSourceMaps in the plugin array: it must see
 // the FINAL bytes, after VitePWA has written sw.js and after testIconVariant has swapped in the
 // gray test-site icons and corrected their revisions.
 const buildIdentity = () => {
@@ -248,7 +255,6 @@ const buildIdentity = () => {
     closeBundle() {
       const hash = createHash('sha256')
       for (const rel of distFiles(outDir)) {
-        if (rel.endsWith('.map')) continue
         hash.update(rel)
         hash.update('\0')
         hash.update(readFileSync(join(outDir, rel)))
@@ -378,8 +384,98 @@ if (!/^\d+\.\d+\.\d+$/.test(APP_VERSION ?? ''))
 // path fails loudly instead of producing it. Nothing renders it today; see src/appVersion.ts for
 // what it is for and how a future round would surface it.
 const DEV_BUILD_NUMBER = 0
-const buildNumber = () =>
-  readBuildNumber((args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }))
+const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' })
+const buildNumber = () => readBuildNumber(git)
+
+// ── THE RELEASE ERROR REPORTS NAME (Round 27, Q2) ─────────────────────────────────────────────
+// `calendar-game@<version>+<commit>` — scripts/sentryRelease.mjs says why that shape, and why the
+// client is TOLD it (the __SENTRY_RELEASE__ define) rather than left to find what the Sentry plugin
+// injects. Built once per build (git runs once), and only for a real `vite build`: dev and Vitest
+// get DEV_RELEASE, process-free, the buildNumber precedent (and never report anyway).
+let release
+const sentryRelease = () => (release ??= releaseName(APP_VERSION, readCommit(git)))
+// Whether this build uploads its source maps: a deploy build (GitHub Actions) must, and fails without
+// the token; a laptop's never does. scripts/sentryRelease.mjs's sentryUploadPlan.
+// Its refusal, like a failed upload, is also written as a GitHub annotation (annotateError), so it
+// heads the run's summary page.
+const uploadsSourceMaps = (command) => {
+  try {
+    return sentryUploadPlan({
+      command,
+      githubActions: process.env.GITHUB_ACTIONS,
+      token: process.env.SENTRY_AUTH_TOKEN,
+    })
+  } catch (refusal) {
+    annotateError(refusal.message)
+    throw refusal
+  }
+}
+// A GitHub annotation, so a refusal or a failed upload heads the run's summary page rather than sitting
+// somewhere in the log. (GitHub's workflow-command escaping: '%', then line breaks, which would
+// otherwise end the message at its first line.) Harmless text in a laptop's terminal.
+const annotateError = (message) =>
+  console.error(
+    `::error title=Sentry source-map upload::${message.replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`,
+  )
+// Where the build writes its maps, for the plugin to delete once they are uploaded — absolute, so it
+// does not depend on the directory the build was started from (forward slashes: it is a glob).
+const SOURCE_MAPS_GLOB = `${join(ROOT, 'dist').replace(/\\/g, '/')}/**/*.map`
+
+// noShippedSourceMaps (Round 27, Q2) — A SOURCE MAP NEVER SHIPS. A deploy build writes them
+// ('hidden': no reference to them in the JS) only so the Sentry plugin can upload them, and the
+// plugin deletes them once uploaded (`filesToDeleteAfterUpload`, in its writeBundle — before any
+// closeBundle runs). This holds that promise instead of trusting it: a .map left in dist for ANY
+// reason — a glob that matched nothing, a deletion that failed quietly, a future setting that emits
+// maps — fails the build, so it is never published for anyone to fetch. And on a build that uploads,
+// every bundled script (assets/*.js) must carry a Sentry debug ID — the plugin's injected snippet,
+// what matches a report's stack to its uploaded map — or the build fails too: a script without one
+// would report unreadably however well the upload went. (The worker's own scripts — sw.js, workbox-*,
+// sw-old-windows.js — are not bundled and carry none; the error reporting never runs in them.)
+// Set by the upload's errorHandler: the build is failing, and its other checks still run (rolldown runs
+// every closeBundle after a writeBundle error), so this one must not then report an upload that did
+// not happen.
+let uploadFailed = false
+const noShippedSourceMaps = (uploads) => {
+  let outDir = 'dist'
+  return {
+    name: 'no-shipped-source-maps',
+    apply: 'build',
+    enforce: 'post',
+    configResolved(config) {
+      outDir = config.build.outDir
+    },
+    closeBundle() {
+      const files = distFiles(outDir)
+      const maps = files.filter((rel) => rel.endsWith('.map'))
+      if (maps.length > 0)
+        throw new Error(
+          `no-shipped-source-maps: ${maps.length} source map(s) are still in ${outDir} and would be ` +
+            `published: ${maps.join(', ')}. A map is written only to be uploaded to Sentry and ` +
+            `deleted (vite.config.js, sentryVitePlugin's filesToDeleteAfterUpload); one left here ` +
+            `means that step did not happen.`,
+        )
+      const bundled = files.filter((rel) => rel.startsWith('assets/') && rel.endsWith('.js'))
+      const without = bundled.filter(
+        (rel) => !readFileSync(join(outDir, rel), 'utf8').includes('_sentryDebugIdIdentifier'),
+      )
+      if (uploads && without.length > 0)
+        throw new Error(
+          `no-shipped-source-maps: ${without.length} of ${bundled.length} bundled script(s) carry no ` +
+            `Sentry debug ID (${without.join(', ')}), so a report from them could not be matched to ` +
+            `its uploaded map. The Sentry plugin did not inject them.`,
+        )
+      console.log(
+        !uploads
+          ? `✅ No source map shipped (this build uploads none: not a deploy build).`
+          : uploadFailed
+            ? `No source map shipped — but the upload to Sentry FAILED (the error above), so this ` +
+              `build stops.`
+            : `✅ Source maps uploaded for release ${sentryRelease()}, none shipped; all ` +
+              `${bundled.length} bundled scripts carry a Sentry debug ID.`,
+      )
+    },
+  }
+}
 
 // changelogStamp — the other half of taking the stamp out of human hands. Automating
 // only the stamp would replace a step somebody remembers with a divergence nobody watches, so the
@@ -483,6 +579,9 @@ export default defineConfig(({ command, mode }) => ({
     // buildNumber() shells out to git, so it is called ONLY on the build branch — a dev server start
     // and every Vitest config load stay process-free.
     __BUILD_NUMBER__: String(command === 'build' ? buildNumber() : DEV_BUILD_NUMBER),
+    // The release every error report names (see sentryRelease above) — the same value the upload
+    // below files the source maps under, so a report names the build whose maps read it.
+    __SENTRY_RELEASE__: JSON.stringify(command === 'build' ? sentryRelease() : DEV_RELEASE),
   },
   // React Compiler — automatic memoization (Stage D2). @vitejs/plugin-react v6 is Rolldown/oxc-based
   // and dropped its old `babel` option, so the compiler runs through @rolldown/plugin-babel fed the
@@ -536,6 +635,12 @@ export default defineConfig(({ command, mode }) => ({
         // address too — so without this it would answer the old address with the LIVE app from its
         // cache, and the redirect would never be reached. Permanent; src/lib/oldTestSite.ts says why.
         navigateFallbackDenylist: [OLD_TEST_SITE_NAVIGATION],
+        // No source map for the worker, ever. vite-plugin-pwa otherwise follows `build.sourcemap`
+        // below and, on a deploy build (which writes maps for the Sentry upload), writes sw.js.map and
+        // workbox-*.js.map AFTER the upload has run and deleted the app's — so they would ship (the
+        // worker's scripts naming them, too). Nothing reports from the worker, so they serve no one;
+        // noShippedSourceMaps fails the build on any map left, and found exactly these two.
+        sourcemap: false,
       },
       manifest: webManifest,
       // The SW never runs in dev (keeps HMR clean) — offline is verified against a production
@@ -572,54 +677,68 @@ export default defineConfig(({ command, mode }) => ({
           }),
         ]
       : []),
-    // Sentry source-map upload — WIRED BUT NEVER YET ACTIVE. Read this before
-    // trusting a stack trace.
-    //
-    // WHAT IT WOULD DO: make crash stack traces READABLE (real file/line, not minified gibberish) by
-    // uploading the source maps to Sentry, matched to events by injected debug IDs so the lazy SDK
-    // chunk resolves too, then DELETING them from dist so they're never publicly served.
-    //
-    // WHAT ACTUALLY HAPPENS TODAY: nothing. The branch below requires process.env.SENTRY_AUTH_TOKEN,
-    // and .github/workflows/deploy.yml has no `env:` block anywhere and passes no secret to the build
-    // step — so the token has never been present in ANY build, CI included. This plugin has therefore
-    // never run once: no source maps uploaded, no debug IDs injected, no release created. The
-    // `build.sourcemap` gate below reads the same variable, so no .map files are generated either.
-    // Every Sentry event this project has ever received is minified. (The comment here used to claim
-    // the opposite — that CI uploads hidden source maps — which was never true; corrected round 12.)
-    //
-    // TO TURN IT ON: create a Sentry auth token with project-releases write scope, add it as a
-    // repository secret named SENTRY_AUTH_TOKEN in BOTH the live and the staging repo, and pass it to
-    // the build step in .github/workflows/deploy.yml (`env: SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}`).
-    // The secret has to exist first, so the workflow is deliberately left untouched here. Local builds
-    // (no token) skip the plugin cleanly either way.
-    //
-    // Must be last (processes the final output). org/project slugs are public, not secret. telemetry off.
-    ...(command === 'build' && process.env.SENTRY_AUTH_TOKEN
+    // ── READABLE ERROR REPORTS: THE SOURCE-MAP UPLOAD (Round 27, Q2) ──────────────────────────
+    // Every DEPLOY build (GitHub Actions, either site) uploads its source maps to Sentry, so a
+    // report's stack reads as real files and lines instead of minified names. The plugin injects a
+    // debug ID into every script (what matches a report's stack to its map — the lazy SDK chunk
+    // included), uploads the maps under this build's release (sentryRelease above, the value the
+    // client reports), and then deletes them, so they are never published (noShippedSourceMaps
+    // below holds that). A laptop's build does none of it.
+    // HISTORY, so the old state is not mistaken for this one: from June to October 2026 this plugin
+    // was gated on a SENTRY_AUTH_TOKEN that deploy.yml never passed to the build, so it never ran
+    // once, and every report carried a minified stack and no release. deploy.yml's 'Build the site'
+    // step now passes it (that step only — see the note there).
+    // ★ IT FAILS LOUDLY, BOTH WAYS. Without the token a deploy build stops before bundling
+    // (sentryUploadPlan); and ANY error from the plugin — the release, the upload, the debug IDs —
+    // stops it too (errorHandler: by default the plugin only logs and carries on, which is how a
+    // silent half-upload would ship). A GitHub annotation names it on the run's summary.
+    // ⚠ WEIGHED, NOT OVERLOOKED: that includes Sentry's own service being down — a reason outside
+    // our control will block a deploy until it is back. Accepted, because the block costs nothing
+    // lasting (the build job fails BEFORE the version tag: nothing is published, no number is spent,
+    // and 'Re-run failed jobs' finishes it), while the alternative — shipping without readable
+    // reports — costs every report from that build, permanently: its maps cannot be uploaded later,
+    // because the debug IDs belong to bytes that existed only on that runner. And from inside the
+    // build an outage cannot be told reliably from our own fault (a revoked or expired token, a
+    // renamed organisation), the likelier causes — so there is no "skip if it looks like theirs".
+    // org/project slugs are public, not secret; `setCommits: false` (linking commits needs Sentry's
+    // GitHub integration, which this project does not use — the release name carries the commit);
+    // `inject: false` (the client is told the release by the define); telemetry off.
+    // (The plugin runs as enforce:'pre'; its upload and deletion happen in writeBundle, before any of
+    // the closeBundle checks below.)
+    ...(uploadsSourceMaps(command)
       ? [
           sentryVitePlugin({
             org: 'ts-6a',
             project: 'javascript-react',
             authToken: process.env.SENTRY_AUTH_TOKEN,
-            sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
+            release: { name: sentryRelease(), inject: false, setCommits: false },
+            sourcemaps: { filesToDeleteAfterUpload: [SOURCE_MAPS_GLOB] },
+            errorHandler: (err) => {
+              const failure = uploadFailure(err)
+              uploadFailed = true
+              annotateError(failure.message)
+              throw failure
+            },
             telemetry: false,
           }),
         ]
       : []),
-    // LAST, and in this order (both enforce:'post', so among post plugins the array order is the
-    // run order): buildIdentity must see the final bytes of every earlier rewrite, and
-    // precacheIntegrity must audit the artifact after buildIdentity's own rewrite. See both above.
+    // LAST, and in this order (all enforce:'post', so among post plugins the array order is the run
+    // order): noShippedSourceMaps checks dist holds no map before anything hashes it; buildIdentity
+    // must see the final bytes of every earlier rewrite, and precacheIntegrity must audit the
+    // artifact after buildIdentity's own rewrite. See all three above.
+    noShippedSourceMaps(uploadsSourceMaps(command)),
     buildIdentity(),
     precacheIntegrity(),
   ],
-  // Generate hidden source maps ONLY when we're uploading them to Sentry. 'hidden' emits the .map
-  // files but omits the //# sourceMappingURL comment from the shipped JS, so browsers never fetch
-  // them and they aren't referenced; the Sentry plugin above uploads then deletes them. Gated on the
-  // SAME variable as that plugin, deliberately: maps must never be emitted with nothing to consume
-  // and delete them. Since no build has ever had SENTRY_AUTH_TOKEN (see the plugin note above), this
-  // has always resolved to `false` — no .map file has ever been produced by CI or locally. (.map
-  // files would not count toward the JS size budget anyway; the size script globs *.js only.)
+  // Source maps are generated ONLY when this build uploads them to Sentry (a deploy build). 'hidden'
+  // emits the .map files but omits the //# sourceMappingURL comment from the shipped JS, so browsers
+  // never fetch them and nothing references them; the Sentry plugin above uploads then deletes them,
+  // and noShippedSourceMaps fails the build if one is left. Gated on the SAME decision as that plugin,
+  // deliberately: maps must never be emitted with nothing to upload and delete them. (A .map would not
+  // count toward the JS size budget anyway; the size script globs *.js only.)
   build: {
-    sourcemap: process.env.SENTRY_AUTH_TOKEN ? 'hidden' : false,
+    sourcemap: uploadsSourceMaps(command) ? 'hidden' : false,
   },
   test: {
     // Pure-logic tests run in Node (Vitest's default environment). DOM characterization
