@@ -644,8 +644,8 @@ input,textarea{user-select:text;-webkit-user-select:text}
    a .panel with a solid border of its own on the very line the dashes take, so that border goes
    transparent — still 1px wide, so nothing shifts — whether the strip wears the frame or stands
    at the top of a frame round both.
-   ⚠ NOT AN outline: the strip is sometimes one big <button>, and `button:focus{outline:none}`
-   below would take an outline off it the moment it was tapped.
+   ⚠ NOT AN outline: the strip is sometimes one big <button>, and the transparent `:focus` outline
+   below (THE KEYBOARD FOCUS RING) would take an outline off it the moment it was tapped.
    COLOUR: the theme's own label tone, thinned — so it is right in all five themes with no table of
    its own, and calm: it has to sit under numbers the player is reading without competing with them.
    pointer-events:none, so the frame never takes a tap meant for the strip. */
@@ -684,13 +684,18 @@ input,textarea{user-select:text;-webkit-user-select:text}
    not in play", and nothing else in the app draws it; a dashed line is taken, by the one
    session-only frame.) A ⚙ picker's tray and a Year Range box wear .tray-dormant in place of
    .surface-tray; the picker's chosen segment wears
-   .pill-dormant-on in place of .btn-solid: a quarter-strength accent tint ringed in the accent, its
-   label in the ordinary text colour. The ring is an OUTLINE so the segment keeps its exact size
-   (it is borderless — components/PillTray's concentric housing), and while the segment has the
-   keyboard the keyboard ring, also an outline, takes its place. tests/browser/notInEffect measures
-   the text's contrast in all five themes, over a hatch line as well as between them. */
+   .pill-dormant-on in place of .btn-solid: a quarter-strength accent tint, its label in the ordinary
+   text colour — the tint alone, with NO RING of its own. (Round 26 review gave it a 1px accent
+   outline too, and the owner's iPhone showed what that cost: :focus's transparent outline, below,
+   is as specific as this class and comes later, so the ring vanished from whichever choice a tap
+   had just focused (components/PillTray focuses the segment it activates) and stayed on every other
+   — ringed in one striped group, bare in the next, and different again after the next tap.) So the
+   only ring a chosen segment ever wears is THE KEYBOARD FOCUS RING, and only while the keyboard has
+   it. tests/browser/notInEffect measures the text's contrast in all five themes, over a hatch line
+   as well as between them, and holds the chosen segment ringless at rest, after taps, and after
+   the keyboard has gone. */
 .tray-dormant{--dormant-hatch:color-mix(in oklab,var(--panel-bd) 60%,transparent);background:repeating-linear-gradient(135deg,var(--dormant-hatch) 0 .1rem,transparent .1rem .375rem);border-color:var(--panel-bd)}
-.pill-dormant-on{background:color-mix(in oklab,var(--acc) 25%,transparent);color:var(--tx-100-80);outline:1px solid var(--acc);outline-offset:-1px;transition:background-color calc(.2s * var(--motion-scale))}
+.pill-dormant-on{background:color-mix(in oklab,var(--acc) 25%,transparent);color:var(--tx-100-80);transition:background-color calc(.2s * var(--motion-scale))}
 /* ★ THE DATE LINE (Round 26, Q7) — the big date on every mode's card, ONE LINE AT ONE SIZE PER
    CARD. 1.875rem is its full size, and the size it has wherever the widest date the card can show
    fits at it. Where that date would not fit (five-digit years made "September 10, 10000" too long

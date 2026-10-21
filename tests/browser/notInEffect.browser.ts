@@ -1,10 +1,16 @@
 // THE "NOT IN EFFECT" LOOK, AND THE YEAR RANGE ROW (Round 26, Q7 and its sweep).
-//   • CONTRAST: a ⚙ setting not in effect is drawn OUTLINED — hollow housing, the chosen option
-//     ringed instead of filled — with its text at full strength, because it is still a control a
+//   • CONTRAST: a ⚙ setting not in effect is drawn STRIPED — a hatched housing, the chosen option
+//     tinted instead of filled — with its text at full strength, because it is still a control a
 //     player uses (the faded look, opacity .6, fails 4.5:1 in the two light themes, and stays only
 //     for what cannot be used). Measured from the colours the browser resolved, in all five themes:
 //     the chosen option's label on its tint, an unchosen option's label, and a Year Range box's
 //     year — each at least 4.5:1 against what is really behind it.
+//   • NO RING BUT THE KEYBOARD'S: the chosen option of a striped setting is shown by its tint alone,
+//     the same in every striped setting at every moment — at rest, after taps, and after the
+//     keyboard has gone — and the only ring any of its options wears is the keyboard focus ring,
+//     on the one the keyboard is on, while the keyboard is in use. (The owner's iPhone, v2.30.2:
+//     the chosen option wore a 1px accent ring that the focus rule took away from whichever option
+//     a tap had just focused, so Date Format's choice was ringed while Rotate Dots' was not.)
 //   • THE YEAR RANGE ROW: four boxes, two pairs, one row, at the sizes where it is tightest — 360 and
 //     375 wide and tall enough that the WIDTH sets the root size (360×860, 375×860), a folding
 //     phone's cover (280×653), the root at its 12px floor (320×568), the largest phone (430×932),
@@ -22,7 +28,7 @@ import {
   THEMES,
 } from './support/app'
 import { SAME_PX, expectPageNotWiderThanWindow } from './support/app'
-import type { Locator } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 // The WCAG contrast of an element's text against what is drawn behind it: every background from
 // the element out to the first opaque one, painted in order onto one pixel, then the text colour
@@ -101,6 +107,81 @@ for (const theme of THEMES)
     expect(await hatched(box), `${theme}: the pair not in use`).toMatch(/repeating-linear-gradient/)
     expect(await hatched(live), `${theme}: the pair in use`).toBe('none')
   })
+
+// The options of a striped setting that wear a ring of any kind — a visible outline (one whose
+// colour is see-through draws nothing: that is index.css's :focus rule) or a box shadow — by name.
+const ringedIn = (group: Locator) =>
+  group.getByRole('radio').evaluateAll((radios) => {
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
+    ctx.canvas.width = ctx.canvas.height = 1
+    const shows = (color: string) => {
+      ctx.clearRect(0, 0, 1, 1)
+      ctx.fillStyle = color
+      ctx.fillRect(0, 0, 1, 1)
+      return ctx.getImageData(0, 0, 1, 1).data[3] > 0
+    }
+    return radios
+      .filter((el) => {
+        const cs = getComputedStyle(el)
+        const outline =
+          cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0 && shows(cs.outlineColor)
+        return outline || cs.boxShadow !== 'none'
+      })
+      .map((el) => el.getAttribute('aria-label') ?? el.textContent)
+  })
+
+test.describe('a striped setting’s options', () => {
+  test.use({ hasTouch: true })
+  for (const theme of THEMES)
+    test(`${theme}: no ring but the keyboard's — at rest, after taps, after the keyboard has gone`, async ({
+      page,
+    }) => {
+      // Random Format on puts Date Format out of effect (on Classic, where the app opens), and the
+      // factory Input, Buttons, puts Rotate Dots out of effect: two striped settings at once.
+      await openApp(page, { theme, seed: { settings: { randomFormat: true } } })
+      const panel = await openSettings(page)
+      const format = panel.getByRole('radiogroup', { name: 'Date Format' })
+      const rotate = panel.getByRole('radiogroup', { name: 'Rotate Dots' })
+      const groups = { 'Date Format': format, 'Rotate Dots': rotate }
+      for (const group of Object.values(groups))
+        await expect(group.getByRole('radio', { checked: true })).toHaveClass(/pill-dormant-on/)
+      const rings = async (page: Page, when: string, keyboardOn: string[] = []) => {
+        await settled(page)
+        const seen = (await Promise.all(Object.values(groups).map(ringedIn))).flat()
+        expect(seen, `${theme}, ${when}: the options wearing a ring`).toEqual(keyboardOn)
+      }
+      await rings(page, 'at rest')
+      // A tap, on the target brought to the middle of the menu's list first: the bottom of the list
+      // runs under the pinned foot, and a touch there lands on the foot's side of the edge.
+      const tap = async (target: Locator) => {
+        await target.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        await settled(page)
+        await target.tap()
+      }
+      // A tap on another option chooses it, and focuses it (components/PillTray).
+      await tap(rotate.getByRole('radio', { name: '90° CCW' }))
+      await expect(rotate.getByRole('radio', { name: '90° CCW' })).toBeChecked()
+      await rings(page, 'after a tap in Rotate Dots')
+      await tap(format.getByRole('radio', { name: 'Written DMY' }))
+      await expect(format.getByRole('radio', { name: 'Written DMY' })).toBeChecked()
+      await rings(page, 'after a tap in Date Format')
+      // A tap on the option already chosen: focus moves, nothing else changes.
+      await tap(rotate.getByRole('radio', { name: '90° CCW' }))
+      await rings(page, 'after a tap on the chosen option')
+      // The keyboard: an arrow walks the choice along, and the option it lands on wears the ring.
+      await page.keyboard.press('ArrowLeft')
+      await expect(rotate.getByRole('radio', { name: '45° CCW' })).toBeChecked()
+      await rings(page, 'with the keyboard on 45° CCW', ['45° CCW'])
+      // …and a tap puts it away, wherever the tap lands: on an option, or on the menu's own text.
+      await tap(format.getByRole('radio', { name: 'Written MDY' }))
+      await rings(page, 'after the keyboard, a tap on an option')
+      await page.keyboard.press('ArrowRight')
+      await expect(format.getByRole('radio', { name: 'Written DMY' })).toBeChecked()
+      await rings(page, 'with the keyboard on Written DMY', ['Written DMY'])
+      await tap(panel.getByText('Rotate Dots', { exact: true }))
+      await rings(page, 'after the keyboard, a tap on a label')
+    })
+})
 
 const ROW_SIZES: [number, number][] = [
   [360, 860],

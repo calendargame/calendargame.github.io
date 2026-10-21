@@ -60,9 +60,10 @@ import { usePillGroupDormant } from './pillGroupDormant.js'
 // and the press-drag ring (see the idiom note above).
 const TRAY_CLASS = 'flex gap-0.5 border surface-tray rounded-xl'
 // …and NOT IN EFFECT (the group's `dormant`, components/PillGroup): the same housing, striped — no
-// fill, a hatch instead (index.css's .tray-dormant) — and the chosen segment ringed instead
-// of filled (.pill-dormant-on), its label in the ordinary text colour. Same box, same size: only the
-// paint differs, so a setting going in and out of effect moves no pixel.
+// fill, a hatch instead (index.css's .tray-dormant) — and the chosen segment tinted instead of
+// filled (.pill-dormant-on), its label in the ordinary text colour, with no ring: the only ring a
+// segment wears is the keyboard's (index.css says why a ring of its own came and went). Same box,
+// same size: only the paint differs, so a setting going in and out of effect moves no pixel.
 const TRAY_DORMANT_CLASS = 'flex gap-0.5 border tray-dormant rounded-xl'
 // One segment: borderless, flex-1, concentric radius, popover control tier.
 const SEGMENT_CLASS =
@@ -114,8 +115,9 @@ export function PillTray<T extends string>({
             // documents both). Explicit because Safari, on macOS and iOS alike, does not focus a
             // <button> when it is clicked: without this, "click a pill, then arrow along the
             // setting" — which the guide and the changelog both promise — was true on Chrome and
-            // Firefox and silently dead on Safari. Nothing is drawn either way (index.css:
-            // button:focus{outline:none}), so this moves no pixel. preventScroll because the pill
+            // Firefox and silently dead on Safari. Nothing is drawn for it — the keyboard's ring
+            // is drawn only while the keyboard is in use (index.css, THE KEYBOARD FOCUS RING), and
+            // no segment look depends on focus — so this moves no pixel. preventScroll because the pill
             // is already under the finger; the popover must not jump to re-reveal it.
             e.currentTarget.focus({ preventScroll: true })
             onChange(o.value)

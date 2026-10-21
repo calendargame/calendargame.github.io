@@ -57,7 +57,7 @@ const ARROW_STEP: Record<string, number> = {
   ArrowUp: -1,
 }
 // ★ TWO LOOKS, TWO MEANINGS (Round 26): FILLED = in effect; STRIPED (a hatched housing, its choice
-// ringed — index.css's .tray-dormant) = kept but NOT IN EFFECT right now, and still changeable
+// tinted — index.css's .tray-dormant) = kept but NOT IN EFFECT right now, and still changeable
 // (`dormant` — a chance setting the year range cannot use, Rotate Dots while Input is Buttons). A dormant group is an ordinary live group in every way but its look and
 // one sentence: its keys, its tab stop, and a press all work; it carries no aria-disabled (the control
 // works, and lib/pointerGestures skips aria-disabled targets); and each of its radios is described by

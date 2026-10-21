@@ -2895,8 +2895,8 @@ export default function GuidePage({
         </p>
         <p>
           A setting can be in one of two looks. <b>Filled</b> — it is in effect. <b>Striped</b> —
-          its box is striped instead of filled and its choice is ringed: it is kept, but it is not
-          in effect right now, and you can still change it. Changing a striped setting never
+          its box is striped instead of filled and its choice is lightly tinted: it is kept, but it
+          is not in effect right now, and you can still change it. Changing a striped setting never
           restarts a MoX run or a Blitz round, never redraws a date, and never changes which Bests
           show; it takes effect when the setting is in effect again. Striped are: Date Format while
           Random Format is on, in Classic, Flash, MoX, and Blitz; Input and Rotate Dots in
