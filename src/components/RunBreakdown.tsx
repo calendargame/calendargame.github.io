@@ -3,7 +3,12 @@ import type { FmtDate } from '../modes/modeTypes.js'
 import { DAY, DAY_LETTER } from '../lib/format.js'
 import type { RunBreakdown as RunBreakdownData, SolveMark } from '../engine/runBreakdown.js'
 import { fmtTime, truncTime, fmtAccuracyPct } from '../lib/modeFormat.js'
-import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
+import {
+  SCROLL_REGION_CLASS,
+  reachEdges,
+  scrollFadeClass,
+  useScrollEdgeState,
+} from './scrollRegion.js'
 import Popup from './Popup.js'
 import { MODAL_CARD_CLASS } from './modalContract.js'
 
@@ -138,10 +143,13 @@ export default function RunBreakdown({
             only, this scroller owns the px-4, which puts the right padding INSIDE the scroller as
             the text-free lane the iOS overlay scrollbar paints in. max-h caps a thousand-solve run
             without growing the card off-screen — and without the mode page behind it ever scrolling,
-            which is the constraint this whole panel exists inside. */}
+            which is the constraint this whole panel exists inside. Its box reaches from the figures'
+            edge to the card's (Round 27, the owner's rule — scrollRegion's reachEdges): the card's row
+            gap above and its py-4 below are padding inside it, so a row scrolling away fades out INTO
+            the edge, and the cap grows by the same 1.75rem so it shows as many rows as before. */}
         <ul
           ref={scrollRef}
-          className={`${SCROLL_REGION_CLASS} max-h-[45vh] text-xs ${scrollFadeClass(scrolledFromTop, atBottom)}`}
+          className={`${SCROLL_REGION_CLASS} ${reachEdges({ top: '3', bottom: '4' })} max-h-[calc(45vh_+_1.75rem)] text-xs ${scrollFadeClass(scrolledFromTop, atBottom)}`}
         >
           {rows.map((r, i) => (
             <li

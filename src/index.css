@@ -356,6 +356,11 @@ input,textarea{user-select:text;-webkit-user-select:text}
      there is no timer that can still be running after the scroll has stopped.
    Where both apply (e.g., bar at scroll's top edge), both stack: shadow says
    "I'm a layered surface," fade says "and there's content extending under me."
+   ★ A FADE ENDS EXACTLY AT THAT EDGE (Round 27, the owner's rule): content fades out INTO the edge or
+   neighbour it disappears under, and the edge's shadow lies over that content — never a strip of
+   plain panel colour between the fade and the edge. Every region's box therefore ends at its
+   neighbour, the space that used to lie outside it now padding inside (components/scrollRegion's
+   reachEdges); the page's own top edge is the bar's underside (--fade-top-inset, below).
    The scroll-REGION recipe that pairs these fades with the px-4 scrollbar lane is
    tokenized in components/scrollRegion.ts (round 7) — new inner scrollers take
    SCROLL_REGION_CLASS + scrollFadeClass + useScrollEdgeState from there, and
@@ -376,21 +381,24 @@ input,textarea{user-select:text;-webkit-user-select:text}
    JS needs both in px, and a custom property hands it the text as written here — so
    components/scrollRegion's readFadeDepthPx / readShadeRampPx resolve the rem against the root's
    own font size. They are the only readers. */
-/* ★ --fade-reach: HOW FAR IN FROM THE REGION'S OWN EDGE ITS CONTENT'S EDGE IS — 0 for every scroller
-   but one. A region may be made to reach PAST its rows (the Presets popup's list does, by one card
-   gap each way, so that a row held at its first or last slot keeps its shadow: the region is what
-   clips). The fade belongs to where the ROWS stop, not to where the clip box does: so a fading edge
-   is fully hidden for the reach and feathers from there — rows scrolling by never show in the gap —
-   while an edge with nothing past it carries no mask at all, and the gap there is free for the
-   shadow. With the reach at 0 these are the plain edge fades they always were. */
-:root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-reach:0px}
-.fade-scroll-top{-webkit-mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)));mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)))}
-.fade-scroll-bottom{-webkit-mask-image:linear-gradient(to bottom,black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)));mask-image:linear-gradient(to bottom,black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)))}
+/* ★ --fade-top-inset: HOW FAR DOWN FROM A REGION'S BOX THE EDGE ITS CONTENT GOES UNDER IS — 0 for
+   every region but the app's page (Round 27). A fade ends AT that edge (the owner's rule;
+   components/scrollRegion's reachEdges makes every region's box end at its neighbour, so for them it
+   is the box's own edge). #appScroll's box starts at the top of the screen, BEHIND the fixed bar, so
+   its top fade starts at the bar's bottom edge, --bar-h down (set on it in src/main.tsx, beside the
+   padding-top that is the same number):
+   content fades out into the bar, as How to Play's top strip does, instead of fading where the bar
+   already hides it. Above the inset the content is transparent — and under the opaque bar anyway.
+   (It replaced --fade-reach, which held the Presets list's fade a card gap in from its box so that
+   rows never showed in the gap: the owner ruled the other way — rows fade into the edge itself.) */
+:root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-top-inset:0px}
+.fade-scroll-top{-webkit-mask-image:linear-gradient(to bottom,transparent var(--fade-top-inset),black calc(var(--fade-top-inset) + var(--fade-h)));mask-image:linear-gradient(to bottom,transparent var(--fade-top-inset),black calc(var(--fade-top-inset) + var(--fade-h)))}
+.fade-scroll-bottom{-webkit-mask-image:linear-gradient(to bottom,black calc(100% - var(--fade-h)),transparent 100%);mask-image:linear-gradient(to bottom,black calc(100% - var(--fade-h)),transparent 100%)}
 /* When a container has BOTH top and bottom fades, the two mask-images must be
    combined into a single rule so neither overrides the other (CSS doesn't stack
    mask-image declarations from separate classes). The combined gradient fades
    both edges at once. */
-.fade-scroll-both{-webkit-mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)),black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)));mask-image:linear-gradient(to bottom,transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h)),black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach)))}
+.fade-scroll-both{-webkit-mask-image:linear-gradient(to bottom,transparent var(--fade-top-inset),black calc(var(--fade-top-inset) + var(--fade-h)),black calc(100% - var(--fade-h)),transparent 100%);mask-image:linear-gradient(to bottom,transparent var(--fade-top-inset),black calc(var(--fade-top-inset) + var(--fade-h)),black calc(100% - var(--fade-h)),transparent 100%)}
 /* The guide's two edge fades — ⚠ KEPT AS STRIPS, AND DELIBERATELY NOT THE MASKS ABOVE. Read this
    before "harmonising" them: folding the guide onto .fade-scroll-* would compile, would leave
    every shipped test name passing, and would break the page in the three ways below.

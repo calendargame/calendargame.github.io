@@ -8,7 +8,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from 'react'
-import type { SetStateAction } from 'react'
+import type { CSSProperties, SetStateAction } from 'react'
 import ErrorBoundary, { ModeErrorBoundary } from './ErrorBoundary'
 import { initObservability, captureError } from './observability/sentry'
 // createRoot only. This used to reconstruct a ReactDOM object carrying createPortal too, because
@@ -2575,7 +2575,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
             headers still pin against the scroller. ⚠ Do not flatten it — and any box that --bar-h
             sizes, if a ResizeObserver watches it, has to sit deeper than the bar for the same reason. */}
         <div className="absolute inset-0">
-        <div ref={attachAppScroll} id="appScroll" tabIndex={-1} style={{paddingTop:'var(--bar-h)'}} className={`absolute inset-0 ${SCROLLER_CORE_CLASS} ${scrollFadeClass(appScrolledFromTop,appAtBottom)}`}>
+        {/* --fade-top-inset: the page's top fade starts at the bar's bottom edge, where the content goes
+            under — not at this box's own top, behind the bar (index.css's --fade-top-inset note;
+            the owner's rule, Round 27). The same --bar-h as the padding-top beside it. */}
+        <div ref={attachAppScroll} id="appScroll" tabIndex={-1} style={{paddingTop:'var(--bar-h)','--fade-top-inset':'var(--bar-h)'} as CSSProperties} className={`absolute inset-0 ${SCROLLER_CORE_CLASS} ${scrollFadeClass(appScrolledFromTop,appAtBottom)}`}>
         {/* Mode-content wrapper. min-h-full + flex column: the scroller above has a definite
             height, so "at least a screenful" gives a mode that wants to FIT the screen (Lookup) a
             definite box to fill, while a mode taller than the screen still grows normally and keeps

@@ -1,11 +1,13 @@
 // THE END OF THE ⚙ MENU'S LIST — scrolled as far as it goes, the last control (the Amnesic picker)
 // is drawn whole: its bottom border is at or above the scroll area's bottom edge, never under it.
 // The scroll area's height is fractional and the browser's furthest scroll position a whole pixel,
-// so without the scroll area's one pixel of bottom padding up to a pixel of the last control could
-// stay out of sight — on the owner's iPhone (430 wide, Round 25) the pill's bottom border was cut
-// by 0.2px, and Chromium dropped the line outright. Swept a pixel at a time over the heights where
-// he saw it, in both engines. And the pixel is taken back from the margin under the scroll area, so
-// the distance from that control to the foot's line is what it was: the card's space-y-4.
+// so with nothing under the last control inside the scroll area up to a pixel of it could stay out
+// of sight — on the owner's iPhone (430 wide, Round 25) the pill's bottom border was cut by 0.2px,
+// and Chromium dropped the line outright. Swept a pixel at a time over the heights where he saw it,
+// in both engines. Round 26 kept it inside with a pixel of padding; since Round 27 the scroll area
+// reaches the foot's line itself, with the rem that lay outside it now padding inside
+// (components/scrollRegion's reachEdges), so the distance from that control to the foot's line is
+// what it always was: the card's space-y-4.
 import {
   test,
   expect,
@@ -56,9 +58,9 @@ test('scrolled to the end, the last control is drawn whole, and sits a rem above
       r.last,
       `${at}: the last control's bottom edge against the scroll area's`,
     ).toBeLessThanOrEqual(r.bottom)
-    // The rem between the list and the foot is the card's space-y-4, as it always was: the pixel of
-    // padding is taken back from the margin under the scroll area, so all that moves it is the
-    // part of a pixel the whole-pixel scroll position leaves over, either way.
+    // The rem between the list and the foot is the card's space-y-4, as it always was (inside the
+    // scroll area now), so all that moves it is the part of a pixel the whole-pixel scroll position
+    // leaves over, either way.
     const gap = r.footTop - r.last
     expect(
       Math.abs(gap - r.rem),
@@ -69,8 +71,8 @@ test('scrolled to the end, the last control is drawn whole, and sits a rem above
 
 // THE SAME, FOR LOOKUP'S HISTORY LIST (Round 26): scrolled to the end, the last row's bottom border is
 // at or above the list's bottom edge — it was under it by up to 0.9px at 360 wide before the list
-// got its pixel of padding — and the panel's bottom padding gave that pixel back, so the padding
-// under the last row is the rem it was.
+// got padding of its own at the end — and the padding under the last row is the rem it always was
+// (since Round 27 all of it inside the list, whose box reaches the panel's edge: reachEdges).
 test('Lookup: scrolled to the end, the last history row is drawn whole, with a rem of padding under it as before', async ({
   page,
 }) => {
@@ -110,6 +112,7 @@ test('Lookup: scrolled to the end, the last history row is drawn whole, with a r
           last: rows[rows.length - 1].getBoundingClientRect().bottom,
           bottom: ul.getBoundingClientRect().bottom,
           listPad: parseFloat(getComputedStyle(ul).paddingBottom),
+          listMargin: parseFloat(getComputedStyle(ul).marginBottom),
           panelPad: parseFloat(getComputedStyle(panel).paddingBottom),
           rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
         }
@@ -119,12 +122,13 @@ test('Lookup: scrolled to the end, the last history row is drawn whole, with a r
       expect(r.last, `${at}: the last row's bottom edge against the list's`).toBeLessThanOrEqual(
         r.bottom,
       )
-      // …and the pixel is GIVEN BACK: the list's pixel of padding and the panel's bottom padding add
-      // up to the rem the panel always had under its last row. (Asserted on the two paddings, not on
-      // the last row's position: a history row's button sits a little above the bottom of its own row,
-      // which no padding decides, and the whole-pixel scroll leaves its own fraction on top.)
+      // …and the space under the last row is the rem the panel always had: the list's own padding,
+      // and the panel's, less the margin that pulls the list's box across the panel's (all of it the
+      // list's since Round 27). (Asserted on the spacing, not on the last row's position: a history
+      // row's button sits a little above the bottom of its own row, which no padding decides, and
+      // the whole-pixel scroll leaves its own fraction on top.)
       expect(
-        Math.abs(r.listPad + r.panelPad - r.rem),
+        Math.abs(r.listPad + r.listMargin + r.panelPad - r.rem),
         `${at}: the padding under the last row`,
       ).toBeLessThanOrEqual(SAME_PX)
     }

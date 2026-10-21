@@ -57,13 +57,13 @@ describe('Lookup history on the shared scroll-region recipe (round 7)', () => {
     const list = container.querySelector('ul')
     expect(list.className).toContain(SCROLL_REGION_CLASS) // the px-4 lane lives INSIDE the scroller
     const panel = list.parentElement
-    // Vertical only — the lane moved inward. A rem top and bottom, the bottom one a pixel less
-    // since Round 26: the list carries that pixel as its own end padding, so a last row's bottom
-    // border is never left under the list's edge at the end of a scroll (LookupCard says why).
-    expect(panel.className.split(/\s+/)).toEqual(
-      expect.arrayContaining(['pt-4', 'pb-[calc(var(--spacing)*4_-_1px)]']),
+    // Vertical only — the lane moved inward. A rem top and bottom (py-4), and the list's box reaches
+    // across both that and the gap-4 above it, as its own padding (Round 27: scrollRegion's
+    // reachEdges — its fades end at the heading and at the panel's edge; LookupCard says why).
+    expect(panel.className.split(/\s+/)).toEqual(expect.arrayContaining(['py-4', 'gap-4']))
+    expect(list.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(['-mt-4', 'pt-4', '-mb-4', 'pb-4']),
     )
-    expect(list.className.split(/\s+/)).toContain('pb-px')
     expect(panel.className.split(/\s+/)).not.toContain('p-4')
   })
 
@@ -150,7 +150,7 @@ describe('the fade depth and the shade ramp reach JS in px, whatever unit the st
 
   it('the stylesheet gives both in rem: the fade half as deep as it was, the ramp unchanged', () => {
     const css = readFileSync('src/index.css', 'utf8')
-    expect(css).toContain(':root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-reach:0px}')
+    expect(css).toContain(':root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-top-inset:0px}')
     // …and each is declared exactly once.
     expect(css.match(/--fade-h:/g)).toHaveLength(1)
     expect(css.match(/--shade-ramp:/g)).toHaveLength(1)

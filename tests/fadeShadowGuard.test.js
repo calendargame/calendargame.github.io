@@ -45,9 +45,11 @@ const css = stripBlockComments(readFileSync(join(root, 'src/index.css'), 'utf8')
 // apart — index.css's --shade note says what an unsupported value inside a box-shadow costs).
 const THEME = 'rgb(var(--shadow-elev-c) / var(--shadow-elev-a))'
 const THEME_SHADED = 'rgb(var(--shadow-elev-c) / calc(var(--shadow-elev-a) * var(--shade,1)))'
-const MASK_TOP = 'transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h))'
-const MASK_BOTTOM =
-  'black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach))'
+// (the top fade starts --fade-top-inset down: 0 but for the page, whose box starts behind the bar;
+// the bottom fade ends at the box's edge — every region's box ends at its neighbour since Round 27)
+const MASK_TOP =
+  'transparent var(--fade-top-inset),black calc(var(--fade-top-inset) + var(--fade-h))'
+const MASK_BOTTOM = 'black calc(100% - var(--fade-h)),transparent 100%'
 const mask = (stops) => {
   const value = `linear-gradient(to bottom,${stops})`
   return { '-webkit-mask-image': value, 'mask-image': value }
@@ -132,7 +134,7 @@ const OWNER_RULES = [
 const TOKENS = {
   '--fade-h': '.75rem',
   '--shade-ramp': '1.5rem',
-  '--fade-reach': '0px',
+  '--fade-top-inset': '0px',
   '--shadow-lifted': `0 .1875rem .75rem ${THEME}`,
   '--shadow-float': `0 .375rem 1.5rem ${THEME}`,
   '--frost-edge': '0 0 0 .5px rgb(0 0 0 / .05)',

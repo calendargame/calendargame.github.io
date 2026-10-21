@@ -45,6 +45,47 @@ export const scrollFadeClass = (scrolledFromTop: boolean, atBottom: boolean): st
         ? ' fade-scroll-bottom'
         : ''
 
+// ── A FADE ENDS AT THE EDGE ITS CONTENT GOES UNDER (Round 27 — the owner's rule) ─────────────
+// Content scrolling out of a region fades out INTO the edge it disappears under — the card's edge, a
+// heading, a pinned foot whose shadow then lies over it — with NO strip of plain panel colour between
+// the fade and that edge. A mask fades what is at the region's own box edge, so the rule is a rule
+// about the box: IT ENDS EXACTLY AT ITS NEIGHBOUR. Every faded region used to stop short of it — the
+// card's padding, the space between it and its heading, a margin of its own all lay OUTSIDE the box —
+// and the fade ended a band away from the edge, over plain panel (the ⚙ menu's foot cast its shadow
+// on that empty band). So the space moves INSIDE, as padding: the box is pulled out to the neighbour
+// by a negative margin (or, where the space was the region's own margin, by giving that up), and
+// padding of the same size puts the content back where it was — at rest, with the list at its top or
+// at its end, nothing moves. tests/browser/fadeEdges holds both halves for every faded area.
+//   • `top` / `bottom` — the space that lay outside the box on that side, as a spacing step: '3' is
+//     .75rem (the card's row gap, space-y-3), '4' is 1rem (a card's py-4, a panel's gap-4).
+//   • `bottomIsOwnMargin` — the space below was the region's OWN bottom margin (its card's space-y
+//     puts one on every child but the last): that margin is set to 0, rather than cancelled by a
+//     negative one, which would override it and pull the box past the neighbour.
+// A region whose content can be revealed or windowed must reckon from its padding-top (the content
+// starts there now): useWindowedRows does. A neighbour that casts a shadow onto the region wears
+// EDGE_OVER_SCROLL_CLASS, so the shadow lies over the content and not under it.
+// The one region with a top edge it does not own is the app's page (#appScroll): its box starts at the
+// top of the screen, behind the bar, so its top fade starts --bar-h down (index.css, --fade-top-inset).
+export type EdgeSpace = '3' | '4'
+const REACH_UP: Record<EdgeSpace, string> = { '3': '-mt-3 pt-3', '4': '-mt-4 pt-4' }
+const REACH_DOWN: Record<EdgeSpace, string> = { '3': '-mb-3 pb-3', '4': '-mb-4 pb-4' }
+const REACH_DOWN_OWN_MARGIN: Record<EdgeSpace, string> = { '3': 'mb-0 pb-3', '4': 'mb-0 pb-4' }
+export function reachEdges({
+  top,
+  bottom,
+  bottomIsOwnMargin = false,
+}: {
+  top: EdgeSpace
+  bottom: EdgeSpace
+  bottomIsOwnMargin?: boolean
+}): string {
+  return `${REACH_UP[top]} ${(bottomIsOwnMargin ? REACH_DOWN_OWN_MARGIN : REACH_DOWN)[bottom]}`
+}
+// A pinned neighbour whose edge shadow (index.css's elev-shadow-up/-down) falls on a region: painted
+// above the region's content. A masked region is a stacking context, painted after every block that
+// is not positioned — it covered the shadow, which only ever fell on the empty band outside the box.
+export const EDGE_OVER_SCROLL_CLASS = 'relative z-[1]'
+
 // ── The edge arithmetic — ONE owner (round 10 item B) ────────────────────────────────────────
 // Everything downstream of "where is this scroller relative to its two edges" is derived from
 // scrollEdgeGaps, and nothing re-derives it: the two booleans that drive the mask fades, and the
@@ -490,7 +531,9 @@ type RowMetrics = { rowHeight: number; pitch: number }
 // by the time the browser reports a resize the old numbers are gone from the element. `rows` is the
 // position in the list's own unit: how many rows are scrolled past the top of the view, fractions
 // included — the one number about the position that a change of row size does not change.
-type RowView = RowMetrics & { clientHeight: number; scrollTop: number; rows: number }
+// `lead` is where the rows begin in the content: the list's padding-top (reachEdges — the space above
+// the first row is inside the box), so row i's top is lead + i × pitch.
+type RowView = RowMetrics & { clientHeight: number; scrollTop: number; rows: number; lead: number }
 
 /**
  * Scroll `el` the least it has to for the band of its content from `top` to `top + height` (content
@@ -534,6 +577,7 @@ export function useWindowedRows<T extends HTMLElement>(
     if (!el) return
     let pitch = 0
     let rowHeight = 0
+    let lead = 0
     // Note the position (and the geometry it was read under) for the next geometry change.
     // The rows last noted STAND while the list is where they put it — to the pixel the browser
     // could give them: a whole one, and never past the end of the content. Anything else is a
@@ -542,19 +586,20 @@ export function useWindowedRows<T extends HTMLElement>(
       const scrollTop = el.scrollTop
       const was = seenRef.current
       const end = Math.max(el.scrollHeight - el.clientHeight, 0)
-      const held = was !== null && Math.abs(Math.min(was.rows * pitch, end) - scrollTop) < 1
+      const held = was !== null && Math.abs(Math.min(lead + was.rows * pitch, end) - scrollTop) < 1
       seenRef.current = {
         rowHeight,
         pitch,
+        lead,
         clientHeight: el.clientHeight,
         scrollTop,
-        rows: held ? was.rows : scrollTop / pitch,
+        rows: held ? was.rows : (scrollTop - lead) / pitch,
       }
     }
     const sync = () => {
       if (pitch <= 0) return
       see()
-      const first = Math.floor(Math.max(el.scrollTop, 0) / pitch)
+      const first = Math.floor(Math.max(el.scrollTop - lead, 0) / pitch)
       const rows = Math.ceil(el.clientHeight / pitch)
       setView((prev) => (prev.first === first && prev.rows === rows ? prev : { first, rows }))
     }
@@ -563,6 +608,7 @@ export function useWindowedRows<T extends HTMLElement>(
       const [a, b] = el.querySelectorAll<HTMLElement>('[data-row]')
       const top = a?.getBoundingClientRect()
       rowHeight = top?.height ?? 0
+      lead = parseFloat(getComputedStyle(el).paddingTop) || 0
       // Two drawn rows are always neighbours, so the difference of their tops IS the pitch.
       pitch = a && b ? b.getBoundingClientRect().top - top!.top : 0
       if (!(pitch > 0)) pitch = 0
@@ -584,16 +630,16 @@ export function useWindowedRows<T extends HTMLElement>(
       ) {
         // The row at the top of the view stays at the top: the same number of rows scrolled past,
         // at the rows' new size. (A box that only changed height needs nothing — scrollTop held.)
-        if (was.pitch !== pitch) scrollBoxTo(el, was.rows * pitch)
+        if (was.pitch !== pitch) scrollBoxTo(el, lead + was.rows * pitch)
         // …and the wanted row stays in view if it was whole in view.
         const wanted = revealIndexRef.current
-        const wasTop = wanted * was.pitch
+        const wasTop = was.lead + wanted * was.pitch
         if (
           wanted >= 0 &&
           wasTop >= was.scrollTop &&
           wasTop + was.rowHeight <= was.scrollTop + was.clientHeight
         )
-          scrollBandIntoView(el, wanted * pitch, rowHeight)
+          scrollBandIntoView(el, lead + wanted * pitch, rowHeight)
       }
       sync()
     }
@@ -639,7 +685,7 @@ export function useWindowedRows<T extends HTMLElement>(
     if (last && last.index === revealIndex && last.key === revealKey) return
     revealedRef.current = { index: revealIndex, key: revealKey }
     if (revealIndex < 0) return
-    const top = revealIndex * pitch
+    const top = (parseFloat(getComputedStyle(el).paddingTop) || 0) + revealIndex * pitch
     if (last === null) scrollBoxTo(el, top - (el.clientHeight - rowHeight) / 2)
     else scrollBandIntoView(el, top, rowHeight)
     syncRef.current()

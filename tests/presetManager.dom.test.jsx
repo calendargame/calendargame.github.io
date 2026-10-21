@@ -1824,39 +1824,40 @@ describe('the list reaches one card gap past its rows, above and below', () => {
     openManager()
     const region = nameBoxes()[0].closest('.overflow-y-auto')
     const classes = [...region.classList]
-    expect(classes).toContain('py-3') // room inside the clip box…
-    expect(classes).toContain('-my-3') // …pulled back out, so no row moves
+    expect(classes).toEqual(expect.arrayContaining(['pt-3', 'pb-3'])) // room inside the clip box…
+    expect(classes).toEqual(expect.arrayContaining(['-mt-3', '-mb-3'])) // …pulled back out, so no row moves
     expect(classes).toContain('max-h-[calc(45vh_+_1.5rem)]') // …and a long list shows the same 45vh
-    expect(classes).toContain('[--fade-reach:0.75rem]') // …and the edge fades know where the rows stop
     expect(region.parentElement.classList.contains('flow-root')).toBe(true) // margins stay inside
     expect(card().classList.contains('space-y-3')).toBe(true) // the gap the reach is taken from
     expect(region.parentElement.parentElement).toBe(card()) // …between the region and its neighbours
   })
-  // The reach is for the held row's shadow and for nothing else. While the list scrolls, rows pass
-  // through it — and used to be drawn there, in the gaps above and below the list. An edge that is
-  // fading (rows past it) hides its reach whole and feathers from where the rows stop; an edge at
-  // the list's end has no mask, and that is the only place the shadow needs the room.
-  it('a fading edge hides the reach and feathers from where the rows stop', () => {
+  // While the list scrolls, rows pass through the reach — and fade out there INTO the description
+  // above and the buttons below (Round 27, the owner's ruling: a fade ends at the edge its content
+  // goes under — scrollRegion's reachEdges). The list's fades are the plain ones every region wears,
+  // feathering from the box's own edge; nothing holds them a reach in any more.
+  it('a fading edge feathers from the box’s own edge, into the neighbour', () => {
     const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
     const mask = (name) => new RegExp(`\\.${name}\\{[^}]*;mask-image:([^}]*)\\}`).exec(code)[1]
-    const TOP = 'transparent var(--fade-reach),black calc(var(--fade-reach) + var(--fade-h))'
-    const BOTTOM =
-      'black calc(100% - var(--fade-reach) - var(--fade-h)),transparent calc(100% - var(--fade-reach))'
+    const TOP =
+      'transparent var(--fade-top-inset),black calc(var(--fade-top-inset) + var(--fade-h))'
+    const BOTTOM = 'black calc(100% - var(--fade-h)),transparent 100%'
     expect(mask('fade-scroll-top')).toBe(`linear-gradient(to bottom,${TOP})`)
     expect(mask('fade-scroll-bottom')).toBe(`linear-gradient(to bottom,${BOTTOM})`)
     expect(mask('fade-scroll-both')).toBe(`linear-gradient(to bottom,${TOP},${BOTTOM})`)
-    // Every other scroller has no reach, and its fades are the plain ones they always were.
-    expect(code).toContain(':root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-reach:0px}')
-    expect(code.match(/--fade-reach:/g)).toHaveLength(1)
+    expect(code).toContain(':root{--fade-h:.75rem;--shade-ramp:1.5rem;--fade-top-inset:0px}')
+    expect(code).not.toMatch(/--fade-reach/)
+    openManager()
+    const region = nameBoxes()[0].closest('.overflow-y-auto')
+    expect(region.className).not.toMatch(/--fade/)
   })
   it('the shadow it makes room for needs no more than that gap on the side it is cut closest', () => {
     // The LIFTED shadow, 0 .1875rem .75rem: it reaches .75 − .1875 = .5625rem above a piece and
-    // .75 + .1875 = .9375rem below. The gap is .75rem (LIST_REACH_CLASS's --fade-reach, the same
+    // .75 + .1875 = .9375rem below. The gap is .75rem (LIST_REACH_CLASS's pt-3 / pb-3, the same
     // unit), so the top is whole and the bottom loses only the last .1875rem of the blur's tail.
     const shadow = /--shadow-lifted:0 ([\d.]+)rem ([\d.]+)rem /.exec(css)
     expect(shadow).not.toBeNull()
     const [down, blur] = [Number(shadow[1]), Number(shadow[2])]
-    const gap = 0.75 // py-3 / [--fade-reach:0.75rem], pinned on the region by the first test here
+    const gap = 0.75 // pt-3 / pb-3, pinned on the region by the first test here
     expect(blur - down).toBeLessThanOrEqual(gap)
     expect(blur + down - gap).toBeLessThanOrEqual(0.1875)
   })

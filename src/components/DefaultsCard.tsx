@@ -38,6 +38,11 @@
 //     whose strength is the --shade the hook writes, and it writes 0 when there is nothing to
 //     scroll — so on every screen tall enough to hold the card, which is every ordinary one, this
 //     whole treatment renders exactly the card that shipped before it.
+//   • the rows' box reaches from the header's edge to the footer's (Round 27, the owner's rule —
+//     scrollRegion's reachEdges): the card's row gap above (the header's space-y-3 margin) and below
+//     (the rows' own) is padding inside it, so a row scrolling away fades out INTO the edge with that
+//     edge's shadow over it, and every row rests where it did. Both surfaces wear
+//     EDGE_OVER_SCROLL_CLASS so their shadows are painted over the rows.
 //
 // ── THE TWO CALLERS, AND THE ONE FLAG BETWEEN THEM ─────────────────────────────────────
 // This is the ONE shared defaults card (round 6): the Save Defaults popup and the
@@ -80,10 +85,19 @@ import type { PrefDefaults } from '../store/userDefaults.js'
 import { normalizeAoxN } from '../store/userDefaults.js'
 import { NUM_INPUT_BASE, NUM_INPUT_CLASS } from './controlClasses.js'
 import { MODAL_CARD_CLASS } from './modalContract.js'
-import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
+import {
+  EDGE_OVER_SCROLL_CLASS,
+  SCROLL_REGION_CLASS,
+  reachEdges,
+  scrollFadeClass,
+  useScrollEdgeState,
+} from './scrollRegion.js'
 import { fmtBlitzT, fmtFlashT, SLIDER_READOUT_WIDEST } from '../lib/modeFormat.js'
 import SliderValueEditor from './SliderValueEditor.jsx'
 import { PRACTICE_MODES, type PracticeModeId } from '../lib/modes.js'
+
+// The rows' scroll box, edge to edge (the header comment of this file says why).
+const ROWS_EDGES = reachEdges({ top: '3', bottom: '3', bottomIsOwnMargin: true })
 
 const NUM_INPUT_DIRTY_CLASS = NUM_INPUT_BASE + ' btn-solid border border-transparent'
 function DefaultsCard({
@@ -335,7 +349,10 @@ function DefaultsCard({
       {/* The three space-y-3 rhythms below reproduce the single card-level one the flat card had:
           title→subline, the gaps between the four rows, and note→buttons were all this same gap,
           and grouping them under the header / scroller / footer changes none of them. */}
-      <div ref={headRef} className="elev-shadow-down shrink-0 px-4 space-y-3">
+      <div
+        ref={headRef}
+        className={`elev-shadow-down ${EDGE_OVER_SCROLL_CLASS} shrink-0 px-4 space-y-3`}
+      >
         <div id={titleId} className="text-sm font-semibold text-(--tx-50)">
           {title}
         </div>
@@ -343,13 +360,16 @@ function DefaultsCard({
       </div>
       <div
         ref={rowsRef}
-        className={`${SCROLL_REGION_CLASS} min-h-0 space-y-3 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
+        className={`${SCROLL_REGION_CLASS} ${ROWS_EDGES} min-h-0 space-y-3 ${scrollFadeClass(scrolledFromTop, atBottom)}`}
       >
         {PRACTICE_MODES.map((mode) =>
           rowsByMode[mode.id] ? <Fragment key={mode.id}>{rowsByMode[mode.id]}</Fragment> : null,
         )}
       </div>
-      <div ref={footRef} className="elev-shadow-up shrink-0 px-4 space-y-3">
+      <div
+        ref={footRef}
+        className={`elev-shadow-up ${EDGE_OVER_SCROLL_CLASS} shrink-0 px-4 space-y-3`}
+      >
         {manage &&
           (dirty ? (
             <div className="text-[0.6875rem] text-(--tx-300-60)">

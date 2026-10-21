@@ -36,7 +36,14 @@ import PresetManager from './PresetManager.jsx'
 import CustomSelect from './CustomSelect.jsx'
 import { PresetOptionLabel, ShortStockNameRoom } from './PresetSwitcher.jsx'
 import QuotedName from './QuotedName.jsx'
-import { SCROLL_REGION_CLASS, scrollFadeClass, useScrollEdgeState } from './scrollRegion.js'
+import {
+  EDGE_OVER_SCROLL_CLASS,
+  SCROLL_REGION_CLASS,
+  reachEdges,
+  scrollFadeClass,
+  useScrollEdgeState,
+} from './scrollRegion.js'
+
 import { useStorageUsage } from '../store/storageUsage.js'
 import { StoragePercent } from './StorageUsagePopup.jsx'
 import Popup from './Popup.js'
@@ -81,6 +88,19 @@ import { useActiveAmnesicMode } from '../store/amnesic.js'
 import type { AmnesicMode } from '../store/amnesicMode.js'
 import { setPresetAmnesic, setOpenInPreset } from '../store/presetControl.js'
 import type { YearMirror, YearRangeMirrors } from './useYearRangeMirrors.js'
+
+// ★ THE TWO SCROLL AREAS HERE END AT THEIR EDGES (Round 27, the owner's rule — components/
+// scrollRegion's reachEdges): content fades out INTO the edge it goes under, never a band away from it.
+//   • THE MENU: its top edge is the card's (the card's py-4 lay above it), its bottom the pinned foot's
+//     line (the card's space-y-4 was its own margin below) — so the foot's shadow lies over the content
+//     scrolling under it. The 1rem inside at the end also keeps every border of the last control
+//     inside the scroll area, which a single pixel of padding used to do (Round 26, the owner's
+//     iPhone: the area's height is fractional while the furthest scroll position is a whole pixel, and
+//     the Amnesic pill's bottom border was cut by 0.2px). tests/browser/settingsScrollEnd sweeps it.
+//   • THE CHANGELOG: its top edge is the heading row's (the card's space-y-3 lay between), its bottom
+//     the card's (py-4). Its cap grows by the space taken in, so it shows as much as before.
+const MENU_EDGES = reachEdges({ top: '4', bottom: '4', bottomIsOwnMargin: true })
+const CHANGELOG_EDGES = `${reachEdges({ top: '3', bottom: '4' })} max-h-[calc(55vh_+_1.75rem)]`
 
 // ============================================================
 // SettingsPanel — the ⚙ popover card and its modals: Save Defaults, the defaults manager, the
@@ -1086,7 +1106,7 @@ export function SettingsPanel({
         </div>
         <div
           ref={changelogScrollRef}
-          className={`${SCROLL_REGION_CLASS} max-h-[55vh] space-y-3 ${scrollFadeClass(changelogScrolledFromTop, changelogAtBottom)}`}
+          className={`${SCROLL_REGION_CLASS} ${CHANGELOG_EDGES} space-y-3 ${scrollFadeClass(changelogScrolledFromTop, changelogAtBottom)}`}
         >
           {CHANGELOG.map((en) => {
             const [yy, mo, da] = en.date.split('-').map(Number)
@@ -1164,15 +1184,9 @@ export function SettingsPanel({
           (components/scrollRegion) — this popover IS the reference treatment (card py-4 only, the
           px-4 scrollbar lane inside the scroller, edge fades) every other scroll region now
           shares.
-          ⚠ pb-px AND THE 1px TAKEN BACK BELOW IT (Round 26, the owner's iPhone): the scroll area's
-          height is fractional — it is what the card has left — while the browser's furthest scroll
-          position is a whole pixel, so at the very end of the list up to a pixel of the last
-          control could stay under the scroll area's bottom edge. On his phone that was the
-          Amnesic pill's bottom border, cut by 0.2px (Chromium drops the line outright). One pixel
-          of padding at the end of the list keeps every border of the last control inside, and
-          the margin under the scroll area is the card's space-y-4 less that same pixel, so the
-          distance from the last control to the foot's line is unchanged. tests/browser/
-          settingsScrollEnd sweeps it.
+          ⚠ ITS BOX REACHES THE CARD'S TOP EDGE AND THE FOOT'S LINE (MENU_EDGES, at the top of this
+          file), its fades ending exactly there; and the foot is painted over it, shadow and all
+          (EDGE_OVER_SCROLL_CLASS).
           tabIndex −1 + its name: the card is what HOLDS the keyboard when the menu opens and the
           keyboard is not already in the top bar (components/overlayStack's "THE KEYBOARD'S REACH";
           src/main.tsx hands it over as the menu's `hold`) — so the first Tab lands on the first
@@ -1190,7 +1204,7 @@ export function SettingsPanel({
         <div
           ref={popoverInnerScrollRef}
           data-drag-scroll
-          className={`${SCROLL_REGION_CLASS} pb-px mb-[calc(var(--spacing)*4_-_1px)] flex-1 min-h-0 space-y-4 ${scrollFadeClass(popoverScrolledFromTop, popoverAtBottom)}`}
+          className={`${SCROLL_REGION_CLASS} ${MENU_EDGES} flex-1 min-h-0 space-y-4 ${scrollFadeClass(popoverScrolledFromTop, popoverAtBottom)}`}
         >
           {/* SETTINGS regrouped into 3 categories: Display (how it's shown + how you answer +
               theme), Dates (which dates get generated), Stats. Each category is a SectionLabel
@@ -1916,7 +1930,7 @@ export function SettingsPanel({
         <div
           ref={popoverFooterRef}
           data-drag-stay
-          className="popover-sticky-footer elev-shadow-up pt-3 px-4 border-t border-(--bd-500-20) text-[0.6875rem] text-(--tx-300-60) space-y-0.5"
+          className={`popover-sticky-footer elev-shadow-up ${EDGE_OVER_SCROLL_CLASS} pt-3 px-4 border-t border-(--bd-500-20) text-[0.6875rem] text-(--tx-300-60) space-y-0.5`}
         >
           {/* CONTACT — with Changelog at the line's right end when the whole line fits
               (changelogOnContact). Alone, it is a flex row like the others, so every line is exactly

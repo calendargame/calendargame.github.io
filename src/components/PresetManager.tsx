@@ -8,6 +8,7 @@ import { flushSync } from 'react-dom'
 import {
   BOTTOM_EDGE_BAND_PX,
   SCROLL_REGION_CLASS,
+  reachEdges,
   readFadeDepthPx,
   scrollBandIntoView,
   scrollEdgeGaps,
@@ -406,10 +407,10 @@ const ROW_COL = {
 //     the dragged row at least half a row from every other, which is further than the patch
 //     reaches.
 // The list's scroll region, reaching one card gap (space-y-3 = 0.75rem) past its rows above and
-// below — the ★ note at listRef, in the component, says what for. The four numbers are one fact:
-// the padding, the margins that cancel it, the cap's extra 1.5rem, and --fade-reach, which tells the
-// region's edge fades (index.css) where the rows stop inside it.
-const LIST_REACH_CLASS = '-my-3 py-3 [--fade-reach:0.75rem] max-h-[calc(45vh_+_1.5rem)]'
+// below, to the description and to the buttons — the ★ note at listRef, in the component, says what
+// for. The padding and the margins that cancel it are scrollRegion's reachEdges; the cap's extra
+// 1.5rem is the two paddings, so a long list shows the same 45vh of rows.
+const LIST_REACH_CLASS = `${reachEdges({ top: '3', bottom: '3' })} max-h-[calc(45vh_+_1.5rem)]`
 const HELD_PIECE_CLASS = 'held-piece'
 const HELD_SHADOW_CLASS = 'held-shadow'
 const HELD_INK_CLASS = 'held-ink'
@@ -589,14 +590,12 @@ export default function PresetManager({
   // box that clips is one gap taller each way — room that was empty already. The wrapper is a
   // `flow-root` so those two negative margins stay inside it instead of collapsing into the card's
   // spacing; the height cap grows by the two paddings, so a long list shows the same 45vh of rows.
-  // ★ AND NOTHING ELSE MAY EVER SHOW IN THAT REACH. It is empty at an end of the list — which is
-  // the only place a held row's shadow needs it — but a list that is scrolled has rows passing
-  // through it, and they used to be drawn there: slivers of the next row in the gap above New
-  // Preset, rows running up under the description. So an edge with rows past it hides its reach
-  // whole and feathers from where the rows stop (--fade-reach, in LIST_REACH_CLASS; index.css),
-  // exactly as the list looked before it reached anywhere; and the held row is kept inside the
-  // band the rows occupy (dragFrame takes the reach off both bounds), so the reach is only ever
-  // used by the shadow.
+  // ★ AND THE ROWS FADE OUT INTO THE EDGE ITSELF (Round 27, the owner's ruling): a list that is
+  // scrolled has rows passing through that reach, and they fade out INTO the description above and
+  // the buttons below — the app's one rule for a fade (components/scrollRegion's reachEdges), which
+  // overrode this list's own earlier choice to hide the reach whole and feather from where the rows
+  // stop. The held row is still kept inside the band the rows occupy (dragFrame: the reach, or the
+  // fade where it reaches further), so the reach holds only its shadow.
   const listRef = useRef<HTMLDivElement | null>(null)
   const { scrolledFromTop, atBottom } = useScrollEdgeState(listRef, pendingDelete === null)
 
@@ -841,7 +840,8 @@ export default function PresetManager({
   // wholly inside the part of the list that is on screen AND clear of the list's edge fades (so a
   // long list never clips the row out of the hand, and the fade at a scrolling edge never
   // dissolves it — lib/presetReorder's edgeFadeInset says how the two bounds are pulled in). "On
-  // screen" is the band the rows are shown in: the region less its reach at either end.
+  // screen" is the band the rows are shown in: the region less its reach at either end — or less
+  // the fade, which starts at the region's own edge, wherever it reaches further in.
   const dragFrame = (d: DragState, pointerY: number): DragState => {
     const list = listRef.current
     const scrollTop = list?.scrollTop ?? 0
@@ -852,11 +852,10 @@ export default function PresetManager({
     const center = clampDragCenter(
       wanted,
       d.slotMidpoints,
-      scrollTop + d.reach + edgeFadeInset(gaps.top, 0, d.fadeDepth),
+      scrollTop + Math.max(d.reach, edgeFadeInset(gaps.top, 0, d.fadeDepth)),
       scrollTop +
         clientHeight -
-        d.reach -
-        edgeFadeInset(gaps.bottom, BOTTOM_EDGE_BAND_PX, d.fadeDepth),
+        Math.max(d.reach, edgeFadeInset(gaps.bottom, BOTTOM_EDGE_BAND_PX, d.fadeDepth)),
       d.halfRow,
     )
     return {
