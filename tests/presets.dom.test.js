@@ -129,7 +129,7 @@ describe('preset 1 is the data that was already there', () => {
 
   // THE LITERALS CASE. The four strings below are the keys shipped builds have been writing since
   // before presets existed. If a future change makes this case fail, it has broken every device
-  // that has ever played the game — and, because live and staging share one browser origin, it has
+  // that has ever played the game — and, because every build on the origin shares these keys, it has
   // broken them in a way that only shows when an old build and a new one interleave.
   it('the four stores still write the four keys shipped builds have always written', () => {
     playOnThisPreset()
@@ -754,7 +754,7 @@ describe('creating a preset', () => {
   })
 
   // MULTI-TAB, and it is reachable: two tabs on this origin each hold their own copy of the
-  // registry (for this app the live PWA and the staging site are literally the same origin), so a
+  // registry (a browser tab and the installed app are literally the same origin), so a
   // tab whose copy is stale would allocate an id the other tab already used and the two presets
   // would SHARE a namespace — merging two sets of a player's data. Neither case below fixes the
   // divergence, which nothing at allocation time can; together they make that MERGE impossible.

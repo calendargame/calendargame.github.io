@@ -59,8 +59,8 @@ export interface LookupEntry {
 // without breaking anything and tells the player (store/storageHealth), and Clear History is the
 // way to make room. On screen the list draws only the rows near the viewport
 // (components/scrollRegion's useWindowedRows), so its length costs nothing to scroll.
-// ⚠ ONE CAVEAT, accepted: live and staging share this saved copy, so a tab still running a build
-// from before this change trims the list back to 100 the next time a lookup is made IN THAT TAB.
+// ⚠ ONE CAVEAT, accepted: every build on the origin shares this saved copy, so a tab still running a
+// build from before this change trims the list back to 100 the next time a lookup is made IN THAT TAB.
 export const addLookupEntry = (prev: LookupEntry[], entry: LookupEntry): LookupEntry[] => [
   entry,
   ...prev,

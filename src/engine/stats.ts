@@ -23,9 +23,10 @@ import { summaryOf } from './timesPool.js'
 // unrounded time does (measured: ~5% of Lasts, ~3.5% of Medians). On 0.1 ms the only thing removed is
 // the subtraction noise.
 // ⚠ THE UNIT STAYS SECONDS everywhere, including the save. An integer count of 0.1 ms would save one
-// byte a time more, and it is not worth it: live and staging share ONE browser origin — one copy of
-// the saved data — and a build from before this change would read an integer 34567 as 34,567
-// SECONDS and write it back that way. Seconds on the grid read correctly in every build ever shipped.
+// byte a time more, and it is not worth it: every build reads the ONE copy of the saved data on its
+// origin — a tab or the installed app left open across an update is a build from before it — and a
+// build from before this change would read an integer 34567 as 34,567 SECONDS and write it back that
+// way. Seconds on the grid read correctly in every build ever shipped.
 export const SOLVE_TIME_UNITS_PER_SECOND = 10000
 /** A solve time in seconds, on the 0.1 ms grid, from a performance.now() difference in ms. */
 // (`+ 0` turns the −0 a rounding of a tiny negative difference would give into 0: engine/timesPool's

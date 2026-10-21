@@ -31,8 +31,9 @@ export const AMNESIC_SPOKEN: Record<AmnesicMode, string | null> = {
 // ── How the value is spelled where it is SAVED ────────────────────────────────────────────────
 //
 // ★ TWO FIELDS, AND THE OLDER ONE IS KEPT ON PURPOSE. Until this setting became three-way it was a
-// boolean called `amnesic`. Live and staging share one browser origin, so a build from before the
-// change can read anything this one saves — and what such a build does with a value it does not
+// boolean called `amnesic`. Every build on an origin shares its one copy of the saved data (a tab or
+// the installed app left open across an update — and, until Round 27, the test site), so a build from
+// before the change can read anything this one saves — and what such a build does with a value it does not
 // recognise in `amnesic` is treat the preset as NOT amnesic: it would keep, for good, the play of a
 // preset saved as one that forgets. So the boolean keeps its name and its meaning ("some kind of
 // amnesic"), and the kind rides beside it in a field an older build never reads:

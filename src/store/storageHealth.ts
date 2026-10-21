@@ -52,9 +52,9 @@ import { reportWritesTo } from '../changelog.js'
 // ⚠ ONLY A QUOTA REFUSAL IS CAUGHT. Any other storage error is rethrown exactly as before: this file
 // answers "the device is full", and swallowing a different failure here would hide it behind a
 // notice that says something untrue about it.
-// ⚠ live and staging share this origin and therefore this allowance — they read and write the SAME
-// keys, so there is one copy of the data, not two; the notice's remedies act on exactly that copy.
-// (The other site cannot see a value this page is holding; it sees it once it is saved.)
+// ⚠ every window of the app shares this origin and therefore this allowance — they read and write
+// the SAME keys, so there is one copy of the data; the notice's remedies act on exactly that copy.
+// (Another window cannot see a value this page is holding; it sees it once it is saved.)
 
 // Is this the browser saying "no room"? Chromium/Safari name it QuotaExceededError (legacy code 22);
 // older Firefox used NS_ERROR_DOM_QUOTA_REACHED (code 1014).
@@ -326,8 +326,8 @@ export function removeItem(storage: Storage, key: string): void {
  * ★ ANOTHER TAB JUST CHANGED (storage, key) — or cleared the whole area (`key` null). A plain value
  * this page was holding for that place is forgotten.
  * WHY. A held value is this page's save, DELAYED: it goes out at the next retry, which can be long
- * after it was made. If another tab (or the other site on this origin — live and staging share
- * these keys) has saved to the same place in the meantime, the retry would put an OLDER save over a
+ * after it was made. If another tab (or the installed app — one origin, the same keys) has saved to
+ * the same place in the meantime, the retry would put an OLDER save over a
  * newer one; if the other tab DELETED the place — a preset removed there — the retry would bring it
  * back. Neither can happen to a save that fit: it would simply have been replaced, or removed, by
  * what came after it. Dropping the held value makes a refused save behave exactly like that.

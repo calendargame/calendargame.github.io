@@ -2,8 +2,8 @@
 // 2.7 and 6.5), and in what order it then does things.
 //
 // THE NOTICES:
-//   • a `storage` event — another window (a tab, the installed app, the other site: live and staging
-//     share one origin) wrote or removed a key. Handed to the door (store/syncedDoc), which merges that
+//   • a `storage` event — another window of this origin (a tab, the installed app) wrote or removed
+//     a key. Handed to the door (store/syncedDoc), which merges that
 //     doc at once and writes once the notices queued with it have all been handled.
 //   • becoming VISIBLE, `pageshow`, `focus`, `resume` — events are queued for a frozen page and MISSED by a
 //     page restored from the back/forward cache, so a return reads every doc as the device holds it now.

@@ -616,7 +616,8 @@ import BlitzMode from './modes/BlitzMode.jsx'
       // guess would have looked right too. Do not add a mechanism here that has not been seen on a
       // device; build a diagnostic instead (the one that settled this is public/sbtest.js in git
       // history, commit 1326cf4 — v2.27.1, test site only: one script, loaded only under
-      // /test_version/, that painted each candidate a different colour for a few seconds).
+      // /test_version/, the test site's address then, that painted each candidate a different colour
+      // for a few seconds).
       //   1. Round 21 — <meta name="theme-color"> → the scrimmed colour. Never consulted by the
       //      installed iOS app (above). The write STAYS, on its own merits: Android Chrome tints its
       //      browser chrome and its installed-app status bar from it, and Safari 15–18 read it in

@@ -8,7 +8,7 @@
 // It is now the entry's date and a 53-bit hash of its date and lines (cyrb53, the hash the
 // windows-in-sync door names content with). A clash would cost one missing dot, at odds of about
 // one in 9 * 10^15 per update, and the date stays legible in devtools.
-// ⚠ OLDER BUILDS share this key (live and the test site are one origin). They store the whole entry
+// ⚠ OLDER BUILDS share this key (a tab left open across an update). They store the whole entry
 // and compare it with theirs, so each side reads the other's value as different and lights the
 // changelog dot - which is what a switch between two builds with different newest entries does in
 // any case. Nothing is lost either way; the only cost is a dot, on a build switch that already

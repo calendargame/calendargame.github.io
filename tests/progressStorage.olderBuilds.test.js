@@ -1,7 +1,7 @@
 // progressStorage.olderBuilds — THE OLDER-BUILD MODELS, HELD TO WHAT THE REAL BUILDS STORED.
 //
-// Live and staging share one browser origin, so older builds read and write the same saved progress
-// this build does. Two lines of them:
+// Every build on an origin shares its saved progress, so older builds (a tab or the installed app left
+// open across an update) read and write the same saved progress this build does. Two lines of them:
 //   • v2.27.3 and v2.26.0 have never heard of `sealed`. The sealed layout (store/progressStorage)
 //     rests on one claim about them: such a build carries `sealed`, and the `timesLost` beside it,
 //     through every write it makes, and drops both only on a reset.

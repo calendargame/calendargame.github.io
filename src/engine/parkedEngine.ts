@@ -8,9 +8,10 @@
 // the state, so a screen's own fields and its engine are kept or dropped together, never one without
 // the other.
 //
-// ★ A PARKED BLOB IS UNTRUSTED, and the door's whole job is to say so. sessionStorage is per ORIGIN,
-// and the live site and the staging build share one (calendargame.app/test_version/) — so a build
-// this one has never heard of can have written the slot, and a reload keeps it. Unguarded, the first
+// ★ A PARKED BLOB IS UNTRUSTED, and the door's whole job is to say so. sessionStorage is per ORIGIN
+// and a tab keeps it across an update's reload (and until Round 27 the test site shared this origin,
+// at calendargame.app/test_version/) — so a build this one has never heard of can have written the
+// slot, and a reload keeps it. Unguarded, the first
 // bad read threw inside the engine's lazy initializer at mount, and since the blob outlives the
 // reload, every reload died the same way for the rest of the browsing session: a mode screen bricked
 // until the tab was closed.

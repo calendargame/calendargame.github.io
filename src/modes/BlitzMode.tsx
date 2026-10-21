@@ -179,8 +179,8 @@ function BlitzMode({
   // as a settings change resets a round that is on screen, and the Bests it set stay as saved.
   // ★ …AND THE SHAPE OF THE BEST RECORDS THE ROUND CARRIES (Round 26, Q10 — the leading
   // `companions|`). Since Round 26 a record carries each field's companion (engine/blitzBest), and an
-  // OLDER build sharing this origin (a tab that moves between the test site and the live one keeps its
-  // session) would restore such a round and reconcile it with records of its own four fields — an
+  // OLDER build sharing this origin (a tab that moved between the test site and the live one when
+  // they were one origin, before Round 27, kept its session) would restore such a round and reconcile it with records of its own four fields — an
   // Override there that moves only a companion (the holder round's other number; its four fields
   // standing still) is a record its fileBest sees as unchanged, so the companion would stay: WRONG,
   // not missing. Proven on the real older builds (tests/blitzBest.olderBuilds). No older build

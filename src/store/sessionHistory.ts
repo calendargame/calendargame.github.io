@@ -38,8 +38,8 @@
 //   • a mode screen that CRASHES — src/main.tsx's error boundary hook, so a history that somehow
 //     breaks its screen cannot come back after the Reload and break it again.
 //
-// ★ SIZE. sessionStorage has a fixed allowance (~5 MB, shared by the whole origin — live and staging
-// both), and other session-lived things share it. A history must never be the thing that crowds those
+// ★ SIZE. sessionStorage has a fixed allowance (~5 MB, shared by the whole origin), and other
+// session-lived things share it. A history must never be the thing that crowds those
 // out, so every history together is held to TOTAL_BUDGET characters, and any one to
 // SLOT_BUDGET (so two long histories — say two Deduction sub-types — can both be kept):
 //   • a history longer than its slot budget is parked with its OLDEST cards forgotten (engine/
@@ -63,7 +63,7 @@
 // not read at all - the copies are gone - and the cost is bounded and one-off, as cg-round-v2's was (a
 // casual history parked at the moment the update reload lands is not restored; its stats were saved with
 // every answer). The browser drops the v1 entries at the session's end.
-// No older build knows the prefix, so none of them reads it (live and staging share this origin); a
+// No older build knows the prefix, so none of them reads it (a tab updated in place keeps it); a
 // later build that changes the parked shape must change the version in the prefix, and the restore
 // door refuses any blob it cannot read anyway.
 // ⚠ THE VALUE IS ONE MARK AND THEN THE TEXT. The mark is this file's own, the one thing it needs to

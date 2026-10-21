@@ -1,6 +1,6 @@
 // progressStorage.fuzz — ONE DEVICE, FOUR BUILDS, RANDOM INTERLEAVINGS, AGAINST A MODEL.
 //
-// Live and staging are one browser origin, so the saved progress is read and written by whatever is
+// Every build on an origin shares its saved progress, so it is read and written by whatever is
 // open: two pages of the sealing line (each either this build, which seals, or a READER build —
 // v2.28.0 / v2.29.x, which never starts sealing — run as its own recorded code), a v2.27.3 page and
 // a v2.26.0 page (tests/helpers/progressWorld's models; every older model is held to the real builds

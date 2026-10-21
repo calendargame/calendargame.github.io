@@ -1,8 +1,8 @@
 // tests/helpers/progressWorld.js — one device's storage, the pages that share it, and the OLDER
 // builds among them, for store/progressStorage's tests.
 //
-// Live and staging are one browser origin, so the saved progress is read and written by whatever
-// builds are open: this build (which seals), the READER builds v2.28.0 and v2.29.x (which read and
+// Every build on an origin shares its saved progress, so it is read and written by whatever builds
+// are open: this build (which seals), the READER builds v2.28.0 and v2.29.x (which read and
 // keep the layout and never start it), v2.27.3, and v2.26.0. This file is the stand-in for that: a
 // Disk (the device), a view of it per page (store/storageHealth keys what it is holding by the
 // Storage object, so each page gets its own), a small independent reader of the layout (the

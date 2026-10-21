@@ -81,8 +81,9 @@ describe.each(['v2.28.0', 'v2.29.0', 'v2.29.2'])('%s, as the real build behaved'
   })
 
   // (iv) THE ONE WAY AN OLDER BUILD MAKES A COMPANION WRONG, and why this build stamps the rounds it
-  // parks. A tab keeps its session when it moves between the test site and the live one, so an older
-  // build can restore an ended round this build parked. The round holds Best Streak only; an Override
+  // parks. A tab keeps its session across an update's reload (and, until Round 27, when it moved
+  // between the test site and the live one), so an older build can restore an ended round this build
+  // parked. The round holds Best Streak only; an Override
   // on a card behind the live one raises its score (5 → 6) and leaves its four older fields standing,
   // and the older build's own write compares only those four — so it keeps the companion that says 5.
   it('(iv) unstamped, the older build restores this build’s round and leaves a WRONG companion', () => {

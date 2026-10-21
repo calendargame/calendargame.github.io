@@ -22,9 +22,10 @@ import { reportedHydration } from './hydrationReport.js'
 // case: the key for preset 1 is the base key with nothing appended.
 //   → WHAT THAT DELETES, rather than manages: the copy step, the half-finished copy, the run-twice
 //     data loss, the doubled storage, and the clean-up pass that would have had to follow.
-//   → ⚠ WHY IT MATTERS *HERE* SPECIFICALLY, and this is not theoretical. The live site and the
-//     staging site are THE SAME BROWSER ORIGIN, and preset builds reach staging first, so an old
-//     build and a new build genuinely interleave on one set of keys. A copy-into-preset-1 migration
+//   → ⚠ WHY IT MATTERS *HERE* SPECIFICALLY, and this is not theoretical. When presets were built the
+//     live site and the staging site were THE SAME BROWSER ORIGIN (until Round 27), and preset
+//     builds reached staging first, so an old build and a new build genuinely interleaved on one set
+//     of keys — as they still do whenever a tab or the installed app is left open across an update. A copy-into-preset-1 migration
 //     was reproduced losing 20 cards silently on exactly that interleaving. With "preset 1 IS the
 //     data", a build that has never heard of presets and a build that has agree about preset 1 BY
 //     CONSTRUCTION — because the un-namespaced keys are the only thing "your data" could possibly
@@ -113,8 +114,8 @@ export type Preset = {
   id: number // allocated once, from `nextId`, and NEVER reused — see normalizeRegistry
   name: string
   // ★ AN OLDER BUILD'S FIELD, CARRIED AND NOT USED. Builds up to v2.27.3 kept a preset's Amnesic
-  // switch here, as a boolean, and live and staging share this registry — so such a build may be
-  // reading and writing this field in another tab right now. This build keeps each preset's Amnesic
+  // switch here, as a boolean, and every build on the origin shares this registry — so such a build
+  // may be reading and writing this field in another tab right now. This build keeps each preset's Amnesic
   // value in the preset's settings instead (store/settings) and NEVER CHANGES this field, nor reads it
   // (design-q1-q2.md v4, 9.4): the windows-in-sync door carries each preset's value as its own slice,
   // so an older tab's change to it is taken as that tab made it and nothing this build does can switch

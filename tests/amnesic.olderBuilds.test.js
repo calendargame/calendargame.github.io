@@ -1,8 +1,8 @@
 // amnesic.olderBuilds — WHAT THE OLDER BUILDS ON THIS ORIGIN MAKE OF THE AMNESIC SETTING AS THIS BUILD
 // SAVES IT, AND WHAT THIS BUILD MAKES OF WHAT THEY LEAVE.
 //
-// Live and staging share one browser origin, so v2.27.3 and v2.26.0 read and write the same saved
-// defaults and the same preset registry this build does. To them Amnesic is a boolean: a switch kept
+// Every build on an origin shares its saved data (a tab or the installed app left open across an
+// update), so v2.27.3 and v2.26.0 read and write the same saved defaults and the same preset registry this build does. To them Amnesic is a boolean: a switch kept
 // on each preset in the registry, put back to `saved.amnesic` at a fresh open. This build made the
 // setting three-way and keeps the value in force in each preset's settings (store/settings; design
 // 9) — a field those builds never read, and drop on their own save — and every claim it makes about

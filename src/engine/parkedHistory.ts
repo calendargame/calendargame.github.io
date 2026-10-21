@@ -25,8 +25,8 @@
 //     the saved TIMES in place: the shape check, and every engine invariant (engine/invariants — the
 //     card ledger, the times ledger in play order, every per-card Override record).
 // Anything else comes up fresh from the saved stats, exactly as a mount with nothing parked does. The
-// counts can disagree for honest reasons — live and staging were both open in this tab, another
-// window moved a shared preset on — so that is checked FIRST and is not reported. So can the TIMES
+// counts can disagree for honest reasons — an older build had this tab before an update's reload,
+// another window moved a shared preset on — so that is checked FIRST and is not reported. So can the TIMES
 // with every count the same (Round 26: another window resets the mode and plays it back to the same
 // counts, its times its own) — hence the hash, checked with the counts. An unreadable blob or an
 // invariant break past both is reported, because no honest path makes one.

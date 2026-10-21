@@ -306,8 +306,9 @@ export const useSettings = create<SettingsState>()(
       // and that is the whole preset design in one line: preset 1 does not receive the existing
       // saved settings, preset 1 IS them.
       // ⚠ THIS STORE IS WHERE THAT PROMISE IS AT ITS WEAKEST, and it is worth stating here rather
-      // than leaving to be rediscovered: the live site and staging share this origin, so an OLD
-      // build and this one really do interleave on this key. The key they agree about is identical;
+      // than leaving to be rediscovered: every build on the origin shares this key (a tab or the
+      // installed app left open across an update), so an OLD build and this one really do
+      // interleave on it. The key they agree about is identical;
       // the PAYLOAD is only as complete as the older build's own `partialize`. For Rotate Dots, in
       // both directions:
       //   • AN OLDER BUILD WRITES, THIS ONE READS: its payload carries `rotateDots` (or, older
@@ -326,7 +327,7 @@ export const useSettings = create<SettingsState>()(
       //     is mis-attributed, no stats are involved) and reachable only from a pre-round-23 tab
       //     still open on the same origin. A legacy `rotateDots` mirror written beside `dotRotation`
       //     would soften it for 90° alone, and would be a shim kept forever for a window that closes
-      //     the moment both sites update — so there is none.
+      //     the moment that tab updates — so there is none.
       // It is the price of one key serving more than one build in flight, argued in full in
       // store/presets' header.
       name: PRESET_STORE_KEYS.settings,

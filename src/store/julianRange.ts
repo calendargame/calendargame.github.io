@@ -11,8 +11,8 @@ import { reportedHydration } from './hydrationReport.js'
 // The ⚙ panel has two Year Range pairs: one for Julian off (1-10000), one for Julian on (1-11582 —
 // years 10001-11582 are modern-calendar years whose last four digits behave like a four-digit year's,
 // since 10000 = 25 x 400). The Julian-OFF pair is the settings store's `minY` / `maxY`, unchanged in
-// name, shape, and version, so every older build on this origin (the live site and the test site
-// share one copy of the data) reads and writes it exactly as it always has — to them it is simply
+// name, shape, and version, so every older build on this origin (a tab or the installed app left open
+// across an update — one copy of the data) reads and writes it exactly as it always has — to them it is simply
 // "the range". The Julian-ON pair lives HERE, in a key of its own that no older build knows exists.
 //
 // ★ WHY A KEY OF ITS OWN, NOT TWO MORE FIELDS IN THE SETTINGS BLOB. An older build saves the settings

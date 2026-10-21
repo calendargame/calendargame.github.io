@@ -586,7 +586,7 @@ describe('a restored Blitz round resumes with the time it had left', () => {
 })
 
 // ── A parked blob the restore door cannot read (second review round, F3) ────────────────────────
-// The park lives in sessionStorage, which live and staging SHARE (one origin), and which a reload
+// The park lives in sessionStorage, which every build on the origin SHARES, and which a reload
 // keeps — so a blob in a shape this build cannot read is not hypothetical, and before the guard it
 // threw inside the screen's mount (the engine's lazy initializer), every reload, for the whole
 // browsing session. Such a blob must be dropped WHOLE — the screen's own fields too, or an "ended"

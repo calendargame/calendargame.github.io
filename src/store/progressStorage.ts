@@ -29,7 +29,8 @@ import { cyrb53 } from './syncStamp.js'
 //
 //   • `sealed.ids[j]` names chunk j; `sealed.n` is how many times they hold (ids.length × 250).
 //   • The sealed count is ADDED to the stored `timesLost`. That is what makes the layout readable by
-//     every older build on this origin (live and staging share one copy of the data): to a build that
+//     every older build on this origin (a tab left open across an update: one copy of the data) - to a
+//     build that
 //     has never heard of chunks, sealed times look exactly like times the old 1,000 cap trimmed — a
 //     state it already handles — and it carries `sealed` and `timesLost` through every write it
 //     makes, because every Stats it builds is a spread of the one it read (or a reset, which drops
@@ -146,8 +147,8 @@ const keysUnder = (area: Storage, prefix: string): string[] => {
 // ★ IT IS A STATEMENT ABOUT THE STORED ARRAY, which is why it runs here, on a save as the device
 // holds it, and not in the store's `migrate`: for a sealed silo the stored array is the tail, and it
 // is the tail such a build trims.
-// ⚠ AND IT IS RE-DERIVED, NOT ADDED TO, on every save stamped older than TIMES_KEPT_VERSION. Live
-// and staging share one browser origin, i.e. ONE copy of the saved data, so an older build can load
+// ⚠ AND IT IS RE-DERIVED, NOT ADDED TO, on every save stamped older than TIMES_KEPT_VERSION. Every
+// build on an origin shares ONE copy of the saved data, so an older build can load
 // a current save, trim it again and write it back under its own version — carrying `timesLost`
 // along untouched on its `...stats` spreads. `good − 1,000` is then the WHOLE gap again (the earlier
 // baseline and any sealed times included), never an increment on top of it; a silo that was NOT

@@ -250,7 +250,7 @@ export const useProgress = create<ProgressState>()(
       // keys it owns. ⚠ THE STRING IS UNCHANGED, deliberately and permanently: preset 1 does not
       // receive a copy of the player's stats and bests, preset 1 IS them. A build that has never
       // heard of presets and one that has therefore agree about preset 1 by construction — which
-      // matters here more than anywhere, because live and staging share one browser origin.
+      // matters here more than anywhere, because every build on the origin reads this one key.
       name: PRESET_STORE_KEYS.progress,
       // Presets 2, 3, 4… read and write a namespaced key instead. The `name` above never moves; the
       // door resolves the active preset per read/write (PROGRESS_DOOR, above). ★ THIS IS THE ONE STORE
@@ -264,8 +264,8 @@ export const useProgress = create<ProgressState>()(
       // a legacy time's long float spelling round-trips exactly through JSON, and snapping it onto
       // the new 0.1 ms grid could move a displayed hundredth that sat on a boundary (a Last or a
       // Median, measured at ~0.15%). At most 1,000 such times per silo, ~10 KB, once.
-      // ⚠ v5 STILL READS CORRECTLY IN EVERY OLDER BUILD, which matters because live and staging
-      // share one saved copy: the times are still seconds, and an older build's `migrate` passes a
+      // ⚠ v5 STILL READS CORRECTLY IN EVERY OLDER BUILD, which matters because every build on the
+      // origin shares one saved copy: the times are still seconds, and an older build's `migrate` passes a
       // newer version through untouched. What an older build does WRITE is the trim, which
       // store/progressStorage re-derives on every save stamped older than this.
       // v4 = lookupHistory LEFT the shape (round 20 — see store/lookupHistory). The bump

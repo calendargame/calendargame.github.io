@@ -9,8 +9,8 @@ import { readItem, writeItem, removeItem } from './storageHealth.js'
 //   • a fresh open that the "Open in" pin moved had to WRITE the registry at that moment so the
 //     reload that might follow would find it. On a device full to the byte that write was refused
 //     and held only in memory, and the reload landed in the last visit's preset instead;
-//   • another tab switching presets (live and staging are two tabs of one origin) moved this tab to
-//     its preset at this tab's next reload.
+//   • another tab switching presets (every tab of the app is one origin) moved this tab to its
+//     preset at this tab's next reload.
 // So the preset a session is on is kept where everything else session-lived is — sessionStorage,
 // which a reload keeps and a real close clears (store/browsingSession) — and a reload reads THAT
 // (store/presets' resolveActiveId; index.html's boot script beside it). The registry's `activeId`

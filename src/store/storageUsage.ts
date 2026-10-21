@@ -112,8 +112,8 @@ import { captureError } from '../observability/sentry.js'
 // popup has actually opened (WARNED_KEY — on the device, so not on every open, not on a reload, not
 // again while usage stays above the line; and for this page as well, in case a full device cannot
 // take even that marker). A reading back under the line forgets it, so a later rise is a new
-// crossing. Live and staging share one copy of the data, and therefore this marker too: one warning
-// per device.
+// crossing. Every window of the app shares one copy of the data, and therefore this marker too: one
+// warning per device (per site: the test site is an origin of its own).
 
 /** The percentage at which the warning starts. */
 export const STORAGE_WARN_PERCENT = 80

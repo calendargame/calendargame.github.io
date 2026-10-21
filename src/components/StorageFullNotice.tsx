@@ -48,8 +48,6 @@ import { readUsageRowsNow, suggestShorterNames, useStorageUsage } from '../store
 //     advice that cannot help, so it is not given.
 //   • WHAT MAKES ROOM — deleting a preset, and Reset Stats in a mode (its solve times go with it), on
 //     every Amnesic value alike: nothing is kept anywhere but the saved progress.
-// It says nothing about live and staging sharing one allowance — that is true, and it is not the
-// player's business.
 // ─────────────────────────────────────────────────────────────────────────
 export default function StorageFullNotice() {
   const open = useStorageHealth((s) => s.noticeOpen)

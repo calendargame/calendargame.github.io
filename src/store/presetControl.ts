@@ -585,9 +585,8 @@ export function createPreset(name?: string): Preset {
   // ★ IDS ARE ALLOCATED FORWARD AND NEVER REUSED (store/presets' normalizeRegistry forces nextId
   // above every listed id, whatever the payload claimed). That is what lets `presetKey` be a pure
   // function of the id: a namespace, once vacated, is never handed to a different preset.
-  // ★ THE REGISTRY IS MERGED WITH THE DEVICE FIRST (design 8.5), so an id another window - the live
-  // PWA and the staging site are one browser origin - allocated is known here before this one is
-  // drawn, even for a preset nobody has opened yet; and the list written afterwards keeps that
+  // ★ THE REGISTRY IS MERGED WITH THE DEVICE FIRST (design 8.5), so an id another window - a tab or
+  // the installed app, one browser origin - allocated is known here before this one is drawn, even for a preset nobody has opened yet; and the list written afterwards keeps that
   // window's preset (the registry's membership rule). What is left is two windows allocating inside
   // the same instant of the read lag (design R1).
   // ⚠ THE SKIP LOOP STAYS, for keys left on disk by a delete interrupted between the registry write
@@ -740,7 +739,8 @@ export const commitSessionPreset = (): void => recordSessionPreset(usePresets.ge
  * src/main.tsx's cold-open effect.
  *
  * WHY IT IS NEEDED. Deleting a preset in THIS build removes everything of it. An older build on this
- * origin (live and staging share one copy of the data) removes only the four keys it knows, so a
+ * origin (a tab left open across an update - one copy of the data) removes only the four keys it
+ * knows, so a
  * preset deleted there leaves behind its sealed chunks of solve times and its Julian-on Year Range
  * (store/julianRange), with nothing pointing at them. (Ids are never reused, so neither could ever
  * be read as another preset's; this is tidying, not a defence.)
