@@ -193,7 +193,9 @@ const BLANK = {
 const TOGETHER = ` ${String.fromCodePoint(0xfffc, 0x2800, 0x3164, 0xfffc)} `
 const NO_PICTURE = String.fromCodePoint(0x0378)
 
-test('a name this device draws as nothing is an empty name: typed, it goes back to the stock name', async ({
+// Typed as a rename, an empty name means "never mind" (the owner's call, 2026-10-21): the preset keeps
+// the name it had.
+test('a name this device draws as nothing is an empty name: typed, the preset keeps the name it had', async ({
   page,
 }) => {
   await openApp(page)
@@ -215,9 +217,9 @@ test('a name this device draws as nothing is an empty name: typed, it goes back 
   }
   for (const [what, name] of Object.entries(BLANK)) {
     expect(await inked(page, name), `${what} draws nothing here`).toBe(false)
-    await rename(name, 'Preset 1', what)
+    await rename(name, 'Mornings', what)
   }
-  const together = (await inked(page, TOGETHER.trim())) ? TOGETHER.trim() : 'Preset 1'
+  const together = (await inked(page, TOGETHER.trim())) ? TOGETHER.trim() : 'Mornings'
   await rename(TOGETHER, together, 'the three together')
   // A character with no picture is drawn as a box — something to see — and is kept.
   expect(await inked(page, NO_PICTURE), 'a box is drawn').toBe(true)

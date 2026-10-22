@@ -709,49 +709,43 @@ input,textarea{user-select:text;-webkit-user-select:text}
    ring 5px in on anything inside the frame (it inherits), so on the strip — which is sometimes one
    big button, on the frame's own line — the ring sits clear inside the dashes, never on them.
    ⚠ IT MUST NOT MOVE A PIXEL — everything is the same size and in the same place with it or
-   without. So it is a ::after BORDER on an absolutely-positioned box, which takes no part in
-   layout, never the host's own border-width or padding; the room the readouts' text needs inside
+   without. So it is drawn on an absolutely-positioned box (.session-frame, below: an SVG, the
+   host's last child, components/DashedFrame), which takes no part in layout, never the host's own
+   border-width or padding; the room the readouts' text needs inside
    the line is padding the readouts' row has in EVERY state (components/BestReadout). The strip is
    a .panel with a solid border of its own on the very line the dashes take, so that border goes
    transparent — still 1px wide, so nothing shifts — whether the strip wears the frame or stands
    at the top of a frame round both.
    ⚠ NOT AN outline: the strip is sometimes one big <button>, and the transparent `:focus` outline
    below (THE KEYBOARD FOCUS RING) would take an outline off it the moment it was tapped.
+   ⚠ NOT A DASHED BORDER EITHER, since 2026-10-21: a browser dashes a border edge by edge and drops
+   the leftover length into one gap, and the owner saw that longer gap on his iPhone; no two engines
+   even dash alike. components/DashedFrame draws the line as one path with a whole number of dashes
+   round it, so every gap is the same everywhere — on the same box, at the same width, with the
+   same corners, as the border it replaced.
    COLOUR: the theme's own label tone, thinned — so it is right in all five themes with no table of
    its own, and calm: it has to sit under numbers the player is reading without competing with them.
    pointer-events:none, so the frame never takes a tap meant for the strip. */
 .session-only{position:relative;--kbd-ring-offset:-5px}
-.session-only::after{content:"";position:absolute;inset:0;border:1.5px dashed color-mix(in oklab,var(--tx-200-80) 70%,transparent);border-radius:inherit;pointer-events:none}
+.session-frame{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;fill:none;stroke:color-mix(in oklab,var(--tx-200-80) 70%,transparent);stroke-width:1.5px}
 .panel.session-only,.session-only>.panel{border-color:transparent}
-/* ⚠ DESIGN TRIALS — TEMPORARY (Round 28). The looks the owner is choosing between on the test site,
-   each keyed to a value lib/designTrials puts on <html> (only on the test site and a dev server, so
-   nowhere else does any of this ever match). lib/designTrials lists everything that goes with this
-   block once he has picked.
-   STATS FRAME (Amnesic's dashed frame, .session-only above). "Today" is the rules above, untouched.
-     A — the strip keeps its whole solid border wherever it is inside the frame: under the dashes
-         (round the strip under Stats Only; along the strip's top and sides under Full) and, under
-         Full, along its bottom above the Best lines.
-     B — under Full, a solid border only where the dashes do not run: the strip's bottom edge and
-         both its rounded bottom corners, at full width all the way round, so the line meets the
-         dashes exactly where each corner turns into the side — no gap, no thinning (the owner's
-         idea, 2026-10-21; a plain border-bottom thins to nothing round a rounded corner). It is
-         drawn by the Best readouts' row, the strip's next sibling in the frame, reaching up over
-         the strip's last radius: the strip clips what it holds (overflow-hidden), so a line of
-         its own could not reach its own border's pixels. The reach is the row's top margin
-         (components/BestReadout's mt-1.5) plus that radius and the border's pixel; the border is
-         drawn on the strip's own tint, as the strip's real border is. (Under Stats Only the dashes
-         run all the way round: as Today.)
-     C — under Full, no inner border at all, and the strip's tint fills the whole frame, the Best
-         lines and the gap above them included: the group wears the tint and the strip none, so it
-         is one coat, never two. (Under Stats Only the strip IS the frame: as Today.) */
-:root[data-trial-stats="a"] .panel.session-only,:root[data-trial-stats="a"] .session-only>.panel{border-color:var(--panel-bd)}
-:root[data-trial-stats="b"] .session-only>.panel+*{position:relative}
-:root[data-trial-stats="b"] .session-only>.panel+*::before{content:"";position:absolute;left:0;right:0;top:calc(-1 * (var(--spacing) * 1.5 + var(--radius-2xl) + 1px));height:calc(var(--radius-2xl) + 1px);border:1px solid var(--panel-bd);border-top:0;border-radius:0 0 var(--radius-2xl) var(--radius-2xl);pointer-events:none}
-:root[data-trial-stats="c"] .session-only:has(>.panel){background:var(--panel-bg)}
-:root[data-trial-stats="c"] .session-only>.panel{background:transparent}
-/* DELETE ✕ (components/PresetManager). Plain: the ✕ alone — no border and no fill, at rest or under a
-   pointer — in the same place and with the same room to press as the button had. */
-:root[data-trial-x="plain"] .trial-x,:root[data-trial-x="plain"] .trial-x:hover{border-color:transparent;background:transparent}
+/* ★ UNDER A FRAME ROUND BOTH (Full), THE STRIP KEEPS ITS OWN EDGE WHERE THE DASHES DO NOT RUN (the
+   owner's pick, 2026-10-21, from three tried side by side on the test site). The strip's tint is
+   the stats panel's, in every state; inside a frame round the strip and the Best lines, the tint
+   used to simply stop above the Best lines, a change of colour with no edge to it. So the strip's
+   border is drawn along its bottom and round both its bottom corners, at full width all the way,
+   from where it comes out from under the dashes on one side to where it goes back under them on
+   the other: it meets the dashes with no gap and never shows inside one (the clip, a dash line's
+   width in from each side). The strip's own top and sides stay under the dashes, as before.
+   It is drawn by the Best readouts' row — the strip's next sibling, the only thing that ever
+   follows the strip in a frame round both — reaching up over the strip's last radius, because the
+   strip clips what it holds (overflow-hidden, components/StatPanel) and so no line of its own
+   could reach its own border's pixels. The reach is the row's top margin (--best-gap, which the
+   row's margin IS — components/BestReadout) and the radius. The line is the strip's border colour
+   on the strip's own tint, exactly as the strip's real border is drawn. */
+:root{--best-gap:calc(var(--spacing) * 1.5)}
+.session-only>.panel+*{position:relative}
+.session-only>.panel+*::before{content:"";position:absolute;left:0;right:0;top:calc(-1 * (var(--best-gap) + var(--radius-2xl)));height:var(--radius-2xl);border:1px solid var(--panel-bd);border-top:0;border-radius:0 0 var(--radius-2xl) var(--radius-2xl);clip-path:inset(0 1.5px);pointer-events:none}
 /* ★ THE .2s BACKGROUND FADE — the app's three interactive surfaces (these two + .btn-solid below)
    all carry it, and all three multiply by --motion-scale (round 16) so Reduce Motion makes the
    fade instant. It is DECORATIVE, checked rather than assumed, and the check is worth keeping:
@@ -808,13 +802,13 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .date-line{font-size:1.875rem;line-height:2.25rem;white-space:nowrap}
 /* THE ROW IN THE HAND — the Presets popup's row while it is being dragged by its grip
    (components/PresetManager, which says what the row looks like and why; these are the three rules
-   that draw it). They come AFTER the two surface rules above on purpose: .held-piece is worn
-   together with one of them and has to win the background.
-   .held-piece — the ✕ button and the name box. At rest their fill is --stgl-bg, a see-through tint,
-     over the card. Here the same tint is laid over the card's own SOLID colour, so the piece looks
-     exactly as it did and nothing sliding underneath shows through it. Two background IMAGES, with
-     the colour beneath them left alone: the ✕ button's background-color carries a .2s transition
-     (.surface-toggle), and changing it would fade the piece through a darker tint as it lifts.
+   that draw it). They come AFTER the surface rules above on purpose: .held-piece is worn together
+   with one of them and has to win the background.
+   .held-piece — the name box. At rest its fill is --stgl-bg, a see-through tint, over the card.
+     Here the same tint is laid over the card's own SOLID colour, so the box looks exactly as it did
+     and nothing sliding underneath shows through it. Two background IMAGES, with the colour beneath
+     them left alone, so a surface whose background-color carries a transition is never faded
+     through a darker tint as it lifts.
    .held-shadow — the "picked up" cue: ONE soft, even shadow on every side (--shadow-lifted, the
      LIFTED role of the app's three shadows, above), on an empty box of the piece's own size and
      radius drawn behind the row's cells (z-index -1 inside the dragged row, which is its own
@@ -822,7 +816,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
      slides under this fixed edge" and so does not borrow it (that one is directional, with a
      negative spread that leaves only slivers at the sides, and it scales with --shade, a scroll
      signal that means nothing here).
-   .held-ink — the ✓ and the grip's bars. A patch of the card's colour exactly behind the mark, with
+   .held-ink — the ✕, the ✓ and the grip's bars. A patch of the card's colour exactly behind the mark, with
      a 2px rim of the same colour and no shadow: invisible against the card, and what a row passing
      underneath disappears behind instead of drawing its own mark through this one. The rim is a
      box-shadow SPREAD rather than padding so the mark's own box, and the row's layout, do not
@@ -988,8 +982,8 @@ button{touch-action:manipulation}
    NEVER TO BE TAKEN FOR AMNESIC'S DASHED FRAME (.session-only): that one is dashed, thin and
    muted, this one solid and bright — and where a control sits on the frame's line (the stats
    strip, when the whole strip is one button) the ring is drawn 5px in, clear inside the dashes,
-   instead of on top of them (.session-only's own rule sets that). (That one is a ::after border and this one an outline, so neither switches the other
-   off.)
+   instead of on top of them (.session-only's own rule sets that). (That one is a drawn line, and
+   this one an outline, so neither switches the other off.)
    ONE CONTROL TAKES IT ON THE OUTSIDE (.ring-outside): the tap-to-type readout beside a slider
    (components/SliderValueEditor) is a button exactly the size of its digits — no padding for a
    ring to sit in, filled or not — so there the ring is drawn 2px clear of the box, in the top text
@@ -1177,9 +1171,17 @@ button{touch-action:manipulation}
    Since round 14 the same boolean also dims Save Defaults AND Reset Settings, so this
    paragraph describes all three.
    Violet, not the rose reset red — "customized" is a benign state, not a
-   warning. App applies the class only while the popover is CLOSED (the open gear is solid purple). */
+   warning.
+   ★ IT SHOWS WHILE THE MENU IS OPEN TOO (the owner's ask, 2026-10-21): the menu is where settings
+   are changed, so that is when the bar should be seen to come and go. The open gear is filled with
+   the brand violet (.btn-solid), where a violet bar would vanish, so on that fill the bar takes the
+   button's own ink (currentColor — the white the ⚙ itself is drawn in, the same on every violet
+   button in the app): no new shade, and it follows that ink if it ever changes. Same place, same
+   size. :root gives it the weight to win over the two light themes' violet below whatever order
+   the rules are in. */
 .gear-modified{position:relative}
 .gear-modified::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;border-radius:9999px;background:rgba(167,139,250,.85)}
+:root .btn-solid.gear-modified::after{background:currentColor}
 [data-theme="light"] .gear-modified::after,[data-theme="parchment"] .gear-modified::after{background:rgba(124,58,237,.75)}
 /* The update-signal dot (re-cut in round 8): the two-stage breadcrumb to the changelog after
    a new build lands. The build-stamp detection lights the GEAR flag on any build change; the

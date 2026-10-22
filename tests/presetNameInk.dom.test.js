@@ -101,7 +101,7 @@ describe('a name that draws nothing is an empty name', () => {
       expect(normalizePresetName(name, 3), name).toBe('Preset 3')
       renamePreset(1, 'Mornings')
       expect(renamePreset(1, name)).toBe('renamed')
-      expect(activePreset().name).toBe('Preset 1')
+      expect(activePreset().name).toBe('Mornings') // a blank rename keeps the name it had
       expect(normalizeRegistry({ presets: [{ id: 2, name }], activeId: 2 }).presets[0].name).toBe(
         'Preset 2',
       )

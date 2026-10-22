@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import DashedFrame from './DashedFrame.jsx'
 
 // BestReadout — the row a round mode shows its all-time Bests in, directly under its stats strip:
 // Blitz's Best Score / Best Streak (components/BlitzBestRow, and the score-only sudden-death row in
@@ -167,7 +168,9 @@ export default function BestReadout({
 }) {
   return (
     <div
-      className={`mt-1.5 px-3 py-1.5 rounded-2xl text-xs text-(--tx-best) ${framed ? 'session-only' : ''}`}
+      // mt-(--best-gap): the gap under the strip, one value with what index.css draws across it
+      // (the strip's own edge under a frame round both).
+      className={`mt-(--best-gap) px-3 py-1.5 rounded-2xl text-xs text-(--tx-best) ${framed ? 'session-only' : ''}`}
     >
       {/* `sr-only` is positioned out of flow, so the word costs no layout. First, so it is heard
           before the readouts it qualifies. */}
@@ -175,6 +178,7 @@ export default function BestReadout({
         <span className="sr-only">Bests set now are forgotten when you close the app</span>
       )}
       {children}
+      {framed && <DashedFrame />}
     </div>
   )
 }

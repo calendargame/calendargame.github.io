@@ -260,14 +260,16 @@ describe('the settings panel — opening and closing by every route (group 1)', 
     expect(after).toEqual(MODAL_KEYS.map((key) => `${key}: modal false, panel true`))
   })
 
-  it('an open panel still says the settings are modified while it stops drawing the modified bar; a closed one shows both', () => {
+  // The owner's ask (2026-10-21): the bar is seen to come and go while the menu is open — where
+  // settings are changed — drawn in the open gear's own ink on its purple (index.css's gear-modified).
+  it('an open panel says the settings are modified and draws the modified bar; a closed one shows both', () => {
     mountApp()
     openSettings()
     // Diverge through a real control, so this is the state a user can actually reach.
     pickPill('Leap Year Chance', '50%')
     expect(gearIndicator().name).toBe('Settings (modified)')
-    // The bar is the CLOSED gear's signal — an open gear is solid and wears no stripe.
-    expect(gearIndicator().bar).toBe(false)
+    expect(gearIndicator().bar).toBe(true)
+    expect(gear().className).toMatch(/(^|\s)btn-solid(\s|$)/)
     closeSettings('gear')
     expect(gearIndicator().name).toBe('Settings (modified)')
     expect(gearIndicator().bar).toBe(true)

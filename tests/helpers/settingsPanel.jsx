@@ -515,8 +515,8 @@ export const gear = () => screen.getByRole('button', { name: /^Settings( \(|$)/ 
 
 // WHAT THE GEAR IS TELLING THE USER, as the independent things it says rather than as the markup
 // that says them:
-//   • bar      — the violet "your settings differ from your defaults" stripe. Drawn only while the
-//                panel is CLOSED (an open gear is solid purple and wears no stripe).
+//   • bar      — the "your settings differ from your defaults" stripe: violet on the closed gear,
+//                and in the open gear's own white ink on its purple fill.
 //   • name     — the accessible name, which is where BOTH signals are always readable, open or
 //                closed. About a dozen helpers across five test files find the gear by this
 //                string, so its format is load-bearing well beyond any one test.

@@ -223,7 +223,9 @@ describe('the outline costs no layout', () => {
     tag: el.tagName,
     classes: [...el.classList].filter((c) => c !== 'session-only').sort(),
     text: [...el.childNodes].filter((c) => c.nodeType === 3).map((c) => c.nodeValue),
-    inFlow: [...el.children].filter((c) => !c.classList.contains('sr-only')).map(shape),
+    inFlow: [...el.children]
+      .filter((c) => !c.classList.contains('sr-only') && !c.classList.contains('session-frame'))
+      .map(shape),
   })
   const block = (amnesic, dimmed, bests) => {
     cleanup()
@@ -242,11 +244,19 @@ describe('the outline costs no layout', () => {
     const full = block('full', false, BESTS)
     expect(frames(full)).toEqual([full])
     expect(shape(full)).toEqual(plain)
-    // The only things added are positioned out of the flow.
+    // The only things added are positioned out of the flow: the words, and the frame's own drawing
+    // (components/DashedFrame), the last child of exactly the element that wears the class.
     expect([...full.querySelectorAll('.sr-only')].map((c) => c.textContent)).toEqual([
       STRIP_WORDS,
       BEST_WORDS,
     ])
+    for (const root of [statsOnly, full])
+      for (const host of frames(root)) {
+        expect(host.lastElementChild.classList.contains('session-frame')).toBe(true)
+        expect(host.lastElementChild.getAttribute('aria-hidden')).toBe('true')
+      }
+    expect(full.querySelectorAll('.session-frame')).toHaveLength(1)
+    expect(block('off', false, BESTS).querySelectorAll('.session-frame')).toHaveLength(0)
     // Save Stats off: the dim's own classes and dashes are the same with or without a frame, and
     // on Full the frame is the Best readouts' own.
     const dimmedPlain = shape(block('off', true, BESTS))
@@ -281,7 +291,9 @@ describe('the outline costs no layout', () => {
     // The group is the strip's place on the page and nothing else: no padding, no border.
     expect([...root.classList].sort()).toEqual(['mt-4', 'rounded-2xl', 'session-only'])
     // The readouts' row: its text starts inside the line, framed or not.
-    expect([...bestsEl.classList]).toEqual(expect.arrayContaining(['px-3', 'py-1.5', 'mt-1.5']))
+    expect([...bestsEl.classList]).toEqual(
+      expect.arrayContaining(['px-3', 'py-1.5', 'mt-(--best-gap)']),
+    )
     expect([...block('off', false, BESTS).lastChild.classList]).toEqual([...bestsEl.classList])
   })
 
@@ -334,9 +346,10 @@ describe('the outline costs no layout', () => {
     },
   )
 
-  // ★ THE RULES THEMSELVES. The frame is a ::after box positioned out of the flow; the host gains
-  // `position:relative` and nothing else, and on a .panel only the border's COLOUR changes. Nothing
-  // here may declare a width, a padding, a margin, a border-width or an outline on the host.
+  // ★ THE RULES THEMSELVES. The frame is drawn on a box positioned out of the flow (an SVG,
+  // components/DashedFrame); the host gains `position:relative` and nothing else, and on a .panel
+  // only the border's COLOUR changes. Nothing here may declare a width, a padding, a margin, a
+  // border-width or an outline on the host.
   it('the class’s rules declare nothing that takes part in layout', () => {
     const css = readFileSync('src/index.css', 'utf8')
     const rule = (selector) => {
@@ -344,30 +357,43 @@ describe('the outline costs no layout', () => {
       expect(at, selector).toBeGreaterThan(-1)
       return css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at))
     }
+    const declarations = (selector) =>
+      Object.fromEntries(
+        rule(selector)
+          .split(';')
+          .map((d) => [d.slice(0, d.indexOf(':')), d.slice(d.indexOf(':') + 1)]),
+      )
     // (…and where the keyboard's focus ring sits on a control on the frame's line: clear inside it.
     // A custom property, so it reaches the strip when the frame is the group's.)
     expect(rule('.session-only')).toBe('position:relative;--kbd-ring-offset:-5px')
     // The strip's own solid border steps aside for the dashes, wearing the frame or under one.
     expect(rule('.panel.session-only,.session-only>.panel')).toBe('border-color:transparent')
-    const frame = Object.fromEntries(
-      rule('.session-only::after')
-        .split(';')
-        .map((d) => [d.slice(0, d.indexOf(':')), d.slice(d.indexOf(':') + 1)]),
-    )
+    const frame = declarations('.session-frame')
     expect(frame.position).toBe('absolute') // out of the flow: it cannot push anything
     expect(frame.inset).toBe('0') // the host's own box — never outside it
+    expect([frame.width, frame.height]).toEqual(['100%', '100%'])
     expect(frame['pointer-events']).toBe('none') // and it never takes a tap meant for the strip
-    expect(frame.border).toMatch(/dashed/) // dashed — the keyboard's focus ring is solid
-    expect(frame['border-radius']).toBe('inherit')
-    // …and every rule with the class in its selector is one of the three above: ONE frame shape.
-    // (⚠ TEMPORARY: the test site's stats-frame trial, lib/designTrials, keyed to a value on <html>
-    // that only the test site and a dev server ever set. It goes, with this filter, once the owner
-    // has picked.)
-    const selectors = [...css.matchAll(/\n([^\n{}]*session-only[^\n{}]*)\{/g)]
-      .map((m) => m[1])
-      .filter((s) => !s.startsWith(':root[data-trial-stats='))
+    expect(frame.fill).toBe('none') // a line, and nothing inside it
+    expect(frame['stroke-width']).toBe('1.5px')
+    // Under a frame round both, the strip's own edge where the dashes do not run: drawn by the
+    // row after the strip, out of the flow, a dash line's width clear of each side.
+    expect(rule('.session-only>.panel+*')).toBe('position:relative')
+    const edge = declarations('.session-only>.panel+*::before')
+    expect(edge.position).toBe('absolute')
+    expect(edge['clip-path']).toBe('inset(0 1.5px)')
+    expect(edge.border).toBe('1px solid var(--panel-bd)')
+    expect(edge['border-top']).toBe('0')
+    expect(edge.top).toBe('calc(-1 * (var(--best-gap) + var(--radius-2xl)))')
+    expect(edge.height).toBe('var(--radius-2xl)')
+    // …and every rule with the class in its selector is one of these: ONE frame shape.
+    const selectors = [...css.matchAll(/\n([^\n{}]*session-only[^\n{}]*)\{/g)].map((m) => m[1])
     expect(selectors.sort()).toEqual(
-      ['.panel.session-only,.session-only>.panel', '.session-only', '.session-only::after'].sort(),
+      [
+        '.panel.session-only,.session-only>.panel',
+        '.session-only',
+        '.session-only>.panel+*',
+        '.session-only>.panel+*::before',
+      ].sort(),
     )
   })
 })

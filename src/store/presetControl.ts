@@ -4,7 +4,8 @@ import {
   normalizePresetName,
   applyRegistryIfRoom,
   copyName,
-  defaultPresetName,
+  nextStockName,
+  hasNothingToSee,
   readStoredRegistry,
   normalizeRegistry,
   onRegistryAdopt,
@@ -601,7 +602,7 @@ export function createPreset(name?: string): Preset {
   // field, store/presets' Preset: the way such a build spells its own new preset.)
   const preset: Preset = {
     id,
-    name: normalizePresetName(name ?? defaultPresetName(id), id),
+    name: name === undefined ? nextStockName(reg.presets) : normalizePresetName(name, id),
     amnesic: false,
   }
   usePresets.getState().applyRegistry({
@@ -822,6 +823,13 @@ export function renamePreset(id: number, name: string): RenameOutcome {
   const reg = usePresets.getState()
   const preset = reg.presets.find((p) => p.id === id)
   if (!preset) return 'unknown'
+  // A NAME LEFT WITH NOTHING TO SEE MEANS "NEVER MIND" (the owner's call, 2026-10-21): the preset
+  // keeps the name it had, exactly as if the box had never been touched. (It used to fall back to
+  // "Preset <id>" — a number the player never chose, and since ids are never reused, often a large
+  // one.) A name with nothing to see that is READ from the device — saved by an older build, or
+  // one that shows nothing on this device — is still shown as the stock name (store/presets'
+  // normalizePresetName): there is no earlier name to keep.
+  if (hasNothingToSee(name)) return 'renamed'
   const next = normalizePresetName(name, id)
   if (next === preset.name) return 'renamed'
   const saved = applyRegistryIfRoom({

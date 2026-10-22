@@ -3,6 +3,7 @@ import type { ElementType, ReactNode } from 'react'
 import { fitScale } from '../lib/statFit.js'
 import { useActiveAmnesicMode } from '../store/amnesic.js'
 import BestReadout from './BestReadout.jsx'
+import DashedFrame from './DashedFrame.jsx'
 
 // StatPanel — the horizontal stats strip (Score / Accuracy / Streak / Last /
 // Mean / Median) shown under the header in the timed/scored modes.
@@ -374,12 +375,14 @@ export default function StatPanel({
           }
           return items
         })()}
+        {frame === 'strip' && <DashedFrame />}
       </Root>
       {bests != null && (
         <BestReadout sessionOnly={bestsSessionOnly} framed={frame === 'bests'}>
           {bests}
         </BestReadout>
       )}
+      {frame === 'group' && <DashedFrame />}
     </div>
   )
 }

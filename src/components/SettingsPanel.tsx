@@ -36,8 +36,6 @@ import PresetManager from './PresetManager.jsx'
 import CustomSelect from './CustomSelect.jsx'
 import { PresetOptionLabel, ShortStockNameRoom } from './PresetSwitcher.jsx'
 import QuotedName from './QuotedName.jsx'
-import DesignTrials from './DesignTrials.jsx'
-import { trialsHere } from '../lib/designTrials.js'
 import {
   EDGE_OVER_SCROLL_CLASS,
   SCROLL_REGION_CLASS,
@@ -1243,8 +1241,6 @@ export function SettingsPanel({
               neither constructive nor destructive, and violet in this panel means "this saves
               something" (Save Defaults). It is deliberately NOT drawn as a switch row — THE PICKER
               RULE below reserves label-left/one-button-right for on/off settings. */}
-          {/* ⚠ TEMPORARY (lib/designTrials): the test site's design trials, first in the menu. */}
-          {trialsHere() && <DesignTrials />}
           <div className="space-y-2">
             <GroupLabel>Global</GroupLabel>
             <div className="text-xs text-(--tx-200-80)">
