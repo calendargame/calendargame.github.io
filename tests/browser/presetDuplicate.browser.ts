@@ -274,3 +274,23 @@ test('a copy’s name box, not typed in, shows its "(2)"; typed in, the whole na
   await expect.poll(drawn).toBeNull()
   await expect(box).toHaveValue(copy)
 })
+
+// NEW PRESET AND DUPLICATE ARE HALF AND HALF (the row's own design; the owner's report, 2026-10-21:
+// they were not — as flex items, New Preset's padding was added to its half before the halves were
+// shared). Equal at every width, in both engines, to the pixel.
+test('New Preset and Duplicate are the same width at every width', async ({ page }) => {
+  await openApp(page)
+  const dialog = await openPresetManager(page)
+  for (const width of [320, 375, 390, 430, 768]) {
+    await page.setViewportSize({ width, height: 800 })
+    await settled(page)
+    const [made, copy] = await Promise.all([
+      rectOf(dialog.getByRole('button', { name: 'New Preset' })),
+      rectOf(dialog.getByRole('button', { name: 'Duplicate' })),
+    ])
+    expect(Math.abs(made.width - copy.width), `${width}px: the same width`).toBeLessThanOrEqual(
+      SAME_PX,
+    )
+    expect(Math.abs(made.top - copy.top), `${width}px: on one line`).toBeLessThanOrEqual(SAME_PX)
+  }
+})

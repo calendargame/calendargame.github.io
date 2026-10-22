@@ -314,7 +314,9 @@ export default function StatPanel({
       <Root
         ref={setRoot}
         {...rootProps}
-        className={`rounded-2xl panel flex overflow-hidden ${onActivate ? ' w-full' : ''}${dimmed ? ' opacity-50' : ''} ${frame === 'strip' ? 'session-only' : ''}`}
+        // stat-strip: the strip clips what it holds at its OUTER edge (index.css says why not
+        // overflow-hidden).
+        className={`rounded-2xl panel stat-strip flex ${onActivate ? ' w-full' : ''}${dimmed ? ' opacity-50' : ''} ${frame === 'strip' ? 'session-only' : ''}`}
       >
         {/* The words that keep the DIM and the DASHED OUTLINE from meaning nothing to a screen reader
           — see the header note. Absolutely positioned by `sr-only`, so it is outside the flex

@@ -50,7 +50,7 @@ interface Box {
 }
 interface Screen {
   /** Every dashed frame drawn on the screen: what wears it (or 'other'), where, and its line. */
-  frames: { wearer: Wearer | 'other'; box: Box; line: string; lineWidth: number }[]
+  frames: { wearer: Wearer | 'other'; box: Box; drawn: Box; line: string; lineWidth: number }[]
   strip: Box
   stripOpacity: string
   bests: Box | null
@@ -76,8 +76,8 @@ const read = (page: Page): Promise<Screen> =>
       .filter((svg) => svg.getClientRects().length > 0)
       .map((svg) => ({ svg, line: svg.querySelector('path') }))
       .filter(({ line }) => line && getComputedStyle(line).strokeDasharray !== 'none')
-      .map(({ svg, line }) => ({ el: svg.parentElement!, drawn: getComputedStyle(line!) }))
-      .map(({ el, drawn }) => ({
+      .map(({ svg, line }) => ({ el: svg.parentElement!, svg, drawn: getComputedStyle(line!) }))
+      .map(({ el, svg, drawn }) => ({
         wearer:
           el === stripEl
             ? ('strip' as const)
@@ -87,6 +87,7 @@ const read = (page: Page): Promise<Screen> =>
                 ? ('bests' as const)
                 : ('other' as const),
         box: box(el),
+        drawn: box(svg),
         line: drawn.stroke,
         lineWidth: parseFloat(drawn.strokeWidth),
       }))
@@ -160,6 +161,17 @@ for (const saveStats of [true, false]) {
             expect(Math.abs(box.top - screen.strip.top), `${at}: top`).toBeLessThanOrEqual(SAME_PX)
           }
           if (frame === 'strip') sameBox(box, screen.strip, `${at}: the frame is the strip's edge`)
+          // …and the LINE is drawn on that edge — not a border's pixel inside it — wherever it goes
+          // round the strip, so the outline is in the same place under Stats Only and Full (the
+          // owner's report, 2026-10-21: it moved out a pixel between the two).
+          if (frame === 'strip' || frame === 'group') {
+            const [{ drawn }] = screen.frames
+            for (const edge of ['left', 'top', 'right'] as const)
+              expect(
+                Math.abs(drawn[edge] - screen.strip[edge]),
+                `${at}: the line on the strip's ${edge} edge`,
+              ).toBeLessThanOrEqual(SAME_PX)
+          }
           if (frame === 'bests')
             sameBox(box, screen.bests!, `${at}: the frame is the readouts' row`)
           // Round both: it closes at the bottom of the readouts' row, and no wider than the strip.

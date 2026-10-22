@@ -1352,7 +1352,12 @@ export default function PresetManager({
           empty it.
         </div>
       )}
-      <div className="px-4 pt-1 flex gap-2">
+      {/* TWO EQUAL COLUMNS, NOT TWO flex-1 ITEMS. The row is half and half by design, but as flex
+          items the two were never equal: a flex item cannot be narrower than its own padding and
+          border, so New Preset's 25px of them were added to its half before the halves were shared
+          (156px against Duplicate's 130px at a 390px phone). A grid's two `minmax(0, 1fr)` columns
+          are equal whatever is in them. */}
+      <div className="px-4 pt-1 grid grid-cols-2 gap-2">
         {/* NEW PRESET is the constructive act, so it wears btn-solid — the same violet fill Save
             Defaults and every Begin button wear, and the same reason rose is left to the two
             destructive controls. Round 21 removed a standalone Close beside it (the scrim tap,
@@ -1361,15 +1366,17 @@ export default function PresetManager({
         <button
           type="button"
           onClick={addPreset}
-          className="flex-1 min-w-0 px-3 py-2 rounded-xl btn-solid border border-transparent text-sm font-medium"
+          className="min-w-0 px-3 py-2 rounded-xl btn-solid border border-transparent text-sm font-medium"
         >
           New Preset
         </button>
         {/* DUPLICATE — a dropdown of the presets (CustomSelect as a MENU). The no-fill toggle
             surface with the select's ▲▼, so it reads as a list to open beside the button that
-            acts at once. Its wrapper is the row's flex item (CustomSelect's own div takes no
-            class) and its trigger fills it. */}
-        <div className="flex-1 min-w-0">
+            acts at once. Its wrapper is the row's grid cell (CustomSelect's own div takes no class)
+            and its trigger fills it. Its word sits at the left, like every ▲▼ button in the app (the
+            top bar's two, Open in): the owner's call, 2026-10-21 — the ▲▼ says "a list", and every
+            list button reads the same way, beside an action button or not. */}
+        <div className="min-w-0">
           <CustomSelect
             value=""
             menuLabel="Duplicate"

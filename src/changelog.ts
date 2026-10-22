@@ -109,6 +109,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'A new preset is now named one number past the highest “Preset” number on your list, or past how many presets you have, whichever is higher, so making and deleting presets no longer leaves the next new one with a big number.',
       'If you clear a preset’s name and leave the box empty, the preset now keeps the name it had, as a way of saying never mind.',
       'In Manage Presets, the ✕ beside each preset is now just the ✕, with no button drawn round it, like the grip at the other end of the row.',
+      'Fixed: with Amnesic on Stats Only, the dashed outline sat a pixel inside the edge of the stats, so it seemed to grow when you switched to Full. It is on the edge in both now.',
+      'Fixed: the New Preset and Duplicate buttons in Manage Presets are now exactly the same width.',
     ],
   },
   {

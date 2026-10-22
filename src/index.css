@@ -737,6 +737,21 @@ input,textarea{user-select:text;-webkit-user-select:text}
    phone's root), which evens the space above the first line and below the last, and leaves the
    line about 10px clear of the controls under it (12px before). */
 .session-frame-below{height:calc(100% + .125rem)}
+/* ★ ON THE STRIP'S OWN EDGE, NOT A PIXEL INSIDE IT (the owner's report, 2026-10-21: switching
+   Amnesic from Stats Only to Full, the outline moved out — "like the stat box's area grows by just a
+   little"). A frame's box is its host's padding box (inset 0), and the strip is the one host with a
+   border of its own: its frame sat that border's 1px inside the strip's edge, where a frame round
+   the strip and the Bests — whose host has no border — sits ON it. So a frame in a .panel reaches
+   out over the border, and every frame's line is on the outer edge of what it marks, in every
+   Amnesic value. (The strip's tint under its transparent border is then inside the line too, as
+   it is under Full.) Nothing moves: the frame takes no part in layout. */
+.panel>.session-frame{inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px)}
+/* .stat-strip — the stats strip (components/StatPanel) keeps everything it holds inside its own
+   rounded box, as `overflow-hidden` did — but at its OUTER edge, where `overflow-hidden` clipped at
+   the inner one (the padding box, a border's pixel in) and so also clipped the frame above off the
+   strip's own edge. A value is fitted to its cell before it is drawn (lib/statFit), so nothing
+   reaches that edge in practice; the clip is the guarantee. */
+.stat-strip{clip-path:inset(0 round var(--radius-2xl))}
 .panel.session-only,.session-only>.panel{border-color:transparent}
 /* ★ UNDER A FRAME ROUND BOTH (Full), THE STRIP KEEPS ITS OWN EDGE WHERE THE DASHES DO NOT RUN (the
    owner's pick, 2026-10-21, from three tried side by side on the test site). The strip's tint is
