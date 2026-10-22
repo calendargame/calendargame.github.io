@@ -1270,7 +1270,7 @@ export default function GuidePage({
           changelog. The one beside Changelog appears only when this list has actually gained
           something since you last saw it, so it never sends you to something you have already read;
           the gear's dot marks every update either way. The gear's dot is separate from the small
-          violet bar that marks modified settings (see the Save Defaults section), and the two can
+          violet edge that marks modified settings (see the Save Defaults section), and the two can
           show at once. The gear&apos;s dot has one other colour: <b>amber</b> means this device is
           running short of room for the app (see Saved Progress), not an update — and if both are
           true at once, it is amber.
@@ -3093,7 +3093,7 @@ export default function GuidePage({
           <li>
             Only the pair for the Julian Calendar setting as it stands is used; the other is
             striped. You can still type into it, and it is saved with your settings: changing it
-            lights the ⚙ button&apos;s violet bar like any other change, and nothing else happens:
+            lights the ⚙ button&apos;s violet edge like any other change, and nothing else happens:
             no date is redrawn, no Best moves, and no run in MoX or round in Blitz starts over.
             Switching the Julian Calendar setting swaps which pair is used — so if the two pairs
             differ, the waiting date is redrawn when you close the ⚙ menu, as it is for any change
@@ -3115,12 +3115,12 @@ export default function GuidePage({
           <li>
             Dates keep coming from the stored range until the year counts — but the menu notices the
             typing straight away. As soon as a box shows something other than the stored year, the ⚙
-            button&apos;s violet bar lights and Save Defaults, Reset Settings, and Full Reset become
-            active, the same as any other change. Finishing the year does not put them back: once it
-            counts, your range differs from your defaults, which is a change in its own right. They
-            settle only when nothing is left that differs — so pressing <Kbd>Esc</Kbd> on a year you
-            never meant to type clears them, while typing 1900 and pressing <Kbd>Enter</Kbd> keeps
-            them lit, now for something you really can save.
+            button&apos;s violet edge lights and Save Defaults, Reset Settings, and Full Reset
+            become active, the same as any other change. Finishing the year does not put them back:
+            once it counts, your range differs from your defaults, which is a change in its own
+            right. They settle only when nothing is left that differs — so pressing <Kbd>Esc</Kbd>{' '}
+            on a year you never meant to type clears them, while typing 1900 and pressing{' '}
+            <Kbd>Enter</Kbd> keeps them lit, now for something you really can save.
           </li>
           <li>
             Changing the range always regenerates the current date — but if you've already
@@ -3770,21 +3770,22 @@ export default function GuidePage({
             your device&apos;s Back — discards the edits and saves nothing.
           </li>
           <li>
-            While anything the snapshot covers differs from your defaults, the gear (⚙) shows a
-            small bar along its bottom edge — violet, or white on the gear&apos;s purple while the
-            menu is open, so you can see it come and go as you change things — and the Save Defaults
-            button is active; once everything already matches your defaults, the bar disappears and
-            the button dims — nothing new to save. <b>Amnesic</b> counts here like any other value
-            the snapshot covers: move it away from what your defaults hold and the bar lights and
-            Save Defaults comes alive, so &quot;Amnesic: Stats Only&quot; or &quot;Amnesic:
-            Full&quot; can be saved as a default on its own. A year you have typed but not yet left
-            also lights the bar, even though there is nothing to save for it yet — pressing Save
-            Defaults then saves everything else and leaves the bar lit until the year is finished or
-            dropped. Finishing it does not clear the bar either, unless the year you finished on is
-            the one your defaults already hold: a stored range that differs from your defaults
-            lights the bar in its own right. <Kbd>Esc</Kbd> is what puts a year you never meant to
-            type back. The bar is separate from the light-blue update dot at the gear&apos;s
-            top-right corner (see Updates in the first section), and the two can show at once.
+            While anything the snapshot covers differs from your defaults, the flat part of the gear
+            (⚙)&apos;s bottom edge is coloured — violet, or white on the gear&apos;s purple while
+            the menu is open, so you can see it come and go as you change things — and the Save
+            Defaults button is active; once everything already matches your defaults, the edge goes
+            back to normal and the button dims — nothing new to save. <b>Amnesic</b> counts here
+            like any other value the snapshot covers: move it away from what your defaults hold and
+            the edge lights and Save Defaults comes alive, so &quot;Amnesic: Stats Only&quot; or
+            &quot;Amnesic: Full&quot; can be saved as a default on its own. A year you have typed
+            but not yet left also lights the edge, even though there is nothing to save for it yet —
+            pressing Save Defaults then saves everything else and leaves the bar lit until the year
+            is finished or dropped. Finishing it does not clear the bar either, unless the year you
+            finished on is the one your defaults already hold: a stored range that differs from your
+            defaults lights the edge in its own right. <Kbd>Esc</Kbd> is what puts a year you never
+            meant to type back. The bar is separate from the light-blue update dot at the
+            gear&apos;s top-right corner (see Updates in the first section), and the two can show at
+            once.
           </li>
           <li>
             Your saved defaults survive Full Reset — that's the point: Full Reset restores{' '}
@@ -3840,7 +3841,7 @@ export default function GuidePage({
           …plus the same four mode-screen values Save Defaults captures: the Flash speed, the MoX
           run length, and both Blitz timers. That makes Reset Settings the exact mirror of Save
           Defaults — one copies your live setup into your defaults, the other copies your defaults
-          back over your live setup — across the very same values the gear's violet bar watches, so
+          back over your live setup — across the very same values the gear's violet edge watches, so
           a single tap clears that bar whatever changed.
         </p>
         <p>

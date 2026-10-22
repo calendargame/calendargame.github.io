@@ -1179,7 +1179,7 @@ button{touch-action:manipulation}
 .dot-cluster[data-dot-rotation="ccw45"]{--dot-scale:.8;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(5,minmax(0,1fr));padding:calc(min(var(--ans-h),100%) * (1 - 5 * var(--dot-scale) / (3 * 1.41421356)) / 2);clip-path:inset(0)}
 .dot-cluster[data-dot-rotation="ccw45"] .dot-btn{inline-size:calc(var(--dot-frac) * 1.41421356 * 100%)}
 .dot-cluster[data-dot-rotation="ccw45"] .dot-btn::after{transform:translate(-50%,-50%) rotate(45deg)}
-/* The ⚙ gear "modified" indicator: a flush inside-bottom 2px violet bar shown while any
+/* The ⚙ gear "modified" indicator: the FLAT PART OF THE GEAR'S BOTTOM BORDER, recoloured, shown while any
    CURRENTLY-IN-EFFECT menu setting, or any of the four capturable mode-screen prefs (Flash speed,
    both Blitz timers, AoX run length), diverges from the user's saved defaults (the factory launch
    values when none are saved — store/userDefaults). ⚠ "in effect" is load-bearing, not filler: it
@@ -1202,9 +1202,16 @@ button{touch-action:manipulation}
    button's own ink (currentColor — the white the ⚙ itself is drawn in, the same on every violet
    button in the app): no new shade, and it follows that ink if it ever changes. Same place, same
    size. :root gives it the weight to win over the two light themes' violet below whatever order
-   the rules are in. */
+   the rules are in.
+   ★ IT IS THE BORDER ITSELF, NOT A BAR INSIDE IT (the owner's ask, 2026-10-21, tried on the test
+   site first): the gear's bottom border, in the bar's colour, along its whole flat part and only
+   there — from where the left corner's curve ends to where the right corner's begins — the
+   border's own pixel thick, open or closed alike (only the colour changes). It is drawn over the
+   border's own row: the box it is placed in is the button's padding box, so its ends are the
+   corner radius in from the outer edge less the border's pixel, and `bottom:-1px` puts it on the
+   border's row. */
 .gear-modified{position:relative}
-.gear-modified::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;border-radius:9999px;background:rgba(167,139,250,.85)}
+.gear-modified::after{content:"";position:absolute;left:calc(var(--radius-xl) - 1px);right:calc(var(--radius-xl) - 1px);bottom:-1px;height:1px;background:rgba(167,139,250,.85)}
 :root .btn-solid.gear-modified::after{background:currentColor}
 [data-theme="light"] .gear-modified::after,[data-theme="parchment"] .gear-modified::after{background:rgba(124,58,237,.75)}
 /* The update-signal dot (re-cut in round 8): the two-stage breadcrumb to the changelog after
