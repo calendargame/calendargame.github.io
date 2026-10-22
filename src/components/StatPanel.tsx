@@ -382,7 +382,7 @@ export default function StatPanel({
           {bests}
         </BestReadout>
       )}
-      {frame === 'group' && <DashedFrame />}
+      {frame === 'group' && <DashedFrame reachBelow />}
     </div>
   )
 }

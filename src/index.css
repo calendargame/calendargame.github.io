@@ -728,6 +728,15 @@ input,textarea{user-select:text;-webkit-user-select:text}
    pointer-events:none, so the frame never takes a tap meant for the strip. */
 .session-only{position:relative;--kbd-ring-offset:-5px}
 .session-frame{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;fill:none;stroke:color-mix(in oklab,var(--tx-200-80) 70%,transparent);stroke-width:1.5px}
+/* ★ ROUND THE STATS AND THE BESTS (Full), THE LINE REACHES A LITTLE BELOW THEM (the owner's call,
+   2026-10-21). Measured on the live site: the dashes sat 10.5px above the stats' labels but only
+   8-9px below the Best lines (Chromium 8.0, WebKit 9.0) — the readouts' row has less room under its
+   text than the strip has above its labels. Giving the row more room would move the page in every
+   Amnesic state (the frame may never move a thing, so the room would have to be there with it
+   off too); so only the DRAWING reaches down — its box, not the group's — by 0.125rem (2px at a
+   phone's root), which evens the space above the first line and below the last, and leaves the
+   line about 10px clear of the controls under it (12px before). */
+.session-frame-below{height:calc(100% + .125rem)}
 .panel.session-only,.session-only>.panel{border-color:transparent}
 /* ★ UNDER A FRAME ROUND BOTH (Full), THE STRIP KEEPS ITS OWN EDGE WHERE THE DASHES DO NOT RUN (the
    owner's pick, 2026-10-21, from three tried side by side on the test site). The strip's tint is

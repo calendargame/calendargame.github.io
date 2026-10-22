@@ -256,6 +256,13 @@ describe('the outline costs no layout', () => {
         expect(host.lastElementChild.getAttribute('aria-hidden')).toBe('true')
       }
     expect(full.querySelectorAll('.session-frame')).toHaveLength(1)
+    // Round the stats AND the Bests, and only there, the drawing reaches a little below the group
+    // (index.css's .session-frame-below): the room under the Best lines matches the room above
+    // the stats.
+    expect(full.lastElementChild.classList.contains('session-frame-below')).toBe(true)
+    expect(
+      statsOnly.querySelector('.session-frame').classList.contains('session-frame-below'),
+    ).toBe(false)
     expect(block('off', false, BESTS).querySelectorAll('.session-frame')).toHaveLength(0)
     // Save Stats off: the dim's own classes and dashes are the same with or without a frame, and
     // on Full the frame is the Best readouts' own.

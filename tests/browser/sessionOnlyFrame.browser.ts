@@ -276,3 +276,63 @@ test.describe('at three times the pixels', () => {
     }
   })
 })
+
+// THE OUTLINE IS DRAWN IN THE SAME FRAME AS THE SCREEN IT IS ON (the owner's report, 2026-10-21: it
+// flashed on every switch of mode). A screen out of view has no size, so its frame has nothing to
+// draw until the switch brings it into view; the browser then tells every ResizeObserver, after
+// layout and before paint. components/DashedFrame draws in its own observer, which was made when
+// the frame was, so it is told FIRST — and an observer made here, later, finds the line already
+// drawn when it is told, in that same frame. (When the line went through React state, it was
+// drawn only on a render after the paint, and this observer found no line.)
+test('switching mode, the outline is there in the first frame the screen is', async ({ page }) => {
+  await openApp(page, { seed: { amnesic: { 1: 'full' } } })
+  await switchMode(page, 'classic')
+  const drawnWhenSeen = page.evaluate(
+    () =>
+      new Promise<boolean[]>((done) => {
+        const seen: boolean[] = []
+        const watch = new ResizeObserver((entries) => {
+          for (const entry of entries)
+            if (entry.contentRect.width > 0)
+              seen.push(entry.target.querySelector('path')!.hasAttribute('d'))
+          if (seen.length) {
+            watch.disconnect()
+            done(seen)
+          }
+        })
+        for (const svg of document.querySelectorAll('svg.session-frame')) watch.observe(svg)
+      }),
+  )
+  await switchMode(page, 'aox')
+  expect(await drawnWhenSeen, 'the line was there when the frame first had a size').not.toContain(
+    false,
+  )
+})
+
+// ROUND THE STATS AND THE BESTS, THE LINE REACHES A LITTLE BELOW THEM (index.css's
+// .session-frame-below, the owner's call 2026-10-21) — its drawing, not the group: nothing on the
+// page moves for it (the test above, against Amnesic Off), and it stays clear of what comes next.
+test('round the stats and the Bests, the line sits an eighth of a rem below them, and clear of what follows', async ({
+  page,
+}) => {
+  await openApp(page, { seed: { amnesic: { 1: 'full' } } })
+  for (const mode of ['aox', 'blitz'] as const) {
+    await switchMode(page, mode)
+    const g = await page.locator('svg.session-frame >> visible=true').evaluate((svg) => {
+      const host = svg.parentElement!
+      let next = host.nextElementSibling
+      while (next && next.getClientRects().length === 0) next = next.nextElementSibling
+      return {
+        reach: svg.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom,
+        eighth: parseFloat(getComputedStyle(document.documentElement).fontSize) / 8,
+        clear: next ? next.getBoundingClientRect().top - svg.getBoundingClientRect().bottom : 99,
+        top: svg.getBoundingClientRect().top - host.getBoundingClientRect().top,
+      }
+    })
+    expect(Math.abs(g.reach - g.eighth), `${mode}: reaches an eighth of a rem below`).toBeLessThan(
+      SAME_PX,
+    )
+    expect(Math.abs(g.top), `${mode}: its top is the group's`).toBeLessThan(SAME_PX)
+    expect(g.clear, `${mode}: clear of what follows`).toBeGreaterThan(4)
+  }
+})
