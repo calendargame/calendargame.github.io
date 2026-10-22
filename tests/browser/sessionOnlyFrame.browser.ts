@@ -58,8 +58,9 @@ interface Screen {
   background: string
 }
 
-// Read off the page as it is drawn: a frame is any visible element whose ::after paints a dashed
-// border — found by what is painted, not by the class that asks for it.
+// Read off the page as it is drawn: a frame is any visible dashed line — a stroked path with a dash
+// pattern (components/DashedFrame draws the frame so, on its wearer's box) — found by what is
+// painted, not by the class that asks for it. Its wearer is the element it is drawn over.
 const read = (page: Page): Promise<Screen> =>
   statsBlock(page).strip.evaluate((stripEl) => {
     const groupEl = stripEl.parentElement!
@@ -71,11 +72,12 @@ const read = (page: Page): Promise<Screen> =>
       return { left, top, right, bottom }
     }
     const scroller = document.getElementById('appScroll')!
-    const frames = [...scroller.querySelectorAll('*')]
-      .filter((el) => el.getClientRects().length > 0)
-      .map((el) => ({ el, after: getComputedStyle(el, '::after') }))
-      .filter(({ after }) => after.content !== 'none' && after.borderTopStyle === 'dashed')
-      .map(({ el, after }) => ({
+    const frames = [...scroller.querySelectorAll('svg')]
+      .filter((svg) => svg.getClientRects().length > 0)
+      .map((svg) => ({ svg, line: svg.querySelector('path') }))
+      .filter(({ line }) => line && getComputedStyle(line).strokeDasharray !== 'none')
+      .map(({ svg, line }) => ({ el: svg.parentElement!, drawn: getComputedStyle(line!) }))
+      .map(({ el, drawn }) => ({
         wearer:
           el === stripEl
             ? ('strip' as const)
@@ -85,8 +87,8 @@ const read = (page: Page): Promise<Screen> =>
                 ? ('bests' as const)
                 : ('other' as const),
         box: box(el),
-        line: after.borderTopColor,
-        lineWidth: parseFloat(after.borderTopWidth),
+        line: drawn.stroke,
+        lineWidth: parseFloat(drawn.strokeWidth),
       }))
     return {
       frames,
@@ -190,3 +192,87 @@ for (const theme of THEMES) {
     expect(line.lineWidth).toBeGreaterThanOrEqual(1)
   })
 }
+
+// EVERY GAP THE SAME, ALL THE WAY ROUND (the owner's report, 2026-10-21: on his iPhone one gap on
+// the right side was longer than the rest — a dashed border's leftover length, dropped into one gap;
+// components/DashedFrame draws the line with a whole number of dashes round it instead). Measured on
+// the drawn picture, at three times the pixels so a gap is several pixels long, along a line of pixels inside the line: along the top edge
+// and down the right side, between the corners, every gap is the same length, and so is every dash,
+// to within the two device pixels that rounding each end of a run to a whole pixel can add or
+// take (two thirds of a CSS pixel). A leftover gap is longer by up to a whole dash and gap.
+test.describe('at three times the pixels', () => {
+  test.use({ deviceScaleFactor: 3 })
+  test('the frame has the same gap all the way round, in both engines and at several widths', async ({
+    page,
+  }) => {
+    for (const width of [320, 390, 768]) {
+      await page.setViewportSize({ width, height: 900 })
+      await openApp(page, { seed: { amnesic: { 1: 'full' } } })
+      await switchMode(page, 'aox')
+      const host = page.locator('svg.session-frame >> visible=true').locator('..')
+      const b = (await host.boundingBox())!
+      const shot = await page.screenshot({ clip: b, scale: 'device' })
+      const gaps = await page.evaluate(
+        async ([base64, inset]) => {
+          const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+          const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+          const canvas = document.createElement('canvas')
+          canvas.width = bitmap.width
+          canvas.height = bitmap.height
+          const g = canvas.getContext('2d', { willReadFrequently: true })!
+          g.drawImage(bitmap, 0, 0)
+          const { data, width: w, height: h } = g.getImageData(0, 0, bitmap.width, bitmap.height)
+          const lum = (x: number, y: number) => {
+            const i = (y * w + x) * 4
+            return data[i] + data[i + 1] + data[i + 2]
+          }
+          // The runs of not-line between the dashes along one line of pixels, corners left out.
+          // The runs along a line of pixels, as two lists — the runs on one side of the middle
+          // brightness and the runs on the other (which is the dashes and which the gaps depends on
+          // the theme), each without the part-runs cut off at the two ends.
+          const runsOf = (values: number[]) => {
+            const middle = (Math.max(...values) + Math.min(...values)) / 2
+            const lengths: { light: boolean; length: number }[] = []
+            for (const v of values) {
+              const light = v > middle
+              const last = lengths[lengths.length - 1]
+              if (last && last.light === light) last.length++
+              else lengths.push({ light, length: 1 })
+            }
+            const whole = lengths.slice(1, -1)
+            return {
+              light: whole.filter((r) => r.light).map((r) => r.length),
+              dark: whole.filter((r) => !r.light).map((r) => r.length),
+            }
+          }
+          // The line of pixels that runs inside the line: of the outermost few, the one that
+          // changes most often between dash and gap (the picture's edge can fall a pixel either
+          // side of the box's, and the line is lighter than what is under it in the dark themes
+          // and darker in the light ones).
+          const changes = (values: number[]) => {
+            const { light, dark } = runsOf(values.slice(inset, -inset))
+            return light.length + dark.length
+          }
+          const busiest = (count: number, along: (k: number) => number[]) =>
+            [...Array(count).keys()].sort((a, b) => changes(along(b)) - changes(along(a)))[0]
+          const row = busiest(6, (y) => [...Array(w).keys()].map((x) => lum(x, y)))
+          const column =
+            w - 1 - busiest(6, (k) => [...Array(h).keys()].map((y) => lum(w - 1 - k, y)))
+          return {
+            top: runsOf([...Array(w).keys()].map((x) => lum(x, row)).slice(inset, -inset)),
+            right: runsOf([...Array(h).keys()].map((y) => lum(column, y)).slice(inset, -inset)),
+          }
+        },
+        [shot.toString('base64'), 60] as const,
+      )
+      for (const [side, both] of Object.entries(gaps))
+        for (const [which, runs] of Object.entries(both)) {
+          expect(runs.length, `${width}px, ${side}: dashes and gaps found`).toBeGreaterThan(2)
+          expect(
+            Math.max(...runs) - Math.min(...runs),
+            `${width}px, ${side}: every ${which} run the same length (${runs.join(' ')})`,
+          ).toBeLessThanOrEqual(2)
+        }
+    }
+  })
+})

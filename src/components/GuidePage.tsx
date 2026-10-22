@@ -3407,7 +3407,8 @@ export default function GuidePage({
         <Subhead>The dashed outline</Subhead>
         <p>
           Whatever on the screen will be forgotten when you close the app sits inside one dashed
-          outline, so you never have to remember which value a preset is on:
+          outline, so you never have to remember which value a preset is on. Its dashes are evenly
+          spaced all the way round, on every device:
         </p>
         <UL>
           <li>
@@ -3416,7 +3417,9 @@ export default function GuidePage({
             a new Best is kept.
           </li>
           <li>
-            On <b>Full</b>, one outline goes round the stats strip and the Best readouts together.
+            On <b>Full</b>, one outline goes round the stats strip and the Best readouts together,
+            and the strip keeps its own solid edge along its bottom and round its two bottom
+            corners, where the outline does not run, so you can still see where the stats end.
           </li>
           <li>
             On <b>Off</b>, nothing is.

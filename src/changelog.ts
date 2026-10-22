@@ -103,6 +103,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-10-21',
     items: [
       'In How to Play, the title of a section you are reading down now stays pinned under the bar as the top of its card: rounded corners and the whole top edge, all of it showing just under the bar, with nothing showing through beside the corners as the text slides underneath. When you reach the end of the section, the card’s rounded bottom closes up under the title as it slides away.',
+      'With Amnesic on Full, the stats keep their own edge along their bottom and round their bottom corners, where the dashed outline round them and the Bests does not run, so the tint behind the stats no longer simply stops above the Bests.',
+      'The dashed outline Amnesic draws now has the same gap between every dash, all the way round, on every device.',
       'The bar along the bottom of the ⚙ button, which shows that your settings differ from your saved defaults, now shows while the menu is open too, in white on the button’s purple, so you can see it come and go as you change things.',
       'A new preset is now named one number past the highest “Preset” number on your list, or past how many presets you have, whichever is higher, so making and deleting presets no longer leaves the next new one with a big number.',
       'If you clear a preset’s name and leave the box empty, the preset now keeps the name it had, as a way of saying never mind.',
