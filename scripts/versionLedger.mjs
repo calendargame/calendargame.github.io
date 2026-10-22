@@ -1,7 +1,7 @@
 // scripts/versionLedger.mjs — THE VERSION BUMP GUARD (2026-08-10). Decides whether the version
 // about to be deployed has ever been deployed to THIS site before, and refuses the deploy if it has.
-// Wired as the first step of .github/workflows/deploy.yml via scripts/checkVersionLedger.mjs; the
-// ledger it reads is written by the LAST step of the same workflow. Read src/appVersion.ts alongside
+// Wired as the first step of .github/workflows/deploy.yml via scripts/checkVersionLedger.mjs, and
+// again in its `record` job — which, once every check has passed, writes the ledger it reads. Read src/appVersion.ts alongside
 // this — that file carries the versioning scheme, this one enforces its one absolute rule:
 //
 //     ★ EVERY DEPLOY BUMPS EXACTLY ONE NUMBER, NEVER ZERO.

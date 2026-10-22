@@ -19,7 +19,7 @@ on:
 # changelog edit; scripts/versionLedger.mjs's failure message spells out both cases.
 
 # What the robot is allowed to do.
-# ⚠ `contents` is WRITE, not read, since 2026-08-10: the build job's last step writes a `v<version>`
+# ⚠ `contents` is WRITE, not read, since 2026-08-10: the `record` job writes a `v<version>`
 # tag recording that this version has shipped here (see the version-ledger steps below). It is
 # GitHub's own built-in job token and it can only reach the repository running the workflow — there
 # is no secret to create, rotate or leak. The deploy job overrides this back down to read, because
@@ -49,26 +49,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Step 1: assemble the finished website.
-  build:
+  # ── THE GATE RUNS SIDE BY SIDE (2026-10-21, the owner's ask: "do we really need that full giant
+  # check?" — yes, and it caught a real error that very evening; but it took 34 minutes, 20 of them
+  # the unit tests on one two-core runner and 12 the browser tests after them). Nothing is checked
+  # less than before. What changed is only WHEN: the checks that do not need a build (`checks`, and
+  # the unit tests split four ways in `unit`) run at the same time as the build, and the browser
+  # tests split three ways across runners once the build exists. The site is published, and its
+  # version recorded, only after EVERY one of them has passed (`record` needs them all, `deploy`
+  # needs `record`). Rough path: ~1 min of setup, then the longer of a unit shard (~6) and the
+  # build plus a browser shard (~3 + ~6), then ~1 to record and publish.
+  #
+  # ⚠ ONE THING THE PARALLEL ORDER CHANGES, WEIGHED AND ACCEPTED: the build uploads the site's source
+  # maps to Sentry as it builds (vite.config.js's sentryVitePlugin, which then deletes them so none
+  # ships), and the build no longer waits for the unit tests. So a run whose tests FAIL may already
+  # have filed maps under its release name in Sentry. Nothing is published, nothing reports against
+  # that release, and the next deploy of the same version (the ledger refuses no number that was
+  # never recorded) files its maps again under the same name. Moving the upload after the tests would
+  # mean a second build of the commit, and the browser tests test THE build that ships (two builds of
+  # one commit are not the same bytes — the deploy stamp is the build clock).
+
+  # ── 1. THE QUICK CHECKS — everything that needs neither a build nor the test suite ──────────────
+  checks:
     runs-on: ubuntu-latest
     steps:
       # ⚠ fetch-depth: 0 IS LOAD-BEARING — DO NOT DROP IT BACK TO THE DEFAULT. The default is
       # fetch-depth: 1, a clone containing exactly one commit, and the build number is
       # `git rev-list --count HEAD` (scripts/buildNumber.mjs). A shallow clone does not make that
       # command fail — it makes it return 1, on every deploy, forever, with nothing looking broken.
-      # The full history is ~200 commits of a small repo, so the cost is a second at most.
+      # The full history is a few hundred commits of a small repo, so the cost is a second at most.
       # (buildNumber.mjs also refuses a shallow checkout outright, so if this line is ever removed
-      # the build FAILS with instructions instead of silently flattening the number. Belt and braces,
-      # deliberately: the guard is what makes the workflow safe to edit.)
-      #
-      # ⚠ SINCE 2026-08-10 IT CARRIES A SECOND, UNRELATED LOAD: TAGS. `fetch-depth: 0` is also the
-      # only reason the version ledger below can see what has already shipped here. Verified in the
-      # action's own source rather than taken from its README: fetch-depth <= 0 selects
-      # `getRefSpecForAllHistory`, whose refspec includes `+refs/tags/*:refs/tags/*`, and
-      # git-command-manager only adds `--no-tags` when that refspec is ABSENT. So tags arrive because
-      # of this line and for no other reason — and versionLedger.mjs fails closed on an empty tag
-      # list, so if that ever changes the deploy stops rather than approving every version forever.
+      # the build FAILS with instructions instead of silently flattening the number.)
+      # ⚠ IT ALSO CARRIES TAGS, and so the version ledger. Verified in the action's own source rather
+      # than taken from its README: fetch-depth <= 0 selects `getRefSpecForAllHistory`, whose refspec
+      # includes `+refs/tags/*:refs/tags/*`, and git-command-manager only adds `--no-tags` when that
+      # refspec is ABSENT. So tags arrive because of this line and for no other reason — and
+      # versionLedger.mjs fails closed on an empty tag list, so if that ever changes the deploy stops
+      # rather than approving every version forever. Every job below checks out the same way.
       - name: Check out the code
         uses: actions/checkout@v4
         with:
@@ -81,45 +97,27 @@ jobs:
       # ── THE VERSION BUMP GUARD, HALF 1 OF 2 ──────────────────────────────────────────────────
       # Refuses the deploy unless package.json's version is HIGHER than every version this site has
       # already published. The record it reads is the `v*` tags in this repository, written by half 2
-      # at the bottom of this job. All the reasoning lives in scripts/versionLedger.mjs; the short
-      # version is that a deploy does not need a new commit (a re-publish of the same commit is a
-      # genuinely different artifact), so nothing derived from the COMMIT can enforce this rule.
-      # It also refuses a version that package-lock.json's own copy disagrees with (a bump that
-      # reached package.json alone) — the same script, the same two seconds.
-      #
-      # FIRST, and deliberately even before `npm ci`: it needs nothing but node and git, so a version
-      # that cannot ship costs about two seconds instead of a dependency install and a three-minute
-      # test run. ⚠ Do not move it below `npm ci` for tidiness, and do not give the script a
-      # dependency — being free to run this early is the point.
-      #
-      # ⚠ IT DEPENDS ON `fetch-depth: 0` ABOVE FOR TAGS, not just for history. If tags ever stop
-      # arriving, the check FAILS rather than passing on an empty list — that fail-closed choice is
-      # the difference between this guard and one that silently approves everything forever.
+      # in `record`, below. All the reasoning lives in scripts/versionLedger.mjs; the short version is
+      # that a deploy does not need a new commit (a re-publish of the same commit is a genuinely
+      # different artifact), so nothing derived from the COMMIT can enforce this rule. It also refuses
+      # a version that package-lock.json's own copy disagrees with (a bump that reached package.json
+      # alone). FIRST, and before `npm ci`: it needs nothing but node and git, so a version that
+      # cannot ship costs seconds. ⚠ Do not give the script a dependency — being free to run this
+      # early is the point.
       - name: Check this version has never shipped here
-        id: version
         run: node scripts/checkVersionLedger.mjs
-      - name: Install dependencies
-        run: npm ci
-      # EARLY — second only to the version ledger above, which needs no dependencies and so runs even
-      # cheaper. This one is among the cheapest in the gate (a second) and is one of the two that can
-      # fail for a reason that has nothing to do with the code. Every deploy ships exactly one
-      # changelog entry dated its own PACIFIC calendar day; the build enforces that too (the
-      # changelog-stamp plugin in vite.config.js is the real authority, since it also gates a local
-      # `npm run build`), but the build step is five minutes down this file, so without this step a
-      # mis-dated changelog costs the entire gate before anyone hears about it.
-      #
+      # Every deploy ships exactly one changelog entry dated its own PACIFIC calendar day; the build
+      # enforces that too (the changelog-stamp plugin in vite.config.js is the real authority, since
+      # it also gates a local `npm run build`), but checked here it fails in seconds, by name.
       # ⚠ THIS IS WHY A RE-DEPLOY OF AN UNCHANGED COMMIT CAN FAIL. The rule is EQUALITY against the
       # build day, so "Re-run all jobs" on a LATER Pacific day than the newest changelog entry fails
       # here — as does pushing the same commit to the staging repo one evening and the live repo the
       # next morning. That is the guard working, not a fault: the fix is a commit that re-dates the
-      # newest entry (and, if that day already shipped, a new entry for the new day). There is
-      # deliberately no bypass; the failure message spells out both cases.
+      # newest entry (and, if that day already shipped, a new entry for the new day).
       - name: Check the changelog date
         run: node scripts/checkChangelogDate.mjs
-      # Quality gate — a failing test, lint error, TYPE error, or FORMATTING drift blocks the deploy,
-      # so broken date math / logic can never reach the site. Tests run first (cheapest signal).
-      - name: Run tests
-        run: npm test
+      - name: Install dependencies
+        run: npm ci
       - name: Lint
         run: npm run lint
       # Formatting gate — Prettier must be clean (npm run format locally to fix). Without this, style
@@ -128,14 +126,54 @@ jobs:
         run: npm run format:check
       - name: Type-check
         run: npm run typecheck
+
+  # ── 2. THE UNIT TESTS, IN FOUR PARTS AT ONCE ───────────────────────────────────────────────────
+  # Vitest's own sharding: each runner takes a quarter of the test FILES, by a split Vitest makes the
+  # same way on every runner, so the four together are the whole suite exactly once. `fail-fast` is
+  # off so that a red shard does not cancel the others half-way: a failing run reports EVERY failure.
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests (part ${{ matrix.shard }} of 4)
+        run: npx vitest run --shard=${{ matrix.shard }}/4
+
+  # ── 3. THE BUILD — the one build, the files that ship ──────────────────────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
       # ★ THE SENTRY TOKEN GOES TO THIS STEP AND NO OTHER (Round 27). The build uploads the site's
       # source maps to Sentry so error reports read as real files and lines (vite.config.js, the
       # sentryVitePlugin; scripts/sentryRelease.mjs), and in GitHub Actions it REFUSES to build
-      # without the token rather than ship unreadable reports. Until Round 27 nothing here passed
-      # it — GitHub never hands a secret to a step that does not ask — so the upload never ran once.
-      # ⚠ NOT AT JOB LEVEL: the browser lane below builds an OLDER version of the app from its own
-      # commit with its own vite.config.js, and that config uploads whenever it sees this token — a
-      # job-wide token would publish a release, and maps, for a build that is never deployed.
+      # without the token rather than ship unreadable reports.
+      # ⚠ NOT AT JOB LEVEL, AND NEVER IN `lane`: the browser tests build an OLDER version of the app
+      # from its own commit with its own vite.config.js, and that config uploads whenever it sees this
+      # token — a token there would publish a release, and maps, for a build that is never deployed.
       # What a working upload looks like in this step's log: "[sentry-vite-plugin] Info: Successfully
       # uploaded source maps to Sentry", then "✅ Source maps uploaded for release
       # calendar-game@<version>+<commit>, none shipped; all N bundled scripts carry a Sentry debug ID."
@@ -144,56 +182,81 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       # ⚠ NO CNAME FILE, on either site, and none is needed (Round 27). Each site's address
-      # (calendargame.app for this repo's live build, test.calendargame.app for the test site's — see
+      # (calendargame.app for the live repo's build, test.calendargame.app for the test site's — see
       # src/sites.ts) is the "Custom domain" in that repository's Settings > Pages, and that setting is
-      # what GitHub serves. GitHub's own docs ("Managing a custom domain for your GitHub Pages site"):
-      # when publishing with a custom Actions workflow, "any existing CNAME file is ignored and is not
-      # required". This step used to write one for the live repo, believing it kept the domain set; it
-      # never did anything.
+      # what GitHub serves. GitHub's own docs: when publishing with a custom Actions workflow, "any
+      # existing CNAME file is ignored and is not required".
       # Size budget — fails the deploy if the app JS bundle grows past the gzip ceiling in
-      # scripts/check-bundle-size.mjs, so accidental bloat (e.g. a large library) can't ship
-      # unnoticed. Intentional growth = bump the budget constant deliberately (shows in the diff).
+      # scripts/check-bundle-size.mjs, so accidental bloat can't ship unnoticed. Intentional growth =
+      # bump the budget constant deliberately (shows in the diff).
       - name: Check bundle size budget
         run: npm run size
-      # ── THE BROWSER LANE (2026-10-12) ─────────────────────────────────────────────────────────
-      # Real-browser layout tests — Chromium and WebKit, tests/browser/*.browser.ts, run by
-      # Playwright (playwright.config.ts) — against THE dist THAT WAS JUST BUILT: the same files the
-      # upload step below hands to GitHub Pages, served under the same base. Vitest's DOM tests run
-      # in jsdom, which lays nothing out; every rule about widths, wrapping, scrollbars and what
-      # fits where is held here and nowhere else.
-      #
-      # ★ IT GATES THE DEPLOY, like every step above it. A layout rule that only advises is not a
-      # rule: the first time it went red on a day somebody wanted to ship, it would be read as noise
-      # and from then on it would be noise. Weighed against that, honestly, is the one thing a
-      # browser test can do that a unit test cannot — fail for no reason on a loaded runner — and
-      # three things keep that from deciding a deploy:
-      #   • the tests assert geometry AT REST and never a frame or a duration (the rule, and why, is
-      #     at the top of tests/browser/support/app.ts), so nothing in them depends on speed;
-      #   • ONE retry (playwright.config.ts), so a single stall cannot stop a deploy — and never a
-      #     silent one: a test that needed its retry is listed as FLAKY in the run, raises a warning
-      #     on it (the step after the tests), and its recorded trace is uploaded. A flaky test is a
-      #     defect to fix that week, not a result to accept;
-      #   • the step is bounded (`timeout-minutes`), so a hung browser fails in minutes, by name.
-      #
-      # ⚠ WHERE IT SITS IS LOAD-BEARING, IN BOTH DIRECTIONS.
-      #   • AFTER the build, the CNAME step and the size check: it tests the finished artifact, not
-      #     a second build of its own (two builds of one commit are not the same bytes — the deploy
-      #     stamp is the build clock), and it is the slowest check in the gate, so everything
-      #     cheaper has already had its chance to fail first.
-      #   • BEFORE the upload and BEFORE the version tag: a red lane publishes nothing and SPENDS NO
-      #     VERSION NUMBER. The tag step must stay last in this job — see its own note.
-      #
-      # THE COST: ESTIMATED at four to six minutes a deploy with the browsers cached — about one for
-      # the system packages WebKit needs, and three to five for the tests on this runner's two
-      # workers (they take 1.9 minutes on two workers of the laptop) — and about one more the first
-      # time after a Playwright upgrade, while the browsers download again. ⚠ An estimate until the
-      # first run here: read the real figure off that run's step timings and put it in this note.
-      #
-      # The browsers are cached under the exact Playwright version (each version pins its own
-      # browser builds, so the version IS the cache's identity; read from the installed package, not
-      # from package.json, so it is the version that will actually run). What a browser needs from
-      # the SYSTEM — the shared libraries WebKit links against — is not in that cache and cannot
-      # be: it is installed by apt on every run.
+      # The finished files, twice over: once for the browser tests below (an ordinary artifact), and
+      # once in the form GitHub Pages publishes from. Uploading the Pages artifact publishes NOTHING —
+      # only `deploy` does, and it waits for every check.
+      - name: Keep the built site for the browser tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-site
+          path: dist/
+          retention-days: 1
+          if-no-files-found: error
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist          # the finished files Vite produces
+
+  # ── 4. THE BROWSER LANE, IN THREE PARTS AT ONCE (2026-10-12; split 2026-10-21) ────────────────
+  # Real-browser layout tests — Chromium and WebKit, tests/browser/*.browser.ts, run by Playwright
+  # (playwright.config.ts) — against THE dist `build` just made: the same files `deploy` hands to
+  # GitHub Pages. Vitest's DOM tests run in jsdom, which lays nothing out; every rule about widths,
+  # wrapping, scrollbars and what fits where is held here and nowhere else. Playwright's own
+  # sharding gives each runner a third of the tests.
+  #
+  # ★ IT GATES THE DEPLOY, like every check. A layout rule that only advises is not a rule: the
+  # first time it went red on a day somebody wanted to ship, it would be read as noise. Weighed
+  # against that, honestly, is the one thing a browser test can do that a unit test cannot — fail for
+  # no reason on a loaded runner — and three things keep that from deciding a deploy:
+  #   • the tests assert geometry AT REST and never a frame or a duration (the rule, and why, is at
+  #     the top of tests/browser/support/app.ts), so nothing in them depends on speed;
+  #   • ONE retry (playwright.config.ts), so a single stall cannot stop a deploy — and never a silent
+  #     one: a test that needed its retry is listed as FLAKY, raises a warning on the run (the step
+  #     after the tests), and its recorded trace is uploaded. A flaky test is a defect to fix that
+  #     week, not a result to accept;
+  #   • the step is bounded (`timeout-minutes`), so a hung browser fails in minutes, by name.
+  #
+  # The browsers are cached under the exact Playwright version (each version pins its own browser
+  # builds, so the version IS the cache's identity; read from the installed package, not from
+  # package.json, so it is the version that will actually run). What a browser needs from the
+  # SYSTEM — the shared libraries WebKit links against — is not in that cache and cannot be: it is
+  # installed by apt on every run.
+  lane:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the older build below is a git worktree of an earlier commit
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # ⚠ AFTER the checkout and the install, and on purpose: the lane refuses a build older than the
+      # source it was made from (tests/browser/support/builtSite.js compares the files' times), and
+      # files arriving last are the newest on this runner — as they were built after the source.
+      - name: Fetch the built site
+        uses: actions/download-artifact@v4
+        with:
+          name: built-site
+          path: dist/
       - name: Read the installed Playwright version
         id: playwright
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -210,10 +273,10 @@ jobs:
         run: npx playwright install-deps chromium webkit
       # The older build the lane keeps beside the one under test (tests/browser/support/oldSite: a
       # window of the version live while this one was made, on the same origin). Built from its own
-      # commit the first time - a git worktree of it (which is one more reason fetch-depth must stay
-      # 0), its own `npm ci`, its own Vite, a minute or two - and restored from this cache after that.
-      # Keyed on that commit, on how it is built, and on this repository (its own vite.config builds the
-      # live or the test site's variant from the repository's name, as this one's does).
+      # commit the first time — a git worktree of it, its own `npm ci`, its own Vite, a minute or two
+      # — and restored from this cache after that. Keyed on that commit, on how it is built, and on
+      # this repository (its own vite.config builds the live or the test site's variant from the
+      # repository's name, as this one's does).
       - name: Read which older build the lane keeps
         id: oldsite
         run: node --input-type=module -e "const m = await import('./tests/browser/support/oldSite.js'); console.log('commit=' + m.OLD_SITE.commit)" >> "$GITHUB_OUTPUT"
@@ -222,77 +285,85 @@ jobs:
         with:
           path: .lane-cache
           key: lane-old-site-${{ steps.oldsite.outputs.commit }}-${{ github.repository }}-${{ hashFiles('tests/browser/support/oldSite.js', 'tests/browser/support/buildOldSite.mjs') }}
-      - name: Run the browser tests
-        timeout-minutes: 20  # (15 for the tests, and room for the older build's first build)
-        run: npm run test:browser
+      - name: Run the browser tests (part ${{ matrix.shard }} of 3)
+        timeout-minutes: 15  # (a third of the tests, and room for the older build's first build)
+        run: npx playwright test --shard=${{ matrix.shard }}/3
       # Runs whether the tests passed or failed (never when the run was cancelled): a test that
       # passed only on its retry is named in a warning on the run, so it cannot go by unseen.
       - name: Name any browser test that needed its retry
         if: ${{ !cancelled() }}
         run: node tests/browser/support/reportFlaky.js
-      # The run's report, and the recorded trace of every test that failed an attempt — what
+      # The part's report, and the recorded trace of every test that failed an attempt — what
       # `npx playwright show-trace` replays. Kept two weeks.
       - name: Keep the browser tests' report and traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: browser-test-results
+          name: browser-test-results-${{ matrix.shard }}
           path: test-results/
           retention-days: 14
           if-no-files-found: ignore
-      - name: Upload the built site
-        uses: actions/upload-pages-artifact@v3
+
+  # ── 5. THE VERSION BUMP GUARD, HALF 2 OF 2: RECORD IT, ONLY ONCE EVERY CHECK HAS PASSED ────────
+  # Writes this version into the ledger half 1 reads: a lightweight tag on the commit that was just
+  # built, in THIS repository only. Tags are per-repository on purpose — production and staging each
+  # keep their own record, because they genuinely have not published the same list of versions.
+  #
+  # ⚠ ITS PLACE IS LOAD-BEARING: AFTER EVERY CHECK, BEFORE THE SITE GOES LIVE. It `needs` every
+  # check, and `deploy` needs it. So a red check records nothing and SPENDS NO VERSION NUMBER; and:
+  #   • tag first, publish second  -> the ledger is only ever AHEAD of the site. "Ahead" costs a
+  #     skipped version number, which costs nothing at all.
+  #   • publish first, tag second  -> a failed or cancelled tag would leave the site UPDATED with no
+  #     record of it, the ledger falls quietly behind reality, and the next duplicate sails straight
+  #     through. That is unrecoverable by inspection, which is why it is not done.
+  # The guard runs AGAIN here, first: its answer is what names the tag, and asked now it also refuses
+  # a number another run recorded while these checks were running.
+  record:
+    needs: [checks, unit, build, lane]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
         with:
-          path: ./dist          # the finished files Vite produces
-      # ── THE VERSION BUMP GUARD, HALF 2 OF 2 ──────────────────────────────────────────────────
-      # Writes this version into the ledger half 1 reads: a lightweight tag on the commit that was
-      # just built, in THIS repository only. Tags are per-repository on purpose — production and
-      # staging each keep their own record, which is right, because they genuinely have not published
-      # the same list of versions.
-      #
-      # ⚠ THE POSITION OF THIS STEP IS LOAD-BEARING: LAST IN `build`, WHICH IS BEFORE THE SITE GOES
-      # LIVE. The `deploy` job below is what publishes, and it `needs: build`. So:
-      #   • tag first, publish second  -> the ledger is only ever AHEAD of the site. "Ahead" costs a
-      #     skipped version number, which costs nothing at all.
-      #   • publish first, tag second  -> a failed or cancelled tag would leave the site UPDATED with
-      #     no record of it, the ledger falls quietly behind reality, and the next duplicate sails
-      #     straight through. That is unrecoverable by inspection, which is why it is not done.
-      # And if this step itself fails, the build job fails, so `deploy` never runs and nothing ships.
-      #
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check this version has never shipped here
+        id: version
+        run: node scripts/checkVersionLedger.mjs
       # ⚠ THE WHOLE REF COMES FROM THE GUARD'S STEP OUTPUT — `v2.21.0`, not `2.21.0` with a `v` glued
       # on here. Gluing was the original shape and it was wrong: while the guard still accepted a
-      # `v`-prefixed version, this produced `vv2.21.0` — a tag that `--list v*` matches but the
-      # parser refuses, so that version went unrecorded and could ship a SECOND time. The version
-      # regex is strict now, and taking the ref whole removes the last place one is assembled outside
-      # the validated path. A lightweight tag (no `-a`) needs no git identity configured, and
-      # `origin` already carries the checkout's credentials.
+      # `v`-prefixed version, this produced `vv2.21.0` — a tag that `--list v*` matches but the parser
+      # refuses, so that version went unrecorded and could ship a SECOND time. A lightweight tag (no
+      # `-a`) needs no git identity configured, and `origin` already carries the checkout's
+      # credentials.
       - name: Record this version in the deploy ledger
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           # Fail closed if that output is ever missing — a renamed `id:`, a deleted step. Without
           # this, the line below would run `git tag "v"`, and `v` IS a legal tag name, so the deploy
-          # would stay GREEN, publish, and write a ledger entry nothing can read. That was the one
-          # fail-OPEN path in the whole feature.
+          # would stay GREEN, publish, and write a ledger entry nothing can read.
           if [ -z "$TAG" ]; then
             echo "::error::app-version: the version guard produced no tag name, so this build cannot be recorded in the deploy ledger. Nothing has been published. Check the 'Check this version has never shipped here' step and its 'id: version'."
             exit 1
           fi
           git tag "$TAG"
-          # The remote rejecting an existing tag is the LAST line of defence: the guard read the
-          # ledger ~5 minutes ago, so a second push inside that window can pass the check and still
-          # be a duplicate. Correct already — but git's own message says nothing about versions, so
-          # this gives that path the one human-readable sentence it was missing.
+          # The remote rejecting an existing tag is the LAST line of defence, for a second push inside
+          # the seconds between the guard above and this push. Correct already — but git's own message
+          # says nothing about versions, so this gives that path a human-readable sentence.
           git push origin "$TAG" || {
             echo "::error::app-version: $TAG already exists on this repository — another run claimed this number between this build's checkout and now. Nothing has been published. Raise \"version\" in package.json and push again (see scripts/versionLedger.mjs)."
             exit 1
           }
 
-  # Step 2: publish the assembled website to GitHub Pages.
+  # ── 6. PUBLISH the assembled website to GitHub Pages ───────────────────────────────────────────
   deploy:
-    needs: build
+    needs: record
     runs-on: ubuntu-latest
     # Narrower than the workflow-level grant above: publishing reads nothing and writes no code, so
-    # the `contents: write` the BUILD job needs for its version tag is handed straight back here.
+    # the `contents: write` that `record` needs for its version tag is handed straight back here.
     # Only the job that actually writes a tag ever holds the permission to write one.
     permissions:
       contents: read

@@ -2,10 +2,10 @@
 //
 // WHY THIS EXISTS SEPARATELY FROM THE PLUGIN. The guard lives in vite.config.js and fails the build
 // before the bundler starts, which is the fastest failure available inside `vite build` — but the
-// DEPLOY does not start at the build. deploy.yml runs tests, lint, format and typecheck first, so
-// in the one place the guard exists to protect, a mis-dated changelog used to cost the entire gate
-// (measured: `npm test` alone is ~3 minutes) before anything looked at the date. This is the same
-// check, wired as the workflow's first step, so the deploy fails in seconds with the same advice.
+// DEPLOY does not start at the build. deploy.yml's quick-checks job runs this in its first seconds,
+// before the install, lint, format and typecheck — and the build itself runs in a job of its own,
+// alongside the unit tests — so a mis-dated changelog fails the deploy in seconds with the same
+// advice, before anything else has been paid for.
 //
 // ⚠ IT IS NOT THE AUTHORITY, AND MUST NOT BECOME ONE. vite.config.js's changelogStamp plugin stays
 // the gate: a check that lives only in the workflow cannot stop a local `npm run build` from
