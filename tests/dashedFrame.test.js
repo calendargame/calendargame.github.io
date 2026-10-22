@@ -1,18 +1,12 @@
 // tests/dashedFrame.test.js — AMNESIC'S DASHED FRAME HAS THE SAME GAP ALL THE WAY ROUND
-// (components/DashedFrame says why it is drawn rather than a dashed border: the owner saw one long
+// (components/DashedFrame says why; lib/dashedOutline is the arithmetic it is drawn rather than a dashed border: the owner saw one long
 // gap on his iPhone). The pattern closes on itself because the path's length is counted as a whole
 // number of dash-and-gap periods; what is pinned here is the arithmetic that number comes from —
 // a whole number, the nearest one, never stretching a period by more than half a period over the
 // whole frame — and the path's shape, at the sizes the frame really has. That the browser then draws
 // it evenly is tests/browser/sessionOnlyFrame's to say.
 import { describe, it, expect } from 'vitest'
-import {
-  dashedOutline,
-  DASH,
-  GAP,
-  DASH_PATTERN,
-  DASHED_LINE,
-} from '../src/components/DashedFrame.jsx'
+import { dashedOutline, DASH, GAP, DASH_PATTERN, DASHED_LINE } from '../src/lib/dashedOutline.js'
 
 const PERIOD = DASH + GAP
 
