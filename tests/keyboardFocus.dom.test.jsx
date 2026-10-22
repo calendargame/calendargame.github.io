@@ -270,7 +270,9 @@ describe('the rule in index.css that draws it', () => {
   // strip is one button. At the ring's usual inset it would be drawn exactly over the dashes.
   it('sits clear inside Amnesic`s dashed frame where a control wears both', () => {
     expect(cssCode).toContain('.session-only{position:relative;--kbd-ring-offset:-5px}')
-    expect(cssCode).toMatch(/\.session-only::after\{[^}]*inset:0;border:1\.5px dashed/)
+    // The frame's line is 1.5px along the inside of the host's own box (components/DashedFrame):
+    // 5px in clears it.
+    expect(cssCode).toMatch(/\.session-frame\{[^}]*inset:0;[^}]*stroke-width:1\.5px/)
   })
 
   // A Tailwind utility outranks the whole `components` layer the ring lives in, so one outline
