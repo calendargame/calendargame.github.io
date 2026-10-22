@@ -920,10 +920,13 @@ describe('reordering', () => {
       expect(usePresets.getState().presets.map((p) => p.name)).toEqual(['Preset 1', 'Scratch'])
     })
 
-    it('the ✕ keeps its button chrome; the grip is bare — no border, no fill', () => {
+    // The owner's pick (2026-10-21, tried side by side on the test site): the ✕ is bare, like the grip.
+    it('the ✕ and the grip are both bare — no border, no fill — and both still controls', () => {
       openManager()
-      expect(rowButton('Preset 1', 'delete').className).toMatch(/(^|\s)border(\s|$)/)
-      expect(rowButton('Preset 1', 'delete').className).toMatch(/surface-toggle/)
+      const cross = rowButton('Preset 1', 'delete').className
+      expect(cross).not.toMatch(/(^|\s)border(\s|$)/)
+      expect(cross).not.toMatch(/surface-/)
+      expect(cross).not.toMatch(/outline-/)
       const grip = reorderHandle('Preset 1').className
       expect(grip).not.toMatch(/(^|\s)border(\s|$)/)
       expect(grip).not.toMatch(/surface-/)
@@ -1273,15 +1276,15 @@ describe('reordering', () => {
       expect(transformOf('Timed')).toBe('translateY(0px)')
     })
 
-    // ★ THE ROW IN THE HAND IS ITS PARTS, NOT A SLAB. Only the two pieces that are boxes at rest —
-    // the ✕ button and the name box — are drawn lifted: each turns opaque (held-piece) and gets a
-    // shadow box of its own behind it (held-shadow). The ✓ and the grip ride along bare, on an
-    // invisible patch of the card's colour (held-ink). The whole-row surface this replaced
+    // ★ THE ROW IN THE HAND IS ITS PARTS, NOT A SLAB. Only the one piece that is a box at rest —
+    // the name box — is drawn lifted: it turns opaque (held-piece) and gets a shadow box of its own
+    // behind it (held-shadow). The ✕, the ✓ and the grip ride along bare, on an invisible patch of
+    // the card's colour (held-ink). The whole-row surface this replaced
     // (row-lifted) drew a rounded shape around the row's empty space too; it must not come back,
     // and neither may the lift before that — a directional boundary shadow plus a scale.
     const heldShadows = (name) =>
       [...rowOf(name).children].filter((c) => /held-shadow/.test(c.className))
-    it('the row being dragged lifts its ✕ and its name box, and nothing else, only while it is dragged', () => {
+    it('the row being dragged lifts its name box, and nothing else, only while it is dragged', () => {
       act(() => {
         createPreset('Timed')
       })
@@ -1289,11 +1292,9 @@ describe('reordering', () => {
       openManager()
       stubRowRects(['Preset 1', 'Timed'])
       const handle = reorderHandle('Timed')
-      const pieces = (name) => [
-        nameBoxes().find((el) => el.value === name),
-        rowButton(name, 'delete'),
-      ]
+      const pieces = (name) => [nameBoxes().find((el) => el.value === name)]
       const marks = (name) => [
+        rowButton(name, 'delete').querySelector('svg'),
         within(rowOf(name)).queryByText('✓'),
         reorderHandle(name).querySelector('svg'),
       ]
@@ -1308,9 +1309,11 @@ describe('reordering', () => {
       for (const el of pieces('Timed')) expect(el.className).toMatch(/(^|\s)held-piece(\s|$)/)
       for (const el of marks('Timed'))
         expect(el.getAttribute('class')).toMatch(/(^|\s)held-ink(\s|$)/)
+      // The ✕ button itself is no surface in the hand either: only its mark is inked.
+      expect(rowButton('Timed', 'delete').className).not.toMatch(/held-/)
       // One shadow box per lifted piece, in that piece's own grid cell, hidden from a screen reader.
       const shadows = heldShadows('Timed')
-      expect(shadows).toHaveLength(2)
+      expect(shadows).toHaveLength(1)
       const cellOf = (el) => el.className.match(/col-start-\d/)[0]
       expect(shadows.map(cellOf).sort()).toEqual(pieces('Timed').map(cellOf).sort())
       for (const el of shadows) expect(el.getAttribute('aria-hidden')).toBe('true')

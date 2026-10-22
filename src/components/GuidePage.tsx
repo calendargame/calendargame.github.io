@@ -1862,8 +1862,11 @@ export default function GuidePage({
             <b>New Preset</b> — adds one at the foot of the list, starting from the{' '}
             <i>factory defaults</i>. It is not a copy of the preset you are on, and it does not
             switch you into it, so making one never disturbs the round you are in. Use the control
-            at the top left when you want to go there. There is no limit on how many presets you can
-            have; a long list scrolls, here and in both preset lists.
+            at the top left when you want to go there. It is named &quot;Preset&quot; and the next
+            number up: one more than the highest number ending a name like &quot;Preset 3&quot; on
+            your list, or than how many presets you have, whichever is higher — so deleting presets
+            never leaves the next one numbered past what you can see. There is no limit on how many
+            presets you can have; a long list scrolls, here and in both preset lists.
           </li>
           <li>
             <b>Duplicate</b> — beside <b>New Preset</b>. Tap it for a list of your presets, and tap
@@ -1898,34 +1901,36 @@ export default function GuidePage({
             shows its name cut before its &quot;(2)&quot;, as the lists do) and shown by its
             beginning everywhere else: where a sentence names a preset it quotes the first 80
             characters, and a letter piled high with accents is trimmed there to the line it is on.
-            Two presets can have the same name. A name with nothing in it to see goes back to
-            &quot;Preset 2&quot;, &quot;Preset 3&quot;, and so on: that is one left blank, or one
-            made up only of spaces and other characters that show nothing on screen. Whether a name
-            shows anything is judged on the device you are using, by drawing it: a character your
-            device draws as nothing counts as nothing, and one it has no picture for, which it shows
-            as an empty box, counts as something to see — so the same name can be kept on one device
-            and shown as &quot;Preset 2&quot; on another. Some browsers&apos; privacy settings
-            change what the app reads back from a drawing; where it does not read back what it drew,
-            nothing is judged by drawing, and only a name of spaces and characters that never show
-            anything counts as blank. Only what is shown changes; the name as it was saved is not
-            touched until you next change the list. (While you type, the note under the box treats
-            such a name as the &quot;Preset&quot; name it is about to become.) If the device has no
-            room left to save a name, it is not changed: the box goes back to the name it had, and a
-            note under it says &quot;This device has no room to save that name, so it was not
-            changed.&quot; That is so however you left the box — Enter, Tab, a tap on another row,
-            Back, the app going to the background. The note stays under its row until you next type
-            in a name box. If what you tapped was the dimmed area outside the popup, that tap shows
-            you the note instead of closing the popup; tap there again to close it. Back is the
-            same: it shows you the note, and the next Back closes the popup.
+            Two presets can have the same name. Rename a preset to a name with nothing in it to see
+            and nothing changes — it keeps the name it had, as if you had never touched it: that is
+            a name left blank, or one made up only of spaces and other characters that show nothing
+            on screen. A saved name with nothing in it to see is shown as &quot;Preset 2&quot;,
+            &quot;Preset 3&quot;, and so on. Whether a name shows anything is judged on the device
+            you are using, by drawing it: a character your device draws as nothing counts as
+            nothing, and one it has no picture for, which it shows as an empty box, counts as
+            something to see — so the same name can be kept on one device and shown as &quot;Preset
+            2&quot; on another. Some browsers&apos; privacy settings change what the app reads back
+            from a drawing; where it does not read back what it drew, nothing is judged by drawing,
+            and only a name of spaces and characters that never show anything counts as blank. Only
+            what is shown changes; the name as it was saved is not touched until you next change the
+            list. (While you type, the note under the box treats such a name as the
+            &quot;Preset&quot; name it is about to become.) If the device has no room left to save a
+            name, it is not changed: the box goes back to the name it had, and a note under it says
+            &quot;This device has no room to save that name, so it was not changed.&quot; That is so
+            however you left the box — Enter, Tab, a tap on another row, Back, the app going to the
+            background. The note stays under its row until you next type in a name box. If what you
+            tapped was the dimmed area outside the popup, that tap shows you the note instead of
+            closing the popup; tap there again to close it. Back is the same: it shows you the note,
+            and the next Back closes the popup.
           </li>
           <li>
             <b>Order</b> — drag a row by its grip, the three small bars at its right-hand end, to
             move it; hold it near the top or bottom of the list and the list scrolls to bring the
-            rest to you. The whole row travels with your finger, but only its ✕ button and its name
-            box lift — each gets a shadow — and the other rows step aside as the one you hold passes
-            their halfway point. Or select the grip and press the up/down arrow keys — the list
-            scrolls to keep the row you are moving in view. That order is the order the top-left
-            list shows them in, and nothing else: moving a preset changes no stats and no settings.
+            rest to you. The whole row travels with your finger, but only its name box lifts — it
+            gets a shadow — and the other rows step aside as the one you hold passes their halfway
+            point. Or select the grip and press the up/down arrow keys — the list scrolls to keep
+            the row you are moving in view. That order is the order the top-left list shows them in,
+            and nothing else: moving a preset changes no stats and no settings.
           </li>
           <li>
             <b>Delete</b> — the ✕ at the left-hand end of each row, kept well away from the grip so
@@ -3762,20 +3767,21 @@ export default function GuidePage({
             your device&apos;s Back — discards the edits and saves nothing.
           </li>
           <li>
-            While anything the snapshot covers differs from your defaults, the closed gear (⚙) shows
-            a small violet bar along its bottom edge, and the Save Defaults button is active; once
-            everything already matches your defaults, the bar disappears and the button dims —
-            nothing new to save. <b>Amnesic</b> counts here like any other value the snapshot
-            covers: move it away from what your defaults hold and the bar lights and Save Defaults
-            comes alive, so &quot;Amnesic: Stats Only&quot; or &quot;Amnesic: Full&quot; can be
-            saved as a default on its own. A year you have typed but not yet left also lights the
-            bar, even though there is nothing to save for it yet — pressing Save Defaults then saves
-            everything else and leaves the bar lit until the year is finished or dropped. Finishing
-            it does not clear the bar either, unless the year you finished on is the one your
-            defaults already hold: a stored range that differs from your defaults lights the bar in
-            its own right. <Kbd>Esc</Kbd> is what puts a year you never meant to type back. The bar
-            is separate from the light-blue update dot at the gear&apos;s top-right corner (see
-            Updates in the first section), and the two can show at once.
+            While anything the snapshot covers differs from your defaults, the gear (⚙) shows a
+            small bar along its bottom edge — violet, or white on the gear&apos;s purple while the
+            menu is open, so you can see it come and go as you change things — and the Save Defaults
+            button is active; once everything already matches your defaults, the bar disappears and
+            the button dims — nothing new to save. <b>Amnesic</b> counts here like any other value
+            the snapshot covers: move it away from what your defaults hold and the bar lights and
+            Save Defaults comes alive, so &quot;Amnesic: Stats Only&quot; or &quot;Amnesic:
+            Full&quot; can be saved as a default on its own. A year you have typed but not yet left
+            also lights the bar, even though there is nothing to save for it yet — pressing Save
+            Defaults then saves everything else and leaves the bar lit until the year is finished or
+            dropped. Finishing it does not clear the bar either, unless the year you finished on is
+            the one your defaults already hold: a stored range that differs from your defaults
+            lights the bar in its own right. <Kbd>Esc</Kbd> is what puts a year you never meant to
+            type back. The bar is separate from the light-blue update dot at the gear&apos;s
+            top-right corner (see Updates in the first section), and the two can show at once.
           </li>
           <li>
             Your saved defaults survive Full Reset — that's the point: Full Reset restores{' '}

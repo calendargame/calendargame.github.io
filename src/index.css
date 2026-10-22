@@ -779,13 +779,13 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .date-line{font-size:1.875rem;line-height:2.25rem;white-space:nowrap}
 /* THE ROW IN THE HAND — the Presets popup's row while it is being dragged by its grip
    (components/PresetManager, which says what the row looks like and why; these are the three rules
-   that draw it). They come AFTER the two surface rules above on purpose: .held-piece is worn
-   together with one of them and has to win the background.
-   .held-piece — the ✕ button and the name box. At rest their fill is --stgl-bg, a see-through tint,
-     over the card. Here the same tint is laid over the card's own SOLID colour, so the piece looks
-     exactly as it did and nothing sliding underneath shows through it. Two background IMAGES, with
-     the colour beneath them left alone: the ✕ button's background-color carries a .2s transition
-     (.surface-toggle), and changing it would fade the piece through a darker tint as it lifts.
+   that draw it). They come AFTER the surface rules above on purpose: .held-piece is worn together
+   with one of them and has to win the background.
+   .held-piece — the name box. At rest its fill is --stgl-bg, a see-through tint, over the card.
+     Here the same tint is laid over the card's own SOLID colour, so the box looks exactly as it did
+     and nothing sliding underneath shows through it. Two background IMAGES, with the colour beneath
+     them left alone, so a surface whose background-color carries a transition is never faded
+     through a darker tint as it lifts.
    .held-shadow — the "picked up" cue: ONE soft, even shadow on every side (--shadow-lifted, the
      LIFTED role of the app's three shadows, above), on an empty box of the piece's own size and
      radius drawn behind the row's cells (z-index -1 inside the dragged row, which is its own
@@ -793,7 +793,7 @@ input,textarea{user-select:text;-webkit-user-select:text}
      slides under this fixed edge" and so does not borrow it (that one is directional, with a
      negative spread that leaves only slivers at the sides, and it scales with --shade, a scroll
      signal that means nothing here).
-   .held-ink — the ✓ and the grip's bars. A patch of the card's colour exactly behind the mark, with
+   .held-ink — the ✕, the ✓ and the grip's bars. A patch of the card's colour exactly behind the mark, with
      a 2px rim of the same colour and no shadow: invisible against the card, and what a row passing
      underneath disappears behind instead of drawing its own mark through this one. The rim is a
      box-shadow SPREAD rather than padding so the mark's own box, and the row's layout, do not
@@ -1148,9 +1148,17 @@ button{touch-action:manipulation}
    Since round 14 the same boolean also dims Save Defaults AND Reset Settings, so this
    paragraph describes all three.
    Violet, not the rose reset red — "customized" is a benign state, not a
-   warning. App applies the class only while the popover is CLOSED (the open gear is solid purple). */
+   warning.
+   ★ IT SHOWS WHILE THE MENU IS OPEN TOO (the owner's ask, 2026-10-21): the menu is where settings
+   are changed, so that is when the bar should be seen to come and go. The open gear is filled with
+   the brand violet (.btn-solid), where a violet bar would vanish, so on that fill the bar takes the
+   button's own ink (currentColor — the white the ⚙ itself is drawn in, the same on every violet
+   button in the app): no new shade, and it follows that ink if it ever changes. Same place, same
+   size. :root gives it the weight to win over the two light themes' violet below whatever order
+   the rules are in. */
 .gear-modified{position:relative}
 .gear-modified::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;border-radius:9999px;background:rgba(167,139,250,.85)}
+:root .btn-solid.gear-modified::after{background:currentColor}
 [data-theme="light"] .gear-modified::after,[data-theme="parchment"] .gear-modified::after{background:rgba(124,58,237,.75)}
 /* The update-signal dot (re-cut in round 8): the two-stage breadcrumb to the changelog after
    a new build lands. The build-stamp detection lights the GEAR flag on any build change; the

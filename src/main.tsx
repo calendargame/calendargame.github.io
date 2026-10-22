@@ -2493,9 +2493,10 @@ import BlitzMode from './modes/BlitzMode.jsx'
                     isPrimary/button guard mirrors the controller's pointer latch: a second finger or a
                     right-click must not toggle. onClick is kept for keyboard/tests; the controller
                     suppresses the trigger's click on a real press so it doesn't double-toggle.
-                    gear-modified (the flush inside-bottom violet bar — index.css) marks live state ≠
-                    the saved defaults while the panel is CLOSED (the open gear is solid purple, no
-                    bar); the CORNER UpdateDot marks an update landed since the panel was last opened
+                    gear-modified (the flush inside-bottom bar — index.css) marks live state ≠ the
+                    saved defaults, open or closed: violet on the closed gear, and in the button's own
+                    white ink on the open one's purple fill, so a change made in the menu shows at
+                    once; the CORNER UpdateDot marks an update landed since the panel was last opened
                     (opening clears the flag — toggleSettings, which BOTH handlers below call — so it
                     too only ever shows CLOSED).
                     The gear is the one host in the app that clears the corner badge's per-axis
@@ -2504,7 +2505,7 @@ import BlitzMode from './modes/BlitzMode.jsx'
                     indicator's class may be counted on to be present. The marker is aria-hidden, so
                     the aria-label carries BOTH booleans in every combination — the only accessible
                     name this button has, its visible content being a bare glyph. */}
-                <button type="button" data-select-trigger aria-controls={settingsOpen?"settings-popover":undefined} onPointerDown={e=>{if(!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;toggleSettings();}} onClick={()=>toggleSettings()} className={`relative px-2.5 py-2 rounded-xl text-sm border ${settingsOpen?"btn-solid border-transparent":`panel text-(--tx-100-80) ${settingsModified?" gear-modified":""}`}`} aria-label={(()=>{const parts=[settingsModified?"modified":"",gearDot?"update":"",storageWarning?"storage almost full":""].filter(Boolean);return parts.length?`Settings (${parts.join(", ")})`:"Settings";})()}>⚙<UpdateDot placement="corner" lit={gearDot||storageWarning} reason={storageWarning?'storage':'update'}/></button>
+                <button type="button" data-select-trigger aria-controls={settingsOpen?"settings-popover":undefined} onPointerDown={e=>{if(!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;toggleSettings();}} onClick={()=>toggleSettings()} className={`relative px-2.5 py-2 rounded-xl text-sm border ${settingsOpen?"btn-solid border-transparent":"panel text-(--tx-100-80)"}${settingsModified?" gear-modified":""}`} aria-label={(()=>{const parts=[settingsModified?"modified":"",gearDot?"update":"",storageWarning?"storage almost full":""].filter(Boolean);return parts.length?`Settings (${parts.join(", ")})`:"Settings";})()}>⚙<UpdateDot placement="corner" lit={gearDot||storageWarning} reason={storageWarning?'storage':'update'}/></button>
               </div>
             </div>
             {/* ⚙ THE SETTINGS PANEL, at the slot its markup used to occupy inline. Three things

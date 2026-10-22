@@ -303,11 +303,41 @@ describe('the registry', () => {
       expect([shortStockName(notStock), stockNumber(notStock)], notStock).toEqual([null, null])
   })
 
-  it('renaming trims, refuses to leave a preset nameless, and cuts nothing', () => {
+  // THE OWNER'S RULE (2026-10-21): a new preset is "Preset n+1", n the larger of the highest number
+  // ending a stock name and how many presets there are — never the never-reused id it is given.
+  it('a new preset is named one past the higher of the highest stock number and the count', () => {
+    const made = Array.from({ length: 5 }, () => createPreset())
+    expect(made.map((p) => p.name)).toEqual([
+      'Preset 2',
+      'Preset 3',
+      'Preset 4',
+      'Preset 5',
+      'Preset 6',
+    ])
+    // Make many, delete them, and the next is numbered from what is left, not from the ids used.
+    for (const p of made) deletePreset(p.id)
+    const after = createPreset()
+    expect(after.id).toBeGreaterThan(made[4].id) // ids still run forward
+    expect(after.name).toBe('Preset 2')
+    // The highest stock number wins over the count…
+    renamePreset(after.id, 'Preset 9')
+    expect(createPreset().name).toBe('Preset 10')
+    // …and the count wins over stock numbers, when names are the player's own.
+    for (const p of usePresets.getState().presets) renamePreset(p.id, `Mine ${p.id}`)
+    expect(usePresets.getState().presets).toHaveLength(3)
+    expect(createPreset().name).toBe('Preset 4')
+    // Only a name of exactly the stock form counts: "Preset 50 (2)" and "My Preset 70" do not.
+    renamePreset(usePresets.getState().presets[0].id, 'Preset 50 (2)')
+    renamePreset(usePresets.getState().presets[1].id, 'My Preset 70')
+    expect(createPreset().name).toBe('Preset 5')
+  })
+
+  // A rename left blank means "never mind" (the owner's call, 2026-10-21): the name it had stays.
+  it('renaming trims, keeps the old name when the new one is blank, and cuts nothing', () => {
     expect(renamePreset(1, '  Mornings  ')).toBe('renamed')
     expect(activePreset().name).toBe('Mornings')
-    renamePreset(1, '   ')
-    expect(activePreset().name).toBe('Preset 1')
+    expect(renamePreset(1, '   ')).toBe('renamed')
+    expect(activePreset().name).toBe('Mornings')
     renamePreset(1, 'y'.repeat(80))
     expect(activePreset().name).toBe('y'.repeat(80))
     expect(renamePreset(99, 'nobody')).toBe('unknown')
@@ -359,13 +389,14 @@ describe('the registry', () => {
     'Ogham space marks round a letter': '\u1680\u1681\u1680',
   }
 
-  it('a name with nothing visible in it is an empty name, and gets the default', () => {
+  it('a name with nothing visible in it is an empty name: a rename keeps the old one, a stored one gets the default', () => {
     for (const [what, name] of Object.entries(DRAWS_NOTHING)) {
       expect(normalizePresetName(name, 3), what).toBe('Preset 3')
-      // The same answer wherever a name is judged: a rename, a new preset, and a stored registry.
+      // The same judgement wherever a name is judged: a rename (which then keeps what it had), a
+      // new preset, and a stored registry.
       renamePreset(1, 'Mornings')
       expect(renamePreset(1, name), what).toBe('renamed')
-      expect(activePreset().name, what).toBe('Preset 1')
+      expect(activePreset().name, what).toBe('Mornings')
       expect(
         normalizeRegistry({ presets: [{ id: 2, name }], activeId: 2 }).presets[0].name,
         what,

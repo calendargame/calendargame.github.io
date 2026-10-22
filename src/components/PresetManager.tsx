@@ -265,9 +265,16 @@ const NO_ROOM_FOR_COPY_NOTE =
 // viewBox have no baseline and no font: the button centres the square (DELETE_BTN_CLASS is a
 // centring flex box) and the cross is centred in the square by construction. Sized in em, so it
 // stays in step with the row's text tier on the app's fluid root font-size.
-function DeleteIcon() {
+// `held` is true on the row being dragged: the cross then sits on a patch of the card's own colour,
+// like the grip's bars (index.css's .held-ink says what that is for).
+function DeleteIcon({ held }: { held: boolean }) {
   return (
-    <svg viewBox="0 0 16 16" className="size-[1em]" aria-hidden="true" focusable="false">
+    <svg
+      viewBox="0 0 16 16"
+      className={held ? `size-[1em] ${HELD_INK_CLASS}` : 'size-[1em]'}
+      aria-hidden="true"
+      focusable="false"
+    >
       <path
         d="M3 3 13 13M13 3 3 13"
         fill="none"
@@ -345,12 +352,14 @@ function ReorderHandleIcon({ held }: { held: boolean }) {
 // orders differ. The same slip is why nothing destructive ever takes the keyboard on open: the
 // popup focuses its card, never a control.
 //
-// THE ✕ KEEPS ITS BUTTON CHROME (the owner's ask): a boxed control says "tap". `shrink-0` because
-// the NAME is the thing that gives way when the card is narrow — a control that shrank to a sliver
-// would be the wrong casualty. The surface is `surface-toggle`, the same no-fill interactive tier
-// Manage Presets and the View/Clear Saved Defaults pair wear: pressing it does not always delete (a
-// preset that holds anything asks first), and the rose fill is kept for the button that commits a
-// deletion — the confirmation's own Delete.
+// THE ✕ IS BARE — no border and no fill, like the grip at the row's other end (the owner's pick,
+// 2026-10-21, after trying it beside the boxed ✕ it had worn until then, on the test site). It is
+// still every bit a control: the hit area below, the pointer, and the popup's FOCUS RING for the
+// keyboard (index.css's THE KEYBOARD FOCUS RING — drawn on whatever the keyboard is on in a popup,
+// round this box's rounded corners). The rose fill stays with the button that commits a deletion —
+// the confirmation's own Delete; pressing the ✕ does not always delete (a preset that holds
+// anything asks first). `shrink-0` because the NAME is the thing that gives way when the card is
+// narrow — a control that shrank to a sliver would be the wrong casualty.
 // IT IS A CENTRING BOX: `self-stretch` makes it exactly as tall as the name box beside it (the row's
 // track), and the flex centring puts the icon in the middle of that — both ways, in every font.
 // ⚠ TOUCH SIZE IS A DEVICE-ONLY QUESTION. At the card's ~288px of content it lands near 28×30px, the
@@ -358,7 +367,7 @@ function ReorderHandleIcon({ held }: { held: boolean }) {
 // smaller one — but jsdom lays nothing out, so only the owner's iPhone can say whether it is
 // comfortable.
 const DELETE_BTN_CLASS =
-  'shrink-0 self-stretch flex items-center justify-center px-2 rounded-xl text-xs border surface-toggle text-(--tx-100-80)'
+  'shrink-0 self-stretch flex items-center justify-center px-2 rounded-xl text-xs text-(--tx-100-80)'
 // THE GRIP HAS NO BUTTON CHROME AT ALL — no border, no fill — the other half of the owner's call: a
 // bare ≡ says "drag", where a boxed one reads as one more thing to tap. What it keeps is everything
 // a control needs that is not decoration: a hit area wider and taller than its 14px glyph
@@ -384,22 +393,21 @@ const ROW_COL = {
 // ── THE ROW IN THE HAND ─────────────────────────────────────────────────────────────────────────
 //
 // ★ WHAT A DRAGGED ROW LOOKS LIKE: ITS PARTS, MOVING TOGETHER — NOT A SLAB. All of it travels (✕,
-// name, ✓, grip: a ✕ left behind beside a gap would read as belonging to nothing), but only the two
-// pieces that are boxes at rest are drawn lifted: the ✕ button and the name box each get the
-// "picked up" shadow. The ✓ and the grip have no box at rest and are given none in the hand — they
-// ride along as the bare marks they are. What this replaced drew ONE rounded surface behind the
+// name, ✓, grip: a ✕ left behind beside a gap would read as belonging to nothing), but only the one
+// piece that is a box at rest is drawn lifted: the name box gets the "picked up" shadow. The ✕, the
+// ✓ and the grip have no box at rest and are given none in the hand — they ride along as the bare
+// marks they are. What this replaced drew ONE rounded surface behind the
 // whole row, the empty stretch between the name and the grip included; the owner found a lifted
 // shape with nothing in most of it strange, and it is gone.
 //
 // Three classes, all index.css's, worn only by the row being dragged:
-//   • HELD_PIECE_CLASS — on the ✕ button and the name box. Their resting fill is a see-through
-//     tint over the card; in the hand the same tint is laid over the card's own solid colour, so
-//     the piece looks exactly as it did and the row passing underneath cannot show through it.
-//   • HELD_SHADOW_CLASS — the lift itself, on two empty boxes drawn in the ✕'s and the name's own
-//     grid cells (heldShadows, in the row). Separate boxes, behind everything in the row, because a
-//     shadow on the pieces themselves falls on the piece beside it: the two are 4px apart and the
-//     shadow spreads 12, so whichever was painted second would smudge the other's edge.
-//   • HELD_INK_CLASS — on the ✓ and the grip's bars: a patch
+//   • HELD_PIECE_CLASS — on the name box. Its resting fill is a see-through tint over the card; in
+//     the hand the same tint is laid over the card's own solid colour, so the box looks exactly as
+//     it did and the row passing underneath cannot show through it.
+//   • HELD_SHADOW_CLASS — the lift itself, on an empty box drawn in the name's own grid cell (in
+//     the row), behind everything in the row, so the shadow lies under the row's marks and never
+//     over any of them.
+//   • HELD_INK_CLASS — on the ✕, the ✓ and the grip's bars: a patch
 //     of the card's colour exactly behind the mark, invisible against the card. It is what stops a
 //     row sliding past underneath from drawing its own grip THROUGH this one for the tenth of a
 //     second the two cross. It is not a surface — it has no edge, no shadow and no size beyond the
@@ -1162,22 +1170,16 @@ export default function PresetManager({
               instead. `items-center` works per row track, so the note appearing never moves the
               controls above it. */}
                 <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-1">
-                  {/* THE LIFT, while THIS row is the one being dragged: one shadow box behind the ✕
-                and one behind the name box, in those pieces' own cells and of their own size
-                (HELD_SHADOW_CLASS, above the component, says why the shadow is not on the pieces).
-                Decoration only, and only mid-drag — the row's real cells follow, in the order the
-                ★★ above the row's class constants argues. */}
+                  {/* THE LIFT, while THIS row is the one being dragged: one shadow box behind the name
+                box, in its own cell and of its own size (HELD_SHADOW_CLASS, above the component,
+                says why the shadow is not on the box itself). Decoration only, and only mid-drag —
+                the row's real cells follow, in the order the ★★ above the row's class constants
+                argues. */}
                   {held && (
-                    <>
-                      <div
-                        aria-hidden="true"
-                        className={`${ROW_COL.delete} self-stretch rounded-xl ${HELD_SHADOW_CLASS}`}
-                      />
-                      <div
-                        aria-hidden="true"
-                        className={`${ROW_COL.name} self-stretch rounded-xl ${HELD_SHADOW_CLASS}`}
-                      />
-                    </>
+                    <div
+                      aria-hidden="true"
+                      className={`${ROW_COL.name} self-stretch rounded-xl ${HELD_SHADOW_CLASS}`}
+                    />
                   )}
                   {/* THE NAME, AS A TEXT BOX — the rename IS the field, with no edit mode to enter and
                 no pencil to find. It always holds the STORED name, whole, however long (the box
@@ -1307,9 +1309,9 @@ export default function PresetManager({
                     aria-label={`Delete ${nameAsDrawn(p.name)}`}
                     aria-disabled={!canDelete || undefined}
                     onClick={() => pressDelete(p.id)}
-                    className={`${ROW_COL.delete} ${DELETE_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS} ${held ? HELD_PIECE_CLASS : ''}`}
+                    className={`${ROW_COL.delete} ${DELETE_BTN_CLASS} ${canDelete ? '' : NOT_OFFERED_BTN_CLASS}`}
                   >
-                    <DeleteIcon />
+                    <DeleteIcon held={held} />
                   </button>
                   {/* THE ROW'S NOTES (the ★ notes above this component) — "not saved", for the row
                 whose rename the device had no room for; and "cut short", for the row being typed

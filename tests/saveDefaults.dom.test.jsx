@@ -493,17 +493,19 @@ describe('Save Defaults + gear indicator', () => {
     act(() => useModePrefs.getState().setFlashMs(900))
     expect(gearIndicator().bar).toBe(true)
     openSettings()
-    expect(gearIndicator().bar).toBe(false) // hidden while open (solid gear)
-    expect(gearIndicator().name).toBe('Settings (modified)') // the label still tells
+    expect(gearIndicator().bar).toBe(true) // shown while open too, in the open gear's own ink
+    expect(gearIndicator().name).toBe('Settings (modified)')
     expect(isOffered(panelButton('Save Defaults'))).toBe(true) // something to save
     openPopup()
     act(() => fireEvent.click(btn('Save'))) // live == saved now
     expect(isOffered(panelButton('Save Defaults'))).toBe(false)
+    expect(gearIndicator().bar).toBe(false) // …and goes the moment there is nothing to save
     // The subtle case: live returns to FACTORY but saved says 900 — that IS a divergence from
     // the effective defaults, so the button stays live (re-saving factory is meaningful).
     act(() => useModePrefs.getState().setFlashMs(2000))
     expect(isOffered(panelButton('Save Defaults'))).toBe(true)
-    closeSettings() // the indicator bar shows again
+    expect(gearIndicator().bar).toBe(true) // back, still open
+    closeSettings()
     expect(gearIndicator().bar).toBe(true)
   })
 

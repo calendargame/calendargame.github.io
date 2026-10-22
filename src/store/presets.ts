@@ -172,6 +172,20 @@ const STOCK_NAME = new RegExp(`^${STOCK_NAME_WORD} ([1-9][0-9]*)$`)
 export const defaultPresetName = (id: number): string => `${STOCK_NAME_WORD} ${id}`
 /** The number of a stock name ("Preset 12" → "12") — or null for a name that is not one. */
 export const stockNumber = (name: string): string | null => STOCK_NAME.exec(name)?.[1] ?? null
+/**
+ * THE NAME A NEW PRESET IS GIVEN (the owner's rule, 2026-10-21): "Preset n+1", where n is the larger
+ * of the highest number ending a stock name on the list and how many presets there are now. A
+ * preset's id is allocated forward and never reused (normalizeRegistry), and the name used to be
+ * "Preset <id>", so after making and deleting a few the next new preset could be "Preset 11" on a
+ * list of two. The id is untouched by this — storage keys are a function of it — only the name it
+ * starts with no longer shows it. The count takes part so that a list of named presets ("Work",
+ * "Speed", "Fun") still gets "Preset 4", and the highest stock number so that a new name never
+ * repeats one already on the list.
+ */
+export const nextStockName = (presets: readonly { name: string }[]): string => {
+  const highest = presets.reduce((n, p) => Math.max(n, Number(stockNumber(p.name) ?? 0)), 0)
+  return defaultPresetName(Math.max(highest, presets.length) + 1)
+}
 /** The short form of a stock name ("Preset 12" → "P12") — or null for a name that is not one. */
 export const shortStockName = (name: string): string | null => {
   const number = stockNumber(name)
@@ -294,10 +308,12 @@ const outerSpacesTrimmed = (name: string): string => {
 // ever sliced off by the unit a string is counted in — which is the only way half an emoji was
 // ever made. Two presets may share a name; nothing depends on names being different (a preset is
 // its id).
-export const normalizePresetName = (name: string, id: number): string => {
+export const normalizePresetName = (name: string, id: number): string =>
+  hasNothingToSee(name) ? defaultPresetName(id) : outerSpacesTrimmed(name)
+/** Whether a name shows nothing at all on this device — blank, spaces, or characters drawn as nothing. */
+export const hasNothingToSee = (name: string): boolean => {
   const trimmed = typeof name === 'string' ? outerSpacesTrimmed(name) : ''
-  const seen = hasVisibleCharacter(trimmed) && nameHasInk(trimmed, hasVisibleCharacter) !== false
-  return seen ? trimmed : defaultPresetName(id)
+  return !(hasVisibleCharacter(trimmed) && nameHasInk(trimmed, hasVisibleCharacter) !== false)
 }
 
 // ★ THE REGISTRY IS READ FROM UNTRUSTED STORAGE, exactly as store/lookupHistory's own list is, and
