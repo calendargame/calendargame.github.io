@@ -731,13 +731,22 @@ input,textarea{user-select:text;-webkit-user-select:text}
      A — the strip keeps its whole solid border wherever it is inside the frame: under the dashes
          (round the strip under Stats Only; along the strip's top and sides under Full) and, under
          Full, along its bottom above the Best lines.
-     B — under Full, a solid border only where the dashes do not run: the strip's bottom edge,
-         above the Best lines. (Under Stats Only the dashes run all the way round: as Today.)
+     B — under Full, a solid border only where the dashes do not run: the strip's bottom edge and
+         both its rounded bottom corners, at full width all the way round, so the line meets the
+         dashes exactly where each corner turns into the side — no gap, no thinning (the owner's
+         idea, 2026-10-21; a plain border-bottom thins to nothing round a rounded corner). It is
+         drawn by the Best readouts' row, the strip's next sibling in the frame, reaching up over
+         the strip's last radius: the strip clips what it holds (overflow-hidden), so a line of
+         its own could not reach its own border's pixels. The reach is the row's top margin
+         (components/BestReadout's mt-1.5) plus that radius and the border's pixel; the border is
+         drawn on the strip's own tint, as the strip's real border is. (Under Stats Only the dashes
+         run all the way round: as Today.)
      C — under Full, no inner border at all, and the strip's tint fills the whole frame, the Best
          lines and the gap above them included: the group wears the tint and the strip none, so it
          is one coat, never two. (Under Stats Only the strip IS the frame: as Today.) */
 :root[data-trial-stats="a"] .panel.session-only,:root[data-trial-stats="a"] .session-only>.panel{border-color:var(--panel-bd)}
-:root[data-trial-stats="b"] .session-only>.panel{border-bottom-color:var(--panel-bd)}
+:root[data-trial-stats="b"] .session-only>.panel+*{position:relative}
+:root[data-trial-stats="b"] .session-only>.panel+*::before{content:"";position:absolute;left:0;right:0;top:calc(-1 * (var(--spacing) * 1.5 + var(--radius-2xl) + 1px));height:calc(var(--radius-2xl) + 1px);border:1px solid var(--panel-bd);border-top:0;border-radius:0 0 var(--radius-2xl) var(--radius-2xl);pointer-events:none}
 :root[data-trial-stats="c"] .session-only:has(>.panel){background:var(--panel-bg)}
 :root[data-trial-stats="c"] .session-only>.panel{background:transparent}
 /* DELETE ✕ (components/PresetManager). Plain: the ✕ alone — no border and no fill, at rest or under a
